@@ -9,6 +9,11 @@ import {
     updateSalaryRequestStatus,
     type SalaryRequestWithDriverRow,
 } from "@/services/salaryRequestsService";
+import {
+  getSharedLedgerNotifications,
+  markSharedLedgerNotificationRead,
+  type SharedLedgerNotificationRow,
+} from "@/services/sharedLedgerNotificationsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
@@ -30,6 +35,26 @@ function requestTypeLabel(t: (k: string) => string, value: string): string {
   return t("tripBased");
 }
 
+function sharedLedgerActionLabel(
+  eventType: SharedLedgerNotificationRow["event_type"],
+): string {
+  if (eventType === "dispute_received") return "Review dispute";
+  if (eventType === "dispute_status_changed") return "View status";
+  if (eventType === "pending_partner_followup") return "Follow up";
+  if (eventType === "mismatch_detected") return "Compare now";
+  return "Fix records";
+}
+
+function sharedLedgerIcon(
+  eventType: SharedLedgerNotificationRow["event_type"],
+): keyof typeof FontAwesome.glyphMap {
+  if (eventType === "dispute_received") return "gavel";
+  if (eventType === "dispute_status_changed") return "check-circle";
+  if (eventType === "pending_partner_followup") return "clock-o";
+  if (eventType === "mismatch_detected") return "exchange";
+  return "exclamation-triangle";
+}
+
 export default function NotificationsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -37,6 +62,9 @@ export default function NotificationsScreen() {
   const { currentOrganization } = useOrganization();
   const [loading, setLoading] = useState(true);
   const [requests, setRequests] = useState<SalaryRequestWithDriverRow[]>([]);
+  const [sharedNotifications, setSharedNotifications] = useState<
+    SharedLedgerNotificationRow[]
+  >([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [profileAvatarByUserId, setProfileAvatarByUserId] = useState<
     Record<string, { avatar_url: string | null; avatar_seed: string | null }>
@@ -53,8 +81,14 @@ export default function NotificationsScreen() {
       return;
     }
     setLoading(true);
-    const { requests: rows } = await getSalaryRequestsByOrganization(orgId);
+    const [{ requests: rows }, { notifications: sharedRows }] = await Promise.all(
+      [
+        getSalaryRequestsByOrganization(orgId),
+        getSharedLedgerNotifications(orgId, "all"),
+      ],
+    );
     setRequests(rows);
+    setSharedNotifications(sharedRows);
     const userIds = Array.from(
       new Set(
         rows
@@ -101,15 +135,17 @@ export default function NotificationsScreen() {
     [requests],
   );
   const visibleRows = activeTab === "action_required" ? actionRequiredRows : historyRows;
-  const hasRows = visibleRows.length > 0;
-  const subtitle = useMemo(
-    () =>
-      actionRequiredRows.length > 0
-        ? "Driver salary requests need your action."
-        : "No pending payment requests.",
-    [actionRequiredRows.length],
+  const actionRequiredShared = useMemo(
+    () => sharedNotifications.filter((n) => n.status === "open"),
+    [sharedNotifications],
   );
-
+  const historyShared = useMemo(
+    () => sharedNotifications.filter((n) => n.status !== "open"),
+    [sharedNotifications],
+  );
+  const visibleShared =
+    activeTab === "action_required" ? actionRequiredShared : historyShared;
+  const hasRows = visibleRows.length > 0 || visibleShared.length > 0;
   return (
     <View style={styles.root}>
       {loading ? (
@@ -205,158 +241,314 @@ export default function NotificationsScreen() {
                   </Text>
                 </View>
               ) : (
-                visibleRows.map((req) => {
-                  const driverName =
-                    req.drivers?.name?.trim() || t("driver");
-                  const typeLabel = requestTypeLabel(t, req.request_type ?? "");
-                  const created = req.created_at
-                    ? new Date(req.created_at).toLocaleDateString("en-IN", {
-                        day: "2-digit",
-                        month: "short",
-                      })
-                    : "";
-                  const requestBusy = busyId === req.id;
-                  const isTripBased =
-                    req.request_type === "trip_based" &&
-                    Array.isArray(req.trip_ids) &&
-                    req.trip_ids.length > 0;
-                  const isHistoryCard = req.status !== "pending";
-                  const historyStatusLabel =
-                    req.status === "paid"
-                      ? "Paid"
-                      : req.status === "approved"
-                        ? "Approved"
-                        : "Rejected";
-                  const profileUserId = String(req.drivers?.user_id ?? "").trim();
-                  const profileAvatar = profileAvatarByUserId[profileUserId];
-                  const driverAvatarUrl =
-                    resolveAvatarPublicUrl(profileAvatar?.avatar_url) ??
-                    (profileAvatar?.avatar_url?.trim() || null);
-                  const fallbackSeed =
-                    (profileAvatar?.avatar_seed ?? "").trim() || "driver-1";
-                  const driverAvatarUri = driverAvatarUrl || getAvatarUriForSeed(fallbackSeed);
-
-                  return (
-                    <View key={req.id} style={styles.card}>
-                      <View style={styles.row}>
-                        <Image
-                          source={{ uri: driverAvatarUri }}
-                          style={styles.avatar}
-                        />
-                        <View style={styles.body}>
-                          <Text style={styles.title} numberOfLines={1}>
-                            <Text style={styles.driverName}>{driverName}</Text> requested payment
-                          </Text>
-                          <View style={styles.metaRow}>
-                            <View style={styles.metaPill}>
-                              <FontAwesome name="map-marker" size={10} color={Theme.primary} />
-                              <Text style={styles.metaPillText}>{typeLabel}</Text>
-                            </View>
-                            {created ? (
-                              <View style={styles.dateInline}>
-                                <FontAwesome name="clock-o" size={10} color={Theme.textMuted} />
-                                <Text style={styles.metaDate}>{created}</Text>
-                              </View>
-                            ) : null}
-                          </View>
-                        </View>
-                        <View style={styles.amountBlock}>
-                          <Text style={styles.amountLabel}>AMOUNT</Text>
-                          <Text style={styles.amount}>
-                            ₹{Number(req.amount ?? 0).toLocaleString("en-IN")}
-                          </Text>
-                        </View>
-                        {isHistoryCard ? (
-                          <View style={styles.historyFooter}>
-                            <Text
-                              style={[
-                                styles.historyStatus,
-                                req.status === "rejected" ? styles.historyStatusReject : styles.historyStatusPaid,
-                              ]}
-                            >
-                              {historyStatusLabel}
+                <>
+                  {visibleShared.length > 0 ? (
+                    <Text style={styles.sectionLabel}>Shared ledger</Text>
+                  ) : null}
+                  {visibleShared.map((item) => {
+                    const created = item.created_at
+                      ? new Date(item.created_at).toLocaleDateString("en-IN", {
+                          day: "2-digit",
+                          month: "short",
+                        })
+                      : "";
+                    const amountMeta =
+                      item.amount_meta != null &&
+                      Number.isFinite(item.amount_meta) &&
+                      item.amount_meta > 0
+                        ? `₹${Number(item.amount_meta).toLocaleString("en-IN")}`
+                        : null;
+                    const isActionRequired = item.status === "open";
+                    const ctaLabel = sharedLedgerActionLabel(item.event_type);
+                    return (
+                      <View key={item.id} style={styles.sharedCard}>
+                        <View style={styles.sharedCardHeader}>
+                          <View style={styles.sharedPill}>
+                            <FontAwesome
+                              name={sharedLedgerIcon(item.event_type)}
+                              size={11}
+                              color={Theme.primary}
+                            />
+                            <Text style={styles.sharedPillText}>
+                              Shared ledger
                             </Text>
                           </View>
-                        ) : (
-                          <View style={styles.actions}>
-                            <TouchableOpacity
-                              style={[styles.actionBtn, styles.rejectBtn]}
-                              disabled={requestBusy}
-                              onPress={() => {
-                                Alert.alert(
-                                  t("rejectRequest"),
-                                  t("rejectRequestConfirm")
-                                    .replace("{{name}}", driverName)
-                                    .replace(
-                                      "{{amount}}",
-                                      Number(req.amount).toLocaleString("en-IN"),
+                          {created ? (
+                            <Text style={styles.sharedDate}>{created}</Text>
+                          ) : null}
+                        </View>
+                        <Text style={styles.sharedTitle}>{item.title}</Text>
+                        {item.subtitle ? (
+                          <Text style={styles.sharedSubtitle}>{item.subtitle}</Text>
+                        ) : null}
+                        <View style={styles.sharedActions}>
+                          {amountMeta ? (
+                            <Text style={styles.sharedAmount}>{amountMeta}</Text>
+                          ) : (
+                            <View />
+                          )}
+                          {isActionRequired ? (
+                            <View style={styles.sharedActionRow}>
+                              <TouchableOpacity
+                                style={styles.sharedGhostBtn}
+                                onPress={async () => {
+                                  const { error } =
+                                    await markSharedLedgerNotificationRead(
+                                      item.id,
+                                      currentOrganization?.id ?? "",
+                                    );
+                                  if (error) {
+                                    Alert.alert("Could not update", error.message);
+                                    return;
+                                  }
+                                  setSharedNotifications((prev) =>
+                                    prev.map((row) =>
+                                      row.id === item.id
+                                        ? {
+                                            ...row,
+                                            status: "read",
+                                            read_at: new Date().toISOString(),
+                                          }
+                                        : row,
                                     ),
-                                  [
-                                    { text: t("cancel"), style: "cancel" },
-                                    {
-                                      text: t("reject"),
-                                      style: "destructive",
-                                      onPress: async () => {
-                                        setBusyId(req.id);
-                                        const { error } = await updateSalaryRequestStatus(
-                                          req.id,
-                                          "rejected",
-                                        );
-                                        setBusyId(null);
-                                        if (error) {
-                                          Alert.alert(t("rejectFailed"), error.message);
-                                          return;
-                                        }
-                                        setRequests((prev) =>
-                                          prev.map((row) =>
-                                            row.id === req.id ? { ...row, status: "rejected" } : row,
-                                          ),
-                                        );
-                                      },
-                                    },
-                                  ],
-                                );
-                              }}
-                            >
-                              <FontAwesome name="close" size={12} color={Theme.textPrimaryDark} />
-                              <Text style={styles.rejectText}>{t("reject")}</Text>
-                            </TouchableOpacity>
+                                  );
+                                }}
+                                activeOpacity={0.82}
+                              >
+                                <Text style={styles.sharedGhostBtnText}>
+                                  Mark read
+                                </Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={styles.sharedPrimaryBtn}
+                                onPress={async () => {
+                                  const payload = item.payload_json ?? {};
+                                  const tripId =
+                                    typeof payload.trip_id === "string"
+                                      ? payload.trip_id
+                                      : null;
+                                  const entityType =
+                                    typeof payload.entity_type === "string"
+                                      ? payload.entity_type.toUpperCase()
+                                      : null;
+                                  const entityId =
+                                    typeof payload.entity_id === "string"
+                                      ? payload.entity_id
+                                      : null;
 
-                            <TouchableOpacity
-                              style={[styles.actionBtn, styles.payBtn]}
-                              disabled={requestBusy}
-                              onPress={() => {
-                                const q = new URLSearchParams({
-                                  entityType: "DRIVER",
-                                  entityId: req.driver_id,
-                                  partyName: driverName,
-                                  partyId: req.driver_id,
-                                  defaultType: "out",
-                                  salaryAmount: String(req.amount),
-                                  defaultDriverPaymentType: isTripBased
-                                    ? "settlement"
-                                    : "advance",
-                                  salaryRequestId: req.id,
-                                });
-                                if (isTripBased && req.trip_ids[0]) {
-                                  q.set("tripId", req.trip_ids[0]);
-                                }
-                                router.push(`/(modals)/ledger-sync?${q.toString()}` as const);
-                              }}
-                            >
-                              <FontAwesome name="check" size={12} color={Theme.textOnPrimary} />
-                              <Text style={styles.payText}>Pay now</Text>
-                            </TouchableOpacity>
+                                  if (tripId) {
+                                    router.push(`/trip-ledger/${tripId}` as const);
+                                  } else if (entityType === "CLIENT" && entityId) {
+                                    router.push(`/client/${entityId}` as const);
+                                  } else if (
+                                    entityType === "SUPPLIER" &&
+                                    entityId
+                                  ) {
+                                    router.push(`/supplier/${entityId}` as const);
+                                  } else {
+                                    router.push("/(tabs)/finance");
+                                  }
 
-                            <TouchableOpacity style={styles.moreBtn} activeOpacity={0.75}>
-                              <FontAwesome name="ellipsis-v" size={13} color={Theme.textMuted} />
-                            </TouchableOpacity>
-                          </View>
-                        )}
+                                  if (item.status === "open") {
+                                    const { error } =
+                                      await markSharedLedgerNotificationRead(
+                                        item.id,
+                                        currentOrganization?.id ?? "",
+                                      );
+                                    if (error) {
+                                      return;
+                                    }
+                                    setSharedNotifications((prev) =>
+                                      prev.map((row) =>
+                                        row.id === item.id
+                                          ? {
+                                              ...row,
+                                              status: "read",
+                                              read_at:
+                                                new Date().toISOString(),
+                                            }
+                                          : row,
+                                      ),
+                                    );
+                                  }
+                                }}
+                                activeOpacity={0.85}
+                              >
+                                <Text style={styles.sharedPrimaryBtnText}>
+                                  {ctaLabel}
+                                </Text>
+                              </TouchableOpacity>
+                            </View>
+                          ) : (
+                            <Text style={styles.sharedHistoryTag}>
+                              {item.status === "resolved"
+                                ? "Resolved"
+                                : item.status === "handled"
+                                  ? "Handled"
+                                  : "Read"}
+                            </Text>
+                          )}
+                        </View>
                       </View>
-                    </View>
-                  );
-                })
+                    );
+                  })}
+
+                  {visibleRows.length > 0 ? (
+                    <Text style={styles.sectionLabel}>Driver requests</Text>
+                  ) : null}
+                  {visibleRows.map((req) => {
+                    const driverName =
+                      req.drivers?.name?.trim() || t("driver");
+                    const typeLabel = requestTypeLabel(t, req.request_type ?? "");
+                    const created = req.created_at
+                      ? new Date(req.created_at).toLocaleDateString("en-IN", {
+                          day: "2-digit",
+                          month: "short",
+                        })
+                      : "";
+                    const requestBusy = busyId === req.id;
+                    const isTripBased =
+                      req.request_type === "trip_based" &&
+                      Array.isArray(req.trip_ids) &&
+                      req.trip_ids.length > 0;
+                    const isHistoryCard = req.status !== "pending";
+                    const historyStatusLabel =
+                      req.status === "paid"
+                        ? "Paid"
+                        : req.status === "approved"
+                          ? "Approved"
+                          : "Rejected";
+                    const profileUserId = String(req.drivers?.user_id ?? "").trim();
+                    const profileAvatar = profileAvatarByUserId[profileUserId];
+                    const driverAvatarUrl =
+                      resolveAvatarPublicUrl(profileAvatar?.avatar_url) ??
+                      (profileAvatar?.avatar_url?.trim() || null);
+                    const fallbackSeed =
+                      (profileAvatar?.avatar_seed ?? "").trim() || "driver-1";
+                    const driverAvatarUri = driverAvatarUrl || getAvatarUriForSeed(fallbackSeed);
+
+                    return (
+                      <View key={req.id} style={styles.card}>
+                        <View style={styles.row}>
+                          <Image
+                            source={{ uri: driverAvatarUri }}
+                            style={styles.avatar}
+                          />
+                          <View style={styles.body}>
+                            <Text style={styles.title} numberOfLines={1}>
+                              <Text style={styles.driverName}>{driverName}</Text> requested payment
+                            </Text>
+                            <View style={styles.metaRow}>
+                              <View style={styles.metaPill}>
+                                <FontAwesome name="map-marker" size={10} color={Theme.primary} />
+                                <Text style={styles.metaPillText}>{typeLabel}</Text>
+                              </View>
+                              {created ? (
+                                <View style={styles.dateInline}>
+                                  <FontAwesome name="clock-o" size={10} color={Theme.textMuted} />
+                                  <Text style={styles.metaDate}>{created}</Text>
+                                </View>
+                              ) : null}
+                            </View>
+                          </View>
+                          <View style={styles.amountBlock}>
+                            <Text style={styles.amountLabel}>AMOUNT</Text>
+                            <Text style={styles.amount}>
+                              ₹{Number(req.amount ?? 0).toLocaleString("en-IN")}
+                            </Text>
+                          </View>
+                          {isHistoryCard ? (
+                            <View style={styles.historyFooter}>
+                              <Text
+                                style={[
+                                  styles.historyStatus,
+                                  req.status === "rejected" ? styles.historyStatusReject : styles.historyStatusPaid,
+                                ]}
+                              >
+                                {historyStatusLabel}
+                              </Text>
+                            </View>
+                          ) : (
+                            <View style={styles.actions}>
+                              <TouchableOpacity
+                                style={[styles.actionBtn, styles.rejectBtn]}
+                                disabled={requestBusy}
+                                onPress={() => {
+                                  Alert.alert(
+                                    t("rejectRequest"),
+                                    t("rejectRequestConfirm")
+                                      .replace("{{name}}", driverName)
+                                      .replace(
+                                        "{{amount}}",
+                                        Number(req.amount).toLocaleString("en-IN"),
+                                      ),
+                                    [
+                                      { text: t("cancel"), style: "cancel" },
+                                      {
+                                        text: t("reject"),
+                                        style: "destructive",
+                                        onPress: async () => {
+                                          setBusyId(req.id);
+                                          const { error } = await updateSalaryRequestStatus(
+                                            req.id,
+                                            "rejected",
+                                          );
+                                          setBusyId(null);
+                                          if (error) {
+                                            Alert.alert(t("rejectFailed"), error.message);
+                                            return;
+                                          }
+                                          setRequests((prev) =>
+                                            prev.map((row) =>
+                                              row.id === req.id ? { ...row, status: "rejected" } : row,
+                                            ),
+                                          );
+                                        },
+                                      },
+                                    ],
+                                  );
+                                }}
+                              >
+                                <FontAwesome name="close" size={12} color={Theme.textPrimaryDark} />
+                                <Text style={styles.rejectText}>{t("reject")}</Text>
+                              </TouchableOpacity>
+
+                              <TouchableOpacity
+                                style={[styles.actionBtn, styles.payBtn]}
+                                disabled={requestBusy}
+                                onPress={() => {
+                                  const q = new URLSearchParams({
+                                    entityType: "DRIVER",
+                                    entityId: req.driver_id,
+                                    partyName: driverName,
+                                    partyId: req.driver_id,
+                                    defaultType: "out",
+                                    salaryAmount: String(req.amount),
+                                    defaultDriverPaymentType: isTripBased
+                                      ? "settlement"
+                                      : "advance",
+                                    salaryRequestId: req.id,
+                                  });
+                                  if (isTripBased && req.trip_ids[0]) {
+                                    q.set("tripId", req.trip_ids[0]);
+                                  }
+                                  router.push(`/(modals)/ledger-sync?${q.toString()}` as const);
+                                }}
+                              >
+                                <FontAwesome name="check" size={12} color={Theme.textOnPrimary} />
+                                <Text style={styles.payText}>Pay now</Text>
+                              </TouchableOpacity>
+
+                              <TouchableOpacity style={styles.moreBtn} activeOpacity={0.75}>
+                                <FontAwesome name="ellipsis-v" size={13} color={Theme.textMuted} />
+                              </TouchableOpacity>
+                            </View>
+                          )}
+                        </View>
+                      </View>
+                    );
+                  })}
+                </>
               )}
             </View>
           </View>
@@ -487,6 +679,89 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.primary,
   },
   listWrap: { padding: 12, gap: 8 },
+  sectionLabel: {
+    color: Theme.textSecondary,
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+    marginTop: 4,
+    marginBottom: 2,
+  },
+  sharedCard: {
+    borderWidth: 1,
+    borderColor: Theme.border,
+    borderRadius: 14,
+    padding: 12,
+    backgroundColor: Theme.surfaceForm,
+    gap: 8,
+  },
+  sharedCardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  sharedPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceLight,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+  },
+  sharedPillText: {
+    color: Theme.textSecondary,
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  sharedDate: { color: Theme.textMuted, fontSize: 11, fontWeight: "600" },
+  sharedTitle: { color: Theme.textPrimaryDark, fontSize: 14, fontWeight: "800" },
+  sharedSubtitle: { color: Theme.textSecondary, fontSize: 12, lineHeight: 17 },
+  sharedActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  sharedAmount: { color: Theme.textPrimaryDark, fontSize: 16, fontWeight: "800" },
+  sharedActionRow: { flexDirection: "row", gap: 8, alignItems: "center" },
+  sharedGhostBtn: {
+    borderWidth: 1,
+    borderColor: Theme.border,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    backgroundColor: Theme.screenBackground,
+  },
+  sharedGhostBtnText: {
+    color: Theme.textPrimaryDark,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  sharedPrimaryBtn: {
+    borderWidth: 1,
+    borderColor: Theme.textPrimaryDark,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 11,
+    backgroundColor: Theme.textPrimaryDark,
+  },
+  sharedPrimaryBtnText: {
+    color: Theme.textOnPrimary,
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  sharedHistoryTag: {
+    color: Theme.textSecondary,
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "capitalize",
+  },
   emptyCard: {
     borderWidth: 1,
     borderColor: Theme.borderLight,
