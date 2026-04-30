@@ -762,52 +762,60 @@ export default function NetworkScreen() {
             <View style={styles.commandStatsWrap}>
               <View style={styles.commandMainCard}>
                 <View style={styles.commandMainBgOrb} />
-                <View style={[styles.commandMainContent, isCompactPhone && styles.commandMainContentCompact]}>
-                  <View style={styles.commandMainHead}>
-                    <View style={styles.commandMainKickerRow}>
+                <View style={[styles.commandMainContent, isMobileLayout && styles.commandMainContentCompact]}>
+                  <View style={[styles.commandMainHead, isMobileLayout && styles.commandMainHeadMobile]}>
+                    <View style={[styles.commandMainKickerRow, isMobileLayout && styles.commandMainKickerRowMobile]}>
                       <Cpu size={12} color={Theme.primary} />
-                      <Text style={styles.commandMainKicker}>CORE NODE INTEL</Text>
+                      <Text style={styles.commandMainKicker} numberOfLines={1}>
+                        CORE NODE INTEL
+                      </Text>
                     </View>
                     <View style={styles.commandGrowthPill}>
                       <ArrowUpRight size={11} color={Theme.primary} />
                       <Text style={styles.commandGrowthText}>+{trendPct || 12}%</Text>
                     </View>
                   </View>
-                  <View style={[styles.commandMainStatsRow, isCompactPhone && styles.commandMainStatsRowCompact]}>
-                    <View style={[styles.commandTotalWrap, isCompactPhone && styles.commandTotalWrapCompact]}>
-                      {isCompactPhone ? (
-                        <View style={styles.commandTotalDigitsRow}>
-                          {totalConnectionsDisplay.split("").map((digit, index) => (
-                            <Text
-                              key={`${digit}-${index}`}
-                              style={[styles.commandTotalText, styles.commandTotalTextCompact]}
-                            >
-                              {digit}
-                            </Text>
-                          ))}
-                        </View>
-                      ) : (
-                        <Text style={styles.commandTotalText} numberOfLines={1}>
-                          {totalConnectionsDisplay}
-                        </Text>
-                      )}
-                      <Text style={[styles.commandTotalSub, isCompactPhone && styles.commandTotalSubCompact]}>Network Growth</Text>
+                  <View style={[styles.commandMainStatsRow, isMobileLayout && styles.commandMainStatsRowCompact]}>
+                    <View style={[styles.commandTotalWrap, isMobileLayout && styles.commandTotalWrapCompact]}>
+                      <Text
+                        style={[styles.commandTotalText, isMobileLayout && styles.commandTotalTextCompact]}
+                        numberOfLines={1}
+                        adjustsFontSizeToFit={isMobileLayout}
+                        minimumFontScale={0.8}
+                      >
+                        {totalConnectionsDisplay}
+                      </Text>
+                      <Text style={[styles.commandTotalSub, isMobileLayout && styles.commandTotalSubCompact]} numberOfLines={2}>
+                        Network Growth
+                      </Text>
                     </View>
-                    <View style={[styles.commandMetricGrid, isCompactPhone && styles.commandMetricGridCompact]}>
-                      <View style={[styles.commandMetricCell, isCompactPhone && styles.commandMetricCellCompact]}>
+                    <View style={[styles.commandMetricGrid, isMobileLayout && styles.commandMetricGridCompact]}>
+                      <View style={[styles.commandMetricCell, isMobileLayout && styles.commandMetricCellCompact]}>
                         <Users size={13} color={Theme.primary} />
-                        <Text style={styles.commandMetricN}>{String(clientCount).padStart(2, "0")}</Text>
-                        <Text style={styles.commandMetricL}>CLIENTS</Text>
+                        <Text style={[styles.commandMetricN, isMobileLayout && styles.commandMetricNCompact]}>
+                          {String(clientCount).padStart(2, "0")}
+                        </Text>
+                        <Text style={[styles.commandMetricL, isMobileLayout && styles.commandMetricLCompact]}>
+                          CLIENTS
+                        </Text>
                       </View>
-                      <View style={[styles.commandMetricCell, isCompactPhone && styles.commandMetricCellCompact]}>
+                      <View style={[styles.commandMetricCell, isMobileLayout && styles.commandMetricCellCompact]}>
                         <Globe size={13} color={Theme.primary} />
-                        <Text style={styles.commandMetricN}>{String(supplierCount).padStart(2, "0")}</Text>
-                        <Text style={styles.commandMetricL}>SUPPLIERS</Text>
+                        <Text style={[styles.commandMetricN, isMobileLayout && styles.commandMetricNCompact]}>
+                          {String(supplierCount).padStart(2, "0")}
+                        </Text>
+                        <Text style={[styles.commandMetricL, isMobileLayout && styles.commandMetricLCompact]}>
+                          SUPPLIERS
+                        </Text>
                       </View>
-                      <View style={[styles.commandMetricCell, isCompactPhone && styles.commandMetricCellCompact]}>
+                      <View style={[styles.commandMetricCell, isMobileLayout && styles.commandMetricCellCompact]}>
                         <Truck size={13} color={Theme.primary} />
-                        <Text style={styles.commandMetricN}>{String(driverCount).padStart(2, "0")}</Text>
-                        <Text style={styles.commandMetricL}>FLEET</Text>
+                        <Text style={[styles.commandMetricN, isMobileLayout && styles.commandMetricNCompact]}>
+                          {String(driverCount).padStart(2, "0")}
+                        </Text>
+                        <Text style={[styles.commandMetricL, isMobileLayout && styles.commandMetricLCompact]}>
+                          FLEET
+                        </Text>
                       </View>
                     </View>
                   </View>
@@ -1175,7 +1183,7 @@ const styles = StyleSheet.create({
   commandMainContentCompact: {
     paddingHorizontal: 14,
     paddingVertical: 14,
-    gap: 10,
+    gap: 16,
   },
   commandMainHead: {
     flexDirection: "row",
@@ -1192,6 +1200,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   commandMainKickerRowMobile: {
+    flex: 1,
     flexShrink: 1,
     minWidth: 0,
   },
@@ -1226,8 +1235,10 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   commandMainStatsRowCompact: {
+    flexDirection: "row",
     alignItems: "flex-start",
-    gap: 12,
+    justifyContent: "flex-start",
+    gap: 10,
   },
   commandTotalWrap: {
     flex: 1,
@@ -1235,9 +1246,13 @@ const styles = StyleSheet.create({
   },
   commandTotalWrapCompact: {
     flex: 0,
-    flexShrink: 0,
-    width: 94,
-    minWidth: 94,
+    width: 112,
+    minWidth: 112,
+    flexDirection: "column",
+    alignItems: "flex-start",
+    justifyContent: "flex-start",
+    gap: 2,
+    paddingTop: 0,
   },
   commandTotalWrapMobile: {
     alignItems: "flex-start",
@@ -1251,19 +1266,12 @@ const styles = StyleSheet.create({
     lineHeight: 72,
   },
   commandTotalTextCompact: {
-    fontSize: 54,
-    lineHeight: 54,
-    minWidth: 34,
-    textAlign: "center",
+    flexShrink: 0,
+    fontSize: 70,
+    lineHeight: 70,
+    minWidth: 104,
+    textAlign: "left",
     includeFontPadding: false,
-  },
-  commandTotalDigitsRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "flex-start",
-    width: 88,
-    flexWrap: "nowrap",
-    overflow: "visible",
   },
   commandTotalSub: {
     marginTop: 6,
@@ -1274,8 +1282,11 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   commandTotalSubCompact: {
-    fontSize: 10,
-    letterSpacing: 0.8,
+    maxWidth: 104,
+    textAlign: "left",
+    fontSize: 9,
+    lineHeight: 11,
+    letterSpacing: 1,
   },
   commandMetricGrid: {
     flexDirection: "row",
@@ -1285,8 +1296,8 @@ const styles = StyleSheet.create({
   },
   commandMetricGridCompact: {
     flex: 1,
-    width: "100%",
-    gap: 6,
+    width: undefined,
+    gap: 5,
     justifyContent: "space-between",
     minWidth: 0,
   },
@@ -1305,9 +1316,10 @@ const styles = StyleSheet.create({
     flex: 1,
     width: undefined,
     minWidth: 0,
-    borderRadius: 18,
-    paddingHorizontal: 6,
-    paddingVertical: 8,
+    minHeight: 72,
+    borderRadius: 16,
+    paddingHorizontal: 4,
+    paddingVertical: 7,
   },
   commandMetricN: {
     fontSize: 24,
@@ -1315,11 +1327,19 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     letterSpacing: -0.4,
   },
+  commandMetricNCompact: {
+    fontSize: 20,
+    lineHeight: 22,
+  },
   commandMetricL: {
     fontSize: 7,
     fontWeight: "900",
     color: Theme.textSecondary,
     letterSpacing: 0.85,
+  },
+  commandMetricLCompact: {
+    fontSize: 6,
+    letterSpacing: 0.6,
   },
   commandSideCard: {
     width: "100%",

@@ -96,6 +96,26 @@ function storyTypeLabel(post: PostRow): string {
   return "NETWORK UPDATE";
 }
 
+function splitLocationParts(value: string | null | undefined): {
+  city: string;
+  state: string;
+} {
+  const raw = (value ?? "").trim();
+  if (!raw) return { city: "—", state: "" };
+  const [city, ...rest] = raw.split(",").map((part) => part.trim()).filter(Boolean);
+  return {
+    city: city || raw,
+    state: rest.join(", "),
+  };
+}
+
+function loadMaterialLabel(post: PostRow, fallbackHeadline: string): string {
+  const material = post.material?.trim();
+  if (material) return material;
+  const beforeRoute = fallbackHeadline.split("→")[0]?.split("•")[0]?.split("·")[0]?.trim();
+  return beforeRoute || "Load";
+}
+
 // ── Viewers bottom sheet ────────────────────────────────────────────────────
 
 function ViewersSheet({
@@ -312,6 +332,9 @@ export default function StoryDetailScreen() {
   const views = viewsQ.data ?? [];
 
   const headline = post ? storyHeadline(post, Boolean(isLoad), Boolean(isVehicle)) : "";
+  const originParts = splitLocationParts(post?.origin);
+  const destinationParts = splitLocationParts(post?.destination);
+  const loadMaterial = post && isLoad ? loadMaterialLabel(post, headline) : "";
   const availabilityLabel = useMemo(() => {
     if (!post || !isVehicle) return null;
     const first = post.content?.split("·")[0]?.trim();
@@ -399,9 +422,40 @@ export default function StoryDetailScreen() {
             : <Sparkles size={44} color={color} strokeWidth={1.8} />}
         </View>
         <Text style={[styles.kicker, isDesktopPreview && styles.kickerDesktop, { color }]}>{heroLabel}</Text>
-        <Text style={[styles.heroTitle, isDesktopPreview && styles.heroTitleDesktop]} numberOfLines={6}>
-          {isVehicle ? `${vehicleTypeHeadline} AVAILABLE` : headline}
-        </Text>
+        {isLoad && post.origin && post.destination ? (
+          <View style={[styles.loadHeroTitleWrap, isDesktopPreview && styles.loadHeroTitleWrapDesktop]}>
+            <Text style={[styles.loadMaterialTitle, isDesktopPreview && styles.loadMaterialTitleDesktop]} numberOfLines={1}>
+              {loadMaterial}
+            </Text>
+            <View style={styles.loadRouteHeadlineRow}>
+              <View style={styles.loadRouteHeadlinePoint}>
+                <Text style={[styles.loadCityText, isDesktopPreview && styles.loadCityTextDesktop]} numberOfLines={1}>
+                  {originParts.city}
+                </Text>
+                {originParts.state ? (
+                  <Text style={[styles.loadStateText, isDesktopPreview && styles.loadStateTextDesktop]} numberOfLines={1}>
+                    {originParts.state}
+                  </Text>
+                ) : null}
+              </View>
+              <ArrowRight size={30} color={INK} strokeWidth={3.5} />
+              <View style={styles.loadRouteHeadlinePoint}>
+                <Text style={[styles.loadCityText, isDesktopPreview && styles.loadCityTextDesktop]} numberOfLines={1}>
+                  {destinationParts.city}
+                </Text>
+                {destinationParts.state ? (
+                  <Text style={[styles.loadStateText, isDesktopPreview && styles.loadStateTextDesktop]} numberOfLines={1}>
+                    {destinationParts.state}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+          </View>
+        ) : (
+          <Text style={[styles.heroTitle, isDesktopPreview && styles.heroTitleDesktop]} numberOfLines={6}>
+            {isVehicle ? `${vehicleTypeHeadline} AVAILABLE` : headline}
+          </Text>
+        )}
 
         {isVehicle ? (
           <View style={[styles.vehicleAvailabilityBlock, isDesktopPreview && styles.vehicleAvailabilityBlockDesktop]}>
@@ -419,13 +473,13 @@ export default function StoryDetailScreen() {
               <View style={styles.routePoint}>
                 <View style={styles.routeDotG} />
                 <Text style={styles.routeLabel}>ORIGIN</Text>
-                <Text style={styles.routeText} numberOfLines={1}>{post.origin}</Text>
+                <Text style={styles.routeText} numberOfLines={1}>{originParts.city}{originParts.state ? `, ${originParts.state}` : ""}</Text>
               </View>
               <ArrowRight size={16} color={MUTED} />
               <View style={[styles.routePoint, { alignItems: "flex-end" }]}>
                 <View style={[styles.routeDot, { backgroundColor: color }]} />
                 <Text style={styles.routeLabel}>DESTINATION</Text>
-                <Text style={styles.routeText} numberOfLines={1}>{post.destination}</Text>
+                <Text style={styles.routeText} numberOfLines={1}>{destinationParts.city}{destinationParts.state ? `, ${destinationParts.state}` : ""}</Text>
               </View>
             </View>
           </View>
@@ -612,16 +666,26 @@ const styles = StyleSheet.create({
   iconHeroDesktop: { width: 118, height: 118, borderRadius: 36, marginBottom: 24 },
   kicker: { fontSize: 10, fontWeight: "900", letterSpacing: 4, textTransform: "uppercase", textAlign: "center", marginBottom: 12 },
   kickerDesktop: { fontSize: 11, letterSpacing: 5.5, marginBottom: 14 },
-  heroTitle: { fontSize: 48, fontWeight: "900", color: INK, lineHeight: 50, textAlign: "center", fontStyle: "italic", letterSpacing: -1.1 },
-  heroTitleDesktop: { fontSize: 56, lineHeight: 58, letterSpacing: -1.7, maxWidth: 980 },
-  routeCard: { marginTop: 20, minWidth: "82%", maxWidth: "95%", borderRadius: 16, borderWidth: 1, borderColor: Theme.borderLight, backgroundColor: Theme.surface, paddingHorizontal: 14, paddingVertical: 12 },
+  heroTitle: { fontSize: 42, fontWeight: "900", color: INK, lineHeight: 44, textAlign: "center", fontStyle: "italic", letterSpacing: -1 },
+  heroTitleDesktop: { fontSize: 50, lineHeight: 52, letterSpacing: -1.5, maxWidth: 980 },
+  loadHeroTitleWrap: { width: "100%", maxWidth: 520, alignItems: "center", gap: 8 },
+  loadHeroTitleWrapDesktop: { maxWidth: 760, gap: 10 },
+  loadMaterialTitle: { maxWidth: "100%", fontSize: 42, fontWeight: "900", color: INK, lineHeight: 44, textAlign: "center", fontStyle: "italic", letterSpacing: -1.1 },
+  loadMaterialTitleDesktop: { fontSize: 50, lineHeight: 52, letterSpacing: -1.5 },
+  loadRouteHeadlineRow: { width: "100%", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 },
+  loadRouteHeadlinePoint: { flex: 1, minWidth: 0, alignItems: "center" },
+  loadCityText: { maxWidth: "100%", fontSize: 34, fontWeight: "900", color: INK, lineHeight: 36, textAlign: "center", fontStyle: "italic", letterSpacing: -0.9 },
+  loadCityTextDesktop: { fontSize: 42, lineHeight: 44, letterSpacing: -1.2 },
+  loadStateText: { maxWidth: "100%", marginTop: 1, fontSize: 18, fontWeight: "900", color: INK, lineHeight: 21, textAlign: "center", fontStyle: "italic", letterSpacing: -0.2 },
+  loadStateTextDesktop: { fontSize: 22, lineHeight: 25, letterSpacing: -0.35 },
+  routeCard: { marginTop: 18, minWidth: "82%", maxWidth: "95%", borderRadius: 16, borderWidth: 1, borderColor: Theme.borderLight, backgroundColor: Theme.surface, paddingHorizontal: 14, paddingVertical: 12 },
   routeCardDesktop: { minWidth: "70%", maxWidth: 900, marginTop: 24, paddingHorizontal: 16, paddingVertical: 14 },
   routeLine: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  routePoint: { flex: 1, minWidth: 0, gap: 2 },
+  routePoint: { flex: 1, minWidth: 0, gap: 2, alignItems: "flex-start" },
   routeLabel: { fontSize: 9, fontWeight: "900", color: Theme.textMutedDemo, letterSpacing: 0.7 },
   routeDotG: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#10b981" },
   routeDot: { width: 8, height: 8, borderRadius: 4 },
-  routeText: { fontSize: 16, fontWeight: "800", color: INK, maxWidth: "100%" },
+  routeText: { fontSize: 15, fontWeight: "800", color: INK, maxWidth: "100%" },
   vehicleAvailabilityBlock: { marginTop: 10, alignItems: "center", gap: 5 },
   vehicleAvailabilityBlockDesktop: { marginTop: 14, gap: 6 },
   vehicleAvailabilityLine: { flexDirection: "row", alignItems: "center", gap: 6 },
@@ -640,9 +704,9 @@ const styles = StyleSheet.create({
   metaChip: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: Theme.surface, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: Theme.borderMedium },
   metaChipEmphasis: { backgroundColor: Theme.screenBackground },
   metaChipText: { fontSize: 11, fontWeight: "800", color: MUTED },
-  watermark: { position: "absolute", bottom: 140, left: 0, right: 0, alignItems: "center" },
-  watermarkDesktop: { bottom: 120 },
-  watermarkText: { fontSize: 96, fontWeight: "900", color: INK, opacity: 0.04, letterSpacing: -2, fontStyle: "italic" },
+  watermark: { position: "absolute", top: "50%", left: 0, right: 0, alignItems: "center", transform: [{ translateY: -38 }] },
+  watermarkDesktop: { transform: [{ translateY: -44 }] },
+  watermarkText: { fontSize: 76, fontWeight: "900", color: INK, opacity: 0.035, letterSpacing: -1.6, fontStyle: "italic" },
   footer: { paddingHorizontal: Layout.screenPaddingHorizontal, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Theme.borderMedium, backgroundColor: "rgba(255,255,255,0.88)" },
   viewersPill: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 8, marginBottom: 8 },
   viewersPillText: { fontSize: 12, fontWeight: "700", color: MUTED, letterSpacing: 0.4 },

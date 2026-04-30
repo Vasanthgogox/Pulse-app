@@ -802,7 +802,7 @@ export type TripsHubTableViewProps = {
   financeAdjustmentsByTripId?: Record<string, TripAdjustment[]>;
   /**
    * When set, the manifest table rows are omitted and this render function receives the filtered + sorted trips
-   * (toolbar, search/sort/status pills, and Filters panel behave like table mode).
+   * (toolbar, search/sort, and Filters panel behave like table mode).
    */
   renderBody?: (templateTrips: TripRow[]) => ReactNode;
 };
@@ -879,9 +879,6 @@ export function TripsHubTableView({
   const [sortKey, setSortKey] = useState<"recent" | "due_desc" | "sales_desc">(
     "recent",
   );
-  const [statusFilter, setStatusFilter] = useState<
-    "all" | "verified" | "pending" | "attention"
-  >("all");
   const [showColSettings, setShowColSettings] = useState(false);
   const [receiptTx, setReceiptTx] = useState<{
     trip: TripRow;
@@ -978,30 +975,9 @@ export function TripsHubTableView({
         ? "Due"
         : "Sales";
 
-  const statusLabel =
-    statusFilter === "all"
-      ? "All status"
-      : statusFilter === "verified"
-        ? "Verified"
-        : statusFilter === "pending"
-          ? "Pending"
-          : "Needs review";
-
   const cycleSortKey = () => {
     setSortKey((prev) =>
       prev === "recent" ? "due_desc" : prev === "due_desc" ? "sales_desc" : "recent",
-    );
-  };
-
-  const cycleStatusFilter = () => {
-    setStatusFilter((prev) =>
-      prev === "all"
-        ? "verified"
-        : prev === "verified"
-          ? "pending"
-          : prev === "pending"
-            ? "attention"
-            : "all",
     );
   };
 
@@ -1021,9 +997,8 @@ export function TripsHubTableView({
   };
 
   const templateTrips = useMemo(() => {
-    if (statusFilter === "all") return displayedTrips;
-    return displayedTrips.filter((trip) => classifyTripFilter(trip) === statusFilter);
-  }, [displayedTrips, statusFilter]);
+    return displayedTrips;
+  }, [displayedTrips]);
 
   const toggleTemplateCol = (key: keyof typeof cols) => {
     setCols((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -1058,17 +1033,6 @@ export function TripsHubTableView({
           </View>
           <TouchableOpacity
             style={styles.auditToolbarBtn}
-            onPress={cycleStatusFilter}
-            activeOpacity={0.85}
-            accessibilityRole="button"
-            accessibilityLabel="Cycle status filter"
-          >
-            <FontAwesome name="check-circle-o" size={13} color={Theme.textSecondary} />
-            <Text style={styles.auditToolbarText}>{statusLabel}</Text>
-            <FontAwesome name="chevron-down" size={10} color={Theme.textMuted} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.auditToolbarBtn}
             onPress={cycleSortKey}
             activeOpacity={0.85}
             accessibilityRole="button"
@@ -1089,60 +1053,6 @@ export function TripsHubTableView({
             <Text style={styles.auditToolbarText}>Filters</Text>
           </TouchableOpacity>
         </View>
-      </View>
-
-      <View style={styles.manifestFilterRow}>
-        <TouchableOpacity
-          style={[styles.manifestFilterPill, statusFilter === "all" && styles.manifestFilterPillOn]}
-          onPress={() => setStatusFilter("all")}
-          activeOpacity={0.85}
-        >
-          <Text style={[styles.manifestFilterPillText, statusFilter === "all" && styles.manifestFilterPillTextOn]}>
-            All
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.manifestFilterPill, statusFilter === "verified" && styles.manifestFilterPillOn]}
-          onPress={() => setStatusFilter("verified")}
-          activeOpacity={0.85}
-        >
-          <Text
-            style={[
-              styles.manifestFilterPillText,
-              statusFilter === "verified" && styles.manifestFilterPillTextOn,
-            ]}
-          >
-            Verified
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.manifestFilterPill, statusFilter === "pending" && styles.manifestFilterPillOn]}
-          onPress={() => setStatusFilter("pending")}
-          activeOpacity={0.85}
-        >
-          <Text
-            style={[
-              styles.manifestFilterPillText,
-              statusFilter === "pending" && styles.manifestFilterPillTextOn,
-            ]}
-          >
-            Pending
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.manifestFilterPill, statusFilter === "attention" && styles.manifestFilterPillOn]}
-          onPress={() => setStatusFilter("attention")}
-          activeOpacity={0.85}
-        >
-          <Text
-            style={[
-              styles.manifestFilterPillText,
-              statusFilter === "attention" && styles.manifestFilterPillTextOn,
-            ]}
-          >
-            Needs Review
-          </Text>
-        </TouchableOpacity>
       </View>
 
       {showColSettings ? (
