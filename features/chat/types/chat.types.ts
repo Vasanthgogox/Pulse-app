@@ -1,6 +1,36 @@
 export type ConversationPartyType = "client" | "supplier" | "driver";
 export type MessageSenderRole = "dispatcher" | "client" | "supplier" | "driver" | "system";
-export type MessageType = "text" | "update" | "question" | "challenge" | "system";
+export type MessageType = "text" | "update" | "question" | "challenge" | "system" | "ledger_event" | "document_share";
+
+// ── Ledger event metadata ─────────────────────────────────────────────────────
+
+export interface LedgerEventMetadata {
+  transaction_id: string;
+  amount: number;
+  flow: "in" | "out";
+  category: string;
+  payment_mode: string;
+  reference_number?: string | null;
+  notes?: string | null;
+  sender_org_id: string;
+  sender_org_name: string;
+  receiver_org_id: string;
+  receiver_org_name: string;
+  acknowledged_at?: string | null;
+  disputed?: boolean;
+}
+
+// ── Document share metadata ───────────────────────────────────────────────────
+
+export interface DocumentShareMetadata {
+  document_type: string;
+  storage_path: string;
+  document_name: string;
+  entity_type: "vehicle" | "driver";
+  entity_id: string;
+}
+
+// ── Trip conversation ─────────────────────────────────────────────────────────
 
 export interface TripConversationRow {
   id: string;
@@ -27,6 +57,7 @@ export interface TripMessageRow {
   sender_name: string;
   content: string;
   message_type: MessageType;
+  metadata?: LedgerEventMetadata | DocumentShareMetadata | null;
   is_read: boolean;
   read_at: string | null;
   created_at: string;
@@ -39,7 +70,7 @@ export interface TripConversation extends TripConversationRow {
   messages: TripMessageRow[];
 }
 
-// ── Network (org-to-org) chat ─────────────────────────────────────────────────
+// ── Network (org-to-org) chat ─────────────────────────────────────────────────────
 
 export interface NetworkConversationRow {
   id: string;
@@ -77,4 +108,14 @@ export interface NetworkConversation extends NetworkConversationRow {
 export interface NetworkPartner {
   org_id: string;
   name: string;
+}
+
+// ── Shareable document item ───────────────────────────────────────────────────
+
+export interface ShareableDocument {
+  key: string;
+  label: string;
+  storage_path: string;
+  entity_type: "vehicle" | "driver";
+  entity_id: string;
 }

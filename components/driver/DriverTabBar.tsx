@@ -3,6 +3,7 @@ import Theme from '@/constants/Theme';
 import Typography from '@/constants/Typography';
 import { driverTabMicroLabel } from '@/constants/DriverTypography';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
+import { useDriverChat } from '@/features/chat/contexts/DriverChatContext';
 import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import * as Haptics from 'expo-haptics';
@@ -46,6 +47,7 @@ export const TAB_CONFIG = [
   { name: 'index', label: 'Dashboard', icon: 'crosshairs' as const },
   { name: 'trip-history', label: 'History', icon: 'history' as const },
   { name: 'wallet', label: 'Earnings', icon: 'wallet' as const },
+  { name: 'chat', label: 'Messages', icon: 'comment-alt' as const },
 ];
 
 export function DriverTabBar({ state, navigation }: BottomTabBarProps) {
@@ -53,6 +55,8 @@ export function DriverTabBar({ state, navigation }: BottomTabBarProps) {
   const colors = useDriverThemeColors();
   const { isDark } = useDriverTheme();
   const current = state.routes[state.index]?.name;
+  const { getTotalUnreadCount } = useDriverChat();
+  const chatUnread = getTotalUnreadCount();
 
   const handlePress = (routeName: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -106,12 +110,21 @@ export function DriverTabBar({ state, navigation }: BottomTabBarProps) {
                 }}
               >
                 <AnimatedTabIcon selected={isActive}>
-                  <FontAwesome5
-                    name={tab.icon}
-                    size={16}
-                    color={isActive ? colors.text : colors.textMuted}
-                    solid={isActive}
-                  />
+                  <View style={{ position: 'relative' }}>
+                    <FontAwesome5
+                      name={tab.icon}
+                      size={16}
+                      color={isActive ? colors.text : colors.textMuted}
+                      solid={isActive}
+                    />
+                    {tab.name === 'chat' && chatUnread > 0 && !isActive && (
+                      <View style={styles.badge}>
+                        <Text style={styles.badgeText}>
+                          {chatUnread > 9 ? '9+' : String(chatUnread)}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
                   <Text
                     style={[
                       styles.dockLabel,
@@ -137,6 +150,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 3,
+  },
+  badge: {
+    position: 'absolute',
+    top: -5,
+    right: -8,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: Theme.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  badgeText: {
+    fontSize: 8,
+    fontWeight: '900',
+    color: '#fff',
   },
   footerWrap: {
     position: 'absolute',

@@ -13,6 +13,7 @@ import { LEDGER_PAGE_SIZE, type PageOpts } from '@/lib/pagination';
 import { VALIDATION, dateISO } from '@/lib/validation';
 import { getAvatarUriForSeed } from '@/constants/DriverLevels';
 import { resolveAvatarPublicUrl } from '@/lib/avatarUpload';
+import { postLedgerEventToChat } from '@/features/chat/services/chatLedgerBridge.service';
 
 /** Join trips for ledger rows; older DBs may not have `trips.display_trip_id` yet (PostgREST 400). */
 const LEDGER_TX_SELECT_WITH_TRIPS =
@@ -664,6 +665,54 @@ export async function createLedgerEntry(
     ledger_category?: string | null;
   };
 
+  // Post ledger event to chat for integrated trip parties (client/supplier only).
+  // Fire-and-forget: chat failure must never block the finance operation.
+  const ct = (payload.contact_type ?? '').toLowerCase();
+  if (row.trip_id && (ct === 'client' || ct === 'supplier') && row.contact_id) {
+    const isIn = row.amount_in > 0;
+    void (async () => {
+      try {
+        const { data: linkedOrg } = ct === 'client'
+          ? await supabase()
+              .from('clients')
+              .select('linked_organization_id, name')
+              .eq('id', row.contact_id!)
+              .maybeSingle()
+          : await supabase()
+              .from('suppliers')
+              .select('linked_organization_id, company_name, name')
+              .eq('id', row.contact_id!)
+              .maybeSingle();
+
+        if (!linkedOrg?.linked_organization_id) return;
+
+        const [{ data: senderOrg }, { data: receiverOrg }] = await Promise.all([
+          supabase().from('organizations').select('id, name').eq('id', orgId).maybeSingle(),
+          supabase().from('organizations').select('id, name').eq('id', linkedOrg.linked_organization_id).maybeSingle(),
+        ]);
+
+        if (!senderOrg || !receiverOrg) return;
+
+        await postLedgerEventToChat({
+          tripId: row.trip_id!,
+          transactionId: row.id,
+          amount: isIn ? row.amount_in : row.amount_out,
+          flow: isIn ? 'in' : 'out',
+          category: normalizePrimaryCategory(row.description) ?? 'Payment',
+          paymentMode: parsePaymentMode(row.description) ?? 'Cash',
+          referenceNumber: parsePaymentReference(row.description),
+          notes: null,
+          senderOrgId: senderOrg.id,
+          senderOrgName: senderOrg.name ?? orgId,
+          receiverOrgId: receiverOrg.id,
+          receiverOrgName: receiverOrg.name ?? linkedOrg.linked_organization_id,
+        });
+      } catch {
+        // Non-critical — chat failure must not affect ledger
+      }
+    })();
+  }
+
   return { error: null, row: toLedgerRow(row) };
 }
 
@@ -775,5 +824,6 @@ export async function updateLedgerEntry(
     ledger_category?: string | null;
   };
 
+  // updateLedgerEntry intentionally does not post to chat to avoid duplicate events.
   return { error: null, row: toLedgerRow(row) };
 }
