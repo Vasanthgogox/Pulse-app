@@ -1,3 +1,5 @@
+import { entityCompanionCardStyles as ecc } from "@/components/entityCompanionCard.styles";
+import { entityHeroScorecardStyles as ehs } from "@/components/entityHeroScorecard.styles";
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { CounterpartyProfileSystemCard } from "@/components/CounterpartyProfileSystemCard";
 import { DatePresetPillBar } from "@/components/DatePresetPillBar";
@@ -19,7 +21,6 @@ import {
     getTransactionsByOrganization,
     LedgerReportModal,
     SharedLedgerContent,
-    type LedgerEntry,
     type LedgerRow,
 } from "@/features/finance";
 import { LedgerTransactionListView } from "@/features/finance/components/LedgerTransactionListView";
@@ -36,7 +37,10 @@ import {
     type TripRow,
 } from "@/features/trips";
 import { adjustedCost } from "@/features/trips/services/tripAdjustments";
-import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
+import {
+    buildUniqueLinkedOrgIdMap,
+    isLoadBasedTrip,
+} from "@/features/trips/visibility/tripVisibility";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import {
     canAccessFinance,
@@ -48,23 +52,24 @@ import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjust
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
-  Animated,
-  Easing,
-  Image,
-  Modal,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  Share,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  useWindowDimensions,
-  View,
+    Alert,
+    Animated,
+    Easing,
+    Image,
+    Modal,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    Share,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -78,17 +83,20 @@ import {
 
 /** Treat DB placeholders or internal ids as empty for display. */
 function normalizeContactDisplay(value: string | null | undefined): string {
-  const s = (value ?? '').trim();
-  if (!s || s === 'nameLabel' || s === 'contactPerson' || s === 'contact') return '';
+  const s = (value ?? "").trim();
+  if (!s || s === "nameLabel" || s === "contactPerson" || s === "contact")
+    return "";
   return s;
 }
 
 /** Treat linked-org placeholder or UUID in phone as empty for display. */
 function normalizePhoneDisplay(value: string | null | undefined): string {
-  const s = (value ?? '').trim();
-  if (!s || /^linked-/i.test(s) || s.toLowerCase().includes('linked-')) return '';
-  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)) return '';
-  if (/^[0-9a-f-]{36,}$/i.test(s)) return '';
+  const s = (value ?? "").trim();
+  if (!s || /^linked-/i.test(s) || s.toLowerCase().includes("linked-"))
+    return "";
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s))
+    return "";
+  if (/^[0-9a-f-]{36,}$/i.test(s)) return "";
   return s;
 }
 
@@ -130,6 +138,11 @@ export default function SupplierDetailScreen({
   );
   const canAddTransaction = canAccessFinance(capabilities);
   const [supplier, setSupplier] = useState<SupplierRow | null>(null);
+  const supplierName =
+    supplier?.name ||
+    supplier?.company_name ||
+    supplier?.contact_person ||
+    t("supplier");
   const [trips, setTrips] = useState<TripRow[]>([]);
   const tripIdsForFinanceAdj = useMemo(
     () => trips.map((t) => String(t.id)).filter(Boolean),
@@ -143,13 +156,17 @@ export default function SupplierDetailScreen({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showReportModal, setShowReportModal] = useState(false);
-  const [sharedLedgerDownloadSignal, setSharedLedgerDownloadSignal] = useState(0);
+  const [sharedLedgerDownloadSignal, setSharedLedgerDownloadSignal] =
+    useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [detailSubTab, setDetailSubTab] = useState<"trips" | "cash" | "shared">("trips");
-  const [tripDatePeriod, setTripDatePeriod] = useState<FinancePeriodFilter>("RANGE");
+  const [detailSubTab, setDetailSubTab] = useState<"trips" | "cash" | "shared">(
+    "trips",
+  );
+  const [tripDatePeriod, setTripDatePeriod] =
+    useState<FinancePeriodFilter>("RANGE");
   const [tripCustomFrom, setTripCustomFrom] = useState<string | null>(null);
   const [tripCustomTo, setTripCustomTo] = useState<string | null>(null);
   const [tripDateModalVisible, setTripDateModalVisible] = useState(false);
@@ -163,8 +180,15 @@ export default function SupplierDetailScreen({
   const [clients, setClients] = useState<ClientRow[]>([]);
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
-  const isWebDesktop = Platform.OS === "web" && windowWidth >= 1024;
-  const webContentGutter = Platform.OS === "web" ? (windowWidth >= 1600 ? 10 : windowWidth >= 1280 ? 12 : 16) : Layout.screenPaddingHorizontal;
+  const isWebDesktop = Platform.OS === "web" && windowWidth >= 640;
+  const webContentGutter =
+    Platform.OS === "web"
+      ? windowWidth >= 1600
+        ? 10
+        : windowWidth >= 1280
+          ? 12
+          : 16
+      : Layout.screenPaddingHorizontal;
   const initialLoadDoneRef = useRef(false);
   const heroDecorProgress = useRef(new Animated.Value(0)).current;
 
@@ -177,6 +201,7 @@ export default function SupplierDetailScreen({
   }, [clients]);
 
   const linkedOrgDisplayMap = useLinkedOrgProfileMap(clients, []);
+  const hasInAppProfile = Boolean(supplier?.linked_organization_id) || isInApp || isLinked;
 
   useEffect(() => {
     if (autoOpenProfile) setShowProfileModal(true);
@@ -231,9 +256,8 @@ export default function SupplierDetailScreen({
     if (!currentOrganization?.id || !supplier?.phone) return;
     setSendingInvitation(true);
     try {
-      const { createConnectionRequest, getConnectionInviteeByPhone } = await import(
-        "@/services/connectionRequestsService"
-      );
+      const { createConnectionRequest, getConnectionInviteeByPhone } =
+        await import("@/services/connectionRequestsService");
       const { invitee, error: lookupError } = await getConnectionInviteeByPhone(
         supplier.phone,
       );
@@ -279,7 +303,8 @@ export default function SupplierDetailScreen({
       setLoading(false);
       return;
     }
-    if (!isRefreshingRef.current && !initialLoadDoneRef.current) setLoading(true);
+    if (!isRefreshingRef.current && !initialLoadDoneRef.current)
+      setLoading(true);
     setError(null);
     const orgId = currentOrganization.id;
     const supplierPromise = getSupplierDetails(supplierId);
@@ -294,15 +319,22 @@ export default function SupplierDetailScreen({
         r.error ? [] : (r.trips ?? []),
       );
     });
-    const subcontractsPromise = getTripsWhereOrgIsSupplier(orgId).then((res) => {
-      if (res.error) return { sharedTrips: [], subcontracts: [] };
-      const sharedTrips = res.trips ?? [];
-      const tripIds = sharedTrips.map((t) => t.id);
-      if (tripIds.length === 0) return { sharedTrips, subcontracts: [] };
-      return getTripSubcontracts({ viewerOrgId: orgId, tripIds }).then((subRes) => {
-        return { sharedTrips, subcontracts: subRes.error ? [] : subRes.rows };
-      });
-    });
+    const subcontractsPromise = getTripsWhereOrgIsSupplier(orgId).then(
+      (res) => {
+        if (res.error) return { sharedTrips: [], subcontracts: [] };
+        const sharedTrips = res.trips ?? [];
+        const tripIds = sharedTrips.map((t) => t.id);
+        if (tripIds.length === 0) return { sharedTrips, subcontracts: [] };
+        return getTripSubcontracts({ viewerOrgId: orgId, tripIds }).then(
+          (subRes) => {
+            return {
+              sharedTrips,
+              subcontracts: subRes.error ? [] : subRes.rows,
+            };
+          },
+        );
+      },
+    );
     const driversPromise = getDriversByOrganization(orgId);
     const clientsPromise = getClientsByOrganization(orgId);
     Promise.all([
@@ -315,84 +347,103 @@ export default function SupplierDetailScreen({
       driversPromise,
       clientsPromise,
     ])
-      .then(([res, tripsRes, txRes, asClientTrips, suppliersRes, subRes, driversRes, clientsRes]) => {
-        if (res.error) {
-          setError(res.error.message);
-          setSupplier(null);
-        } else {
-          setSupplier(res.supplier ?? null);
-        }
-        const allTrips = tripsRes.error ? [] : (tripsRes.trips ?? []);
-        const sup = res.supplier;
-        const supplierDisplayName = sup
-          ? (sup.name || sup.company_name || sup.contact_person || "")
-              .trim()
-              .toLowerCase()
-          : "";
-        const linkedOrgId = sup?.linked_organization_id ?? null;
-        const linkedSupplierIdByOrgId = buildUniqueLinkedOrgIdMap(
-          suppliersRes.error ? [] : (suppliersRes.suppliers ?? []),
-        );
-        const fromOwned = allTrips.filter(
-          (t) =>
-            t.supplier_id === supplierId ||
-            (!t.supplier_id &&
-              supplierDisplayName &&
-              (t.supplier_name ?? "").trim().toLowerCase() ===
-                supplierDisplayName),
-        );
-        const seen = new Set(fromOwned.map((t) => t.id));
-        const merged: TripRow[] = [...fromOwned];
-        
-        // Add shared trips where we are the supplier and we subcontracted to THIS supplier
-        const { sharedTrips, subcontracts } = subRes;
-        const tripIdToSubcontract = new Map(subcontracts.map(s => [s.trip_id, s]));
-        for (const t of sharedTrips) {
-          const sub = tripIdToSubcontract.get(t.id);
-          if (sub && sub.supplier_id === supplierId) {
-            if (!seen.has(t.id)) {
-              seen.add(t.id);
-              // Overwrite supplier_rate so the UI displays the subcontract rate
-              merged.push({ ...t, supplier_rate: sub.rate });
-            }
-          } else if (t.supplier_id === supplierId || (!t.supplier_id && supplierDisplayName && (t.supplier_name ?? "").trim().toLowerCase() === supplierDisplayName)) {
-            if (!seen.has(t.id)) {
+      .then(
+        ([
+          res,
+          tripsRes,
+          txRes,
+          asClientTrips,
+          suppliersRes,
+          subRes,
+          driversRes,
+          clientsRes,
+        ]) => {
+          if (res.error) {
+            setError(res.error.message);
+            setSupplier(null);
+          } else {
+            setSupplier(res.supplier ?? null);
+          }
+          const allTrips = tripsRes.error ? [] : (tripsRes.trips ?? []);
+          const sup = res.supplier;
+          const supplierDisplayName = sup
+            ? (sup.name || sup.company_name || sup.contact_person || "")
+                .trim()
+                .toLowerCase()
+            : "";
+          const linkedOrgId = sup?.linked_organization_id ?? null;
+          const linkedSupplierIdByOrgId = buildUniqueLinkedOrgIdMap(
+            suppliersRes.error ? [] : (suppliersRes.suppliers ?? []),
+          );
+          const fromOwned = allTrips.filter(
+            (t) =>
+              t.supplier_id === supplierId ||
+              (!t.supplier_id &&
+                supplierDisplayName &&
+                (t.supplier_name ?? "").trim().toLowerCase() ===
+                  supplierDisplayName),
+          );
+          const seen = new Set(fromOwned.map((t) => t.id));
+          const merged: TripRow[] = [...fromOwned];
+
+          // Add shared trips where we are the supplier and we subcontracted to THIS supplier
+          const { sharedTrips, subcontracts } = subRes;
+          const tripIdToSubcontract = new Map(
+            subcontracts.map((s) => [s.trip_id, s]),
+          );
+          for (const t of sharedTrips) {
+            const sub = tripIdToSubcontract.get(t.id);
+            if (sub && sub.supplier_id === supplierId) {
+              if (!seen.has(t.id)) {
+                seen.add(t.id);
+                // Overwrite supplier_rate so the UI displays the subcontract rate
+                merged.push({ ...t, supplier_rate: sub.rate });
+              }
+            } else if (
+              t.supplier_id === supplierId ||
+              (!t.supplier_id &&
+                supplierDisplayName &&
+                (t.supplier_name ?? "").trim().toLowerCase() ===
+                  supplierDisplayName)
+            ) {
+              if (!seen.has(t.id)) {
                 seen.add(t.id);
                 merged.push(t);
+              }
             }
           }
-        }
-        
-        if (linkedOrgId && Array.isArray(asClientTrips)) {
-          for (const t of asClientTrips) {
-            if (
-              isLoadBasedTrip(t) &&
-              t.organization_id === linkedOrgId &&
-              linkedSupplierIdByOrgId.get(linkedOrgId) === supplierId &&
-              !seen.has(t.id)
-            ) {
-              seen.add(t.id);
-              merged.push(t);
+
+          if (linkedOrgId && Array.isArray(asClientTrips)) {
+            for (const t of asClientTrips) {
+              if (
+                isLoadBasedTrip(t) &&
+                t.organization_id === linkedOrgId &&
+                linkedSupplierIdByOrgId.get(linkedOrgId) === supplierId &&
+                !seen.has(t.id)
+              ) {
+                seen.add(t.id);
+                merged.push(t);
+              }
             }
           }
-        }
-        setTrips(merged);
-        const allTx =
-          (txRes.error ? [] : ((txRes.transactions ?? []) as LedgerRow[])) ??
-          [];
-        const normId = (id: string | null | undefined) =>
-          id == null ? "" : String(id).trim().toLowerCase();
-        const forSupplierTx = allTx.filter((tx) => {
-          return (
-            tx.contact_type === "supplier" &&
-            tx.contact_id != null &&
-            normId(tx.contact_id) === normId(supplierId)
-          );
-        });
-        setTransactions(forSupplierTx);
-        setOrgDrivers(driversRes?.error ? [] : (driversRes.drivers ?? []));
-        setClients(clientsRes.error ? [] : (clientsRes.clients ?? []));
-      })
+          setTrips(merged);
+          const allTx =
+            (txRes.error ? [] : ((txRes.transactions ?? []) as LedgerRow[])) ??
+            [];
+          const normId = (id: string | null | undefined) =>
+            id == null ? "" : String(id).trim().toLowerCase();
+          const forSupplierTx = allTx.filter((tx) => {
+            return (
+              tx.contact_type === "supplier" &&
+              tx.contact_id != null &&
+              normId(tx.contact_id) === normId(supplierId)
+            );
+          });
+          setTransactions(forSupplierTx);
+          setOrgDrivers(driversRes?.error ? [] : (driversRes.drivers ?? []));
+          setClients(clientsRes.error ? [] : (clientsRes.clients ?? []));
+        },
+      )
       .finally(() => {
         setLoading(false);
         initialLoadDoneRef.current = true;
@@ -415,7 +466,9 @@ export default function SupplierDetailScreen({
         if (mounted) setProfileAvatarUri(null);
         return;
       }
-      const { profile } = await getLinkedOrgProfileForSupplier(supplier.linked_organization_id);
+      const { profile } = await getLinkedOrgProfileForSupplier(
+        supplier.linked_organization_id,
+      );
       if (!profile) {
         if (mounted) setProfileAvatarUri(null);
         return;
@@ -430,7 +483,10 @@ export default function SupplierDetailScreen({
         return;
       }
       if (profile.avatarSeed?.trim()) {
-        if (mounted) setProfileAvatarUri(getUser2DAvatarUriForSeed(profile.avatarSeed.trim()));
+        if (mounted)
+          setProfileAvatarUri(
+            getUser2DAvatarUriForSeed(profile.avatarSeed.trim()),
+          );
         return;
       }
       if (mounted) setProfileAvatarUri(null);
@@ -515,8 +571,7 @@ export default function SupplierDetailScreen({
     > = {};
     for (const t of trips) {
       const key = norm(t.id);
-      const base =
-        Number(t.supplier_rate ?? 0) || Number(t.client_price ?? 0);
+      const base = Number(t.supplier_rate ?? 0) || Number(t.client_price ?? 0);
       const adj = tripFinanceAdjRecord[key] ?? [];
       const sales = adjustedCost(base, adj);
       const paid = allocatedOutByTripId[key] ?? 0;
@@ -578,8 +633,7 @@ export default function SupplierDetailScreen({
     const tripIdToDue: Record<string, number> = {};
     for (const t of trips) {
       const key = norm(t.id);
-      const base =
-        Number(t.supplier_rate ?? 0) || Number(t.client_price ?? 0);
+      const base = Number(t.supplier_rate ?? 0) || Number(t.client_price ?? 0);
       const adj = tripFinanceAdjRecord[key] ?? [];
       const sales = adjustedCost(base, adj);
       const paid = allocatedOutByTripId[key] ?? 0;
@@ -617,8 +671,7 @@ export default function SupplierDetailScreen({
       id == null ? "" : String(id).trim().toLowerCase();
     return tripsForMissionTable.map((t) => {
       const key = norm(t.id);
-      const base =
-        Number(t.supplier_rate ?? 0) || Number(t.client_price ?? 0);
+      const base = Number(t.supplier_rate ?? 0) || Number(t.client_price ?? 0);
       const adj = tripFinanceAdjRecord[key] ?? [];
       const sales = adjustedCost(base, adj);
       const paid = paidByTripId[key] ?? 0;
@@ -626,7 +679,8 @@ export default function SupplierDetailScreen({
       return {
         trip: t,
         missionId: getTripDisplayNumber(t),
-        route: `${t.pickup_area ?? ""} → ${t.drop_location ?? ""}`.trim() || "—",
+        route:
+          `${t.pickup_area ?? ""} → ${t.drop_location ?? ""}`.trim() || "—",
         sales,
         paid,
         due,
@@ -634,7 +688,10 @@ export default function SupplierDetailScreen({
     });
   }, [tripsForMissionTable, paidByTripId, tripIdToDue, tripFinanceAdjRecord]);
   const tripTransactionMetaById = useMemo(() => {
-    const byTrip: Record<string, { count: number; lastTxnDate: string | null }> = {};
+    const byTrip: Record<
+      string,
+      { count: number; lastTxnDate: string | null }
+    > = {};
     for (const tx of transactions) {
       if (!tx.trip_id) continue;
       const key = String(tx.trip_id).trim().toLowerCase();
@@ -646,7 +703,10 @@ export default function SupplierDetailScreen({
         continue;
       }
       current.count += 1;
-      if (candidateDate && (!current.lastTxnDate || candidateDate > current.lastTxnDate)) {
+      if (
+        candidateDate &&
+        (!current.lastTxnDate || candidateDate > current.lastTxnDate)
+      ) {
         current.lastTxnDate = candidateDate;
       }
     }
@@ -741,7 +801,9 @@ export default function SupplierDetailScreen({
         }
       }
     }
-    const { error: err, supplier: latest } = await getSupplierDetails(supplier.id);
+    const { error: err, supplier: latest } = await getSupplierDetails(
+      supplier.id,
+    );
     if (err || !latest) return;
     setSupplier(latest);
     return {
@@ -752,11 +814,14 @@ export default function SupplierDetailScreen({
     };
   };
 
-  const supplierName =
-    supplier?.name ||
-    supplier?.company_name ||
-    supplier?.contact_person ||
-    t("supplier");
+  const handleInviteToApp = useCallback(() => {
+    const message = `Join me on Pulse to sync our ledger and compare books with ${supplierName}. Download the Q app to get started.`;
+    Share.share({ message, title: "Invite to Q" })
+      .then(() => {
+        triggerSuccess("INVITE_SENT");
+      })
+      .catch(() => {});
+  }, [supplierName, triggerSuccess]);
 
   const sortedTx = useMemo(
     () =>
@@ -802,14 +867,21 @@ export default function SupplierDetailScreen({
     if (detailSubTab !== "trips") return undefined;
     const rows = missionRows.map((row) => {
       const key = String(row.trip.id).trim().toLowerCase();
-      const meta = tripTransactionMetaById[key] ?? { count: 0, lastTxnDate: null };
+      const meta = tripTransactionMetaById[key] ?? {
+        count: 0,
+        lastTxnDate: null,
+      };
       const clientRevenue = Number(row.trip.client_price ?? 0);
       const pnl = clientRevenue - row.sales;
-      const margin = clientRevenue > 0 ? `${((pnl / clientRevenue) * 100).toFixed(1)}%` : "0.0%";
+      const margin =
+        clientRevenue > 0
+          ? `${((pnl / clientRevenue) * 100).toFixed(1)}%`
+          : "0.0%";
       return {
         trip: row.missionId,
         route: row.route,
-        client: row.trip.client_name?.trim() || row.trip.client_id?.trim() || "—",
+        client:
+          row.trip.client_name?.trim() || row.trip.client_id?.trim() || "—",
         contract: formatINR(row.sales),
         clientRevenue: formatINR(clientRevenue),
         pnl: formatINR(pnl),
@@ -851,8 +923,16 @@ export default function SupplierDetailScreen({
     return (
       <View style={[styles.wrap, { paddingTop: insets.top }]}>
         <View style={styles.header}>
-          <TouchableOpacity style={styles.backBtn} onPress={onBack} activeOpacity={0.8}>
-            <FontAwesome name="chevron-left" size={20} color={Theme.textPrimaryDark} />
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={onBack}
+            activeOpacity={0.8}
+          >
+            <FontAwesome
+              name="chevron-left"
+              size={20}
+              color={Theme.textPrimaryDark}
+            />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
             <Text style={styles.headerTitle} numberOfLines={1}>
@@ -871,6 +951,43 @@ export default function SupplierDetailScreen({
   const contractValue = totalBilledConsolidated;
   const paid = contractValue - totalPendingConsolidated;
   const due = totalPendingConsolidated;
+  const tripsHandled = missionRows.length;
+  const isIntegrated =
+    supplier.supplier_type === "integrated" ||
+    Boolean(supplier.linked_organization_id);
+  const isInAppNotIntegrated = !isIntegrated && isInApp;
+  const isNotInApp = !isIntegrated && !isInApp;
+  const rating = Number(
+    (
+      supplier.is_verified
+        ? hasInAppProfile
+          ? 4.6
+          : 4.2
+        : hasInAppProfile
+          ? 4.1
+          : 3.8
+    ).toFixed(1),
+  );
+  const ratingFilledStars = Math.max(0, Math.min(5, Math.round(rating)));
+  const statusTitle = isIntegrated
+    ? "Integrated"
+    : isInAppNotIntegrated
+      ? "In App - Not Integrated"
+      : "Offline";
+  const statusSubtitle = isIntegrated
+    ? "In-App Active"
+    : isInAppNotIntegrated
+      ? "In-App Active"
+      : "External Entity";
+  const canSendRequest = isInAppNotIntegrated && !isLinked;
+  const canInviteToApp = isNotInApp;
+  const profileActionLabel = canSendRequest
+    ? "Send Request"
+    : canInviteToApp
+      ? "Invite to App"
+      : isLinked
+        ? "Invitation Sent"
+        : "Integrated";
   const tabConfig = [
     { id: "trips" as const, label: "Trips" },
     { id: "cash" as const, label: "Cash Flow" },
@@ -902,8 +1019,16 @@ export default function SupplierDetailScreen({
   return (
     <View style={[styles.wrap, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={onBack} activeOpacity={0.8}>
-          <FontAwesome name="chevron-left" size={20} color={Theme.textPrimaryDark} />
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={onBack}
+          activeOpacity={0.8}
+        >
+          <FontAwesome
+            name="chevron-left"
+            size={20}
+            color={Theme.textPrimaryDark}
+          />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle} numberOfLines={1}>
@@ -914,11 +1039,17 @@ export default function SupplierDetailScreen({
         <View style={styles.headerRight}>
           <TouchableOpacity
             style={styles.publicProfileBtn}
-            onPress={() => router.push(`/public-profile/supplier/${supplierId}`)}
+            onPress={() =>
+              router.push(`/public-profile/supplier/${supplierId}`)
+            }
             activeOpacity={0.8}
             accessibilityLabel="View public profile"
           >
-            <FontAwesome name="id-card-o" size={15} color={Theme.textPrimaryDark} />
+            <FontAwesome
+              name="id-card-o"
+              size={15}
+              color={Theme.textPrimaryDark}
+            />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.profileBtn}
@@ -927,9 +1058,16 @@ export default function SupplierDetailScreen({
             accessibilityLabel="Supplier profile"
           >
             {profileAvatarUri ? (
-              <Image source={{ uri: profileAvatarUri }} style={styles.headerAvatarImage} />
+              <Image
+                source={{ uri: profileAvatarUri }}
+                style={styles.headerAvatarImage}
+              />
             ) : (
-              <FontAwesome name="user" size={16} color={Theme.textPrimaryDark} />
+              <FontAwesome
+                name="user"
+                size={16}
+                color={Theme.textPrimaryDark}
+              />
             )}
           </TouchableOpacity>
           <TouchableOpacity
@@ -948,7 +1086,11 @@ export default function SupplierDetailScreen({
                 : "Download report"
             }
           >
-            <FontAwesome name="cloud-download" size={18} color={Theme.textOnPrimary} />
+            <FontAwesome
+              name="cloud-download"
+              size={18}
+              color={Theme.textOnPrimary}
+            />
           </TouchableOpacity>
         </View>
       </View>
@@ -961,9 +1103,10 @@ export default function SupplierDetailScreen({
             paddingHorizontal: webContentGutter,
           },
           {
-            paddingBottom: canAddTransaction && detailSubTab !== "shared"
-              ? Layout.fabBottomOffset + Layout.fabSize + insets.bottom
-              : Layout.fabBottomOffset + insets.bottom,
+            paddingBottom:
+              canAddTransaction && detailSubTab !== "shared"
+                ? Layout.fabBottomOffset + Layout.fabSize + insets.bottom
+                : Layout.fabBottomOffset + insets.bottom,
           },
         ]}
         showsVerticalScrollIndicator={false}
@@ -979,36 +1122,150 @@ export default function SupplierDetailScreen({
           />
         }
       >
-        <View style={[styles.scorecard, isWebDesktop && styles.scorecardWebDesktop]}>
+        <View style={isWebDesktop ? styles.heroCardsRow : undefined}>
+          <LinearGradient
+            colors={[Theme.financeCardOrangeFrom, Theme.financeCardOrangeTo]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[
+              styles.scorecard,
+              isWebDesktop && styles.scorecardWebDesktop,
+              isWebDesktop && styles.scorecardHeroPane,
+            ]}
+          >
+            {isWebDesktop ? (
+              <Animated.View
+                style={[styles.scorecardDecorIconWrap, heroDecorAnimatedStyle]}
+              >
+                <FontAwesome
+                  name="book"
+                  size={120}
+                  color={Theme.textOnDark}
+                  style={styles.scorecardDecorIcon}
+                />
+              </Animated.View>
+            ) : null}
+            <View
+              style={[
+                styles.scorecardTop,
+                isWebDesktop && styles.scorecardTopWebDesktop,
+              ]}
+            >
+              <View style={styles.scorecardLeft}>
+                <Text style={styles.scorecardLabel}>FINANCIAL OVERVIEW</Text>
+                <Text style={styles.scorecardSalesLabel}>CONTRACT VALUE</Text>
+                <Text style={[styles.scorecardAmount, isWebDesktop && styles.scorecardAmountWebDesktop]}>
+                  {formatINR(contractValue)}
+                </Text>
+              </View>
+            </View>
+            <View
+              style={[
+                styles.scorecardGrid,
+                isWebDesktop && styles.scorecardGridWebDesktop,
+              ]}
+            >
+              <View style={isWebDesktop ? styles.scorecardGridStat : undefined}>
+                <Text style={styles.scorecardGridLabelPaid}>PAID</Text>
+                <Text style={[styles.scorecardGridPaid, isWebDesktop && styles.scorecardGridPaidWebDesktop]}>
+                  {formatINR(paid)}
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.scorecardGridRight,
+                  isWebDesktop && styles.scorecardGridStat,
+                ]}
+              >
+                <Text style={styles.scorecardGridLabelDue}>DUE</Text>
+                <Text style={[styles.scorecardGridDue, isWebDesktop && styles.scorecardGridDueWebDesktop]}>
+                  {formatINR(due)}
+                </Text>
+              </View>
+            </View>
+          </LinearGradient>
           {isWebDesktop ? (
-            <Animated.View style={[styles.scorecardDecorIconWrap, heroDecorAnimatedStyle]}>
-              <FontAwesome name="book" size={120} color={Theme.textOnDark} style={styles.scorecardDecorIcon} />
-            </Animated.View>
+            <View style={styles.profilePreviewCard}>
+              <Text style={styles.profilePreviewEyebrow}>ENTITY PROFILE</Text>
+              <View style={styles.profilePreviewRatingRow}>
+                <View style={styles.profilePreviewStars}>
+                  {Array.from({ length: 5 }).map((_, idx) => (
+                    <FontAwesome
+                      key={`supplier-star-${idx}`}
+                      name={idx < ratingFilledStars ? "star" : "star-o"}
+                      size={12}
+                      color={idx < ratingFilledStars ? "#fbbf24" : Theme.borderMedium}
+                    />
+                  ))}
+                </View>
+                <View style={styles.profilePreviewRatingBadge}>
+                  <Text style={styles.profilePreviewRatingBadgeText}>{rating.toFixed(1)}</Text>
+                </View>
+              </View>
+              <View style={styles.profilePreviewExperienceBlock}>
+                <Text style={styles.profilePreviewExperienceEyebrow}>EXPERIENCE</Text>
+                <View style={styles.profilePreviewExperienceRow}>
+                  <FontAwesome name="history" size={13} color={Theme.textSecondary} />
+                  <Text style={styles.profilePreviewTripsNumber}>{tripsHandled}</Text>
+                  <Text style={styles.profilePreviewExperienceLabel}>Trips Handled</Text>
+                </View>
+              </View>
+              <View style={styles.profilePreviewToggle}>
+                <View
+                  style={[
+                    styles.profilePreviewToggleDot,
+                    isInAppNotIntegrated && styles.profilePreviewToggleDotPending,
+                    isIntegrated && styles.profilePreviewToggleDotActive,
+                  ]}
+                >
+                  {isIntegrated ? (
+                    <FontAwesome name="check" size={10} color={Theme.textOnPrimary} />
+                  ) : isInAppNotIntegrated ? (
+                    <FontAwesome name="send" size={8} color={Theme.financeCardOrangeFrom} />
+                  ) : null}
+                </View>
+                <View>
+                  <Text style={styles.profilePreviewToggleTitle}>{statusTitle}</Text>
+                  <Text style={styles.profilePreviewToggleSub}>{statusSubtitle}</Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={[
+                  styles.profilePreviewActionBtn,
+                  ecc.actionBtnPrimary,
+                  (!canSendRequest && !canInviteToApp) && ecc.actionBtnDisabled,
+                ]}
+                onPress={() => {
+                  if (canSendRequest) {
+                    void handleSendInvitation();
+                  } else if (canInviteToApp) {
+                    handleInviteToApp();
+                  }
+                }}
+                activeOpacity={0.86}
+                disabled={sendingInvitation || (!canSendRequest && !canInviteToApp)}
+              >
+                <FontAwesome
+                  name={canSendRequest ? "send" : "envelope-o"}
+                  size={12}
+                  color={Theme.textOnPrimary}
+                />
+                <Text style={styles.profilePreviewActionText}>
+                  {sendingInvitation && canSendRequest ? "Sending..." : profileActionLabel}
+                </Text>
+              </TouchableOpacity>
+            </View>
           ) : null}
-          <View style={[styles.scorecardTop, isWebDesktop && styles.scorecardTopWebDesktop]}>
-            <View style={styles.scorecardLeft}>
-              <Text style={styles.scorecardLabel}>FINANCIAL OVERVIEW</Text>
-              <Text style={styles.scorecardSalesLabel}>CONTRACT VALUE</Text>
-              <Text style={styles.scorecardAmount}>{formatINR(contractValue)}</Text>
-            </View>
-          </View>
-          <View style={[styles.scorecardGrid, isWebDesktop && styles.scorecardGridWebDesktop]}>
-            <View style={isWebDesktop ? styles.scorecardGridStat : undefined}>
-              <Text style={styles.scorecardGridLabelPaid}>PAID</Text>
-              <Text style={styles.scorecardGridPaid}>{formatINR(paid)}</Text>
-            </View>
-            <View style={[styles.scorecardGridRight, isWebDesktop && styles.scorecardGridStat]}>
-              <Text style={styles.scorecardGridLabelDue}>DUE</Text>
-              <Text style={styles.scorecardGridDue}>{formatINR(due)}</Text>
-            </View>
-          </View>
         </View>
 
         <View style={styles.tabRow}>
           {tabConfig.map((tab) => (
             <TouchableOpacity
               key={tab.id}
-              style={[styles.tabItem, detailSubTab === tab.id && styles.tabItemActive]}
+              style={[
+                styles.tabItem,
+                detailSubTab === tab.id && styles.tabItemActive,
+              ]}
               onPress={() => setDetailSubTab(tab.id)}
               activeOpacity={0.8}
             >
@@ -1044,8 +1301,18 @@ export default function SupplierDetailScreen({
         )}
 
         {detailSubTab === "trips" && (
-          <View style={[styles.tableCard, isWebDesktop && styles.tableCardWebDesktop]}>
-            <View style={[styles.tableHeader, isWebDesktop && styles.tableHeaderWebDesktop]}>
+          <View
+            style={[
+              styles.tableCard,
+              isWebDesktop && styles.tableCardWebDesktop,
+            ]}
+          >
+            <View
+              style={[
+                styles.tableHeader,
+                isWebDesktop && styles.tableHeaderWebDesktop,
+              ]}
+            >
               <Text
                 style={[
                   styles.th,
@@ -1062,44 +1329,98 @@ export default function SupplierDetailScreen({
                 </View>
               ) : null}
               {isWebDesktop ? (
-                <View style={[styles.headerAmountCol, styles.amountColWebDesktop]}>
-                  <Text style={[styles.th, styles.thRight, styles.thWebDesktop]}>
+                <View
+                  style={[styles.headerAmountCol, styles.amountColWebDesktop]}
+                >
+                  <Text
+                    style={[styles.th, styles.thRight, styles.thWebDesktop]}
+                  >
                     Client Rev
                   </Text>
                 </View>
               ) : null}
-              <View style={[styles.headerAmountCol, isWebDesktop && styles.amountColWebDesktop]}>
-                <Text style={[styles.th, styles.thSales, isWebDesktop && styles.thWebDesktop]}>
+              <View
+                style={[
+                  styles.headerAmountCol,
+                  isWebDesktop && styles.amountColWebDesktop,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.th,
+                    styles.thSales,
+                    isWebDesktop && styles.thWebDesktop,
+                  ]}
+                >
                   Contract
                 </Text>
               </View>
               {isWebDesktop ? (
-                <View style={[styles.headerAmountCol, styles.amountColWebDesktop]}>
-                  <Text style={[styles.th, styles.thRight, styles.thWebDesktop, { textAlign: "right" as const }]}>
+                <View
+                  style={[styles.headerAmountCol, styles.amountColWebDesktop]}
+                >
+                  <Text
+                    style={[
+                      styles.th,
+                      styles.thRight,
+                      styles.thWebDesktop,
+                      { textAlign: "right" as const },
+                    ]}
+                  >
                     P&L
                   </Text>
                 </View>
               ) : null}
-              <View style={[styles.headerAmountCol, isWebDesktop && styles.amountColWebDesktop]}>
-                <Text style={[styles.th, styles.thRight, isWebDesktop && styles.thWebDesktop]}>
+              <View
+                style={[
+                  styles.headerAmountCol,
+                  isWebDesktop && styles.amountColWebDesktop,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.th,
+                    styles.thRight,
+                    isWebDesktop && styles.thWebDesktop,
+                  ]}
+                >
                   Paid
                 </Text>
               </View>
-              <View style={[styles.headerAmountCol, isWebDesktop && styles.amountColWebDesktop]}>
-                <Text style={[styles.th, styles.thRight, isWebDesktop && styles.thWebDesktop]}>
+              <View
+                style={[
+                  styles.headerAmountCol,
+                  isWebDesktop && styles.amountColWebDesktop,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.th,
+                    styles.thRight,
+                    isWebDesktop && styles.thWebDesktop,
+                  ]}
+                >
                   Due
                 </Text>
               </View>
               {isWebDesktop ? (
-                <View style={[styles.headerAmountCol, styles.amountColWebDesktop]}>
-                  <Text style={[styles.th, styles.thRight, styles.thWebDesktop]}>
+                <View
+                  style={[styles.headerAmountCol, styles.amountColWebDesktop]}
+                >
+                  <Text
+                    style={[styles.th, styles.thRight, styles.thWebDesktop]}
+                  >
                     Txns
                   </Text>
                 </View>
               ) : null}
               {isWebDesktop ? (
-                <View style={[styles.headerAmountCol, styles.amountColWebDesktop]}>
-                  <Text style={[styles.th, styles.thRight, styles.thWebDesktop]}>
+                <View
+                  style={[styles.headerAmountCol, styles.amountColWebDesktop]}
+                >
+                  <Text
+                    style={[styles.th, styles.thRight, styles.thWebDesktop]}
+                  >
                     Last Txn
                   </Text>
                 </View>
@@ -1109,21 +1430,35 @@ export default function SupplierDetailScreen({
               missionRows.map((row) => (
                 <TouchableOpacity
                   key={row.trip.id}
-                  style={[styles.tableRow, isWebDesktop && styles.tableRowWebDesktop]}
-                  onPress={() => router.push(`/trip/${row.trip.id}?entryContext=supplier`)}
+                  style={[
+                    styles.tableRow,
+                    isWebDesktop && styles.tableRowWebDesktop,
+                  ]}
+                  onPress={() =>
+                    router.push(`/trip/${row.trip.id}?entryContext=supplier`)
+                  }
                   activeOpacity={0.7}
                 >
                   {(() => {
-                    const meta = tripTransactionMetaById[String(row.trip.id).trim().toLowerCase()] ?? {
+                    const meta = tripTransactionMetaById[
+                      String(row.trip.id).trim().toLowerCase()
+                    ] ?? {
                       count: 0,
                       lastTxnDate: null,
                     };
-                    const cidKey = (row.trip.client_id ?? "").trim().toLowerCase();
-                    const clientRow = cidKey ? clientById.get(cidKey) : undefined;
-                    const rawTripClientName = (row.trip.client_name ?? "").trim();
+                    const cidKey = (row.trip.client_id ?? "")
+                      .trim()
+                      .toLowerCase();
+                    const clientRow = cidKey
+                      ? clientById.get(cidKey)
+                      : undefined;
+                    const rawTripClientName = (
+                      row.trip.client_name ?? ""
+                    ).trim();
                     const clientDisplayName =
                       (clientRow?.name ?? "").trim() ||
-                      (rawTripClientName && !isUuidLikeString(row.trip.client_name)
+                      (rawTripClientName &&
+                      !isUuidLikeString(row.trip.client_name)
                         ? rawTripClientName
                         : "");
                     const clientNameForUi = clientDisplayName || "—";
@@ -1131,128 +1466,197 @@ export default function SupplierDetailScreen({
                     const tripPnl = clientRevenue - row.sales;
                     return (
                       <>
-                  <View
-                    style={[
-                      styles.tdMission,
-                      isWebDesktop && styles.tdMissionWebDesktop,
-                    ]}
-                  >
-                    <Text style={styles.tdMissionId}>{row.missionId}</Text>
-                    <Text style={styles.tdRoute} numberOfLines={isWebDesktop ? 3 : 1}>
-                      {row.route}
-                    </Text>
-                  </View>
-                  {isWebDesktop ? (
-                    <View style={styles.partyColWebDesktop}>
-                      <View style={styles.tdPartyAvatarRow}>
-                        <PartyAvatar
-                          name={clientNameForUi}
-                          organizationImageUrl={
-                            clientRow?.linked_organization_id
-                              ? linkedOrgDisplayMap[clientRow.linked_organization_id]
-                                  ?.avatarUrl
-                              : undefined
-                          }
-                          organizationAvatarSeed={
-                            clientRow?.linked_organization_id
-                              ? linkedOrgDisplayMap[clientRow.linked_organization_id]
-                                  ?.avatarSeed
-                              : undefined
-                          }
-                          avatarUrl={clientRow?.avatar_url ?? null}
-                          avatarSeed={clientRow?.avatar_seed ?? null}
-                          entityType="client"
-                          size={TRIP_TABLE_AVATAR}
-                        />
-                        <View style={styles.tdPartyTextStack}>
-                          <Text style={styles.tdPartyWebDesktop} numberOfLines={1}>
-                            {clientNameForUi}
+                        <View
+                          style={[
+                            styles.tdMission,
+                            isWebDesktop && styles.tdMissionWebDesktop,
+                          ]}
+                        >
+                          <Text style={styles.tdMissionId}>
+                            {row.missionId}
                           </Text>
-                          <Text style={styles.tdPartyHintWebDesktop} numberOfLines={1}>
-                            {(clientRow?.contact_person ?? "").trim() || "—"}
+                          <Text
+                            style={styles.tdRoute}
+                            numberOfLines={isWebDesktop ? 3 : 1}
+                          >
+                            {row.route}
                           </Text>
                         </View>
-                      </View>
-                    </View>
-                  ) : null}
-                  {isWebDesktop ? (
-                    <View style={[styles.amountCol, styles.amountColWebDesktop]}>
-                      <Text
-                        numberOfLines={1}
-                        style={[styles.td, styles.tdRight, styles.tdAmountWebDesktop]}
-                      >
-                        {formatINR(clientRevenue)}
-                      </Text>
-                    </View>
-                  ) : null}
-                  <View style={[styles.amountCol, isWebDesktop && styles.amountColWebDesktop]}>
-                    <Text
-                      numberOfLines={1}
-                      style={[
-                        styles.td,
-                        styles.tdSales,
-                        isWebDesktop && styles.tdAmountWebDesktop,
-                      ]}
-                    >
-                      {formatINR(row.sales)}
-                    </Text>
-                  </View>
-                  {isWebDesktop ? (
-                    <View style={[styles.amountCol, styles.amountColWebDesktop]}>
-                      <Text
-                        numberOfLines={1}
-                        style={[
-                          styles.td,
-                          styles.tdRight,
-                          styles.tdAmountWebDesktop,
-                          tripPnl >= 0 ? styles.tdGreen : styles.tdRed,
-                          { textAlign: "right" as const },
-                        ]}
-                      >
-                        {formatINR(tripPnl)}
-                      </Text>
-                    </View>
-                  ) : null}
-                  <View style={[styles.amountCol, isWebDesktop && styles.amountColWebDesktop]}>
-                    <Text
-                      numberOfLines={1}
-                      style={[
-                        styles.td,
-                        styles.tdRight,
-                        styles.tdGreen,
-                        isWebDesktop && styles.tdAmountWebDesktop,
-                      ]}
-                    >
-                      {formatINR(row.paid)}
-                    </Text>
-                  </View>
-                  <View style={[styles.amountCol, isWebDesktop && styles.amountColWebDesktop]}>
-                    <Text
-                      numberOfLines={1}
-                      style={[
-                        styles.td,
-                        styles.tdRight,
-                        styles.tdRed,
-                        isWebDesktop && styles.tdAmountWebDesktop,
-                      ]}
-                    >
-                      {formatINR(row.due)}
-                    </Text>
-                  </View>
-                  {isWebDesktop ? (
-                    <View style={[styles.amountCol, styles.amountColWebDesktop]}>
-                      <Text numberOfLines={1} style={[styles.td, styles.tdRight, styles.tdAmountWebDesktop]}>
-                        {meta.count}
-                      </Text>
-                    </View>
-                  ) : null}
-                  {isWebDesktop ? (
-                    <View style={[styles.amountCol, styles.amountColWebDesktop]}>
-                      <Text numberOfLines={1} style={[styles.td, styles.tdRight, styles.tdAmountWebDesktop]}>
-                        {meta.lastTxnDate ? formatLedgerDate(meta.lastTxnDate) : "—"}
-                      </Text>
-                    </View>
-                  ) : null}
+                        {isWebDesktop ? (
+                          <View style={styles.partyColWebDesktop}>
+                            <View style={styles.tdPartyAvatarRow}>
+                              <PartyAvatar
+                                name={clientNameForUi}
+                                organizationImageUrl={
+                                  clientRow?.linked_organization_id
+                                    ? linkedOrgDisplayMap[
+                                        clientRow.linked_organization_id
+                                      ]?.avatarUrl
+                                    : undefined
+                                }
+                                organizationAvatarSeed={
+                                  clientRow?.linked_organization_id
+                                    ? linkedOrgDisplayMap[
+                                        clientRow.linked_organization_id
+                                      ]?.avatarSeed
+                                    : undefined
+                                }
+                                avatarUrl={clientRow?.avatar_url ?? null}
+                                avatarSeed={clientRow?.avatar_seed ?? null}
+                                entityType="client"
+                                size={TRIP_TABLE_AVATAR}
+                              />
+                              <View style={styles.tdPartyTextStack}>
+                                <Text
+                                  style={styles.tdPartyWebDesktop}
+                                  numberOfLines={1}
+                                >
+                                  {clientNameForUi}
+                                </Text>
+                                <Text
+                                  style={styles.tdPartyHintWebDesktop}
+                                  numberOfLines={1}
+                                >
+                                  {(clientRow?.contact_person ?? "").trim() ||
+                                    "—"}
+                                </Text>
+                              </View>
+                            </View>
+                          </View>
+                        ) : null}
+                        {isWebDesktop ? (
+                          <View
+                            style={[
+                              styles.amountCol,
+                              styles.amountColWebDesktop,
+                            ]}
+                          >
+                            <Text
+                              numberOfLines={1}
+                              style={[
+                                styles.td,
+                                styles.tdRight,
+                                styles.tdAmountWebDesktop,
+                              ]}
+                            >
+                              {formatINR(clientRevenue)}
+                            </Text>
+                          </View>
+                        ) : null}
+                        <View
+                          style={[
+                            styles.amountCol,
+                            isWebDesktop && styles.amountColWebDesktop,
+                          ]}
+                        >
+                          <Text
+                            numberOfLines={1}
+                            style={[
+                              styles.td,
+                              styles.tdSales,
+                              isWebDesktop && styles.tdAmountWebDesktop,
+                            ]}
+                          >
+                            {formatINR(row.sales)}
+                          </Text>
+                        </View>
+                        {isWebDesktop ? (
+                          <View
+                            style={[
+                              styles.amountCol,
+                              styles.amountColWebDesktop,
+                            ]}
+                          >
+                            <Text
+                              numberOfLines={1}
+                              style={[
+                                styles.td,
+                                styles.tdRight,
+                                styles.tdAmountWebDesktop,
+                                tripPnl >= 0 ? styles.tdGreen : styles.tdRed,
+                                { textAlign: "right" as const },
+                              ]}
+                            >
+                              {formatINR(tripPnl)}
+                            </Text>
+                          </View>
+                        ) : null}
+                        <View
+                          style={[
+                            styles.amountCol,
+                            isWebDesktop && styles.amountColWebDesktop,
+                          ]}
+                        >
+                          <Text
+                            numberOfLines={1}
+                            style={[
+                              styles.td,
+                              styles.tdRight,
+                              styles.tdGreen,
+                              isWebDesktop && styles.tdAmountWebDesktop,
+                            ]}
+                          >
+                            {formatINR(row.paid)}
+                          </Text>
+                        </View>
+                        <View
+                          style={[
+                            styles.amountCol,
+                            isWebDesktop && styles.amountColWebDesktop,
+                          ]}
+                        >
+                          <Text
+                            numberOfLines={1}
+                            style={[
+                              styles.td,
+                              styles.tdRight,
+                              styles.tdRed,
+                              isWebDesktop && styles.tdAmountWebDesktop,
+                            ]}
+                          >
+                            {formatINR(row.due)}
+                          </Text>
+                        </View>
+                        {isWebDesktop ? (
+                          <View
+                            style={[
+                              styles.amountCol,
+                              styles.amountColWebDesktop,
+                            ]}
+                          >
+                            <Text
+                              numberOfLines={1}
+                              style={[
+                                styles.td,
+                                styles.tdRight,
+                                styles.tdAmountWebDesktop,
+                              ]}
+                            >
+                              {meta.count}
+                            </Text>
+                          </View>
+                        ) : null}
+                        {isWebDesktop ? (
+                          <View
+                            style={[
+                              styles.amountCol,
+                              styles.amountColWebDesktop,
+                            ]}
+                          >
+                            <Text
+                              numberOfLines={1}
+                              style={[
+                                styles.td,
+                                styles.tdRight,
+                                styles.tdAmountWebDesktop,
+                              ]}
+                            >
+                              {meta.lastTxnDate
+                                ? formatLedgerDate(meta.lastTxnDate)
+                                : "—"}
+                            </Text>
+                          </View>
+                        ) : null}
                       </>
                     );
                   })()}
@@ -1306,7 +1710,10 @@ export default function SupplierDetailScreen({
               trips={trips}
               transactions={transactions}
               organizationId={currentOrganization?.id ?? null}
-              integrated={Boolean(supplier.supplier_type === "integrated" || supplier.linked_organization_id)}
+              integrated={Boolean(
+                supplier.supplier_type === "integrated" ||
+                supplier.linked_organization_id,
+              )}
               embeddedInOverlay={true}
               externalDownloadRequest={sharedLedgerDownloadSignal}
               onRefresh={load}
@@ -1382,7 +1789,9 @@ export default function SupplierDetailScreen({
         visible={showReportModal}
         onClose={() => setShowReportModal(false)}
         transactions={reportTransactions}
-        title={supplierName ? `${t("ledgerFor")}${supplierName}` : t("ledgerReport")}
+        title={
+          supplierName ? `${t("ledgerFor")}${supplierName}` : t("ledgerReport")
+        }
         customReport={tripTableReport}
       />
       <Modal
@@ -1391,12 +1800,17 @@ export default function SupplierDetailScreen({
         presentationStyle="pageSheet"
         onRequestClose={() => setShowProfileModal(false)}
       >
-        <View style={[styles.profileModalWrap, { paddingBottom: insets.bottom }]}>
+        <View
+          style={[styles.profileModalWrap, { paddingBottom: insets.bottom }]}
+        >
           <CounterpartyProfileSystemCard
             visible={showProfileModal}
             type="supplier"
             organizationName={
-              (supplier?.company_name ?? supplier?.name ?? supplier?.contact_person ?? "—") as string
+              (supplier?.company_name ??
+                supplier?.name ??
+                supplier?.contact_person ??
+                "—") as string
             }
             adminName={normalizeContactDisplay(supplier?.contact_person)}
             email={normalizeContactDisplay(supplier?.email)}
@@ -1407,15 +1821,17 @@ export default function SupplierDetailScreen({
             networkTrustLabel="94.2%"
             isIntegrated={Boolean(
               supplier?.supplier_type === "integrated" ||
-                supplier?.linked_organization_id ||
-                isInApp,
+              supplier?.linked_organization_id ||
+              isInApp,
             )}
             entityDisplayId={supplier?.id?.slice(0, 8) ?? null}
             kycDocs={[
               {
                 id: "gst",
                 documentType: "GST REGISTRATION",
-                status: normalizeContactDisplay(supplier?.gst_number) ? "Verified" : "Pending",
+                status: normalizeContactDisplay(supplier?.gst_number)
+                  ? "Verified"
+                  : "Pending",
                 dateLabel: "—",
               },
               {
@@ -1445,7 +1861,11 @@ export default function SupplierDetailScreen({
                 activeOpacity={0.8}
                 disabled={sendingInvitation}
               >
-                <FontAwesome name="paper-plane" size={14} color={Theme.primary} />
+                <FontAwesome
+                  name="paper-plane"
+                  size={14}
+                  color={Theme.primary}
+                />
                 <Text style={styles.profileSecondaryBtnText}>
                   {sendingInvitation ? "Sending..." : "Send request"}
                 </Text>
@@ -1454,7 +1874,9 @@ export default function SupplierDetailScreen({
             {!supplier?.linked_organization_id && isInApp && isLinked && (
               <View style={[styles.profileSecondaryBtn, { opacity: 0.7 }]}>
                 <FontAwesome name="check" size={14} color={Theme.primary} />
-                <Text style={styles.profileSecondaryBtnText}>Invitation sent</Text>
+                <Text style={styles.profileSecondaryBtnText}>
+                  Invitation sent
+                </Text>
               </View>
             )}
             {!supplier?.linked_organization_id && !isInApp && (
@@ -1467,7 +1889,9 @@ export default function SupplierDetailScreen({
                 activeOpacity={0.8}
               >
                 <FontAwesome name="link" size={14} color={Theme.primary} />
-                <Text style={styles.profileSecondaryBtnText}>{t("linkToAppAccount")}</Text>
+                <Text style={styles.profileSecondaryBtnText}>
+                  {t("linkToAppAccount")}
+                </Text>
               </TouchableOpacity>
             )}
           </View>
@@ -1845,62 +2269,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 10,
   },
-  scorecard: {
-    backgroundColor: Theme.darkBackground,
-    borderRadius: 24,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginBottom: 10,
-    overflow: "hidden",
-  },
-  scorecardWebDesktop: {
-    borderRadius: 34,
-    paddingHorizontal: 26,
-    paddingVertical: 24,
-    minHeight: 236,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    marginBottom: 16,
-  },
-  scorecardDecorIconWrap: {
-    position: "absolute",
-    right: -14,
-    top: -16,
-  },
-  scorecardDecorIcon: {
-    transform: [{ rotate: "12deg" }],
-  },
-  scorecardTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 8,
-  },
-  scorecardTopWebDesktop: {
-    marginBottom: 20,
-  },
-  scorecardLeft: { flex: 1 },
-  scorecardLabel: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: Theme.aggregatePillText,
-    letterSpacing: 1.2,
-  },
-  scorecardSalesLabel: {
-    fontSize: 8,
-    fontWeight: "700",
-    color: "rgba(255,255,255,0.7)",
-    letterSpacing: 1,
-    marginTop: 6,
-    textTransform: "uppercase",
-  },
-  scorecardAmount: {
-    fontSize: 32,
-    fontWeight: "300",
-    fontStyle: "italic",
-    color: Theme.textOnDark,
-    marginTop: 4,
-  },
+  scorecard: ehs.scorecard,
+  scorecardWebDesktop: ehs.scorecardWebDesktop,
+  heroCardsRow: ehs.heroCardsRow,
+  scorecardHeroPane: ehs.scorecardHeroPane,
+  scorecardDecorIconWrap: ehs.scorecardDecorIconWrap,
+  scorecardDecorIcon: ehs.scorecardDecorIcon,
+  scorecardTop: ehs.scorecardTop,
+  scorecardTopWebDesktop: ehs.scorecardTopWebDesktop,
+  scorecardLeft: ehs.scorecardLeft,
+  scorecardLabel: ehs.scorecardLabel,
+  scorecardSalesLabel: ehs.scorecardSalesLabel,
+  scorecardAmount: ehs.scorecardAmount,
+  scorecardAmountWebDesktop: ehs.scorecardAmountWebDesktop,
   healthCircle: {
     width: 56,
     height: 56,
@@ -1924,50 +2305,38 @@ const styles = StyleSheet.create({
     color: Theme.textOnDark,
     zIndex: 1,
   },
-  scorecardGrid: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.1)",
+  scorecardGrid: ehs.scorecardGrid,
+  scorecardGridWebDesktop: ehs.scorecardGridWebDesktop,
+  scorecardGridStat: ehs.scorecardGridStat,
+  scorecardGridRight: ehs.scorecardGridRight,
+  scorecardGridLabelPaid: ehs.scorecardGridLabelPaid,
+  scorecardGridLabelDue: ehs.scorecardGridLabelDue,
+  scorecardGridPaid: ehs.scorecardGridPaid,
+  scorecardGridPaidWebDesktop: ehs.scorecardGridPaidWebDesktop,
+  scorecardGridDue: ehs.scorecardGridDue,
+  scorecardGridDueWebDesktop: ehs.scorecardGridDueWebDesktop,
+  profilePreviewCard: ecc.card,
+  profilePreviewEyebrow: ecc.eyebrow,
+  profilePreviewRatingRow: ecc.ratingRow,
+  profilePreviewStars: ecc.stars,
+  profilePreviewRatingBadge: ecc.ratingBadge,
+  profilePreviewRatingBadgeText: ecc.ratingBadgeText,
+  profilePreviewExperienceBlock: ecc.experienceBlock,
+  profilePreviewExperienceEyebrow: ecc.experienceEyebrow,
+  profilePreviewExperienceRow: ecc.experienceRow,
+  profilePreviewTripsNumber: ecc.tripsNumber,
+  profilePreviewExperienceLabel: ecc.experienceLabel,
+  profilePreviewToggle: ecc.toggle,
+  profilePreviewToggleDot: ecc.toggleDot,
+  profilePreviewToggleDotActive: ecc.toggleDotActive,
+  profilePreviewToggleDotPending: {
+    borderColor: Theme.financeCardOrangeFrom,
+    backgroundColor: "rgba(234,88,12,0.12)",
   },
-  scorecardGridWebDesktop: {
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 0,
-    paddingTop: 18,
-  },
-  scorecardGridStat: {
-    minWidth: 0,
-    flex: 1,
-  },
-  scorecardGridRight: { alignItems: "flex-end" },
-  scorecardGridLabelPaid: {
-    fontSize: 8,
-    fontWeight: "700",
-    color: Theme.darkGreen,
-    letterSpacing: 0.6,
-  },
-  scorecardGridLabelDue: {
-    fontSize: 8,
-    fontWeight: "700",
-    color: Theme.teslaRed,
-    letterSpacing: 0.6,
-  },
-  scorecardGridPaid: {
-    fontSize: 18,
-    fontWeight: "800",
-    fontStyle: "italic",
-    color: Theme.textOnDark,
-    marginTop: 4,
-  },
-  scorecardGridDue: {
-    fontSize: 18,
-    fontWeight: "800",
-    fontStyle: "italic",
-    color: Theme.teslaRed,
-    marginTop: 4,
-  },
+  profilePreviewToggleTitle: ecc.toggleTitle,
+  profilePreviewToggleSub: ecc.toggleSub,
+  profilePreviewActionBtn: ecc.actionBtn,
+  profilePreviewActionText: ecc.actionText,
   tabRow: {
     flexDirection: "row",
     backgroundColor: Theme.surfaceGray,

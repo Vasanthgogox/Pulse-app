@@ -1,5 +1,6 @@
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -20,6 +21,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import { entityCompanionCardStyles as ecc } from "@/components/entityCompanionCard.styles";
+import { entityHeroScorecardStyles as ehs } from "@/components/entityHeroScorecard.styles";
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { FinanceFAB } from "@/components/FinanceFAB";
 import { useAuth } from "@/contexts/AuthContext";
@@ -274,6 +277,22 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
     () => missionRows.reduce((s, r) => s + r.profit, 0),
     [missionRows],
   );
+  const tripsHandled = missionRows.length;
+  const performanceScore = Number(
+    (
+      contractValue > 0
+        ? Math.min(5, Math.max(2.8, 3 + (profit / contractValue) * 1.4))
+        : 3.8
+    ).toFixed(1),
+  );
+  const performanceStars = Math.max(0, Math.min(5, Math.round(performanceScore)));
+  const vehicleStatusTitle =
+    (vehicle?.status ?? "active").toLowerCase() === "active"
+      ? "Active"
+      : "Inactive";
+  const vehicleStatusSub =
+    vehicleStatusTitle === "Active" ? "Operational in fleet" : "Not currently operating";
+  const docsCount = vehicle?.documents ? Object.keys(vehicle.documents).length : 0;
 
   const handleVehicleEntrySubmit = useCallback(
     (data: Parameters<typeof createLedgerEntry>[1]) => {
@@ -408,33 +427,142 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
           />
         }
       >
-        <View style={styles.scorecard}>
+        <View style={isWebDesktop ? styles.heroCardsRow : undefined}>
+          <LinearGradient
+            colors={[Theme.financeCardSlateFrom, Theme.financeCardSlateTo]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[
+              styles.scorecard,
+              isWebDesktop && styles.scorecardWebDesktop,
+              isWebDesktop && styles.scorecardHeroPane,
+            ]}
+          >
+            {isWebDesktop ? (
+              <Animated.View style={[styles.scorecardDecorIconWrap, heroDecorAnimatedStyle]}>
+                <FontAwesome name="truck" size={120} color={Theme.textOnDark} style={styles.scorecardDecorIcon} />
+              </Animated.View>
+            ) : null}
+            <View
+              style={[styles.scorecardTop, isWebDesktop && styles.scorecardTopWebDesktop]}
+            >
+              <View style={styles.scorecardLeft}>
+                <Text style={styles.scorecardLabel}>FINANCIAL OVERVIEW</Text>
+                <Text style={styles.scorecardSalesLabel}>VEHICLE SALES</Text>
+                <Text
+                  style={[
+                    styles.scorecardAmount,
+                    isWebDesktop && styles.scorecardAmountWebDesktop,
+                  ]}
+                >
+                  {formatINR(contractValue)}
+                </Text>
+              </View>
+            </View>
+            <View
+              style={[styles.scorecardGrid, isWebDesktop && styles.scorecardGridWebDesktop]}
+            >
+              <View style={isWebDesktop ? styles.scorecardGridStat : undefined}>
+                <Text style={styles.scorecardGridLabelPaid}>EXPENSE</Text>
+                <Text
+                  style={[
+                    styles.scorecardGridPaid,
+                    isWebDesktop && styles.scorecardGridPaidWebDesktop,
+                  ]}
+                >
+                  {formatINR(totalExpense)}
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.scorecardGridRight,
+                  isWebDesktop && styles.scorecardGridStat,
+                ]}
+              >
+                <Text style={styles.scorecardGridLabelDue}>PROFIT</Text>
+                <Text
+                  style={[
+                    styles.scorecardGridDue,
+                    isWebDesktop && styles.scorecardGridDueWebDesktop,
+                  ]}
+                >
+                  {formatINR(profit)}
+                </Text>
+              </View>
+            </View>
+          </LinearGradient>
           {isWebDesktop ? (
-            <Animated.View style={[styles.scorecardDecorIconWrap, heroDecorAnimatedStyle]}>
-              <FontAwesome name="book" size={120} color={Theme.textOnDark} style={styles.scorecardDecorIcon} />
-            </Animated.View>
+            <View style={styles.profilePreviewCard}>
+              <Text style={styles.profilePreviewEyebrow}>VEHICLE PROFILE</Text>
+              <View style={styles.profilePreviewRatingRow}>
+                <View style={styles.profilePreviewStars}>
+                  {Array.from({ length: 5 }).map((_, idx) => (
+                    <FontAwesome
+                      key={`vehicle-star-${idx}`}
+                      name={idx < performanceStars ? "star" : "star-o"}
+                      size={12}
+                      color={idx < performanceStars ? "#fbbf24" : Theme.borderMedium}
+                    />
+                  ))}
+                </View>
+                <View style={styles.profilePreviewRatingBadge}>
+                  <Text style={styles.profilePreviewRatingBadgeText}>{performanceScore.toFixed(1)}</Text>
+                </View>
+              </View>
+              <View style={styles.profilePreviewExperienceBlock}>
+                <Text style={styles.profilePreviewExperienceEyebrow}>EXPERIENCE</Text>
+                <View style={styles.profilePreviewExperienceRow}>
+                  <FontAwesome name="history" size={13} color={Theme.textSecondary} />
+                  <Text style={styles.profilePreviewTripsNumber}>{tripsHandled}</Text>
+                  <Text style={styles.profilePreviewExperienceLabel}>Trips Handled</Text>
+                </View>
+              </View>
+              <View style={styles.profilePreviewDetails}>
+                <View style={styles.profilePreviewDetailRow}>
+                  <Text style={styles.profilePreviewDetailLabel}>Number</Text>
+                  <Text style={styles.profilePreviewDetailValue} numberOfLines={1}>
+                    {vehicle.vehicle_number}
+                  </Text>
+                </View>
+                <View style={styles.profilePreviewDetailRow}>
+                  <Text style={styles.profilePreviewDetailLabel}>Type</Text>
+                  <Text style={styles.profilePreviewDetailValue} numberOfLines={1}>
+                    {vehicleTypeLabel}
+                  </Text>
+                </View>
+                <View style={styles.profilePreviewDetailRow}>
+                  <Text style={styles.profilePreviewDetailLabel}>Docs</Text>
+                  <Text style={styles.profilePreviewDetailValue} numberOfLines={1}>
+                    {docsCount} attached
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.profilePreviewToggle}>
+                <View
+                  style={[
+                    styles.profilePreviewToggleDot,
+                    vehicleStatusTitle === "Active" && styles.profilePreviewToggleDotActive,
+                  ]}
+                >
+                  {vehicleStatusTitle === "Active" ? (
+                    <FontAwesome name="check" size={10} color={Theme.textOnPrimary} />
+                  ) : null}
+                </View>
+                <View>
+                  <Text style={styles.profilePreviewToggleTitle}>{vehicleStatusTitle}</Text>
+                  <Text style={styles.profilePreviewToggleSub}>{vehicleStatusSub}</Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={[styles.profilePreviewActionBtn, ecc.actionBtnPrimary]}
+                onPress={() => setShowProfileModal(true)}
+                activeOpacity={0.86}
+              >
+                <FontAwesome name="id-card-o" size={12} color={Theme.textOnPrimary} />
+                <Text style={styles.profilePreviewActionText}>View full profile</Text>
+              </TouchableOpacity>
+            </View>
           ) : null}
-          <View style={styles.scorecardTop}>
-            <View style={styles.scorecardLeft}>
-              <Text style={styles.scorecardLabel}>FINANCIAL OVERVIEW</Text>
-              <Text style={styles.scorecardSalesLabel}>VEHICLE SALES</Text>
-              <Text style={styles.scorecardAmount}>
-                {formatINR(contractValue)}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.scorecardGrid}>
-            <View>
-              <Text style={styles.scorecardGridLabelPaid}>EXPENSE</Text>
-              <Text style={styles.scorecardGridPaid}>
-                {formatINR(totalExpense)}
-              </Text>
-            </View>
-            <View style={styles.scorecardGridRight}>
-              <Text style={styles.scorecardGridLabelDue}>PROFIT</Text>
-              <Text style={styles.scorecardGridDue}>{formatINR(profit)}</Text>
-            </View>
-          </View>
         </View>
 
         <View style={styles.tabRow}>
@@ -757,49 +885,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 24,
   },
-  scorecard: {
-    backgroundColor: Theme.darkBackground,
-    borderRadius: 40,
-    padding: 32,
-    marginBottom: 24,
-    overflow: "hidden",
-  },
-  scorecardDecorIconWrap: {
-    position: "absolute",
-    right: -14,
-    top: -16,
-  },
-  scorecardDecorIcon: {
-    transform: [{ rotate: "12deg" }],
-  },
-  scorecardTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 24,
-  },
-  scorecardLeft: { flex: 1 },
-  scorecardLabel: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: Theme.aggregatePillText,
-    letterSpacing: 1.2,
-  },
-  scorecardSalesLabel: {
-    fontSize: 8,
-    fontWeight: "700",
-    color: "rgba(255,255,255,0.7)",
-    letterSpacing: 1,
-    marginTop: 6,
-    textTransform: "uppercase",
-  },
-  scorecardAmount: {
-    fontSize: 28,
-    fontWeight: "300",
-    fontStyle: "italic",
-    color: Theme.textOnDark,
-    marginTop: 4,
-  },
+  scorecard: ehs.scorecard,
+  scorecardWebDesktop: ehs.scorecardWebDesktop,
+  heroCardsRow: ehs.heroCardsRow,
+  scorecardHeroPane: ehs.scorecardHeroPane,
+  scorecardDecorIconWrap: ehs.scorecardDecorIconWrap,
+  scorecardDecorIcon: ehs.scorecardDecorIcon,
+  scorecardTop: ehs.scorecardTop,
+  scorecardTopWebDesktop: ehs.scorecardTopWebDesktop,
+  scorecardLeft: ehs.scorecardLeft,
+  scorecardLabel: ehs.scorecardLabel,
+  scorecardSalesLabel: ehs.scorecardSalesLabel,
+  scorecardAmount: ehs.scorecardAmount,
+  scorecardAmountWebDesktop: ehs.scorecardAmountWebDesktop,
   healthCircle: {
     width: 56,
     height: 56,
@@ -823,40 +921,38 @@ const styles = StyleSheet.create({
     color: Theme.textOnDark,
     zIndex: 1,
   },
-  scorecardGrid: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.1)",
-  },
-  scorecardGridRight: { alignItems: "flex-end" },
-  scorecardGridLabelPaid: {
-    fontSize: 8,
-    fontWeight: "700",
-    color: Theme.darkGreen,
-    letterSpacing: 0.6,
-  },
-  scorecardGridLabelDue: {
-    fontSize: 8,
-    fontWeight: "700",
-    color: Theme.teslaRed,
-    letterSpacing: 0.6,
-  },
-  scorecardGridPaid: {
-    fontSize: 18,
-    fontWeight: "800",
-    fontStyle: "italic",
-    color: Theme.textOnDark,
-    marginTop: 4,
-  },
-  scorecardGridDue: {
-    fontSize: 18,
-    fontWeight: "800",
-    fontStyle: "italic",
-    color: Theme.teslaRed,
-    marginTop: 4,
-  },
+  scorecardGrid: ehs.scorecardGrid,
+  scorecardGridWebDesktop: ehs.scorecardGridWebDesktop,
+  scorecardGridStat: ehs.scorecardGridStat,
+  scorecardGridRight: ehs.scorecardGridRight,
+  scorecardGridLabelPaid: ehs.scorecardGridLabelPaid,
+  scorecardGridLabelDue: ehs.scorecardGridLabelDue,
+  scorecardGridPaid: ehs.scorecardGridPaid,
+  scorecardGridPaidWebDesktop: ehs.scorecardGridPaidWebDesktop,
+  scorecardGridDue: ehs.scorecardGridDue,
+  scorecardGridDueWebDesktop: ehs.scorecardGridDueWebDesktop,
+  profilePreviewCard: ecc.card,
+  profilePreviewEyebrow: ecc.eyebrow,
+  profilePreviewRatingRow: ecc.ratingRow,
+  profilePreviewStars: ecc.stars,
+  profilePreviewRatingBadge: ecc.ratingBadge,
+  profilePreviewRatingBadgeText: ecc.ratingBadgeText,
+  profilePreviewExperienceBlock: ecc.experienceBlock,
+  profilePreviewExperienceEyebrow: ecc.experienceEyebrow,
+  profilePreviewExperienceRow: ecc.experienceRow,
+  profilePreviewTripsNumber: ecc.tripsNumber,
+  profilePreviewExperienceLabel: ecc.experienceLabel,
+  profilePreviewDetails: ecc.details,
+  profilePreviewDetailRow: ecc.detailRow,
+  profilePreviewDetailLabel: ecc.detailLabel,
+  profilePreviewDetailValue: ecc.detailValue,
+  profilePreviewToggle: ecc.toggle,
+  profilePreviewToggleDot: ecc.toggleDot,
+  profilePreviewToggleDotActive: ecc.toggleDotActive,
+  profilePreviewToggleTitle: ecc.toggleTitle,
+  profilePreviewToggleSub: ecc.toggleSub,
+  profilePreviewActionBtn: ecc.actionBtn,
+  profilePreviewActionText: ecc.actionText,
   tabRow: {
     flexDirection: "row",
     backgroundColor: Theme.surfaceGray,
