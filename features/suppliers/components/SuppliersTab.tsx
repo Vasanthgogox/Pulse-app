@@ -38,12 +38,6 @@ export interface LedgerRowForSupplier {
   amount_out?: number;
 }
 
-/** Minimal shape for a pending supplier invitation (invite-by-phone sent, awaiting approval). */
-export interface PendingSupplierInviteRow {
-  id: string;
-  to_org_name: string;
-}
-
 export interface SuppliersTabProps {
   organizationId: string | null;
   /** When provided (e.g. from Finance parent), use these instead of fetching — same pattern as Ledger tab. */
@@ -63,8 +57,6 @@ export interface SuppliersTabProps {
   ) => void;
   searchQuery?: string;
   entityFilter?: EntityListFilter;
-  /** Pending connection requests sent (invite-by-phone as supplier); shown as "Pending invitations". */
-  pendingSupplierInvites?: PendingSupplierInviteRow[];
   /** Optional map of trip_id -> party ids for ledger fallback attribution. */
   tripPartyMap?: TripPartyMap | null;
   topContent?: ReactNode;
@@ -88,7 +80,6 @@ export function SuppliersTab({
   onRowSelect,
   searchQuery = "",
   entityFilter = "all",
-  pendingSupplierInvites = [],
   tripPartyMap,
   topContent,
   refreshing = false,
@@ -193,13 +184,6 @@ export function SuppliersTab({
     [tabBarScrollProps, onSupplierTablePaginatedScroll],
   );
 
-  const filteredPendingInvites = useMemo(() => {
-    if (!q) return pendingSupplierInvites;
-    return pendingSupplierInvites.filter((r) =>
-      (r.to_org_name || "").toLowerCase().includes(q),
-    );
-  }, [pendingSupplierInvites, q]);
-
   useEffect(() => {
     if (onTotals) {
       onTotals(totals);
@@ -210,8 +194,7 @@ export function SuppliersTab({
     return <Text style={styles.loading}>Loading…</Text>;
   }
   const hasSuppliers = filteredRows.length > 0;
-  const hasPendingInvites = filteredPendingInvites.length > 0;
-  if (!hasSuppliers && !hasPendingInvites) {
+  if (!hasSuppliers) {
     return (
       <View style={styles.emptyState}>
         <Text style={styles.emptyText}>
@@ -291,21 +274,6 @@ export function SuppliersTab({
             </Text>
           </View>
         </View>
-        {hasPendingInvites ? (
-          <View style={styles.pendingSectionWrap}>
-            <View style={styles.pendingSection}>
-              <Text style={styles.pendingSectionTitle}>PENDING INVITATIONS</Text>
-              {filteredPendingInvites.map((inv) => (
-                <View key={inv.id} style={styles.pendingRow}>
-                  <Text style={styles.pendingRowName} numberOfLines={1}>
-                    {inv.to_org_name || "Unknown"}
-                  </Text>
-                  <Text style={styles.pendingRowBadge}>Pending</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-        ) : null}
         <View style={styles.tableCard}>
           {visibleSupplierRows.map((data) => {
             const due = data.due ?? 0;
@@ -427,7 +395,6 @@ const styles = StyleSheet.create({
   },
   tableScroll: { flex: 1 },
   tableScrollContent: { paddingHorizontal: 0, paddingTop: 12 },
-  pendingSectionWrap: { paddingHorizontal: 16 },
   tableCard: {
     backgroundColor: "rgba(255,255,255,0.8)",
     borderBottomLeftRadius: 20,
@@ -537,40 +504,6 @@ const styles = StyleSheet.create({
   emptyState: { paddingVertical: 24, alignItems: "center" },
   emptyText: {
     fontSize: 10,
-    fontWeight: "700",
-    color: Theme.textMutedDemo,
-    textTransform: "uppercase",
-  },
-  pendingSection: {
-    marginBottom: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
-  },
-  pendingSectionTitle: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: Theme.textMutedDemo,
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    marginBottom: 8,
-  },
-  pendingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 10,
-    paddingHorizontal: 0,
-  },
-  pendingRowName: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: Theme.textPrimary,
-    flex: 1,
-    marginRight: 8,
-  },
-  pendingRowBadge: {
-    fontSize: 9,
     fontWeight: "700",
     color: Theme.textMutedDemo,
     textTransform: "uppercase",
