@@ -1344,7 +1344,7 @@ export default function DriverDetailScreen({
                   <FontAwesome name="send" size={8} color={Theme.financeCardGreenFrom} />
                 ) : null}
               </View>
-              <View>
+              <View style={styles.profilePreviewToggleTextWrap}>
                 <Text style={styles.profilePreviewToggleTitle}>{statusTitle}</Text>
                 <Text style={styles.profilePreviewToggleSub}>{statusSubtitle}</Text>
               </View>
@@ -2696,6 +2696,7 @@ const styles = StyleSheet.create({
     borderColor: Theme.financeCardGreenFrom,
     backgroundColor: "rgba(5,150,105,0.14)",
   },
+  profilePreviewToggleTextWrap: ecc.toggleTextWrap,
   profilePreviewToggleTitle: ecc.toggleTitle,
   profilePreviewToggleSub: ecc.toggleSub,
   profilePreviewActionBtn: ecc.actionBtn,

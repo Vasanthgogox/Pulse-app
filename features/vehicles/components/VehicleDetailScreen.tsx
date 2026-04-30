@@ -614,7 +614,7 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
                     <FontAwesome name="check" size={10} color={Theme.textOnPrimary} />
                   ) : null}
                 </View>
-                <View>
+                <View style={styles.profilePreviewToggleTextWrap}>
                   <Text style={styles.profilePreviewToggleTitle}>{vehicleStatusTitle}</Text>
                   <Text style={styles.profilePreviewToggleSub}>{vehicleStatusSub}</Text>
                 </View>
@@ -1022,6 +1022,7 @@ const styles = StyleSheet.create({
   profilePreviewToggle: ecc.toggle,
   profilePreviewToggleDot: ecc.toggleDot,
   profilePreviewToggleDotActive: ecc.toggleDotActive,
+  profilePreviewToggleTextWrap: ecc.toggleTextWrap,
   profilePreviewToggleTitle: ecc.toggleTitle,
   profilePreviewToggleSub: ecc.toggleSub,
   profilePreviewActionBtn: ecc.actionBtn,

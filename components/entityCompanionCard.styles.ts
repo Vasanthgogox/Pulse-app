@@ -76,6 +76,8 @@ export const entityCompanionCardStyles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    width: "100%",
+    marginTop: 2,
   },
   stars: {
     flexDirection: "row",
@@ -84,17 +86,21 @@ export const entityCompanionCardStyles = StyleSheet.create({
   },
   ratingBadge: {
     borderRadius: 8,
+    minWidth: 38,
     paddingHorizontal: 8,
     paddingVertical: 3,
     backgroundColor: Theme.surfaceGray,
+    alignItems: "center",
+    justifyContent: "center",
   },
   ratingBadgeText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "900",
     color: Theme.textSecondary,
   },
   experienceBlock: {
     marginBottom: 0,
+    width: "100%",
   },
   experienceEyebrow: {
     fontSize: 8,
@@ -108,6 +114,7 @@ export const entityCompanionCardStyles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    width: "100%",
   },
   experienceIconWrap: {
     width: 24,
@@ -164,6 +171,7 @@ export const entityCompanionCardStyles = StyleSheet.create({
     color: Theme.textPrimaryDark,
   },
   toggle: {
+    width: "100%",
     backgroundColor: Theme.surfaceForm,
     borderWidth: 1,
     borderColor: Theme.surfaceBorder,
@@ -173,6 +181,10 @@ export const entityCompanionCardStyles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+  },
+  toggleTextWrap: {
+    flex: 1,
+    minWidth: 0,
   },
   toggleDot: {
     width: 18,

@@ -1552,7 +1552,7 @@ export default function ClientDetailScreen({
                     <FontAwesome name="send" size={8} color={Theme.financeCardBlueFrom} />
                   ) : null}
                 </View>
-                <View>
+                <View style={styles.profilePreviewToggleTextWrap}>
                   <Text style={styles.profilePreviewToggleTitle}>{statusTitle}</Text>
                   <Text style={styles.profilePreviewToggleSub}>{statusSubtitle}</Text>
                 </View>
@@ -2830,6 +2830,7 @@ const styles = StyleSheet.create({
     borderColor: Theme.financeCardBlueFrom,
     backgroundColor: "rgba(29,78,216,0.12)",
   },
+  profilePreviewToggleTextWrap: ecc.toggleTextWrap,
   profilePreviewToggleTitle: ecc.toggleTitle,
   profilePreviewToggleSub: ecc.toggleSub,
   profilePreviewActionBtn: ecc.actionBtn,

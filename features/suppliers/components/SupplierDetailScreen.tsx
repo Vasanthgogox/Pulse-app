@@ -1289,7 +1289,7 @@ export default function SupplierDetailScreen({
                     />
                   ) : null}
                 </View>
-                <View>
+                <View style={styles.profilePreviewToggleTextWrap}>
                   <Text style={styles.profilePreviewToggleTitle}>
                     {statusTitle}
                   </Text>
@@ -2419,6 +2419,7 @@ const styles = StyleSheet.create({
     borderColor: Theme.financeCardOrangeFrom,
     backgroundColor: "rgba(234,88,12,0.12)",
   },
+  profilePreviewToggleTextWrap: ecc.toggleTextWrap,
   profilePreviewToggleTitle: ecc.toggleTitle,
   profilePreviewToggleSub: ecc.toggleSub,
   profilePreviewActionBtn: ecc.actionBtn,
