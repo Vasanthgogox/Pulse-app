@@ -1801,9 +1801,19 @@ export default function DriverDetailScreen({
                   <Text style={styles.driverTripsThTrip} numberOfLines={1}>
                     {t("driverTripsColTrip")}
                   </Text>
+                  {isWebDesktop ? (
+                    <Text style={styles.driverTripsThClient} numberOfLines={1}>
+                      {t("tripsHubColClient")}
+                    </Text>
+                  ) : null}
                   <Text style={styles.driverTripsThNum} numberOfLines={1}>
                     {t("driverTripsColContract")}
                   </Text>
+                  {isWebDesktop ? (
+                    <Text style={styles.driverTripsThNum} numberOfLines={1}>
+                      {t("driverTripsColPnL")}
+                    </Text>
+                  ) : null}
                   <Text style={styles.driverTripsThNum} numberOfLines={1}>
                     {t("paid")}
                   </Text>
@@ -1835,6 +1845,13 @@ export default function DriverDetailScreen({
                   </View>
                 ) : (
                   filteredLedgerRows.map((r) => {
+                    const pl = Number(r.margin ?? 0);
+                    const plStyle =
+                      pl > 0
+                        ? styles.tdGreen
+                        : pl < 0
+                          ? styles.tdRed
+                          : styles.tdMuted;
                     return (
                       <Pressable
                         key={r.id}
@@ -1862,9 +1879,32 @@ export default function DriverDetailScreen({
                             {r.dest?.trim() || "—"}
                           </Text>
                         </View>
+                          {isWebDesktop ? (
+                            <View style={styles.driverTripsCellClient}>
+                              <View style={styles.driverTripsClientAvatar}>
+                                <Text style={styles.driverTripsClientAvatarText}>
+                                  {r.clientInitials}
+                                </Text>
+                              </View>
+                              <Text
+                                style={styles.driverTripsClientName}
+                                numberOfLines={2}
+                              >
+                                {(r.clientName ?? "—").toUpperCase()}
+                              </Text>
+                            </View>
+                          ) : null}
                         <Text style={styles.driverTripsAmt} numberOfLines={1}>
                           {formatINR(r.col1)}
                         </Text>
+                          {isWebDesktop ? (
+                            <Text
+                              style={[styles.driverTripsAmt, plStyle]}
+                              numberOfLines={1}
+                            >
+                              {formatINR(pl)}
+                            </Text>
+                          ) : null}
                         <Text
                           style={[
                             styles.driverTripsAmt,
