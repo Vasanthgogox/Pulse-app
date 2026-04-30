@@ -18,6 +18,11 @@ import {
   type SalaryRequestWithDriverRow,
 } from "@/services/salaryRequestsService";
 import {
+  getSharedLedgerNotifications,
+  markSharedLedgerNotificationRead,
+  type SharedLedgerNotificationRow,
+} from "@/services/sharedLedgerNotificationsService";
+import {
   approveConnectionRequest,
   cancelConnectionRequest,
   rejectConnectionRequest,
@@ -25,11 +30,12 @@ import {
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { Command } from "lucide-react-native";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Image,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -50,6 +56,44 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const springBounce = { damping: 14, stiffness: 400 };
 const springSettle = { damping: 18, stiffness: 320 };
+
+function sharedLedgerActionLabel(
+  eventType: SharedLedgerNotificationRow["event_type"],
+): string {
+  if (eventType === "dispute_received") return "Review";
+  if (eventType === "dispute_status_changed") return "Status";
+  if (eventType === "pending_partner_followup") return "Follow up";
+  if (eventType === "mismatch_detected") return "Compare";
+  return "Fix";
+}
+
+function resolveSharedActionKind(
+  eventType: SharedLedgerNotificationRow["event_type"],
+  payload: Record<string, unknown>,
+):
+  | "review_dispute"
+  | "raise_dispute"
+  | "fix_records"
+  | "compare_now"
+  | "follow_up"
+  | "view_status" {
+  const explicit = typeof payload.cta_kind === "string" ? payload.cta_kind : "";
+  if (
+    explicit === "review_dispute" ||
+    explicit === "raise_dispute" ||
+    explicit === "fix_records" ||
+    explicit === "compare_now" ||
+    explicit === "follow_up" ||
+    explicit === "view_status"
+  ) {
+    return explicit;
+  }
+  if (eventType === "dispute_received") return "review_dispute";
+  if (eventType === "pending_partner_followup") return "follow_up";
+  if (eventType === "mismatch_detected") return "compare_now";
+  if (eventType === "partner_only_ghost") return "fix_records";
+  return "view_status";
+}
 
 /** Wraps content with a pop-in animation when selected. */
 function AnimatedTabIcon({
@@ -239,8 +283,13 @@ export function DemoTabBar({
   const [notifTab, setNotifTab] = useState<"active" | "history">("active");
   const [inviteTab, setInviteTab] = useState<"received" | "sent">("received");
   const [salaryRequests, setSalaryRequests] = useState<SalaryRequestWithDriverRow[]>([]);
+  const [sharedNotifications, setSharedNotifications] = useState<
+    SharedLedgerNotificationRow[]
+  >([]);
   const [notifActionId, setNotifActionId] = useState<string | null>(null);
   const [inviteActionId, setInviteActionId] = useState<string | null>(null);
+  const notificationsPopoverRootRef = useRef<any>(null);
+  const invitationsPopoverRootRef = useRef<any>(null);
   const orgId = currentOrganization?.id ?? null;
   const receivedQ = useConnectionRequestsReceivedQuery(orgId);
   const sentQ = useConnectionRequestsSentQuery(orgId);
@@ -331,10 +380,18 @@ export function DemoTabBar({
       return;
     }
     const loadNotificationCount = async () => {
-      const { requests } = await getSalaryRequestsByOrganization(orgId);
+      const [{ requests }, sharedRes] = await Promise.all([
+        getSalaryRequestsByOrganization(orgId),
+        getSharedLedgerNotifications(orgId, "all"),
+      ]);
       if (cancelled) return;
       setSalaryRequests(requests);
-      setNotificationCount(requests.filter((r) => r.status === "pending").length);
+      const sharedRows = sharedRes.notifications ?? [];
+      setSharedNotifications(sharedRows);
+      setNotificationCount(
+        requests.filter((r) => r.status === "pending").length +
+          sharedRows.filter((n) => n.status === "open").length,
+      );
     };
     void loadNotificationCount();
     return () => {
@@ -349,11 +406,27 @@ export function DemoTabBar({
     () => salaryRequests.filter((r) => r.status !== "pending"),
     [salaryRequests]
   );
+  const activeSharedNotifications = useMemo(
+    () => sharedNotifications.filter((n) => n.status === "open"),
+    [sharedNotifications],
+  );
+  const historySharedNotifications = useMemo(
+    () => sharedNotifications.filter((n) => n.status !== "open"),
+    [sharedNotifications],
+  );
   const refreshSalaryRequests = async () => {
     if (!orgId) return;
-    const { requests } = await getSalaryRequestsByOrganization(orgId);
+    const [{ requests }, sharedRes] = await Promise.all([
+      getSalaryRequestsByOrganization(orgId),
+      getSharedLedgerNotifications(orgId, "all"),
+    ]);
     setSalaryRequests(requests);
-    setNotificationCount(requests.filter((r) => r.status === "pending").length);
+    const sharedRows = sharedRes.notifications ?? [];
+    setSharedNotifications(sharedRows);
+    setNotificationCount(
+      requests.filter((r) => r.status === "pending").length +
+        sharedRows.filter((n) => n.status === "open").length,
+    );
   };
   const handleSalaryReject = async (requestId: string) => {
     setNotifActionId(requestId);
@@ -361,6 +434,46 @@ export function DemoTabBar({
     setNotifActionId(null);
     if (!error) await refreshSalaryRequests();
   };
+  const handleSharedAction = useCallback(
+    async (item: SharedLedgerNotificationRow) => {
+      const payload = item.payload_json ?? {};
+      const actionKind = resolveSharedActionKind(item.event_type, payload);
+      const tripId = typeof payload.trip_id === "string" ? payload.trip_id : null;
+      const entityType =
+        typeof payload.entity_type === "string"
+          ? payload.entity_type.toUpperCase()
+          : null;
+      const entityId = typeof payload.entity_id === "string" ? payload.entity_id : null;
+
+      setShowNotifications(false);
+
+      if (entityType === "CLIENT" && entityId) {
+        const q = new URLSearchParams({
+          shared: "1",
+          sharedAction: actionKind,
+        });
+        if (tripId) q.set("tripId", tripId);
+        router.push(`/client/${entityId}?${q.toString()}` as const);
+      } else if (entityType === "SUPPLIER" && entityId) {
+        const q = new URLSearchParams({
+          shared: "1",
+          sharedAction: actionKind,
+        });
+        if (tripId) q.set("tripId", tripId);
+        router.push(`/supplier/${entityId}?${q.toString()}` as const);
+      } else if (tripId) {
+        router.push(`/trip-ledger/${tripId}` as const);
+      } else {
+        router.push("/(tabs)/finance");
+      }
+
+      if (orgId && item.status === "open") {
+        await markSharedLedgerNotificationRead(item.id, orgId);
+        await refreshSalaryRequests();
+      }
+    },
+    [orgId, refreshSalaryRequests, router],
+  );
   const handleInviteAction = async (requestId: string, action: "approve" | "reject" | "cancel") => {
     if (!orgId) return;
     setInviteActionId(requestId);
@@ -426,6 +539,29 @@ export function DemoTabBar({
   const verticalPad = Math.max(dockBottom / 4, 4);
   const bottomPad = verticalPad + 6;
 
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const onDocumentPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      const inNotifications =
+        !!notificationsPopoverRootRef.current &&
+        typeof notificationsPopoverRootRef.current.contains === "function" &&
+        notificationsPopoverRootRef.current.contains(target);
+      const inInvitations =
+        !!invitationsPopoverRootRef.current &&
+        typeof invitationsPopoverRootRef.current.contains === "function" &&
+        invitationsPopoverRootRef.current.contains(target);
+      if (inNotifications || inInvitations) return;
+      setShowNotifications(false);
+      setShowInvitations(false);
+    };
+    document.addEventListener("mousedown", onDocumentPointerDown);
+    return () => {
+      document.removeEventListener("mousedown", onDocumentPointerDown);
+    };
+  }, []);
+
   if (isDesktopWeb) {
     const navItems: Array<{
       id: DemoTabId;
@@ -490,7 +626,7 @@ export function DemoTabBar({
           </View>
 
           <View style={styles.webUtilityWrap}>
-            <View style={styles.webPopoverAnchor}>
+            <View style={styles.webPopoverAnchor} ref={notificationsPopoverRootRef}>
               <AnimatedPress
                 style={styles.webBellBtn}
                 activeOpacity={0.8}
@@ -547,15 +683,80 @@ export function DemoTabBar({
                       </Text>
                     </TouchableOpacity>
                   </View>
-                  <View style={styles.webPopoverBody}>
-                    {(notifTab === "active" ? activeSalaryRequests : historySalaryRequests).length === 0 ? (
+                  <ScrollView
+                    style={styles.webPopoverScroll}
+                    contentContainerStyle={styles.webPopoverBody}
+                    showsVerticalScrollIndicator
+                    nestedScrollEnabled
+                  >
+                    {(notifTab === "active"
+                      ? activeSalaryRequests.length + activeSharedNotifications.length
+                      : historySalaryRequests.length + historySharedNotifications.length) === 0 ? (
                       <Text style={styles.webPopoverEmpty}>
                         {notifTab === "active" ? "No action required" : "No history yet"}
                       </Text>
                     ) : (
-                      (notifTab === "active" ? activeSalaryRequests : historySalaryRequests)
-                        .slice(0, 6)
-                        .map((req) => (
+                      <>
+                        {(notifTab === "active"
+                          ? activeSharedNotifications
+                          : historySharedNotifications
+                        )
+                          .map((item) => (
+                            <View key={item.id} style={styles.webNotifRow}>
+                              <View style={styles.webNotifLeft}>
+                                <View style={styles.webNotifAvatar}>
+                                  <Text style={styles.webNotifAvatarText}>SL</Text>
+                                </View>
+                                <View style={styles.webNotifTextWrap}>
+                                  <Text style={styles.webNotifName} numberOfLines={1}>
+                                    {item.title}
+                                  </Text>
+                                  <Text style={styles.webNotifMeta}>
+                                    SHARED LEDGER ·{" "}
+                                    {new Date(item.created_at).toLocaleDateString("en-IN", {
+                                      day: "2-digit",
+                                      month: "short",
+                                    })}
+                                  </Text>
+                                </View>
+                              </View>
+                              <View style={styles.webNotifRight}>
+                                <Text style={styles.webNotifAmount}>
+                                  {item.amount_meta != null && Number(item.amount_meta) > 0
+                                    ? `₹${Number(item.amount_meta).toLocaleString("en-IN")}`
+                                    : "—"}
+                                </Text>
+                                {notifTab === "active" ? (
+                                  <View style={styles.webNotifActions}>
+                                    <TouchableOpacity
+                                      style={styles.webNotifRejectBtn}
+                                      onPress={async () => {
+                                        if (!orgId) return;
+                                        await markSharedLedgerNotificationRead(item.id, orgId);
+                                        await refreshSalaryRequests();
+                                      }}
+                                    >
+                                      <Text style={styles.webNotifRejectBtnText}>Read</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                      style={styles.webNotifPayBtn}
+                                      onPress={() => void handleSharedAction(item)}
+                                    >
+                                      <Text style={styles.webNotifPayBtnText}>
+                                        {sharedLedgerActionLabel(item.event_type)}
+                                      </Text>
+                                    </TouchableOpacity>
+                                  </View>
+                                ) : (
+                                  <Text style={styles.webNotifStatus}>
+                                    {String(item.status ?? "").toUpperCase()}
+                                  </Text>
+                                )}
+                              </View>
+                            </View>
+                          ))}
+                        {(notifTab === "active" ? activeSalaryRequests : historySalaryRequests)
+                          .map((req) => (
                           <View key={req.id} style={styles.webNotifRow}>
                             <View style={styles.webNotifLeft}>
                               <View style={styles.webNotifAvatar}>
@@ -597,13 +798,14 @@ export function DemoTabBar({
                               )}
                             </View>
                           </View>
-                        ))
+                        ))}
+                      </>
                     )}
-                  </View>
+                  </ScrollView>
                 </View>
               ) : null}
             </View>
-            <View style={styles.webPopoverAnchor}>
+            <View style={styles.webPopoverAnchor} ref={invitationsPopoverRootRef}>
               <AnimatedPress
                 style={styles.webBellBtn}
                 activeOpacity={0.8}
@@ -1196,7 +1398,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     borderWidth: 1,
     borderColor: "#e2e8f0",
-    backgroundColor: "rgba(255,255,255,0.98)",
+    backgroundColor: "#ffffff",
     overflow: "hidden",
     shadowColor: "#0f172a",
     shadowOffset: { width: 0, height: 16 },
@@ -1234,6 +1436,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 10,
     paddingTop: 10,
+    backgroundColor: "#ffffff",
   },
   webPopoverTabBtn: {
     flex: 1,
@@ -1258,10 +1461,12 @@ const styles = StyleSheet.create({
   webPopoverTabBtnTextActive: {
     color: "#ffffff",
   },
+  webPopoverScroll: {
+    maxHeight: 360,
+  },
   webPopoverBody: {
     padding: 10,
     gap: 8,
-    maxHeight: 360,
   },
   webPopoverRow: {
     borderRadius: 14,

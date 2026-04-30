@@ -49,13 +49,53 @@ const TABLE_SELECT =
   'id, organization_id, partner_org_id, partner_key, trip_id, transaction_id, source_dispute_id, event_type, status, title, subtitle, amount_meta, payload_json, created_at, updated_at, read_at, handled_at';
 
 function rpcOrTableUnavailable(message: string): boolean {
-  return /could not find the function|does not exist|relation .* does not exist|schema cache/i.test(
+  return /could not find the function|does not exist|relation .* does not exist|schema cache|no function matches|invalid input value for enum|structure of query does not match function result type|function .* has .* parameters but .* were supplied/i.test(
     message,
   );
 }
 
+function extractRpcRows(data: unknown): Array<Record<string, unknown>> {
+  if (Array.isArray(data)) {
+    return data as Array<Record<string, unknown>>;
+  }
+  if (data && typeof data === "object") {
+    const obj = data as Record<string, unknown>;
+    const candidate =
+      obj.notifications ??
+      obj.rows ??
+      obj.data ??
+      obj.result;
+    if (Array.isArray(candidate)) {
+      return candidate as Array<Record<string, unknown>>;
+    }
+  }
+  return [];
+}
+
 function toRow(raw: Record<string, unknown>): SharedLedgerNotificationRow {
   const payload = raw.payload_json;
+  const rawEventType = String(raw.event_type ?? "mismatch_detected")
+    .trim()
+    .toLowerCase();
+  const rawStatus = String(raw.status ?? "open")
+    .trim()
+    .toLowerCase();
+  const eventType: SharedLedgerNotificationEventType =
+    rawEventType === "dispute_received" ||
+    rawEventType === "dispute_status_changed" ||
+    rawEventType === "pending_partner_followup" ||
+    rawEventType === "mismatch_detected" ||
+    rawEventType === "partner_only_ghost"
+      ? rawEventType
+      : "mismatch_detected";
+  const status: SharedLedgerNotificationStatus =
+    rawStatus === "open" ||
+    rawStatus === "read" ||
+    rawStatus === "handled" ||
+    rawStatus === "resolved"
+      ? rawStatus
+      : "open";
+
   return {
     id: String(raw.id ?? ''),
     organization_id: String(raw.organization_id ?? ''),
@@ -67,9 +107,8 @@ function toRow(raw: Record<string, unknown>): SharedLedgerNotificationRow {
       raw.transaction_id == null ? null : String(raw.transaction_id),
     source_dispute_id:
       raw.source_dispute_id == null ? null : String(raw.source_dispute_id),
-    event_type:
-      (String(raw.event_type ?? 'mismatch_detected') as SharedLedgerNotificationEventType),
-    status: (String(raw.status ?? 'open') as SharedLedgerNotificationStatus),
+    event_type: eventType,
+    status,
     title: String(raw.title ?? 'Shared ledger update'),
     subtitle: raw.subtitle == null ? null : String(raw.subtitle),
     amount_meta:
@@ -374,15 +413,11 @@ export async function getSharedLedgerNotifications(
     status_filter: statusFilter,
   });
   if (!error) {
-    const rows = (Array.isArray(data) ? data : []) as Array<Record<string, unknown>>;
+    const rows = extractRpcRows(data);
     return { error: null, notifications: rows.map(toRow) };
   }
 
-  if (!rpcOrTableUnavailable(error.message)) {
-    return { error: new Error(error.message), notifications: [] };
-  }
-
-  // Fallback to direct table read when RPC is not deployed yet.
+  // Fallback to direct table read on any RPC failure (permissions/signature/version drift).
   let query = supabase()
     .from('shared_ledger_notifications')
     .select(TABLE_SELECT)
@@ -410,7 +445,24 @@ export async function getSharedLedgerNotifications(
         unavailable: derived.length === 0,
       };
     }
-    return { error: new Error(tableError.message), notifications: [] };
+    // If table also failed, still attempt derived notifications as a final safety net.
+    const derived = await getDerivedSharedLedgerNotifications(organizationId);
+    const filtered =
+      statusFilter === 'action_required'
+        ? derived.filter((r) => r.status === 'open')
+        : statusFilter === 'history'
+          ? derived.filter((r) => r.status !== 'open')
+          : derived;
+    if (filtered.length > 0) {
+      return { error: null, notifications: filtered };
+    }
+    return {
+      error: new Error(
+        `RPC failed: ${error.message}. Table fallback failed: ${tableError.message}.`,
+      ),
+      notifications: [],
+      unavailable: true,
+    };
   }
 
   const rows = (tableRows ?? []) as Array<Record<string, unknown>>;
@@ -428,19 +480,19 @@ export async function getSharedLedgerNotificationsCount(
     org_id: organizationId,
   });
   if (!error) {
-    const rows = Array.isArray(data) ? data : [];
+    const rows = extractRpcRows(data);
     const first = (rows[0] ?? {}) as Record<string, unknown>;
     const actionable = Number(
-      first.actionable_count ?? first.count ?? 0,
+      first.actionable_count ??
+        first.actionableCount ??
+        first.open_count ??
+        first.count ??
+        0,
     );
     return { error: null, count: { actionableCount: Number.isFinite(actionable) ? actionable : 0 } };
   }
 
-  if (!rpcOrTableUnavailable(error.message)) {
-    return { error: new Error(error.message), count: { actionableCount: 0 } };
-  }
-
-  // Fallback to direct table count for open events.
+  // Fallback to direct table count for open events on any RPC failure.
   const { count, error: tableError } = await supabase()
     .from('shared_ledger_notifications')
     .select('id', { count: 'exact', head: true })
@@ -448,16 +500,21 @@ export async function getSharedLedgerNotificationsCount(
     .eq('status', 'open');
 
   if (tableError) {
-    if (rpcOrTableUnavailable(tableError.message)) {
-      const derived = await getDerivedSharedLedgerNotifications(organizationId);
-      const actionable = derived.filter((r) => r.status === 'open').length;
+    const derived = await getDerivedSharedLedgerNotifications(organizationId);
+    const actionable = derived.filter((r) => r.status === 'open').length;
+    if (actionable > 0 || rpcOrTableUnavailable(tableError.message)) {
       return {
         error: null,
         count: { actionableCount: actionable },
         unavailable: derived.length === 0,
       };
     }
-    return { error: new Error(tableError.message), count: { actionableCount: 0 } };
+    return {
+      error: new Error(
+        `RPC failed: ${error.message}. Table fallback failed: ${tableError.message}.`,
+      ),
+      count: { actionableCount: 0 },
+    };
   }
 
   return { error: null, count: { actionableCount: Number(count ?? 0) } };

@@ -3,6 +3,7 @@
  * Header "Load Center" / "Find or Hire Work", three sub-tabs, cards, modals.
  */
 import { LoadCardRouteRow } from "@/components/LoadCardRouteRow";
+import { FinanceFAB } from "@/components/FinanceFAB";
 import { SemanticAddIcon } from "@/components/SemanticAddIcon";
 import { getAvatarUriForSeed } from "@/constants/DriverLevels";
 import Layout from "@/constants/Layout";
@@ -312,6 +313,7 @@ export function LoadCenterView({
   }, [loadSubTabIndex, loadTabsActiveAnim]);
 
   const useGridLayout = width >= 1024;
+  const isMobileView = width < 820;
 
   /** O(myQuotes.length): map indent_id -> quote for Find Work "Quote Sent" / "Update quote" and modal prefill. */
   const myQuoteByIndentId = useMemo(() => {
@@ -2512,24 +2514,34 @@ export function LoadCenterView({
               { bottom: hirePartnerFabBottom, pointerEvents: "box-none" },
             ]}
           >
-            <TouchableOpacity
-              style={styles.hirePartnerFab}
-              onPress={onCreateIndentPress}
-              activeOpacity={0.9}
-              accessibilityLabel="Broadcast New Indent"
-            >
-              <SemanticAddIcon
-                IconComponent={Package}
-                iconSize={20}
-                iconColor={Theme.textOnPrimary}
-                badgeSize={18}
-                badgeIconSize={13}
-                badgeBackgroundColor="#FFFFFF"
-                badgeIconColor={Theme.darkBackground}
-                badgeOffsetX={-7}
-                badgeOffsetY={-6}
+            {isMobileView ? (
+              <FinanceFAB
+                onPress={onCreateIndentPress}
+                accessibilityLabel="Broadcast New Indent"
+                icon="package"
+                size={40}
+                iconSize={17}
               />
-            </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.hirePartnerFab}
+                onPress={onCreateIndentPress}
+                activeOpacity={0.9}
+                accessibilityLabel="Broadcast New Indent"
+              >
+                <SemanticAddIcon
+                  IconComponent={Package}
+                  iconSize={20}
+                  iconColor={Theme.textOnPrimary}
+                  badgeSize={18}
+                  badgeIconSize={13}
+                  badgeBackgroundColor="#FFFFFF"
+                  badgeIconColor={Theme.darkBackground}
+                  badgeOffsetX={-7}
+                  badgeOffsetY={-6}
+                />
+              </TouchableOpacity>
+            )}
           </View>
         ) : null}
       </View>
