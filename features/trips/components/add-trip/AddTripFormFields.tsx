@@ -410,6 +410,21 @@ export function AddTripFormFields({
     !fleetLoading &&
     availableDrivers.length === 0;
 
+  const aggregateDriverFoundByPhone =
+    !!(state.driverPhoneName && state.driverPhone.trim());
+  const aggregateDriverVehicleBothSet =
+    state.supplySource === "aggregate" &&
+    !state.assignLater &&
+    state.driverPhone.trim().length > 0 &&
+    state.aggregateVehicleText.trim().length > 0 &&
+    (!aggregateDriverFoundByPhone || state.driverPhoneConfirmed);
+  const assetDriverVehicleBothSet =
+    supplyIsAsset &&
+    !state.assignLater &&
+    Boolean(state.driverId && state.vehicleId);
+  const assignLaterSwitchDisabled =
+    supplyIsAsset ? assetDriverVehicleBothSet : aggregateDriverVehicleBothSet;
+
   const baseInputArr = [styles.input, inputStyle];
 
   return (
@@ -935,7 +950,13 @@ export function AddTripFormFields({
               </TouchableOpacity>
             </View>
 
-            <View style={[styles.assignLaterCard, { marginBottom: 16 }]}>
+            <View
+              style={[
+                styles.assignLaterCard,
+                { marginBottom: 16 },
+                assignLaterSwitchDisabled && styles.assignLaterCardDisabled,
+              ]}
+            >
               <View style={styles.assignLaterCardLeft}>
                 <View style={styles.assignLaterIconCircle}>
                   <ListChecks size={18} color={Theme.iconPrimary} />
@@ -947,11 +968,17 @@ export function AddTripFormFields({
                       ? "(vehicle & driver from trip detail)"
                       : "(vehicle & driver phone from trip detail)"}
                   </Text>
+                  {assignLaterSwitchDisabled ? (
+                    <Text style={styles.assignLaterLockedHint}>
+                      Remove driver or vehicle assignment to enable assign later.
+                    </Text>
+                  ) : null}
                 </View>
               </View>
               <Switch
                 value={state.assignLater}
                 onValueChange={setters.setAssignLater}
+                disabled={assignLaterSwitchDisabled}
                 trackColor={{
                   false: Theme.borderInput,
                   true: Theme.darkBackground,
@@ -2527,6 +2554,16 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: Theme.textMuted,
     lineHeight: 17,
+  },
+  assignLaterCardDisabled: {
+    opacity: 0.72,
+  },
+  assignLaterLockedHint: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: Theme.textMuted,
+    marginTop: 8,
+    lineHeight: 16,
   },
   warningText: {
     fontSize: 11,
