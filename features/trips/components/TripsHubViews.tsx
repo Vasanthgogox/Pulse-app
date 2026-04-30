@@ -2270,14 +2270,14 @@ const styles = StyleSheet.create({
   },
   fleetProgSegment: {
     flex: 1,
-    height: 8,
-    borderRadius: 6,
+    height: 5 ,
+    borderRadius: 5,
   },
   fleetProgSegmentFilled: {
     backgroundColor: Theme.darkGreen,
   },
   fleetProgSegmentEmpty: {
-    backgroundColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceBorder,
   },
   fleetFooter: {
     flexDirection: "row",

@@ -1,8 +1,8 @@
 import { Layout } from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import {
-    CUSTOMERS_SUPPLIERS,
-    LEDGER,
+  CUSTOMERS_SUPPLIERS,
+  LEDGER,
 } from "@/features/finance/constants/tableColumns";
 import { Platform, StyleSheet } from "react-native";
 export const styles = StyleSheet.create({
@@ -90,12 +90,29 @@ export const styles = StyleSheet.create({
   financeHeroPrimaryBlock: {
     width: "100%",
     zIndex: 1,
+    flex: 1,
+    justifyContent: "space-between",
   },
   financeHeroPillsDock: {
     width: "100%",
     paddingTop: 18,
     marginTop: 2,
     zIndex: 1,
+  },
+  financeHeroFooterRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: 16,
+    marginTop: 10,
+    minWidth: 0,
+  },
+  financeHeroPillsDockInline: {
+    flexShrink: 0,
+    minWidth: 0,
+    maxWidth: "52%",
+    alignSelf: "flex-end",
+    marginLeft: "auto",
   },
   financeBalanceDecorIconWrap: {
     position: "absolute",
@@ -115,7 +132,7 @@ export const styles = StyleSheet.create({
   financeBalanceEyebrow: {
     fontSize: 10,
     fontWeight: "900",
-    color: Theme.primaryLight,
+    color: Theme.textOnDarkMuted,
     textTransform: "uppercase",
     letterSpacing: 2,
     flexShrink: 1,
@@ -192,21 +209,24 @@ export const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
   },
   financeBalanceValue: {
-    fontSize: 42,
-    fontWeight: "900",
+    fontSize: 56,
+    fontWeight: "800",
     color: Theme.textOnDark,
-    letterSpacing: -0.75,
+    letterSpacing: -0.85,
+    fontStyle: "italic",
     marginTop: 8,
     paddingLeft: Layout.currencyTextPaddingStartLarge,
     paddingTop: Layout.currencyTextPaddingVertical,
     paddingBottom: Layout.currencyTextPaddingVertical,
-    lineHeight: 52,
+    lineHeight: 70,
   },
   financeBalanceStatsRow: {
     flexDirection: "row",
-    gap: 8,
-    marginTop: 6,
-    flexWrap: "wrap",
+    gap: 20,
+    flexWrap: "nowrap",
+    alignItems: "center",
+    flexShrink: 0,
+    paddingBottom: 1,
   },
   financeBalanceStat: {
     flexDirection: "row",
@@ -244,14 +264,16 @@ export const styles = StyleSheet.create({
     color: Theme.textOnDarkMuted,
     textTransform: "uppercase",
     letterSpacing: 1,
+    fontStyle: "italic",
   },
   financeBalanceStatValue: {
-    fontSize: 12,
+    fontSize: 22,
     fontWeight: "800",
     color: Theme.textOnDark,
+    fontStyle: "italic",
     paddingLeft: Layout.currencyTextPaddingStart,
     paddingTop: Layout.currencyTextPaddingVerticalTight,
-    lineHeight: 18,
+    lineHeight: 30,
   },
   financeCategoryCardsRow: {
     flexDirection: "row",
@@ -582,9 +604,10 @@ export const styles = StyleSheet.create({
   financeHeroPillsRow: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "flex-end",
     gap: 8,
     paddingVertical: 2,
-    flexGrow: 1,
+    paddingLeft: 12,
     paddingRight: 4,
   },
   financeHeroPillsRowTreasuryInset: {
