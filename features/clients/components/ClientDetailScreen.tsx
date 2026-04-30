@@ -1333,37 +1333,6 @@ export default function ClientDetailScreen({
         </View>
         <View style={styles.headerRight}>
           <TouchableOpacity
-            style={styles.publicProfileBtn}
-            onPress={() => router.push(`/public-profile/client/${clientId}`)}
-            activeOpacity={0.8}
-            accessibilityLabel="View public profile"
-          >
-            <FontAwesome
-              name="id-card-o"
-              size={15}
-              color={Theme.textPrimaryDark}
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.profileBtn}
-            onPress={() => setShowProfileModal(true)}
-            activeOpacity={0.8}
-            accessibilityLabel="Client profile"
-          >
-            {profileAvatarUri ? (
-              <Image
-                source={{ uri: profileAvatarUri }}
-                style={styles.headerAvatarImage}
-              />
-            ) : (
-              <FontAwesome
-                name="user"
-                size={16}
-                color={Theme.textPrimaryDark}
-              />
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity
             style={styles.downloadBtn}
             onPress={() => {
               if (detailSubTab === "shared") {
@@ -1495,14 +1464,55 @@ export default function ClientDetailScreen({
           </LinearGradient>
           {isWebDesktop ? (
             <View style={styles.profilePreviewCard}>
-              <Text style={styles.profilePreviewEyebrow}>ENTITY PROFILE</Text>
+              <View style={styles.profilePreviewTopRow}>
+                <Text style={styles.profilePreviewEyebrow}>ENTITY PROFILE</Text>
+                <TouchableOpacity
+                  style={styles.profilePreviewTopAction}
+                  onPress={() => setShowProfileModal(true)}
+                  activeOpacity={0.85}
+                  accessibilityLabel="Open client full profile"
+                >
+                  <Text style={styles.profilePreviewTopActionText}>
+                    FULL PROFILE
+                  </Text>
+                  <FontAwesome
+                    name="chevron-right"
+                    size={10}
+                    color={Theme.textSecondary}
+                  />
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity
+                style={styles.profilePreviewIdentityTrigger}
+                onPress={() => setShowProfileModal(true)}
+                activeOpacity={0.85}
+                accessibilityLabel="Open client full profile"
+              >
+                <View style={styles.profilePreviewIdentityRow}>
+                  <View style={styles.profilePreviewIdentityAvatar}>
+                    {profileAvatarUri ? (
+                      <Image source={{ uri: profileAvatarUri }} style={styles.profilePreviewIdentityAvatarImage} />
+                    ) : (
+                      <FontAwesome name="building" size={14} color={Theme.textSecondary} />
+                    )}
+                  </View>
+                  <View style={styles.profilePreviewIdentityMeta}>
+                    <Text style={styles.profilePreviewIdentityName} numberOfLines={1}>
+                      {clientName}
+                    </Text>
+                    <Text style={styles.profilePreviewIdentitySub} numberOfLines={1}>
+                      {(client.contact_person ?? "No contact").trim() || "No contact"}
+                    </Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
               <View style={styles.profilePreviewRatingRow}>
                 <View style={styles.profilePreviewStars}>
                   {Array.from({ length: 5 }).map((_, idx) => (
                     <FontAwesome
                       key={`client-star-${idx}`}
                       name={idx < ratingFilledStars ? "star" : "star-o"}
-                      size={12}
+                      size={13}
                       color={idx < ratingFilledStars ? "#fbbf24" : Theme.borderMedium}
                     />
                   ))}
@@ -1514,7 +1524,9 @@ export default function ClientDetailScreen({
               <View style={styles.profilePreviewExperienceBlock}>
                 <Text style={styles.profilePreviewExperienceEyebrow}>EXPERIENCE</Text>
                 <View style={styles.profilePreviewExperienceRow}>
-                  <FontAwesome name="history" size={13} color={Theme.textSecondary} />
+                  <View style={styles.profilePreviewExperienceIconWrap}>
+                    <FontAwesome name="road" size={12} color={Theme.textOnPrimary} />
+                  </View>
                   <Text style={styles.profilePreviewTripsNumber}>{tripsHandled}</Text>
                   <Text style={styles.profilePreviewExperienceLabel}>Trips Handled</Text>
                 </View>
@@ -1528,12 +1540,14 @@ export default function ClientDetailScreen({
                   ]}
                 >
                   {isIntegrated ? (
-                    <FontAwesome name="check" size={10} color={Theme.textOnPrimary} />
+                    <FontAwesome name="check" size={11} color={Theme.textOnPrimary} />
                   ) : isInAppNotIntegrated ? (
-                    <FontAwesome name="send" size={8} color={Theme.financeCardBlueFrom} />
+                    <FontAwesome name="send" size={9} color={Theme.financeCardBlueFrom} />
+                  ) : isNotInApp ? (
+                    <FontAwesome name="envelope-o" size={9} color={Theme.textMuted} />
                   ) : null}
                 </View>
-                <View>
+                <View style={styles.profilePreviewToggleTextWrap}>
                   <Text style={styles.profilePreviewToggleTitle}>{statusTitle}</Text>
                   <Text style={styles.profilePreviewToggleSub}>{statusSubtitle}</Text>
                 </View>
@@ -1556,7 +1570,7 @@ export default function ClientDetailScreen({
               >
                 <FontAwesome
                   name={canSendRequest ? "send" : "envelope-o"}
-                  size={12}
+                  size={14}
                   color={Theme.textOnPrimary}
                 />
                 <Text style={styles.profilePreviewActionText}>
@@ -2420,29 +2434,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
-  profileBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: Theme.screenBackground,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  publicProfileBtn: {
-    width: 36,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: Theme.surfaceLight,
-    borderWidth: 1,
-    borderColor: Theme.cinematicCardBorder,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerAvatarImage: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 12,
-  },
   downloadBtn: {
     width: 40,
     height: 40,
@@ -2787,7 +2778,42 @@ const styles = StyleSheet.create({
   scorecardGridDue: ehs.scorecardGridDue,
   scorecardGridDueWebDesktop: ehs.scorecardGridDueWebDesktop,
   profilePreviewCard: ecc.card,
+  profilePreviewTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
   profilePreviewEyebrow: ecc.eyebrow,
+  profilePreviewTopAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    minHeight: 24,
+    borderRadius: 12,
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    paddingHorizontal: 8,
+  },
+  profilePreviewTopActionText: {
+    fontSize: 8,
+    fontWeight: "900",
+    color: Theme.textSecondary,
+    letterSpacing: 0.7,
+    textTransform: "uppercase",
+  },
+  profilePreviewIdentityRow: ecc.identityRow,
+  profilePreviewIdentityAvatar: ecc.identityAvatar,
+  profilePreviewIdentityAvatarImage: ecc.identityAvatarImage,
+  profilePreviewIdentityMeta: ecc.identityMeta,
+  profilePreviewIdentityName: ecc.identityName,
+  profilePreviewIdentitySub: ecc.identitySub,
+  profilePreviewIdentityTrigger: {
+    borderRadius: 12,
+    paddingVertical: 2,
+  },
   profilePreviewRatingRow: ecc.ratingRow,
   profilePreviewStars: ecc.stars,
   profilePreviewRatingBadge: ecc.ratingBadge,
@@ -2795,6 +2821,7 @@ const styles = StyleSheet.create({
   profilePreviewExperienceBlock: ecc.experienceBlock,
   profilePreviewExperienceEyebrow: ecc.experienceEyebrow,
   profilePreviewExperienceRow: ecc.experienceRow,
+  profilePreviewExperienceIconWrap: ecc.experienceIconWrap,
   profilePreviewTripsNumber: ecc.tripsNumber,
   profilePreviewExperienceLabel: ecc.experienceLabel,
   profilePreviewToggle: ecc.toggle,
@@ -2804,6 +2831,7 @@ const styles = StyleSheet.create({
     borderColor: Theme.financeCardBlueFrom,
     backgroundColor: "rgba(29,78,216,0.12)",
   },
+  profilePreviewToggleTextWrap: ecc.toggleTextWrap,
   profilePreviewToggleTitle: ecc.toggleTitle,
   profilePreviewToggleSub: ecc.toggleSub,
   profilePreviewActionBtn: ecc.actionBtn,

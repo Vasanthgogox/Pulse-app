@@ -63,7 +63,7 @@ export default function NotificationsScreen() {
     () =>
       hasRows
         ? "Driver salary requests need your action."
-        : "No pending salary notifications.",
+        : "No pending payment requests.",
     [hasRows],
   );
 
@@ -79,6 +79,7 @@ export default function NotificationsScreen() {
           else router.replace("/(tabs)/finance");
         }}
         hideLogoBadge
+        hideNotificationBell
         titleTextStyle={styles.headerTitle}
         subtitleTextStyle={styles.headerSubtitle}
       />
