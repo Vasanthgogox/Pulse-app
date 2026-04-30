@@ -133,7 +133,9 @@ export async function getNetworkFeed(
   });
   if (error) return { error: new Error(error.message), posts: [] };
   const rawPosts = (data ?? []) as PostRow[];
-  const activePosts = rawPosts.filter((p) => !isPostExpired(p));
+  const activePosts = rawPosts.filter(
+    (p) => p.is_active === true && !isPostExpired(p),
+  );
 
   // Best effort: auto-deactivate expired own stories so they disappear for everyone.
   const expiredOwnIds = rawPosts

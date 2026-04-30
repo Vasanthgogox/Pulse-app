@@ -32,6 +32,7 @@ import {
   Users,
   X,
 } from "lucide-react-native";
+import { useRouter } from "expo-router";
 import Theme from "@/constants/Theme";
 import {
   QUICK_MESSAGES,
@@ -142,6 +143,7 @@ function partyLabel(type: ConversationPartyType) {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 export function ChatScreen() {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
@@ -381,7 +383,16 @@ export function ChatScreen() {
     return (
       <View style={s.listPanel}>
         <View style={s.listHeader}>
-          <Text style={s.brandTitle}>Comms.</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            <TouchableOpacity
+              onPress={() => router.canGoBack() ? router.back() : router.replace("/(tabs)")}
+              hitSlop={10}
+              style={s.backBtn}
+            >
+              <ArrowLeft size={18} color="#1e293b" />
+            </TouchableOpacity>
+            <Text style={s.brandTitle}>Comms.</Text>
+          </View>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
             <TouchableOpacity hitSlop={10}>
               <Filter size={16} color="#94a3b8" />
@@ -1368,6 +1379,16 @@ const s = StyleSheet.create({
     backgroundColor: "#0f172a",
     alignItems: "center",
     justifyContent: "center",
+  },
+  backBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f1f5f9",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
   },
 });
 

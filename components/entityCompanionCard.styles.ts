@@ -1,0 +1,180 @@
+import Layout from "@/constants/Layout";
+import Theme from "@/constants/Theme";
+import { StyleSheet } from "react-native";
+
+const H = Layout.entityHero;
+
+/**
+ * Shared shell + typography for the profile column on entity detail screens.
+ * Sizes come from Layout.entityHero so all entities stay visually aligned.
+ */
+export const entityCompanionCardStyles = StyleSheet.create({
+  card: {
+    flex: H.profileFlex,
+    minHeight: H.columnMinHeightDesktop,
+    alignSelf: "stretch",
+    borderRadius: H.profileRadius,
+    backgroundColor: Theme.screenBackground,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    paddingHorizontal: H.profilePaddingHorizontal,
+    paddingVertical: H.profilePaddingVertical,
+    shadowColor: "rgba(148, 163, 184, 0.35)",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.45,
+    shadowRadius: 20,
+    boxShadow:
+      "0 20px 25px -5px rgba(226, 232, 240, 0.5), 0 8px 10px -6px rgba(226, 232, 240, 0.4)",
+    elevation: 6,
+    justifyContent: "flex-start",
+    gap: H.profileGap,
+  },
+  eyebrow: {
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 2,
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+  },
+  ratingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  stars: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  ratingBadge: {
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: Theme.surfaceGray,
+  },
+  ratingBadgeText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: Theme.textSecondary,
+  },
+  experienceBlock: {
+    marginBottom: 0,
+  },
+  experienceEyebrow: {
+    fontSize: 8,
+    fontWeight: "900",
+    letterSpacing: 1.6,
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    marginBottom: 4,
+  },
+  experienceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  tripsNumber: {
+    fontSize: H.profileTripsNumberSize,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+    lineHeight: H.profileTripsNumberLineHeight,
+  },
+  experienceLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textSecondary,
+  },
+  details: {
+    borderTopWidth: 1,
+    borderTopColor: Theme.surfaceBorder,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.surfaceBorder,
+    paddingVertical: H.profileDetailsPaddingVertical,
+    gap: H.profileDetailsGap,
+    maxHeight: H.profileDetailsMaxHeight,
+    overflow: "hidden",
+  },
+  detailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 6,
+  },
+  detailLabel: {
+    fontSize: 8,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+  },
+  detailValue: {
+    flex: 1,
+    textAlign: "right",
+    fontSize: H.profileDetailValueFontSize,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  toggle: {
+    backgroundColor: Theme.surfaceForm,
+    borderWidth: 1,
+    borderColor: Theme.surfaceBorder,
+    borderRadius: 16,
+    paddingHorizontal: H.togglePaddingHorizontal,
+    paddingVertical: H.togglePaddingVertical,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  toggleDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: Theme.borderMedium,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.screenBackground,
+  },
+  toggleDotActive: {
+    borderColor: Theme.darkGreen,
+    backgroundColor: Theme.darkGreen,
+  },
+  toggleTitle: {
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    color: Theme.textPrimaryDark,
+  },
+  toggleSub: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: Theme.textSecondary,
+    marginTop: 2,
+  },
+  actionBtn: {
+    width: "100%",
+    borderRadius: 16,
+    paddingVertical: H.actionButtonPaddingVertical,
+    minHeight: H.actionButtonMinHeight,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+    marginTop: "auto",
+  },
+  /** Black CTA on all entity profile cards (client / supplier / driver / vehicle) */
+  actionBtnPrimary: {
+    backgroundColor: Theme.darkBackground,
+  },
+  actionBtnDisabled: {
+    backgroundColor: Theme.textSecondary,
+  },
+  actionText: {
+    fontSize: 10,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1.4,
+    color: Theme.textOnPrimary,
+  },
+});

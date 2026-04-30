@@ -14,7 +14,8 @@ import {
 } from "@/features/network/services/posts.service";
 import { type StoryViewRow } from "@/features/network/services/story-views.service";
 import { formatINR } from "@/lib/format";
-import { useNetworkFeedQuery, useInvalidatePosts, useMyBidQuery, useStoryViewsQuery, useRecordStoryViewMutation } from "@/lib/queries";
+import { useNetworkFeedQuery, useAfterPostDeleted, useInvalidatePosts, useMyBidQuery, useStoryViewsQuery, useRecordStoryViewMutation } from "@/lib/queries";
+import { confirmDialog } from "@/lib/confirmDialog";
 import { ROUTES } from "@/lib/routes";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
@@ -211,6 +212,7 @@ export default function StoryDetailScreen() {
   const { currentOrganization } = useOrganization();
   const myOrgId = currentOrganization?.id ?? "";
   const invalidatePosts = useInvalidatePosts(myOrgId);
+  const afterPostDeleted = useAfterPostDeleted(currentOrganization?.id ?? null);
 
   const feedQ = useNetworkFeedQuery(myOrgId);
   const allowLoadPosts = currentOrganization?.capabilities?.canBid ?? true;
@@ -322,23 +324,24 @@ export default function StoryDetailScreen() {
   const storyDateLabel = useMemo(() => post ? formatStoryDate(post.created_at) : "", [post]);
   const heroLabel = useMemo(() => post ? storyTypeLabel(post) : "", [post]);
 
-  const handleDeletePost = useCallback(() => {
+  const handleDeletePost = useCallback(async () => {
     if (!post || !isOwnPost || isDeletingCurrent) return;
-    Alert.alert("Delete story?", "This story will be removed from your network broadcasts.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete", style: "destructive",
-        onPress: async () => {
-          setDeletingPostId(post.id);
-          const { error } = await deactivatePost(post.id, myOrgId);
-          setDeletingPostId(null);
-          if (error) { Alert.alert("Could not delete", error.message); return; }
-          invalidatePosts();
-          router.back();
-        },
-      },
-    ]);
-  }, [post, isOwnPost, isDeletingCurrent, invalidatePosts, router]);
+    const ok = await confirmDialog(
+      "Delete story?",
+      "This story will be removed from your network broadcasts.",
+      { confirmText: "Delete", destructive: true },
+    );
+    if (!ok) return;
+    setDeletingPostId(post.id);
+    const { error } = await deactivatePost(post.id, myOrgId);
+    setDeletingPostId(null);
+    if (error) {
+      Alert.alert("Could not delete", error.message);
+      return;
+    }
+    await afterPostDeleted(post.id);
+    router.back();
+  }, [post, isOwnPost, isDeletingCurrent, myOrgId, afterPostDeleted, router]);
 
   if (!post) {
     return (
@@ -578,9 +581,16 @@ const styles = StyleSheet.create({
   progressRow: {
     flexDirection: "row", gap: 4,
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingBottom: 10, zIndex: 50,
+    paddingBottom: 10, zIndex: 100, elevation: 100,
   },
-  topBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", zIndex: 50, marginBottom: 6 },
+  topBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    zIndex: 100,
+    elevation: 100,
+    marginBottom: 6,
+  },
   topBarDesktop: { marginBottom: 12 },
   topBarLeft: { flexDirection: "row", alignItems: "center", flex: 1, minWidth: 0 },
   topBarText: { flex: 1, minWidth: 0 },

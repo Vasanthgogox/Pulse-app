@@ -92,6 +92,7 @@ export function AddSupplierModal({
   );
   const [phoneSearchLoading, setPhoneSearchLoading] = useState(false);
   const [searchedNoResult, setSearchedNoResult] = useState(false);
+  const [driverRegisteredAtPhone, setDriverRegisteredAtPhone] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
   const searchIdRef = useRef(0);
   const companyInputRef = useRef<TextInput>(null);
@@ -110,6 +111,7 @@ export function AddSupplierModal({
         setPhone(result.contact.phone);
         setInviteeMatch(null);
         setSearchedNoResult(false);
+        setDriverRegisteredAtPhone(false);
       } else if (
         result.reason === "no_phone" ||
         result.reason === "permission_denied" ||
@@ -131,6 +133,7 @@ export function AddSupplierModal({
   const phoneError = phone.trim() ? validatePhone(phone.trim()) : null;
   const canSubmit =
     !blockedByNoOrg &&
+    !driverRegisteredAtPhone &&
     companyName.trim().length > 0 &&
     name.trim().length > 0 &&
     phone.trim().length > 0 &&
@@ -153,6 +156,7 @@ export function AddSupplierModal({
       setInviteeMatch(null);
       setPhoneSearchLoading(false);
       setSearchedNoResult(false);
+      setDriverRegisteredAtPhone(false);
     }
   }, [visible]);
 
@@ -161,6 +165,7 @@ export function AddSupplierModal({
     const normalized = phone.trim().replace(/\s+/g, "");
     setInviteeMatch(null);
     setSearchedNoResult(false);
+    setDriverRegisteredAtPhone(false);
     if (normalized.length < MIN_PHONE_LENGTH_FOR_SEARCH) {
       setPhoneSearchLoading(false);
       return;
@@ -173,6 +178,9 @@ export function AddSupplierModal({
         setPhoneSearchLoading(false);
         setInviteeMatch(result ?? null);
         setSearchedNoResult(!result);
+        setDriverRegisteredAtPhone(
+          Boolean(result && inviteeProfileIsDriver(result.profile_role)),
+        );
         if (result) {
           setName((prev) => (prev.trim() ? prev : result.full_name));
           const suggested = inviteeSuggestedCompanyName(result);
@@ -184,6 +192,19 @@ export function AddSupplierModal({
     }, PHONE_DEBOUNCE_MS);
     return () => clearTimeout(t);
   }, [phone, searchInviteeByPhone, onSendInvitation]);
+
+  /** Clearing/editing phone after a lookup match should drop auto-filled name + company (same as invalidating the search). */
+  const handlePhoneChangeText = (text: string) => {
+    const hadInviteeMatch = inviteeMatch != null;
+    setPhone(formatMobileNumber(text));
+    setInviteeMatch(null);
+    setSearchedNoResult(false);
+    setDriverRegisteredAtPhone(false);
+    if (hadInviteeMatch) {
+      setName("");
+      setCompanyName("");
+    }
+  };
 
   const handleSendInvitation = async () => {
     if (!inviteeMatch || !onSendInvitation) return;
@@ -205,6 +226,7 @@ export function AddSupplierModal({
     setInviteeMatch(null);
     setSearchedNoResult(false);
     setError(null);
+    setDriverRegisteredAtPhone(false);
   };
 
   const handleCreateSuccessOk = () => {
@@ -214,6 +236,10 @@ export function AddSupplierModal({
 
   const handleSubmit = () => {
     if (!canSubmit) return;
+    if (driverRegisteredAtPhone) {
+      setError(t("errorDriverCannotAddAsSupplier"));
+      return;
+    }
     setError(null);
     setSubmitting(true);
     const result = onComplete({
@@ -287,11 +313,7 @@ export function AddSupplierModal({
             placeholder="+91 …"
             placeholderTextColor={Theme.textMutedDemo}
             value={phone}
-            onChangeText={(t) => {
-              setPhone(formatMobileNumber(t));
-              setInviteeMatch(null);
-              setSearchedNoResult(false);
-            }}
+            onChangeText={handlePhoneChangeText}
             keyboardType="phone-pad"
             autoCorrect={false}
             spellCheck={false}
@@ -386,15 +408,17 @@ export function AddSupplierModal({
               ? t("addSupplierInviteeHintDriver")
               : t("addSupplierInviteeHintDefault")}
           </Text>
-          <TouchableOpacity
-            style={styles.ledgerAddOfflineLink}
-            onPress={handleAddAsOfflineInstead}
-            disabled={submitting}
-          >
-            <Text style={styles.ledgerAddOfflineLinkText}>
-              Add as offline instead
-            </Text>
-          </TouchableOpacity>
+          {!inviteeIsDriver ? (
+            <TouchableOpacity
+              style={styles.ledgerAddOfflineLink}
+              onPress={handleAddAsOfflineInstead}
+              disabled={submitting}
+            >
+              <Text style={styles.ledgerAddOfflineLinkText}>
+                Add as offline instead
+              </Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       ) : searchedNoResult ? (
         <Text style={[styles.ledgerHintText, { color: Theme.textSecondary }]}>
@@ -559,11 +583,7 @@ export function AddSupplierModal({
                 placeholder="+91 98765 43210"
                 placeholderTextColor={Theme.textMutedDemo}
                 value={phone}
-                onChangeText={(t) => {
-                  setPhone(formatMobileNumber(t));
-                  setInviteeMatch(null);
-                  setSearchedNoResult(false);
-                }}
+                onChangeText={handlePhoneChangeText}
                 keyboardType="phone-pad"
                 autoCorrect={false}
                 spellCheck={false}
@@ -686,16 +706,18 @@ export function AddSupplierModal({
                     ? t("addSupplierInviteeHintDriver")
                     : t("addSupplierInviteeHintDefault")}
                 </Text>
-                <TouchableOpacity
-                  style={styles.screenAddOfflineLink}
-                  onPress={handleAddAsOfflineInstead}
-                  disabled={submitting}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.screenAddOfflineLinkText}>
-                    Add as offline instead
-                  </Text>
-                </TouchableOpacity>
+                {!inviteeIsDriver ? (
+                  <TouchableOpacity
+                    style={styles.screenAddOfflineLink}
+                    onPress={handleAddAsOfflineInstead}
+                    disabled={submitting}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.screenAddOfflineLinkText}>
+                      Add as offline instead
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
               </View>
             ) : searchedNoResult ? (
               <View style={styles.screenStatusCard}>
