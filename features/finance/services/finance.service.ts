@@ -125,6 +125,68 @@ export interface CreateLedgerEntryData {
   ledger_category?: string | null;
 }
 
+type LedgerContactType = 'client' | 'supplier' | 'driver';
+
+const GENERIC_PARTY_LABELS = new Set([
+  '',
+  '-',
+  '—',
+  'party',
+  'client',
+  'supplier',
+  'driver',
+]);
+
+function normalizePartyName(raw: string | null | undefined): string {
+  return String(raw ?? '').trim();
+}
+
+function isGenericPartyName(raw: string | null | undefined): boolean {
+  return GENERIC_PARTY_LABELS.has(normalizePartyName(raw).toLowerCase());
+}
+
+async function resolveContactDisplayName(
+  orgId: string,
+  contactType: LedgerContactType,
+  contactId: string,
+): Promise<string | null> {
+  const trimmedContactId = contactId.trim();
+  if (!trimmedContactId) return null;
+
+  if (contactType === 'client') {
+    const { data } = await supabase()
+      .from('clients')
+      .select('name')
+      .eq('organization_id', orgId)
+      .eq('id', trimmedContactId)
+      .maybeSingle();
+    return normalizePartyName((data as { name?: string | null } | null)?.name) || null;
+  }
+
+  if (contactType === 'supplier') {
+    const { data } = await supabase()
+      .from('suppliers')
+      .select('name, company_name')
+      .eq('organization_id', orgId)
+      .eq('id', trimmedContactId)
+      .maybeSingle();
+    const row = data as { name?: string | null; company_name?: string | null } | null;
+    return (
+      normalizePartyName(row?.name) ||
+      normalizePartyName(row?.company_name) ||
+      null
+    );
+  }
+
+  const { data } = await supabase()
+    .from('drivers')
+    .select('name')
+    .eq('organization_id', orgId)
+    .eq('id', trimmedContactId)
+    .maybeSingle();
+  return normalizePartyName((data as { name?: string | null } | null)?.name) || null;
+}
+
 function enrichLedgerMetaFromRow(
   entry: CreateLedgerEntryData,
 ): CreateLedgerEntryData {
@@ -507,7 +569,34 @@ export async function createLedgerEntry(
   const rawDate = (enriched.transaction_date ?? new Date().toISOString().slice(0, 10)).slice(0, 10);
   const dateErr = dateISO()(rawDate);
   const date = dateErr ? new Date().toISOString().slice(0, 10) : rawDate;
-  const partyName = ((enriched.party_name || '—').trim() || '—').slice(0, VALIDATION.PARTY_NAME_MAX_LENGTH);
+  if (enriched.contact_type && !enriched.contact_id) {
+    return {
+      error: new Error('Missing contact_id for ledger contact_type entry.'),
+      row: null,
+    };
+  }
+  const normalizedContactType = (enriched.contact_type ?? null) as LedgerContactType | null;
+  const normalizedContactId = normalizePartyName(enriched.contact_id);
+  const fallbackPartyName = normalizePartyName(enriched.party_name || '—') || '—';
+  const resolvedPartyName =
+    normalizedContactType && normalizedContactId
+      ? await resolveContactDisplayName(orgId, normalizedContactType, normalizedContactId)
+      : null;
+  if (
+    normalizedContactType &&
+    normalizedContactId &&
+    !resolvedPartyName &&
+    isGenericPartyName(fallbackPartyName)
+  ) {
+    return {
+      error: new Error(`Missing ${normalizedContactType} name for selected contact.`),
+      row: null,
+    };
+  }
+  const partyName = ((resolvedPartyName || fallbackPartyName).trim() || '—').slice(
+    0,
+    VALIDATION.PARTY_NAME_MAX_LENGTH,
+  );
   const description = buildDescriptionWithMeta(
     entry.description ?? 'ENTRY',
     {
@@ -589,7 +678,34 @@ export async function updateLedgerEntry(
   const rawDate = (enriched.transaction_date ?? new Date().toISOString().slice(0, 10)).slice(0, 10);
   const date = dateISO()(rawDate) ? new Date().toISOString().slice(0, 10) : rawDate;
   const isCashIn = amountIn > 0;
-  const partyName = ((enriched.party_name || '—').trim() || '—').slice(0, VALIDATION.PARTY_NAME_MAX_LENGTH);
+  if (enriched.contact_type && !enriched.contact_id) {
+    return {
+      error: new Error('Missing contact_id for ledger contact_type entry.'),
+      row: null,
+    };
+  }
+  const normalizedContactType = (enriched.contact_type ?? null) as LedgerContactType | null;
+  const normalizedContactId = normalizePartyName(enriched.contact_id);
+  const fallbackPartyName = normalizePartyName(enriched.party_name || '—') || '—';
+  const resolvedPartyName =
+    normalizedContactType && normalizedContactId
+      ? await resolveContactDisplayName(orgId, normalizedContactType, normalizedContactId)
+      : null;
+  if (
+    normalizedContactType &&
+    normalizedContactId &&
+    !resolvedPartyName &&
+    isGenericPartyName(fallbackPartyName)
+  ) {
+    return {
+      error: new Error(`Missing ${normalizedContactType} name for selected contact.`),
+      row: null,
+    };
+  }
+  const partyName = ((resolvedPartyName || fallbackPartyName).trim() || '—').slice(
+    0,
+    VALIDATION.PARTY_NAME_MAX_LENGTH,
+  );
   const description = buildDescriptionWithMeta(
     entry.description ?? 'ENTRY',
     {

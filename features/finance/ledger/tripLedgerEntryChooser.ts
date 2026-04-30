@@ -123,7 +123,7 @@ export function pushTripLedgerQuickEntry(
       Alert.alert(L.addTransaction, L.missingSupplier);
       return;
     }
-    const partyName = (partnerName ?? trip.supplier_name ?? "").trim() || "Supplier";
+    const partyName = (partnerName ?? trip.supplier_name ?? "").trim() || "—";
     pushLedgerSync(router, {
       ...base,
       defaultType: "out",
