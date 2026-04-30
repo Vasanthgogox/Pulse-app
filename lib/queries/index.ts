@@ -43,6 +43,7 @@ export {
   useNetworkFeedQuery,
   useCreatePostMutation,
   useInvalidatePosts,
+  useAfterPostDeleted,
 } from './usePostsQuery';
 export {
   useBidsForPostQuery,

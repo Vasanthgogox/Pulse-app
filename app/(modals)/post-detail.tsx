@@ -4,12 +4,18 @@
  */
 import Theme from '@/constants/Theme';
 import { BidSheet } from '@/features/network/components/BidSheet';
-import { useNetworkFeedQuery } from '@/lib/queries';
-import { useBidsForPostQuery, useAcceptBidMutation, useRejectBidMutation } from '@/lib/queries';
+import {
+  useNetworkFeedQuery,
+  useBidsForPostQuery,
+  useAcceptBidMutation,
+  useRejectBidMutation,
+  useAfterPostDeleted,
+} from '@/lib/queries';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import { isPostVisibleForOrg, type PostRow } from '@/features/network/services/posts.service';
+import { deactivatePost, isPostVisibleForOrg, type PostRow } from '@/features/network/services/posts.service';
 import { type BidRow } from '@/features/network/services/bids.service';
 import { formatINR } from '@/lib/format';
+import { confirmDialog } from '@/lib/confirmDialog';
 import { getInitials } from '@/lib/stringUtils';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
@@ -21,14 +27,13 @@ import {
   ThumbsDown,
   ThumbsUp,
   Truck,
-  X,
+  Trash2,
   Zap,
 } from 'lucide-react-native';
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -117,9 +122,11 @@ export default function PostDetailScreen() {
   const [bidSheetPost, setBidSheetPost] = useState<PostRow | null>(null);
 
   const feedQ = useNetworkFeedQuery(orgId);
+  const afterPostDeleted = useAfterPostDeleted(orgId);
   const bidsQ = useBidsForPostQuery(postId ?? null);
   const acceptMutation = useAcceptBidMutation(postId ?? '');
   const rejectMutation = useRejectBidMutation(postId ?? '');
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const allowLoadPosts = organization?.capabilities?.canBid ?? true;
   const visiblePosts = useMemo(
@@ -162,6 +169,25 @@ export default function PostDetailScreen() {
     ]);
   };
 
+  const handleDeletePost = useCallback(async () => {
+    if (!post || !isOwner || !orgId || isDeleting) return;
+    const ok = await confirmDialog(
+      'Delete post?',
+      'This broadcast will be removed from your network feed.',
+      { confirmText: 'Delete', destructive: true },
+    );
+    if (!ok) return;
+    setIsDeleting(true);
+    const { error } = await deactivatePost(post.id, orgId);
+    setIsDeleting(false);
+    if (error) {
+      Alert.alert('Could not delete', error.message);
+      return;
+    }
+    await afterPostDeleted(post.id);
+    router.back();
+  }, [post, isOwner, orgId, isDeleting, afterPostDeleted, router]);
+
   if (!post) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -184,8 +210,24 @@ export default function PostDetailScreen() {
         <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={8}>
           <ArrowLeft size={20} color={Theme.textPrimary} />
         </Pressable>
-        <Text style={styles.headerTitle}>{isLoad ? 'Load Post' : 'Post'}</Text>
-        <View style={{ width: 36 }} />
+        <View style={styles.headerTitleWrap}>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {isLoad ? 'Load Post' : 'Post'}
+          </Text>
+        </View>
+        {isOwner ? (
+          <Pressable
+            onPress={handleDeletePost}
+            disabled={isDeleting}
+            style={[styles.headerActionBtn, isDeleting && styles.headerActionBtnDisabled]}
+            hitSlop={8}
+            accessibilityLabel="Delete post"
+          >
+            <Trash2 size={18} color={Theme.teslaRed} strokeWidth={2.2} />
+          </Pressable>
+        ) : (
+          <View style={styles.headerActionSpacer} />
+        )}
       </View>
 
       <ScrollView
@@ -340,12 +382,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  headerTitleWrap: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    minWidth: 0,
+  },
   headerTitle: {
     fontSize: 17,
     fontWeight: '800',
     color: Theme.textPrimary,
     letterSpacing: -0.3,
   },
+  headerActionSpacer: { width: 36, height: 36 },
+  headerActionBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: Theme.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.surfaceBorder,
+  },
+  headerActionBtnDisabled: { opacity: 0.55 },
   scroll: { flex: 1 },
   scrollContent: { padding: 16, gap: 16 },
   postCard: {
