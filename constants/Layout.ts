@@ -89,6 +89,42 @@ export const Layout = {
   fabShadowOpacity: 0.3,
   fabShadowRadius: 12,
   fabElevation: 12,
+  /**
+   * Entity detail hero (Client / Supplier / Driver / Vehicle): one system of sizes so
+   * financial + profile columns align everywhere. Prefer compact density when content is heavy.
+   */
+  entityHero: {
+    /** Desktop 70/30 split between gradient financial card and white profile card */
+    financialFlex: 7,
+    profileFlex: 3,
+    /** Same row rhythm on every entity detail page */
+    rowGap: 14,
+    rowMarginBottom: 14,
+    /** Shared minimum column height on desktop web (both cards stretch together) */
+    columnMinHeightDesktop: 280,
+    /** Financial gradient card (desktop) */
+    scorecardRadiusDesktop: 34,
+    scorecardPaddingHorizontal: 26,
+    scorecardPaddingVertical: 28,
+    /** Profile companion card shell */
+    profileRadius: 24,
+    profilePaddingHorizontal: 16,
+    profilePaddingVertical: 16,
+    profileGap: 8,
+    /** Compact “trips handled” hero numeral — keeps profile card height aligned across entities */
+    profileTripsNumberSize: 24,
+    profileTripsNumberLineHeight: 26,
+    /** Tight stack for name/phone rows (driver/vehicle) */
+    profileDetailsPaddingVertical: 6,
+    profileDetailsGap: 4,
+    profileDetailsMaxHeight: 78,
+    profileDetailValueFontSize: 9,
+    /** Status pill + CTA (shared) */
+    togglePaddingHorizontal: 10,
+    togglePaddingVertical: 10,
+    actionButtonMinHeight: 44,
+    actionButtonPaddingVertical: 14,
+  },
 } as const;
 
 export default Layout;

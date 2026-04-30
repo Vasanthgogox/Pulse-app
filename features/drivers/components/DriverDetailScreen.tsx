@@ -1,3 +1,5 @@
+import { entityCompanionCardStyles as ecc } from "@/components/entityCompanionCard.styles";
+import { entityHeroScorecardStyles as ehs } from "@/components/entityHeroScorecard.styles";
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { DateRangePickerModal } from "@/components/DateRangePickerModal";
 import { DetailPageLayout, DetailSection } from "@/components/DetailPageLayout";
@@ -51,6 +53,7 @@ import {
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -60,6 +63,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  Share,
   ScrollView,
   StyleSheet,
   Text,
@@ -810,6 +814,11 @@ export default function DriverDetailScreen({
     primaryStatementRow && monthlyStatement
       ? monthlyStatement.detailsByMonth[primaryStatementRow.monthKey]
       : null;
+  const lockedPartyName = (driver?.name || t("driver")).trim() || t("driver");
+  const handleInviteToApp = useCallback(() => {
+    const message = `Join me on Pulse to sync trips and payouts with ${lockedPartyName}. Download the Q app to get started.`;
+    Share.share({ message, title: "Invite to Q" }).catch(() => {});
+  }, [lockedPartyName]);
 
   if (loading) {
     return <CenteredLoadingView message={t("loadingDriver")} />;
@@ -1004,8 +1013,6 @@ export default function DriverDetailScreen({
     load();
   };
 
-  const lockedPartyName = (driver.name || t("driver")).trim() || t("driver");
-
   function formatRatingDate(s: string) {
     if (!s) return "—";
     const d = s.slice(0, 10);
@@ -1015,6 +1022,30 @@ export default function DriverDetailScreen({
   }
 
   const hasPendingSalaryRequests = driverRequests.length > 0;
+  const tripsHandled = filteredLedgerRows.length;
+  const isIntegrated = Boolean(driver.user_id);
+  const isInAppNotIntegrated =
+    !isIntegrated && (signupMatch != null || canSendMatchedInvite || inviteAlreadySentForMatch);
+  const isNotInApp = !isIntegrated && !isInAppNotIntegrated;
+  const statusTitle = isIntegrated
+    ? "Integrated"
+    : isInAppNotIntegrated
+      ? "In App - Not Integrated"
+      : "Not in app";
+  const statusSubtitle = isIntegrated
+    ? "Driver account linked"
+    : isInAppNotIntegrated
+      ? "Can request integration"
+      : "Invite to onboard";
+  const ratingValue = driverRatingAvg && driverRatingAvg > 0 ? driverRatingAvg : 0;
+  const ratingFilledStars = Math.max(0, Math.min(5, Math.round(ratingValue)));
+  const profileActionLabel = canSendMatchedInvite
+    ? "Send invitation"
+    : inviteAlreadySentForMatch
+      ? "Invitation sent"
+      : isNotInApp
+        ? "Invite to app"
+        : "Integrated";
   const heroDecorAnimatedStyle = isWebDesktop
     ? {
         opacity: heroDecorProgress.interpolate({
@@ -1142,58 +1173,190 @@ export default function DriverDetailScreen({
         </View>
       )}
 
-      <View style={styles.scorecard}>
+      <View style={isWebDesktop ? styles.heroCardsRow : undefined}>
+        <LinearGradient
+          colors={[Theme.financeCardGreenFrom, Theme.financeCardGreenTo]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[
+            styles.scorecard,
+            isWebDesktop && styles.scorecardWebDesktop,
+            isWebDesktop && styles.scorecardHeroPane,
+          ]}
+        >
+          {isWebDesktop ? (
+            <Animated.View style={[styles.scorecardDecorIconWrap, heroDecorAnimatedStyle]}>
+              <FontAwesome name="user" size={120} color={Theme.textOnDark} style={styles.scorecardDecorIcon} />
+            </Animated.View>
+          ) : null}
+          <View
+            style={[styles.scorecardTop, isWebDesktop && styles.scorecardTopWebDesktop]}
+          >
+            <View style={styles.scorecardLeft}>
+              <Text style={styles.scorecardLabel}>FINANCIAL OVERVIEW</Text>
+              {driverDetailTab === "trips" ? (
+                <>
+                  <Text style={styles.scorecardSalesLabel}>
+                    {t("driverScorecardContractValue")}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.scorecardAmount,
+                      isWebDesktop && styles.scorecardAmountWebDesktop,
+                    ]}
+                  >
+                    {formatINR(tripsScorecard.contractValue)}
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.scorecardSalesLabel}>DRIVER PAYMENTS</Text>
+                  <Text
+                    style={[
+                      styles.scorecardAmount,
+                      isWebDesktop && styles.scorecardAmountWebDesktop,
+                    ]}
+                  >
+                    {formatINR(totalDriverEarnings)}
+                  </Text>
+                </>
+              )}
+            </View>
+          </View>
+          <View
+            style={[styles.scorecardGrid, isWebDesktop && styles.scorecardGridWebDesktop]}
+          >
+            <View style={isWebDesktop ? styles.scorecardGridStat : undefined}>
+              <Text style={styles.scorecardGridLabelPaid}>PAID</Text>
+              <Text
+                style={[
+                  styles.scorecardGridPaid,
+                  isWebDesktop && styles.scorecardGridPaidWebDesktop,
+                ]}
+              >
+                {formatINR(
+                  driverDetailTab === "trips"
+                    ? tripsScorecard.paidSum
+                    : entityPaid,
+                )}
+              </Text>
+            </View>
+            <View
+              style={[
+                styles.scorecardGridRight,
+                isWebDesktop && styles.scorecardGridStat,
+              ]}
+            >
+              <Text style={styles.scorecardGridLabelDue}>
+                {driverDetailTab === "trips" ? t("due") : t("toPay")}
+              </Text>
+              <Text
+                style={[
+                  styles.scorecardGridDue,
+                  isWebDesktop && styles.scorecardGridDueWebDesktop,
+                ]}
+              >
+                {formatINR(
+                  driverDetailTab === "trips"
+                    ? tripsScorecard.dueSum
+                    : entityPending,
+                )}
+              </Text>
+            </View>
+          </View>
+        </LinearGradient>
         {isWebDesktop ? (
-          <Animated.View style={[styles.scorecardDecorIconWrap, heroDecorAnimatedStyle]}>
-            <FontAwesome name="book" size={120} color={Theme.textOnDark} style={styles.scorecardDecorIcon} />
-          </Animated.View>
+          <View style={styles.profilePreviewCard}>
+            <Text style={styles.profilePreviewEyebrow}>ENTITY PROFILE</Text>
+            <View style={styles.profilePreviewRatingRow}>
+              <View style={styles.profilePreviewStars}>
+                {Array.from({ length: 5 }).map((_, idx) => (
+                  <FontAwesome
+                    key={`driver-star-${idx}`}
+                    name={idx < ratingFilledStars ? "star" : "star-o"}
+                    size={12}
+                    color={idx < ratingFilledStars ? "#fbbf24" : Theme.borderMedium}
+                  />
+                ))}
+              </View>
+              <View style={styles.profilePreviewRatingBadge}>
+                <Text style={styles.profilePreviewRatingBadgeText}>{ratingValue.toFixed(1)}</Text>
+              </View>
+            </View>
+            <View style={styles.profilePreviewExperienceBlock}>
+              <Text style={styles.profilePreviewExperienceEyebrow}>EXPERIENCE</Text>
+              <View style={styles.profilePreviewExperienceRow}>
+                <FontAwesome name="history" size={13} color={Theme.textSecondary} />
+                <Text style={styles.profilePreviewTripsNumber}>{tripsHandled}</Text>
+                <Text style={styles.profilePreviewExperienceLabel}>Trips Handled</Text>
+              </View>
+            </View>
+            <View style={styles.profilePreviewDetails}>
+              <View style={styles.profilePreviewDetailRow}>
+                <Text style={styles.profilePreviewDetailLabel}>Name</Text>
+                <Text style={styles.profilePreviewDetailValue} numberOfLines={1}>
+                  {(driver.name ?? "—").trim() || "—"}
+                </Text>
+              </View>
+              <View style={styles.profilePreviewDetailRow}>
+                <Text style={styles.profilePreviewDetailLabel}>Phone</Text>
+                <Text style={styles.profilePreviewDetailValue} numberOfLines={1}>
+                  {(driver.phone ?? "—").trim() || "—"}
+                </Text>
+              </View>
+              <View style={styles.profilePreviewDetailRow}>
+                <Text style={styles.profilePreviewDetailLabel}>Email</Text>
+                <Text style={styles.profilePreviewDetailValue} numberOfLines={1}>
+                  {(driver.email ?? "—").trim() || "—"}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.profilePreviewToggle}>
+              <View
+                style={[
+                  styles.profilePreviewToggleDot,
+                  isInAppNotIntegrated && styles.profilePreviewToggleDotPending,
+                  isIntegrated && styles.profilePreviewToggleDotActive,
+                ]}
+              >
+                {isIntegrated ? (
+                  <FontAwesome name="check" size={10} color={Theme.textOnPrimary} />
+                ) : isInAppNotIntegrated ? (
+                  <FontAwesome name="send" size={8} color={Theme.financeCardGreenFrom} />
+                ) : null}
+              </View>
+              <View>
+                <Text style={styles.profilePreviewToggleTitle}>{statusTitle}</Text>
+                <Text style={styles.profilePreviewToggleSub}>{statusSubtitle}</Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={[
+                styles.profilePreviewActionBtn,
+                ecc.actionBtnPrimary,
+                (!canSendMatchedInvite && !isNotInApp) && ecc.actionBtnDisabled,
+              ]}
+              onPress={() => {
+                if (canSendMatchedInvite) {
+                  void handleSendMatchedInvite();
+                } else if (isNotInApp) {
+                  handleInviteToApp();
+                }
+              }}
+              activeOpacity={0.86}
+              disabled={inviting || (!canSendMatchedInvite && !isNotInApp)}
+            >
+              <FontAwesome
+                name={canSendMatchedInvite ? "send" : "envelope-o"}
+                size={12}
+                color={Theme.textOnPrimary}
+              />
+              <Text style={styles.profilePreviewActionText}>
+                {inviting && canSendMatchedInvite ? "Sending..." : profileActionLabel}
+              </Text>
+            </TouchableOpacity>
+          </View>
         ) : null}
-        <View style={styles.scorecardTop}>
-          <View style={styles.scorecardLeft}>
-            <Text style={styles.scorecardLabel}>FINANCIAL OVERVIEW</Text>
-            {driverDetailTab === "trips" ? (
-              <>
-                <Text style={styles.scorecardSalesLabel}>
-                  {t("driverScorecardContractValue")}
-                </Text>
-                <Text style={styles.scorecardAmount}>
-                  {formatINR(tripsScorecard.contractValue)}
-                </Text>
-              </>
-            ) : (
-              <>
-                <Text style={styles.scorecardSalesLabel}>DRIVER PAYMENTS</Text>
-                <Text style={styles.scorecardAmount}>
-                  {formatINR(totalDriverEarnings)}
-                </Text>
-              </>
-            )}
-          </View>
-        </View>
-        <View style={styles.scorecardGrid}>
-          <View>
-            <Text style={styles.scorecardGridLabelPaid}>PAID</Text>
-            <Text style={styles.scorecardGridPaid}>
-              {formatINR(
-                driverDetailTab === "trips"
-                  ? tripsScorecard.paidSum
-                  : entityPaid,
-              )}
-            </Text>
-          </View>
-          <View style={styles.scorecardGridRight}>
-            <Text style={styles.scorecardGridLabelDue}>
-              {driverDetailTab === "trips" ? t("due") : t("toPay")}
-            </Text>
-            <Text style={styles.scorecardGridDue}>
-              {formatINR(
-                driverDetailTab === "trips"
-                  ? tripsScorecard.dueSum
-                  : entityPending,
-              )}
-            </Text>
-          </View>
-        </View>
       </View>
 
       <View style={styles.tabRow}>
@@ -2439,51 +2602,19 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: Theme.textPrimaryDark,
   },
-  // Scorecard (copied from vehicle detail for visual parity)
-  scorecard: {
-    backgroundColor: Theme.darkBackground,
-    borderRadius: 40,
-    padding: 32,
-    marginBottom: 24,
-    marginHorizontal: Layout.screenPaddingHorizontal,
-    overflow: "hidden",
-  },
-  scorecardDecorIconWrap: {
-    position: "absolute",
-    right: -14,
-    top: -16,
-  },
-  scorecardDecorIcon: {
-    transform: [{ rotate: "12deg" }],
-  },
-  scorecardTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 24,
-  },
-  scorecardLeft: { flex: 1 },
-  scorecardLabel: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: Theme.aggregatePillText,
-    letterSpacing: 1.2,
-  },
-  scorecardSalesLabel: {
-    fontSize: 8,
-    fontWeight: "700",
-    color: "rgba(255,255,255,0.7)",
-    letterSpacing: 1,
-    marginTop: 6,
-    textTransform: "uppercase",
-  },
-  scorecardAmount: {
-    fontSize: 28,
-    fontWeight: "300",
-    fontStyle: "italic",
-    color: Theme.textOnDark,
-    marginTop: 4,
-  },
+  scorecard: ehs.scorecard,
+  scorecardWebDesktop: ehs.scorecardWebDesktop,
+  heroCardsRow: ehs.heroCardsRow,
+  scorecardHeroPane: ehs.scorecardHeroPane,
+  scorecardDecorIconWrap: ehs.scorecardDecorIconWrap,
+  scorecardDecorIcon: ehs.scorecardDecorIcon,
+  scorecardTop: ehs.scorecardTop,
+  scorecardTopWebDesktop: ehs.scorecardTopWebDesktop,
+  scorecardLeft: ehs.scorecardLeft,
+  scorecardLabel: ehs.scorecardLabel,
+  scorecardSalesLabel: ehs.scorecardSalesLabel,
+  scorecardAmount: ehs.scorecardAmount,
+  scorecardAmountWebDesktop: ehs.scorecardAmountWebDesktop,
   healthCircle: {
     width: 56,
     height: 56,
@@ -2507,40 +2638,42 @@ const styles = StyleSheet.create({
     color: Theme.textOnDark,
     zIndex: 1,
   },
-  scorecardGrid: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.1)",
+  scorecardGrid: ehs.scorecardGrid,
+  scorecardGridWebDesktop: ehs.scorecardGridWebDesktop,
+  scorecardGridStat: ehs.scorecardGridStat,
+  scorecardGridRight: ehs.scorecardGridRight,
+  scorecardGridLabelPaid: ehs.scorecardGridLabelPaid,
+  scorecardGridLabelDue: ehs.scorecardGridLabelDue,
+  scorecardGridPaid: ehs.scorecardGridPaid,
+  scorecardGridPaidWebDesktop: ehs.scorecardGridPaidWebDesktop,
+  scorecardGridDue: ehs.scorecardGridDue,
+  scorecardGridDueWebDesktop: ehs.scorecardGridDueWebDesktop,
+  profilePreviewCard: ecc.card,
+  profilePreviewEyebrow: ecc.eyebrow,
+  profilePreviewRatingRow: ecc.ratingRow,
+  profilePreviewStars: ecc.stars,
+  profilePreviewRatingBadge: ecc.ratingBadge,
+  profilePreviewRatingBadgeText: ecc.ratingBadgeText,
+  profilePreviewExperienceBlock: ecc.experienceBlock,
+  profilePreviewExperienceEyebrow: ecc.experienceEyebrow,
+  profilePreviewExperienceRow: ecc.experienceRow,
+  profilePreviewTripsNumber: ecc.tripsNumber,
+  profilePreviewExperienceLabel: ecc.experienceLabel,
+  profilePreviewDetails: ecc.details,
+  profilePreviewDetailRow: ecc.detailRow,
+  profilePreviewDetailLabel: ecc.detailLabel,
+  profilePreviewDetailValue: ecc.detailValue,
+  profilePreviewToggle: ecc.toggle,
+  profilePreviewToggleDot: ecc.toggleDot,
+  profilePreviewToggleDotActive: ecc.toggleDotActive,
+  profilePreviewToggleDotPending: {
+    borderColor: Theme.financeCardGreenFrom,
+    backgroundColor: "rgba(5,150,105,0.14)",
   },
-  scorecardGridRight: { alignItems: "flex-end" },
-  scorecardGridLabelPaid: {
-    fontSize: 8,
-    fontWeight: "700",
-    color: Theme.darkGreen,
-    letterSpacing: 0.6,
-  },
-  scorecardGridLabelDue: {
-    fontSize: 8,
-    fontWeight: "700",
-    color: Theme.teslaRed,
-    letterSpacing: 0.6,
-  },
-  scorecardGridPaid: {
-    fontSize: 18,
-    fontWeight: "800",
-    fontStyle: "italic",
-    color: Theme.textOnDark,
-    marginTop: 4,
-  },
-  scorecardGridDue: {
-    fontSize: 18,
-    fontWeight: "800",
-    fontStyle: "italic",
-    color: Theme.teslaRed,
-    marginTop: 4,
-  },
+  profilePreviewToggleTitle: ecc.toggleTitle,
+  profilePreviewToggleSub: ecc.toggleSub,
+  profilePreviewActionBtn: ecc.actionBtn,
+  profilePreviewActionText: ecc.actionText,
   // Tabs (matching vehicle detail pills)
   tabRow: {
     flexDirection: "row",

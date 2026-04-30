@@ -1,3 +1,5 @@
+import { entityCompanionCardStyles as ecc } from "@/components/entityCompanionCard.styles";
+import { entityHeroScorecardStyles as ehs } from "@/components/entityHeroScorecard.styles";
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { CounterpartyProfileSystemCard } from "@/components/CounterpartyProfileSystemCard";
 import { DatePresetPillBar } from "@/components/DatePresetPillBar";
@@ -50,6 +52,7 @@ import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -231,6 +234,7 @@ export default function ClientDetailScreen({
   );
   const canAddTransaction = canAccessFinance(capabilities);
   const [client, setClient] = useState<ClientRow | null>(null);
+  const clientName = client?.name || client?.contact_person || t("client");
   const [trips, setTrips] = useState<TripRow[]>([]);
   const tripIdsForFinanceAdj = useMemo(
     () => trips.map((t) => String(t.id)).filter(Boolean),
@@ -764,6 +768,11 @@ export default function ClientDetailScreen({
     }
   }, [currentOrganization?.id, client?.phone, triggerSuccess]);
 
+  const handleInviteToApp = useCallback(() => {
+    const message = `Join me on Pulse to sync our ledger and compare books with ${clientName}. Download the Q app to get started.`;
+    Share.share({ message, title: "Invite to Q" });
+  }, [clientName]);
+
   // TRANSACTION LEDGER — Aggressive consolidation & tally, O(n). Must run before any early return (Rules of Hooks).
   const {
     rows: _ledgerProtocolRows,
@@ -1161,8 +1170,6 @@ export default function ClientDetailScreen({
     );
   }
 
-  const clientName = client?.name || client?.contact_person || t("client");
-
   if (error || !client) {
     return (
       <TreasuryDetailLayout title={t("client")} onBack={onBack}>
@@ -1176,6 +1183,41 @@ export default function ClientDetailScreen({
   const sales = totalBilledConsolidated;
   const paid = sales - totalPendingConsolidated;
   const due = totalPendingConsolidated;
+  const tripsHandled = missionRows.length;
+  const isIntegrated = Boolean(client.is_integrated || client.linked_organization_id);
+  const isInAppNotIntegrated = !isIntegrated && isInApp;
+  const isNotInApp = !isIntegrated && !isInApp;
+  const clientRating = Number(
+    (
+      client.linked_organization_id
+        ? 4.7
+        : client.is_integrated
+          ? 4.5
+          : isInApp
+            ? 4.2
+            : 3.9
+    ).toFixed(1),
+  );
+  const ratingFilledStars = Math.max(0, Math.min(5, Math.round(clientRating)));
+  const statusTitle = isIntegrated
+    ? "Integrated"
+    : isInAppNotIntegrated
+      ? "In App - Not Integrated"
+      : "Not in app";
+  const statusSubtitle = isIntegrated
+    ? "Ledger sync active"
+    : isInAppNotIntegrated
+      ? "Can request integration"
+      : "Invite to onboard";
+  const canSendRequest = isInAppNotIntegrated && !isLinked;
+  const canInviteToApp = isNotInApp;
+  const profileActionLabel = canSendRequest
+    ? "Send invitation"
+    : canInviteToApp
+      ? "Invite to app"
+      : isLinked
+        ? "Invitation sent"
+        : "Integrated";
   const profileWarehouses = (() => {
     const byPickup = new Map<
       string,
@@ -1374,8 +1416,11 @@ export default function ClientDetailScreen({
         }
       >
         {/* Scorecard — same metrics row as Trips / Cash Flow (above tab content). */}
-        <View style={isWebDesktop ? styles.scorecardDesktopRow : undefined}>
-          <View
+        <View style={isWebDesktop ? styles.heroCardsRow : undefined}>
+          <LinearGradient
+            colors={[Theme.financeCardBlueFrom, Theme.financeCardBlueTo]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
             style={[
               styles.scorecard,
               isWebDesktop && styles.scorecardWebDesktop,
@@ -1387,7 +1432,7 @@ export default function ClientDetailScreen({
                 style={[styles.scorecardDecorIconWrap, heroDecorAnimatedStyle]}
               >
                 <FontAwesome
-                  name="book"
+                  name="building"
                   size={120}
                   color={Theme.textOnDark}
                   style={styles.scorecardDecorIcon}
@@ -1403,7 +1448,14 @@ export default function ClientDetailScreen({
               <View style={styles.scorecardLeft}>
                 <Text style={styles.scorecardLabel}>FINANCIAL OVERVIEW</Text>
                 <Text style={styles.scorecardSalesLabel}>TOTAL SALES</Text>
-                <Text style={styles.scorecardAmount}>{formatINR(sales)}</Text>
+                <Text
+                  style={[
+                    styles.scorecardAmount,
+                    isWebDesktop && styles.scorecardAmountWebDesktop,
+                  ]}
+                >
+                  {formatINR(sales)}
+                </Text>
               </View>
             </View>
             <View
@@ -1414,7 +1466,14 @@ export default function ClientDetailScreen({
             >
               <View style={isWebDesktop ? styles.scorecardGridStat : undefined}>
                 <Text style={styles.scorecardGridLabelPaid}>RECEIVED</Text>
-                <Text style={styles.scorecardGridPaid}>{formatINR(paid)}</Text>
+                <Text
+                  style={[
+                    styles.scorecardGridPaid,
+                    isWebDesktop && styles.scorecardGridPaidWebDesktop,
+                  ]}
+                >
+                  {formatINR(paid)}
+                </Text>
               </View>
               <View
                 style={[
@@ -1423,11 +1482,89 @@ export default function ClientDetailScreen({
                 ]}
               >
                 <Text style={styles.scorecardGridLabelDue}>DUE</Text>
-                <Text style={styles.scorecardGridDue}>{formatINR(due)}</Text>
+                <Text
+                  style={[
+                    styles.scorecardGridDue,
+                    isWebDesktop && styles.scorecardGridDueWebDesktop,
+                  ]}
+                >
+                  {formatINR(due)}
+                </Text>
               </View>
             </View>
-          </View>
-          {null}
+          </LinearGradient>
+          {isWebDesktop ? (
+            <View style={styles.profilePreviewCard}>
+              <Text style={styles.profilePreviewEyebrow}>ENTITY PROFILE</Text>
+              <View style={styles.profilePreviewRatingRow}>
+                <View style={styles.profilePreviewStars}>
+                  {Array.from({ length: 5 }).map((_, idx) => (
+                    <FontAwesome
+                      key={`client-star-${idx}`}
+                      name={idx < ratingFilledStars ? "star" : "star-o"}
+                      size={12}
+                      color={idx < ratingFilledStars ? "#fbbf24" : Theme.borderMedium}
+                    />
+                  ))}
+                </View>
+                <View style={styles.profilePreviewRatingBadge}>
+                  <Text style={styles.profilePreviewRatingBadgeText}>{clientRating.toFixed(1)}</Text>
+                </View>
+              </View>
+              <View style={styles.profilePreviewExperienceBlock}>
+                <Text style={styles.profilePreviewExperienceEyebrow}>EXPERIENCE</Text>
+                <View style={styles.profilePreviewExperienceRow}>
+                  <FontAwesome name="history" size={13} color={Theme.textSecondary} />
+                  <Text style={styles.profilePreviewTripsNumber}>{tripsHandled}</Text>
+                  <Text style={styles.profilePreviewExperienceLabel}>Trips Handled</Text>
+                </View>
+              </View>
+              <View style={styles.profilePreviewToggle}>
+                <View
+                  style={[
+                    styles.profilePreviewToggleDot,
+                    isInAppNotIntegrated && styles.profilePreviewToggleDotPending,
+                    isIntegrated && styles.profilePreviewToggleDotActive,
+                  ]}
+                >
+                  {isIntegrated ? (
+                    <FontAwesome name="check" size={10} color={Theme.textOnPrimary} />
+                  ) : isInAppNotIntegrated ? (
+                    <FontAwesome name="send" size={8} color={Theme.financeCardBlueFrom} />
+                  ) : null}
+                </View>
+                <View>
+                  <Text style={styles.profilePreviewToggleTitle}>{statusTitle}</Text>
+                  <Text style={styles.profilePreviewToggleSub}>{statusSubtitle}</Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={[
+                  styles.profilePreviewActionBtn,
+                  ecc.actionBtnPrimary,
+                  (!canSendRequest && !canInviteToApp) && ecc.actionBtnDisabled,
+                ]}
+                onPress={() => {
+                  if (canSendRequest) {
+                    void handleSendInvitation();
+                  } else if (canInviteToApp) {
+                    handleInviteToApp();
+                  }
+                }}
+                activeOpacity={0.86}
+                disabled={sendingInvitation || (!canSendRequest && !canInviteToApp)}
+              >
+                <FontAwesome
+                  name={canSendRequest ? "send" : "envelope-o"}
+                  size={12}
+                  color={Theme.textOnPrimary}
+                />
+                <Text style={styles.profilePreviewActionText}>
+                  {sendingInvitation && canSendRequest ? "Sending..." : profileActionLabel}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
         </View>
 
         {/* Tab switcher */}
@@ -2603,113 +2740,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 10,
   },
-  scorecard: {
-    backgroundColor: Theme.darkBackground,
-    borderRadius: 24,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginBottom: 10,
-    overflow: "hidden",
-  },
-  scorecardDesktopRow: {
-    flexDirection: "row",
-    alignItems: "stretch",
-    gap: 20,
-    marginBottom: 16,
-  },
-  scorecardWebDesktop: {
-    borderRadius: 34,
-    paddingHorizontal: 26,
-    paddingVertical: 24,
-    minHeight: 236,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    marginBottom: 0,
-  },
-  scorecardHeroPane: {
-    flexBasis: 0,
-    flexGrow: 2.2,
-    flexShrink: 1,
-  },
-  scorecardDecorIconWrap: {
-    position: "absolute",
-    right: -14,
-    top: -16,
-    opacity: 1,
-  },
-  scorecardDecorIcon: {
-    transform: [{ rotate: "12deg" }],
-  },
-  scorecardTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 8,
-  },
-  scorecardTopWebDesktop: {
-    marginBottom: 20,
-    gap: 16,
-    alignItems: "center",
-  },
-  scorecardLeft: { flex: 1 },
-  scorecardLabel: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: Theme.aggregatePillText,
-    letterSpacing: 1.2,
-  },
-  scorecardSalesLabel: {
-    fontSize: 8,
-    fontWeight: "700",
-    color: "rgba(255,255,255,0.7)",
-    letterSpacing: 1,
-    marginTop: 6,
-    textTransform: "uppercase",
-  },
-  scorecardAmount: {
-    fontSize: 32,
-    fontWeight: "300",
-    fontStyle: "italic",
-    color: Theme.textOnDark,
-    marginTop: 4,
-  },
-  scorecardConfigCard: {
-    width: 250,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(255,255,255,0.04)",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    gap: 8,
-  },
-  scorecardConfigTitle: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: Theme.financeCardBlueFrom,
-    letterSpacing: 0.9,
-    textTransform: "uppercase",
-  },
-  scorecardConfigRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.08)",
-    paddingTop: 10,
-  },
-  scorecardConfigLabel: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: Theme.textMuted,
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
-  },
-  scorecardConfigValue: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: Theme.textOnDark,
-  },
+  scorecard: ehs.scorecard,
+  scorecardWebDesktop: ehs.scorecardWebDesktop,
+  heroCardsRow: ehs.heroCardsRow,
+  scorecardHeroPane: ehs.scorecardHeroPane,
+  scorecardDecorIconWrap: ehs.scorecardDecorIconWrap,
+  scorecardDecorIcon: ehs.scorecardDecorIcon,
+  scorecardTop: ehs.scorecardTop,
+  scorecardTopWebDesktop: ehs.scorecardTopWebDesktop,
+  scorecardLeft: ehs.scorecardLeft,
+  scorecardLabel: ehs.scorecardLabel,
+  scorecardSalesLabel: ehs.scorecardSalesLabel,
+  scorecardAmount: ehs.scorecardAmount,
+  scorecardAmountWebDesktop: ehs.scorecardAmountWebDesktop,
   healthCircle: {
     width: 56,
     height: 56,
@@ -2733,168 +2776,38 @@ const styles = StyleSheet.create({
     color: Theme.textOnDark,
     zIndex: 1,
   },
-  scorecardGrid: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.1)",
+  scorecardGrid: ehs.scorecardGrid,
+  scorecardGridWebDesktop: ehs.scorecardGridWebDesktop,
+  scorecardGridStat: ehs.scorecardGridStat,
+  scorecardGridRight: ehs.scorecardGridRight,
+  scorecardGridLabelPaid: ehs.scorecardGridLabelPaid,
+  scorecardGridLabelDue: ehs.scorecardGridLabelDue,
+  scorecardGridPaid: ehs.scorecardGridPaid,
+  scorecardGridPaidWebDesktop: ehs.scorecardGridPaidWebDesktop,
+  scorecardGridDue: ehs.scorecardGridDue,
+  scorecardGridDueWebDesktop: ehs.scorecardGridDueWebDesktop,
+  profilePreviewCard: ecc.card,
+  profilePreviewEyebrow: ecc.eyebrow,
+  profilePreviewRatingRow: ecc.ratingRow,
+  profilePreviewStars: ecc.stars,
+  profilePreviewRatingBadge: ecc.ratingBadge,
+  profilePreviewRatingBadgeText: ecc.ratingBadgeText,
+  profilePreviewExperienceBlock: ecc.experienceBlock,
+  profilePreviewExperienceEyebrow: ecc.experienceEyebrow,
+  profilePreviewExperienceRow: ecc.experienceRow,
+  profilePreviewTripsNumber: ecc.tripsNumber,
+  profilePreviewExperienceLabel: ecc.experienceLabel,
+  profilePreviewToggle: ecc.toggle,
+  profilePreviewToggleDot: ecc.toggleDot,
+  profilePreviewToggleDotActive: ecc.toggleDotActive,
+  profilePreviewToggleDotPending: {
+    borderColor: Theme.financeCardBlueFrom,
+    backgroundColor: "rgba(29,78,216,0.12)",
   },
-  scorecardGridWebDesktop: {
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 0,
-    paddingTop: 18,
-  },
-  scorecardGridStat: {
-    minWidth: 0,
-    flex: 1,
-  },
-  scorecardGridDivider: {
-    width: 1,
-    height: 48,
-    backgroundColor: "rgba(255,255,255,0.1)",
-  },
-  scorecardGridRight: { alignItems: "flex-end" },
-  scorecardGridLabelPaid: {
-    fontSize: 8,
-    fontWeight: "700",
-    color: Theme.darkGreen,
-    letterSpacing: 0.6,
-  },
-  scorecardGridLabelDue: {
-    fontSize: 8,
-    fontWeight: "700",
-    color: Theme.teslaRed,
-    letterSpacing: 0.6,
-  },
-  scorecardGridPaid: {
-    fontSize: 18,
-    fontWeight: "800",
-    fontStyle: "italic",
-    color: Theme.textOnDark,
-    marginTop: 4,
-  },
-  scorecardGridDue: {
-    fontSize: 18,
-    fontWeight: "800",
-    fontStyle: "italic",
-    color: Theme.teslaRed,
-    marginTop: 4,
-  },
-  scorecardGridLabelNeutral: {
-    fontSize: 8,
-    fontWeight: "700",
-    color: "rgba(255,255,255,0.66)",
-    letterSpacing: 0.6,
-  },
-  scorecardGridNeutral: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: Theme.textOnDark,
-    marginTop: 4,
-  },
-  scorecardProfileCard: {
-    flexBasis: 0,
-    flexGrow: 1,
-    flexShrink: 1,
-    minWidth: 300,
-    maxWidth: 380,
-    borderRadius: 34,
-    backgroundColor: Theme.surface,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    paddingHorizontal: 22,
-    paddingVertical: 20,
-    justifyContent: "space-between",
-    gap: 14,
-  },
-  scorecardProfileHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
-  },
-  scorecardProfileAvatar: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: Theme.surfaceGray,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-  scorecardProfileAvatarImage: {
-    width: "100%",
-    height: "100%",
-  },
-  scorecardProfileMeta: {
-    flex: 1,
-  },
-  scorecardProfileRatingBadge: {
-    minWidth: 74,
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Theme.surfaceGray,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-  },
-  scorecardProfileRatingValue: {
-    fontSize: 12,
-    fontWeight: "900",
-    color: Theme.textPrimaryDark,
-    lineHeight: 14,
-  },
-  scorecardProfileRatingLabel: {
-    marginTop: 1,
-    fontSize: 7,
-    fontWeight: "700",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-    textAlign: "center",
-  },
-  scorecardProfileName: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: Theme.textPrimaryDark,
-  },
-  scorecardProfileSub: {
-    marginTop: 2,
-    fontSize: 10,
-    color: Theme.textMuted,
-  },
-  scorecardProfileHint: {
-    fontSize: 9,
-    color: Theme.textMuted,
-    lineHeight: 13,
-    marginTop: 2,
-  },
-  scorecardConfigValueDark: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: Theme.textPrimaryDark,
-  },
-  scorecardSyncBtn: {
-    marginTop: 6,
-    borderRadius: 18,
-    backgroundColor: Theme.darkBackground,
-    minHeight: 46,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 14,
-  },
-  scorecardSyncBtnText: {
-    color: Theme.textOnDark,
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.7,
-  },
+  profilePreviewToggleTitle: ecc.toggleTitle,
+  profilePreviewToggleSub: ecc.toggleSub,
+  profilePreviewActionBtn: ecc.actionBtn,
+  profilePreviewActionText: ecc.actionText,
   tabRow: {
     flexDirection: "row",
     backgroundColor: Theme.surfaceGray,
