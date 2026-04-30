@@ -5,7 +5,6 @@
  */
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { ThemedAlertModal } from "@/components/ThemedAlertModal";
-import { TripMap } from "./TripMap.web";
 import { Theme } from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
@@ -35,19 +34,20 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  adjustedCost,
-  adjustedRevenue,
-  COST_REASON_OPTIONS,
-  REVENUE_REASON_OPTIONS,
-  type TripAdjustmentImpact,
-  type TripAdjustmentType,
-  type TripAdjustment,
+    COST_REASON_OPTIONS,
+    REVENUE_REASON_OPTIONS,
+    adjustedCost,
+    adjustedRevenue,
+    type TripAdjustment,
+    type TripAdjustmentImpact,
+    type TripAdjustmentType,
 } from "../../services/tripAdjustments";
 import { regenerateTripOtp } from "../../services/tripOtp.service";
 import { getTripDisplayNumber } from "../../services/trips.service";
 import { TripAssignmentBlock } from "../TripAssignmentBlock";
 import { TripAdjustmentModal } from "./TripAdjustmentModal";
 import type { TripDetailScreenProps } from "./TripDetailScreen.types";
+import { TripMap } from "./TripMap.web";
 import { useTripDetail } from "./hooks/useTripDetail";
 import { type ExpenseRow } from "./sections/ExpensesTable";
 import { LRDocumentsSection } from "./sections/LRDocumentsSection";
@@ -1542,8 +1542,17 @@ export default function TripDetailScreen({
                   ) : timelineRows.map((item, idx) => {
                       const isLast = idx === timelineRows.length - 1;
                       if (item.kind === 'status') {
+                        const tripFullyCompleted =
+                          statusLabel === 'Completed' ||
+                          statusLower.includes('complet') ||
+                          statusLower.includes('deliver') ||
+                          statusLower === 'done';
+                        const markGreen =
+                          tripFullyCompleted ||
+                          item.status_context === 'completed' ||
+                          item.status_context === 'in_transit';
                         const iconTone =
-                          item.status_context === 'completed' || item.status_context === 'in_transit'
+                          markGreen
                             ? '#059669'
                             : 'rgba(15,23,42,0.35)';
                         return (
@@ -1552,7 +1561,7 @@ export default function TripDetailScreen({
                               <View
                                 style={[
                                   dStyles.auditTimelineDot,
-                                  { borderColor: iconTone, backgroundColor: item.status_context === 'completed' || item.status_context === 'in_transit' ? '#ecfdf5' : '#f8fafc' },
+                                  { borderColor: iconTone, backgroundColor: markGreen ? '#ecfdf5' : '#f8fafc' },
                                 ]}
                               >
                                 <View style={[dStyles.auditTimelineDotInner, { backgroundColor: iconTone }]} />
@@ -1562,7 +1571,6 @@ export default function TripDetailScreen({
                             <View style={dStyles.auditContentRow}>
                               <View style={dStyles.auditBody}>
                                 <Text style={dStyles.auditTitle}>{item.status_label}</Text>
-                                <Text style={dStyles.auditDetail}>{item.detail_line}</Text>
                               </View>
                               <View style={dStyles.auditMeta}>
                                 <Text style={dStyles.auditTime}>{fmtTimelineTime(item.changed_at)}</Text>
@@ -1614,13 +1622,24 @@ export default function TripDetailScreen({
             <View style={dStyles.row}>
               <View style={dStyles.bottomLeft}>
                 <View style={dStyles.card}>
-                  <Text style={dStyles.cardMicroLabel}>PRIMARY DRIVER</Text>
+                  <View style={dStyles.cardHeaderRowInline}>
+                    <Text style={dStyles.cardMicroLabel}>PRIMARY DRIVER</Text>
+                    {detail.canAssign ? (
+                      <TouchableOpacity
+                        style={dStyles.reassignInlineBtn}
+                        activeOpacity={0.85}
+                        onPress={() => setShowAssignmentManager(true)}
+                      >
+                        <Text style={dStyles.reassignInlineBtnText}>Reassign</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
                   <View style={dStyles.driverRow}>
                     {detail.driverAvatarUri ? (
                       <Image source={{ uri: detail.driverAvatarUri }} style={dStyles.driverAvatar} />
                     ) : (
                       <View style={dStyles.driverAvatarFallback}>
-                        <FontAwesome name="user" size={20} color="rgba(255,255,255,0.5)" />
+                        <FontAwesome name="user" size={20} color="#1d4ed8" />
                       </View>
                     )}
                     <View style={{ flex: 1 }}>
@@ -1641,10 +1660,21 @@ export default function TripDetailScreen({
                 </View>
 
                 <View style={dStyles.card}>
-                  <Text style={dStyles.cardMicroLabel}>ASSIGNED VEHICLE</Text>
+                  <View style={dStyles.cardHeaderRowInline}>
+                    <Text style={dStyles.cardMicroLabel}>ASSIGNED VEHICLE</Text>
+                    {detail.canAssign ? (
+                      <TouchableOpacity
+                        style={dStyles.reassignInlineBtn}
+                        activeOpacity={0.85}
+                        onPress={() => setShowAssignmentManager(true)}
+                      >
+                        <Text style={dStyles.reassignInlineBtnText}>Reassign</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
                   <View style={dStyles.vehicleRow}>
                     <View style={dStyles.vehicleIconWrap}>
-                      <FontAwesome name="truck" size={20} color="rgba(255,255,255,0.5)" />
+                      <FontAwesome name="truck" size={20} color="#059669" />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={dStyles.vehicleName}>
@@ -2765,11 +2795,50 @@ const dStyles = StyleSheet.create({
   cardMicroLabel: { fontSize: 9, fontWeight: '700', color: DS_MUTED, letterSpacing: 1.2, marginBottom: 14 },
   driverRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   driverAvatar: { width: 44, height: 44, borderRadius: 22 },
-  driverAvatarFallback: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(15,23,42,0.06)', alignItems: 'center', justifyContent: 'center' },
+  cardHeaderRowInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  reassignInlineBtn: {
+    borderRadius: 999,
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  reassignInlineBtnText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#1d4ed8',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  driverAvatarFallback: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#dbeafe',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   driverName: { fontSize: 15, fontWeight: '700', color: DS_TEXT },
   driverRating: { fontSize: 12, color: '#f59e0b', marginTop: 3 },
   vehicleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  vehicleIconWrap: { width: 44, height: 44, borderRadius: 10, backgroundColor: 'rgba(15,23,42,0.05)', borderWidth: 1, borderColor: DS_BORDER, alignItems: 'center', justifyContent: 'center' },
+  vehicleIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: '#dcfce7',
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   vehicleName: { fontSize: 15, fontWeight: '700', color: DS_TEXT },
   vehicleSub: { fontSize: 12, color: DS_MUTED, marginTop: 3 },
   docRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: 'rgba(15,23,42,0.06)' },
