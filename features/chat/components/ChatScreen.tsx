@@ -34,6 +34,7 @@ import {
 } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import Theme from "@/constants/Theme";
+import { isAggregateTrip } from "@/lib/driverUtils";
 import {
   QUICK_MESSAGES,
   TripConversation,
@@ -140,6 +141,54 @@ function partyLabel(type: ConversationPartyType) {
   return type === "client" ? "CLIENT" : type === "supplier" ? "SUPPLIER" : "DRIVER";
 }
 
+type ComposePartyRow =
+  | {
+      kind: "selectable";
+      partyType: ConversationPartyType;
+      name: string;
+      id: string;
+    }
+  /** Asset / own fleet: show driver slot dulled until assigned. */
+  | { kind: "unassigned_driver" };
+
+/** Compose list rows: supplier only for aggregate (integrated) trips; driver shows Not assigned when empty. */
+function getComposePartyRows(trip: TripForCompose): ComposePartyRow[] {
+  const rows: ComposePartyRow[] = [];
+  const aggregate = isAggregateTrip(trip);
+
+  if (trip.client_id)
+    rows.push({
+      kind: "selectable",
+      partyType: "client",
+      name: trip.client_name?.trim() || "Client",
+      id: trip.client_id,
+    });
+
+  if (aggregate && trip.supplier_id)
+    rows.push({
+      kind: "selectable",
+      partyType: "supplier",
+      name: trip.supplier_name?.trim() || "Supplier",
+      id: trip.supplier_id,
+    });
+
+  const hasSelectableOther = rows.some((r) => r.kind === "selectable");
+  if (trip.driver_id) {
+    rows.push({
+      kind: "selectable",
+      partyType: "driver",
+      name: trip.driver_display_name?.trim() || "Driver",
+      id: trip.driver_id,
+    });
+  } else if (hasSelectableOther) rows.push({ kind: "unassigned_driver" });
+
+  return rows;
+}
+
+function tripHasSelectableComposeParty(trip: TripForCompose): boolean {
+  return getComposePartyRows(trip).some((r) => r.kind === "selectable");
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 export function ChatScreen() {
@@ -161,6 +210,10 @@ export function ChatScreen() {
   const [composeSearch, setComposeSearch] = useState("");
   const [composeTrips, setComposeTrips] = useState<TripForCompose[]>([]);
   const [composeLoading, setComposeLoading] = useState(false);
+  /** Why the trip list might be empty (avoid “No trips” when org missing or fetch failed). */
+  const [composeTripListIssue, setComposeTripListIssue] = useState<"no_org" | "fetch_failed" | null>(
+    null
+  );
   const [expandedTripId, setExpandedTripId] = useState<string | null>(null);
   const [initiating, setInitiating] = useState(false);
   const [showNetCompose, setShowNetCompose] = useState(false);
@@ -220,13 +273,19 @@ export function ChatScreen() {
     setShowCompose(true);
     setComposeSearch("");
     setExpandedTripId(null);
-    if (!organizationId) return;
+    setComposeTripListIssue(null);
+    setComposeTrips([]);
+    if (!organizationId) {
+      setComposeTripListIssue("no_org");
+      return;
+    }
     setComposeLoading(true);
     try {
       const trips = await getTripsForCompose(organizationId);
       setComposeTrips(trips);
     } catch {
       setComposeTrips([]);
+      setComposeTripListIssue("fetch_failed");
     } finally {
       setComposeLoading(false);
     }
@@ -263,10 +322,15 @@ export function ChatScreen() {
             .toLowerCase()
             .includes(composeSearch.toLowerCase()) ||
           (t.client_name ?? "").toLowerCase().includes(composeSearch.toLowerCase()) ||
+          (t.supplier_name ?? "").toLowerCase().includes(composeSearch.toLowerCase()) ||
           (t.pickup_area ?? "").toLowerCase().includes(composeSearch.toLowerCase()) ||
           (t.drop_location ?? "").toLowerCase().includes(composeSearch.toLowerCase())
       )
     : composeTrips;
+
+  const composeTripsWithChatParties = filteredComposeTrips.filter((t) =>
+    tripHasSelectableComposeParty(t)
+  );
 
   const filteredNetPartners = netComposeSearch.trim()
     ? netPartners.filter((p) =>
@@ -473,302 +537,6 @@ export function ChatScreen() {
     );
   }
 
-  function DetailHeader({
-    title,
-    subtitle,
-    partyType,
-  }: {
-    title: string;
-    subtitle?: string;
-    partyType?: ConversationPartyType;
-  }) {
-    return (
-      <View style={s.detailHeader}>
-        {!isDesktop && (
-          <TouchableOpacity onPress={closeDetail} hitSlop={10} style={{ marginRight: 8 }}>
-            <ArrowLeft size={20} color="#1e293b" />
-          </TouchableOpacity>
-        )}
-        <View style={s.detailIconWrap}>
-          {partyType ? (
-            <PartyIcon partyType={partyType} active size={18} />
-          ) : (
-            <MessageSquare size={18} color="#fff" />
-          )}
-        </View>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={s.detailTitle} numberOfLines={1}>
-            {title}
-          </Text>
-          {subtitle ? (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginTop: 2 }}>
-              <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: "#22c55e" }} />
-              <Text style={s.detailStatus}>{subtitle}</Text>
-            </View>
-          ) : null}
-        </View>
-        <TouchableOpacity hitSlop={10}>
-          <Search size={17} color="#94a3b8" />
-        </TouchableOpacity>
-        <TouchableOpacity hitSlop={10} style={{ marginLeft: 8 }}>
-          <MoreVertical size={17} color="#94a3b8" />
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  function SystemMsg({ label }: { label: string }) {
-    return (
-      <View style={s.sysMsg}>
-        <Text style={s.sysMsgText}>{label}</Text>
-      </View>
-    );
-  }
-
-  function Bubble({
-    isOwn,
-    content,
-    timestamp,
-    senderName,
-  }: {
-    isOwn: boolean;
-    content: string;
-    timestamp: string;
-    senderName?: string;
-  }) {
-    const displayTime = (() => {
-      try {
-        return new Date(timestamp).toLocaleTimeString("en-IN", {
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: true,
-        });
-      } catch {
-        return timestamp;
-      }
-    })();
-
-    return (
-      <View style={[s.bubbleWrap, isOwn ? s.bubbleWrapOwn : s.bubbleWrapOther]}>
-        {!isOwn && <LetterAvatar name={senderName ?? "?"} size={32} />}
-        <View style={{ maxWidth: "72%" }}>
-          <View style={[s.bubble, isOwn ? s.bubbleOwn : s.bubbleOther]}>
-            <Text style={[s.bubbleText, isOwn ? s.bubbleTextOwn : s.bubbleTextOther]}>
-              {content}
-            </Text>
-          </View>
-          <Text style={[s.bubbleMeta, isOwn && { textAlign: "right" }]}>
-            {displayTime}
-            {senderName ? ` · ${senderName.toUpperCase()}` : " · YOU"}
-          </Text>
-        </View>
-        {isOwn && <LetterAvatar name="You" own size={32} />}
-      </View>
-    );
-  }
-
-  function ScriptsPopup({ quickMsgs }: { quickMsgs: string[] }) {
-    if (!showScripts) return null;
-    return (
-      <View style={s.scriptPopup}>
-        <View style={s.scriptPopupHeader}>
-          <Text style={s.scriptPopupTitle}>QUICK MESSAGES</Text>
-          <TouchableOpacity onPress={() => setShowScripts(false)} hitSlop={8}>
-            <X size={15} color="#94a3b8" />
-          </TouchableOpacity>
-        </View>
-        <ScrollView style={{ maxHeight: 220 }}>
-          {quickMsgs.map((m, i) => (
-            <TouchableOpacity
-              key={i}
-              style={s.scriptItem}
-              onPress={() => {
-                setMessageInput(m);
-                setShowScripts(false);
-              }}
-              activeOpacity={0.7}
-            >
-              <Text style={s.scriptItemText}>{m}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-    );
-  }
-
-  function EmojiPopup() {
-    if (!showEmoji) return null;
-    return (
-      <View style={s.emojiPopup}>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 2 }}>
-          {QUICK_EMOJIS.map((e) => (
-            <TouchableOpacity
-              key={e}
-              style={s.emojiBtn}
-              onPress={() => {
-                setMessageInput((p) => p + e);
-                setShowEmoji(false);
-              }}
-              activeOpacity={0.7}
-            >
-              <Text style={{ fontSize: 22 }}>{e}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-    );
-  }
-
-  function InputBar({ quickMsgs }: { quickMsgs: string[] }) {
-    return (
-      <View style={s.inputWrap}>
-        <EmojiPopup />
-        <ScriptsPopup quickMsgs={quickMsgs} />
-        <View style={s.inputRow}>
-          <TouchableOpacity style={s.plusBtn} hitSlop={6}>
-            <Plus size={16} color="#94a3b8" />
-          </TouchableOpacity>
-          <TextInput
-            style={s.input}
-            value={messageInput}
-            onChangeText={setMessageInput}
-            placeholder="Type a message…"
-            placeholderTextColor="#b0b8c8"
-            multiline
-          />
-          <TouchableOpacity
-            style={s.iconBtn}
-            onPress={() => {
-              setShowEmoji((v) => !v);
-              setShowScripts(false);
-            }}
-            hitSlop={6}
-          >
-            <Smile size={19} color={showEmoji ? Theme.primary : "#94a3b8"} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={s.iconBtn}
-            onPress={() => {
-              setShowScripts((v) => !v);
-              setShowEmoji(false);
-            }}
-            hitSlop={6}
-          >
-            <FileType size={19} color={showScripts ? Theme.primary : "#94a3b8"} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[s.sendBtn, !messageInput.trim() && s.sendBtnOff]}
-            onPress={handleSend}
-            disabled={!messageInput.trim()}
-            activeOpacity={0.85}
-          >
-            <Send size={15} color="#fff" />
-          </TouchableOpacity>
-        </View>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={{ flexShrink: 0 }}
-          contentContainerStyle={s.chipRow}
-        >
-          {quickMsgs.map((m, i) => (
-            <TouchableOpacity
-              key={i}
-              style={s.chip}
-              onPress={() => setMessageInput(m)}
-              activeOpacity={0.7}
-            >
-              <Text style={s.chipText} numberOfLines={1}>
-                {m}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-    );
-  }
-
-  // ── Detail views ─────────────────────────────────────────────────────────────
-
-  function TripConversationDetail() {
-    if (!selectedConv) return <EmptyDetail />;
-    const quickMsgs = QUICK_MESSAGES[selectedConv.party_type];
-
-    return (
-      <View style={s.detailPanel}>
-        <DetailHeader
-          title={`${selectedConv.trip_number} · ${partyLabel(selectedConv.party_type)}`}
-          subtitle={selectedConv.party_name.toUpperCase()}
-          partyType={selectedConv.party_type}
-        />
-        <ScrollView
-          ref={messagesRef}
-          style={s.msgs}
-          contentContainerStyle={s.msgsContent}
-          onContentSizeChange={() => messagesRef.current?.scrollToEnd({ animated: false })}
-        >
-          <SystemMsg
-            label={`${selectedConv.pickup_area.toUpperCase()} → ${selectedConv.drop_location.toUpperCase()} · TODAY`}
-          />
-          {selectedConv.messages.length === 0 && (
-            <View style={{ alignItems: "center", paddingVertical: 32 }}>
-              <Text style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>
-                No messages yet
-              </Text>
-            </View>
-          )}
-          {selectedConv.messages.map((m) => (
-            <Bubble
-              key={m.id}
-              isOwn={m.sender_role === "dispatcher"}
-              content={m.content}
-              timestamp={m.created_at}
-              senderName={m.sender_role !== "dispatcher" ? m.sender_name : undefined}
-            />
-          ))}
-        </ScrollView>
-        <InputBar quickMsgs={quickMsgs} />
-      </View>
-    );
-  }
-
-  function NetworkDetail() {
-    if (!selectedNet) return <EmptyDetail />;
-    return (
-      <View style={s.detailPanel}>
-        <DetailHeader
-          title={selectedNet.partnerName}
-          subtitle={selectedNet.organization.toUpperCase()}
-        />
-        <ScrollView
-          ref={messagesRef}
-          style={s.msgs}
-          contentContainerStyle={s.msgsContent}
-          onContentSizeChange={() => messagesRef.current?.scrollToEnd({ animated: false })}
-        >
-          <SystemMsg label="SECURE CHANNEL · TODAY" />
-          {selectedNet.messages.map((m) => (
-            <Bubble
-              key={m.id}
-              isOwn={m.senderId === "dispatcher-1"}
-              content={m.content}
-              timestamp={m.timestamp}
-              senderName={
-                m.senderId !== "dispatcher-1" ? selectedNet.partnerName : undefined
-              }
-            />
-          ))}
-        </ScrollView>
-        <InputBar quickMsgs={INTEGRATED_QUICK_MESSAGES} />
-      </View>
-    );
-  }
-
-  function CurrentDetail() {
-    if (activeTab === "trips") return <TripConversationDetail />;
-    return <NetworkDetail />;
-  }
-
   // ── Network compose modal ─────────────────────────────────────────────────────
 
   function NetworkComposeModal() {
@@ -936,28 +704,42 @@ export function ChatScreen() {
               <View style={{ paddingTop: 48, alignItems: "center" }}>
                 <ActivityIndicator color={Theme.primary} />
               </View>
+            ) : composeTripListIssue === "no_org" ? (
+              <View style={{ paddingTop: 48, alignItems: "center", gap: 8, paddingHorizontal: 24 }}>
+                <MessageSquare size={28} color="#e2e8f0" />
+                <Text style={{ fontSize: 13, color: "#94a3b8", textAlign: "center" }}>
+                  No organization selected. Open the workspace switcher and pick your company, then try again.
+                </Text>
+              </View>
+            ) : composeTripListIssue === "fetch_failed" ? (
+              <View style={{ paddingTop: 48, alignItems: "center", gap: 8, paddingHorizontal: 24 }}>
+                <MessageSquare size={28} color="#e2e8f0" />
+                <Text style={{ fontSize: 13, color: "#94a3b8", textAlign: "center" }}>
+                  Could not load trips. Check your connection and open this screen again.
+                </Text>
+              </View>
             ) : filteredComposeTrips.length === 0 ? (
               <View style={{ paddingTop: 48, alignItems: "center", gap: 8 }}>
                 <MessageSquare size={28} color="#e2e8f0" />
                 <Text style={{ fontSize: 13, color: "#94a3b8" }}>
-                  {composeSearch ? "No matching trips" : "No active trips found"}
+                  {composeSearch.trim() ? "No matching trips" : "No active trips found"}
+                </Text>
+              </View>
+            ) : composeTripsWithChatParties.length === 0 ? (
+              <View style={{ paddingTop: 48, alignItems: "center", gap: 8, paddingHorizontal: 24 }}>
+                <MessageSquare size={28} color="#e2e8f0" />
+                <Text style={{ fontSize: 13, color: "#94a3b8", textAlign: "center", lineHeight: 20 }}>
+                  Trips matched your filters, but none have a linked client, supplier, or driver ID on the
+                  trip record. Assign parties on each trip first, then return here to start chat.
                 </Text>
               </View>
             ) : (
               <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
-                {filteredComposeTrips.map((trip) => {
+                {composeTripsWithChatParties.map((trip) => {
                   const isExpanded = expandedTripId === trip.id;
                   const tripLabel = trip.display_trip_id ?? trip.trip_number;
 
-                  const parties: { type: ConversationPartyType; name: string; id: string }[] = [];
-                  if (trip.client_id && trip.client_name)
-                    parties.push({ type: "client", name: trip.client_name, id: trip.client_id });
-                  if (trip.supplier_id && trip.supplier_name)
-                    parties.push({ type: "supplier", name: trip.supplier_name, id: trip.supplier_id });
-                  if (trip.driver_id && trip.driver_display_name)
-                    parties.push({ type: "driver", name: trip.driver_display_name, id: trip.driver_id });
-
-                  if (parties.length === 0) return null;
+                  const partyRows = getComposePartyRows(trip);
 
                   return (
                     <View key={trip.id} style={cm.tripCard}>
@@ -981,28 +763,54 @@ export function ChatScreen() {
 
                       {isExpanded && (
                         <View style={cm.partyList}>
-                          {parties.map((p) => (
-                            <TouchableOpacity
-                              key={p.type}
-                              style={cm.partyRow}
-                              onPress={() => handleInitiate(trip, p.type, p.name, p.id)}
-                              disabled={initiating}
-                              activeOpacity={0.7}
-                            >
-                              <View style={cm.partyIconWrap}>
-                                <PartyIcon partyType={p.type} size={14} />
+                          {partyRows.map((row) =>
+                            row.kind === "unassigned_driver" ? (
+                              <View
+                                key="driver-unassigned"
+                                style={[cm.partyRow, cm.partyRowDisabled]}
+                              >
+                                <View
+                                  style={cm.partyRowDisabledOverlay}
+                                  pointerEvents="none"
+                                />
+                                <View style={[cm.partyIconWrap, cm.partyIconWrapMuted]}>
+                                  <PartyIcon partyType="driver" size={14} />
+                                </View>
+                                <View style={{ flex: 1, minWidth: 0 }}>
+                                  <Text style={[cm.partyType, cm.partyTypeMuted]}>DRIVER</Text>
+                                  <Text style={[cm.partyName, cm.partyNameMuted]} numberOfLines={1}>
+                                    Not assigned
+                                  </Text>
+                                </View>
+                                <Text style={cm.partyDisabledHint}>—</Text>
                               </View>
-                              <View style={{ flex: 1, minWidth: 0 }}>
-                                <Text style={cm.partyType}>{partyLabel(p.type)}</Text>
-                                <Text style={cm.partyName} numberOfLines={1}>{p.name}</Text>
-                              </View>
-                              {initiating ? (
-                                <ActivityIndicator size="small" color={Theme.primary} />
-                              ) : (
-                                <Plus size={14} color={Theme.primary} />
-                              )}
-                            </TouchableOpacity>
-                          ))}
+                            ) : (
+                              <TouchableOpacity
+                                key={`${row.partyType}-${row.id}`}
+                                style={cm.partyRow}
+                                onPress={() =>
+                                  handleInitiate(trip, row.partyType, row.name, row.id)
+                                }
+                                disabled={initiating}
+                                activeOpacity={0.7}
+                              >
+                                <View style={cm.partyIconWrap}>
+                                  <PartyIcon partyType={row.partyType} size={14} />
+                                </View>
+                                <View style={{ flex: 1, minWidth: 0 }}>
+                                  <Text style={cm.partyType}>{partyLabel(row.partyType)}</Text>
+                                  <Text style={cm.partyName} numberOfLines={1}>
+                                    {row.name}
+                                  </Text>
+                                </View>
+                                {initiating ? (
+                                  <ActivityIndicator size="small" color={Theme.primary} />
+                                ) : (
+                                  <Plus size={14} color={Theme.primary} />
+                                )}
+                              </TouchableOpacity>
+                            )
+                          )}
                         </View>
                       )}
                     </View>
@@ -1015,6 +823,37 @@ export function ChatScreen() {
       </Modal>
     );
   }
+
+  const detailPanel =
+    activeTab === "trips" ? (
+      <TripConversationDetailPanel
+        selectedConv={selectedConv}
+        messagesRef={messagesRef}
+        messageInput={messageInput}
+        setMessageInput={setMessageInput}
+        showEmoji={showEmoji}
+        setShowEmoji={setShowEmoji}
+        showScripts={showScripts}
+        setShowScripts={setShowScripts}
+        onSend={handleSend}
+        isDesktop={isDesktop}
+        onCloseDetail={closeDetail}
+      />
+    ) : (
+      <NetworkDetailPanel
+        selectedNet={selectedNet}
+        messagesRef={messagesRef}
+        messageInput={messageInput}
+        setMessageInput={setMessageInput}
+        showEmoji={showEmoji}
+        setShowEmoji={setShowEmoji}
+        showScripts={showScripts}
+        setShowScripts={setShowScripts}
+        onSend={handleSend}
+        isDesktop={isDesktop}
+        onCloseDetail={closeDetail}
+      />
+    );
 
   // ── Layout ────────────────────────────────────────────────────────────────────
 
@@ -1031,9 +870,7 @@ export function ChatScreen() {
           <View style={s.desktopList}>
             <ChatList />
           </View>
-          <View style={s.desktopDetail}>
-            <CurrentDetail />
-          </View>
+          <View style={s.desktopDetail}>{detailPanel}</View>
         </View>
         <ComposeModal />
         <NetworkComposeModal />
@@ -1049,7 +886,7 @@ export function ChatScreen() {
       end={{ x: 1, y: 1 }}
       style={[s.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}
     >
-      {!isMobileDetail ? <ChatList /> : <CurrentDetail />}
+      {!isMobileDetail ? <ChatList /> : detailPanel}
       <ComposeModal />
       <NetworkComposeModal />
     </LinearGradient>
@@ -1487,4 +1324,391 @@ const cm = StyleSheet.create({
     textTransform: "uppercase",
   },
   partyName: { fontSize: 13, fontWeight: "600", color: "#1e293b", marginTop: 1 },
+
+  partyRowDisabled: {
+    position: "relative",
+    overflow: "hidden",
+    opacity: 0.72,
+    shadowColor: "#64748b",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  partyRowDisabledOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(248, 250, 252, 0.82)",
+  },
+  partyIconWrapMuted: { opacity: 0.55 },
+  partyTypeMuted: { color: "#94a3b8" },
+  partyNameMuted: { color: "#94a3b8", fontStyle: "italic" },
+  partyDisabledHint: { fontSize: 14, color: "#cbd5e1", fontWeight: "600", paddingHorizontal: 4 },
 });
+
+// ── Conversation detail (module scope: stable component identity so TextInput keeps focus) ─
+
+function ChatDetailHeader({
+  title,
+  subtitle,
+  partyType,
+  isDesktop,
+  onCloseDetail,
+}: {
+  title: string;
+  subtitle?: string;
+  partyType?: ConversationPartyType;
+  isDesktop: boolean;
+  onCloseDetail: () => void;
+}) {
+  return (
+    <View style={s.detailHeader}>
+      {!isDesktop && (
+        <TouchableOpacity onPress={onCloseDetail} hitSlop={10} style={{ marginRight: 8 }}>
+          <ArrowLeft size={20} color="#1e293b" />
+        </TouchableOpacity>
+      )}
+      <View style={s.detailIconWrap}>
+        {partyType ? (
+          <PartyIcon partyType={partyType} active size={18} />
+        ) : (
+          <MessageSquare size={18} color="#fff" />
+        )}
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={s.detailTitle} numberOfLines={1}>
+          {title}
+        </Text>
+        {subtitle ? (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginTop: 2 }}>
+            <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: "#22c55e" }} />
+            <Text style={s.detailStatus}>{subtitle}</Text>
+          </View>
+        ) : null}
+      </View>
+      <TouchableOpacity hitSlop={10}>
+        <Search size={17} color="#94a3b8" />
+      </TouchableOpacity>
+      <TouchableOpacity hitSlop={10} style={{ marginLeft: 8 }}>
+        <MoreVertical size={17} color="#94a3b8" />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function ChatSystemMsg({ label }: { label: string }) {
+  return (
+    <View style={s.sysMsg}>
+      <Text style={s.sysMsgText}>{label}</Text>
+    </View>
+  );
+}
+
+function ChatBubble({
+  isOwn,
+  content,
+  timestamp,
+  senderName,
+}: {
+  isOwn: boolean;
+  content: string;
+  timestamp: string;
+  senderName?: string;
+}) {
+  let displayTime = timestamp;
+  try {
+    displayTime = new Date(timestamp).toLocaleTimeString("en-IN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  } catch {
+    // keep raw
+  }
+
+  return (
+    <View style={[s.bubbleWrap, isOwn ? s.bubbleWrapOwn : s.bubbleWrapOther]}>
+      {!isOwn && <LetterAvatar name={senderName ?? "?"} size={32} />}
+      <View style={{ maxWidth: "72%" }}>
+        <View style={[s.bubble, isOwn ? s.bubbleOwn : s.bubbleOther]}>
+          <Text style={[s.bubbleText, isOwn ? s.bubbleTextOwn : s.bubbleTextOther]}>{content}</Text>
+        </View>
+        <Text style={[s.bubbleMeta, isOwn && { textAlign: "right" }]}>
+          {displayTime}
+          {senderName ? ` · ${senderName.toUpperCase()}` : " · YOU"}
+        </Text>
+      </View>
+      {isOwn && <LetterAvatar name="You" own size={32} />}
+    </View>
+  );
+}
+
+function ChatInputBar({
+  quickMsgs,
+  messageInput,
+  onChangeMessage,
+  showEmoji,
+  setShowEmoji,
+  showScripts,
+  setShowScripts,
+  onSend,
+}: {
+  quickMsgs: string[];
+  messageInput: string;
+  onChangeMessage: React.Dispatch<React.SetStateAction<string>>;
+  showEmoji: boolean;
+  setShowEmoji: React.Dispatch<React.SetStateAction<boolean>>;
+  showScripts: boolean;
+  setShowScripts: React.Dispatch<React.SetStateAction<boolean>>;
+  onSend: () => void;
+}) {
+  return (
+    <View style={s.inputWrap}>
+      {showEmoji ? (
+        <View style={s.emojiPopup}>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 2 }}>
+            {QUICK_EMOJIS.map((e) => (
+              <TouchableOpacity
+                key={e}
+                style={s.emojiBtn}
+                onPress={() => {
+                  onChangeMessage((p) => p + e);
+                  setShowEmoji(false);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={{ fontSize: 22 }}>{e}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      ) : null}
+      {showScripts ? (
+        <View style={s.scriptPopup}>
+          <View style={s.scriptPopupHeader}>
+            <Text style={s.scriptPopupTitle}>QUICK MESSAGES</Text>
+            <TouchableOpacity onPress={() => setShowScripts(false)} hitSlop={8}>
+              <X size={15} color="#94a3b8" />
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={{ maxHeight: 220 }}>
+            {quickMsgs.map((m, i) => (
+              <TouchableOpacity
+                key={i}
+                style={s.scriptItem}
+                onPress={() => {
+                  onChangeMessage(m);
+                  setShowScripts(false);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={s.scriptItemText}>{m}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      ) : null}
+      <View style={s.inputRow}>
+        <TouchableOpacity style={s.plusBtn} hitSlop={6}>
+          <Plus size={16} color="#94a3b8" />
+        </TouchableOpacity>
+        <TextInput
+          style={s.input}
+          value={messageInput}
+          onChangeText={onChangeMessage}
+          placeholder="Type a message…"
+          placeholderTextColor="#b0b8c8"
+          multiline
+        />
+        <TouchableOpacity
+          style={s.iconBtn}
+          onPress={() => {
+            setShowEmoji((v) => !v);
+            setShowScripts(false);
+          }}
+          hitSlop={6}
+        >
+          <Smile size={19} color={showEmoji ? Theme.primary : "#94a3b8"} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={s.iconBtn}
+          onPress={() => {
+            setShowScripts((v) => !v);
+            setShowEmoji(false);
+          }}
+          hitSlop={6}
+        >
+          <FileType size={19} color={showScripts ? Theme.primary : "#94a3b8"} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[s.sendBtn, !messageInput.trim() && s.sendBtnOff]}
+          onPress={onSend}
+          disabled={!messageInput.trim()}
+          activeOpacity={0.85}
+        >
+          <Send size={15} color="#fff" />
+        </TouchableOpacity>
+      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={{ flexShrink: 0 }}
+        contentContainerStyle={s.chipRow}
+      >
+        {quickMsgs.map((m, i) => (
+          <TouchableOpacity
+            key={i}
+            style={s.chip}
+            onPress={() => onChangeMessage(m)}
+            activeOpacity={0.7}
+          >
+            <Text style={s.chipText} numberOfLines={1}>
+              {m}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
+function TripConversationDetailPanel({
+  selectedConv,
+  messagesRef,
+  messageInput,
+  setMessageInput,
+  showEmoji,
+  setShowEmoji,
+  showScripts,
+  setShowScripts,
+  onSend,
+  isDesktop,
+  onCloseDetail,
+}: {
+  selectedConv: TripConversation | null;
+  messagesRef: React.RefObject<ScrollView | null>;
+  messageInput: string;
+  setMessageInput: React.Dispatch<React.SetStateAction<string>>;
+  showEmoji: boolean;
+  setShowEmoji: React.Dispatch<React.SetStateAction<boolean>>;
+  showScripts: boolean;
+  setShowScripts: React.Dispatch<React.SetStateAction<boolean>>;
+  onSend: () => void;
+  isDesktop: boolean;
+  onCloseDetail: () => void;
+}) {
+  if (!selectedConv) return <EmptyDetail />;
+  const quickMsgs = QUICK_MESSAGES[selectedConv.party_type];
+
+  return (
+    <View style={s.detailPanel}>
+      <ChatDetailHeader
+        title={`${selectedConv.trip_number} · ${partyLabel(selectedConv.party_type)}`}
+        subtitle={selectedConv.party_name.toUpperCase()}
+        partyType={selectedConv.party_type}
+        isDesktop={isDesktop}
+        onCloseDetail={onCloseDetail}
+      />
+      <ScrollView
+        ref={messagesRef}
+        style={s.msgs}
+        contentContainerStyle={s.msgsContent}
+        onContentSizeChange={() => messagesRef.current?.scrollToEnd({ animated: false })}
+      >
+        <ChatSystemMsg
+          label={`${selectedConv.pickup_area.toUpperCase()} → ${selectedConv.drop_location.toUpperCase()} · TODAY`}
+        />
+        {selectedConv.messages.length === 0 && (
+          <View style={{ alignItems: "center", paddingVertical: 32 }}>
+            <Text style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>
+              No messages yet
+            </Text>
+          </View>
+        )}
+        {selectedConv.messages.map((m) => (
+          <ChatBubble
+            key={m.id}
+            isOwn={m.sender_role === "dispatcher"}
+            content={m.content}
+            timestamp={m.created_at}
+            senderName={m.sender_role !== "dispatcher" ? m.sender_name : undefined}
+          />
+        ))}
+      </ScrollView>
+      <ChatInputBar
+        quickMsgs={quickMsgs}
+        messageInput={messageInput}
+        onChangeMessage={setMessageInput}
+        showEmoji={showEmoji}
+        setShowEmoji={setShowEmoji}
+        showScripts={showScripts}
+        setShowScripts={setShowScripts}
+        onSend={onSend}
+      />
+    </View>
+  );
+}
+
+function NetworkDetailPanel({
+  selectedNet,
+  messagesRef,
+  messageInput,
+  setMessageInput,
+  showEmoji,
+  setShowEmoji,
+  showScripts,
+  setShowScripts,
+  onSend,
+  isDesktop,
+  onCloseDetail,
+}: {
+  selectedNet: IntegratedChat | null;
+  messagesRef: React.RefObject<ScrollView | null>;
+  messageInput: string;
+  setMessageInput: React.Dispatch<React.SetStateAction<string>>;
+  showEmoji: boolean;
+  setShowEmoji: React.Dispatch<React.SetStateAction<boolean>>;
+  showScripts: boolean;
+  setShowScripts: React.Dispatch<React.SetStateAction<boolean>>;
+  onSend: () => void;
+  isDesktop: boolean;
+  onCloseDetail: () => void;
+}) {
+  if (!selectedNet) return <EmptyDetail />;
+  return (
+    <View style={s.detailPanel}>
+      <ChatDetailHeader
+        title={selectedNet.partnerName}
+        subtitle={selectedNet.organization.toUpperCase()}
+        isDesktop={isDesktop}
+        onCloseDetail={onCloseDetail}
+      />
+      <ScrollView
+        ref={messagesRef}
+        style={s.msgs}
+        contentContainerStyle={s.msgsContent}
+        onContentSizeChange={() => messagesRef.current?.scrollToEnd({ animated: false })}
+      >
+        <ChatSystemMsg label="SECURE CHANNEL · TODAY" />
+        {selectedNet.messages.map((m) => (
+          <ChatBubble
+            key={m.id}
+            isOwn={m.senderId === "dispatcher-1"}
+            content={m.content}
+            timestamp={m.timestamp}
+            senderName={m.senderId !== "dispatcher-1" ? selectedNet.partnerName : undefined}
+          />
+        ))}
+      </ScrollView>
+      <ChatInputBar
+        quickMsgs={INTEGRATED_QUICK_MESSAGES}
+        messageInput={messageInput}
+        onChangeMessage={setMessageInput}
+        showEmoji={showEmoji}
+        setShowEmoji={setShowEmoji}
+        showScripts={showScripts}
+        setShowScripts={setShowScripts}
+        onSend={onSend}
+      />
+    </View>
+  );
+}
