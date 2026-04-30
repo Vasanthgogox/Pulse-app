@@ -19,6 +19,7 @@ import {
     assignTripDriverByPhone,
     getActiveDriverIds,
     getDriverAvailabilityByPhone,
+    getTripsByOrganization,
     getTripDisplayNumber,
     isTripCompleted,
     updateTripAssignment,
@@ -160,6 +161,9 @@ export function TripAssignmentBlock({
   const [activeDriverIds, setActiveDriverIds] = useState<Set<string>>(
     new Set(),
   );
+  const [activeVehicleIds, setActiveVehicleIds] = useState<Set<string>>(new Set());
+  const [activeDriverTripLabelById, setActiveDriverTripLabelById] = useState<Record<string, string>>({});
+  const [activeVehicleTripLabelById, setActiveVehicleTripLabelById] = useState<Record<string, string>>({});
   const [vehicles, setVehicles] = useState<VehicleRow[]>([]);
   const [pickDriverId, setPickDriverId] = useState<string | null>(
     trip.driver_id,
@@ -370,6 +374,32 @@ export function TripAssignmentBlock({
           (v) => normalizeVehicleNumber(v.vehicle_number) === vehicleNumNorm,
         )
       : null;
+    if (matchedVehicle) {
+      const tripsRes = await getTripsByOrganization(organizationId);
+      if (!tripsRes.error) {
+        const activeTrips = (tripsRes.trips ?? []).filter((t) => {
+          const s = String(t.status ?? "").toLowerCase();
+          return t.id !== trip.id && !isTripCompleted(t) && s !== "cancelled";
+        });
+        const vehicleBusyTrip = activeTrips.find((t) => t.vehicle_id === matchedVehicle.id);
+        if (vehicleBusyTrip && availability.isBusy) {
+          const driverLabel =
+            availability.ongoingTripLabel ?? "another ongoing trip";
+          const vehicleLabel = getTripDisplayNumber(vehicleBusyTrip);
+          setPhoneSaving(false);
+          setPhoneError(
+            `Driver is already in ${driverLabel} and vehicle is already in ${vehicleLabel}.`,
+          );
+          return;
+        }
+        if (vehicleBusyTrip) {
+          const vehicleLabel = getTripDisplayNumber(vehicleBusyTrip);
+          setPhoneSaving(false);
+          setPhoneError(`Vehicle is already assigned to ${vehicleLabel}.`);
+          return;
+        }
+      }
+    }
 
     if (driverAssignOrgId) {
       const { error: rpcErr } = await assignAggregateTripDriverByPhone(
@@ -568,12 +598,23 @@ export function TripAssignmentBlock({
     Promise.all([
       getDriversByOrganization(organizationId),
       getActiveDriverIds(organizationId),
-    ]).then(([r, busyIds]) => {
+      getTripsByOrganization(organizationId),
+    ]).then(([r, busyIds, tripsRes]) => {
       const list = r.error ? [] : (r.drivers ?? []);
       setDrivers(list.filter((d) => !d.left_at));
       setActiveDriverIds(busyIds);
+      const activeTrips = (tripsRes.error ? [] : (tripsRes.trips ?? [])).filter((t) => {
+        const s = String(t.status ?? "").toLowerCase();
+        return !isTripCompleted(t) && s !== "cancelled";
+      });
+      const labels: Record<string, string> = {};
+      for (const t of activeTrips) {
+        if (t.id === trip.id) continue;
+        if (t.driver_id) labels[t.driver_id] = getTripDisplayNumber(t);
+      }
+      setActiveDriverTripLabelById(labels);
     });
-  }, [organizationId, trip.driver_id]);
+  }, [organizationId, trip.driver_id, trip.id]);
 
   const openVehiclePicker = useCallback(() => {
     setAssignMode("vehicle");
@@ -589,14 +630,33 @@ export function TripAssignmentBlock({
     } else {
       setPickerVehicleInput("");
     }
-    getVehiclesByOrganization(organizationId).then((r) =>
-      setVehicles(r.error ? [] : (r.vehicles ?? [])),
-    );
+    Promise.all([
+      getVehiclesByOrganization(organizationId),
+      getTripsByOrganization(organizationId),
+    ]).then(([vehiclesRes, tripsRes]) => {
+      setVehicles(vehiclesRes.error ? [] : (vehiclesRes.vehicles ?? []));
+      const activeTrips = (tripsRes.error ? [] : (tripsRes.trips ?? [])).filter((t) => {
+        const s = String(t.status ?? "").toLowerCase();
+        return !isTripCompleted(t) && s !== "cancelled";
+      });
+      const ids = new Set<string>();
+      const labels: Record<string, string> = {};
+      for (const t of activeTrips) {
+        if (t.id === trip.id) continue;
+        if (t.vehicle_id) {
+          ids.add(t.vehicle_id);
+          labels[t.vehicle_id] = getTripDisplayNumber(t);
+        }
+      }
+      setActiveVehicleIds(ids);
+      setActiveVehicleTripLabelById(labels);
+    });
   }, [
     organizationId,
     trip.vehicle_id,
     trip.vehicle_display_number,
     propsVehicleLabel,
+    trip.id,
   ]);
 
   useEffect(() => {
@@ -616,6 +676,11 @@ export function TripAssignmentBlock({
 
   const saveDriverOnly = useCallback(
     async (driverId: string | null) => {
+      if (driverId && driverId !== trip.driver_id && activeDriverIds.has(driverId)) {
+        const label = activeDriverTripLabelById[driverId] ?? "another ongoing trip";
+        Alert.alert("Driver already in trip", `Driver is already assigned to ${label}.`);
+        return;
+      }
       setSaving(true);
       try {
         const { error } = await updateTripAssignment(
@@ -639,7 +704,15 @@ export function TripAssignmentBlock({
         setSaving(false);
       }
     },
-    [trip.id, trip.driver_id, trip.vehicle_id, currentUserId, onUpdated],
+    [
+      trip.id,
+      trip.driver_id,
+      trip.vehicle_id,
+      currentUserId,
+      onUpdated,
+      activeDriverIds,
+      activeDriverTripLabelById,
+    ],
   );
 
   const saveVehicleOnly = useCallback(
@@ -647,6 +720,11 @@ export function TripAssignmentBlock({
       vehicleId: string | null,
       vehicleDisplayNumber: string | null = null,
     ) => {
+      if (vehicleId && vehicleId !== trip.vehicle_id && activeVehicleIds.has(vehicleId)) {
+        const label = activeVehicleTripLabelById[vehicleId] ?? "another ongoing trip";
+        Alert.alert("Vehicle already in trip", `Vehicle is already assigned to ${label}.`);
+        return;
+      }
       setSaving(true);
       try {
         const payload: Parameters<typeof updateTripAssignment>[1] = {
@@ -687,6 +765,8 @@ export function TripAssignmentBlock({
       showAssignByPhone,
       onVehicleDisplayChange,
       onUpdated,
+      activeVehicleIds,
+      activeVehicleTripLabelById,
     ],
   );
 
@@ -794,10 +874,10 @@ export function TripAssignmentBlock({
           )}
         </View>
 
-        {/* Driver and Vehicle rows — side-by-side on web view */}
-        <View style={isDesktop ? styles.twoCol : null}>
+        {/* Driver and Vehicle rows — stacked so Vehicle appears below Driver */}
+        <View>
           {/* Driver row — reference: Driver Node, + Assign / Change */}
-          <View style={[styles.assignRow, isDesktop && styles.webAssignRow]}>
+          <View style={styles.assignRow}>
             <View style={styles.assignRowLeft}>
               <View
                 style={[
@@ -877,7 +957,7 @@ export function TripAssignmentBlock({
           </View>
 
           {/* Vehicle row — reference: Vehicle Registry, Change */}
-          <View style={[styles.assignRow, isDesktop && styles.webAssignRow]}>
+          <View style={styles.assignRow}>
             <View style={styles.assignRowLeft}>
               <View
                 style={[
@@ -1043,7 +1123,7 @@ export function TripAssignmentBlock({
                     const ratingMeta = getDriverRatingMeta(d);
                     const hasAvatar = !!(d.avatar_url && d.avatar_url.trim());
                     const statusText = isOnTrip
-                      ? "On trip"
+                      ? `Already in ${activeDriverTripLabelById[d.id] ?? "another trip"}`
                       : isAvailable
                         ? "Available"
                         : "On leave";
@@ -1122,7 +1202,7 @@ export function TripAssignmentBlock({
                         {isOnTrip ? (
                           <View style={styles.assignBusyBadge}>
                             <Text style={styles.assignBusyBadgeText}>
-                              On Trip
+                              Already in trip
                             </Text>
                           </View>
                         ) : (
@@ -1184,14 +1264,19 @@ export function TripAssignmentBlock({
                   ) : (
                     filteredVehicles.map((v) => {
                       const plate = formatIndianVehicleNumber(v.vehicle_number);
+                      const vehicleBusy =
+                        activeVehicleIds.has(v.id) && v.id !== trip.vehicle_id;
                       const typeLabel = v.vehicle_type ?? "Vehicle";
                       return (
                         <TouchableOpacity
                           key={v.id}
-                          style={styles.assignRegistryCard}
-                          onPress={() => saveVehicleOnly(v.id)}
-                          disabled={saving}
-                          activeOpacity={0.98}
+                          style={[
+                            styles.assignRegistryCard,
+                            vehicleBusy && styles.assignRegistryCardBusy,
+                          ]}
+                          onPress={() => !vehicleBusy && saveVehicleOnly(v.id)}
+                          disabled={saving || vehicleBusy}
+                          activeOpacity={vehicleBusy ? 1 : 0.98}
                         >
                           <View style={styles.assignRegistryCardLeft}>
                             <View style={styles.assignVehicleIconWrapRegistry}>
@@ -1203,21 +1288,37 @@ export function TripAssignmentBlock({
                             </View>
                             <View style={styles.assignCardBody}>
                               <Text
-                                style={styles.assignCardTitle}
+                                style={[
+                                  styles.assignCardTitle,
+                                  vehicleBusy && styles.assignCardTitleMuted,
+                                ]}
                                 numberOfLines={1}
                               >
                                 {plate}
                               </Text>
-                              <Text style={styles.assignRegistrySubtext}>
-                                {typeLabel}
+                              <Text
+                                style={[
+                                  styles.assignRegistrySubtext,
+                                  vehicleBusy && styles.assignRegistrySubtextBusy,
+                                ]}
+                              >
+                                {vehicleBusy
+                                  ? `Already in ${activeVehicleTripLabelById[v.id] ?? "another trip"}`
+                                  : typeLabel}
                               </Text>
                             </View>
                           </View>
-                          <View style={styles.assignUpdateLinkBadge}>
-                            <Text style={styles.assignUpdateLinkBadgeText}>
-                              Select
-                            </Text>
-                          </View>
+                          {vehicleBusy ? (
+                            <View style={styles.assignBusyBadge}>
+                              <Text style={styles.assignBusyBadgeText}>Already in trip</Text>
+                            </View>
+                          ) : (
+                            <View style={styles.assignUpdateLinkBadge}>
+                              <Text style={styles.assignUpdateLinkBadgeText}>
+                                Select
+                              </Text>
+                            </View>
+                          )}
                         </TouchableOpacity>
                       );
                     })

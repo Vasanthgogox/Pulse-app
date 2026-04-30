@@ -533,9 +533,16 @@ export default function TripDetailScreen({
   ];
   const isTripCompleted =
     String(trip.status ?? "").toLowerCase() === "completed" || !!trip.completed_at;
-  const currentStatusLabel = String(trip.status ?? "assigned")
-    .replace(/_/g, " ")
-    .toUpperCase();
+  const hasAnyAssignment =
+    !!trip.driver_id ||
+    !!trip.vehicle_id ||
+    !!String(trip.driver_display_name ?? "").trim() ||
+    !!String(trip.vehicle_display_number ?? "").trim();
+  const currentStatusLabel = (() => {
+    const s = String(trip.status ?? "assigned").toLowerCase();
+    if (s === "assigned" && !hasAnyAssignment) return "UNASSIGNED";
+    return s.replace(/_/g, " ").toUpperCase();
+  })();
   const tripAny = trip as any;
   const durationLabel = tripAny.duration_minutes
     ? `${Math.floor(tripAny.duration_minutes / 60)}h ${tripAny.duration_minutes % 60}m`
@@ -643,6 +650,7 @@ export default function TripDetailScreen({
     statusLower.includes('in_transit') || statusLower.includes('transit') ? 'In Transit'
     : statusLower.includes('in_progress') ? 'In Progress'
     : statusLower.includes('complet') || statusLower.includes('deliver') || statusLower === 'done' ? 'Completed'
+    : statusLower === 'assigned' && !hasAnyAssignment ? 'Unassigned'
     : statusLower === 'assigned' ? 'Assigned'
     : statusLower === 'pending' ? 'Pending'
     : trip.status ?? 'Pending';
@@ -3504,13 +3512,17 @@ const styles = StyleSheet.create({
   assignModalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(15,23,42,0.45)",
-    justifyContent: "flex-end",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 16,
   },
   assignModalCard: {
     maxHeight: "86%",
+    width: "100%",
+    maxWidth: 860,
     backgroundColor: "#f8fafc",
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
+    borderRadius: 18,
     paddingTop: 10,
     paddingHorizontal: 10,
     paddingBottom: 14,
