@@ -580,6 +580,9 @@ export default function TripsScreen() {
 
   const [tripsTablePageSize, setTripsTablePageSize] = useState<25 | 50>(25);
   const [tripsTablePage, setTripsTablePage] = useState(0);
+  const [supplierNameFallbackById, setSupplierNameFallbackById] = useState<
+    Record<string, string>
+  >({});
   const tripsTableTotalPages = Math.max(
     1,
     Math.ceil(filtered.length / tripsTablePageSize),
@@ -613,6 +616,56 @@ export default function TripsScreen() {
     return Array.from(types).sort();
   }, [trips]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const loadMissingSupplierNames = async () => {
+      const knownSupplierIds = new Set(
+        suppliers.map((s) => String(s.id).trim().toLowerCase()).filter(Boolean),
+      );
+      const missingSupplierIds = Array.from(
+        new Set(
+          trips
+            .map((trip) => String(trip.supplier_id ?? "").trim().toLowerCase())
+            .filter((id) => id.length > 0 && !knownSupplierIds.has(id)),
+        ),
+      );
+      if (missingSupplierIds.length === 0) {
+        if (!cancelled) setSupplierNameFallbackById({});
+        return;
+      }
+      const { data, error } = await supabase()
+        .from("suppliers")
+        .select("id, name, company_name, contact_person")
+        .in("id", missingSupplierIds);
+      if (cancelled) return;
+      if (error) {
+        setSupplierNameFallbackById({});
+        return;
+      }
+      const next: Record<string, string> = {};
+      for (const row of
+        (data ?? []) as Array<{
+          id: string;
+          name?: string | null;
+          company_name?: string | null;
+          contact_person?: string | null;
+        }>) {
+        const key = String(row.id ?? "").trim().toLowerCase();
+        if (!key) continue;
+        const label =
+          String(row.name ?? "").trim() ||
+          String(row.company_name ?? "").trim() ||
+          String(row.contact_person ?? "").trim();
+        if (label) next[key] = label;
+      }
+      setSupplierNameFallbackById(next);
+    };
+    void loadMissingSupplierNames();
+    return () => {
+      cancelled = true;
+    };
+  }, [trips, suppliers]);
+
   const tripHubPartyMetaByTripId = useMemo(
     () =>
       buildTripHubPartyMetaByTripId(
@@ -621,8 +674,9 @@ export default function TripsScreen() {
         suppliers,
         drivers,
         transactions,
+        supplierNameFallbackById,
       ),
-    [trips, clients, suppliers, drivers, transactions],
+    [trips, clients, suppliers, drivers, transactions, supplierNameFallbackById],
   );
 
   const tripLedgerExportReport = useMemo(() => {

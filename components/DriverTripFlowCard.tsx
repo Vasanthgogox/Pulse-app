@@ -199,11 +199,20 @@ export function DriverTripFlowCard({
   const confirmArrival = async () => {
     const id = localTrip?.id;
     if (!id || stepLoading) return;
+    const now = new Date().toISOString();
     setStepError(null);
     setStepLoading(true);
     setStep('pickup');
-    setLocalTrip((prev) => ({ ...prev, status: 'in_progress', updated_at: new Date().toISOString() }));
-    const { error, trip: updated } = await tripsService.updateTripStatus(id, { status: 'in_progress' });
+    setLocalTrip((prev) => ({
+      ...prev,
+      status: 'in_progress',
+      started_at: prev.started_at ?? now,
+      updated_at: now,
+    }));
+    const { error, trip: updated } = await tripsService.updateTripStatus(id, {
+      status: 'in_progress',
+      started_at: localTrip?.started_at ?? now,
+    });
     setStepLoading(false);
     if (error) {
       setStepError(error.message);

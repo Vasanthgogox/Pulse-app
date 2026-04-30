@@ -1254,6 +1254,55 @@ export interface UpdateTripStatusData {
   completed_at?: string | null;
 }
 
+const COMPLETED_STATUS_SET = new Set(["completed", "delivered", "done"]);
+
+async function validateSupplierLinkForCompletion(
+  tripId: string,
+): Promise<{ error: Error | null }> {
+  const { data: trip, error: tripError } = await supabase()
+    .from("trips")
+    .select("id, source, supplier_id")
+    .eq("id", tripId)
+    .maybeSingle();
+  if (tripError) return { error: new Error(tripError.message) };
+  if (!trip) return { error: new Error("Trip not found.") };
+
+  const source = String(trip.source ?? "").trim().toLowerCase();
+  const supplierId = String(trip.supplier_id ?? "").trim();
+  const requiresSupplierLink = source === "direct_quote" || supplierId.length > 0;
+  if (!requiresSupplierLink) return { error: null };
+
+  if (!supplierId) {
+    return {
+      error: new Error(
+        "Cannot complete aggregate trip without a supplier. Assign a supplier first.",
+      ),
+    };
+  }
+
+  const { data: supplierRow, error: supplierError } = await supabase()
+    .from("suppliers")
+    .select("id")
+    .eq("id", supplierId)
+    .maybeSingle();
+  if (!supplierError && supplierRow) return { error: null };
+
+  const { data: supplierTxnRow, error: supplierTxnError } = await supabase()
+    .from("transactions")
+    .select("id")
+    .eq("trip_id", tripId)
+    .eq("contact_type", "supplier")
+    .limit(1)
+    .maybeSingle();
+  if (!supplierTxnError && supplierTxnRow) return { error: null };
+
+  return {
+    error: new Error(
+      "Cannot complete aggregate trip because supplier linkage is unresolved.",
+    ),
+  };
+}
+
 export async function updateTripStatus(
   tripId: string,
   data: UpdateTripStatusData,
@@ -1268,6 +1317,10 @@ export async function updateTripStatus(
       ),
       trip: null,
     };
+  }
+  if (COMPLETED_STATUS_SET.has(status)) {
+    const validation = await validateSupplierLinkForCompletion(tripId);
+    if (validation.error) return { error: validation.error, trip: null };
   }
   const updates: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
@@ -1346,6 +1399,10 @@ export async function manualAdvanceTrip(
     idempotencyKey: string;
   },
 ): Promise<{ error: Error | null; trip: TripRow | null }> {
+  if (params.action === "complete") {
+    const validation = await validateSupplierLinkForCompletion(tripId);
+    if (validation.error) return { error: validation.error, trip: null };
+  }
   const { data, error } = await supabase().rpc("manual_advance_trip", {
     p_trip_id: tripId,
     p_action: params.action,

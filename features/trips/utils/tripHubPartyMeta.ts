@@ -50,6 +50,7 @@ function resolveSupplierName(
   t: TripRow,
   entries: LedgerRow[],
   supplierById: Map<string, SupplierRow>,
+  supplierNameByIdFallback?: Record<string, string>,
 ): string {
   const raw = (t.supplier_name ?? "").trim();
   const clientName = (t.client_name ?? "").trim().toLowerCase();
@@ -71,6 +72,8 @@ function resolveSupplierName(
       ""
     ).trim();
     if (label) return label;
+    const fallbackLabel = (supplierNameByIdFallback?.[sid] ?? "").trim();
+    if (fallbackLabel) return fallbackLabel;
   }
   for (const tx of entries) {
     if (tx.contact_type !== "supplier") continue;
@@ -94,6 +97,7 @@ export function buildTripHubPartyMetaByTripId(
   suppliers: SupplierRow[],
   drivers: DriverRow[],
   transactions: LedgerRow[],
+  supplierNameByIdFallback?: Record<string, string>,
 ): Map<string, TripHubPartyMeta> {
   const clientById = new Map(
     clients.map((c) => [String(c.id).trim().toLowerCase(), c] as const),
@@ -118,7 +122,12 @@ export function buildTripHubPartyMetaByTripId(
   for (const t of tripsList) {
     const tidKey = String(t.id).trim().toLowerCase();
     const entries = txByTripId.get(tidKey) ?? [];
-    const displaySupplierName = resolveSupplierName(t, entries, supplierById);
+    const displaySupplierName = resolveSupplierName(
+      t,
+      entries,
+      supplierById,
+      supplierNameByIdFallback,
+    );
 
     const clientIdKey = (t.client_id ?? "").trim().toLowerCase();
     const clientRow = clientIdKey ? clientById.get(clientIdKey) : undefined;
