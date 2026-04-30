@@ -110,22 +110,27 @@ export default function NotificationsScreen() {
   const [activeTab, setActiveTab] = useState<"action_required" | "history">(
     "action_required",
   );
+  const [sharedLoadError, setSharedLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const orgId = currentOrganization?.id ?? "";
     if (!orgId) {
       setRequests([]);
+      setSharedNotifications([]);
+      setSharedLoadError(null);
       setLoading(false);
       return;
     }
     setLoading(true);
-    const [{ requests: rows }, { notifications: sharedRows }] =
+    const [{ requests: rows }, sharedRes] =
       await Promise.all([
         getSalaryRequestsByOrganization(orgId),
         getSharedLedgerNotifications(orgId, "all"),
       ]);
+    const sharedRows = sharedRes.notifications ?? [];
     setRequests(rows);
     setSharedNotifications(sharedRows);
+    setSharedLoadError(sharedRes.error ? sharedRes.error.message : null);
     const userIds = Array.from(
       new Set(
         rows
@@ -282,6 +287,18 @@ export default function NotificationsScreen() {
             </View>
 
             <View style={styles.listWrap}>
+              {sharedLoadError ? (
+                <View style={styles.warningCard}>
+                  <FontAwesome
+                    name="exclamation-circle"
+                    size={13}
+                    color={Theme.warning}
+                  />
+                  <Text style={styles.warningText}>
+                    Shared ledger updates are temporarily unavailable.
+                  </Text>
+                </View>
+              ) : null}
               {!hasRows ? (
                 <View style={styles.emptyCard}>
                   <FontAwesome
@@ -852,6 +869,24 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.primary,
   },
   listWrap: { padding: 12, gap: 8 },
+  warningCard: {
+    borderWidth: 1,
+    borderColor: Theme.warning,
+    backgroundColor: Theme.surface,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  warningText: {
+    color: Theme.textSecondary,
+    fontSize: 11,
+    fontWeight: "600",
+    flex: 1,
+    minWidth: 0,
+  },
   sectionLabel: {
     color: Theme.textSecondary,
     fontSize: 12,
