@@ -1472,40 +1472,6 @@ export default function TripsScreen() {
                         />
                       </TouchableOpacity>
                     </View>
-                    <View style={styles.tripsToolbarActions}>
-                      <TouchableOpacity
-                        style={[styles.tripsFilterIconBtn]}
-                        onPress={(e) => {
-                          const target = e.currentTarget;
-                          if (
-                            target &&
-                            typeof target.measureInWindow === "function"
-                          ) {
-                            target.measureInWindow(
-                              (
-                                _x: number,
-                                y: number,
-                                _w: number,
-                                h: number,
-                              ) => {
-                                setSortAnchorY(y + h + 6);
-                                setShowSortModal(true);
-                              },
-                            );
-                          } else {
-                            setSortAnchorY(100);
-                            setShowSortModal(true);
-                          }
-                        }}
-                        activeOpacity={0.7}
-                      >
-                        <FontAwesome
-                          name="sort"
-                          size={12}
-                          color={Theme.textPrimaryDark}
-                        />
-                      </TouchableOpacity>
-                    </View>
                     {(
                       [
                         { id: "all" as const, label: tr("all") },
@@ -1620,43 +1586,6 @@ export default function TripsScreen() {
                         isCompactWeb && styles.tripsToolbarWebCompact,
                       ]}
                     >
-                      <View style={styles.tripsToolbarActions}>
-                        <TouchableOpacity
-                          style={[
-                            styles.tripsFilterIconBtn,
-                            styles.tripsSupplyChipWeb,
-                          ]}
-                          onPress={(e) => {
-                            const target = e.currentTarget;
-                            if (
-                              target &&
-                              typeof target.measureInWindow === "function"
-                            ) {
-                              target.measureInWindow(
-                                (
-                                  _x: number,
-                                  y: number,
-                                  _w: number,
-                                  h: number,
-                                ) => {
-                                  setSortAnchorY(y + h + 6);
-                                  setShowSortModal(true);
-                                },
-                              );
-                            } else {
-                              setSortAnchorY(100);
-                              setShowSortModal(true);
-                            }
-                          }}
-                          activeOpacity={0.7}
-                        >
-                          <FontAwesome
-                            name="sort"
-                            size={12}
-                            color={Theme.textPrimaryDark}
-                          />
-                        </TouchableOpacity>
-                      </View>
                       <View
                         style={[
                           styles.tripsMainTabsRowWeb,
@@ -2073,6 +2002,38 @@ export default function TripsScreen() {
                     </TouchableOpacity>
                   </View>
                 ) : null}
+              <TouchableOpacity
+                style={[
+                  styles.tripsBodyDateRangeIconBtn,
+                  styles.tripsSupplyChipWeb,
+                ]}
+                onPress={(e) => {
+                  const target = e.currentTarget;
+                  if (
+                    target &&
+                    typeof target.measureInWindow === "function"
+                  ) {
+                    target.measureInWindow(
+                      (_x: number, y: number, _w: number, h: number) => {
+                        setSortAnchorY(y + h + 6);
+                        setShowSortModal(true);
+                      },
+                    );
+                  } else {
+                    setSortAnchorY(100);
+                    setShowSortModal(true);
+                  }
+                }}
+                activeOpacity={0.8}
+                accessibilityLabel="Sort filters"
+                accessibilityRole="button"
+              >
+                <FontAwesome
+                  name="sort"
+                  size={12}
+                  color={Theme.textPrimaryDark}
+                />
+              </TouchableOpacity>
               <TouchableOpacity
                 style={[
                   styles.tripsBodyDateRangeIconBtn,
@@ -3040,8 +3001,10 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   tripsMainTabsRowWebCompact: {
-    width: "100%",
-    justifyContent: "flex-start",
+    width: "auto" as const,
+    minWidth: 0,
+    flex: 1,
+    justifyContent: "flex-end",
   },
   tripsTopHeaderSpacer: {
     flex: 1,
@@ -3187,9 +3150,8 @@ const styles = StyleSheet.create({
   },
   tripsToolbarWebCompact: {
     width: "100%",
-    justifyContent: "flex-start",
-    rowGap: 8,
-    flexWrap: "wrap",
+    justifyContent: "space-between",
+    flexWrap: "nowrap",
     alignItems: "center",
   },
   tripsSearchWrapWebFluid: {
