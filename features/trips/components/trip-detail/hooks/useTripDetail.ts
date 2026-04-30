@@ -315,9 +315,16 @@ export function useTripDetail({
     return latest.changed_by === currentUserId ? "private" : "shared";
   }, [assignmentAuditRows, currentUserId]);
 
+  const latestAssignmentRow = useMemo(() => {
+    if (!assignmentAuditRows.length) return null;
+    return [...assignmentAuditRows].sort(
+      (a, b) => new Date(b.changed_at).getTime() - new Date(a.changed_at).getTime(),
+    )[0] ?? null;
+  }, [assignmentAuditRows]);
+
   const effectiveDriverIdForLocation = useMemo(
-    () => trip?.driver_id ?? assignmentAuditRows[0]?.driver_id_new ?? null,
-    [trip?.driver_id, assignmentAuditRows],
+    () => trip?.driver_id ?? latestAssignmentRow?.driver_id_new ?? null,
+    [trip?.driver_id, latestAssignmentRow],
   );
 
   const isDriverOffline = useMemo(() => {
@@ -453,23 +460,43 @@ export function useTripDetail({
       });
     }
 
-    if (trip.started_at) {
+    const statusLower = String(trip.status ?? "").toLowerCase();
+    const inTransitLikeStatus =
+      statusLower === "in_progress" ||
+      statusLower === "in_transit" ||
+      statusLower === "pickup" ||
+      statusLower === "picked_up" ||
+      statusLower === "at_drop";
+
+    if (trip.started_at || inTransitLikeStatus) {
       rows.push({
         kind: "status",
         id: "status-in-transit",
         status_label: "In transit",
-        changed_at: trip.started_at,
+        changed_at:
+          trip.started_at ??
+          trip.status_updated_at ??
+          trip.updated_at ??
+          new Date().toISOString(),
         status_context: "in_transit",
         detail_line: trip.pickup_area || "Origin",
       });
     }
 
-    if (trip.completed_at) {
+    const completedLikeStatus =
+      statusLower.includes("complet") ||
+      statusLower.includes("deliver") ||
+      statusLower === "done";
+    if (trip.completed_at || completedLikeStatus) {
       rows.push({
         kind: "status",
         id: "status-completed",
         status_label: "Delivered",
-        changed_at: trip.completed_at,
+        changed_at:
+          trip.completed_at ??
+          trip.status_updated_at ??
+          trip.updated_at ??
+          new Date().toISOString(),
         status_context: "completed",
         detail_line: trip.drop_location || "Destination",
       });
@@ -693,7 +720,12 @@ export function useTripDetail({
   const loadAssignmentAudit = useCallback(() => {
     if (!tripId) return;
     getTripAssignmentAuditHistory(tripId).then(({ error, rows }) => {
-      if (!error) setAssignmentAuditRows(rows ?? []);
+      if (!error) {
+        const sorted = [...(rows ?? [])].sort(
+          (a, b) => new Date(b.changed_at).getTime() - new Date(a.changed_at).getTime(),
+        );
+        setAssignmentAuditRows(sorted);
+      }
       else setAssignmentAuditRows([]);
     });
   }, [tripId]);
@@ -1697,6 +1729,12 @@ export function useTripDetail({
     }
     void fetchDriverLocationFromDb();
   }, [trip?.id, effectiveDriverIdForLocation, fetchDriverLocationFromDb]);
+
+  // Re-fetch location on realtime trip updates/status transitions so map follows driver movement quickly.
+  useEffect(() => {
+    if (!trip?.id || !effectiveDriverIdForLocation) return;
+    void fetchDriverLocationFromDb();
+  }, [trip?.updated_at, trip?.status_revision, trip?.status, effectiveDriverIdForLocation, fetchDriverLocationFromDb, trip?.id]);
 
   useEffect(() => {
     if (!trip?.id || !effectiveDriverIdForLocation) return;

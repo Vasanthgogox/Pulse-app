@@ -674,12 +674,7 @@ export default function TripDetailScreen({
       return '—';
     }
   };
-  const driverActivityRows = detail.driverActivityTimelineRows ?? [];
-  const timelineRows = [...driverActivityRows].sort((a, b) => {
-    const aDate = new Date(a.kind === 'status' ? a.changed_at : a.row.changed_at).getTime();
-    const bDate = new Date(b.kind === 'status' ? b.changed_at : b.row.changed_at).getTime();
-    return aDate - bDate;
-  });
+  const timelineRows = detail.driverActivityTimelineRows ?? [];
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
