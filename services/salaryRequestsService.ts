@@ -89,7 +89,10 @@ export async function getSalaryRequestsByDriverIds(
 
 /** Row returned for org: request + driver name from join. */
 export interface SalaryRequestWithDriverRow extends SalaryRequestRow {
-  drivers?: { name: string | null } | null;
+  drivers?: {
+    name: string | null;
+    user_id?: string | null;
+  } | null;
 }
 
 /**
@@ -101,7 +104,7 @@ export async function getSalaryRequestsByOrganization(
 ): Promise<{ error: Error | null; requests: SalaryRequestWithDriverRow[] }> {
   let q = supabase()
     .from('driver_salary_requests')
-    .select('*, drivers(name)')
+    .select('*, drivers(name, user_id)')
     .eq('organization_id', organizationId)
     .order('created_at', { ascending: false });
   if (status) q = q.eq('status', status);

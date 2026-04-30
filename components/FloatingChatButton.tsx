@@ -8,8 +8,6 @@ import { useIntegratedChat } from "@/features/chat/contexts/IntegratedChatContex
 import { useTripChat } from "@/features/chat/contexts/TripChatContext";
 
 const FAB_SIZE = 46;
-const OPS_FAB_SIZE = 52;
-const GAP = 10;
 
 function useShouldShow(): boolean {
   const pathname = usePathname();
@@ -38,9 +36,7 @@ export function FloatingChatButton() {
   const bottom =
     Layout.demoTabBarScrollBottomInset +
     insets.bottom +
-    Layout.tabBarBottomPaddingMin +
-    OPS_FAB_SIZE +
-    GAP;
+    Layout.tabBarBottomPaddingMin;
 
   return (
     <View style={[styles.wrap, { bottom }]} pointerEvents="box-none">

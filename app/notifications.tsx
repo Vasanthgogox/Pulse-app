@@ -1,7 +1,9 @@
-import { TeslaHeader } from "@/components/TeslaHeader";
+import { getAvatarUriForSeed } from "@/constants/DriverLevels";
 import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { resolveAvatarPublicUrl } from "@/lib/avatarUpload";
+import { supabase } from "@/lib/supabase";
 import {
     getSalaryRequestsByOrganization,
     updateSalaryRequestStatus,
@@ -13,6 +15,7 @@ import { useCallback, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
+  Image,
     ScrollView,
     StyleSheet,
     Text,
@@ -35,6 +38,12 @@ export default function NotificationsScreen() {
   const [loading, setLoading] = useState(true);
   const [requests, setRequests] = useState<SalaryRequestWithDriverRow[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [profileAvatarByUserId, setProfileAvatarByUserId] = useState<
+    Record<string, { avatar_url: string | null; avatar_seed: string | null }>
+  >({});
+  const [activeTab, setActiveTab] = useState<"action_required" | "history">(
+    "action_required",
+  );
 
   const load = useCallback(async () => {
     const orgId = currentOrganization?.id ?? "";
@@ -44,11 +53,36 @@ export default function NotificationsScreen() {
       return;
     }
     setLoading(true);
-    const { requests: rows } = await getSalaryRequestsByOrganization(
-      orgId,
-      "pending",
-    );
+    const { requests: rows } = await getSalaryRequestsByOrganization(orgId);
     setRequests(rows);
+    const userIds = Array.from(
+      new Set(
+        rows
+          .map((row) => String(row.drivers?.user_id ?? "").trim())
+          .filter((id) => id.length > 0),
+      ),
+    );
+    if (userIds.length > 0) {
+      const { data } = await supabase()
+        .from("profiles")
+        .select("id, avatar_url, avatar_seed")
+        .in("id", userIds);
+      const map: Record<string, { avatar_url: string | null; avatar_seed: string | null }> = {};
+      for (const row of
+        (data ?? []) as Array<{
+          id: string;
+          avatar_url: string | null;
+          avatar_seed: string | null;
+        }>) {
+        map[row.id] = {
+          avatar_url: row.avatar_url ?? null,
+          avatar_seed: row.avatar_seed ?? null,
+        };
+      }
+      setProfileAvatarByUserId(map);
+    } else {
+      setProfileAvatarByUserId({});
+    }
     setLoading(false);
   }, [currentOrganization?.id]);
 
@@ -58,32 +92,26 @@ export default function NotificationsScreen() {
     }, [load]),
   );
 
-  const hasRows = requests.length > 0;
+  const actionRequiredRows = useMemo(
+    () => requests.filter((row) => row.status === "pending"),
+    [requests],
+  );
+  const historyRows = useMemo(
+    () => requests.filter((row) => row.status !== "pending"),
+    [requests],
+  );
+  const visibleRows = activeTab === "action_required" ? actionRequiredRows : historyRows;
+  const hasRows = visibleRows.length > 0;
   const subtitle = useMemo(
     () =>
-      hasRows
+      actionRequiredRows.length > 0
         ? "Driver salary requests need your action."
         : "No pending payment requests.",
-    [hasRows],
+    [actionRequiredRows.length],
   );
 
   return (
     <View style={styles.root}>
-      <TeslaHeader
-        title="Notifications"
-        subtitle={subtitle}
-        variant="default"
-        showBack
-        onBack={() => {
-          if (router.canGoBack()) router.back();
-          else router.replace("/(tabs)/finance");
-        }}
-        hideLogoBadge
-        hideNotificationBell
-        titleTextStyle={styles.headerTitle}
-        subtitleTextStyle={styles.headerSubtitle}
-      />
-
       {loading ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color={Theme.primary} />
@@ -92,135 +120,255 @@ export default function NotificationsScreen() {
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={[
-            styles.content,
+            styles.pageWrap,
             { paddingBottom: insets.bottom + 24 },
           ]}
           showsVerticalScrollIndicator={false}
         >
-          {!hasRows ? (
-            <View style={styles.emptyCard}>
-              <FontAwesome name="bell-slash" size={24} color={Theme.textMuted} />
-              <Text style={styles.emptyTitle}>All caught up</Text>
-              <Text style={styles.emptySubtitle}>
-                New driver payment requests will show up here.
-              </Text>
-            </View>
-          ) : (
-            requests.map((req) => {
-              const driverName =
-                req.drivers?.name?.trim() || t("driver");
-              const typeLabel = requestTypeLabel(t, req.request_type ?? "");
-              const created = req.created_at
-                ? new Date(req.created_at).toLocaleDateString("en-IN", {
-                    day: "2-digit",
-                    month: "short",
-                  })
-                : "";
-              const requestBusy = busyId === req.id;
-              const isTripBased =
-                req.request_type === "trip_based" &&
-                Array.isArray(req.trip_ids) &&
-                req.trip_ids.length > 0;
+          <View style={[styles.shell, { paddingTop: insets.top + 8 }]}>
+            <View style={styles.header}>
+              <View style={styles.headerLeft}>
+                <TouchableOpacity
+                  style={styles.backBtn}
+                  onPress={() => {
+                    if (router.canGoBack()) router.back();
+                    else router.replace("/(tabs)/finance");
+                  }}
+                >
+                  <FontAwesome name="arrow-left" size={16} color={Theme.textMuted} />
+                </TouchableOpacity>
+                <View>
+                  <Text style={styles.workspaceText}>QU. WORKSPACE</Text>
+                  <Text style={styles.headerTitle}>Notifications</Text>
+                  <Text style={styles.headerSubtitle}>Driver salary requests need your action.</Text>
+                </View>
+              </View>
 
-              return (
-                <View key={req.id} style={styles.card}>
-                  <View style={styles.row}>
-                    <View style={styles.iconWrap}>
-                      <FontAwesome
-                        name="money"
-                        size={14}
-                        color={Theme.primary}
-                      />
-                    </View>
-                    <View style={styles.body}>
-                      <Text style={styles.title} numberOfLines={1}>
-                        {driverName} requested payment
-                      </Text>
-                      <Text style={styles.meta} numberOfLines={1}>
-                        {typeLabel}
-                        {created ? ` · ${created}` : ""}
-                      </Text>
-                      {req.note?.trim() ? (
-                        <Text style={styles.note} numberOfLines={2}>
-                          {req.note.trim()}
-                        </Text>
-                      ) : null}
-                    </View>
-                    <Text style={styles.amount}>
-                      ₹{Number(req.amount ?? 0).toLocaleString("en-IN")}
-                    </Text>
+              <View style={styles.headerRight}>
+                <View style={styles.escrowCard}>
+                  <View style={styles.escrowIconWrap}>
+                    <FontAwesome name="credit-card" size={13} color={Theme.primary} />
                   </View>
-
-                  <View style={styles.actions}>
-                    <TouchableOpacity
-                      style={[styles.actionBtn, styles.rejectBtn]}
-                      disabled={requestBusy}
-                      onPress={() => {
-                        Alert.alert(
-                          t("rejectRequest"),
-                          t("rejectRequestConfirm")
-                            .replace("{{name}}", driverName)
-                            .replace(
-                              "{{amount}}",
-                              Number(req.amount).toLocaleString("en-IN"),
-                            ),
-                          [
-                            { text: t("cancel"), style: "cancel" },
-                            {
-                              text: t("reject"),
-                              style: "destructive",
-                              onPress: async () => {
-                                setBusyId(req.id);
-                                const { error } = await updateSalaryRequestStatus(
-                                  req.id,
-                                  "rejected",
-                                );
-                                setBusyId(null);
-                                if (error) {
-                                  Alert.alert(t("rejectFailed"), error.message);
-                                  return;
-                                }
-                                setRequests((prev) =>
-                                  prev.filter((row) => row.id !== req.id),
-                                );
-                              },
-                            },
-                          ],
-                        );
-                      }}
-                    >
-                      <Text style={styles.rejectText}>{t("reject")}</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[styles.actionBtn, styles.payBtn]}
-                      disabled={requestBusy}
-                      onPress={() => {
-                        const q = new URLSearchParams({
-                          entityType: "DRIVER",
-                          entityId: req.driver_id,
-                          partyName: driverName,
-                          partyId: req.driver_id,
-                          defaultType: "out",
-                          salaryAmount: String(req.amount),
-                          defaultDriverPaymentType: isTripBased
-                            ? "settlement"
-                            : "advance",
-                          salaryRequestId: req.id,
-                        });
-                        if (isTripBased && req.trip_ids[0]) {
-                          q.set("tripId", req.trip_ids[0]);
-                        }
-                        router.push(`/(modals)/ledger-sync?${q.toString()}` as const);
-                      }}
-                    >
-                      <Text style={styles.payText}>Pay now</Text>
-                    </TouchableOpacity>
+                  <View>
+                    <Text style={styles.escrowLabel}>ESCROW</Text>
+                    <Text style={styles.escrowValue}>₹45.2K</Text>
                   </View>
                 </View>
-              );
-            })
-          )}
+                <Image
+                  source={{ uri: "https://i.pravatar.cc/100?img=64" }}
+                  style={styles.profileAvatar}
+                />
+              </View>
+            </View>
+
+            <View style={styles.tabsRow}>
+              <TouchableOpacity
+                style={styles.tabBtn}
+                onPress={() => setActiveTab("action_required")}
+                activeOpacity={0.8}
+              >
+                <View style={styles.tabTextRow}>
+                  <Text
+                    style={[
+                      styles.tabText,
+                      activeTab === "action_required" && styles.tabTextActive,
+                    ]}
+                  >
+                    Action Required
+                  </Text>
+                  {actionRequiredRows.length > 0 ? (
+                    <View style={styles.tabCountPill}>
+                      <Text style={styles.tabCountText}>{actionRequiredRows.length}</Text>
+                    </View>
+                  ) : null}
+                </View>
+                {activeTab === "action_required" ? <View style={styles.tabUnderline} /> : null}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.tabBtn}
+                onPress={() => setActiveTab("history")}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[
+                    styles.tabText,
+                    activeTab === "history" && styles.tabTextActive,
+                  ]}
+                >
+                  History
+                </Text>
+                {activeTab === "history" ? <View style={styles.tabUnderline} /> : null}
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.listWrap}>
+              {!hasRows ? (
+                <View style={styles.emptyCard}>
+                  <FontAwesome name="bell-slash" size={24} color={Theme.textMuted} />
+                  <Text style={styles.emptyTitle}>All caught up</Text>
+                  <Text style={styles.emptySubtitle}>
+                    {activeTab === "history"
+                      ? "No processed salary requests yet."
+                      : "New driver payment requests will show up here."}
+                  </Text>
+                </View>
+              ) : (
+                visibleRows.map((req) => {
+                  const driverName =
+                    req.drivers?.name?.trim() || t("driver");
+                  const typeLabel = requestTypeLabel(t, req.request_type ?? "");
+                  const created = req.created_at
+                    ? new Date(req.created_at).toLocaleDateString("en-IN", {
+                        day: "2-digit",
+                        month: "short",
+                      })
+                    : "";
+                  const requestBusy = busyId === req.id;
+                  const isTripBased =
+                    req.request_type === "trip_based" &&
+                    Array.isArray(req.trip_ids) &&
+                    req.trip_ids.length > 0;
+                  const isHistoryCard = req.status !== "pending";
+                  const historyStatusLabel =
+                    req.status === "paid"
+                      ? "Paid"
+                      : req.status === "approved"
+                        ? "Approved"
+                        : "Rejected";
+                  const profileUserId = String(req.drivers?.user_id ?? "").trim();
+                  const profileAvatar = profileAvatarByUserId[profileUserId];
+                  const driverAvatarUrl =
+                    resolveAvatarPublicUrl(profileAvatar?.avatar_url) ??
+                    (profileAvatar?.avatar_url?.trim() || null);
+                  const fallbackSeed =
+                    (profileAvatar?.avatar_seed ?? "").trim() || "driver-1";
+                  const driverAvatarUri = driverAvatarUrl || getAvatarUriForSeed(fallbackSeed);
+
+                  return (
+                    <View key={req.id} style={styles.card}>
+                      <View style={styles.row}>
+                        <Image
+                          source={{ uri: driverAvatarUri }}
+                          style={styles.avatar}
+                        />
+                        <View style={styles.body}>
+                          <Text style={styles.title} numberOfLines={1}>
+                            <Text style={styles.driverName}>{driverName}</Text> requested payment
+                          </Text>
+                          <View style={styles.metaRow}>
+                            <View style={styles.metaPill}>
+                              <FontAwesome name="map-marker" size={10} color={Theme.primary} />
+                              <Text style={styles.metaPillText}>{typeLabel}</Text>
+                            </View>
+                            {created ? (
+                              <View style={styles.dateInline}>
+                                <FontAwesome name="clock-o" size={10} color={Theme.textMuted} />
+                                <Text style={styles.metaDate}>{created}</Text>
+                              </View>
+                            ) : null}
+                          </View>
+                        </View>
+                        <View style={styles.amountBlock}>
+                          <Text style={styles.amountLabel}>AMOUNT</Text>
+                          <Text style={styles.amount}>
+                            ₹{Number(req.amount ?? 0).toLocaleString("en-IN")}
+                          </Text>
+                        </View>
+                        {isHistoryCard ? (
+                          <View style={styles.historyFooter}>
+                            <Text
+                              style={[
+                                styles.historyStatus,
+                                req.status === "rejected" ? styles.historyStatusReject : styles.historyStatusPaid,
+                              ]}
+                            >
+                              {historyStatusLabel}
+                            </Text>
+                          </View>
+                        ) : (
+                          <View style={styles.actions}>
+                            <TouchableOpacity
+                              style={[styles.actionBtn, styles.rejectBtn]}
+                              disabled={requestBusy}
+                              onPress={() => {
+                                Alert.alert(
+                                  t("rejectRequest"),
+                                  t("rejectRequestConfirm")
+                                    .replace("{{name}}", driverName)
+                                    .replace(
+                                      "{{amount}}",
+                                      Number(req.amount).toLocaleString("en-IN"),
+                                    ),
+                                  [
+                                    { text: t("cancel"), style: "cancel" },
+                                    {
+                                      text: t("reject"),
+                                      style: "destructive",
+                                      onPress: async () => {
+                                        setBusyId(req.id);
+                                        const { error } = await updateSalaryRequestStatus(
+                                          req.id,
+                                          "rejected",
+                                        );
+                                        setBusyId(null);
+                                        if (error) {
+                                          Alert.alert(t("rejectFailed"), error.message);
+                                          return;
+                                        }
+                                        setRequests((prev) =>
+                                          prev.map((row) =>
+                                            row.id === req.id ? { ...row, status: "rejected" } : row,
+                                          ),
+                                        );
+                                      },
+                                    },
+                                  ],
+                                );
+                              }}
+                            >
+                              <FontAwesome name="close" size={12} color={Theme.textPrimaryDark} />
+                              <Text style={styles.rejectText}>{t("reject")}</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                              style={[styles.actionBtn, styles.payBtn]}
+                              disabled={requestBusy}
+                              onPress={() => {
+                                const q = new URLSearchParams({
+                                  entityType: "DRIVER",
+                                  entityId: req.driver_id,
+                                  partyName: driverName,
+                                  partyId: req.driver_id,
+                                  defaultType: "out",
+                                  salaryAmount: String(req.amount),
+                                  defaultDriverPaymentType: isTripBased
+                                    ? "settlement"
+                                    : "advance",
+                                  salaryRequestId: req.id,
+                                });
+                                if (isTripBased && req.trip_ids[0]) {
+                                  q.set("tripId", req.trip_ids[0]);
+                                }
+                                router.push(`/(modals)/ledger-sync?${q.toString()}` as const);
+                              }}
+                            >
+                              <FontAwesome name="check" size={12} color={Theme.textOnPrimary} />
+                              <Text style={styles.payText}>Pay now</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity style={styles.moreBtn} activeOpacity={0.75}>
+                              <FontAwesome name="ellipsis-v" size={13} color={Theme.textMuted} />
+                            </TouchableOpacity>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  );
+                })
+              )}
+            </View>
+          </View>
         </ScrollView>
       )}
     </View>
@@ -228,12 +376,126 @@ export default function NotificationsScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Theme.screenBackground },
-  headerTitle: { fontSize: 8.5 },
-  headerSubtitle: { fontSize: 8 },
+  root: { flex: 1, backgroundColor: Theme.surface },
   loadingWrap: { flex: 1, alignItems: "center", justifyContent: "center" },
   scroll: { flex: 1 },
-  content: { padding: 16, gap: 12 },
+  pageWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
+  shell: {
+    width: "100%",
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: Theme.border,
+    overflow: "hidden",
+    marginBottom: 12,
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.border,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+  },
+  headerLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
+  backBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  workspaceText: {
+    color: Theme.textSecondary,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.7,
+  },
+  headerTitle: {
+    color: Theme.textPrimaryDark,
+    fontSize: 24,
+    fontWeight: "800",
+    lineHeight: 30,
+  },
+  headerSubtitle: { color: Theme.textSecondary, fontSize: 12, marginTop: 1 },
+  headerRight: { flexDirection: "row", alignItems: "center", gap: 10 },
+  escrowCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.border,
+    backgroundColor: Theme.surface,
+    paddingVertical: 6,
+    paddingHorizontal: 9,
+  },
+  escrowIconWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Theme.border,
+    backgroundColor: Theme.screenBackground,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  escrowLabel: {
+    color: Theme.textSecondary,
+    fontSize: 8,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+  },
+  escrowValue: { color: Theme.textPrimaryDark, fontSize: 14, fontWeight: "800" },
+  profileAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Theme.border,
+  },
+  tabsRow: {
+    flexDirection: "row",
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.border,
+    paddingHorizontal: 16,
+  },
+  tabBtn: {
+    paddingTop: 10,
+    paddingBottom: 8,
+    marginRight: 24,
+  },
+  tabTextRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  tabText: {
+    color: Theme.textMuted,
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  tabTextActive: {
+    color: Theme.primary,
+    fontWeight: "700",
+  },
+  tabCountPill: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: Theme.fiscalTabActiveBg,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 5,
+  },
+  tabCountText: { color: Theme.primary, fontSize: 11, fontWeight: "700" },
+  tabUnderline: {
+    marginTop: 7,
+    height: 2,
+    borderRadius: 2,
+    backgroundColor: Theme.primary,
+  },
+  listWrap: { padding: 12, gap: 8 },
   emptyCard: {
     borderWidth: 1,
     borderColor: Theme.borderLight,
@@ -251,39 +513,93 @@ const styles = StyleSheet.create({
   },
   card: {
     borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 16,
+    borderColor: Theme.border,
+    borderRadius: 14,
     padding: 12,
     backgroundColor: Theme.screenBackground,
-    gap: 10,
   },
-  row: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
-  iconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+  row: { flexDirection: "row", alignItems: "center", gap: 8 },
+  avatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: Theme.border,
+  },
+  body: { flex: 1, minWidth: 0 },
+  title: { color: Theme.textSecondary, fontSize: 14, fontWeight: "500" },
+  driverName: { fontWeight: "800", color: Theme.textPrimaryDark },
+  metaRow: { flexDirection: "row", alignItems: "center", marginTop: 3, gap: 8 },
+  metaPill: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    gap: 4,
     backgroundColor: Theme.surfaceLight,
     borderWidth: 1,
     borderColor: Theme.borderLight,
+    borderRadius: 999,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
   },
-  body: { flex: 1, minWidth: 0 },
-  title: { color: Theme.textPrimaryDark, fontSize: 14, fontWeight: "700" },
-  meta: { color: Theme.textMuted, fontSize: 11, marginTop: 2 },
-  note: { color: Theme.textSecondary, fontSize: 12, marginTop: 4 },
-  amount: { color: Theme.textPrimaryDark, fontSize: 13, fontWeight: "800" },
-  actions: { flexDirection: "row", gap: 8 },
+  metaPillText: { color: Theme.textSecondary, fontSize: 10, fontWeight: "600" },
+  dateInline: { flexDirection: "row", alignItems: "center", gap: 4 },
+  metaDate: { color: Theme.textMuted, fontSize: 11, fontWeight: "500" },
+  amountBlock: { alignItems: "flex-start", minWidth: 98 },
+  amountLabel: {
+    color: Theme.textSecondary,
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+  },
+  amount: { color: Theme.textPrimaryDark, fontSize: 33, fontWeight: "800", lineHeight: 38 },
+  actions: { flexDirection: "row", gap: 8, alignItems: "center" },
   actionBtn: {
-    flex: 1,
-    minHeight: 40,
+    flex: 0,
+    minHeight: 38,
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
+    paddingHorizontal: 13,
+    flexDirection: "row",
+    gap: 6,
   },
-  rejectBtn: { backgroundColor: Theme.screenBackground, borderColor: Theme.border },
-  payBtn: { backgroundColor: Theme.textPrimaryDark, borderColor: Theme.textPrimaryDark },
+  rejectBtn: { backgroundColor: Theme.screenBackground, borderColor: Theme.border, minWidth: 84 },
+  payBtn: {
+    backgroundColor: Theme.textPrimaryDark,
+    borderColor: Theme.textPrimaryDark,
+    minWidth: 108,
+  },
   rejectText: { color: Theme.textPrimaryDark, fontSize: 12, fontWeight: "700" },
   payText: { color: Theme.textOnPrimary, fontSize: 12, fontWeight: "800" },
+  moreBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.border,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.screenBackground,
+  },
+  historyFooter: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+  },
+  historyStatus: {
+    fontSize: 12,
+    fontWeight: "700",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    overflow: "hidden",
+  },
+  historyStatusPaid: {
+    color: Theme.positive,
+    backgroundColor: Theme.positiveMuted,
+  },
+  historyStatusReject: {
+    color: Theme.negative,
+    backgroundColor: Theme.negativeMuted,
+  },
 });

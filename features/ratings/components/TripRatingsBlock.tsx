@@ -5,6 +5,7 @@
  * - Indent-based: Client→Supplier, Client→Driver, Supplier→Driver
  */
 import Theme from '@/constants/Theme';
+import { isAggregateTrip } from '@/lib/driverUtils';
 import {
   getClientById,
   getClientDetails,
@@ -858,7 +859,10 @@ export function TripRatingsBlock({
   const displayDriverAvg = histDriverAvg;
   const displayClientAvg = histClientAvg;
   const clientDisplayName = (clientName || trip.client_name || 'Client').trim();
-  const supplierDisplayName = (partnerName || 'Supplier').trim();
+  const hasSupplierParty = !!trip.supplier_id && isAggregateTrip(trip);
+  const supplierDisplayName = hasSupplierParty
+    ? (partnerName || 'Supplier').trim()
+    : 'No supplier';
   const driverDisplayName = (
     driverName ||
     trip.driver_display_name ||
@@ -1241,7 +1245,7 @@ export function TripRatingsBlock({
                     () => {
                       if (canOpenSupplierRate) openRateSupplier();
                     },
-                    !canOpenSupplierRate,
+                    !canOpenSupplierRate || !hasSupplierParty,
                     canOpenSupplierRate ? openRateSupplierAtScore : undefined,
                   )}
                 </View>
