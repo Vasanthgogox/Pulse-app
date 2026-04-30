@@ -974,6 +974,7 @@ export function useTripDetail({
   const fetchDriverLocationFromDb = useCallback(async () => {
     if (!trip?.id) return;
     const driverId = effectiveDriverIdForLocation;
+    setDriverLocationLoading(true);
     try {
       const [latestRes, historyByTrip] = await Promise.all([
         driverLocationService.getLatestDriverLocationForTripOrDriver(trip.id, driverId),
@@ -995,6 +996,8 @@ export function useTripDetail({
       );
     } catch {
       // silently ignore
+    } finally {
+      setDriverLocationLoading(false);
     }
   }, [trip?.id, effectiveDriverIdForLocation]);
 
@@ -1683,6 +1686,42 @@ export function useTripDetail({
       setTripOtp(null);
     }
   }, [trip?.id, trip?.supplier_id, loadTripOtp]);
+
+  // Driver location load/polling (shared across web + native detail screens).
+  useEffect(() => {
+    if (!trip?.id) {
+      setDriverLocation(null);
+      setTripLocationPoints([]);
+      setDriverLocationLoading(false);
+      return;
+    }
+    void fetchDriverLocationFromDb();
+  }, [trip?.id, effectiveDriverIdForLocation, fetchDriverLocationFromDb]);
+
+  useEffect(() => {
+    if (!trip?.id || !effectiveDriverIdForLocation) return;
+    if (isTripCompleted(trip)) return;
+    const status = String(trip.status ?? "").toLowerCase();
+    const isTrackable =
+      status === "assigned" ||
+      status === "in_progress" ||
+      status === "in_transit" ||
+      status === "pickup" ||
+      status === "picked_up" ||
+      status === "at_drop";
+    if (!isTrackable) return;
+    const timer = setInterval(() => {
+      void fetchDriverLocationFromDb();
+    }, 15000);
+    return () => clearInterval(timer);
+  }, [
+    trip?.id,
+    trip?.status,
+    trip?.completed_at,
+    effectiveDriverIdForLocation,
+    fetchDriverLocationFromDb,
+    trip,
+  ]);
 
   // Counterparty entries
   useEffect(() => {
