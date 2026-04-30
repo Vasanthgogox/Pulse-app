@@ -73,6 +73,15 @@ function DemoCustomTabBar(props: BottomTabBarProps) {
       zIndex: 100,
       width: '100%' as const,
     },
+    // Mobile web: dock overlays the scene so when it auto-hides (translate) no grey strip
+    // remains in document flow; main scroll area fills to the viewport bottom.
+    !isDesktopWeb && Platform.OS === 'web' && {
+      position: 'absolute' as const,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 100,
+    },
     !isDesktopWeb && {
       paddingBottom: insets.bottom > 0 ? 0 : 4,
     },

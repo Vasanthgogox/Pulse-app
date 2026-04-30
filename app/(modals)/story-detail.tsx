@@ -18,6 +18,9 @@ import { useNetworkFeedQuery, useAfterPostDeleted, useInvalidatePosts, useMyBidQ
 import { confirmDialog } from "@/lib/confirmDialog";
 import { ROUTES } from "@/lib/routes";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
+import * as Linking from "expo-linking";
+import * as Sharing from "expo-sharing";
 import {
   ArrowRight,
   CheckCircle2,
@@ -30,8 +33,8 @@ import {
   Send,
   Sparkles,
   Trash2,
-  Truck,
   X,
+  Truck,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -47,6 +50,25 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+function buildPulseStoryPublicUrl(
+  postId: string,
+  orgId: string,
+  storyType: 'LOAD' | 'VEHICLE_AVAILABILITY' | 'UPDATE',
+): string {
+  const webBase = process.env.EXPO_PUBLIC_WEB_BASE_URL?.trim().replace(/\/$/, '') || '';
+  const params = new URLSearchParams({
+    postId,
+    orgId,
+    storyType,
+    queue: postId,
+  });
+  const qs = params.toString();
+  if (webBase !== '') {
+    return `${webBase}/story-detail?${qs}`;
+  }
+  return Linking.createURL(`/story-detail?${qs}`);
+}
 
 const STORY_DURATION = 15000;
 const INK = Theme.textPrimaryDark;
@@ -343,6 +365,32 @@ export default function StoryDetailScreen() {
     router.back();
   }, [post, isOwnPost, isDeletingCurrent, myOrgId, afterPostDeleted, router]);
 
+  const handleShareWhatsApp = useCallback(async () => {
+    if (!post || !myOrgId) return;
+    const storyUrl = buildPulseStoryPublicUrl(post.id, myOrgId, post.type);
+    const routeLabel =
+      isLoad && post.origin && post.destination
+        ? `${(post.origin || "—").toUpperCase()} → ${(post.destination || "—").toUpperCase()}`
+        : post.content?.trim() || "Network Story";
+
+    const message = `Load broadcast · ${routeLabel}\n\nView & bid:\n${storyUrl}`;
+    try {
+      const waUrl = `whatsapp://send?text=${encodeURIComponent(message)}`;
+      const canOpen = await Linking.canOpenURL(waUrl);
+      if (canOpen) {
+        await Linking.openURL(waUrl);
+      } else if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(storyUrl, { dialogTitle: message });
+      } else {
+        // Fallback for when Sharing is not available
+        await Sharing.shareAsync(storyUrl, { dialogTitle: message });
+      }
+    } catch {
+      await Sharing.shareAsync(storyUrl, { dialogTitle: message });
+    }
+  }, [post, myOrgId, isLoad]);
+
+
   if (!post) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -485,6 +533,15 @@ export default function StoryDetailScreen() {
             <Pressable style={[styles.authorizeBtn, { backgroundColor: INK }]} onPress={() => router.push(ROUTES.PULSE_LOADS)}>
               <Text style={styles.authorizeBtnText}>Open load center</Text>
             </Pressable>
+            <Pressable
+              style={styles.shareWaBtn}
+              onPress={handleShareWhatsApp}
+              accessibilityRole="button"
+              accessibilityLabel="Share story bidding link on WhatsApp"
+            >
+              <FontAwesome name="whatsapp" size={20} color={Theme.textOnPrimary} />
+              <Text style={styles.shareWaBtnText}>Share on WhatsApp</Text>
+            </Pressable>
           </>
         )}
 
@@ -499,6 +556,15 @@ export default function StoryDetailScreen() {
             <Text style={styles.ownerHint}>Your vehicle availability is visible to your network.</Text>
             <Pressable style={[styles.authorizeBtn, { backgroundColor: INK }]} onPress={() => router.back()}>
               <Text style={styles.authorizeBtnText}>Done</Text>
+            </Pressable>
+            <Pressable
+              style={styles.shareWaBtn}
+              onPress={handleShareWhatsApp}
+              accessibilityRole="button"
+              accessibilityLabel="Share story bidding link on WhatsApp"
+            >
+              <FontAwesome name="whatsapp" size={20} color={Theme.textOnPrimary} />
+              <Text style={styles.shareWaBtnText}>Share on WhatsApp</Text>
             </Pressable>
           </>
         )}
@@ -651,6 +717,18 @@ const styles = StyleSheet.create({
   authorizeBtnText: { fontSize: 12, fontWeight: "900", color: "#fff", letterSpacing: 1.2, textTransform: "uppercase" },
   messageGhost: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 12 },
   messageGhostText: { fontSize: 12, fontWeight: "800", color: INK, letterSpacing: 0.6 },
+  shareWaBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    borderRadius: 22,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    marginBottom: 8,
+    backgroundColor: "#25D366",
+  },
+  shareWaBtnText: { fontSize: 12, fontWeight: "900", color: "#fff", letterSpacing: 1.2, textTransform: "uppercase" },
   // Bid status
   bidStatusBanner: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#10b98110", borderRadius: 14, borderWidth: 1, borderColor: "#10b98130", paddingHorizontal: 14, paddingVertical: 12, marginBottom: 10 },
   bidStatusText: { flex: 1, minWidth: 0 },

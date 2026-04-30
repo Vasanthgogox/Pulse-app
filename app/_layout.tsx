@@ -327,6 +327,13 @@ function RootOverlayTabBar() {
       zIndex: 100,
       width: '100%' as const,
     },
+    !isDesktopWeb && Platform.OS === 'web' && {
+      position: 'absolute' as const,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 100,
+    },
   ];
 
   if (isDesktopWeb) {

@@ -1,12 +1,14 @@
 /**
  * ShareLoadSheet — dark bottom sheet to broadcast an indent to the Q Pulse network.
- * Two options: "Post to Feed" (permanent LOAD post) or "Story Broadcast" (24h expiry).
- * Maps IndentRow fields → CreatePostInput and calls createPost().
+ * Story broadcast (24h) + optional WhatsApp share with public story-detail URL (bidding page).
  */
 import Theme from '@/constants/Theme';
 import { type IndentRow } from '@/features/indents';
 import { createPost } from '@/features/network/services/posts.service';
 import { formatINR } from '@/lib/format';
+import FontAwesome from '@expo/vector-icons/FontAwesome';
+import * as Linking from 'expo-linking';
+import * as Sharing from 'expo-sharing';
 import {
   ArrowRight,
   CheckCircle2,
@@ -15,7 +17,7 @@ import {
   X,
   Zap,
 } from 'lucide-react-native';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -32,6 +34,25 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+function buildPulseStoryPublicUrl(
+  postId: string,
+  orgId: string,
+  storyType: 'LOAD',
+): string {
+  const webBase = process.env.EXPO_PUBLIC_WEB_BASE_URL?.trim().replace(/\/$/, '') || '';
+  const params = new URLSearchParams({
+    postId,
+    orgId,
+    storyType,
+    queue: postId,
+  });
+  const qs = params.toString();
+  if (webBase !== '') {
+    return `${webBase}/story-detail?${qs}`;
+  }
+  return Linking.createURL(`/story-detail?${qs}`);
+}
 
 interface ShareLoadSheetProps {
   visible: boolean;
@@ -95,7 +116,17 @@ function LoadPreviewCard({ indent }: { indent: IndentRow }) {
   );
 }
 
-function SuccessView() {
+function SuccessView({
+  indent,
+  orgId,
+  postId,
+  onShareWhatsApp,
+}: {
+  indent: IndentRow;
+  orgId: string;
+  postId: string;
+  onShareWhatsApp: () => void;
+}) {
   const scale = useRef(new Animated.Value(0.7)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
@@ -107,6 +138,9 @@ function SuccessView() {
   }, []);
 
   const color = '#f59e0b';
+  const storyUrl = buildPulseStoryPublicUrl(postId, orgId, 'LOAD');
+  const hasWebBase =
+    (process.env.EXPO_PUBLIC_WEB_BASE_URL?.trim().replace(/\/$/, '') || '') !== '';
 
   return (
     <Animated.View style={[styles.successView, { opacity, transform: [{ scale }] }]}>
@@ -116,6 +150,29 @@ function SuccessView() {
       <Text style={[styles.successTitle, { color }]}>Story live</Text>
       <Text style={styles.successSub}>
         Your load is in the story reel and expires in 24 hours. Partners can bid and message.
+      </Text>
+      {!hasWebBase ? (
+        <Text style={styles.successHintMuted}>
+          Set EXPO_PUBLIC_WEB_BASE_URL for a public https link (e.g. Netlify) when sharing outside the app.
+        </Text>
+      ) : null}
+      <Pressable
+        style={({ pressed }) => [styles.waBtn, pressed && { opacity: 0.9 }]}
+        onPress={onShareWhatsApp}
+        accessibilityRole="button"
+        accessibilityLabel="Share story bidding link on WhatsApp"
+      >
+        <FontAwesome name="whatsapp" size={20} color="#fff" />
+        <Text style={styles.waBtnText}>Share link on WhatsApp</Text>
+      </Pressable>
+      <Text style={styles.waHint}>
+        Opens WhatsApp with your bidding page link — paste to Status or send to a chat.
+      </Text>
+      <Text style={styles.linkPreview} numberOfLines={2} selectable>
+        {storyUrl}
+      </Text>
+      <Text style={styles.routeMini} numberOfLines={1}>
+        {(indent.pickup_area || '—').toUpperCase()} → {(indent.drop_location || '—').toUpperCase()}
       </Text>
     </Animated.View>
   );
@@ -133,6 +190,7 @@ export function ShareLoadSheet({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [successPostId, setSuccessPostId] = useState<string | null>(null);
   const translateY = useRef(new Animated.Value(500)).current;
 
   useEffect(() => {
@@ -140,6 +198,7 @@ export function ShareLoadSheet({
       setNote('');
       setError(null);
       setSuccess(false);
+      setSuccessPostId(null);
       setLoading(false);
       Animated.spring(translateY, {
         toValue: 0,
@@ -157,6 +216,26 @@ export function ShareLoadSheet({
     }
   }, [visible]);
 
+  const shareStoryLinkOnWhatsApp = useCallback(async () => {
+    if (!indent || !successPostId) return;
+    const storyUrl = buildPulseStoryPublicUrl(successPostId, orgId, 'LOAD');
+    const routeLabel = `${(indent.pickup_area || '—').toUpperCase()} → ${(indent.drop_location || '—').toUpperCase()}`;
+    const message = `Load broadcast · ${routeLabel}\n\nView & bid:\n${storyUrl}`;
+    try {
+      const waUrl = `whatsapp://send?text=${encodeURIComponent(message)}`;
+      const canOpen = await Linking.canOpenURL(waUrl);
+      if (canOpen) {
+        await Linking.openURL(waUrl);
+      } else if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(storyUrl, { dialogTitle: message });
+      } else {
+        await Sharing.shareAsync(storyUrl, { dialogTitle: message });
+      }
+    } catch {
+      await Sharing.shareAsync(storyUrl, { dialogTitle: message });
+    }
+  }, [indent, successPostId, orgId]);
+
   const handleBroadcast = async () => {
     if (!indent || loading) return;
     setLoading(true);
@@ -165,7 +244,7 @@ export function ShareLoadSheet({
     const weight = indent.weight != null ? indent.weight / 1000 : undefined;
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
-    const { error: err } = await createPost({
+    const { error: err, postId: newPostId } = await createPost({
       organizationId: orgId,
       type: 'LOAD',
       content: note.trim() || undefined,
@@ -185,12 +264,14 @@ export function ShareLoadSheet({
       setError(err.message);
       return;
     }
+    if (!newPostId) {
+      setError('Story posted but could not build share link. Try again.');
+      return;
+    }
 
+    setSuccessPostId(newPostId);
     setSuccess(true);
     onSuccess?.('story');
-    setTimeout(() => {
-      onClose();
-    }, 1800);
   };
 
   if (!indent) return null;
@@ -236,9 +317,14 @@ export function ShareLoadSheet({
                 </Pressable>
               </View>
 
-              {success ? (
-                <SuccessView />
-              ) : (
+              {success && indent && successPostId ? (
+                <SuccessView
+                  indent={indent}
+                  orgId={orgId}
+                  postId={successPostId}
+                  onShareWhatsApp={shareStoryLinkOnWhatsApp}
+                />
+              ) : !success ? (
                 <>
                   <LoadPreviewCard indent={indent} />
                   <Text style={styles.storyOnlyHint}>
@@ -289,7 +375,7 @@ export function ShareLoadSheet({
                     )}
                   </Pressable>
                 </>
-              )}
+              ) : null}
             </Animated.View>
           </KeyboardAvoidingView>
         </View>
@@ -494,5 +580,48 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
     paddingHorizontal: 20,
+  },
+  successHintMuted: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.35)',
+    textAlign: 'center',
+    lineHeight: 16,
+    paddingHorizontal: 16,
+    marginTop: -4,
+  },
+  waBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: '#25D366',
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    marginTop: 8,
+    width: '100%',
+  },
+  waBtnText: { fontSize: 15, fontWeight: '800', color: '#fff', letterSpacing: -0.2 },
+  waHint: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.38)',
+    textAlign: 'center',
+    lineHeight: 16,
+    paddingHorizontal: 12,
+    marginTop: 4,
+  },
+  linkPreview: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.28)',
+    textAlign: 'center',
+    marginTop: 8,
+    paddingHorizontal: 8,
+  },
+  routeMini: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.45)',
+    marginTop: 4,
   },
 });
