@@ -166,15 +166,6 @@ export async function getOrCreateConversation(params: {
 }): Promise<TripConversationRow> {
   const { tripId, partyType, partyName, organizationId, partyId } = params;
 
-  const { data: existing } = await supabase()
-    .from("trip_conversations")
-    .select("*")
-    .eq("trip_id", tripId)
-    .eq("party_type", partyType)
-    .maybeSingle();
-
-  if (existing) return existing;
-
   const partyCol =
     partyType === "client"
       ? "client_id"
@@ -182,20 +173,22 @@ export async function getOrCreateConversation(params: {
       ? "supplier_id"
       : "driver_id";
 
+  const payload = {
+    organization_id: organizationId,
+    trip_id: tripId,
+    party_type: partyType,
+    party_name: partyName,
+    [partyCol]: partyId,
+  };
+
   const { data, error } = await supabase()
     .from("trip_conversations")
-    .insert({
-      organization_id: organizationId,
-      trip_id: tripId,
-      party_type: partyType,
-      party_name: partyName,
-      [partyCol]: partyId,
-    })
-    .select()
+    .upsert(payload, { onConflict: "trip_id,party_type" })
+    .select("*")
     .single();
 
   if (error) throw error;
-  return data;
+  return data as TripConversationRow;
 }
 
 export async function sendChatMessage(params: {

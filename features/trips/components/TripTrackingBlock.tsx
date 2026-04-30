@@ -30,14 +30,18 @@ interface LogEntry {
 }
 
 /**
- * Builds mission log entries to align with driver app 4 steps (Accepted → Pickup → Transit → Complete).
- * Driver "Confirm arrival" sets status=in_progress (no started_at); "Start delivery" sets started_at.
- * So: PICKUP appears when status is in_progress (use updated_at if no started_at, else started_at).
+ * Mission log: Assigned → Pickup (in_progress) → In transit (in_transit) → Delivered.
+ * Transit step sets status=in_transit and keeps first started_at from pickup.
  */
 function buildMissionLog(trip: TripRow): LogEntry[] {
   const entries: LogEntry[] = [];
   const statusLower = (trip.status ?? '').toLowerCase();
-  const inProgress = statusLower === 'in_progress';
+  const atPickup =
+    statusLower === 'in_progress' || statusLower === 'picked_up' || statusLower === 'pickup';
+  const linehaul =
+    statusLower === 'in_transit' ||
+    statusLower === 'transit' ||
+    statusLower === 'at_drop';
 
   if (trip.created_at) {
     entries.push({
@@ -47,7 +51,7 @@ function buildMissionLog(trip: TripRow): LogEntry[] {
       sortKey: trip.created_at,
     });
   }
-  if (inProgress) {
+  if (atPickup || linehaul) {
     const pickupTime = trip.started_at ?? trip.updated_at ?? trip.created_at ?? '';
     if (pickupTime) {
       entries.push({
@@ -57,14 +61,15 @@ function buildMissionLog(trip: TripRow): LogEntry[] {
         sortKey: pickupTime,
       });
     }
-    if (trip.started_at) {
-      entries.push({
-        time: formatTime(trip.started_at),
-        status: 'IN-TRANSIT',
-        loc: trip.pickup_area || '—',
-        sortKey: trip.started_at,
-      });
-    }
+  }
+  if (linehaul && trip.started_at) {
+    const transitTime = trip.updated_at ?? trip.started_at;
+    entries.push({
+      time: formatTime(transitTime),
+      status: 'IN-TRANSIT',
+      loc: trip.drop_location || trip.pickup_area || '—',
+      sortKey: transitTime,
+    });
   }
   if (trip.completed_at) {
     entries.push({
@@ -88,10 +93,17 @@ function buildMissionLog(trip: TripRow): LogEntry[] {
 /** 0–100% from trip state: assigned → pickup → transit → delivered */
 function getTripProgressPct(trip: TripRow): number {
   if (trip.completed_at) return 100;
-  if (trip.started_at) return 66; // in-transit
   const statusLower = (trip.status ?? '').toLowerCase();
-  if (statusLower === 'in_progress') return 33; // pickup confirmed (driver tapped Confirm arrival)
-  if (trip.driver_id || trip.status) return 33; // assigned
+  if (
+    statusLower === 'in_transit' ||
+    statusLower === 'transit' ||
+    statusLower === 'at_drop'
+  ) {
+    return 66;
+  }
+  if (trip.started_at && statusLower === 'in_progress') return 50;
+  if (statusLower === 'in_progress') return 33;
+  if (trip.driver_id || trip.status) return 33;
   return 0;
 }
 

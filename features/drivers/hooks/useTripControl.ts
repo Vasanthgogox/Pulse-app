@@ -144,12 +144,11 @@ export function useTripControl(tripId: string | undefined) {
     // Optimistic UI update for immediate feedback
     setTrip((prev) =>
       prev
-        ? { ...prev, status: "in_progress", started_at: now, updated_at: now }
+        ? { ...prev, status: "in_transit", updated_at: now }
         : prev,
     );
     const { error, trip: updated } = await tripsService.updateTripStatus(id, {
-      status: "in_progress",
-      started_at: now,
+      status: "in_transit",
     });
     setStepLoading(false);
     if (error) {

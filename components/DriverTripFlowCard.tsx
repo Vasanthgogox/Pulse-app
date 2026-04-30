@@ -231,10 +231,9 @@ export function DriverTripFlowCard({
     setStepLoading(true);
     const now = new Date().toISOString();
     setStep('transit');
-    setLocalTrip((prev) => ({ ...prev, status: 'in_progress', started_at: now, updated_at: now }));
+    setLocalTrip((prev) => ({ ...prev, status: 'in_transit', updated_at: now }));
     const { error, trip: updated } = await tripsService.updateTripStatus(id, {
-      status: 'in_progress',
-      started_at: now,
+      status: 'in_transit',
     });
     setStepLoading(false);
     if (error) {

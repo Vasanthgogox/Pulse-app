@@ -416,7 +416,11 @@ async function getDriverOngoingTrip(
         const status = String(row.status ?? "").trim().toLowerCase();
         // "Busy" applies only after the driver actually accepts/starts the trip.
         // Pre-acceptance assignment (status="assigned", started_at=null) must stay available.
-        const isAcceptedStatus = status === "in_progress" || status === "at_drop";
+        const isAcceptedStatus =
+          status === "in_progress" ||
+          status === "in_transit" ||
+          status === "picked_up" ||
+          status === "at_drop";
         return isAcceptedStatus || row.started_at != null;
       }) ?? null,
   };
@@ -1226,6 +1230,8 @@ const TRIP_STATUS_VALUES = [
   "draft",
   "assigned",
   "in_progress",
+  "picked_up",
+  "in_transit",
   "at_drop",
   "completed",
   "cancelled",

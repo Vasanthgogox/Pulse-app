@@ -1242,7 +1242,13 @@ export default function TripDetailScreen({
   useEffect(() => {
     if (!tripId || !trip || isTripCompleted(trip)) return;
     const statusLower = (trip.status ?? "").toLowerCase();
-    if (statusLower !== "assigned" && statusLower !== "in_progress") return;
+    const activeJourney =
+      statusLower === "assigned" ||
+      statusLower === "in_progress" ||
+      statusLower === "picked_up" ||
+      statusLower === "in_transit" ||
+      statusLower === "at_drop";
+    if (!activeJourney) return;
     const intervalMs = 15000;
     const id = setInterval(() => {
       isRefreshingRef.current = true;
