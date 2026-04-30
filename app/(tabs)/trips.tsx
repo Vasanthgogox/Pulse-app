@@ -163,10 +163,7 @@ export default function TripsScreen() {
     Layout.demoTabBarScrollBottomInset +
     insets.bottom +
     Layout.tabBarBottomPaddingMin;
-  const tripsFabBottom =
-    !isMobileViewport && Platform.OS === "web"
-      ? webChatFabBaseBottom + CHAT_FAB_STACK_OFFSET
-      : insets.bottom + Layout.tabBarBottomPaddingMin + CHAT_FAB_STACK_OFFSET;
+  const tripsFabBottom = webChatFabBaseBottom + CHAT_FAB_STACK_OFFSET;
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const screenTopPad =
     Platform.OS === "web" ? 0 : insets.top + Layout.headerPaddingBelowInset;
@@ -1581,31 +1578,6 @@ export default function TripsScreen() {
                         ) : null}
                       </TouchableOpacity>
                     ))}
-                    <View style={styles.tripsFilterGroupSeparator} />
-                    {subTabs.map((tab) => (
-                      <TouchableOpacity
-                        key={tab.id}
-                        style={[
-                          styles.tab,
-                          styles.tripsMobileTab,
-                          styles.tabSubPill,
-                          tab.isActive && styles.tabSubPillActive,
-                        ]}
-                        onPress={tab.onPress}
-                        activeOpacity={0.7}
-                        accessibilityRole="tab"
-                        accessibilityState={{ selected: tab.isActive }}
-                      >
-                        <Text
-                          style={[
-                            styles.tabSubPillText,
-                            tab.isActive && styles.tabSubPillTextActive,
-                          ]}
-                        >
-                          {tab.label}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
                   </ScrollView>
                   <ScrollView
                     horizontal
@@ -1691,40 +1663,6 @@ export default function TripsScreen() {
                       isCompactWeb && styles.tripsBottomHeaderRowWebCompact,
                     ]}
                   >
-                    {!isMobileViewport ? (
-                      <View
-                        style={[
-                          styles.tripsTabClusterWeb,
-                          isCompactWeb && styles.tripsTabClusterWebCompact,
-                        ]}
-                      >
-                        {subTabs.map((tab) => (
-                          <TouchableOpacity
-                            key={tab.id}
-                            style={[
-                              styles.tabSubPill,
-                              styles.tripsScopePillWeb,
-                              tab.isActive && styles.tripsScopePillActiveWeb,
-                            ]}
-                            onPress={tab.onPress}
-                            activeOpacity={0.75}
-                            accessibilityRole="tab"
-                            accessibilityState={{ selected: tab.isActive }}
-                          >
-                            <Text
-                              style={[
-                                styles.tabSubPillText,
-                                styles.tripsScopePillTextWeb,
-                                tab.isActive &&
-                                  styles.tripsScopePillTextActiveWeb,
-                              ]}
-                            >
-                              {tab.label}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    ) : null}
                     <View
                       style={[
                         styles.tripsToolbarWeb,
@@ -2102,7 +2040,8 @@ export default function TripsScreen() {
                           styles.tripsMainPillWeb,
                           styles.tripsMainPillWebMobile,
                           styles.tripMetricTabPill,
-                          active && styles.tripsMainPillActiveWeb,
+                          styles.tripMetricTabPillDark,
+                          active && styles.tripMetricTabPillDarkActive,
                         ]}
                         onPress={() =>
                           setActiveHistoryMetricTab((current) =>
@@ -2118,7 +2057,7 @@ export default function TripsScreen() {
                           style={[
                             styles.tripsMainPillTextWeb,
                             styles.tripMetricTabText,
-                            active && styles.tripsMainPillTextActiveWeb,
+                            active && styles.tripMetricTabTextDarkActive,
                           ]}
                           numberOfLines={1}
                         >
@@ -3632,27 +3571,41 @@ const styles = StyleSheet.create({
   },
   tripMetricTabsScroll: {
     marginBottom: 10,
-    paddingBottom: 2,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderLight,
+    borderRadius: 22,
+    backgroundColor: Theme.darkBackground,
+    borderWidth: 1,
+    borderColor: Theme.separatorDark,
   },
   tripMetricTabsRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingBottom: 10,
+    gap: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 7,
   },
   tripHistoryMobileTabsWrap: {
-    marginBottom: 4,
+    marginBottom: 8,
   },
   tripMetricTabPill: {
     minWidth: 104,
     paddingVertical: 9,
     paddingHorizontal: 14,
   },
+  tripMetricTabPillDark: {
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+  },
+  tripMetricTabPillDarkActive: {
+    backgroundColor: Theme.primary,
+    borderColor: Theme.primary,
+  },
   tripMetricTabText: {
     letterSpacing: 0.9,
+    color: "rgba(255,255,255,0.66)",
+  },
+  tripMetricTabTextDarkActive: {
+    color: Theme.textOnDark,
   },
   metricTagRailScrollMobile: {
     marginBottom: 8,

@@ -1590,14 +1590,10 @@ export function FinanceScreen() {
               styles.fabAbsoluteWrap,
               {
                 bottom:
-                  !isMobileViewport && Platform.OS === "web"
-                    ? Layout.demoTabBarScrollBottomInset +
-                      insets.bottom +
-                      Layout.tabBarBottomPaddingMin +
-                      CHAT_FAB_STACK_OFFSET
-                    : insets.bottom +
-                      Layout.tabBarBottomPaddingMin +
-                      CHAT_FAB_STACK_OFFSET,
+                  Layout.demoTabBarScrollBottomInset +
+                  insets.bottom +
+                  Layout.tabBarBottomPaddingMin +
+                  CHAT_FAB_STACK_OFFSET,
               },
             ]}
           >

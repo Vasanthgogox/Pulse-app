@@ -732,27 +732,43 @@ export function TripsHubTripCard({
 
         <View style={[styles.fleetMetricsRow, compactMetricGrid && styles.fleetMetricsRowCompact]}>
           <View style={[styles.fleetMetricCell, compactMetricGrid && styles.fleetMetricCellCompact]}>
-            <Text style={styles.fleetMetricLabel}>{tr("tripsHubColCost")}</Text>
-            <Text style={styles.fleetMetricVal}>{formatINR(cost)}</Text>
+            <Text style={styles.fleetMetricLabel} numberOfLines={1}>
+              {tr("tripsHubColCost")}
+            </Text>
+            <Text style={styles.fleetMetricVal} numberOfLines={1}>
+              {formatINR(cost)}
+            </Text>
           </View>
           <View style={[styles.fleetMetricCell, compactMetricGrid && styles.fleetMetricCellCompact]}>
-            <Text style={styles.fleetMetricLabel}>{tr("tripsHubColMargin")}</Text>
-            <Text style={styles.fleetMetricVal}>{formatINR(pnl)}</Text>
-            <Text style={styles.fleetMetricPct}>{marginPct}</Text>
+            <Text style={styles.fleetMetricLabel} numberOfLines={1}>
+              {tr("tripsHubColMargin")}
+            </Text>
+            <Text style={styles.fleetMetricVal} numberOfLines={1}>
+              {formatINR(pnl)}
+            </Text>
+            <Text style={styles.fleetMetricPct} numberOfLines={1}>
+              {marginPct}
+            </Text>
           </View>
           <View style={[styles.fleetMetricCell, compactMetricGrid && styles.fleetMetricCellCompact]}>
-            <Text style={styles.fleetMetricLabel}>{tr("tripsHubColReceived")}</Text>
-            <Text style={styles.fleetMetricVal}>
+            <Text style={styles.fleetMetricLabel} numberOfLines={1}>
+              {tr("tripsHubColReceived")}
+            </Text>
+            <Text style={styles.fleetMetricVal} numberOfLines={1}>
               {ledgerReceivedTotal != null ? formatINR(ledgerReceivedTotal) : "—"}
             </Text>
-            <Text style={styles.fleetMetricMeta}>
+            <Text style={styles.fleetMetricMeta} numberOfLines={1}>
               {tr("tripsHubAmountPaidBook")}: {formatINR(Number(trip.amount_paid ?? 0))}
             </Text>
           </View>
           <View style={[styles.fleetMetricCell, compactMetricGrid && styles.fleetMetricCellCompact]}>
-            <Text style={styles.fleetMetricLabel}>{tr("tripsHubColDue")}</Text>
-            <Text style={styles.fleetMetricVal}>{formatINR(due)}</Text>
-            <Text style={styles.fleetMetricMeta}>
+            <Text style={styles.fleetMetricLabel} numberOfLines={1}>
+              {tr("tripsHubColDue")}
+            </Text>
+            <Text style={styles.fleetMetricVal} numberOfLines={1}>
+              {formatINR(due)}
+            </Text>
+            <Text style={styles.fleetMetricMeta} numberOfLines={1}>
               {ledgerTxnCount != null ? `${ledgerTxnCount} · ${tr("tripsHubColTxns")}` : "—"}
               {lastLedgerDateLabel ? ` · ${lastLedgerDateLabel}` : ""}
             </Text>
@@ -802,7 +818,7 @@ export type TripsHubTableViewProps = {
   financeAdjustmentsByTripId?: Record<string, TripAdjustment[]>;
   /**
    * When set, the manifest table rows are omitted and this render function receives the filtered + sorted trips
-   * (toolbar, search/sort/status pills, and Filters panel behave like table mode).
+   * (toolbar, search/sort, and Filters panel behave like table mode).
    */
   renderBody?: (templateTrips: TripRow[]) => ReactNode;
 };
@@ -879,9 +895,6 @@ export function TripsHubTableView({
   const [sortKey, setSortKey] = useState<"recent" | "due_desc" | "sales_desc">(
     "recent",
   );
-  const [statusFilter, setStatusFilter] = useState<
-    "all" | "verified" | "pending" | "attention"
-  >("all");
   const [showColSettings, setShowColSettings] = useState(false);
   const [receiptTx, setReceiptTx] = useState<{
     trip: TripRow;
@@ -978,30 +991,9 @@ export function TripsHubTableView({
         ? "Due"
         : "Sales";
 
-  const statusLabel =
-    statusFilter === "all"
-      ? "All status"
-      : statusFilter === "verified"
-        ? "Verified"
-        : statusFilter === "pending"
-          ? "Pending"
-          : "Needs review";
-
   const cycleSortKey = () => {
     setSortKey((prev) =>
       prev === "recent" ? "due_desc" : prev === "due_desc" ? "sales_desc" : "recent",
-    );
-  };
-
-  const cycleStatusFilter = () => {
-    setStatusFilter((prev) =>
-      prev === "all"
-        ? "verified"
-        : prev === "verified"
-          ? "pending"
-          : prev === "pending"
-            ? "attention"
-            : "all",
     );
   };
 
@@ -1021,9 +1013,8 @@ export function TripsHubTableView({
   };
 
   const templateTrips = useMemo(() => {
-    if (statusFilter === "all") return displayedTrips;
-    return displayedTrips.filter((trip) => classifyTripFilter(trip) === statusFilter);
-  }, [displayedTrips, statusFilter]);
+    return displayedTrips;
+  }, [displayedTrips]);
 
   const toggleTemplateCol = (key: keyof typeof cols) => {
     setCols((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -1058,17 +1049,6 @@ export function TripsHubTableView({
           </View>
           <TouchableOpacity
             style={styles.auditToolbarBtn}
-            onPress={cycleStatusFilter}
-            activeOpacity={0.85}
-            accessibilityRole="button"
-            accessibilityLabel="Cycle status filter"
-          >
-            <FontAwesome name="check-circle-o" size={13} color={Theme.textSecondary} />
-            <Text style={styles.auditToolbarText}>{statusLabel}</Text>
-            <FontAwesome name="chevron-down" size={10} color={Theme.textMuted} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.auditToolbarBtn}
             onPress={cycleSortKey}
             activeOpacity={0.85}
             accessibilityRole="button"
@@ -1089,60 +1069,6 @@ export function TripsHubTableView({
             <Text style={styles.auditToolbarText}>Filters</Text>
           </TouchableOpacity>
         </View>
-      </View>
-
-      <View style={styles.manifestFilterRow}>
-        <TouchableOpacity
-          style={[styles.manifestFilterPill, statusFilter === "all" && styles.manifestFilterPillOn]}
-          onPress={() => setStatusFilter("all")}
-          activeOpacity={0.85}
-        >
-          <Text style={[styles.manifestFilterPillText, statusFilter === "all" && styles.manifestFilterPillTextOn]}>
-            All
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.manifestFilterPill, statusFilter === "verified" && styles.manifestFilterPillOn]}
-          onPress={() => setStatusFilter("verified")}
-          activeOpacity={0.85}
-        >
-          <Text
-            style={[
-              styles.manifestFilterPillText,
-              statusFilter === "verified" && styles.manifestFilterPillTextOn,
-            ]}
-          >
-            Verified
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.manifestFilterPill, statusFilter === "pending" && styles.manifestFilterPillOn]}
-          onPress={() => setStatusFilter("pending")}
-          activeOpacity={0.85}
-        >
-          <Text
-            style={[
-              styles.manifestFilterPillText,
-              statusFilter === "pending" && styles.manifestFilterPillTextOn,
-            ]}
-          >
-            Pending
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.manifestFilterPill, statusFilter === "attention" && styles.manifestFilterPillOn]}
-          onPress={() => setStatusFilter("attention")}
-          activeOpacity={0.85}
-        >
-          <Text
-            style={[
-              styles.manifestFilterPillText,
-              statusFilter === "attention" && styles.manifestFilterPillTextOn,
-            ]}
-          >
-            Needs Review
-          </Text>
-        </TouchableOpacity>
       </View>
 
       {showColSettings ? (
@@ -2491,41 +2417,45 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
   },
   fleetMetricCellCompact: {
-    flexBasis: "48%",
+    flex: 1,
+    flexBasis: 0,
     minWidth: 0,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    paddingVertical: 5,
   },
   fleetMetricsRowCompact: {
-    rowGap: 6,
-    columnGap: 6,
+    flexWrap: "nowrap",
+    gap: 4,
   },
   fleetMetricLabel: {
-    fontSize: FS_AMOUNT_LABEL,
+    fontSize: 5.5,
     fontWeight: "900",
     color: Theme.textMuted,
     textTransform: "uppercase",
-    letterSpacing: 0.4,
+    letterSpacing: 0.35,
   },
   fleetMetricVal: {
     marginTop: 2,
-    fontSize: FS_BODY,
+    fontSize: 9.5,
     fontWeight: "900",
     fontStyle: "italic",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.25,
+    letterSpacing: -0.35,
     fontVariant: ["tabular-nums"],
   },
   fleetMetricPct: {
     marginTop: 1,
-    fontSize: FS_CAPTION,
+    fontSize: 6.5,
     fontWeight: "900",
     color: Theme.textSecondary,
   },
   fleetMetricMeta: {
     marginTop: 2,
-    fontSize: FS_AMOUNT_LABEL,
+    fontSize: 5.5,
     fontWeight: "800",
     color: Theme.textMuted,
-    lineHeight: 11,
+    lineHeight: 8,
   },
   auditTableWrap: {
     backgroundColor: Theme.screenBackground,

@@ -83,6 +83,13 @@ function DemoCustomTabBar(props: BottomTabBarProps) {
       zIndex: 100,
     },
     !isDesktopWeb && {
+      position: 'absolute' as const,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 100,
+      elevation: 100,
+      backgroundColor: 'transparent',
       paddingBottom: insets.bottom > 0 ? 0 : 4,
     },
   ];

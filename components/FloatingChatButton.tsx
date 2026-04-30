@@ -7,6 +7,7 @@ import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useIntegratedChat } from "@/features/chat/contexts/IntegratedChatContext";
 import { useTripChat } from "@/features/chat/contexts/TripChatContext";
+import { ROUTES } from "@/lib/routes";
 
 const FAB_SIZE = 56;
 type ChatTab = "trips" | "network";
@@ -14,16 +15,18 @@ type ChatTab = "trips" | "network";
 function useShouldShow(): boolean {
   const pathname = usePathname();
   if (!pathname) return false;
-  // Hide on the chat screen itself
   if (pathname.includes("chat")) return false;
-  // Show on all main tab screens (web strips group prefix so /finance works too)
-  const p = pathname.replace("/(tabs)", "");
+  const p = pathname.replace(/\/$/, "");
+  const ungrouped = p.replace("/(tabs)", "");
   return (
-    p === "/finance" ||
-    p === "/trips" ||
-    p === "/network" ||
-    p === "/load-board" ||
-    p === "/pulse-loads"
+    p === ROUTES.TABS.FINANCE ||
+    p === ROUTES.TABS.TRIPS ||
+    p === ROUTES.TABS.NETWORK ||
+    p === ROUTES.PULSE_LOADS ||
+    ungrouped === "/finance" ||
+    ungrouped === "/trips" ||
+    ungrouped === "/network" ||
+    ungrouped === ROUTES.PULSE_LOADS
   );
 }
 
