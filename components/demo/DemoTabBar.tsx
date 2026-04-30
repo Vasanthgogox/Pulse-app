@@ -1389,7 +1389,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     borderWidth: 1,
     borderColor: "#e2e8f0",
-    backgroundColor: "rgba(255,255,255,0.98)",
+    backgroundColor: "#ffffff",
     overflow: "hidden",
     shadowColor: "#0f172a",
     shadowOffset: { width: 0, height: 16 },
@@ -1427,6 +1427,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 10,
     paddingTop: 10,
+    backgroundColor: "#ffffff",
   },
   webPopoverTabBtn: {
     flex: 1,
