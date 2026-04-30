@@ -38,7 +38,7 @@ function requestTypeLabel(t: (k: string) => string, value: string): string {
 function sharedLedgerActionLabel(
   eventType: SharedLedgerNotificationRow["event_type"],
 ): string {
-  if (eventType === "dispute_received") return "Review dispute";
+  if (eventType === "dispute_received") return "Raise dispute";
   if (eventType === "dispute_status_changed") return "View status";
   if (eventType === "pending_partner_followup") return "Follow up";
   if (eventType === "mismatch_detected") return "Compare now";
@@ -53,6 +53,28 @@ function sharedLedgerIcon(
   if (eventType === "pending_partner_followup") return "clock-o";
   if (eventType === "mismatch_detected") return "exchange";
   return "exclamation-triangle";
+}
+
+function resolveSharedActionKind(
+  eventType: SharedLedgerNotificationRow["event_type"],
+  payload: Record<string, unknown>,
+): "review_dispute" | "raise_dispute" | "fix_records" | "compare_now" | "follow_up" | "view_status" {
+  const explicit = typeof payload.cta_kind === "string" ? payload.cta_kind : "";
+  if (
+    explicit === "review_dispute" ||
+    explicit === "raise_dispute" ||
+    explicit === "fix_records" ||
+    explicit === "compare_now" ||
+    explicit === "follow_up" ||
+    explicit === "view_status"
+  ) {
+    return explicit;
+  }
+  if (eventType === "dispute_received") return "review_dispute";
+  if (eventType === "pending_partner_followup") return "follow_up";
+  if (eventType === "mismatch_detected") return "compare_now";
+  if (eventType === "partner_only_ghost") return "fix_records";
+  return "view_status";
 }
 
 export default function NotificationsScreen() {
@@ -323,6 +345,10 @@ export default function NotificationsScreen() {
                                 style={styles.sharedPrimaryBtn}
                                 onPress={async () => {
                                   const payload = item.payload_json ?? {};
+                                  const actionKind = resolveSharedActionKind(
+                                    item.event_type,
+                                    payload,
+                                  );
                                   const tripId =
                                     typeof payload.trip_id === "string"
                                       ? payload.trip_id
@@ -336,15 +362,26 @@ export default function NotificationsScreen() {
                                       ? payload.entity_id
                                       : null;
 
-                                  if (tripId) {
+                                  if (entityType === "CLIENT" && entityId) {
+                                    const q = new URLSearchParams({
+                                      shared: "1",
+                                      sharedAction: actionKind,
+                                    });
+                                    if (tripId) q.set("tripId", tripId);
+                                    router.push(
+                                      `/client/${entityId}?${q.toString()}` as const,
+                                    );
+                                  } else if (entityType === "SUPPLIER" && entityId) {
+                                    const q = new URLSearchParams({
+                                      shared: "1",
+                                      sharedAction: actionKind,
+                                    });
+                                    if (tripId) q.set("tripId", tripId);
+                                    router.push(
+                                      `/supplier/${entityId}?${q.toString()}` as const,
+                                    );
+                                  } else if (tripId) {
                                     router.push(`/trip-ledger/${tripId}` as const);
-                                  } else if (entityType === "CLIENT" && entityId) {
-                                    router.push(`/client/${entityId}` as const);
-                                  } else if (
-                                    entityType === "SUPPLIER" &&
-                                    entityId
-                                  ) {
-                                    router.push(`/supplier/${entityId}` as const);
                                   } else {
                                     router.push("/(tabs)/finance");
                                   }
