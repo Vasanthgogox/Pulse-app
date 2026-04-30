@@ -543,6 +543,30 @@ export default function TripDetailScreen({
     if (s === "assigned" && !hasAnyAssignment) return "UNASSIGNED";
     return s.replace(/_/g, " ").toUpperCase();
   })();
+  const payoutModeLabel = (() => {
+    const raw = String(trip.trip_payout_mode ?? "").trim().toLowerCase();
+    if (!raw) return "—";
+    if (raw === "asset") return "Asset";
+    if (raw === "market") return "Market";
+    return raw.replace(/_/g, " ");
+  })();
+  const paymentStatusLabel = (() => {
+    const raw = String(trip.payment_status ?? "").trim().toLowerCase();
+    if (!raw) return "—";
+    return raw.replace(/_/g, " ");
+  })();
+  const loadTonsLabel = (() => {
+    const n = Number(trip.load_tons ?? 0);
+    return Number.isFinite(n) && n > 0 ? `${n} t` : "—";
+  })();
+  const advancePaidLabel = (() => {
+    const n = Number(trip.advance_paid ?? 0);
+    return Number.isFinite(n) && n > 0 ? `₹${n.toLocaleString("en-IN")}` : "₹0";
+  })();
+  const amountPaidLabel = (() => {
+    const n = Number(trip.amount_paid ?? 0);
+    return Number.isFinite(n) ? `₹${n.toLocaleString("en-IN")}` : "₹0";
+  })();
   const tripAny = trip as any;
   const durationLabel = tripAny.duration_minutes
     ? `${Math.floor(tripAny.duration_minutes / 60)}h ${tripAny.duration_minutes % 60}m`
@@ -1500,6 +1524,55 @@ export default function TripDetailScreen({
                 <View style={dStyles.statBox}>
                   <Text style={dStyles.statLabel}>STATUS</Text>
                   <Text style={[dStyles.statValue, { fontSize: 14 }]}>{statusLabel}</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={[dStyles.card, dStyles.snapshotCard]}>
+              <View style={dStyles.cardHeader}>
+                <FontAwesome name="database" size={14} color="#60a5fa" style={{ marginRight: 8 }} />
+                <Text style={dStyles.cardTitle}>Trip Data Snapshot</Text>
+              </View>
+              <View style={dStyles.snapshotGrid}>
+                <View style={dStyles.snapshotCell}>
+                  <Text style={dStyles.snapshotLabel}>Client Name</Text>
+                  <Text style={dStyles.snapshotValue} numberOfLines={2}>
+                    {clientNameCard || "—"}
+                  </Text>
+                </View>
+                {isAggregate ? (
+                  <View style={dStyles.snapshotCell}>
+                    <Text style={dStyles.snapshotLabel}>Supplier Name</Text>
+                    <Text style={dStyles.snapshotValue} numberOfLines={2}>
+                      {supplierName || "—"}
+                    </Text>
+                  </View>
+                ) : null}
+                <View style={dStyles.snapshotCell}>
+                  <Text style={dStyles.snapshotLabel}>Payment Status</Text>
+                  <Text style={dStyles.snapshotValue}>{paymentStatusLabel}</Text>
+                </View>
+                <View style={dStyles.snapshotCell}>
+                  <Text style={dStyles.snapshotLabel}>Amount Paid</Text>
+                  <Text style={dStyles.snapshotValue}>{amountPaidLabel}</Text>
+                </View>
+                <View style={dStyles.snapshotCell}>
+                  <Text style={dStyles.snapshotLabel}>Advance Paid</Text>
+                  <Text style={dStyles.snapshotValue}>{advancePaidLabel}</Text>
+                </View>
+                <View style={dStyles.snapshotCell}>
+                  <Text style={dStyles.snapshotLabel}>Payout Mode</Text>
+                  <Text style={dStyles.snapshotValue}>{payoutModeLabel}</Text>
+                </View>
+                <View style={dStyles.snapshotCell}>
+                  <Text style={dStyles.snapshotLabel}>Load Tons</Text>
+                  <Text style={dStyles.snapshotValue}>{loadTonsLabel}</Text>
+                </View>
+                <View style={dStyles.snapshotCell}>
+                  <Text style={dStyles.snapshotLabel}>Estimated Duration</Text>
+                  <Text style={dStyles.snapshotValue}>
+                    {trip.estimated_duration ? String(trip.estimated_duration) : "—"}
+                  </Text>
                 </View>
               </View>
             </View>
@@ -2737,6 +2810,31 @@ const dStyles = StyleSheet.create({
   statValueSm: { fontSize: 14, fontWeight: '700', color: DS_TEXT },
   row: { flexDirection: 'row', gap: 16, marginBottom: 16, flexWrap: 'wrap' },
   card: { backgroundColor: DS_CARD, borderRadius: 16, borderWidth: 1, borderColor: DS_BORDER, padding: 20 },
+  snapshotCard: { marginBottom: 16 },
+  snapshotGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  snapshotCell: {
+    width: '32%',
+    minWidth: 170,
+    backgroundColor: 'rgba(15,23,42,0.03)',
+    borderWidth: 1,
+    borderColor: DS_BORDER,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  snapshotLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: DS_MUTED,
+    letterSpacing: 0.5,
+    marginBottom: 4,
+    textTransform: 'uppercase',
+  },
+  snapshotValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: DS_TEXT,
+  },
   mapCol: { flex: 3, minWidth: 300 },
   auditCol: { flex: 2, minWidth: 260 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
