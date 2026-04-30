@@ -1495,31 +1495,55 @@ export default function ClientDetailScreen({
           </LinearGradient>
           {isWebDesktop ? (
             <View style={styles.profilePreviewCard}>
-              <Text style={styles.profilePreviewEyebrow}>ENTITY PROFILE</Text>
-              <View style={styles.profilePreviewIdentityRow}>
-                <View style={styles.profilePreviewIdentityAvatar}>
-                  {profileAvatarUri ? (
-                    <Image source={{ uri: profileAvatarUri }} style={styles.profilePreviewIdentityAvatarImage} />
-                  ) : (
-                    <FontAwesome name="building" size={12} color={Theme.textSecondary} />
-                  )}
-                </View>
-                <View style={styles.profilePreviewIdentityMeta}>
-                  <Text style={styles.profilePreviewIdentityName} numberOfLines={1}>
-                    {clientName}
+              <View style={styles.profilePreviewTopRow}>
+                <Text style={styles.profilePreviewEyebrow}>ENTITY PROFILE</Text>
+                <TouchableOpacity
+                  style={styles.profilePreviewTopAction}
+                  onPress={() => setShowProfileModal(true)}
+                  activeOpacity={0.85}
+                  accessibilityLabel="Open client full profile"
+                >
+                  <Text style={styles.profilePreviewTopActionText}>
+                    FULL PROFILE
                   </Text>
-                  <Text style={styles.profilePreviewIdentitySub} numberOfLines={1}>
-                    {(client.contact_person ?? "No contact").trim() || "No contact"}
-                  </Text>
-                </View>
+                  <FontAwesome
+                    name="chevron-right"
+                    size={10}
+                    color={Theme.textSecondary}
+                  />
+                </TouchableOpacity>
               </View>
+              <TouchableOpacity
+                style={styles.profilePreviewIdentityTrigger}
+                onPress={() => setShowProfileModal(true)}
+                activeOpacity={0.85}
+                accessibilityLabel="Open client full profile"
+              >
+                <View style={styles.profilePreviewIdentityRow}>
+                  <View style={styles.profilePreviewIdentityAvatar}>
+                    {profileAvatarUri ? (
+                      <Image source={{ uri: profileAvatarUri }} style={styles.profilePreviewIdentityAvatarImage} />
+                    ) : (
+                      <FontAwesome name="building" size={14} color={Theme.textSecondary} />
+                    )}
+                  </View>
+                  <View style={styles.profilePreviewIdentityMeta}>
+                    <Text style={styles.profilePreviewIdentityName} numberOfLines={1}>
+                      {clientName}
+                    </Text>
+                    <Text style={styles.profilePreviewIdentitySub} numberOfLines={1}>
+                      {(client.contact_person ?? "No contact").trim() || "No contact"}
+                    </Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
               <View style={styles.profilePreviewRatingRow}>
                 <View style={styles.profilePreviewStars}>
                   {Array.from({ length: 5 }).map((_, idx) => (
                     <FontAwesome
                       key={`client-star-${idx}`}
                       name={idx < ratingFilledStars ? "star" : "star-o"}
-                      size={12}
+                      size={13}
                       color={idx < ratingFilledStars ? "#fbbf24" : Theme.borderMedium}
                     />
                   ))}
@@ -1547,9 +1571,11 @@ export default function ClientDetailScreen({
                   ]}
                 >
                   {isIntegrated ? (
-                    <FontAwesome name="check" size={10} color={Theme.textOnPrimary} />
+                    <FontAwesome name="check" size={11} color={Theme.textOnPrimary} />
                   ) : isInAppNotIntegrated ? (
-                    <FontAwesome name="send" size={8} color={Theme.financeCardBlueFrom} />
+                    <FontAwesome name="send" size={9} color={Theme.financeCardBlueFrom} />
+                  ) : isNotInApp ? (
+                    <FontAwesome name="envelope-o" size={9} color={Theme.textMuted} />
                   ) : null}
                 </View>
                 <View style={styles.profilePreviewToggleTextWrap}>
@@ -1575,7 +1601,7 @@ export default function ClientDetailScreen({
               >
                 <FontAwesome
                   name={canSendRequest ? "send" : "envelope-o"}
-                  size={12}
+                  size={14}
                   color={Theme.textOnPrimary}
                 />
                 <Text style={styles.profilePreviewActionText}>
@@ -2806,13 +2832,42 @@ const styles = StyleSheet.create({
   scorecardGridDue: ehs.scorecardGridDue,
   scorecardGridDueWebDesktop: ehs.scorecardGridDueWebDesktop,
   profilePreviewCard: ecc.card,
+  profilePreviewTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
   profilePreviewEyebrow: ecc.eyebrow,
+  profilePreviewTopAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    minHeight: 24,
+    borderRadius: 12,
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    paddingHorizontal: 8,
+  },
+  profilePreviewTopActionText: {
+    fontSize: 8,
+    fontWeight: "900",
+    color: Theme.textSecondary,
+    letterSpacing: 0.7,
+    textTransform: "uppercase",
+  },
   profilePreviewIdentityRow: ecc.identityRow,
   profilePreviewIdentityAvatar: ecc.identityAvatar,
   profilePreviewIdentityAvatarImage: ecc.identityAvatarImage,
   profilePreviewIdentityMeta: ecc.identityMeta,
   profilePreviewIdentityName: ecc.identityName,
   profilePreviewIdentitySub: ecc.identitySub,
+  profilePreviewIdentityTrigger: {
+    borderRadius: 12,
+    paddingVertical: 2,
+  },
   profilePreviewRatingRow: ecc.ratingRow,
   profilePreviewStars: ecc.stars,
   profilePreviewRatingBadge: ecc.ratingBadge,

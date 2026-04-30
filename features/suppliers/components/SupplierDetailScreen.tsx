@@ -1287,6 +1287,12 @@ export default function SupplierDetailScreen({
                       size={9}
                       color={Theme.financeCardOrangeFrom}
                     />
+                  ) : isNotInApp ? (
+                    <FontAwesome
+                      name="envelope-o"
+                      size={9}
+                      color={Theme.textMuted}
+                    />
                   ) : null}
                 </View>
                 <View style={styles.profilePreviewToggleTextWrap}>

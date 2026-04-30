@@ -540,31 +540,55 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
           </LinearGradient>
           {isWebDesktop ? (
             <View style={styles.profilePreviewCard}>
-              <Text style={styles.profilePreviewEyebrow}>VEHICLE PROFILE</Text>
-              <View style={styles.profilePreviewIdentityRow}>
-                <View style={styles.profilePreviewIdentityAvatar}>
-                  {profileAvatarUri ? (
-                    <Image source={{ uri: profileAvatarUri }} style={styles.profilePreviewIdentityAvatarImage} resizeMode="cover" />
-                  ) : (
-                    <Image source={truckImage} style={styles.profilePreviewIdentityAvatarImage} resizeMode="cover" />
-                  )}
-                </View>
-                <View style={styles.profilePreviewIdentityMeta}>
-                  <Text style={styles.profilePreviewIdentityName} numberOfLines={1}>
-                    {vehicle.vehicle_number}
+              <View style={styles.profilePreviewTopRow}>
+                <Text style={styles.profilePreviewEyebrow}>VEHICLE PROFILE</Text>
+                <TouchableOpacity
+                  style={styles.profilePreviewTopAction}
+                  onPress={() => setShowProfileModal(true)}
+                  activeOpacity={0.85}
+                  accessibilityLabel="Open vehicle full profile"
+                >
+                  <Text style={styles.profilePreviewTopActionText}>
+                    FULL PROFILE
                   </Text>
-                  <Text style={styles.profilePreviewIdentitySub} numberOfLines={1}>
-                    {profileIdentitySubtitle}
-                  </Text>
-                </View>
+                  <FontAwesome
+                    name="chevron-right"
+                    size={10}
+                    color={Theme.textSecondary}
+                  />
+                </TouchableOpacity>
               </View>
+              <TouchableOpacity
+                style={styles.profilePreviewIdentityTrigger}
+                onPress={() => setShowProfileModal(true)}
+                activeOpacity={0.85}
+                accessibilityLabel="Open vehicle full profile"
+              >
+                <View style={styles.profilePreviewIdentityRow}>
+                  <View style={styles.profilePreviewIdentityAvatar}>
+                    {profileAvatarUri ? (
+                      <Image source={{ uri: profileAvatarUri }} style={styles.profilePreviewIdentityAvatarImage} resizeMode="cover" />
+                    ) : (
+                      <Image source={truckImage} style={styles.profilePreviewIdentityAvatarImage} resizeMode="cover" />
+                    )}
+                  </View>
+                  <View style={styles.profilePreviewIdentityMeta}>
+                    <Text style={styles.profilePreviewIdentityName} numberOfLines={1}>
+                      {vehicle.vehicle_number}
+                    </Text>
+                    <Text style={styles.profilePreviewIdentitySub} numberOfLines={1}>
+                      {profileIdentitySubtitle}
+                    </Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
               <View style={styles.profilePreviewRatingRow}>
                 <View style={styles.profilePreviewStars}>
                   {Array.from({ length: 5 }).map((_, idx) => (
                     <FontAwesome
                       key={`vehicle-star-${idx}`}
                       name={idx < performanceStars ? "star" : "star-o"}
-                      size={12}
+                      size={13}
                       color={idx < performanceStars ? "#fbbf24" : Theme.borderMedium}
                     />
                   ))}
@@ -611,8 +635,10 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
                   ]}
                 >
                   {vehicleStatusTitle === "Active" ? (
-                    <FontAwesome name="check" size={10} color={Theme.textOnPrimary} />
-                  ) : null}
+                    <FontAwesome name="check" size={11} color={Theme.textOnPrimary} />
+                  ) : (
+                    <FontAwesome name="minus" size={10} color={Theme.textMuted} />
+                  )}
                 </View>
                 <View style={styles.profilePreviewToggleTextWrap}>
                   <Text style={styles.profilePreviewToggleTitle}>{vehicleStatusTitle}</Text>
@@ -624,7 +650,7 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
                 onPress={() => setShowProfileModal(true)}
                 activeOpacity={0.86}
               >
-                <FontAwesome name="id-card-o" size={12} color={Theme.textOnPrimary} />
+                <FontAwesome name="id-card-o" size={14} color={Theme.textOnPrimary} />
                 <Text style={styles.profilePreviewActionText}>View full profile</Text>
               </TouchableOpacity>
             </View>
@@ -998,13 +1024,42 @@ const styles = StyleSheet.create({
   scorecardGridDue: ehs.scorecardGridDue,
   scorecardGridDueWebDesktop: ehs.scorecardGridDueWebDesktop,
   profilePreviewCard: ecc.card,
+  profilePreviewTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
   profilePreviewEyebrow: ecc.eyebrow,
+  profilePreviewTopAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    minHeight: 24,
+    borderRadius: 12,
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    paddingHorizontal: 8,
+  },
+  profilePreviewTopActionText: {
+    fontSize: 8,
+    fontWeight: "900",
+    color: Theme.textSecondary,
+    letterSpacing: 0.7,
+    textTransform: "uppercase",
+  },
   profilePreviewIdentityRow: ecc.identityRow,
   profilePreviewIdentityAvatar: ecc.identityAvatar,
   profilePreviewIdentityAvatarImage: ecc.identityAvatarImage,
   profilePreviewIdentityMeta: ecc.identityMeta,
   profilePreviewIdentityName: ecc.identityName,
   profilePreviewIdentitySub: ecc.identitySub,
+  profilePreviewIdentityTrigger: {
+    borderRadius: 12,
+    paddingVertical: 2,
+  },
   profilePreviewRatingRow: ecc.ratingRow,
   profilePreviewStars: ecc.stars,
   profilePreviewRatingBadge: ecc.ratingBadge,
