@@ -93,9 +93,9 @@ type DateFilter =
   | "this_month"
   | "custom";
 
-const CHAT_FAB_SIZE = 46;
-const FAB_STACK_GAP = 14;
-const TRIPS_FAB_STACK_OFFSET = CHAT_FAB_SIZE + FAB_STACK_GAP;
+const TRIPS_FAB_SIZE_MOBILE = 40;
+const TRIPS_FAB_SIZE_DESKTOP = 46;
+const CHAT_FAB_STACK_OFFSET = 60;
 
 type TripsListLayout = "cards" | "table";
 type HistoryTripMetricId =
@@ -143,7 +143,10 @@ export default function TripsScreen() {
   const isLargeScreen = Platform.OS === "web" && width >= 1280;
   const isCompactWeb = Platform.OS === "web" && width < 1180;
   const isMobile = width < 560;
+  const tripsFabSize = isMobile ? TRIPS_FAB_SIZE_MOBILE : TRIPS_FAB_SIZE_DESKTOP;
   const insets = useSafeAreaInsets();
+  const tripsFabBottom =
+    insets.bottom + Layout.tabBarBottomPaddingMin + CHAT_FAB_STACK_OFFSET;
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const screenTopPad =
     Platform.OS === "web" ? 0 : insets.top + Layout.headerPaddingBelowInset;
@@ -2468,11 +2471,7 @@ export default function TripsScreen() {
             {
               zIndex: 40,
               right: Layout.screenPaddingHorizontal,
-              bottom:
-                Layout.demoTabBarScrollBottomInset +
-                insets.bottom +
-                Layout.tabBarBottomPaddingMin +
-                TRIPS_FAB_STACK_OFFSET,
+              bottom: tripsFabBottom,
             },
           ]}
         >
@@ -2480,7 +2479,7 @@ export default function TripsScreen() {
             onPress={() => router.push("/add-trip")}
             accessibilityLabel={tr("addTrip")}
             icon="road"
-            size={isMobile ? 40 : 46}
+            size={tripsFabSize}
             iconSize={isMobile ? 17 : 20}
           />
         </View>
