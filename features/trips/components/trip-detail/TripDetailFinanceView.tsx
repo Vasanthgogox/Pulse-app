@@ -25,7 +25,7 @@ import {
 import type { TripRow } from "@/features/trips/services/trips.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   LayoutAnimation,
@@ -246,6 +246,8 @@ export interface TripDetailFinanceViewProps {
   /** When set with `onTripDetailTabChange`, the view uses two tabs (full trip detail screen). */
   tripDetailTab?: TripDetailTab | null;
   onTripDetailTabChange?: (tab: TripDetailTab) => void;
+  /** Suppress the internal Tracking/Finance tab bar (web uses its own top-level tabs). */
+  hideInternalTabBar?: boolean;
   /** Tracking tab: map + vehicle + driver activity (parent renders `TrackingMapBlock` + timeline). */
   trackingTabExtras?: ReactNode;
   /** Opens ledger-sync from the trip financial snapshot (respects market vs asset). */
@@ -1128,6 +1130,7 @@ export function TripDetailFinanceView({
   reconciliationParties,
   tripDetailTab = null,
   onTripDetailTabChange,
+  hideInternalTabBar = false,
   trackingTabExtras,
   onTripFinancialLedgerCta,
 }: TripDetailFinanceViewProps) {
@@ -1420,7 +1423,7 @@ export function TripDetailFinanceView({
 
   return (
     <View style={styles.content}>
-      {tabsEnabled ? (
+      {tabsEnabled && !hideInternalTabBar ? (
         <View style={styles.detailTabBar}>
           <TouchableOpacity
             style={[

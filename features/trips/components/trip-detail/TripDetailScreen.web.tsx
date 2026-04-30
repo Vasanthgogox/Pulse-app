@@ -2021,6 +2021,8 @@ export default function TripDetailScreen({
           <TripDetailFinanceView
             trip={trip}
             tripDetailTab="finance"
+            onTripDetailTabChange={(tab) => setActiveTab(tab)}
+            hideInternalTabBar
             tripLedgerEntries={detail.tripLedgerEntries}
             adjustments={detail.adjustments}
             viewerOrgId={currentOrganization?.id ?? null}
