@@ -1,91 +1,89 @@
-import { entityCompanionCardStyles as ecc } from "@/components/entityCompanionCard.styles";
-import { entityHeroScorecardStyles as ehs } from "@/components/entityHeroScorecard.styles";
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { DateRangePickerModal } from "@/components/DateRangePickerModal";
 import { DetailPageLayout, DetailSection } from "@/components/DetailPageLayout";
+import { entityCompanionCardStyles as ecc } from "@/components/entityCompanionCard.styles";
+import { entityHeroScorecardStyles as ehs } from "@/components/entityHeroScorecard.styles";
 import { FinanceFAB } from "@/components/FinanceFAB";
+import { getAvatarUriForSeed } from "@/constants/DriverLevels";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
-  computeDriverCommissionForTrip,
-  getTransactionsByOrganizationAndDriver,
-  LedgerReportModal,
-  type LedgerRow,
+    computeDriverCommissionForTrip,
+    getTransactionsByOrganizationAndDriver,
+    LedgerReportModal,
+    type LedgerRow,
 } from "@/features/finance";
+import {
+    buildMonthlyDriverStatement,
+    type DriverLedgerEntryForStatement,
+    type TripForStatement,
+} from "@/features/finance/aggregation/driverMonthlyStatement";
 import { LedgerTransactionListView } from "@/features/finance/components/LedgerTransactionListView";
 import {
-  buildMonthlyDriverStatement,
-  type DriverLedgerEntryForStatement,
-  type TripForStatement,
-} from "@/features/finance/aggregation/driverMonthlyStatement";
-import {
-  averageScore,
-  getRatingsForDriver,
-  type RatingRow,
+    averageScore,
+    getRatingsForDriver,
+    type RatingRow,
 } from "@/features/ratings";
 import {
-  getTripDisplayNumber,
-  getTripsByOrganization,
-  getTripsWhereOrgIsSupplier,
-  type TripRow,
+    getTripDisplayNumber,
+    getTripsByOrganization,
+    getTripsWhereOrgIsSupplier,
+    type TripRow,
 } from "@/features/trips/services/trips.service";
-import {
-  getAvatarUriForSeed,
-} from "@/constants/DriverLevels";
-import {
-  canAccessFinance,
-  getCapabilitiesFromProfile,
-} from "@/lib/capabilities";
-import {
-  formatINR,
-  formatIndianVehicleNumber,
-  formatLedgerAmount,
-  formatLedgerDate,
-} from "@/lib/format";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import {
-  getSalaryRequestsByDriverIds,
-  type SalaryRequestRow,
+    canAccessFinance,
+    getCapabilitiesFromProfile,
+} from "@/lib/capabilities";
+import {
+    formatIndianVehicleNumber,
+    formatINR,
+    formatLedgerAmount,
+    formatLedgerDate,
+} from "@/lib/format";
+import {
+    getSalaryRequestsByDriverIds,
+    type SalaryRequestRow,
 } from "@/services/salaryRequestsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
-import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
-  Animated,
-  Easing,
-  Image,
-  Modal,
-  Platform,
-  Pressable,
-  Share,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  useWindowDimensions,
-  View,
+    Alert,
+    Animated,
+    Easing,
+    Image,
+    Modal,
+    Platform,
+    Pressable,
+    ScrollView,
+    Share,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  attachDriverByContact,
-  getDriverById,
-  getDriverProfileDisplay,
-  getLatestDriverInviteTermsByUser,
-  getDriverInviteSentStatus,
-  getDriverLedgerByDriver,
-  getDriverOffersByOrganization,
-  getDriverSignupMatchStatus,
-  resetDriverSignupInvite,
-  sendDriverSignupMatchInvite,
-  updateDriver,
-  type DriverRow,
-  type DriverSignupMatchStatus
+    attachDriverByContact,
+    getDriverById,
+    getDriverInviteSentStatus,
+    getDriverLedgerByDriver,
+    getDriverOffersByOrganization,
+    getDriverProfileDisplay,
+    getDriverSignupMatchStatus,
+    getLatestDriverInviteTermsByUser,
+    resetDriverSignupInvite,
+    sendDriverSignupMatchInvite,
+    updateDriver,
+    type DriverRow,
+    type DriverSignupMatchStatus,
 } from "../services/drivers.service";
 
 /** Latest payment date for a trip from ledger. */
@@ -157,8 +155,7 @@ function getClientInitials(name: string | null | undefined): string {
 function formatDayMonUpper(iso: string | null | undefined): string {
   if (!iso || iso.length < 10) return "—";
   const [y, m, day] = iso.slice(0, 10).split("-").map(Number);
-  const months =
-    "JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC".split(" ");
+  const months = "JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC".split(" ");
   if (!y || !m || !day) return "—";
   return `${day} ${months[m - 1] ?? ""}`.trim();
 }
@@ -176,15 +173,7 @@ function startOfLocalDay(d: Date): Date {
 }
 
 function endOfLocalDay(d: Date): Date {
-  return new Date(
-    d.getFullYear(),
-    d.getMonth(),
-    d.getDate(),
-    23,
-    59,
-    59,
-    999,
-  );
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
 }
 
 function startOfWeekMonday(d: Date): Date {
@@ -283,8 +272,11 @@ export default function DriverDetailScreen({
   const [linking, setLinking] = useState(false);
   const [inviting, setInviting] = useState(false);
   const [dismissingMatch, setDismissingMatch] = useState(false);
-  const [signupMatch, setSignupMatch] = useState<DriverSignupMatchStatus | null>(null);
-  const [matchInviteStatus, setMatchInviteStatus] = useState<string | null>(null);
+  const [signupMatch, setSignupMatch] =
+    useState<DriverSignupMatchStatus | null>(null);
+  const [matchInviteStatus, setMatchInviteStatus] = useState<string | null>(
+    null,
+  );
   const [historicalInviteOffer, setHistoricalInviteOffer] = useState<{
     payableAmount: number | null;
     commissionPercent: number | null;
@@ -356,7 +348,8 @@ export default function DriverDetailScreen({
       setLoading(false);
       return;
     }
-    if (!isRefreshingRef.current && !initialLoadDoneRef.current) setLoading(true);
+    if (!isRefreshingRef.current && !initialLoadDoneRef.current)
+      setLoading(true);
     setError(null);
     const orgId = currentOrganization.id;
     Promise.all([
@@ -390,7 +383,9 @@ export default function DriverDetailScreen({
             setDriver(driverRow);
           }
           const ownerTrips = ownerRes.error ? [] : (ownerRes.trips ?? []);
-          const supplierTrips = supplierRes.error ? [] : (supplierRes.trips ?? []);
+          const supplierTrips = supplierRes.error
+            ? []
+            : (supplierRes.trips ?? []);
           const byId = new Map(ownerTrips.map((t) => [t.id, t]));
           for (const t of supplierTrips) if (!byId.has(t.id)) byId.set(t.id, t);
           const allTrips = Array.from(byId.values());
@@ -415,7 +410,8 @@ export default function DriverDetailScreen({
             const displayName = (t.driver_display_name ?? "").trim();
             if (!displayName) return false;
             const nameMatch =
-              (driver.name ?? "").trim().toLowerCase() === displayName.toLowerCase();
+              (driver.name ?? "").trim().toLowerCase() ===
+              displayName.toLowerCase();
             const phoneNorm = (p: string) =>
               (p ?? "").replace(/\s/g, "").replace(/\D/g, "");
             const phoneMatch =
@@ -460,7 +456,9 @@ export default function DriverDetailScreen({
           setDriverTransactions(
             txsRes.error ? [] : (txsRes.transactions ?? []),
           );
-          setSignupMatch(signupMatchRes.error ? null : (signupMatchRes.match ?? null));
+          setSignupMatch(
+            signupMatchRes.error ? null : (signupMatchRes.match ?? null),
+          );
         },
       )
       .finally(() => {
@@ -542,7 +540,9 @@ export default function DriverDetailScreen({
       }
 
       // Match network page behavior: stable fallback based on driver id.
-      setProfileAvatarUri(getAvatarUriForSeed(getDriverFallbackSeed(driver.id)));
+      setProfileAvatarUri(
+        getAvatarUriForSeed(getDriverFallbackSeed(driver.id)),
+      );
     };
 
     void resolveAvatar();
@@ -574,12 +574,15 @@ export default function DriverDetailScreen({
     [driverRatings],
   );
 
-  const entityPaid = useMemo(() =>
-    driverTransactions.reduce((s, tx) => s + Number(tx.amount_out ?? 0), 0),
-  [driverTransactions]);
-  const entityPending = useMemo(() =>
-    driverRequests.reduce((s, r) => s + Number(r.amount ?? 0), 0),
-  [driverRequests]);
+  const entityPaid = useMemo(
+    () =>
+      driverTransactions.reduce((s, tx) => s + Number(tx.amount_out ?? 0), 0),
+    [driverTransactions],
+  );
+  const entityPending = useMemo(
+    () => driverRequests.reduce((s, r) => s + Number(r.amount ?? 0), 0),
+    [driverRequests],
+  );
   const totalDriverEarnings = useMemo(
     () => entityPaid + entityPending,
     [entityPaid, entityPending],
@@ -688,7 +691,7 @@ export default function DriverDetailScreen({
           ? ledgerLast > paymentLast
             ? ledgerLast
             : paymentLast
-          : ledgerLast ?? paymentLast ?? null;
+          : (ledgerLast ?? paymentLast ?? null);
       return {
         id: t.id,
         missionId: getTripDisplayNumber(t),
@@ -722,12 +725,7 @@ export default function DriverDetailScreen({
           tripsCustomTo,
         ),
       ),
-    [
-      ledgerRows,
-      tripsDatePreset,
-      tripsCustomFrom,
-      tripsCustomTo,
-    ],
+    [ledgerRows, tripsDatePreset, tripsCustomFrom, tripsCustomTo],
   );
 
   const tripsScorecard = useMemo(() => {
@@ -807,8 +805,9 @@ export default function DriverDetailScreen({
   >(monthlyRowsReversed.length > 0 ? monthlyRowsReversed[0].monthKey : null);
   const primaryStatementRow =
     expandedStatementMonthKey && monthlyStatement
-      ? monthlyStatement.rows.find((r) => r.monthKey === expandedStatementMonthKey) ??
-        null
+      ? (monthlyStatement.rows.find(
+          (r) => r.monthKey === expandedStatementMonthKey,
+        ) ?? null)
       : null;
   const primaryStatementDetail =
     primaryStatementRow && monthlyStatement
@@ -945,10 +944,11 @@ export default function DriverDetailScreen({
                 commission_per_km: inviteOffer.commissionPerKm,
               });
             }
-            let { error: inviteError, status, already_exists } = await sendDriverSignupMatchInvite(
-              driver.id,
-              inviteOffer,
-            );
+            let {
+              error: inviteError,
+              status,
+              already_exists,
+            } = await sendDriverSignupMatchInvite(driver.id, inviteOffer);
             if (inviteError) {
               setInviting(false);
               Alert.alert(t("linkFailed"), inviteError.message);
@@ -956,11 +956,14 @@ export default function DriverDetailScreen({
             }
             const normalizedStatus = (status ?? "").toLowerCase();
             if (already_exists && normalizedStatus === "rejected") {
-              const { error: resetErr } = await resetDriverSignupInvite(driver.id);
+              const { error: resetErr } = await resetDriverSignupInvite(
+                driver.id,
+              );
               if (resetErr) {
                 setInviting(false);
                 Alert.alert(
-                  t("invitationAlreadySentTitle") === "invitationAlreadySentTitle"
+                  t("invitationAlreadySentTitle") ===
+                    "invitationAlreadySentTitle"
                     ? "Invitation update needed"
                     : t("invitationAlreadySentTitle"),
                   t("invitationRejectedNeedsResetBody") ===
@@ -971,8 +974,11 @@ export default function DriverDetailScreen({
                 load();
                 return;
               }
-              ({ error: inviteError, status, already_exists } =
-                await sendDriverSignupMatchInvite(driver.id, inviteOffer));
+              ({
+                error: inviteError,
+                status,
+                already_exists,
+              } = await sendDriverSignupMatchInvite(driver.id, inviteOffer));
               if (inviteError) {
                 setInviting(false);
                 Alert.alert(t("linkFailed"), inviteError.message);
@@ -1008,7 +1014,7 @@ export default function DriverDetailScreen({
         : t("invitationResetTitle"),
       t("invitationResetBody") === "invitationResetBody"
         ? "Invitation has been reset. You can send a new invitation now."
-        : t("invitationResetBody")
+        : t("invitationResetBody"),
     );
     load();
   };
@@ -1025,7 +1031,8 @@ export default function DriverDetailScreen({
   const tripsHandled = filteredLedgerRows.length;
   const isIntegrated = Boolean(driver.user_id);
   const isInAppNotIntegrated =
-    !isIntegrated && (signupMatch != null || canSendMatchedInvite || inviteAlreadySentForMatch);
+    !isIntegrated &&
+    (signupMatch != null || canSendMatchedInvite || inviteAlreadySentForMatch);
   const isNotInApp = !isIntegrated && !isInAppNotIntegrated;
   const statusTitle = isIntegrated
     ? "Integrated"
@@ -1037,7 +1044,8 @@ export default function DriverDetailScreen({
     : isInAppNotIntegrated
       ? "Can request integration"
       : "Invite to onboard";
-  const ratingValue = driverRatingAvg && driverRatingAvg > 0 ? driverRatingAvg : 0;
+  const ratingValue =
+    driverRatingAvg && driverRatingAvg > 0 ? driverRatingAvg : 0;
   const ratingFilledStars = Math.max(0, Math.min(5, Math.round(ratingValue)));
   const profileActionLabel = canSendMatchedInvite
     ? "Send invitation"
@@ -1075,48 +1083,11 @@ export default function DriverDetailScreen({
       titleSubline={
         <View style={styles.headerTitleSubwrap}>
           <Text style={styles.entityHeaderSubtitle}>DEEP ENTITY INTEL</Text>
-          {driverRatingAvg != null && driverRatingAvg > 0 ? (
-            <Text style={styles.headerRatingText}>
-              {driverRatingAvg.toFixed(1)} ★
-              {driverRatings.length > 0 ? ` (${driverRatings.length})` : ""}
-            </Text>
-          ) : null}
         </View>
       }
       onBack={onBack}
       rightAction={
         <View style={styles.headerRightActions}>
-          <TouchableOpacity
-            style={styles.publicProfileHeaderBtn}
-            onPress={() => router.push(`/public-profile/driver/${driverId}`)}
-            activeOpacity={0.8}
-            accessibilityLabel="View public profile"
-          >
-            <FontAwesome name="id-card-o" size={15} color={Theme.textOnPrimary} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.profileHeaderBtn}
-            onPress={() => setShowProfileModal(true)}
-            activeOpacity={0.8}
-            accessibilityLabel={t("profile")}
-            accessibilityHint={
-              hasPendingSalaryRequests
-                ? "Open profile with pending salary requests"
-                : undefined
-            }
-          >
-            {profileAvatarUri ? (
-              <Image
-                source={{ uri: profileAvatarUri }}
-                style={styles.profileHeaderAvatarImage}
-              />
-            ) : (
-              <FontAwesome name="user" size={16} color={Theme.textOnPrimary} />
-            )}
-            {hasPendingSalaryRequests ? (
-              <View style={styles.headerProfileBadge} />
-            ) : null}
-          </TouchableOpacity>
           <TouchableOpacity
             style={styles.downloadHeaderBtn}
             onPress={() => setShowReportModal(true)}
@@ -1185,12 +1156,22 @@ export default function DriverDetailScreen({
           ]}
         >
           {isWebDesktop ? (
-            <Animated.View style={[styles.scorecardDecorIconWrap, heroDecorAnimatedStyle]}>
-              <FontAwesome name="user" size={120} color={Theme.textOnDark} style={styles.scorecardDecorIcon} />
+            <Animated.View
+              style={[styles.scorecardDecorIconWrap, heroDecorAnimatedStyle]}
+            >
+              <FontAwesome
+                name="user"
+                size={120}
+                color={Theme.textOnDark}
+                style={styles.scorecardDecorIcon}
+              />
             </Animated.View>
           ) : null}
           <View
-            style={[styles.scorecardTop, isWebDesktop && styles.scorecardTopWebDesktop]}
+            style={[
+              styles.scorecardTop,
+              isWebDesktop && styles.scorecardTopWebDesktop,
+            ]}
           >
             <View style={styles.scorecardLeft}>
               <Text style={styles.scorecardLabel}>FINANCIAL OVERVIEW</Text>
@@ -1210,7 +1191,9 @@ export default function DriverDetailScreen({
                 </>
               ) : (
                 <>
-                  <Text style={styles.scorecardSalesLabel}>DRIVER PAYMENTS</Text>
+                  <Text style={styles.scorecardSalesLabel}>
+                    DRIVER PAYMENTS
+                  </Text>
                   <Text
                     style={[
                       styles.scorecardAmount,
@@ -1224,7 +1207,10 @@ export default function DriverDetailScreen({
             </View>
           </View>
           <View
-            style={[styles.scorecardGrid, isWebDesktop && styles.scorecardGridWebDesktop]}
+            style={[
+              styles.scorecardGrid,
+              isWebDesktop && styles.scorecardGridWebDesktop,
+            ]}
           >
             <View style={isWebDesktop ? styles.scorecardGridStat : undefined}>
               <Text style={styles.scorecardGridLabelPaid}>PAID</Text>
@@ -1294,17 +1280,31 @@ export default function DriverDetailScreen({
               <View style={styles.profilePreviewIdentityRow}>
                 <View style={styles.profilePreviewIdentityAvatar}>
                   {profileAvatarUri ? (
-                    <Image source={{ uri: profileAvatarUri }} style={styles.profilePreviewIdentityAvatarImage} />
+                    <Image
+                      source={{ uri: profileAvatarUri }}
+                      style={styles.profilePreviewIdentityAvatarImage}
+                    />
                   ) : (
-                    <FontAwesome name="user" size={14} color={Theme.textSecondary} />
+                    <FontAwesome
+                      name="user"
+                      size={14}
+                      color={Theme.textSecondary}
+                    />
                   )}
                 </View>
                 <View style={styles.profilePreviewIdentityMeta}>
-                  <Text style={styles.profilePreviewIdentityName} numberOfLines={1}>
+                  <Text
+                    style={styles.profilePreviewIdentityName}
+                    numberOfLines={1}
+                  >
                     {(driver.name ?? "Driver").trim() || "Driver"}
                   </Text>
-                  <Text style={styles.profilePreviewIdentitySub} numberOfLines={1}>
-                    {(driver.phone ?? driver.email ?? "No contact").trim() || "No contact"}
+                  <Text
+                    style={styles.profilePreviewIdentitySub}
+                    numberOfLines={1}
+                  >
+                    {(driver.phone ?? driver.email ?? "No contact").trim() ||
+                      "No contact"}
                   </Text>
                 </View>
               </View>
@@ -1316,40 +1316,63 @@ export default function DriverDetailScreen({
                     key={`driver-star-${idx}`}
                     name={idx < ratingFilledStars ? "star" : "star-o"}
                     size={13}
-                    color={idx < ratingFilledStars ? "#fbbf24" : Theme.borderMedium}
+                    color={
+                      idx < ratingFilledStars ? "#fbbf24" : Theme.borderMedium
+                    }
                   />
                 ))}
               </View>
               <View style={styles.profilePreviewRatingBadge}>
-                <Text style={styles.profilePreviewRatingBadgeText}>{ratingValue.toFixed(1)}</Text>
+                <Text style={styles.profilePreviewRatingBadgeText}>
+                  {ratingValue.toFixed(1)}
+                </Text>
               </View>
             </View>
             <View style={styles.profilePreviewExperienceBlock}>
-              <Text style={styles.profilePreviewExperienceEyebrow}>EXPERIENCE</Text>
+              <Text style={styles.profilePreviewExperienceEyebrow}>
+                EXPERIENCE
+              </Text>
               <View style={styles.profilePreviewExperienceRow}>
                 <View style={styles.profilePreviewExperienceIconWrap}>
-                  <FontAwesome name="road" size={12} color={Theme.textOnPrimary} />
+                  <FontAwesome
+                    name="road"
+                    size={12}
+                    color={Theme.textOnPrimary}
+                  />
                 </View>
-                <Text style={styles.profilePreviewTripsNumber}>{tripsHandled}</Text>
-                <Text style={styles.profilePreviewExperienceLabel}>Trips Handled</Text>
+                <Text style={styles.profilePreviewTripsNumber}>
+                  {tripsHandled}
+                </Text>
+                <Text style={styles.profilePreviewExperienceLabel}>
+                  Trips Handled
+                </Text>
               </View>
             </View>
             <View style={styles.profilePreviewDetails}>
               <View style={styles.profilePreviewDetailRow}>
                 <Text style={styles.profilePreviewDetailLabel}>Name</Text>
-                <Text style={styles.profilePreviewDetailValue} numberOfLines={1}>
+                <Text
+                  style={styles.profilePreviewDetailValue}
+                  numberOfLines={1}
+                >
                   {(driver.name ?? "—").trim() || "—"}
                 </Text>
               </View>
               <View style={styles.profilePreviewDetailRow}>
                 <Text style={styles.profilePreviewDetailLabel}>Phone</Text>
-                <Text style={styles.profilePreviewDetailValue} numberOfLines={1}>
+                <Text
+                  style={styles.profilePreviewDetailValue}
+                  numberOfLines={1}
+                >
                   {(driver.phone ?? "—").trim() || "—"}
                 </Text>
               </View>
               <View style={styles.profilePreviewDetailRow}>
                 <Text style={styles.profilePreviewDetailLabel}>Email</Text>
-                <Text style={styles.profilePreviewDetailValue} numberOfLines={1}>
+                <Text
+                  style={styles.profilePreviewDetailValue}
+                  numberOfLines={1}
+                >
                   {(driver.email ?? "—").trim() || "—"}
                 </Text>
               </View>
@@ -1363,23 +1386,39 @@ export default function DriverDetailScreen({
                 ]}
               >
                 {isIntegrated ? (
-                  <FontAwesome name="check" size={11} color={Theme.textOnPrimary} />
+                  <FontAwesome
+                    name="check"
+                    size={11}
+                    color={Theme.textOnPrimary}
+                  />
                 ) : isInAppNotIntegrated ? (
-                  <FontAwesome name="send" size={9} color={Theme.financeCardGreenFrom} />
+                  <FontAwesome
+                    name="send"
+                    size={9}
+                    color={Theme.financeCardGreenFrom}
+                  />
                 ) : isNotInApp ? (
-                  <FontAwesome name="envelope-o" size={9} color={Theme.textMuted} />
+                  <FontAwesome
+                    name="envelope-o"
+                    size={9}
+                    color={Theme.textMuted}
+                  />
                 ) : null}
               </View>
               <View style={styles.profilePreviewToggleTextWrap}>
-                <Text style={styles.profilePreviewToggleTitle}>{statusTitle}</Text>
-                <Text style={styles.profilePreviewToggleSub}>{statusSubtitle}</Text>
+                <Text style={styles.profilePreviewToggleTitle}>
+                  {statusTitle}
+                </Text>
+                <Text style={styles.profilePreviewToggleSub}>
+                  {statusSubtitle}
+                </Text>
               </View>
             </View>
             <TouchableOpacity
               style={[
                 styles.profilePreviewActionBtn,
                 ecc.actionBtnPrimary,
-                (!canSendMatchedInvite && !isNotInApp) && ecc.actionBtnDisabled,
+                !canSendMatchedInvite && !isNotInApp && ecc.actionBtnDisabled,
               ]}
               onPress={() => {
                 if (canSendMatchedInvite) {
@@ -1397,7 +1436,9 @@ export default function DriverDetailScreen({
                 color={Theme.textOnPrimary}
               />
               <Text style={styles.profilePreviewActionText}>
-                {inviting && canSendMatchedInvite ? "Sending..." : profileActionLabel}
+                {inviting && canSendMatchedInvite
+                  ? "Sending..."
+                  : profileActionLabel}
               </Text>
             </TouchableOpacity>
           </View>
@@ -1478,7 +1519,11 @@ export default function DriverDetailScreen({
               hitSlop={12}
               accessibilityLabel={t("close") ?? "Close"}
             >
-              <FontAwesome name="times" size={18} color={Theme.textPrimaryDark} />
+              <FontAwesome
+                name="times"
+                size={18}
+                color={Theme.textPrimaryDark}
+              />
             </TouchableOpacity>
           </View>
           <ScrollView
@@ -1526,7 +1571,9 @@ export default function DriverDetailScreen({
                         </Text>
                       </View>
                     )}
-                    <View style={[styles.profileBadge, styles.profileBadgeCore]}>
+                    <View
+                      style={[styles.profileBadge, styles.profileBadgeCore]}
+                    >
                       <Text style={styles.profileBadgeCoreText}>Core Node</Text>
                     </View>
                   </View>
@@ -1574,7 +1621,11 @@ export default function DriverDetailScreen({
               </View>
               <View style={styles.profileContactRow}>
                 <View style={styles.profileContactIcon}>
-                  <FontAwesome name="envelope" size={14} color={Theme.textMuted} />
+                  <FontAwesome
+                    name="envelope"
+                    size={14}
+                    color={Theme.textMuted}
+                  />
                 </View>
                 <View style={styles.profileContactText}>
                   <Text style={styles.profileContactLabel}>Email link</Text>
@@ -1641,15 +1692,28 @@ export default function DriverDetailScreen({
               <DetailSection title={t("account")}>
                 <TouchableOpacity
                   style={[styles.linkBtn, linking && styles.linkBtnDisabled]}
-                  onPress={canSendMatchedInvite ? handleSendMatchedInvite : handleLinkToAccount}
-                  disabled={linking || inviting || dismissingMatch || Boolean(inviteAlreadySentForMatch)}
+                  onPress={
+                    canSendMatchedInvite
+                      ? handleSendMatchedInvite
+                      : handleLinkToAccount
+                  }
+                  disabled={
+                    linking ||
+                    inviting ||
+                    dismissingMatch ||
+                    Boolean(inviteAlreadySentForMatch)
+                  }
                 >
                   <Text style={styles.linkBtnText}>
                     {inviteAlreadySentForMatch
                       ? t("invitationSentLabel")
                       : canSendMatchedInvite
-                        ? (inviting ? t("sending") : t("sendInvitation"))
-                        : (linking ? t("linking") : t("linkToAppAccount"))}
+                        ? inviting
+                          ? t("sending")
+                          : t("sendInvitation")
+                        : linking
+                          ? t("linking")
+                          : t("linkToAppAccount")}
                   </Text>
                 </TouchableOpacity>
                 <Text style={styles.linkHint}>
@@ -1797,201 +1861,154 @@ export default function DriverDetailScreen({
               </TouchableOpacity>
             </View>
 
-            {ledgerRows.length > 0 && filteredLedgerRows.length > 0 ? (
-              <View style={styles.ledgerSummaryRowTripsFull}>
-                <View style={styles.ledgerSummaryTripsPaidBlock}>
-                  <Text style={styles.ledgerSummaryLabel}>{t("paid")}</Text>
-                  <Text
-                    style={[styles.ledgerSummaryAmount, styles.ledgerSummaryIn]}
-                  >
-                    {formatINR(
-                      filteredLedgerRows.reduce(
-                        (s, r) => s + Number(r.col2 ?? 0),
-                        0,
-                      ),
-                    )}
-                  </Text>
-                </View>
-                <View style={styles.ledgerSummaryTripsDueBlock}>
-                  <Text style={styles.ledgerSummaryLabel}>{t("due")}</Text>
-                  <Text
-                    style={[
-                      styles.ledgerSummaryAmount,
-                      styles.ledgerSummaryOut,
-                    ]}
-                  >
-                    {formatINR(
-                      filteredLedgerRows.reduce(
-                        (s, r) => s + Number(r.col3 ?? 0),
-                        0,
-                      ),
-                    )}
-                  </Text>
-                </View>
-              </View>
-            ) : null}
-
             <View style={[styles.tripTableCard, styles.tripTableCardFullWidth]}>
               <View style={styles.driverTripsTableFull}>
-                  <View style={styles.driverTripsHeaderRow}>
-                    <Text style={styles.driverTripsThTrip} numberOfLines={1}>
-                      {t("driverTripsColTrip")}
-                    </Text>
-                    <Text style={styles.driverTripsThClient} numberOfLines={1}>
-                      {t("tripsHubColClient")}
-                    </Text>
-                    <Text style={styles.driverTripsThNum} numberOfLines={1}>
-                      {t("driverTripsColClientRev")}
-                    </Text>
-                    <Text style={styles.driverTripsThNum} numberOfLines={1}>
-                      {t("driverTripsColContract")}
-                    </Text>
-                    <Text style={styles.driverTripsThNum} numberOfLines={1}>
-                      {t("driverTripsColPnL")}
-                    </Text>
-                    <Text style={styles.driverTripsThNum} numberOfLines={1}>
-                      {t("paid")}
-                    </Text>
-                    <Text style={styles.driverTripsThNum} numberOfLines={1}>
-                      {t("due")}
-                    </Text>
-                    <Text style={styles.driverTripsThTxn} numberOfLines={1}>
-                      {t("tripsHubColTxns")}
-                    </Text>
-                    <Text style={styles.driverTripsThLast} numberOfLines={1}>
-                      {t("driverTripsColLastTxn")}
+                <View style={styles.driverTripsHeaderRow}>
+                  <Text style={styles.driverTripsThTrip} numberOfLines={1}>
+                    {t("driverTripsColTrip")}
+                  </Text>
+                  <Text style={styles.driverTripsThClient} numberOfLines={1}>
+                    {t("tripsHubColClient")}
+                  </Text>
+                  <Text style={styles.driverTripsThNum} numberOfLines={1}>
+                    {t("driverTripsColClientRev")}
+                  </Text>
+                  <Text style={styles.driverTripsThNum} numberOfLines={1}>
+                    {t("driverTripsColContract")}
+                  </Text>
+                  <Text style={styles.driverTripsThNum} numberOfLines={1}>
+                    {t("driverTripsColPnL")}
+                  </Text>
+                  <Text style={styles.driverTripsThNum} numberOfLines={1}>
+                    {t("paid")}
+                  </Text>
+                  <Text style={styles.driverTripsThNum} numberOfLines={1}>
+                    {t("due")}
+                  </Text>
+                  <Text style={styles.driverTripsThTxn} numberOfLines={1}>
+                    {t("tripsHubColTxns")}
+                  </Text>
+                  <Text style={styles.driverTripsThLast} numberOfLines={1}>
+                    {t("driverTripsColLastTxn")}
+                  </Text>
+                </View>
+                {ledgerRows.length === 0 ? (
+                  <View
+                    style={[
+                      styles.driverTripsDataRow,
+                      styles.driverTripsDataRowEmpty,
+                    ]}
+                  >
+                    <Text style={styles.driverTripsEmptyWide} numberOfLines={2}>
+                      {t("noLedgerEntriesDriver")}
                     </Text>
                   </View>
-                  {ledgerRows.length === 0 ? (
-                    <View
-                      style={[
-                        styles.driverTripsDataRow,
-                        styles.driverTripsDataRowEmpty,
-                      ]}
-                    >
-                      <Text
-                        style={styles.driverTripsEmptyWide}
-                        numberOfLines={2}
+                ) : filteredLedgerRows.length === 0 ? (
+                  <View
+                    style={[
+                      styles.driverTripsDataRow,
+                      styles.driverTripsDataRowEmpty,
+                    ]}
+                  >
+                    <Text style={styles.driverTripsEmptyWide} numberOfLines={2}>
+                      {t("driverTripsEmptyFilter")}
+                    </Text>
+                  </View>
+                ) : (
+                  filteredLedgerRows.map((r) => {
+                    const pl = Number(r.margin ?? 0);
+                    const plStyle =
+                      pl > 0
+                        ? styles.tdGreen
+                        : pl < 0
+                          ? styles.tdRed
+                          : styles.tdMuted;
+                    return (
+                      <Pressable
+                        key={r.id}
+                        style={({ pressed }) => [
+                          styles.driverTripsDataRow,
+                          pressed && styles.ledgerRowPressed,
+                        ]}
+                        onPress={() => {
+                          const tripId = String(r.id ?? "").trim();
+                          if (!tripId) return;
+                          router.push(`/trip/${tripId}`);
+                        }}
                       >
-                        {t("noLedgerEntriesDriver")}
-                      </Text>
-                    </View>
-                  ) : filteredLedgerRows.length === 0 ? (
-                    <View
-                      style={[
-                        styles.driverTripsDataRow,
-                        styles.driverTripsDataRowEmpty,
-                      ]}
-                    >
-                      <Text
-                        style={styles.driverTripsEmptyWide}
-                        numberOfLines={2}
-                      >
-                        {t("driverTripsEmptyFilter")}
-                      </Text>
-                    </View>
-                  ) : (
-                    filteredLedgerRows.map((r) => {
-                      const pl = Number(r.margin ?? 0);
-                      const plStyle =
-                        pl > 0
-                          ? styles.tdGreen
-                          : pl < 0
-                            ? styles.tdRed
-                            : styles.tdMuted;
-                      return (
-                        <Pressable
-                          key={r.id}
-                          style={({ pressed }) => [
-                            styles.driverTripsDataRow,
-                            pressed && styles.ledgerRowPressed,
-                          ]}
-                          onPress={() => {
-                            const tripId = String(r.id ?? "").trim();
-                            if (!tripId) return;
-                            router.push(`/trip/${tripId}`);
-                          }}
+                        <View style={styles.driverTripsCellTrip}>
+                          <Text
+                            style={styles.driverTripsTripId}
+                            numberOfLines={1}
+                          >
+                            {r.missionId ?? "—"}
+                          </Text>
+                          <Text
+                            style={styles.driverTripsRoute}
+                            numberOfLines={2}
+                          >
+                            {r.dest?.trim() || "—"}
+                          </Text>
+                        </View>
+                        <View style={styles.driverTripsCellClient}>
+                          <View style={styles.driverTripsClientAvatar}>
+                            <Text style={styles.driverTripsClientAvatarText}>
+                              {r.clientInitials}
+                            </Text>
+                          </View>
+                          <Text
+                            style={styles.driverTripsClientName}
+                            numberOfLines={2}
+                          >
+                            {(r.clientName ?? "—").toUpperCase()}
+                          </Text>
+                        </View>
+                        <Text style={styles.driverTripsAmt} numberOfLines={1}>
+                          {formatINR(r.clientRev)}
+                        </Text>
+                        <Text style={styles.driverTripsAmt} numberOfLines={1}>
+                          {formatINR(r.col1)}
+                        </Text>
+                        <Text
+                          style={[styles.driverTripsAmt, plStyle]}
+                          numberOfLines={1}
                         >
-                          <View style={styles.driverTripsCellTrip}>
-                            <Text
-                              style={styles.driverTripsTripId}
-                              numberOfLines={1}
-                            >
-                              {r.missionId ?? "—"}
-                            </Text>
-                            <Text
-                              style={styles.driverTripsRoute}
-                              numberOfLines={2}
-                            >
-                              {r.dest?.trim() || "—"}
-                            </Text>
-                          </View>
-                          <View style={styles.driverTripsCellClient}>
-                            <View style={styles.driverTripsClientAvatar}>
-                              <Text style={styles.driverTripsClientAvatarText}>
-                                {r.clientInitials}
-                              </Text>
-                            </View>
-                            <Text
-                              style={styles.driverTripsClientName}
-                              numberOfLines={2}
-                            >
-                              {(r.clientName ?? "—").toUpperCase()}
-                            </Text>
-                          </View>
-                          <Text style={styles.driverTripsAmt} numberOfLines={1}>
-                            {formatINR(r.clientRev)}
-                          </Text>
-                          <Text style={styles.driverTripsAmt} numberOfLines={1}>
-                            {formatINR(r.col1)}
-                          </Text>
-                          <Text
-                            style={[styles.driverTripsAmt, plStyle]}
-                            numberOfLines={1}
-                          >
-                            {formatINR(pl)}
-                          </Text>
-                          <Text
-                            style={[
-                              styles.driverTripsAmt,
-                              (r.col2 ?? 0) > 0 ? styles.tdGreen : styles.tdMuted,
-                            ]}
-                            numberOfLines={1}
-                          >
-                            {(r.col2 ?? 0) > 0
-                              ? formatLedgerAmount(r.col2)
-                              : "—"}
-                          </Text>
-                          <Text
-                            style={[
-                              styles.driverTripsAmt,
-                              (r.col3 ?? 0) > 0 ? styles.tdRed : styles.tdMuted,
-                            ]}
-                            numberOfLines={1}
-                          >
-                            {(r.col3 ?? 0) > 0
-                              ? formatLedgerAmount(r.col3)
-                              : "—"}
-                          </Text>
-                          <Text
-                            style={styles.driverTripsTxn}
-                            numberOfLines={1}
-                          >
-                            {r.txnCount > 0 ? String(r.txnCount) : "—"}
-                          </Text>
-                          <Text
-                            style={styles.driverTripsLastTxn}
-                            numberOfLines={1}
-                          >
-                            {r.lastTxnShort}
-                          </Text>
-                        </Pressable>
-                      );
-                    })
-                  )}
-                </View>
+                          {formatINR(pl)}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.driverTripsAmt,
+                            (r.col2 ?? 0) > 0 ? styles.tdGreen : styles.tdMuted,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {(r.col2 ?? 0) > 0 ? formatLedgerAmount(r.col2) : "—"}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.driverTripsAmt,
+                            (r.col3 ?? 0) > 0 ? styles.tdRed : styles.tdMuted,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {(r.col3 ?? 0) > 0 ? formatLedgerAmount(r.col3) : "—"}
+                        </Text>
+                        <Text style={styles.driverTripsTxn} numberOfLines={1}>
+                          {r.txnCount > 0 ? String(r.txnCount) : "—"}
+                        </Text>
+                        <Text
+                          style={styles.driverTripsLastTxn}
+                          numberOfLines={1}
+                        >
+                          {r.lastTxnShort}
+                        </Text>
+                      </Pressable>
+                    );
+                  })
+                )}
               </View>
             </View>
+          </View>
         </ScrollView>
       )}
 
@@ -2053,8 +2070,7 @@ export default function DriverDetailScreen({
                 </View>
               ) : (
                 monthlyRowsReversed.map((row) => {
-                  const isExpanded =
-                    expandedStatementMonthKey === row.monthKey;
+                  const isExpanded = expandedStatementMonthKey === row.monthKey;
                   return (
                     <TouchableOpacity
                       key={row.monthKey}
@@ -2066,20 +2082,25 @@ export default function DriverDetailScreen({
                         )
                       }
                     >
-                      <View style={[styles.tableRow, styles.statementMonthRowInner]}>
+                      <View
+                        style={[styles.tableRow, styles.statementMonthRowInner]}
+                      >
                         <View style={styles.tdMonth}>
                           <Text style={styles.tdMissionId} numberOfLines={1}>
                             {row.label}
                           </Text>
                           <Text style={styles.tdDest} numberOfLines={1}>
-                            {row.tripCount} trips, {row.ledgerEntryCount} payments
+                            {row.tripCount} trips, {row.ledgerEntryCount}{" "}
+                            payments
                           </Text>
                         </View>
                         <View style={styles.tdCol}>
                           <Text
                             style={[
                               styles.td,
-                              row.fixedSalary > 0 ? styles.tdDark : styles.tdMuted,
+                              row.fixedSalary > 0
+                                ? styles.tdDark
+                                : styles.tdMuted,
                             ]}
                             numberOfLines={1}
                           >
@@ -2107,11 +2128,15 @@ export default function DriverDetailScreen({
                           <Text
                             style={[
                               styles.td,
-                              row.paidTotal > 0 ? styles.tdGreen : styles.tdMuted,
+                              row.paidTotal > 0
+                                ? styles.tdGreen
+                                : styles.tdMuted,
                             ]}
                             numberOfLines={1}
                           >
-                            {row.paidTotal > 0 ? formatINR(row.paidTotal) : "₹0"}
+                            {row.paidTotal > 0
+                              ? formatINR(row.paidTotal)
+                              : "₹0"}
                           </Text>
                         </View>
                         <FontAwesome
@@ -2201,7 +2226,12 @@ export default function DriverDetailScreen({
                   ) : (
                     <>
                       <View style={styles.statementHeaderRow}>
-                        <Text style={[styles.statementHeaderCell, styles.statementHeaderCellLeft]}>
+                        <Text
+                          style={[
+                            styles.statementHeaderCell,
+                            styles.statementHeaderCellLeft,
+                          ]}
+                        >
                           TRIP ID
                         </Text>
                         <View style={styles.statementTripAmounts}>
@@ -2260,7 +2290,12 @@ export default function DriverDetailScreen({
                   ) : (
                     <>
                       <View style={styles.statementHeaderRow}>
-                        <Text style={[styles.statementHeaderCell, styles.statementHeaderCellLeft]}>
+                        <Text
+                          style={[
+                            styles.statementHeaderCell,
+                            styles.statementHeaderCellLeft,
+                          ]}
+                        >
                           DATE / TYPE
                         </Text>
                         <Text style={styles.statementHeaderCell}>AMOUNT</Text>
@@ -2357,30 +2392,6 @@ const styles = StyleSheet.create({
     zIndex: 100,
     elevation: 10,
   },
-  publicProfileHeaderBtn: {
-    width: 36,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.18)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  profileHeaderBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: Theme.darkBackground,
-    alignItems: "center",
-    justifyContent: "center",
-    position: "relative",
-    overflow: "hidden",
-  },
-  profileHeaderAvatarImage: {
-    width: "100%",
-    height: "100%",
-  },
   downloadHeaderBtn: {
     width: 40,
     height: 40,
@@ -2388,17 +2399,6 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.darkBackground,
     alignItems: "center",
     justifyContent: "center",
-  },
-  headerProfileBadge: {
-    position: "absolute",
-    top: 5,
-    right: 5,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: Theme.negative,
-    borderWidth: 1,
-    borderColor: Theme.screenBackground,
   },
   profileModalWrap: {
     flex: 1,
@@ -2833,7 +2833,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surfaceGray,
   },
   tripsFilterChipActive: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.darkBackground,
   },
   tripsFilterChipText: {
     fontSize: 11,

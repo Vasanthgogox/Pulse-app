@@ -439,16 +439,7 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
           </Text>
           <Text style={styles.headerSubtitle}>VEHICLE FINANCIAL VIEW</Text>
         </View>
-        <View style={styles.headerRight}>
-          <TouchableOpacity
-            style={styles.profileBtn}
-            onPress={() => setShowProfileModal(true)}
-            activeOpacity={0.8}
-            accessibilityLabel="Vehicle profile"
-          >
-            <FontAwesome name="truck" size={16} color={Theme.textOnPrimary} />
-          </TouchableOpacity>
-        </View>
+        <View style={styles.headerRight} />
       </View>
 
       <ScrollView
@@ -949,14 +940,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-  },
-  profileBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: Theme.darkBackground,
-    alignItems: "center",
-    justifyContent: "center",
   },
   fabWrap: {
     position: "absolute",
