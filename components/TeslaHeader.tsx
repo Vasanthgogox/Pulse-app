@@ -36,6 +36,8 @@ export interface TeslaHeaderProps {
   onAddClick?: () => void;
   /** Hide the small square icon badge before the brand/title block. */
   hideLogoBadge?: boolean;
+  /** Hide bell + unread dot (e.g. when already on the notifications screen). */
+  hideNotificationBell?: boolean;
   /** Optional per-screen override for title text style. */
   titleTextStyle?: TextStyle;
   /** Optional per-screen override for subtitle text style. */
@@ -60,6 +62,7 @@ export function TeslaHeader({
   hideRightIcons = false,
   onAddClick,
   hideLogoBadge = false,
+  hideNotificationBell = false,
   titleTextStyle,
   subtitleTextStyle,
 }: TeslaHeaderProps) {
@@ -170,16 +173,18 @@ export function TeslaHeader({
           <Text style={[styles.escrowLabel, isDark && styles.escrowLabelDark]}>Escrow</Text>
           <Text style={styles.escrowValue}>{escrowFormatted}</Text>
         </TouchableOpacity>
-        <View style={styles.iconWithDot}>
-          <TouchableOpacity
-            onPress={handleNotificationPress}
-            style={styles.iconWrap}
-            hitSlop={8}
-          >
-            <FontAwesome name="bell" size={16} color={iconColor(isDark)} />
-          </TouchableOpacity>
-          <View style={[styles.dot, isDark && styles.dotDark]} />
-        </View>
+        {!hideNotificationBell && (
+          <View style={styles.iconWithDot}>
+            <TouchableOpacity
+              onPress={handleNotificationPress}
+              style={styles.iconWrap}
+              hitSlop={8}
+            >
+              <FontAwesome name="bell" size={16} color={iconColor(isDark)} />
+            </TouchableOpacity>
+            <View style={[styles.dot, isDark && styles.dotDark]} />
+          </View>
+        )}
         {onProfileClick ? (
           <TouchableOpacity
             onPress={onProfileClick}
