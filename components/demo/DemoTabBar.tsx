@@ -30,7 +30,7 @@ import {
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { Command } from "lucide-react-native";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Image,
   Platform,
@@ -288,6 +288,8 @@ export function DemoTabBar({
   >([]);
   const [notifActionId, setNotifActionId] = useState<string | null>(null);
   const [inviteActionId, setInviteActionId] = useState<string | null>(null);
+  const notificationsPopoverRootRef = useRef<any>(null);
+  const invitationsPopoverRootRef = useRef<any>(null);
   const orgId = currentOrganization?.id ?? null;
   const receivedQ = useConnectionRequestsReceivedQuery(orgId);
   const sentQ = useConnectionRequestsSentQuery(orgId);
@@ -540,10 +542,17 @@ export function DemoTabBar({
   useEffect(() => {
     if (Platform.OS !== "web") return;
     const onDocumentPointerDown = (event: MouseEvent) => {
-      const target = event.target as HTMLElement | null;
+      const target = event.target as Node | null;
       if (!target) return;
-      const insidePopoverRoot = target.closest('[data-demo-popover-root="true"]');
-      if (insidePopoverRoot) return;
+      const inNotifications =
+        !!notificationsPopoverRootRef.current &&
+        typeof notificationsPopoverRootRef.current.contains === "function" &&
+        notificationsPopoverRootRef.current.contains(target);
+      const inInvitations =
+        !!invitationsPopoverRootRef.current &&
+        typeof invitationsPopoverRootRef.current.contains === "function" &&
+        invitationsPopoverRootRef.current.contains(target);
+      if (inNotifications || inInvitations) return;
       setShowNotifications(false);
       setShowInvitations(false);
     };
@@ -617,7 +626,7 @@ export function DemoTabBar({
           </View>
 
           <View style={styles.webUtilityWrap}>
-            <View style={styles.webPopoverAnchor} data-demo-popover-root="true">
+            <View style={styles.webPopoverAnchor} ref={notificationsPopoverRootRef}>
               <AnimatedPress
                 style={styles.webBellBtn}
                 activeOpacity={0.8}
@@ -796,7 +805,7 @@ export function DemoTabBar({
                 </View>
               ) : null}
             </View>
-            <View style={styles.webPopoverAnchor} data-demo-popover-root="true">
+            <View style={styles.webPopoverAnchor} ref={invitationsPopoverRootRef}>
               <AnimatedPress
                 style={styles.webBellBtn}
                 activeOpacity={0.8}
