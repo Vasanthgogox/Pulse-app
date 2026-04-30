@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "expo-router";
 import { Hash, MessageSquare, Plus, Users, X } from "lucide-react-native";
-import { Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -9,8 +9,6 @@ import { useIntegratedChat } from "@/features/chat/contexts/IntegratedChatContex
 import { useTripChat } from "@/features/chat/contexts/TripChatContext";
 
 const FAB_SIZE = 56;
-const STACK_CLEARANCE_WEB = 72;
-const STACK_CLEARANCE_MOBILE = 118;
 type ChatTab = "trips" | "network";
 
 function useShouldShow(): boolean {
@@ -83,11 +81,7 @@ export function FloatingChatButton() {
     [conversations]
   );
 
-  const compactViewport = Platform.OS !== "web" || width < 1024;
   const normalizedPath = (pathname ?? "").replace("/(tabs)", "");
-  const hasLocalFabInViewport =
-    compactViewport &&
-    (normalizedPath === "/trips" || normalizedPath === "/finance");
 
   useEffect(() => {
     // Always collapse preview on route change for predictable mobile UX.
@@ -99,18 +93,12 @@ export function FloatingChatButton() {
   const bottom =
     Layout.demoTabBarScrollBottomInset +
     insets.bottom +
-    Layout.tabBarBottomPaddingMin +
-    (Platform.OS === "web" ? STACK_CLEARANCE_WEB : STACK_CLEARANCE_MOBILE) +
-    (Platform.OS === "web" ? 2 : 0);
+    Layout.tabBarBottomPaddingMin;
 
   const previewWidth = Math.max(290, Math.min(380, width - 28));
-  const anchorStart = hasLocalFabInViewport;
 
   return (
-    <View
-      style={[styles.wrap, { bottom }, anchorStart ? styles.wrapStart : styles.wrapEnd]}
-      pointerEvents="box-none"
-    >
+    <View style={[styles.wrap, { bottom }]} pointerEvents="box-none">
       {showPreview && (
         <View style={[styles.previewCard, { width: previewWidth }]}>
           <View style={styles.previewHead}>
@@ -254,11 +242,10 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     right: 0,
-    paddingHorizontal: 20,
+    alignItems: "flex-end",
+    paddingHorizontal: Layout.screenPaddingHorizontal,
     zIndex: 998,
   },
-  wrapEnd: { alignItems: "flex-end" },
-  wrapStart: { alignItems: "flex-start" },
   touchable: {
     width: FAB_SIZE,
     height: FAB_SIZE,
