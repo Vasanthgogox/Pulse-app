@@ -1470,36 +1470,6 @@ export default function TripsScreen() {
                         />
                       </TouchableOpacity>
                     </View>
-                    <View
-                      style={[
-                        styles.tripsSearchWrap,
-                        styles.tripsSearchWrapInToolbarScroll,
-                        isLargeScreen && styles.tripsSearchWrapRow,
-                      ]}
-                    >
-                      <FontAwesome
-                        name="search"
-                        size={12}
-                        color={Theme.textSecondary}
-                        style={styles.tripsSearchIcon}
-                      />
-                      <TextInput
-                        style={[styles.tripsSearchInput]}
-                        placeholder={
-                          isLargeScreen
-                            ? "Find by name..."
-                            : tr("searchTripsPlaceholder")
-                        }
-                        placeholderTextColor={Theme.textSecondary}
-                        value={searchQuery}
-                        onChangeText={setSearchQuery}
-                        returnKeyType="search"
-                        autoCorrect={false}
-                        spellCheck={false}
-                        autoComplete="off"
-                        maxLength={120}
-                      />
-                    </View>
                     <View style={styles.tripsToolbarActions}>
                       <TouchableOpacity
                         style={[styles.tripsFilterIconBtn]}
@@ -1648,40 +1618,6 @@ export default function TripsScreen() {
                         isCompactWeb && styles.tripsToolbarWebCompact,
                       ]}
                     >
-                      <View
-                        style={[
-                          styles.tripsSearchWrap,
-                          styles.tripsSearchWrapWeb,
-                          styles.tripsSearchWrapWebCompact,
-                          isCompactWeb && styles.tripsSearchWrapWebFluid,
-                        ]}
-                      >
-                        <FontAwesome
-                          name="search"
-                          size={12}
-                          color={Theme.textSecondary}
-                          style={styles.tripsSearchIcon}
-                        />
-                        <TextInput
-                          style={[
-                            styles.tripsSearchInput,
-                            styles.tripsSearchInputWeb,
-                          ]}
-                          placeholder={
-                            isLargeScreen
-                              ? "Find by name..."
-                              : tr("searchTripsPlaceholder")
-                          }
-                          placeholderTextColor={Theme.textSecondary}
-                          value={searchQuery}
-                          onChangeText={setSearchQuery}
-                          returnKeyType="search"
-                          autoCorrect={false}
-                          spellCheck={false}
-                          autoComplete="off"
-                          maxLength={120}
-                        />
-                      </View>
                       <View style={styles.tripsToolbarActions}>
                         <TouchableOpacity
                           style={[
@@ -2630,6 +2566,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     flex: 0,
+    flexShrink: 0,
     minWidth: 0,
   },
   tripsSearchWrap: {
@@ -2682,6 +2619,11 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
     alignItems: "center",
     justifyContent: "center",
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   tripsMobileDateInlineRow: {
     flex: 1,
@@ -3245,6 +3187,8 @@ const styles = StyleSheet.create({
     width: "100%",
     justifyContent: "flex-start",
     rowGap: 8,
+    flexWrap: "wrap",
+    alignItems: "center",
   },
   tripsSearchWrapWebFluid: {
     flex: 1,
