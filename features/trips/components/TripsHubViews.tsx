@@ -1598,7 +1598,9 @@ export function TripsHubTableView({
                       ]}
                       numberOfLines={1}
                     >
-                      {pendingPayable > 0
+                      {!aggregate
+                        ? "NO SUPPLIER"
+                        : pendingPayable > 0
                         ? `${tr("tripsHubColDue")} ${formatINR(pendingPayable)}`
                         : tr("tripsHubSettlementSettled").toUpperCase()}
                     </Text>

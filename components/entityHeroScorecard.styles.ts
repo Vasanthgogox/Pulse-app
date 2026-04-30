@@ -3,6 +3,10 @@ import Theme from "@/constants/Theme";
 import { StyleSheet } from "react-native";
 
 const H = Layout.entityHero;
+const rupeePad = Layout.currencyTextPaddingStart;
+const rupeePadLg = Layout.currencyTextPaddingStartLarge;
+const rupeePadV = Layout.currencyTextPaddingVertical;
+const rupeePadVTight = Layout.currencyTextPaddingVerticalTight;
 
 /**
  * Financial hero LinearGradient card on entity detail pages — single global scale
@@ -78,13 +82,20 @@ export const entityHeroScorecardStyles = StyleSheet.create({
     fontStyle: "italic",
     color: Theme.textOnDark,
     marginTop: 6,
-    letterSpacing: -0.8,
+    letterSpacing: -0.35,
+    paddingLeft: rupeePad,
+    paddingTop: rupeePadVTight,
+    paddingBottom: rupeePadVTight,
+    lineHeight: 46,
   },
   scorecardAmountWebDesktop: {
     fontSize: 64,
-    lineHeight: 66,
+    lineHeight: 82,
     fontWeight: "800",
-    letterSpacing: -1.4,
+    letterSpacing: -0.85,
+    paddingLeft: rupeePadLg,
+    paddingTop: rupeePadV,
+    paddingBottom: rupeePadV,
   },
   scorecardGrid: {
     flexDirection: "row",
@@ -92,7 +103,7 @@ export const entityHeroScorecardStyles = StyleSheet.create({
     paddingTop: 14,
     borderTopWidth: 1,
     borderTopColor: "rgba(255,255,255,0.1)",
-    minHeight: 92,
+    minHeight: 100,
     alignItems: "flex-end",
   },
   scorecardGridWebDesktop: {
@@ -124,11 +135,19 @@ export const entityHeroScorecardStyles = StyleSheet.create({
     fontStyle: "italic",
     color: Theme.textOnDark,
     marginTop: 6,
+    letterSpacing: -0.35,
+    paddingLeft: rupeePad,
+    paddingTop: rupeePadVTight,
+    paddingBottom: rupeePadVTight,
+    lineHeight: 30,
   },
   scorecardGridPaidWebDesktop: {
     fontSize: 40,
-    lineHeight: 42,
-    letterSpacing: -0.8,
+    lineHeight: 52,
+    letterSpacing: -0.45,
+    paddingLeft: rupeePadLg,
+    paddingTop: rupeePadVTight,
+    paddingBottom: rupeePadVTight,
   },
   scorecardGridDue: {
     fontSize: 22,
@@ -137,10 +156,18 @@ export const entityHeroScorecardStyles = StyleSheet.create({
     color: Theme.textOnDark,
     marginTop: 6,
     textAlign: "right",
+    letterSpacing: -0.35,
+    paddingLeft: rupeePad,
+    paddingTop: rupeePadVTight,
+    paddingBottom: rupeePadVTight,
+    lineHeight: 30,
   },
   scorecardGridDueWebDesktop: {
     fontSize: 40,
-    lineHeight: 42,
-    letterSpacing: -0.8,
+    lineHeight: 52,
+    letterSpacing: -0.45,
+    paddingLeft: rupeePadLg,
+    paddingTop: rupeePadVTight,
+    paddingBottom: rupeePadVTight,
   },
 });

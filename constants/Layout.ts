@@ -67,6 +67,17 @@ export const Layout = {
   tabBarPillBorderRadius: 14,
   /** Min padding below tab bar (add to insets.bottom in component) */
   tabBarBottomPaddingMin: 8,
+  /**
+   * Left padding for `Text` that shows `formatINR` / ₹ on dark gradients.
+   * Italic + negative letterSpacing draw glyphs past the box; `overflow: hidden` on
+   * cards then clips the rupee — use on all currency `Text` styles.
+   */
+  currencyTextPaddingStart: 5,
+  /** Large hero amounts (e.g. 64px web) need a bit more optical inset */
+  currencyTextPaddingStartLarge: 7,
+  /** Vertical inset so ₹ ascenders / italic aren’t clipped (esp. with overflow:hidden cards) */
+  currencyTextPaddingVertical: 4,
+  currencyTextPaddingVerticalTight: 2,
   /** Max width per tab item so labels don't stretch on tablets */
   tabItemMaxWidth: 120,
   /** Shadow: bar elevation (iOS shadowOffset Y) */

@@ -1,9 +1,9 @@
-import { entityCompanionCardStyles as ecc } from "@/components/entityCompanionCard.styles";
-import { entityHeroScorecardStyles as ehs } from "@/components/entityHeroScorecard.styles";
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { CounterpartyProfileSystemCard } from "@/components/CounterpartyProfileSystemCard";
 import { DatePresetPillBar } from "@/components/DatePresetPillBar";
 import { DateRangePickerModal } from "@/components/DateRangePickerModal";
+import { entityCompanionCardStyles as ecc } from "@/components/entityCompanionCard.styles";
+import { entityHeroScorecardStyles as ehs } from "@/components/entityHeroScorecard.styles";
 import { FinanceFAB } from "@/components/FinanceFAB";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import Layout from "@/constants/Layout";
@@ -13,15 +13,15 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
-    getClientsByOrganization,
-    type ClientRow,
+  getClientsByOrganization,
+  type ClientRow,
 } from "@/features/clients/services/clients.service";
 import { getDriversByOrganization, type DriverRow } from "@/features/drivers";
 import {
-    getTransactionsByOrganization,
-    LedgerReportModal,
-    SharedLedgerContent,
-    type LedgerRow,
+  getTransactionsByOrganization,
+  LedgerReportModal,
+  SharedLedgerContent,
+  type LedgerRow,
 } from "@/features/finance";
 import { LedgerTransactionListView } from "@/features/finance/components/LedgerTransactionListView";
 import { ledgerDayMatchesPeriod } from "@/features/finance/lib/filterLedgerByPeriod";
@@ -30,21 +30,21 @@ import type { FinancePeriodFilter } from "@/features/finance/types";
 import { allocateAmountsToLargestDueTrips } from "@/features/finance/utils/allocateToLargestDue";
 import { EditSupplierModal } from "@/features/suppliers/components/EditSupplierModal";
 import {
-    getTripDisplayNumber,
-    getTripsByOrganization,
-    getTripsWhereOrgIsClient,
-    getTripsWhereOrgIsSupplier,
-    type TripRow,
+  getTripDisplayNumber,
+  getTripsByOrganization,
+  getTripsWhereOrgIsClient,
+  getTripsWhereOrgIsSupplier,
+  type TripRow,
 } from "@/features/trips";
 import { adjustedCost } from "@/features/trips/services/tripAdjustments";
 import {
-    buildUniqueLinkedOrgIdMap,
-    isLoadBasedTrip,
+  buildUniqueLinkedOrgIdMap,
+  isLoadBasedTrip,
 } from "@/features/trips/visibility/tripVisibility";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import {
-    canAccessFinance,
-    getCapabilitiesFromProfile,
+  canAccessFinance,
+  getCapabilitiesFromProfile,
 } from "@/lib/capabilities";
 import { tripDayIso } from "@/lib/dateRangePresets";
 import { formatINR, formatLedgerDate } from "@/lib/format";
@@ -56,29 +56,29 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    Alert,
-    Animated,
-    Easing,
-    Image,
-    Modal,
-    Platform,
-    RefreshControl,
-    ScrollView,
-    Share,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    useWindowDimensions,
-    View,
+  Alert,
+  Animated,
+  Easing,
+  Image,
+  Modal,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-    getLinkedOrgProfileForSupplier,
-    getSupplierDetails,
-    getSuppliersByOrganization,
-    updateSupplier,
-    type SupplierRow,
-    type UpdateSupplierData,
+  getLinkedOrgProfileForSupplier,
+  getSupplierDetails,
+  getSuppliersByOrganization,
+  updateSupplier,
+  type SupplierRow,
+  type UpdateSupplierData,
 } from "../services/suppliers.service";
 
 /** Treat DB placeholders or internal ids as empty for display. */
@@ -201,7 +201,8 @@ export default function SupplierDetailScreen({
   }, [clients]);
 
   const linkedOrgDisplayMap = useLinkedOrgProfileMap(clients, []);
-  const hasInAppProfile = Boolean(supplier?.linked_organization_id) || isInApp || isLinked;
+  const hasInAppProfile =
+    Boolean(supplier?.linked_organization_id) || isInApp || isLinked;
 
   useEffect(() => {
     if (autoOpenProfile) setShowProfileModal(true);
@@ -958,14 +959,13 @@ export default function SupplierDetailScreen({
   const isInAppNotIntegrated = !isIntegrated && isInApp;
   const isNotInApp = !isIntegrated && !isInApp;
   const rating = Number(
-    (
-      supplier.is_verified
-        ? hasInAppProfile
-          ? 4.6
-          : 4.2
-        : hasInAppProfile
-          ? 4.1
-          : 3.8
+    (supplier.is_verified
+      ? hasInAppProfile
+        ? 4.6
+        : 4.2
+      : hasInAppProfile
+        ? 4.1
+        : 3.8
     ).toFixed(1),
   );
   const ratingFilledStars = Math.max(0, Math.min(5, Math.round(rating)));
@@ -1037,39 +1037,6 @@ export default function SupplierDetailScreen({
           <Text style={styles.headerSubtitle}>DEEP ENTITY INTEL</Text>
         </View>
         <View style={styles.headerRight}>
-          <TouchableOpacity
-            style={styles.publicProfileBtn}
-            onPress={() =>
-              router.push(`/public-profile/supplier/${supplierId}`)
-            }
-            activeOpacity={0.8}
-            accessibilityLabel="View public profile"
-          >
-            <FontAwesome
-              name="id-card-o"
-              size={15}
-              color={Theme.textPrimaryDark}
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.profileBtn}
-            onPress={() => setShowProfileModal(true)}
-            activeOpacity={0.8}
-            accessibilityLabel="Supplier profile"
-          >
-            {profileAvatarUri ? (
-              <Image
-                source={{ uri: profileAvatarUri }}
-                style={styles.headerAvatarImage}
-              />
-            ) : (
-              <FontAwesome
-                name="user"
-                size={16}
-                color={Theme.textPrimaryDark}
-              />
-            )}
-          </TouchableOpacity>
           <TouchableOpacity
             style={styles.downloadBtn}
             onPress={() => {
@@ -1154,7 +1121,12 @@ export default function SupplierDetailScreen({
               <View style={styles.scorecardLeft}>
                 <Text style={styles.scorecardLabel}>FINANCIAL OVERVIEW</Text>
                 <Text style={styles.scorecardSalesLabel}>CONTRACT VALUE</Text>
-                <Text style={[styles.scorecardAmount, isWebDesktop && styles.scorecardAmountWebDesktop]}>
+                <Text
+                  style={[
+                    styles.scorecardAmount,
+                    isWebDesktop && styles.scorecardAmountWebDesktop,
+                  ]}
+                >
                   {formatINR(contractValue)}
                 </Text>
               </View>
@@ -1167,7 +1139,12 @@ export default function SupplierDetailScreen({
             >
               <View style={isWebDesktop ? styles.scorecardGridStat : undefined}>
                 <Text style={styles.scorecardGridLabelPaid}>PAID</Text>
-                <Text style={[styles.scorecardGridPaid, isWebDesktop && styles.scorecardGridPaidWebDesktop]}>
+                <Text
+                  style={[
+                    styles.scorecardGridPaid,
+                    isWebDesktop && styles.scorecardGridPaidWebDesktop,
+                  ]}
+                >
                   {formatINR(paid)}
                 </Text>
               </View>
@@ -1178,7 +1155,12 @@ export default function SupplierDetailScreen({
                 ]}
               >
                 <Text style={styles.scorecardGridLabelDue}>DUE</Text>
-                <Text style={[styles.scorecardGridDue, isWebDesktop && styles.scorecardGridDueWebDesktop]}>
+                <Text
+                  style={[
+                    styles.scorecardGridDue,
+                    isWebDesktop && styles.scorecardGridDueWebDesktop,
+                  ]}
+                >
                   {formatINR(due)}
                 </Text>
               </View>
@@ -1186,54 +1168,147 @@ export default function SupplierDetailScreen({
           </LinearGradient>
           {isWebDesktop ? (
             <View style={styles.profilePreviewCard}>
-              <Text style={styles.profilePreviewEyebrow}>ENTITY PROFILE</Text>
+              <View style={styles.profilePreviewTopRow}>
+                <Text style={styles.profilePreviewEyebrow}>ENTITY PROFILE</Text>
+                <TouchableOpacity
+                  style={styles.profilePreviewTopAction}
+                  onPress={() => setShowProfileModal(true)}
+                  activeOpacity={0.85}
+                  accessibilityLabel="Open supplier full profile"
+                >
+                  <Text style={styles.profilePreviewTopActionText}>
+                    FULL PROFILE
+                  </Text>
+                  <FontAwesome
+                    name="chevron-right"
+                    size={10}
+                    color={Theme.textSecondary}
+                  />
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity
+                style={styles.profilePreviewIdentityTrigger}
+                onPress={() => setShowProfileModal(true)}
+                activeOpacity={0.85}
+                accessibilityLabel="Open supplier full profile"
+              >
+                <View style={styles.profilePreviewIdentityRow}>
+                  <View style={styles.profilePreviewIdentityAvatar}>
+                    {profileAvatarUri ? (
+                      <Image
+                        source={{ uri: profileAvatarUri }}
+                        style={styles.profilePreviewIdentityAvatarImage}
+                      />
+                    ) : (
+                      <FontAwesome
+                        name="building"
+                        size={14}
+                        color={Theme.textSecondary}
+                      />
+                    )}
+                  </View>
+                  <View style={styles.profilePreviewIdentityMeta}>
+                    <Text
+                      style={styles.profilePreviewIdentityName}
+                      numberOfLines={1}
+                    >
+                      {supplierName}
+                    </Text>
+                    <Text
+                      style={styles.profilePreviewIdentitySub}
+                      numberOfLines={1}
+                    >
+                      {(
+                        supplier.contact_person ??
+                        supplier.phone ??
+                        "No contact"
+                      ).trim() || "No contact"}
+                    </Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
               <View style={styles.profilePreviewRatingRow}>
                 <View style={styles.profilePreviewStars}>
                   {Array.from({ length: 5 }).map((_, idx) => (
                     <FontAwesome
                       key={`supplier-star-${idx}`}
                       name={idx < ratingFilledStars ? "star" : "star-o"}
-                      size={12}
-                      color={idx < ratingFilledStars ? "#fbbf24" : Theme.borderMedium}
+                      size={13}
+                      color={
+                        idx < ratingFilledStars ? "#fbbf24" : Theme.borderMedium
+                      }
                     />
                   ))}
                 </View>
                 <View style={styles.profilePreviewRatingBadge}>
-                  <Text style={styles.profilePreviewRatingBadgeText}>{rating.toFixed(1)}</Text>
+                  <Text style={styles.profilePreviewRatingBadgeText}>
+                    {rating.toFixed(1)}
+                  </Text>
                 </View>
               </View>
               <View style={styles.profilePreviewExperienceBlock}>
-                <Text style={styles.profilePreviewExperienceEyebrow}>EXPERIENCE</Text>
+                <Text style={styles.profilePreviewExperienceEyebrow}>
+                  EXPERIENCE
+                </Text>
                 <View style={styles.profilePreviewExperienceRow}>
-                  <FontAwesome name="history" size={13} color={Theme.textSecondary} />
-                  <Text style={styles.profilePreviewTripsNumber}>{tripsHandled}</Text>
-                  <Text style={styles.profilePreviewExperienceLabel}>Trips Handled</Text>
+                  <View style={styles.profilePreviewExperienceIconWrap}>
+                    <FontAwesome
+                      name="road"
+                      size={12}
+                      color={Theme.textOnPrimary}
+                    />
+                  </View>
+                  <Text style={styles.profilePreviewTripsNumber}>
+                    {tripsHandled}
+                  </Text>
+                  <Text style={styles.profilePreviewExperienceLabel}>
+                    Trips Handled
+                  </Text>
                 </View>
               </View>
               <View style={styles.profilePreviewToggle}>
                 <View
                   style={[
                     styles.profilePreviewToggleDot,
-                    isInAppNotIntegrated && styles.profilePreviewToggleDotPending,
+                    isInAppNotIntegrated &&
+                      styles.profilePreviewToggleDotPending,
                     isIntegrated && styles.profilePreviewToggleDotActive,
                   ]}
                 >
                   {isIntegrated ? (
-                    <FontAwesome name="check" size={10} color={Theme.textOnPrimary} />
+                    <FontAwesome
+                      name="check"
+                      size={11}
+                      color={Theme.textOnPrimary}
+                    />
                   ) : isInAppNotIntegrated ? (
-                    <FontAwesome name="send" size={8} color={Theme.financeCardOrangeFrom} />
+                    <FontAwesome
+                      name="send"
+                      size={9}
+                      color={Theme.financeCardOrangeFrom}
+                    />
+                  ) : isNotInApp ? (
+                    <FontAwesome
+                      name="envelope-o"
+                      size={9}
+                      color={Theme.textMuted}
+                    />
                   ) : null}
                 </View>
-                <View>
-                  <Text style={styles.profilePreviewToggleTitle}>{statusTitle}</Text>
-                  <Text style={styles.profilePreviewToggleSub}>{statusSubtitle}</Text>
+                <View style={styles.profilePreviewToggleTextWrap}>
+                  <Text style={styles.profilePreviewToggleTitle}>
+                    {statusTitle}
+                  </Text>
+                  <Text style={styles.profilePreviewToggleSub}>
+                    {statusSubtitle}
+                  </Text>
                 </View>
               </View>
               <TouchableOpacity
                 style={[
                   styles.profilePreviewActionBtn,
                   ecc.actionBtnPrimary,
-                  (!canSendRequest && !canInviteToApp) && ecc.actionBtnDisabled,
+                  !canSendRequest && !canInviteToApp && ecc.actionBtnDisabled,
                 ]}
                 onPress={() => {
                   if (canSendRequest) {
@@ -1243,15 +1318,19 @@ export default function SupplierDetailScreen({
                   }
                 }}
                 activeOpacity={0.86}
-                disabled={sendingInvitation || (!canSendRequest && !canInviteToApp)}
+                disabled={
+                  sendingInvitation || (!canSendRequest && !canInviteToApp)
+                }
               >
                 <FontAwesome
                   name={canSendRequest ? "send" : "envelope-o"}
-                  size={12}
+                  size={14}
                   color={Theme.textOnPrimary}
                 />
                 <Text style={styles.profilePreviewActionText}>
-                  {sendingInvitation && canSendRequest ? "Sending..." : profileActionLabel}
+                  {sendingInvitation && canSendRequest
+                    ? "Sending..."
+                    : profileActionLabel}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1965,29 +2044,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
-  profileBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: Theme.screenBackground,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  publicProfileBtn: {
-    width: 36,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: Theme.surfaceLight,
-    borderWidth: 1,
-    borderColor: Theme.cinematicCardBorder,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerAvatarImage: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 12,
-  },
   downloadBtn: {
     width: 40,
     height: 40,
@@ -2316,7 +2372,42 @@ const styles = StyleSheet.create({
   scorecardGridDue: ehs.scorecardGridDue,
   scorecardGridDueWebDesktop: ehs.scorecardGridDueWebDesktop,
   profilePreviewCard: ecc.card,
+  profilePreviewTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
   profilePreviewEyebrow: ecc.eyebrow,
+  profilePreviewTopAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    minHeight: 24,
+    borderRadius: 12,
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    paddingHorizontal: 8,
+  },
+  profilePreviewTopActionText: {
+    fontSize: 8,
+    fontWeight: "900",
+    color: Theme.textSecondary,
+    letterSpacing: 0.7,
+    textTransform: "uppercase",
+  },
+  profilePreviewIdentityRow: ecc.identityRow,
+  profilePreviewIdentityAvatar: ecc.identityAvatar,
+  profilePreviewIdentityAvatarImage: ecc.identityAvatarImage,
+  profilePreviewIdentityMeta: ecc.identityMeta,
+  profilePreviewIdentityName: ecc.identityName,
+  profilePreviewIdentitySub: ecc.identitySub,
+  profilePreviewIdentityTrigger: {
+    borderRadius: 12,
+    paddingVertical: 2,
+  },
   profilePreviewRatingRow: ecc.ratingRow,
   profilePreviewStars: ecc.stars,
   profilePreviewRatingBadge: ecc.ratingBadge,
@@ -2324,6 +2415,7 @@ const styles = StyleSheet.create({
   profilePreviewExperienceBlock: ecc.experienceBlock,
   profilePreviewExperienceEyebrow: ecc.experienceEyebrow,
   profilePreviewExperienceRow: ecc.experienceRow,
+  profilePreviewExperienceIconWrap: ecc.experienceIconWrap,
   profilePreviewTripsNumber: ecc.tripsNumber,
   profilePreviewExperienceLabel: ecc.experienceLabel,
   profilePreviewToggle: ecc.toggle,
@@ -2333,6 +2425,7 @@ const styles = StyleSheet.create({
     borderColor: Theme.financeCardOrangeFrom,
     backgroundColor: "rgba(234,88,12,0.12)",
   },
+  profilePreviewToggleTextWrap: ecc.toggleTextWrap,
   profilePreviewToggleTitle: ecc.toggleTitle,
   profilePreviewToggleSub: ecc.toggleSub,
   profilePreviewActionBtn: ecc.actionBtn,

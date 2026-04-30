@@ -175,8 +175,8 @@ const styles = StyleSheet.create({
     borderColor: Theme.textOnDark,
   },
   pillActiveLight: {
-    backgroundColor: Theme.primary,
-    borderColor: Theme.primary,
+    backgroundColor: Theme.iconPrimary,
+    borderColor: Theme.iconPrimary,
   },
   pillText: {
     fontSize: 12,
@@ -193,6 +193,6 @@ const styles = StyleSheet.create({
     color: Theme.darkBackground,
   },
   pillTextActiveLight: {
-    color: Theme.textOnPrimary,
+    color: Theme.screenBackground,
   },
 });

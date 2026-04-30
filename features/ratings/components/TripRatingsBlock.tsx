@@ -5,6 +5,7 @@
  * - Indent-based: Client→Supplier, Client→Driver, Supplier→Driver
  */
 import Theme from '@/constants/Theme';
+import { isAggregateTrip } from '@/lib/driverUtils';
 import {
   getClientById,
   getClientDetails,
@@ -398,10 +399,8 @@ export function TripRatingsBlock({
   // Client feedback should be allowed anytime once trip has a client link,
   // independent of transaction/payment capture state or client name resolution.
   const canRateClient =
-    !!trip.client_id &&
-    !!effectiveOrganizationId &&
-    clientFeedback == null &&
-    !hasRatedClient;
+    (!!trip.client_id || !!trip.client_name?.trim()) &&
+    !!effectiveOrganizationId;
 
   const clientFeedbackStorageKey = `trip_client_feedback:${trip.id}`;
 
@@ -738,6 +737,21 @@ export function TripRatingsBlock({
   const openRateDriver = () => {
     resetComposer({ type: 'supplier_driver' });
   };
+  const openRateSupplierAtScore = (nextScore: number) => {
+    resetComposer({ type: 'client_supplier' });
+    setScore(nextScore);
+  };
+  const openRateDriverAtScore = (nextScore: number) => {
+    resetComposer({ type: 'supplier_driver' });
+    setScore(nextScore);
+  };
+  const openRateClientAtScore = (nextScore: number) => {
+    setClientScore(nextScore);
+    setShowClientFeedbackModal(true);
+  };
+  const canOpenSupplierRate = canRateSupplier;
+  const canOpenDriverRate = canRateDriver;
+  const canOpenClientRate = canRateClient;
   const closeModal = () => {
     setFlow(null);
     setSubmitting(false);
@@ -845,7 +859,10 @@ export function TripRatingsBlock({
   const displayDriverAvg = histDriverAvg;
   const displayClientAvg = histClientAvg;
   const clientDisplayName = (clientName || trip.client_name || 'Client').trim();
-  const supplierDisplayName = (partnerName || 'Supplier').trim();
+  const hasSupplierParty = !!trip.supplier_id && isAggregateTrip(trip);
+  const supplierDisplayName = hasSupplierParty
+    ? (partnerName || 'Supplier').trim()
+    : 'No supplier';
   const driverDisplayName = (
     driverName ||
     trip.driver_display_name ||
@@ -1054,11 +1071,12 @@ export function TripRatingsBlock({
     roleKicker: string,
     tag: string,
     partyName: string,
-    initial: string,
+    avatarUri: string | null | undefined,
     tripScore: number | null,
     globalScore: number | null,
     onAudit: () => void,
     auditDisabled: boolean,
+    onSelectScore?: (score: number) => void,
   ) => {
     const tripVal = tripScore ?? 0;
     const rungs = Math.min(5, Math.max(0, Math.floor(tripVal)));
@@ -1084,9 +1102,13 @@ export function TripRatingsBlock({
         <View style={styles.regCardDecor} />
         <View style={styles.regCardTop}>
           <View style={styles.regCardLeft}>
-            <View style={styles.regInitialMark}>
-              <Text style={styles.regInitialText}>{initial}</Text>
-            </View>
+            <PartyAvatar
+              uri={avatarUri}
+              name={partyName}
+              size={40}
+              containerStyle={styles.regInitialMark}
+              initialTextStyle={{ color: Theme.textOnPrimary }}
+            />
             <View style={styles.regCardLeftText}>
               <Text style={styles.regKicker}>{roleKicker.toUpperCase()} NODE</Text>
               <Text style={styles.regPartyName} numberOfLines={2}>
@@ -1121,17 +1143,21 @@ export function TripRatingsBlock({
         <View style={styles.regCardFoot}>
           <View style={styles.regRungRow}>
             {[1, 2, 3, 4, 5].map((step) => (
-              <View
+              <TouchableOpacity
                 key={step}
+                disabled={auditDisabled || !onSelectScore}
+                activeOpacity={0.8}
+                onPress={() => onSelectScore?.(step)}
                 style={[
                   styles.regRungDot,
                   step <= rungs ? styles.regRungDotOn : styles.regRungDotOff,
+                  auditDisabled || !onSelectScore ? null : styles.regRungDotTap,
                 ]}
               >
                 {step <= rungs ? (
                   <Feather name="check" size={9} color={Theme.textOnPrimary} />
                 ) : null}
-              </View>
+              </TouchableOpacity>
             ))}
           </View>
           <TouchableOpacity
@@ -1141,7 +1167,7 @@ export function TripRatingsBlock({
             style={styles.regAuditTap}
           >
             <Text style={[styles.regAuditTxt, auditDisabled && styles.regAuditTxtDis]}>
-              Audit feedback
+              {auditDisabled ? 'Unavailable' : 'Rate now'}
             </Text>
             <Feather name="arrow-up-right" size={12} color={auditDisabled ? Theme.textMuted : Theme.primary} />
           </TouchableOpacity>
@@ -1187,37 +1213,40 @@ export function TripRatingsBlock({
                     'Authorized Pilot',
                     'Precision pilot',
                     driverDisplayName,
-                    initialsFromDisplayName(driverDisplayName),
+                    resolvedDriverAvatarUri,
                     driverTripAvg,
                     displayDriverAvg,
                     () => {
-                      if (canRateDriver && !hasRatedDriver) openRateDriver();
+                      if (canOpenDriverRate) openRateDriver();
                     },
-                    !canRateDriver || hasRatedDriver,
+                    !canOpenDriverRate,
+                    canOpenDriverRate ? openRateDriverAtScore : undefined,
                   )}
                   {renderRegistryCard(
                     'Client Hub',
                     'Billing party',
                     clientDisplayName,
-                    initialsFromDisplayName(clientDisplayName),
+                    clientAvatarUri,
                     clientTripAvg,
                     displayClientAvg,
                     () => {
-                      if (canRateClient) setShowClientFeedbackModal(true);
+                      if (canOpenClientRate) setShowClientFeedbackModal(true);
                     },
-                    !canRateClient,
+                    !canOpenClientRate,
+                    canOpenClientRate ? openRateClientAtScore : undefined,
                   )}
                   {renderRegistryCard(
                     'Supplier Node',
                     'Fleet partner',
                     supplierDisplayName,
-                    initialsFromDisplayName(supplierDisplayName),
+                    supplierAvatarUri,
                     supplierTripAvg,
                     displaySupplierAvg,
                     () => {
-                      if (canRateSupplier && !hasRatedSupplier) openRateSupplier();
+                      if (canOpenSupplierRate) openRateSupplier();
                     },
-                    !canRateSupplier || hasRatedSupplier,
+                    !canOpenSupplierRate || !hasSupplierParty,
+                    canOpenSupplierRate ? openRateSupplierAtScore : undefined,
                   )}
                 </View>
               </View>
@@ -1694,8 +1723,8 @@ export function TripRatingsBlock({
                 disabled={clientScore < 1 || clientSubmitting}
                 onPress={async () => {
                   if (clientScore < 1) return;
-                  if (!effectiveOrganizationId || !trip.client_id) {
-                    Alert.alert('Rating failed', 'Client profile is missing for this trip.');
+                  if (!effectiveOrganizationId) {
+                    Alert.alert('Rating failed', 'Organization context is missing for this trip.');
                     return;
                   }
                   setClientSubmitting(true);
@@ -1709,30 +1738,36 @@ export function TripRatingsBlock({
                     clientTags,
                     clientComment.trim().slice(0, VALIDATION.NOTES_MAX_LENGTH),
                   );
-                  const { error } = await createRating(effectiveOrganizationId, {
-                    trip_id: trip.id,
-                    rater_type: trip.supplier_id ? 'supplier' : 'organization',
-                    rater_id: trip.supplier_id ?? effectiveOrganizationId,
-                    rated_type: 'client',
-                    rated_id: trip.client_id,
-                    score: clientScore,
-                    comment: commentPayload,
-                  });
-                  const allowLocalClientFallback =
-                    !!error &&
-                    (error.message.toLowerCase().includes('ratings_rated_type_check') ||
-                      error.message.toLowerCase().includes('check constraint') ||
-                      error.message.toLowerCase().includes('rated_type'));
-                  if (error && !allowLocalClientFallback) {
-                    setClientSubmitting(false);
-                    Alert.alert('Rating failed', error.message);
-                    return;
+                  let error: { message: string } | null = null;
+                  if (trip.client_id) {
+                    const submitRes = await createRating(effectiveOrganizationId, {
+                      trip_id: trip.id,
+                      rater_type: trip.supplier_id ? 'supplier' : 'organization',
+                      rater_id: trip.supplier_id ?? effectiveOrganizationId,
+                      rated_type: 'client',
+                      rated_id: trip.client_id,
+                      score: clientScore,
+                      comment: commentPayload,
+                    });
+                    error = submitRes.error;
+                    const allowLocalClientFallback =
+                      !!error &&
+                      (error.message.toLowerCase().includes('ratings_rated_type_check') ||
+                        error.message.toLowerCase().includes('check constraint') ||
+                        error.message.toLowerCase().includes('rated_type'));
+                    if (error && !allowLocalClientFallback) {
+                      setClientSubmitting(false);
+                      Alert.alert('Rating failed', error.message);
+                      return;
+                    }
                   }
                   await AsyncStorage.setItem(clientFeedbackStorageKey, JSON.stringify(payload));
                   setClientFeedback(payload);
                   await loadRatings();
-                  const { ratings: clientRatings } = await getRatingsForClient(trip.client_id);
-                  setHistClientAvg(averageScore(clientRatings));
+                  if (trip.client_id) {
+                    const { ratings: clientRatings } = await getRatingsForClient(trip.client_id);
+                    setHistClientAvg(averageScore(clientRatings));
+                  }
                   setClientSubmitting(false);
                   setShowClientFeedbackModal(false);
                 }}
@@ -2440,6 +2475,9 @@ const styles = StyleSheet.create({
     borderColor: Theme.screenBackground,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  regRungDotTap: {
+    cursor: 'pointer',
   },
   regRungDotOn: { backgroundColor: Theme.primary },
   regRungDotOff: { backgroundColor: Theme.surfaceGray },

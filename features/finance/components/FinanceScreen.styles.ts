@@ -5,8 +5,6 @@ import {
     LEDGER,
 } from "@/features/finance/constants/tableColumns";
 import { Platform, StyleSheet } from "react-native";
-import { MIN_FISCAL_TAB_WIDTH } from "../types";
-
 export const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -80,11 +78,30 @@ export const styles = StyleSheet.create({
       default: {},
     }),
   },
+  /** Desktop hero: fiscal pills docked at bottom; primary metrics stay visually grouped above. */
+  financeBalanceCardHeroIntegrated: {
+    ...Platform.select({
+      web: {
+        minHeight: 252,
+      } as any,
+      default: {},
+    }),
+  },
+  financeHeroPrimaryBlock: {
+    width: "100%",
+    zIndex: 1,
+  },
+  financeHeroPillsDock: {
+    width: "100%",
+    paddingTop: 18,
+    marginTop: 2,
+    zIndex: 1,
+  },
   financeBalanceDecorIconWrap: {
     position: "absolute",
     right: -18,
     top: -22,
-    opacity: 0.12,
+    opacity: 0.06,
   },
   financeBalanceDecorIcon: {
     transform: [{ rotate: "10deg" }],
@@ -178,8 +195,12 @@ export const styles = StyleSheet.create({
     fontSize: 42,
     fontWeight: "900",
     color: Theme.textOnDark,
-    letterSpacing: -1.3,
+    letterSpacing: -0.75,
     marginTop: 8,
+    paddingLeft: Layout.currencyTextPaddingStartLarge,
+    paddingTop: Layout.currencyTextPaddingVertical,
+    paddingBottom: Layout.currencyTextPaddingVertical,
+    lineHeight: 52,
   },
   financeBalanceStatsRow: {
     flexDirection: "row",
@@ -228,6 +249,9 @@ export const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "800",
     color: Theme.textOnDark,
+    paddingLeft: Layout.currencyTextPaddingStart,
+    paddingTop: Layout.currencyTextPaddingVerticalTight,
+    lineHeight: 18,
   },
   financeCategoryCardsRow: {
     flexDirection: "row",
@@ -359,13 +383,21 @@ export const styles = StyleSheet.create({
     fontSize: 36,
     fontWeight: "900",
     color: Theme.textOnDark,
-    letterSpacing: -1.1,
+    letterSpacing: -0.5,
+    paddingLeft: Layout.currencyTextPaddingStart,
+    paddingTop: Layout.currencyTextPaddingVerticalTight,
+    paddingBottom: Layout.currencyTextPaddingVerticalTight,
+    lineHeight: 44,
   },
   financeCategoryValueDesktop: {
     ...Platform.select({
       web: {
         fontSize: 46,
-        letterSpacing: -1.4,
+        letterSpacing: -0.85,
+        paddingLeft: Layout.currencyTextPaddingStartLarge,
+        paddingTop: Layout.currencyTextPaddingVertical,
+        paddingBottom: Layout.currencyTextPaddingVertical,
+        lineHeight: 58,
       } as any,
       default: {},
     }),
@@ -422,6 +454,9 @@ export const styles = StyleSheet.create({
     fontWeight: "800",
     color: Theme.textOnDark,
     letterSpacing: 0.2,
+    paddingLeft: Layout.currencyTextPaddingStart,
+    paddingTop: Layout.currencyTextPaddingVerticalTight,
+    lineHeight: 16,
   },
   financeCategoryCtaRow: {
     flexDirection: "row",
@@ -538,42 +573,49 @@ export const styles = StyleSheet.create({
     color: Theme.textOnDark,
     letterSpacing: -0.4,
   },
-  fiscalTabScroll: {
+
+  financeHeroPillsScroll: {
     width: "100%",
+    maxWidth: "100%",
+    minWidth: 0,
   },
-  fiscalTabRow: {
+  financeHeroPillsRow: {
     flexDirection: "row",
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    marginTop: 2,
-    marginBottom: 6,
-    paddingBottom: 8,
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 2,
+    flexGrow: 1,
+    paddingRight: 4,
   },
-  fiscalTab: {
-    flex: 1,
-    minWidth: MIN_FISCAL_TAB_WIDTH,
-    position: "relative" as const,
-    paddingVertical: 6,
+  financeHeroPillsRowTreasuryInset: {
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+  },
+  financeHeroPill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    minHeight: 34,
     justifyContent: "center",
     alignItems: "center",
   },
-  fiscalTabActive: {},
-  fiscalTabText: {
+  financeHeroPillInactive: {
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderColor: "rgba(255,255,255,0.05)",
+  },
+  financeHeroPillActive: {
+    backgroundColor: Theme.screenBackground,
+    borderColor: Theme.screenBackground,
+  },
+  financeHeroPillText: {
     fontSize: 8,
     fontWeight: "800",
     textTransform: "uppercase",
-    letterSpacing: 2,
-    color: Theme.textSecondary,
+    letterSpacing: 1.4,
+    color: Theme.textOnDarkMuted,
   },
-  fiscalTabTextActive: {
-    color: Theme.textOnDark,
-  },
-  fiscalTabUnderline: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 1.5,
-    backgroundColor: Theme.teslaRed,
+  financeHeroPillTextActive: {
+    color: Theme.textPrimaryDark,
   },
 
   ledgerViewModeRow: {
