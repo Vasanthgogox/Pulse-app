@@ -3,7 +3,7 @@
  * Tapping opens the dedicated Ops Agent route.
  */
 import { useEffect } from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -18,8 +18,9 @@ import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 
 const FAB_SIZE = 46;
+const FAB_SIZE_MOBILE = 40;
 const BOT_ICON_SIZE = 22;
-const CHAT_STACK_OFFSET = FAB_SIZE + 14;
+const BOT_ICON_SIZE_MOBILE = 19;
 
 /** Show floating Ops Agent only on home (tab list) pages, not on Ops Agent or detail pages. */
 function useShowFloatingOpsAgent(): boolean {
@@ -36,7 +37,12 @@ function useShowFloatingOpsAgent(): boolean {
 export function FloatingOpsAgentButton() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const show = useShowFloatingOpsAgent();
+  const isMobile = width < 560;
+  const fabSize = isMobile ? FAB_SIZE_MOBILE : FAB_SIZE;
+  const botIconSize = isMobile ? BOT_ICON_SIZE_MOBILE : BOT_ICON_SIZE;
+  const chatStackOffset = fabSize + 14;
 
   const pulse = useSharedValue(1);
 
@@ -63,7 +69,7 @@ export function FloatingOpsAgentButton() {
     Layout.demoTabBarScrollBottomInset +
     insets.bottom +
     Layout.tabBarBottomPaddingMin +
-    CHAT_STACK_OFFSET;
+    chatStackOffset;
 
   return (
     <View
@@ -72,14 +78,20 @@ export function FloatingOpsAgentButton() {
       <TouchableOpacity
         activeOpacity={0.85}
         onPress={() => router.push('/(tabs)/ops-agent')}
-        style={styles.touchable}
+        style={[styles.touchable, { width: fabSize, height: fabSize }]}
         accessibilityLabel="Open Ops Agent"
       >
-        <Animated.View style={[styles.circle, animatedCircleStyle]}>
+        <Animated.View
+          style={[
+            styles.circle,
+            animatedCircleStyle,
+            { width: fabSize, height: fabSize, borderRadius: fabSize / 2 },
+          ]}
+        >
           <View style={styles.iconWrap}>
             <OpsAgentBotSvg
-              width={BOT_ICON_SIZE}
-              height={(39 / 32) * BOT_ICON_SIZE}
+              width={botIconSize}
+              height={(39 / 32) * botIconSize}
               headOnly
               bright
             />

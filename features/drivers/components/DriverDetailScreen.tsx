@@ -1,5 +1,6 @@
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { DateRangePickerModal } from "@/components/DateRangePickerModal";
+import { DatePresetPillBar } from "@/components/DatePresetPillBar";
 import { DetailPageLayout, DetailSection } from "@/components/DetailPageLayout";
 import { entityCompanionCardStyles as ecc } from "@/components/entityCompanionCard.styles";
 import { entityHeroScorecardStyles as ehs } from "@/components/entityHeroScorecard.styles";
@@ -14,6 +15,7 @@ import {
     computeDriverCommissionForTrip,
     getTransactionsByOrganizationAndDriver,
     LedgerReportModal,
+    type FinancePeriodFilter,
     type LedgerRow,
 } from "@/features/finance";
 import {
@@ -160,14 +162,6 @@ function formatDayMonUpper(iso: string | null | undefined): string {
   return `${day} ${months[m - 1] ?? ""}`.trim();
 }
 
-type TripsDatePreset =
-  | "today"
-  | "yesterday"
-  | "this_week"
-  | "this_month"
-  | "all"
-  | "custom";
-
 function startOfLocalDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
@@ -197,32 +191,32 @@ function parseTripFilterDate(iso: string | undefined): Date | null {
 
 function tripMatchesDatePreset(
   dateIso: string | undefined,
-  preset: TripsDatePreset,
+  preset: FinancePeriodFilter,
   customFrom: string | null,
   customTo: string | null,
   now: Date = new Date(),
 ): boolean {
-  if (preset === "all") return true;
+  if (preset === "RANGE") return true;
   const tripD = parseTripFilterDate(dateIso);
   if (!tripD) return false;
   const t0 = startOfLocalDay(now);
-  if (preset === "today") {
+  if (preset === "TODAY") {
     return tripD >= t0 && tripD <= endOfLocalDay(now);
   }
-  if (preset === "yesterday") {
+  if (preset === "YESTERDAY") {
     const y = new Date(t0);
     y.setDate(y.getDate() - 1);
     return tripD >= startOfLocalDay(y) && tripD <= endOfLocalDay(y);
   }
-  if (preset === "this_week") {
+  if (preset === "WEEK") {
     const wStart = startOfWeekMonday(now);
     return tripD >= wStart && tripD <= endOfLocalDay(now);
   }
-  if (preset === "this_month") {
+  if (preset === "MONTH") {
     const mStart = startOfMonthLocal(now);
     return tripD >= mStart && tripD <= endOfLocalDay(now);
   }
-  if (preset === "custom" && customFrom && customTo) {
+  if (preset === "CUSTOM" && customFrom && customTo) {
     const from = parseTripFilterDate(customFrom);
     const to = parseTripFilterDate(customTo);
     if (!from || !to) return true;
@@ -297,7 +291,7 @@ export default function DriverDetailScreen({
     "trips" | "ledger" | "statement"
   >("trips");
   const [tripsDatePreset, setTripsDatePreset] =
-    useState<TripsDatePreset>("all");
+    useState<FinancePeriodFilter>("RANGE");
   const [tripsCustomFrom, setTripsCustomFrom] = useState<string | null>(null);
   const [tripsCustomTo, setTripsCustomTo] = useState<string | null>(null);
   const [tripsDateRangeModalVisible, setTripsDateRangeModalVisible] =
@@ -1781,84 +1775,24 @@ export default function DriverDetailScreen({
           nestedScrollEnabled
         >
           <View style={styles.tripsTabInner}>
-            <View style={styles.tripsFilterBar}>
-              <ScrollView
-                horizontal
-                style={styles.tripsFilterScroll}
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.tripsFilterChipsContent}
-              >
-                {(
-                  [
-                    { key: "today" as const, label: t("today") },
-                    { key: "yesterday" as const, label: t("yesterdayTrips") },
-                    { key: "this_week" as const, label: t("thisWeekTrips") },
-                    { key: "this_month" as const, label: t("thisMonth") },
-                    { key: "all" as const, label: t("all") },
-                  ] as { key: TripsDatePreset; label: string }[]
-                ).map(({ key, label }) => (
-                  <TouchableOpacity
-                    key={key}
-                    style={[
-                      styles.tripsFilterChip,
-                      tripsDatePreset === key && styles.tripsFilterChipActive,
-                    ]}
-                    onPress={() => {
-                      setTripsDatePreset(key);
-                      if (key !== "custom") {
-                        setTripsCustomFrom(null);
-                        setTripsCustomTo(null);
-                      }
-                    }}
-                    activeOpacity={0.85}
-                  >
-                    <Text
-                      style={[
-                        styles.tripsFilterChipText,
-                        tripsDatePreset === key &&
-                          styles.tripsFilterChipTextActive,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-                <TouchableOpacity
-                  style={[
-                    styles.tripsFilterChip,
-                    tripsDatePreset === "custom" &&
-                      styles.tripsFilterChipActive,
-                  ]}
-                  onPress={() => {
-                    setTripsDatePreset("custom");
-                    setTripsDateRangeModalVisible(true);
-                  }}
-                  activeOpacity={0.85}
-                >
-                  <Text
-                    style={[
-                      styles.tripsFilterChipText,
-                      tripsDatePreset === "custom" &&
-                        styles.tripsFilterChipTextActive,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {t("driverTripsFilterCustom")}
-                  </Text>
-                </TouchableOpacity>
-              </ScrollView>
-              <TouchableOpacity
-                style={styles.tripsFilterCalendarBtn}
-                onPress={() => {
-                  setTripsDatePreset("custom");
+            <View style={styles.tripDatePillWrap}>
+              <DatePresetPillBar
+                variant="onLight"
+                period={tripsDatePreset}
+                onPeriodChange={(p) => {
+                  setTripsDatePreset(p);
+                  if (p !== "CUSTOM") {
+                    setTripsCustomFrom(null);
+                    setTripsCustomTo(null);
+                  }
+                }}
+                onCustomRangePress={() => {
+                  setTripsDatePreset("CUSTOM");
                   setTripsDateRangeModalVisible(true);
                 }}
-                hitSlop={8}
-                accessibilityLabel={t("driverTripsFilterCustom")}
-              >
-                <FontAwesome name="calendar" size={14} color={Theme.primary} />
-              </TouchableOpacity>
+                customFrom={tripsCustomFrom}
+                customTo={tripsCustomTo}
+              />
             </View>
 
             <View style={[styles.tripTableCard, styles.tripTableCardFullWidth]}>
@@ -1867,29 +1801,24 @@ export default function DriverDetailScreen({
                   <Text style={styles.driverTripsThTrip} numberOfLines={1}>
                     {t("driverTripsColTrip")}
                   </Text>
-                  <Text style={styles.driverTripsThClient} numberOfLines={1}>
-                    {t("tripsHubColClient")}
-                  </Text>
-                  <Text style={styles.driverTripsThNum} numberOfLines={1}>
-                    {t("driverTripsColClientRev")}
-                  </Text>
+                  {isWebDesktop ? (
+                    <Text style={styles.driverTripsThClient} numberOfLines={1}>
+                      {t("tripsHubColClient")}
+                    </Text>
+                  ) : null}
                   <Text style={styles.driverTripsThNum} numberOfLines={1}>
                     {t("driverTripsColContract")}
                   </Text>
-                  <Text style={styles.driverTripsThNum} numberOfLines={1}>
-                    {t("driverTripsColPnL")}
-                  </Text>
+                  {isWebDesktop ? (
+                    <Text style={styles.driverTripsThNum} numberOfLines={1}>
+                      {t("driverTripsColPnL")}
+                    </Text>
+                  ) : null}
                   <Text style={styles.driverTripsThNum} numberOfLines={1}>
                     {t("paid")}
                   </Text>
                   <Text style={styles.driverTripsThNum} numberOfLines={1}>
                     {t("due")}
-                  </Text>
-                  <Text style={styles.driverTripsThTxn} numberOfLines={1}>
-                    {t("tripsHubColTxns")}
-                  </Text>
-                  <Text style={styles.driverTripsThLast} numberOfLines={1}>
-                    {t("driverTripsColLastTxn")}
                   </Text>
                 </View>
                 {ledgerRows.length === 0 ? (
@@ -1950,31 +1879,32 @@ export default function DriverDetailScreen({
                             {r.dest?.trim() || "—"}
                           </Text>
                         </View>
-                        <View style={styles.driverTripsCellClient}>
-                          <View style={styles.driverTripsClientAvatar}>
-                            <Text style={styles.driverTripsClientAvatarText}>
-                              {r.clientInitials}
-                            </Text>
-                          </View>
-                          <Text
-                            style={styles.driverTripsClientName}
-                            numberOfLines={2}
-                          >
-                            {(r.clientName ?? "—").toUpperCase()}
-                          </Text>
-                        </View>
-                        <Text style={styles.driverTripsAmt} numberOfLines={1}>
-                          {formatINR(r.clientRev)}
-                        </Text>
+                          {isWebDesktop ? (
+                            <View style={styles.driverTripsCellClient}>
+                              <View style={styles.driverTripsClientAvatar}>
+                                <Text style={styles.driverTripsClientAvatarText}>
+                                  {r.clientInitials}
+                                </Text>
+                              </View>
+                              <Text
+                                style={styles.driverTripsClientName}
+                                numberOfLines={2}
+                              >
+                                {(r.clientName ?? "—").toUpperCase()}
+                              </Text>
+                            </View>
+                          ) : null}
                         <Text style={styles.driverTripsAmt} numberOfLines={1}>
                           {formatINR(r.col1)}
                         </Text>
-                        <Text
-                          style={[styles.driverTripsAmt, plStyle]}
-                          numberOfLines={1}
-                        >
-                          {formatINR(pl)}
-                        </Text>
+                          {isWebDesktop ? (
+                            <Text
+                              style={[styles.driverTripsAmt, plStyle]}
+                              numberOfLines={1}
+                            >
+                              {formatINR(pl)}
+                            </Text>
+                          ) : null}
                         <Text
                           style={[
                             styles.driverTripsAmt,
@@ -1992,15 +1922,6 @@ export default function DriverDetailScreen({
                           numberOfLines={1}
                         >
                           {(r.col3 ?? 0) > 0 ? formatLedgerAmount(r.col3) : "—"}
-                        </Text>
-                        <Text style={styles.driverTripsTxn} numberOfLines={1}>
-                          {r.txnCount > 0 ? String(r.txnCount) : "—"}
-                        </Text>
-                        <Text
-                          style={styles.driverTripsLastTxn}
-                          numberOfLines={1}
-                        >
-                          {r.lastTxnShort}
                         </Text>
                       </Pressable>
                     );
@@ -2344,13 +2265,13 @@ export default function DriverDetailScreen({
         onApply={(from, to) => {
           setTripsCustomFrom(from);
           setTripsCustomTo(to);
-          setTripsDatePreset("custom");
+          setTripsDatePreset("CUSTOM");
           setTripsDateRangeModalVisible(false);
         }}
         onClear={() => {
           setTripsCustomFrom(null);
           setTripsCustomTo(null);
-          setTripsDatePreset("all");
+          setTripsDatePreset("RANGE");
           setTripsDateRangeModalVisible(false);
         }}
       />
@@ -2801,11 +2722,16 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     width: "100%",
   },
+  tripDatePillWrap: {
+    paddingHorizontal: 4,
+    marginBottom: 6,
+    marginTop: -4,
+  },
   tripsTabInner: {
     alignSelf: "stretch",
     width: "100%",
-    marginHorizontal: -Layout.screenPaddingHorizontal,
-    paddingHorizontal: Layout.screenPaddingHorizontal,
+    marginHorizontal: 0,
+    paddingHorizontal: 0,
     paddingTop: 8,
   },
   tripsFilterBar: {
@@ -2887,8 +2813,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     width: "100%",
     alignSelf: "stretch",
-    paddingVertical: 12,
-    paddingHorizontal: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
     backgroundColor: Theme.surfaceLight,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
@@ -2898,8 +2824,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     width: "100%",
     alignSelf: "stretch",
-    paddingVertical: 12,
-    paddingHorizontal: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 8,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
     minHeight: 56,
@@ -2908,9 +2834,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   driverTripsThTrip: {
-    flex: 2.05,
+    flex: 1.8,
     minWidth: 0,
-    fontSize: 7,
+    fontSize: 8,
     fontWeight: "700",
     fontStyle: "italic",
     color: Theme.textMuted,
@@ -2926,9 +2852,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.35,
   },
   driverTripsThNum: {
-    flex: 1,
+    flex: 1.05,
     minWidth: 0,
-    fontSize: 7,
+    fontSize: 8,
     fontWeight: "700",
     fontStyle: "italic",
     color: Theme.textMuted,
@@ -2956,20 +2882,20 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   driverTripsCellTrip: {
-    flex: 2.05,
+    flex: 1.8,
     minWidth: 0,
-    paddingRight: 6,
+    paddingRight: 8,
   },
   driverTripsTripId: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
   },
   driverTripsRoute: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "400",
     color: Theme.textMuted,
-    marginTop: 4,
+    marginTop: 2,
   },
   driverTripsCellClient: {
     flex: 1.85,
@@ -3001,9 +2927,9 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
   },
   driverTripsAmt: {
-    flex: 1,
+    flex: 1.05,
     minWidth: 0,
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "600",
     fontStyle: "italic",
     color: Theme.textPrimaryDark,
@@ -3039,7 +2965,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.screenBackground,
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    borderRadius: 32,
+    borderRadius: 20,
     overflow: "hidden",
   },
   tripTableHeader: {
