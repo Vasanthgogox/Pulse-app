@@ -106,6 +106,18 @@ type HistoryTripMetricId =
 
 const TRIPS_PAGE_BG = "#f4f5f7";
 
+function supplierNameFallbackMapsEqual(
+  a: Record<string, string>,
+  b: Record<string, string>,
+): boolean {
+  const keysA = Object.keys(a);
+  if (keysA.length !== Object.keys(b).length) return false;
+  for (const k of keysA) {
+    if (a[k] !== b[k]) return false;
+  }
+  return true;
+}
+
 function formatCompactINR(value: number): string {
   const safe = Math.max(0, Number(value) || 0);
   if (safe >= 10000000) return `₹${(safe / 10000000).toFixed(1)}Cr`;
@@ -628,30 +640,45 @@ export default function TripsScreen() {
     return Array.from(types).sort();
   }, [trips]);
 
+  /** Stable fingerprint of supplier ids needing name fallback — avoids effect churn when trip array identity changes without data changes */
+  const supplierNameFallbackEffectKey = useMemo(() => {
+    const knownSupplierIds = new Set(
+      suppliers.map((s) => String(s.id).trim().toLowerCase()).filter(Boolean),
+    );
+    const missingSupplierIds = [
+      ...new Set(
+        trips
+          .map((trip) => String(trip.supplier_id ?? "").trim().toLowerCase())
+          .filter((id) => id.length > 0 && !knownSupplierIds.has(id)),
+      ),
+    ].sort();
+    return missingSupplierIds.join("|");
+  }, [trips, suppliers]);
+
   useEffect(() => {
     let cancelled = false;
-    const loadMissingSupplierNames = async () => {
-      const knownSupplierIds = new Set(
-        suppliers.map((s) => String(s.id).trim().toLowerCase()).filter(Boolean),
+
+    if (!supplierNameFallbackEffectKey) {
+      setSupplierNameFallbackById((prev) =>
+        Object.keys(prev).length === 0 ? prev : {},
       );
-      const missingSupplierIds = Array.from(
-        new Set(
-          trips
-            .map((trip) => String(trip.supplier_id ?? "").trim().toLowerCase())
-            .filter((id) => id.length > 0 && !knownSupplierIds.has(id)),
-        ),
-      );
-      if (missingSupplierIds.length === 0) {
-        if (!cancelled) setSupplierNameFallbackById({});
-        return;
-      }
+      return undefined;
+    }
+
+    const missingSupplierIds = supplierNameFallbackEffectKey.split("|").filter(
+      Boolean,
+    );
+
+    void (async () => {
       const { data, error } = await supabase()
         .from("suppliers")
         .select("id, name, company_name, contact_person")
         .in("id", missingSupplierIds);
       if (cancelled) return;
       if (error) {
-        setSupplierNameFallbackById({});
+        setSupplierNameFallbackById((prev) =>
+          Object.keys(prev).length === 0 ? prev : {},
+        );
         return;
       }
       const next: Record<string, string> = {};
@@ -670,13 +697,15 @@ export default function TripsScreen() {
           String(row.contact_person ?? "").trim();
         if (label) next[key] = label;
       }
-      setSupplierNameFallbackById(next);
-    };
-    void loadMissingSupplierNames();
+      setSupplierNameFallbackById((prev) =>
+        supplierNameFallbackMapsEqual(prev, next) ? prev : next,
+      );
+    })();
+
     return () => {
       cancelled = true;
     };
-  }, [trips, suppliers]);
+  }, [supplierNameFallbackEffectKey]);
 
   const tripHubPartyMetaByTripId = useMemo(
     () =>

@@ -1835,6 +1835,7 @@ function TripConversationDetailPanel({
                 key={m.id}
                 message={m}
                 currentOrgId={currentOrgId}
+                conversationPartyName={selectedConv.party_name}
                 onAddToBook={onAddToBook}
                 onDispute={onDispute}
                 addingToBook={addingToBookId === m.id}

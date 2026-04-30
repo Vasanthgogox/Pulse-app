@@ -9,6 +9,7 @@ import React, {
 import { useAuth } from "@/contexts/AuthContext";
 import { useOptionalOrganization } from "@/contexts/OrganizationContext";
 import { supabase } from "@/lib/supabase";
+import { subscribeTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
 import * as chatService from "../services/chat.service";
 import type {
   ConversationPartyType,
@@ -112,6 +113,21 @@ export function TripChatProvider({ children }: { children: ReactNode }) {
     loadConversations();
   }, [loadConversations]);
 
+  // Refetch when ledger (or anything) signals new trip chat rows — survives missing realtime publication
+  useEffect(() => {
+    let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+    const unsub = subscribeTripChatMessagesChanged(() => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        void loadConversations();
+      }, 200);
+    });
+    return () => {
+      unsub();
+      clearTimeout(debounceTimer);
+    };
+  }, [loadConversations]);
+
   // Realtime subscription — react to new messages in this org's conversations
   useEffect(() => {
     if (!organizationId) return;
@@ -128,31 +144,39 @@ export function TripChatProvider({ children }: { children: ReactNode }) {
         },
         (payload) => {
           const newMsg = payload.new as TripMessageRow;
-          setConversations((prev) =>
-            prev.map((conv) => {
+          setConversations((prev) => {
+            const hasConv = prev.some((c) => c.id === newMsg.conversation_id);
+            if (!hasConv) {
+              setTimeout(() => void loadConversations(), 0);
+              return prev;
+            }
+            return prev.map((conv) => {
               if (conv.id !== newMsg.conversation_id) return conv;
               const alreadyExists = conv.messages.some((m) => m.id === newMsg.id);
               if (alreadyExists) return conv;
+              const fromParty =
+                newMsg.sender_role === "client" ||
+                newMsg.sender_role === "supplier" ||
+                newMsg.sender_role === "driver";
               return {
                 ...conv,
                 messages: [...conv.messages, newMsg],
                 last_message_at: newMsg.created_at,
                 last_message_preview: newMsg.content.slice(0, 120),
-                unread_dispatcher_count:
-                  newMsg.sender_role !== "dispatcher"
-                    ? conv.unread_dispatcher_count + 1
-                    : conv.unread_dispatcher_count,
+                unread_dispatcher_count: fromParty
+                  ? conv.unread_dispatcher_count + 1
+                  : conv.unread_dispatcher_count,
               };
-            })
-          );
-        }
+            });
+          });
+        },
       )
       .subscribe();
 
     return () => {
       supabase().removeChannel(channel);
     };
-  }, [organizationId]);
+  }, [organizationId, loadConversations]);
 
   const sendMessage = useCallback(
     async (conversationId: string, content: string, messageType: MessageType = "text") => {

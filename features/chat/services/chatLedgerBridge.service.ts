@@ -1,11 +1,15 @@
 import { supabase } from "@/lib/supabase";
+import { notifyTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
 import type { LedgerEventMetadata } from "../types/chat.types";
+import { getOrCreateConversation } from "./chat.service";
 
 export interface PostLedgerEventParams {
   tripId: string;
   transactionId: string;
   amount: number;
   flow: "in" | "out";
+  contactType: "client" | "supplier";
+  contactId: string;
   category: string;
   paymentMode: string;
   referenceNumber?: string | null;
@@ -24,8 +28,19 @@ export interface PostLedgerEventParams {
 export async function postLedgerEventToChat(params: PostLedgerEventParams): Promise<void> {
   const {
     tripId, transactionId, amount, flow, category, paymentMode,
+    contactType, contactId,
     referenceNumber, notes, senderOrgId, senderOrgName, receiverOrgId, receiverOrgName,
   } = params;
+
+  // DB trigger may have already inserted this card (same transaction commits first).
+  const { data: existingRow } = await supabase()
+    .from("trip_messages")
+    .select("id")
+    .eq("message_type", "ledger_event")
+    .contains("metadata", { transaction_id: transactionId })
+    .maybeSingle();
+
+  if (existingRow) return;
 
   const metadata: LedgerEventMetadata = {
     transaction_id: transactionId,
@@ -53,20 +68,78 @@ export async function postLedgerEventToChat(params: PostLedgerEventParams): Prom
     ? `${senderOrgName} received ${amountLabel} · ${category}`
     : `${senderOrgName} paid ${amountLabel} to ${receiverOrgName} · ${category}`;
 
-  // Fetch all conversations for this trip that belong to integrated parties
+  // Ledger often runs before chat was opened; mirror DB trigger by ensuring a row exists.
+  try {
+    await getOrCreateConversation({
+      tripId,
+      organizationId: senderOrgId,
+      partyType: contactType,
+      partyId: contactId,
+      partyName: receiverOrgName,
+    });
+  } catch {
+    // Conversation may already exist with different party_name; continue to targeted select.
+  }
+
+  // Fetch source-org conversations for this trip and targeted party only.
   const { data: conversations, error } = await supabase()
     .from("trip_conversations")
     .select("id, organization_id, party_type, client_id, supplier_id")
+    .eq("organization_id", senderOrgId)
     .eq("trip_id", tripId)
-    .in("party_type", ["client", "supplier"]);
+    .eq("party_type", contactType);
 
-  if (error || !conversations?.length) return;
+  if (error) {
+    console.warn("[chatLedgerBridge] trip_conversations query failed", {
+      tripId,
+      senderOrgId,
+      contactType,
+      contactId,
+      message: error.message,
+    });
+    return;
+  }
+  if (!conversations?.length) {
+    console.warn("[chatLedgerBridge] no matching trip_conversation for ledger_event", {
+      tripId,
+      senderOrgId,
+      contactType,
+      contactId,
+    });
+    return;
+  }
 
   for (const conv of conversations) {
-    // Only post to conversations belonging to one of the two transacting orgs
-    if (conv.organization_id !== senderOrgId && conv.organization_id !== receiverOrgId) continue;
+    // Guard against posting to the wrong contact thread on the same trip.
+    const isTargetConversation = contactType === "client"
+      ? conv.client_id === contactId
+      : conv.supplier_id === contactId;
+    if (!isTargetConversation) continue;
 
-    await supabase().from("trip_messages").insert({
+    const { error: rpcError } = await supabase().rpc("send_trip_chat_message", {
+      p_conversation_id: conv.id,
+      p_content: content,
+      p_sender_role: "system",
+      p_sender_name: "Payment System",
+      p_sender_user_id: null,
+      p_message_type: "ledger_event",
+      p_metadata: metadata,
+    });
+
+    if (!rpcError) continue;
+
+    // Previously we only inserted when RPC was "missing". Any RPC failure (timeouts,
+    // PostgREST hiccups, transient DB errors) must still try client insert + log.
+    console.warn("[chatLedgerBridge] send_trip_chat_message failed, trying direct insert", {
+      conversationId: conv.id,
+      organizationId: conv.organization_id,
+      tripId,
+      transactionId,
+      code: rpcError.code,
+      message: rpcError.message,
+    });
+
+    const { error: fallbackError } = await supabase().from("trip_messages").insert({
       conversation_id: conv.id,
       organization_id: conv.organization_id,
       sender_user_id: null,
@@ -77,6 +150,15 @@ export async function postLedgerEventToChat(params: PostLedgerEventParams): Prom
       is_read: false,
       metadata,
     });
+    if (fallbackError) {
+      console.warn("[chatLedgerBridge] direct ledger_event insert failed", {
+        conversationId: conv.id,
+        organizationId: conv.organization_id,
+        tripId,
+        transactionId,
+        error: fallbackError.message,
+      });
+    }
   }
 }
 
@@ -114,6 +196,7 @@ export async function mirrorLedgerEntryFromChat(
   });
 
   if (error) return { error: new Error(error.message) };
+  notifyTripChatMessagesChanged();
   return { error: null };
 }
 

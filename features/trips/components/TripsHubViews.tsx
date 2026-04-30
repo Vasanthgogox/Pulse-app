@@ -1303,18 +1303,19 @@ export function TripsHubTableView({
 
         return (
           <View key={t.id} style={styles.auditRowGroup}>
-            <Pressable
-              style={({ pressed }) => [
-                styles.auditTr,
-                pressed && styles.auditTrPressed,
-                rowWebCursor,
-              ]}
-              onPress={() => toggleExpanded(t.id)}
-              accessibilityRole="button"
-              accessibilityState={{ expanded }}
-              accessibilityLabel={`${getTripDisplayNumber(t)} ${expanded ? tr("tripsHubCollapseRow") : tr("tripsHubExpandRow")}`}
-            >
+            <View style={styles.auditTr}>
               {hasSalesConflict ? <View style={styles.mismatchStripe} /> : null}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.auditTrMain,
+                  rowWebCursor,
+                  pressed && styles.auditTrPressed,
+                ]}
+                onPress={() => toggleExpanded(t.id)}
+                accessibilityRole="button"
+                accessibilityState={{ expanded }}
+                accessibilityLabel={`${getTripDisplayNumber(t)} ${expanded ? tr("tripsHubCollapseRow") : tr("tripsHubExpandRow")}`}
+              >
               <View style={[styles.manifestTd, styles.manifestColIdentity]}>
                 <View style={styles.manifestIdentityRow}>
                   <View
@@ -1617,6 +1618,7 @@ export function TripsHubTableView({
                   </View>
                 </View>
               </View>
+              </Pressable>
 
               <View style={[styles.manifestTd, styles.manifestColActions]}>
                 <View style={styles.auditCellIconRow}>
@@ -1673,7 +1675,7 @@ export function TripsHubTableView({
                   </Pressable>
                 </View>
               </View>
-            </Pressable>
+            </View>
 
             {expanded ? (
               <View style={styles.expandPanel}>
@@ -3469,6 +3471,14 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   auditTrPressed: { backgroundColor: Theme.surface },
+  /** Main row tap target — sibling to action icons so web does not nest <button> inside <button>. */
+  auditTrMain: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 4,
+    minWidth: 0,
+  },
   mismatchStripe: {
     position: "absolute",
     left: 0,

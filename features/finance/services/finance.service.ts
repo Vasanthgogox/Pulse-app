@@ -13,6 +13,7 @@ import { LEDGER_PAGE_SIZE, type PageOpts } from '@/lib/pagination';
 import { VALIDATION, dateISO } from '@/lib/validation';
 import { getAvatarUriForSeed } from '@/constants/DriverLevels';
 import { resolveAvatarPublicUrl } from '@/lib/avatarUpload';
+import { notifyTripChatMessagesChanged } from '@/lib/tripChatInvalidate';
 import { postLedgerEventToChat } from '@/features/chat/services/chatLedgerBridge.service';
 
 /** Join trips for ledger rows; older DBs may not have `trips.display_trip_id` yet (PostgREST 400). */
@@ -186,6 +187,72 @@ async function resolveContactDisplayName(
     .eq('id', trimmedContactId)
     .maybeSingle();
   return normalizePartyName((data as { name?: string | null } | null)?.name) || null;
+}
+
+async function resolveTripContextForLedgerWrite(params: {
+  orgId: string;
+  tripId?: string | null;
+  tripNumber?: string | null;
+}): Promise<{ tripId: string | null; tripNumber: string | null }> {
+  const { orgId } = params;
+  const requestedTripId = String(params.tripId ?? "").trim();
+  const requestedTripNumber = String(params.tripNumber ?? "").trim();
+
+  if (!requestedTripId) {
+    return {
+      tripId: null,
+      tripNumber: requestedTripNumber || null,
+    };
+  }
+
+  const { data: tripById, error: tripByIdError } = await supabase()
+    .from("trips")
+    .select("id, organization_id, trip_number")
+    .eq("id", requestedTripId)
+    .maybeSingle();
+
+  if (tripByIdError) {
+    throw new Error(`Failed to resolve trip context: ${tripByIdError.message}`);
+  }
+
+  if (!tripById) {
+    throw new Error("Selected trip was not found.");
+  }
+
+  const row = tripById as { id: string; organization_id: string; trip_number: string | null };
+  if (row.organization_id === orgId) {
+    return {
+      tripId: row.id,
+      tripNumber: requestedTripNumber || (row.trip_number ?? null),
+    };
+  }
+
+  const candidateTripNumber = requestedTripNumber || String(row.trip_number ?? "").trim();
+  if (!candidateTripNumber) {
+    throw new Error("Invalid trip context: trip belongs to another organization.");
+  }
+
+  const { data: localTrip, error: localTripError } = await supabase()
+    .from("trips")
+    .select("id, trip_number")
+    .eq("organization_id", orgId)
+    .eq("trip_number", candidateTripNumber)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (localTripError) {
+    throw new Error(`Failed to map trip context: ${localTripError.message}`);
+  }
+
+  if (!localTrip) {
+    throw new Error("Invalid trip context: selected trip does not belong to current organization.");
+  }
+
+  return {
+    tripId: String((localTrip as { id: string }).id),
+    tripNumber: String((localTrip as { trip_number?: string | null }).trip_number ?? candidateTripNumber),
+  };
 }
 
 function enrichLedgerMetaFromRow(
@@ -560,6 +627,118 @@ export async function getTransactionsByOrganizationAndDriver(
   return { error: null, transactions };
 }
 
+type InsertedTxnRowForChat = {
+  id: string;
+  trip_id: string | null;
+  party_name: string | null;
+  description: string | null;
+  amount_in: number;
+  amount_out: number;
+  transaction_date: string;
+  created_at: string;
+  contact_id: string | null;
+  contact_type: string | null;
+  vehicle_number?: string | null;
+  driver_name?: string | null;
+  trips?: { trip_number: string; display_trip_id?: string | null } | null;
+  ledger_entity_type?: string | null;
+  ledger_flow_type?: string | null;
+  ledger_category?: string | null;
+};
+
+/**
+ * Integrated client/supplier: post ledger_event after insert. Errors are swallowed
+ * (ledger succeeded); must run to completion — do not detach as untracked promises.
+ */
+async function tryNotifyLinkedPartyChatAfterLedgerInsert(
+  orgId: string,
+  row: InsertedTxnRowForChat,
+): Promise<void> {
+  const ct = (row.contact_type ?? '').toLowerCase();
+  if (!row.trip_id || !(ct === 'client' || ct === 'supplier') || !row.contact_id) return;
+
+  const isIn = row.amount_in > 0;
+  try {
+    const { data: linkedOrg, error: linkErr } =
+      ct === 'client'
+        ? await supabase()
+            .from('clients')
+            .select('linked_organization_id, name')
+            .eq('id', row.contact_id!)
+            .maybeSingle()
+        : await supabase()
+            .from('suppliers')
+            .select('linked_organization_id, company_name, name')
+            .eq('id', row.contact_id!)
+            .maybeSingle();
+
+    if (linkErr) {
+      console.warn('[finance] linked party lookup failed (ledger_event skipped)', {
+        transactionId: row.id,
+        contactType: ct,
+        contactId: row.contact_id,
+        message: linkErr.message,
+      });
+      return;
+    }
+
+    if (!linkedOrg?.linked_organization_id) return;
+
+    // RLS: users can SELECT only organizations they belong to. Receiver (linked tenant) is blocked,
+    // so receiver org name must fall back to the client/supplier record we already read.
+    const receiverOrgId = linkedOrg.linked_organization_id;
+    const receiverPartyFallback =
+      ct === 'client'
+        ? normalizePartyName((linkedOrg as { name?: string | null }).name)
+        : normalizePartyName(
+            (linkedOrg as { company_name?: string | null; name?: string | null }).company_name,
+          ) || normalizePartyName((linkedOrg as { name?: string | null }).name);
+
+    const [{ data: senderOrg }, { data: receiverOrgRow }] = await Promise.all([
+      supabase().from('organizations').select('id, name').eq('id', orgId).maybeSingle(),
+      supabase().from('organizations').select('id, name').eq('id', receiverOrgId).maybeSingle(),
+    ]);
+
+    if (!senderOrg?.id) {
+      console.warn('[finance] sender org missing for ledger_event', {
+        transactionId: row.id,
+      });
+      return;
+    }
+
+    const receiverOrgNameResolved =
+      normalizePartyName(receiverOrgRow?.name) ||
+      receiverPartyFallback ||
+      receiverOrgId;
+
+    await postLedgerEventToChat({
+      tripId: row.trip_id!,
+      transactionId: row.id,
+      amount: isIn ? row.amount_in : row.amount_out,
+      flow: isIn ? 'in' : 'out',
+      contactType: ct as 'client' | 'supplier',
+      contactId: row.contact_id!,
+      category: normalizePrimaryCategory(row.description) ?? 'Payment',
+      paymentMode: parsePaymentMode(row.description) ?? 'Cash',
+      referenceNumber: parsePaymentReference(row.description),
+      notes: null,
+      senderOrgId: senderOrg.id,
+      senderOrgName: senderOrg.name ?? orgId,
+      receiverOrgId,
+      receiverOrgName: receiverOrgNameResolved,
+    });
+  } catch (e) {
+    console.warn('[finance] ledger_event chat post failed', {
+      transactionId: row.id,
+      tripId: row.trip_id,
+      organizationId: orgId,
+      contactType: ct,
+      contactId: row.contact_id,
+      detail: e instanceof Error ? e.message : String(e),
+    });
+  }
+}
+
 export async function createLedgerEntry(
   orgId: string,
   entry: CreateLedgerEntryData
@@ -598,10 +777,15 @@ export async function createLedgerEntry(
     0,
     VALIDATION.PARTY_NAME_MAX_LENGTH,
   );
+  const tripContext = await resolveTripContextForLedgerWrite({
+    orgId,
+    tripId: enriched.trip_id,
+    tripNumber: enriched.trip_number,
+  });
   const description = buildDescriptionWithMeta(
     entry.description ?? 'ENTRY',
     {
-      trip_number: entry.trip_number,
+      trip_number: tripContext.tripNumber,
       indent_id: entry.indent_id,
       vehicle_number: entry.vehicle_number,
       driver_name: entry.driver_name,
@@ -616,7 +800,7 @@ export async function createLedgerEntry(
 
   const payload = {
     organization_id: orgId,
-    trip_id: enriched.trip_id ?? null,
+    trip_id: tripContext.tripId,
     party_name: partyName,
     description,
     amount_in: isCashIn ? amountIn : 0,
@@ -645,73 +829,12 @@ export async function createLedgerEntry(
 
   if (error) return { error: new Error(error.message), row: null };
 
-  const row = data as {
-    id: string;
+  const row = data as InsertedTxnRowForChat & {
     organization_id: string;
-    trip_id: string | null;
-    party_name: string | null;
-    description: string | null;
-    amount_in: number;
-    amount_out: number;
-    transaction_date: string;
-    created_at: string;
-    contact_id: string | null;
-    contact_type: string | null;
-    vehicle_number?: string | null;
-    driver_name?: string | null;
-    trips?: { trip_number: string; display_trip_id?: string | null } | null;
-    ledger_entity_type?: string | null;
-    ledger_flow_type?: string | null;
-    ledger_category?: string | null;
   };
 
-  // Post ledger event to chat for integrated trip parties (client/supplier only).
-  // Fire-and-forget: chat failure must never block the finance operation.
-  const ct = (payload.contact_type ?? '').toLowerCase();
-  if (row.trip_id && (ct === 'client' || ct === 'supplier') && row.contact_id) {
-    const isIn = row.amount_in > 0;
-    void (async () => {
-      try {
-        const { data: linkedOrg } = ct === 'client'
-          ? await supabase()
-              .from('clients')
-              .select('linked_organization_id, name')
-              .eq('id', row.contact_id!)
-              .maybeSingle()
-          : await supabase()
-              .from('suppliers')
-              .select('linked_organization_id, company_name, name')
-              .eq('id', row.contact_id!)
-              .maybeSingle();
-
-        if (!linkedOrg?.linked_organization_id) return;
-
-        const [{ data: senderOrg }, { data: receiverOrg }] = await Promise.all([
-          supabase().from('organizations').select('id, name').eq('id', orgId).maybeSingle(),
-          supabase().from('organizations').select('id, name').eq('id', linkedOrg.linked_organization_id).maybeSingle(),
-        ]);
-
-        if (!senderOrg || !receiverOrg) return;
-
-        await postLedgerEventToChat({
-          tripId: row.trip_id!,
-          transactionId: row.id,
-          amount: isIn ? row.amount_in : row.amount_out,
-          flow: isIn ? 'in' : 'out',
-          category: normalizePrimaryCategory(row.description) ?? 'Payment',
-          paymentMode: parsePaymentMode(row.description) ?? 'Cash',
-          referenceNumber: parsePaymentReference(row.description),
-          notes: null,
-          senderOrgId: senderOrg.id,
-          senderOrgName: senderOrg.name ?? orgId,
-          receiverOrgId: receiverOrg.id,
-          receiverOrgName: receiverOrg.name ?? linkedOrg.linked_organization_id,
-        });
-      } catch {
-        // Non-critical — chat failure must not affect ledger
-      }
-    })();
-  }
+  await tryNotifyLinkedPartyChatAfterLedgerInsert(orgId, row);
+  notifyTripChatMessagesChanged();
 
   return { error: null, row: toLedgerRow(row) };
 }
@@ -755,10 +878,15 @@ export async function updateLedgerEntry(
     0,
     VALIDATION.PARTY_NAME_MAX_LENGTH,
   );
+  const tripContext = await resolveTripContextForLedgerWrite({
+    orgId,
+    tripId: enriched.trip_id,
+    tripNumber: enriched.trip_number,
+  });
   const description = buildDescriptionWithMeta(
     entry.description ?? 'ENTRY',
     {
-      trip_number: entry.trip_number,
+      trip_number: tripContext.tripNumber,
       indent_id: entry.indent_id,
       vehicle_number: entry.vehicle_number,
       driver_name: entry.driver_name,
@@ -770,7 +898,7 @@ export async function updateLedgerEntry(
   );
 
   const payload = {
-    trip_id: enriched.trip_id ?? null,
+    trip_id: tripContext.tripId,
     party_name: partyName,
     description,
     amount_in: isCashIn ? amountIn : 0,
