@@ -11,6 +11,8 @@ import { useTripChat } from "@/features/chat/contexts/TripChatContext";
 const FAB_SIZE = 56;
 const STACK_CLEARANCE_WEB = 72;
 const STACK_CLEARANCE_MOBILE = 118;
+const TRIPS_FAB_STACK_GAP_WEB = 58;
+const TRIPS_FAB_STACK_GAP_MOBILE = 52;
 type ChatTab = "trips" | "network";
 
 function useShouldShow(): boolean {
@@ -85,9 +87,16 @@ export function FloatingChatButton() {
 
   const compactViewport = Platform.OS !== "web" || width < 1024;
   const normalizedPath = (pathname ?? "").replace("/(tabs)", "");
+  const isTripsLikeRoute =
+    normalizedPath === "/trips" || normalizedPath.startsWith("/trip/");
   const hasLocalFabInViewport =
     compactViewport &&
-    (normalizedPath === "/trips" || normalizedPath === "/finance");
+    (isTripsLikeRoute ||
+      normalizedPath === "/finance" ||
+      normalizedPath === "/network" ||
+      normalizedPath === "/load-board" ||
+      normalizedPath === "/pulse-loads");
+  const stackAboveTripsFab = isTripsLikeRoute;
 
   useEffect(() => {
     // Always collapse preview on route change for predictable mobile UX.
@@ -101,10 +110,15 @@ export function FloatingChatButton() {
     insets.bottom +
     Layout.tabBarBottomPaddingMin +
     (Platform.OS === "web" ? STACK_CLEARANCE_WEB : STACK_CLEARANCE_MOBILE) +
+    (stackAboveTripsFab
+      ? Platform.OS === "web"
+        ? TRIPS_FAB_STACK_GAP_WEB
+        : TRIPS_FAB_STACK_GAP_MOBILE
+      : 0) +
     (Platform.OS === "web" ? 2 : 0);
 
   const previewWidth = Math.max(290, Math.min(380, width - 28));
-  const anchorStart = hasLocalFabInViewport;
+  const anchorStart = stackAboveTripsFab ? false : hasLocalFabInViewport;
 
   return (
     <View
