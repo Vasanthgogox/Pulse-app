@@ -39,7 +39,7 @@ export async function getTripsForCompose(organizationId: string): Promise<TripFo
 
   if (error) throw error;
 
-  return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+  const trips = ((data ?? []) as Record<string, unknown>[]).map((row) => ({
     id: String(row.id ?? ""),
     trip_number: String(row.trip_number ?? ""),
     display_trip_id: (row.display_trip_id as string | null | undefined) ?? null,
@@ -51,6 +51,27 @@ export async function getTripsForCompose(organizationId: string): Promise<TripFo
     supplier_name: (row.supplier_name as string | null | undefined) ?? null,
     driver_id: (row.driver_id as string | null | undefined) ?? null,
     driver_display_name: (row.driver_display_name as string | null | undefined) ?? null,
+  }));
+
+  // Resolve supplier display names when trips table doesn't carry denormalized supplier_name.
+  const supplierIds = Array.from(
+    new Set(trips.map((t) => t.supplier_id).filter((v): v is string => !!v))
+  );
+  if (supplierIds.length === 0) return trips;
+
+  const { data: suppliers } = await supabase()
+    .from("suppliers")
+    .select("id, company_name, name")
+    .in("id", supplierIds);
+  const supplierNameById = new Map<string, string>();
+  for (const s of suppliers ?? []) {
+    const label = (s.company_name ?? "").trim() || (s.name ?? "").trim();
+    if (label) supplierNameById.set(s.id, label);
+  }
+
+  return trips.map((t) => ({
+    ...t,
+    supplier_name: t.supplier_name?.trim() || (t.supplier_id ? supplierNameById.get(t.supplier_id) ?? null : null),
   }));
 }
 
@@ -69,7 +90,7 @@ export async function getConversationsByOrganization(
 
   if (error) throw error;
 
-  return (data ?? []).map((row: any) => ({
+  const conversations = (data ?? []).map((row: any) => ({
     ...row,
     trip_number: row.trips?.trip_number ?? "",
     pickup_area: row.trips?.pickup_area ?? "",
@@ -78,6 +99,60 @@ export async function getConversationsByOrganization(
       (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
     ),
   }));
+
+  // If party_name is generic (e.g. "Supplier"), resolve from linked entity tables.
+  const unresolvedClientIds = Array.from(
+    new Set(
+      conversations
+        .filter((c) => c.party_type === "client" && c.client_id)
+        .map((c) => c.client_id as string)
+    )
+  );
+  const unresolvedSupplierIds = Array.from(
+    new Set(
+      conversations
+        .filter((c) => c.party_type === "supplier" && c.supplier_id)
+        .map((c) => c.supplier_id as string)
+    )
+  );
+
+  const [clientsResp, suppliersResp] = await Promise.all([
+    unresolvedClientIds.length
+      ? supabase().from("clients").select("id, name").in("id", unresolvedClientIds)
+      : Promise.resolve({ data: [] as { id: string; name: string | null }[] }),
+    unresolvedSupplierIds.length
+      ? supabase().from("suppliers").select("id, company_name, name").in("id", unresolvedSupplierIds)
+      : Promise.resolve({ data: [] as { id: string; company_name: string | null; name: string | null }[] }),
+  ]);
+
+  const clientNameById = new Map<string, string>();
+  for (const c of clientsResp.data ?? []) {
+    const label = (c.name ?? "").trim();
+    if (label) clientNameById.set(c.id, label);
+  }
+  const supplierNameById = new Map<string, string>();
+  for (const s of suppliersResp.data ?? []) {
+    const label = (s.company_name ?? "").trim() || (s.name ?? "").trim();
+    if (label) supplierNameById.set(s.id, label);
+  }
+
+  return conversations.map((c) => {
+    const partyRaw = String(c.party_name ?? "").trim().toLowerCase();
+    const isGeneric =
+      partyRaw === "" ||
+      partyRaw === "supplier" ||
+      partyRaw === "client" ||
+      partyRaw === "driver";
+    if (!isGeneric) return c;
+
+    if (c.party_type === "client" && c.client_id) {
+      return { ...c, party_name: clientNameById.get(c.client_id) ?? c.party_name };
+    }
+    if (c.party_type === "supplier" && c.supplier_id) {
+      return { ...c, party_name: supplierNameById.get(c.supplier_id) ?? c.party_name };
+    }
+    return c;
+  });
 }
 
 export async function getOrCreateConversation(params: {
@@ -139,6 +214,25 @@ export async function sendChatMessage(params: {
     senderUserId,
     messageType = "text",
   } = params;
+
+  // Preferred path: DB RPC writes source message and mirrors to linked partner org.
+  const { data: rpcData, error: rpcError } = await supabase().rpc("send_trip_chat_message", {
+    p_conversation_id: conversationId,
+    p_content: content,
+    p_sender_role: senderRole,
+    p_sender_name: senderName,
+    p_sender_user_id: senderUserId,
+    p_message_type: messageType,
+  });
+
+  if (!rpcError && rpcData) return rpcData as TripMessageRow;
+
+  // Fallback for environments that don't have the migration yet.
+  const isMissingRpc =
+    rpcError != null &&
+    (rpcError.code === "42883" ||
+      String(rpcError.message ?? "").toLowerCase().includes("send_trip_chat_message"));
+  if (!isMissingRpc && rpcError) throw rpcError;
 
   const { data, error } = await supabase()
     .from("trip_messages")
