@@ -537,6 +537,22 @@ export function DemoTabBar({
   const verticalPad = Math.max(dockBottom / 4, 4);
   const bottomPad = verticalPad + 6;
 
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const onDocumentPointerDown = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+      const insidePopoverRoot = target.closest('[data-demo-popover-root="true"]');
+      if (insidePopoverRoot) return;
+      setShowNotifications(false);
+      setShowInvitations(false);
+    };
+    document.addEventListener("mousedown", onDocumentPointerDown);
+    return () => {
+      document.removeEventListener("mousedown", onDocumentPointerDown);
+    };
+  }, []);
+
   if (isDesktopWeb) {
     const navItems: Array<{
       id: DemoTabId;
@@ -601,7 +617,7 @@ export function DemoTabBar({
           </View>
 
           <View style={styles.webUtilityWrap}>
-            <View style={styles.webPopoverAnchor}>
+            <View style={styles.webPopoverAnchor} data-demo-popover-root="true">
               <AnimatedPress
                 style={styles.webBellBtn}
                 activeOpacity={0.8}
@@ -780,7 +796,7 @@ export function DemoTabBar({
                 </View>
               ) : null}
             </View>
-            <View style={styles.webPopoverAnchor}>
+            <View style={styles.webPopoverAnchor} data-demo-popover-root="true">
               <AnimatedPress
                 style={styles.webBellBtn}
                 activeOpacity={0.8}
