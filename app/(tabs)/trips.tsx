@@ -93,7 +93,9 @@ type DateFilter =
   | "this_month"
   | "custom";
 
-const CHAT_FAB_STACK_OFFSET = 60;
+const CHAT_FAB_SIZE = 46;
+const FAB_STACK_GAP = 14;
+const TRIPS_FAB_STACK_OFFSET = CHAT_FAB_SIZE + FAB_STACK_GAP;
 
 type TripsListLayout = "cards" | "table";
 type HistoryTripMetricId =
@@ -2380,10 +2382,13 @@ export default function TripsScreen() {
           style={[
             styles.fabWrap,
             {
+              zIndex: 40,
+              right: Layout.screenPaddingHorizontal,
               bottom:
+                Layout.demoTabBarScrollBottomInset +
                 insets.bottom +
                 Layout.tabBarBottomPaddingMin +
-                CHAT_FAB_STACK_OFFSET,
+                TRIPS_FAB_STACK_OFFSET,
             },
           ]}
         >
@@ -3692,7 +3697,6 @@ const styles = StyleSheet.create({
   },
   fabWrap: {
     position: "absolute",
-    right: Layout.fabRightOffset,
   },
   card: {
     borderWidth: 1,
