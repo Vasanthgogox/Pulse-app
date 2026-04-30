@@ -7,10 +7,14 @@
 -- 5. RLS: allow drivers to read/write their own trip conversations
 -- ============================================================
 
--- ── 1. Add metadata column ────────────────────────────────────────────────────
+-- ── 1. Add metadata column + expand message_type constraint ──────────────────
 
 ALTER TABLE public.trip_messages
   ADD COLUMN IF NOT EXISTS metadata jsonb;
+
+ALTER TABLE public.trip_messages DROP CONSTRAINT IF EXISTS trip_messages_message_type_check;
+ALTER TABLE public.trip_messages ADD CONSTRAINT trip_messages_message_type_check
+  CHECK (message_type = ANY (ARRAY['text','update','question','challenge','system','ledger_event','document_share']));
 
 -- ── 2. Replace send_trip_chat_message with metadata support ───────────────────
 
@@ -234,7 +238,7 @@ BEGIN
       'Vehicle has reached the destination — ' ||
       COALESCE(NULLIF(NEW.drop_location,''), 'drop location') || '.'
     WHEN 'completed' THEN
-      'Trip ' || COALESCE(NULLIF(NEW.display_trip_id,''), NEW.trip_number, '') ||
+      'Trip ' || COALESCE(NULLIF(NEW.trip_number,''), '') ||
       ' completed successfully.'
     WHEN 'cancelled' THEN
       'Trip has been cancelled.'
