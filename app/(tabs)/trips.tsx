@@ -154,7 +154,7 @@ export default function TripsScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const queryClient = useQueryClient();
   const [activeMetricTab, setActiveMetricTab] =
-    useState<TripMetricId>("unassigned");
+    useState<TripMetricId>("assigned");
   const [supplyFilter, setSupplyFilter] = useState<SupplyFilter>("all");
   const [sortBy, setSortBy] = useState<SortBy>("date_desc");
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>("all");
@@ -238,6 +238,9 @@ export default function TripsScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      setTripFilter("Active");
+      setActiveMetricTab("assigned");
+      setActiveHistoryMetricTab(null);
       onRefresh();
     }, [onRefresh]),
   );
@@ -2543,9 +2546,9 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   tabSubPill: {
-    minWidth: 50,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    minWidth: 74,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     borderRadius: 999,
     backgroundColor: Theme.liquidPillBg,
     borderWidth: 1,
@@ -2556,6 +2559,11 @@ const styles = StyleSheet.create({
   tabSubPillActive: {
     backgroundColor: Theme.darkBackground,
     borderColor: Theme.darkBackground,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    elevation: 2,
   },
   tabSubPillText: {
     fontSize: 10,
@@ -2647,9 +2655,9 @@ const styles = StyleSheet.create({
   } as unknown as ViewStyle,
   tripsSearchWrapWebCompact: {
     flex: 0,
-    width: 280,
-    minWidth: 240,
-    maxWidth: 340,
+    width: 240,
+    minWidth: 160,
+    maxWidth: 300,
   },
   tripsSearchIcon: { marginRight: 8 },
   tripsSearchInput: {
@@ -3085,6 +3093,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+    flexShrink: 0,
   },
   tripsMainTabsRowWebCompact: {
     width: "100%",
@@ -3096,17 +3105,17 @@ const styles = StyleSheet.create({
   tripsMainTabsPillWrap: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 4,
     padding: 4,
     borderRadius: 999,
     backgroundColor: Theme.liquidPillBg,
     borderWidth: 1,
     borderColor: Theme.liquidPillBorder,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 0,
   },
   tripsMainPillWeb: {
     minWidth: 104,
@@ -3123,11 +3132,8 @@ const styles = StyleSheet.create({
   },
   tripsMainPillActiveWeb: {
     backgroundColor: Theme.darkBackground,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.16,
-    shadowRadius: 6,
-    elevation: 2,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   tripsMainPillTextWeb: {
     fontSize: 10,
@@ -3141,10 +3147,10 @@ const styles = StyleSheet.create({
   },
   tripsBottomHeaderRowWeb: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
-    flexWrap: "wrap",
+    flexWrap: "nowrap",
   },
   tripsBottomHeaderRowWebCompact: {
     flexDirection: "column",
@@ -3154,19 +3160,19 @@ const styles = StyleSheet.create({
   tripsTabClusterWeb: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    flexShrink: 1,
+    gap: 4,
+    flexShrink: 0,
     backgroundColor: Theme.liquidPillBg,
     borderWidth: 1,
     borderColor: Theme.liquidPillBorder,
     borderRadius: 999,
-    paddingHorizontal: 6,
-    paddingVertical: 5,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.05,
-    shadowRadius: 9,
-    elevation: 1,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 2,
   },
   tripsTabClusterWebCompact: {
     alignSelf: "flex-start",
@@ -3174,7 +3180,8 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
   },
   tripsScopePillWeb: {
-    minWidth: 94,
+    minWidth: 92,
+    borderRadius: 999,
     backgroundColor: "transparent",
     borderColor: "transparent",
     borderWidth: 1,
@@ -3187,20 +3194,20 @@ const styles = StyleSheet.create({
     }),
   },
   tripsScopePillActiveWeb: {
-    backgroundColor: Theme.surface,
-    borderColor: Theme.borderLight,
+    backgroundColor: Theme.darkBackground,
+    borderColor: Theme.darkBackground,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.09,
-    shadowRadius: 4,
-    elevation: 1,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.16,
+    shadowRadius: 7,
+    elevation: 2,
   },
   tripsScopePillTextWeb: {
     color: Theme.textMuted,
     letterSpacing: 1,
   },
   tripsScopePillTextActiveWeb: {
-    color: Theme.textPrimaryDark,
+    color: Theme.textOnDark,
   },
   tabWebCompact: {
     minWidth: 66,
@@ -3228,7 +3235,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexShrink: 1,
     minWidth: 0,
-    flexWrap: "wrap",
+    flexWrap: "nowrap",
     justifyContent: "flex-end",
     paddingHorizontal: 0,
     paddingVertical: 0,
