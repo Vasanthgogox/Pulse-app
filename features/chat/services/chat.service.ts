@@ -1,6 +1,8 @@
 import { supabase } from "@/lib/supabase";
 import type {
   ConversationPartyType,
+  DocumentShareMetadata,
+  LedgerEventMetadata,
   MessageSenderRole,
   MessageType,
   NetworkConversation,
@@ -390,4 +392,120 @@ export async function getIntegratedPartners(orgId: string): Promise<NetworkPartn
     }
   }
   return partners;
+}
+
+// ── Driver chat ───────────────────────────────────────────────────────────────
+
+/** Fetches all trip conversations where the party is the driver (by driver record IDs). */
+export async function getConversationsByDriverIds(
+  driverIds: string[]
+): Promise<TripConversation[]> {
+  if (!driverIds.length) return [];
+
+  const { data, error } = await supabase()
+    .from("trip_conversations")
+    .select(`
+      *,
+      trips!inner ( trip_number, pickup_area, drop_location ),
+      trip_messages ( * )
+    `)
+    .in("driver_id", driverIds)
+    .order("last_message_at", { ascending: false, nullsFirst: false });
+
+  if (error) throw error;
+
+  return (data ?? []).map((row: any) => ({
+    ...row,
+    trip_number: row.trips?.trip_number ?? "",
+    pickup_area: row.trips?.pickup_area ?? "",
+    drop_location: row.trips?.drop_location ?? "",
+    messages: ((row.trip_messages ?? []) as TripMessageRow[]).sort(
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    ),
+  }));
+}
+
+/** Sends a message as the driver role. Thin wrapper for consistency. */
+export async function sendDriverChatMessage(params: {
+  conversationId: string;
+  organizationId: string;
+  content: string;
+  senderName: string;
+  senderUserId: string | null;
+}): Promise<TripMessageRow> {
+  return sendChatMessage({
+    ...params,
+    senderRole: "driver",
+    messageType: "text",
+  });
+}
+
+/** Posts a document_share message into a trip conversation. */
+export async function sendDocumentShareMessage(params: {
+  conversationId: string;
+  organizationId: string;
+  senderRole: MessageSenderRole;
+  senderName: string;
+  senderUserId: string | null;
+  metadata: DocumentShareMetadata;
+}): Promise<TripMessageRow> {
+  const { conversationId, organizationId, senderRole, senderName, senderUserId, metadata } = params;
+
+  const { data, error } = await supabase()
+    .from("trip_messages")
+    .insert({
+      conversation_id: conversationId,
+      organization_id: organizationId,
+      sender_user_id: senderUserId,
+      sender_role: senderRole,
+      sender_name: senderName,
+      content: `Shared document: ${metadata.document_name}`,
+      message_type: "document_share",
+      is_read: false,
+      metadata,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+/** Fetches shareable documents for a trip (vehicle + driver docs). */
+export async function getShareableDocumentsForTrip(params: {
+  vehicleId: string | null;
+  driverId: string | null;
+}): Promise<{ key: string; label: string; storage_path: string; entity_type: "vehicle" | "driver"; entity_id: string }[]> {
+  const results: { key: string; label: string; storage_path: string; entity_type: "vehicle" | "driver"; entity_id: string }[] = [];
+
+  if (params.vehicleId) {
+    const { data: vehicle } = await supabase()
+      .from("vehicles")
+      .select("id, documents")
+      .eq("id", params.vehicleId)
+      .maybeSingle();
+
+    if (vehicle?.documents && typeof vehicle.documents === "object") {
+      const docs = vehicle.documents as Record<string, { url?: string }>;
+      const LABELS: Record<string, string> = {
+        rc: "Registration Certificate (RC)",
+        insurance: "Insurance Policy",
+        fitness: "Fitness Certificate",
+        pollution: "PUC Certificate",
+      };
+      for (const [key, doc] of Object.entries(docs)) {
+        if (doc?.url) {
+          results.push({
+            key,
+            label: LABELS[key] ?? key.toUpperCase(),
+            storage_path: doc.url,
+            entity_type: "vehicle",
+            entity_id: vehicle.id,
+          });
+        }
+      }
+    }
+  }
+
+  return results;
 }

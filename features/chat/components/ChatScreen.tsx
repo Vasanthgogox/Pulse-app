@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Modal,
   ScrollView,
@@ -47,11 +48,22 @@ import {
   useIntegratedChat,
   type NetworkPartner,
 } from "@/features/chat/contexts/IntegratedChatContext";
+import { useOrganization } from "@/contexts/OrganizationContext";
 import {
   getTripsForCompose,
+  sendDocumentShareMessage,
   type TripForCompose,
 } from "@/features/chat/services/chat.service";
-import type { ConversationPartyType } from "../types/chat.types";
+import {
+  acknowledgeLedgerEventMessage,
+  disputeLedgerEventMessage,
+  mirrorLedgerEntryFromChat,
+} from "@/features/chat/services/chatLedgerBridge.service";
+import { ChatSystemEventCard, ChatLedgerEventCard } from "./ChatEventCard";
+import { DocumentShareCard } from "./DocumentShareCard";
+import { DocumentShareSheet } from "./DocumentShareSheet";
+import type { ConversationPartyType, LedgerEventMetadata, TripMessageRow } from "../types/chat.types";
+import { useAuth } from "@/contexts/AuthContext";
 
 type TabId = "trips" | "network";
 
@@ -198,10 +210,14 @@ export function ChatScreen() {
     tab?: string | string[];
     conversationId?: string | string[];
     openDetail?: string | string[];
+    ts?: string | string[];
   }>();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
+  const { profile } = useAuth();
+  const { currentOrganization } = useOrganization();
+  const currentOrgId = currentOrganization?.id ?? "";
 
   const [activeTab, setActiveTab] = useState<TabId>("trips");
   const [isMobileDetail, setIsMobileDetail] = useState(false);
@@ -211,12 +227,16 @@ export function ChatScreen() {
   const [showEmoji, setShowEmoji] = useState(false);
   const [showScripts, setShowScripts] = useState(false);
 
+  // Document share sheet
+  const [showDocShare, setShowDocShare] = useState(false);
+  const [addingToBook, setAddingToBook] = useState<string | null>(null);
+
   // Compose modal state
   const [showCompose, setShowCompose] = useState(false);
   const [composeSearch, setComposeSearch] = useState("");
   const [composeTrips, setComposeTrips] = useState<TripForCompose[]>([]);
   const [composeLoading, setComposeLoading] = useState(false);
-  /** Why the trip list might be empty (avoid “No trips” when org missing or fetch failed). */
+  /** Why the trip list might be empty (avoid "No trips" when org missing or fetch failed). */
   const [composeTripListIssue, setComposeTripListIssue] = useState<"no_org" | "fetch_failed" | null>(
     null
   );
@@ -322,6 +342,68 @@ export function ChatScreen() {
     } else if (activeTab === "network" && selectedNetId) {
       sendNet(selectedNetId, text, "dispatcher");
       setTimeout(() => messagesRef.current?.scrollToEnd({ animated: true }), 80);
+    }
+  };
+
+  const handleDocShare = async (doc: {
+    key: string;
+    label: string;
+    storage_path: string;
+    entity_type: "vehicle" | "driver";
+    entity_id: string;
+  }) => {
+    if (!selectedConv || !organizationId) return;
+    setShowDocShare(false);
+    const senderName =
+      (profile as any)?.full_name || (profile as any)?.displayName || "Dispatcher";
+    try {
+      await sendDocumentShareMessage({
+        conversationId: selectedConv.id,
+        organizationId,
+        senderRole: "dispatcher",
+        senderName,
+        senderUserId: (profile as any)?.uid ?? null,
+        metadata: {
+          document_type: doc.label,
+          storage_path: doc.storage_path,
+          document_name: doc.label,
+          entity_type: doc.entity_type,
+          entity_id: doc.entity_id,
+        },
+      });
+      setTimeout(() => messagesRef.current?.scrollToEnd({ animated: true }), 80);
+    } catch {
+      // fail silently
+    }
+  };
+
+  const handleAddToBook = async (message: TripMessageRow) => {
+    const meta = message.metadata as LedgerEventMetadata | null;
+    if (!meta || !currentOrgId || !selectedConv) return;
+    setAddingToBook(message.id);
+    try {
+      const { error } = await mirrorLedgerEntryFromChat(meta, currentOrgId, selectedConv.trip_id);
+      if (error) { Alert.alert("Error", error.message); return; }
+      await acknowledgeLedgerEventMessage(message.id, selectedConv.id);
+    } catch {
+      Alert.alert("Error", "Could not add to book. Please try again.");
+    } finally {
+      setAddingToBook(null);
+    }
+  };
+
+  const handleDispute = async (message: TripMessageRow) => {
+    if (!selectedConv) return;
+    await disputeLedgerEventMessage(message.id);
+    // Pre-fill the reply input with a dispute notice
+    const meta = message.metadata as LedgerEventMetadata | null;
+    if (meta) {
+      const amount = new Intl.NumberFormat("en-IN", {
+        style: "currency",
+        currency: "INR",
+        maximumFractionDigits: 0,
+      }).format(meta.amount);
+      setMessageInput(`Raising dispute on ${amount} — ${meta.category}. `);
     }
   };
 
@@ -898,8 +980,13 @@ export function ChatScreen() {
         showScripts={showScripts}
         setShowScripts={setShowScripts}
         onSend={handleSend}
+        onOpenDocShare={() => setShowDocShare(true)}
         isDesktop={isDesktop}
         onCloseDetail={closeDetail}
+        currentOrgId={currentOrgId}
+        onAddToBook={handleAddToBook}
+        onDispute={handleDispute}
+        addingToBookId={addingToBook}
       />
     ) : (
       <NetworkDetailPanel
@@ -936,6 +1023,13 @@ export function ChatScreen() {
         </View>
         <ComposeModal />
         <NetworkComposeModal />
+        <DocumentShareSheet
+          visible={showDocShare}
+          vehicleId={selectedConv?.trip_id ? null : null}
+          driverId={null}
+          onClose={() => setShowDocShare(false)}
+          onShare={handleDocShare}
+        />
       </LinearGradient>
     );
   }
@@ -951,6 +1045,13 @@ export function ChatScreen() {
       {!isMobileDetail ? <ChatList /> : detailPanel}
       <ComposeModal />
       <NetworkComposeModal />
+      <DocumentShareSheet
+        visible={showDocShare}
+        vehicleId={null}
+        driverId={null}
+        onClose={() => setShowDocShare(false)}
+        onShare={handleDocShare}
+      />
     </LinearGradient>
   );
 }
@@ -1534,6 +1635,7 @@ function ChatInputBar({
   showScripts,
   setShowScripts,
   onSend,
+  onOpenDocShare,
 }: {
   quickMsgs: string[];
   messageInput: string;
@@ -1543,6 +1645,7 @@ function ChatInputBar({
   showScripts: boolean;
   setShowScripts: React.Dispatch<React.SetStateAction<boolean>>;
   onSend: () => void;
+  onOpenDocShare?: () => void;
 }) {
   return (
     <View style={s.inputWrap}>
@@ -1591,8 +1694,13 @@ function ChatInputBar({
         </View>
       ) : null}
       <View style={s.inputRow}>
-        <TouchableOpacity style={s.plusBtn} hitSlop={6}>
-          <Plus size={16} color="#94a3b8" />
+        <TouchableOpacity
+          style={s.plusBtn}
+          hitSlop={6}
+          onPress={onOpenDocShare}
+          activeOpacity={0.75}
+        >
+          <Plus size={16} color={onOpenDocShare ? Theme.primary : "#94a3b8"} />
         </TouchableOpacity>
         <TextInput
           style={s.input}
@@ -1664,8 +1772,13 @@ function TripConversationDetailPanel({
   showScripts,
   setShowScripts,
   onSend,
+  onOpenDocShare,
   isDesktop,
   onCloseDetail,
+  currentOrgId,
+  onAddToBook,
+  onDispute,
+  addingToBookId,
 }: {
   selectedConv: TripConversation | null;
   messagesRef: React.RefObject<ScrollView | null>;
@@ -1676,8 +1789,13 @@ function TripConversationDetailPanel({
   showScripts: boolean;
   setShowScripts: React.Dispatch<React.SetStateAction<boolean>>;
   onSend: () => void;
+  onOpenDocShare: () => void;
   isDesktop: boolean;
   onCloseDetail: () => void;
+  currentOrgId: string;
+  onAddToBook: (message: TripMessageRow) => void;
+  onDispute: (message: TripMessageRow) => void;
+  addingToBookId: string | null;
 }) {
   if (!selectedConv) return <EmptyDetail />;
   const quickMsgs = QUICK_MESSAGES[selectedConv.party_type];
@@ -1707,15 +1825,41 @@ function TripConversationDetailPanel({
             </Text>
           </View>
         )}
-        {selectedConv.messages.map((m) => (
-          <ChatBubble
-            key={m.id}
-            isOwn={m.sender_role === "dispatcher"}
-            content={m.content}
-            timestamp={m.created_at}
-            senderName={m.sender_role !== "dispatcher" ? m.sender_name : undefined}
-          />
-        ))}
+        {selectedConv.messages.map((m) => {
+          if (m.message_type === "system") {
+            return <ChatSystemEventCard key={m.id} message={m} />;
+          }
+          if (m.message_type === "ledger_event") {
+            return (
+              <ChatLedgerEventCard
+                key={m.id}
+                message={m}
+                currentOrgId={currentOrgId}
+                onAddToBook={onAddToBook}
+                onDispute={onDispute}
+                addingToBook={addingToBookId === m.id}
+              />
+            );
+          }
+          if (m.message_type === "document_share") {
+            return (
+              <DocumentShareCard
+                key={m.id}
+                message={m}
+                isOwn={m.sender_role === "dispatcher"}
+              />
+            );
+          }
+          return (
+            <ChatBubble
+              key={m.id}
+              isOwn={m.sender_role === "dispatcher"}
+              content={m.content}
+              timestamp={m.created_at}
+              senderName={m.sender_role !== "dispatcher" ? m.sender_name : undefined}
+            />
+          );
+        })}
       </ScrollView>
       <ChatInputBar
         quickMsgs={quickMsgs}
@@ -1726,6 +1870,7 @@ function TripConversationDetailPanel({
         showScripts={showScripts}
         setShowScripts={setShowScripts}
         onSend={onSend}
+        onOpenDocShare={onOpenDocShare}
       />
     </View>
   );

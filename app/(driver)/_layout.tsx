@@ -8,6 +8,7 @@ import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { DriverAvatarProvider } from '@/contexts/DriverAvatarContext';
 import { DriverThemeProvider } from '@/contexts/DriverThemeContext';
+import { DriverChatProvider } from '@/features/chat/contexts/DriverChatContext';
 import { ROUTES } from '@/lib/routes';
 import {
   PlusJakartaSans_400Regular,
@@ -43,6 +44,7 @@ function DriverTabsNavigator() {
       <Tabs.Screen name="control" options={{ title: 'Trip', href: null }} />
       <Tabs.Screen name="trip-history" options={{ title: 'History' }} />
       <Tabs.Screen name="wallet" options={{ title: 'Transactions' }} />
+      <Tabs.Screen name="chat" options={{ title: 'Messages' }} />
 
       {/* Hidden routes */}
       <Tabs.Screen name="notifications" options={{ title: 'Notifications', href: null }} />
@@ -115,7 +117,9 @@ export default function DriverAppLayout() {
   return (
     <DriverThemeProvider>
       <DriverAvatarProvider>
-        <DriverTabsNavigator />
+        <DriverChatProvider>
+          <DriverTabsNavigator />
+        </DriverChatProvider>
       </DriverAvatarProvider>
     </DriverThemeProvider>
   );
