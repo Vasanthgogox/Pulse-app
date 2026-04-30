@@ -143,10 +143,17 @@ export default function TripsScreen() {
   const isLargeScreen = Platform.OS === "web" && width >= 1280;
   const isCompactWeb = Platform.OS === "web" && width < 1180;
   const isMobile = width < 560;
+  const isMobileViewport = width < 560;
   const tripsFabSize = isMobile ? TRIPS_FAB_SIZE_MOBILE : TRIPS_FAB_SIZE_DESKTOP;
   const insets = useSafeAreaInsets();
+  const webChatFabBaseBottom =
+    Layout.demoTabBarScrollBottomInset +
+    insets.bottom +
+    Layout.tabBarBottomPaddingMin;
   const tripsFabBottom =
-    insets.bottom + Layout.tabBarBottomPaddingMin + CHAT_FAB_STACK_OFFSET;
+    !isMobileViewport && Platform.OS === "web"
+      ? webChatFabBaseBottom + CHAT_FAB_STACK_OFFSET
+      : insets.bottom + Layout.tabBarBottomPaddingMin + CHAT_FAB_STACK_OFFSET;
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const screenTopPad =
     Platform.OS === "web" ? 0 : insets.top + Layout.headerPaddingBelowInset;
