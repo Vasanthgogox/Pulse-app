@@ -1,8 +1,6 @@
 import { DatePresetPillBar } from "@/components/DatePresetPillBar";
 import Theme from "@/constants/Theme";
-import { useLanguage } from "@/contexts/LanguageContext";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, type ReactNode } from "react";
 import {
     Platform,
@@ -105,16 +103,6 @@ function formatAmount(value: number): string {
   })}`;
 }
 
-function formatCompactAmount(value: number): string {
-  const abs = Math.abs(value);
-  if (abs >= 1000) {
-    const k = value / 1000;
-    const rounded = Number.isInteger(k) ? k.toFixed(0) : k.toFixed(1);
-    return `₹${rounded}k`;
-  }
-  return formatAmount(value);
-}
-
 function AnimatedFinanceHeroCard({
   desktop,
   onPress,
@@ -180,188 +168,6 @@ function AnimatedFinanceHeroCard({
   );
 }
 
-function AnimatedFinanceCategoryCard({
-  label,
-  value,
-  icon,
-  gradient,
-  count,
-  secondaryLabel,
-  secondaryValue,
-  onPress,
-  style,
-  desktop,
-  active = false,
-}: {
-  label: string;
-  value: string;
-  icon: string;
-  gradient: readonly [string, string];
-  count?: number;
-  secondaryLabel?: string;
-  secondaryValue?: string;
-  onPress: () => void;
-  style?: any;
-  desktop?: boolean;
-  active?: boolean;
-}) {
-  const hover = useSharedValue(0);
-  const press = useSharedValue(0);
-  const decorFloat = useSharedValue(0);
-
-  useEffect(() => {
-    decorFloat.value = withRepeat(
-      withTiming(1, { duration: 2200, easing: Easing.inOut(Easing.quad) }),
-      -1,
-      true,
-    );
-  }, [decorFloat]);
-
-  const cardAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: interpolate(hover.value, [0, 1], [0, -2]) },
-      {
-        scale:
-          interpolate(hover.value, [0, 1], [1, 1.018]) *
-          interpolate(press.value, [0, 1], [1, 0.985]),
-      },
-    ],
-  }));
-  const decorAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: interpolate(decorFloat.value, [0, 1], [0, -4]) },
-      { scale: interpolate(hover.value, [0, 1], [1, 1.06]) },
-    ],
-    opacity: interpolate(hover.value, [0, 1], [0.17, 0.24]),
-  }));
-  const iconBadgeAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scale: interpolate(hover.value, [0, 1], [1, 1.1]) },
-      { rotate: `${interpolate(hover.value, [0, 1], [0, -5])}deg` },
-    ],
-  }));
-  const ctaArrowAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: interpolate(hover.value, [0, 1], [0, 3]) }],
-  }));
-
-  return (
-    <Pressable
-      onPress={onPress}
-      onHoverIn={() => {
-        hover.value = withTiming(1, { duration: 150 });
-      }}
-      onHoverOut={() => {
-        hover.value = withTiming(0, { duration: 160 });
-      }}
-      onPressIn={() => {
-        press.value = withSpring(1, { damping: 16, stiffness: 250 });
-      }}
-      onPressOut={() => {
-        press.value = withSpring(0, { damping: 16, stiffness: 250 });
-      }}
-      style={[style, active && styles.financeCategoryCardActive]}
-    >
-      <Animated.View
-        style={[styles.financeCategoryAnimatedWrap, cardAnimatedStyle]}
-      >
-        <LinearGradient
-          colors={gradient}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[
-            styles.financeCategoryCardGradient,
-            desktop && styles.financeCategoryCardGradientDesktop,
-          ]}
-        >
-          <Animated.View
-            style={[
-              styles.financeCategoryDecorIcon,
-              desktop && styles.financeCategoryDecorIconDesktop,
-              decorAnimatedStyle,
-            ]}
-          >
-            <FontAwesome
-              name={icon as any}
-              size={desktop ? 68 : 56}
-              color={Theme.textOnDark}
-            />
-          </Animated.View>
-          <View style={styles.financeCategoryTop}>
-            <Animated.View
-              style={[
-                styles.financeCategoryIconBadge,
-                desktop && styles.financeCategoryIconBadgeDesktop,
-                iconBadgeAnimatedStyle,
-              ]}
-            >
-              <FontAwesome
-                name={icon as any}
-                size={desktop ? 12 : 11}
-                color={Theme.textOnDark}
-              />
-            </Animated.View>
-            <Text
-              style={[
-                styles.financeCategoryTitle,
-                desktop && styles.financeCategoryTitleDesktop,
-              ]}
-            >
-              {label}
-            </Text>
-            <View style={styles.financeCategoryCountPill}>
-              <Text style={styles.financeCategoryCountText}>
-                {typeof count === "number"
-                  ? count.toLocaleString("en-IN")
-                  : "0"}
-              </Text>
-            </View>
-            {active && (
-              <View style={styles.financeCategoryActivePill}>
-                <Text style={styles.financeCategoryActivePillText}>Active</Text>
-              </View>
-            )}
-          </View>
-          <Text
-            style={[
-              styles.financeCategoryValue,
-              desktop && styles.financeCategoryValueDesktop,
-            ]}
-          >
-            {value}
-          </Text>
-          {secondaryLabel != null && secondaryValue != null && (
-            <View style={styles.financeCategorySecondaryRow}>
-              <Text style={styles.financeCategorySecondaryLabel}>
-                {secondaryLabel}
-              </Text>
-              <Text style={styles.financeCategorySecondaryValue}>
-                {secondaryValue}
-              </Text>
-            </View>
-          )}
-          <View style={styles.financeCategoryCtaRow}>
-            <Text
-              style={[
-                styles.financeCategoryCtaText,
-                desktop && styles.financeCategoryCtaTextDesktop,
-              ]}
-            >
-              {active ? "Current Tab" : "Grid Profile"}
-            </Text>
-            <Animated.View style={ctaArrowAnimatedStyle}>
-              <FontAwesome
-                name={active ? "check-circle" : "arrow-right"}
-                size={desktop ? 12 : 11}
-                color={Theme.textOnDark}
-              />
-            </Animated.View>
-          </View>
-        </LinearGradient>
-      </Animated.View>
-    </Pressable>
-  );
-}
-
 export function FinanceSummarySection({
   activeTab,
   onTabPress,
@@ -400,13 +206,12 @@ export function FinanceSummarySection({
   onQuickCustomRange,
   desktopCardMetrics,
 }: FinanceSummarySectionProps) {
-  const { t } = useLanguage();
+  void desktopCardMetrics;
   const auditedIn = auditedTotalIn ?? totalIn;
   const auditedOut = auditedTotalOut ?? totalOut;
   const auditedNet = auditedIn - auditedOut;
-  // Enable parity cards only on true desktop widths; keep mobile/tablet unchanged.
+  // Enable desktop hero + integrated pills at true desktop widths; keep mobile/tablet unchanged.
   const desktopParity = Platform.OS === "web" && screenWidth >= 1024;
-  const desktopFourCardParity = Platform.OS === "web" && screenWidth >= 1024;
   const heroDecorDrift = useSharedValue(0);
   const heroStatPulse = useSharedValue(0);
   const rangePills = [
@@ -436,7 +241,7 @@ export function FinanceSummarySection({
       { rotate: `${interpolate(heroDecorDrift.value, [0, 1], [10, 2])}deg` },
       { scale: interpolate(heroDecorDrift.value, [0, 1], [1, 1.04]) },
     ],
-    opacity: interpolate(heroDecorDrift.value, [0, 1], [0.12, 0.22]),
+    opacity: interpolate(heroDecorDrift.value, [0, 1], [0.055, 0.1]),
   }));
 
   const heroStatPulseStyle = useAnimatedStyle(() => ({
@@ -452,9 +257,9 @@ export function FinanceSummarySection({
               fullWidth
               topContent={
                 <FinanceTabRow
+                  treasuryInset
                   activeTab={activeTab}
                   onTabPress={onTabPress}
-                  screenWidth={screenWidth}
                 />
               }
               totalIn={totalIn}
@@ -518,6 +323,7 @@ export function FinanceSummarySection({
               style={[
                 styles.financeBalanceCard,
                 desktopParity && styles.financeBalanceCardDesktop,
+                styles.financeBalanceCardHeroIntegrated,
               ]}
             >
               <Animated.View
@@ -527,12 +333,13 @@ export function FinanceSummarySection({
                 ]}
               >
                 <FontAwesome
-                  name="book"
-                  size={desktopParity ? 132 : 92}
+                  name="briefcase"
+                  size={desktopParity ? 118 : 92}
                   color={Theme.textOnDark}
                   style={styles.financeBalanceDecorIcon}
                 />
               </Animated.View>
+              <View style={styles.financeHeroPrimaryBlock}>
               <View style={styles.financeBalanceTopRow}>
                 <Text style={styles.financeBalanceEyebrow}>
                   Audited Operating Balance
@@ -668,114 +475,15 @@ export function FinanceSummarySection({
                   </View>
                 </View>
               </View>
+              </View>
+              <View style={styles.financeHeroPillsDock}>
+                <FinanceTabRow
+                  activeTab={activeTab}
+                  onTabPress={onTabPress}
+                />
+              </View>
             </View>
           </AnimatedFinanceHeroCard>
-        </View>
-
-        <View
-          style={[
-            styles.financeCategoryCardsRow,
-            desktopFourCardParity && styles.financeCategoryCardsRowDesktopGrid,
-          ]}
-        >
-          {[
-            {
-              id: "cash" as FinanceSubTab,
-              label: "Cash",
-              value:
-                desktopCardMetrics?.cash?.value ??
-                formatCompactAmount(auditedNet),
-              icon: "money",
-              count: desktopCardMetrics?.cash?.count ?? 0,
-              secondaryLabel:
-                desktopCardMetrics?.cash?.secondaryLabel ?? "Total Outstanding",
-              secondaryValue:
-                desktopCardMetrics?.cash?.secondaryValue ??
-                formatAmount(auditedOut),
-              gradient: [
-                Theme.financeCardCashFrom,
-                Theme.financeCardCashTo,
-              ] as const,
-            },
-            {
-              id: "customers" as FinanceSubTab,
-              label: "Client Revenue",
-              value: desktopCardMetrics?.customers?.value ?? "₹45k",
-              icon: "building",
-              count: desktopCardMetrics?.customers?.count ?? 0,
-              secondaryLabel:
-                desktopCardMetrics?.customers?.secondaryLabel ?? "Outstanding",
-              secondaryValue:
-                desktopCardMetrics?.customers?.secondaryValue ?? "₹0",
-              gradient: [
-                Theme.financeCardBlueFrom,
-                Theme.financeCardBlueTo,
-              ] as const,
-            },
-            {
-              id: "suppliers" as FinanceSubTab,
-              label: "Supplier Payables",
-              value: desktopCardMetrics?.suppliers?.value ?? "₹14k",
-              icon: "industry",
-              count: desktopCardMetrics?.suppliers?.count ?? 0,
-              secondaryLabel:
-                desktopCardMetrics?.suppliers?.secondaryLabel ?? "Outstanding",
-              secondaryValue:
-                desktopCardMetrics?.suppliers?.secondaryValue ?? "₹0",
-              gradient: [
-                Theme.financeCardOrangeFrom,
-                Theme.financeCardOrangeTo,
-              ] as const,
-            },
-            {
-              id: "garage" as FinanceSubTab,
-              label: "Vehicle Opex",
-              value: desktopCardMetrics?.garage?.value ?? "₹22.0k",
-              icon: "truck",
-              count: desktopCardMetrics?.garage?.count ?? 0,
-              secondaryLabel:
-                desktopCardMetrics?.garage?.secondaryLabel ?? "Total Expense",
-              secondaryValue:
-                desktopCardMetrics?.garage?.secondaryValue ?? "₹0",
-              gradient: [
-                Theme.financeCardSlateFrom,
-                Theme.financeCardSlateTo,
-              ] as const,
-            },
-            {
-              id: "drivers" as FinanceSubTab,
-              label: "Fleet Payroll",
-              value: desktopCardMetrics?.drivers?.value ?? "₹0.0k",
-              icon: "user",
-              count: desktopCardMetrics?.drivers?.count ?? 0,
-              secondaryLabel:
-                desktopCardMetrics?.drivers?.secondaryLabel ?? "Pending",
-              secondaryValue:
-                desktopCardMetrics?.drivers?.secondaryValue ?? "₹0",
-              gradient: [
-                Theme.financeCardGreenFrom,
-                Theme.financeCardGreenTo,
-              ] as const,
-            },
-          ].map((card) => (
-            <AnimatedFinanceCategoryCard
-              key={card.id}
-              label={card.label}
-              value={card.value}
-              icon={card.icon}
-              gradient={card.gradient}
-              count={card.count}
-              secondaryLabel={card.secondaryLabel}
-              secondaryValue={card.secondaryValue}
-              onPress={() => onTabPress(card.id)}
-              desktop={desktopParity}
-              active={activeTab === card.id}
-              style={[
-                styles.financeCategoryCard,
-                desktopFourCardParity && styles.financeCategoryCardDesktop,
-              ]}
-            />
-          ))}
         </View>
       </View>
     </>

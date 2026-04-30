@@ -1,6 +1,6 @@
 import { useLanguage } from "@/contexts/LanguageContext";
-import { ScrollView, Text, TouchableOpacity, View } from "react-native";
-import { MIN_FISCAL_TAB_WIDTH, TABS, type FinanceSubTab } from "../types";
+import { ScrollView, Text, TouchableOpacity } from "react-native";
+import { TABS, type FinanceSubTab } from "../types";
 import { styles } from "./FinanceScreen.styles";
 
 const TAB_I18N_KEYS: Record<FinanceSubTab, string> = {
@@ -14,25 +14,28 @@ const TAB_I18N_KEYS: Record<FinanceSubTab, string> = {
 export interface FinanceTabRowProps {
   activeTab: FinanceSubTab;
   onTabPress: (tabId: FinanceSubTab) => void;
-  screenWidth: number;
+  /**
+   * When embedded in `TreasurySummaryCard` topContent (negative horizontal margin),
+   * apply horizontal inset so pills align with the summary card content.
+   */
+  treasuryInset?: boolean;
 }
 
 export function FinanceTabRow({
   activeTab,
   onTabPress,
-  screenWidth,
+  treasuryInset = false,
 }: FinanceTabRowProps) {
   const { t } = useLanguage();
+
   return (
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
-      style={styles.fiscalTabScroll}
+      style={styles.financeHeroPillsScroll}
       contentContainerStyle={[
-        styles.fiscalTabRow,
-        {
-          minWidth: Math.max(screenWidth, TABS.length * MIN_FISCAL_TAB_WIDTH),
-        },
+        styles.financeHeroPillsRow,
+        treasuryInset && styles.financeHeroPillsRowTreasuryInset,
       ]}
     >
       {TABS.map((tab) => {
@@ -40,21 +43,25 @@ export function FinanceTabRow({
         return (
           <TouchableOpacity
             key={tab.id}
-            style={[styles.fiscalTab, isActive && styles.fiscalTabActive]}
+            style={[
+              styles.financeHeroPill,
+              !isActive && styles.financeHeroPillInactive,
+              isActive && styles.financeHeroPillActive,
+            ]}
             onPress={() => onTabPress(tab.id)}
-            activeOpacity={0.7}
+            activeOpacity={0.82}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: isActive }}
           >
             <Text
               style={[
-                styles.fiscalTabText,
-                isActive && styles.fiscalTabTextActive,
+                styles.financeHeroPillText,
+                isActive && styles.financeHeroPillTextActive,
               ]}
               numberOfLines={1}
-              adjustsFontSizeToFit
             >
               {t(TAB_I18N_KEYS[tab.id])}
             </Text>
-            {isActive && <View style={styles.fiscalTabUnderline} />}
           </TouchableOpacity>
         );
       })}
