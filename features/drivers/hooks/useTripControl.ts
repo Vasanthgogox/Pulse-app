@@ -103,6 +103,7 @@ export function useTripControl(tripId: string | undefined) {
   const confirmArrival = async () => {
     const id = trip?.id ?? tripId;
     if (!id || stepLoading) return;
+    const now = new Date().toISOString();
     setStepError(null);
     setStepLoading(true);
     setStep("pickup");
@@ -112,12 +113,14 @@ export function useTripControl(tripId: string | undefined) {
         ? {
             ...prev,
             status: "in_progress",
-            updated_at: new Date().toISOString(),
+            started_at: prev.started_at ?? now,
+            updated_at: now,
           }
         : prev,
     );
     const { error, trip: updated } = await tripsService.updateTripStatus(id, {
       status: "in_progress",
+      started_at: trip?.started_at ?? now,
     });
     setStepLoading(false);
     if (error) {

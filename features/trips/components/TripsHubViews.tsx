@@ -1284,6 +1284,22 @@ export function TripsHubTableView({
           avatarSeed: meta?.supplierAvatarSeed,
           entityType: "supplier",
         });
+        const vehicleLine = (t.vehicle_display_number ?? "").trim();
+        const payableKindLabel = !aggregate
+          ? tr("tripsHubColVehicle")
+          : tr("tripsHubSupplierShort");
+        const payableNameDisplay = !aggregate
+          ? (vehicleLine || tr("tripsHubAwaitingData"))
+          : payablePartyName === "—"
+            ? "—"
+            : payablePartyName.toUpperCase();
+        const payableStatusLine = !aggregate
+          ? payableTarget > 0
+            ? `${tr("tripsHubColCost").toUpperCase()} ${formatINR(payableTarget)}`
+            : "NO VEHICLE EXPENSE"
+          : pendingPayable > 0
+            ? `${tr("tripsHubColDue")} ${formatINR(pendingPayable)}`
+            : tr("tripsHubSettlementSettled").toUpperCase();
 
         return (
           <View key={t.id} style={styles.auditRowGroup}>
@@ -1514,21 +1530,19 @@ export function TripsHubTableView({
                   <View style={styles.manifestSettlementHeaderRow}>
                     <View style={styles.manifestSettlementHeaderTextCol}>
                       <Text style={styles.manifestSettlementPartyKindCard}>
-                        {tr("tripsHubSupplierShort")}
+                        {payableKindLabel}
                       </Text>
                       <Text
                         style={styles.manifestSettlementPartyNameCard}
                         numberOfLines={compactSettlement ? 1 : 2}
                       >
-                        {payablePartyName === "—"
-                          ? "—"
-                          : payablePartyName.toUpperCase()}
+                        {payableNameDisplay}
                       </Text>
                     </View>
                     <View style={styles.manifestSettlementIconChipPay}>
                       <View style={[styles.manifestSettlementChipOrb, styles.manifestSettlementChipOrbPayA]} />
                       <View style={[styles.manifestSettlementChipOrb, styles.manifestSettlementChipOrbPayB]} />
-                      {supplierPayRenderable && showSupplierParty ? (
+                      {aggregate && supplierPayRenderable && showSupplierParty ? (
                         <View style={styles.manifestSettlementAvatarRingPay}>
                           <HubPartyAvatar
                             size="compact"
@@ -1598,11 +1612,7 @@ export function TripsHubTableView({
                       ]}
                       numberOfLines={1}
                     >
-                      {!aggregate
-                        ? "NO SUPPLIER"
-                        : pendingPayable > 0
-                        ? `${tr("tripsHubColDue")} ${formatINR(pendingPayable)}`
-                        : tr("tripsHubSettlementSettled").toUpperCase()}
+                      {payableStatusLine}
                     </Text>
                   </View>
                 </View>

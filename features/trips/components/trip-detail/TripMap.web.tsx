@@ -312,7 +312,20 @@ export function TripMap({
         (L as any).latLng(dstCoords[0], dstCoords[1]),
       ];
 
+      const isMapReadyForDrawing = () => {
+        if (unmountedRef.current) return false;
+        if (mapInstanceRef.current !== map) return false;
+        try {
+          const container =
+            typeof map.getContainer === 'function' ? map.getContainer() : null;
+          return !!container && container.isConnected;
+        } catch {
+          return false;
+        }
+      };
+
       const createFallbackRoute = () => {
+        if (!isMapReadyForDrawing()) return;
         const allPoints = [srcCoords, ...stopCoords.map((s) => s.coords), dstCoords];
         const R = 6371;
         let totalDist = 0;
@@ -329,7 +342,16 @@ export function TripMap({
         }
         const roadDist = (totalDist * 1.3).toFixed(1);
         if (onDistanceCalculated) onDistanceCalculated(roadDist);
-        L.polyline(allPoints, { color: '#2196F3', weight: 3, opacity: 0.7, dashArray: '10, 10' }).addTo(map);
+        try {
+          L.polyline(allPoints, {
+            color: '#2196F3',
+            weight: 3,
+            opacity: 0.7,
+            dashArray: '10, 10',
+          }).addTo(map);
+        } catch {
+          // Map can be torn down while async routing callbacks are still in flight.
+        }
       };
 
       try {
@@ -357,6 +379,7 @@ export function TripMap({
           });
 
           routingControl.on('routesfound', (e: any) => {
+            if (!isMapReadyForDrawing()) return;
             if (e.routes?.[0] && onDistanceCalculated) {
               onDistanceCalculated((e.routes[0].summary.totalDistance / 1000).toFixed(1));
             }
