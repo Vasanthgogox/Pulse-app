@@ -19,6 +19,45 @@ if (typeof document !== 'undefined') {
   }
 }
 
+/** Metro web cannot bundle leaflet.css (relative url(images/...) in CSS). Load from CDN instead. */
+const LEAFLET_CSS_VERSION = '1.9.4';
+const LEAFLET_CSS_LINK_ID = 'leaflet-dist-css';
+
+function ensureLeafletStylesheet(): Promise<void> {
+  if (typeof document === 'undefined') return Promise.resolve();
+  const existing = document.getElementById(LEAFLET_CSS_LINK_ID) as HTMLLinkElement | null;
+  if (existing?.dataset.loaded === '1') return Promise.resolve();
+  if (existing && existing.dataset.loaded !== '1') {
+    return new Promise((resolve, reject) => {
+      const done = () => {
+        existing.dataset.loaded = '1';
+        resolve();
+      };
+      if (existing.sheet) {
+        done();
+        return;
+      }
+      existing.addEventListener('load', done, { once: true });
+      existing.addEventListener('error', () => reject(new Error('Leaflet CSS failed to load')), {
+        once: true,
+      });
+    });
+  }
+  return new Promise((resolve, reject) => {
+    const link = document.createElement('link');
+    link.id = LEAFLET_CSS_LINK_ID;
+    link.rel = 'stylesheet';
+    link.href = `https://unpkg.com/leaflet@${LEAFLET_CSS_VERSION}/dist/leaflet.css`;
+    link.crossOrigin = 'anonymous';
+    link.onload = () => {
+      link.dataset.loaded = '1';
+      resolve();
+    };
+    link.onerror = () => reject(new Error('Leaflet CSS failed to load'));
+    document.head.appendChild(link);
+  });
+}
+
 // ── Fallback Indian city coordinates (same as reference) ────────────────────
 const INDIAN_CITY_COORDINATES: Record<string, [number, number]> = {
   mumbai: [19.076, 72.8777], delhi: [28.6139, 77.209], bangalore: [12.9716, 77.5946],
@@ -105,7 +144,7 @@ export function TripMap({
 
       // Dynamic imports to avoid SSR issues (same pattern as existing LeafletMap.web.tsx)
       const L = (await import('leaflet')).default;
-      await import('leaflet/dist/leaflet.css' as any);
+      await ensureLeafletStylesheet();
       await import('leaflet-routing-machine' as any);
 
       // ── Resolve source coordinates ───────────────────────────────────────

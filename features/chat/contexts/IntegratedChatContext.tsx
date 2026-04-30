@@ -1,4 +1,20 @@
-import React, { createContext, useContext, useState, useCallback } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { useOrganization } from "@/contexts/OrganizationContext";
+import { supabase } from "@/lib/supabase";
+import * as chatService from "../services/chat.service";
+import type { NetworkConversation, NetworkMessageRow, NetworkPartner } from "../types/chat.types";
+
+export type { NetworkConversation, NetworkPartner };
+
+// ── Backward-compatible shape for ChatScreen ──────────────────────────────────
 
 export interface DirectMessage {
   id: string;
@@ -14,146 +30,279 @@ export interface IntegratedChat {
   partnerName: string;
   partnerRole: "dispatcher" | "owner";
   organization: string;
-  avatar?: string;
   isOnline: boolean;
   messages: DirectMessage[];
   lastActivity: string;
   unreadCount: number;
 }
 
+export const INTEGRATED_QUICK_MESSAGES = [
+  "Do you have availability this week?",
+  "What vehicles do you have free?",
+  "Can we discuss rates?",
+  "Please share your updated rate card.",
+  "I have a new requirement.",
+  "Let's schedule a call.",
+];
+
+// ── Context type ──────────────────────────────────────────────────────────────
+
 interface IntegratedChatContextType {
   chats: IntegratedChat[];
+  partners: NetworkPartner[];
+  isLoading: boolean;
   sendMessage: (chatId: string, content: string, viewerRole: "dispatcher" | "owner") => void;
   markAsRead: (chatId: string) => void;
   getUnreadCount: (chatId: string) => number;
   getTotalUnreadCount: () => number;
+  initiateNetworkConversation: (partner: NetworkPartner) => Promise<string | null>;
 }
 
 const IntegratedChatContext = createContext<IntegratedChatContextType | undefined>(undefined);
 
-const mockIntegratedChats: IntegratedChat[] = [
-  {
-    id: "int-1",
-    partnerId: "owner-1",
-    partnerName: "Sharma Transport",
+export function useIntegratedChat() {
+  const ctx = useContext(IntegratedChatContext);
+  if (!ctx) throw new Error("useIntegratedChat must be used within an IntegratedChatProvider");
+  return ctx;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function formatRelativeTime(isoString: string): string {
+  const diff = Date.now() - new Date(isoString).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} hour${hours > 1 ? "s" : ""} ago`;
+  const days = Math.floor(hours / 24);
+  return days === 1 ? "Yesterday" : `${days} days ago`;
+}
+
+function toIntegratedChat(conv: NetworkConversation, currentOrgId: string): IntegratedChat {
+  return {
+    id: conv.id,
+    partnerId: conv.partner_org_id,
+    partnerName: conv.partner_name,
     partnerRole: "owner",
-    organization: "Sharma Transport Co.",
-    isOnline: true,
-    messages: [
-      { id: "dm1", senderId: "dispatcher-1", content: "Hi, I have a new requirement for next week", timestamp: "10:00 AM", isRead: true },
-      { id: "dm2", senderId: "owner-1", content: "Sure, what route and vehicle type?", timestamp: "10:05 AM", isRead: true },
-      { id: "dm3", senderId: "dispatcher-1", content: "Mumbai to Pune, need a 20ft container", timestamp: "10:08 AM", isRead: true },
-      { id: "dm4", senderId: "owner-1", content: "I have availability. When do you need it?", timestamp: "10:10 AM", isRead: false },
-    ],
-    lastActivity: "2 hours ago",
-    unreadCount: 1,
-  },
-  {
-    id: "int-2",
-    partnerId: "owner-2",
-    partnerName: "Patel Logistics",
-    partnerRole: "owner",
-    organization: "Patel Logistics Pvt Ltd",
+    organization: conv.partner_name,
     isOnline: false,
-    messages: [
-      { id: "dm5", senderId: "dispatcher-1", content: "Can we discuss rates for regular Nashik trips?", timestamp: "Yesterday", isRead: true },
-      { id: "dm6", senderId: "owner-2", content: "Yes, let me share our updated rate card", timestamp: "Yesterday", isRead: true },
-    ],
-    lastActivity: "Yesterday",
-    unreadCount: 0,
-  },
-  {
-    id: "int-3",
-    partnerId: "dispatcher-2",
-    partnerName: "Express Cargo",
-    partnerRole: "dispatcher",
-    organization: "Express Cargo Solutions",
-    isOnline: true,
-    messages: [
-      { id: "dm7", senderId: "owner-1", content: "Do you have any loads for Chennai route?", timestamp: "3 hours ago", isRead: true },
-      { id: "dm8", senderId: "dispatcher-2", content: "Yes, we have 3 indents for Chennai next week", timestamp: "3 hours ago", isRead: false },
-      { id: "dm9", senderId: "dispatcher-2", content: "I'll share the details shortly", timestamp: "2 hours ago", isRead: false },
-    ],
-    lastActivity: "2 hours ago",
-    unreadCount: 2,
-  },
-];
+    messages: conv.messages.map((m) => ({
+      id: m.id,
+      senderId: m.sender_org_id === currentOrgId ? "dispatcher-1" : "partner-1",
+      content: m.content,
+      timestamp: m.created_at,
+      isRead: m.is_read_by_other,
+    })),
+    lastActivity: conv.last_message_at ? formatRelativeTime(conv.last_message_at) : "No messages",
+    unreadCount: conv.unread_count,
+  };
+}
 
-export const INTEGRATED_QUICK_MESSAGES = [
-  "Do you have availability next week?",
-  "What vehicles do you have free?",
-  "Can we discuss rates?",
-  "Please share your updated rate card",
-  "I have a new requirement",
-  "Let's schedule a call",
-];
+// ── Provider ──────────────────────────────────────────────────────────────────
 
-const MOCK_RESPONSES = [
-  "Thanks for reaching out! Let me check and get back to you.",
-  "Yes, I can help with that. What are the details?",
-  "Sure, I'll send the information shortly.",
-  "Let me check availability and confirm.",
-  "That works for me. Please share more details.",
-];
+export function IntegratedChatProvider({ children }: { children: ReactNode }) {
+  const { profile } = useAuth();
+  const { currentOrganization } = useOrganization();
+  const orgId = currentOrganization?.id ?? null;
+  const orgName = currentOrganization?.name ?? "My Organization";
 
-export const IntegratedChatProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [chats, setChats] = useState<IntegratedChat[]>(mockIntegratedChats);
+  const [conversations, setConversations] = useState<NetworkConversation[]>([]);
+  const [partners, setPartners] = useState<NetworkPartner[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const sendMessage = useCallback((chatId: string, content: string, viewerRole: "dispatcher" | "owner") => {
-    const timestamp = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
-    const newMsg: DirectMessage = {
-      id: `dm-${Date.now()}`,
-      senderId: viewerRole === "dispatcher" ? "dispatcher-1" : "owner-1",
-      content,
-      timestamp,
-      isRead: true,
-    };
-    setChats((prev) =>
-      prev.map((chat) =>
-        chat.id === chatId ? { ...chat, messages: [...chat.messages, newMsg], lastActivity: "Just now" } : chat
+  const loadData = useCallback(async () => {
+    if (!orgId) return;
+    setIsLoading(true);
+    try {
+      const [convs, pts] = await Promise.all([
+        chatService.getNetworkConversationsByOrg(orgId),
+        chatService.getIntegratedPartners(orgId),
+      ]);
+      setConversations(convs);
+      setPartners(pts);
+    } catch {
+      // Fail silently — tables may not be migrated yet
+    } finally {
+      setIsLoading(false);
+    }
+  }, [orgId]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Realtime: new network messages
+  useEffect(() => {
+    if (!orgId) return;
+
+    const channel = supabase()
+      .channel(`network_messages:org:${orgId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "network_messages" },
+        (payload) => {
+          const newMsg = payload.new as NetworkMessageRow;
+          setConversations((prev) =>
+            prev.map((conv) => {
+              if (conv.id !== newMsg.conversation_id) return conv;
+              if (conv.messages.some((m) => m.id === newMsg.id)) return conv;
+              return {
+                ...conv,
+                messages: [...conv.messages, newMsg],
+                last_message_at: newMsg.created_at,
+                last_message_preview: newMsg.content.slice(0, 120),
+                unread_count:
+                  newMsg.sender_org_id !== orgId ? conv.unread_count + 1 : conv.unread_count,
+              };
+            })
+          );
+        }
       )
-    );
-    setTimeout(() => {
-      const responseMsg: DirectMessage = {
-        id: `dm-${Date.now()}-r`,
-        senderId: chatId.includes("owner") ? "owner-1" : "dispatcher-2",
-        content: MOCK_RESPONSES[Math.floor(Math.random() * MOCK_RESPONSES.length)],
-        timestamp: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }),
-        isRead: false,
+      .subscribe();
+
+    return () => {
+      supabase().removeChannel(channel);
+    };
+  }, [orgId]);
+
+  const chats: IntegratedChat[] = orgId
+    ? conversations.map((c) => toIntegratedChat(c, orgId))
+    : [];
+
+  const sendMessage = useCallback(
+    (chatId: string, content: string, _viewerRole: "dispatcher" | "owner") => {
+      if (!orgId || !profile) return;
+
+      const senderName =
+        (profile as any).full_name || (profile as any).displayName || orgName;
+
+      const optimisticMsg: NetworkMessageRow = {
+        id: `optimistic-${Date.now()}`,
+        conversation_id: chatId,
+        sender_org_id: orgId,
+        sender_user_id: (profile as any).uid ?? null,
+        sender_name: senderName,
+        content,
+        is_read_by_other: false,
+        read_at: null,
+        created_at: new Date().toISOString(),
       };
-      setChats((prev) =>
-        prev.map((chat) =>
-          chat.id === chatId
-            ? { ...chat, messages: [...chat.messages, responseMsg], lastActivity: "Just now", unreadCount: chat.unreadCount + 1 }
-            : chat
+
+      setConversations((prev) =>
+        prev.map((conv) =>
+          conv.id === chatId
+            ? {
+                ...conv,
+                messages: [...conv.messages, optimisticMsg],
+                last_message_at: optimisticMsg.created_at,
+                last_message_preview: content.slice(0, 120),
+              }
+            : conv
         )
       );
-    }, 1500);
-  }, []);
 
-  const markAsRead = useCallback((chatId: string) => {
-    setChats((prev) =>
-      prev.map((chat) =>
-        chat.id === chatId
-          ? { ...chat, unreadCount: 0, messages: chat.messages.map((m) => ({ ...m, isRead: true })) }
-          : chat
-      )
-    );
-  }, []);
+      chatService
+        .sendNetworkMessage({
+          conversationId: chatId,
+          senderOrgId: orgId,
+          senderUserId: (profile as any).uid ?? null,
+          senderName,
+          content,
+        })
+        .then((persisted) => {
+          setConversations((prev) =>
+            prev.map((conv) =>
+              conv.id === chatId
+                ? {
+                    ...conv,
+                    messages: conv.messages.map((m) =>
+                      m.id === optimisticMsg.id ? persisted : m
+                    ),
+                  }
+                : conv
+            )
+          );
+        })
+        .catch(() => {
+          setConversations((prev) =>
+            prev.map((conv) =>
+              conv.id === chatId
+                ? { ...conv, messages: conv.messages.filter((m) => m.id !== optimisticMsg.id) }
+                : conv
+            )
+          );
+        });
+    },
+    [orgId, orgName, profile]
+  );
 
-  const getUnreadCount = useCallback((chatId: string) => chats.find((c) => c.id === chatId)?.unreadCount ?? 0, [chats]);
+  const markAsRead = useCallback(
+    (chatId: string) => {
+      if (!orgId) return;
+      setConversations((prev) =>
+        prev.map((conv) => (conv.id === chatId ? { ...conv, unread_count: 0 } : conv))
+      );
+      chatService.markNetworkConversationRead(chatId, orgId).catch(() => {});
+    },
+    [orgId]
+  );
 
-  const getTotalUnreadCount = useCallback(() => chats.reduce((sum, c) => sum + c.unreadCount, 0), [chats]);
+  const getUnreadCount = useCallback(
+    (chatId: string) => conversations.find((c) => c.id === chatId)?.unread_count ?? 0,
+    [conversations]
+  );
+
+  const getTotalUnreadCount = useCallback(
+    () => conversations.reduce((sum, c) => sum + c.unread_count, 0),
+    [conversations]
+  );
+
+  const initiateNetworkConversation = useCallback(
+    async (partner: NetworkPartner): Promise<string | null> => {
+      if (!orgId) return null;
+      try {
+        const conv = await chatService.getOrCreateNetworkConversation({
+          orgId,
+          orgName,
+          partnerOrgId: partner.org_id,
+          partnerOrgName: partner.name,
+        });
+
+        setConversations((prev) => {
+          if (prev.find((c) => c.id === conv.id)) return prev;
+          const newConv: NetworkConversation = {
+            ...conv,
+            partner_org_id: partner.org_id === conv.org_a_id ? conv.org_b_id : conv.org_a_id,
+            partner_name: partner.name,
+            unread_count: 0,
+            messages: [],
+          };
+          return [newConv, ...prev];
+        });
+
+        return conv.id;
+      } catch {
+        return null;
+      }
+    },
+    [orgId, orgName]
+  );
 
   return (
-    <IntegratedChatContext.Provider value={{ chats, sendMessage, markAsRead, getUnreadCount, getTotalUnreadCount }}>
+    <IntegratedChatContext.Provider
+      value={{
+        chats,
+        partners,
+        isLoading,
+        sendMessage,
+        markAsRead,
+        getUnreadCount,
+        getTotalUnreadCount,
+        initiateNetworkConversation,
+      }}
+    >
       {children}
     </IntegratedChatContext.Provider>
   );
-};
-
-export const useIntegratedChat = () => {
-  const context = useContext(IntegratedChatContext);
-  if (!context) throw new Error("useIntegratedChat must be used within an IntegratedChatProvider");
-  return context;
-};
+}
