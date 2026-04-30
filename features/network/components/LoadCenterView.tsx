@@ -183,6 +183,7 @@ interface LoadCenterViewProps {
 }
 
 const TESLA_BLACK = "#171A20";
+const CHAT_FAB_STACK_OFFSET = 60;
 
 export function LoadCenterView({
   contentTopPadding = 0,
@@ -1357,11 +1358,12 @@ export function LoadCenterView({
     }
   }, [deployOtpCode, handshakeStep]);
 
-  /** Keep FAB above the floating demo tab bar + safe area insets. */
+  /** Keep add-load FAB above the global chat FAB, tab bar, and safe area. */
   const hirePartnerFabBottom =
     Layout.demoTabBarScrollBottomInset +
     insets.bottom +
-    Layout.tabBarBottomPaddingMin;
+    Layout.tabBarBottomPaddingMin +
+    CHAT_FAB_STACK_OFFSET;
   const paddingBottom = useMemo(() => {
     const base = 24 + Layout.demoTabBarScrollBottomInset + insets.bottom + 24;
     if (loadSubTab !== "GIVE_LOAD") return base;

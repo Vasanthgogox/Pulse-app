@@ -163,10 +163,7 @@ export default function TripsScreen() {
     Layout.demoTabBarScrollBottomInset +
     insets.bottom +
     Layout.tabBarBottomPaddingMin;
-  const tripsFabBottom =
-    !isMobileViewport && Platform.OS === "web"
-      ? webChatFabBaseBottom + CHAT_FAB_STACK_OFFSET
-      : insets.bottom + Layout.tabBarBottomPaddingMin + CHAT_FAB_STACK_OFFSET;
+  const tripsFabBottom = webChatFabBaseBottom + CHAT_FAB_STACK_OFFSET;
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const screenTopPad =
     Platform.OS === "web" ? 0 : insets.top + Layout.headerPaddingBelowInset;

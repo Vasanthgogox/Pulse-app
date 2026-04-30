@@ -28,7 +28,6 @@ import {
   rejectConnectionRequest,
 } from "@/services/connectionRequestsService";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
-import { Command } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -48,14 +47,10 @@ import Animated, {
   useAnimatedStyle,
   useDerivedValue,
   useSharedValue,
-  withSequence,
   withSpring,
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-const springBounce = { damping: 14, stiffness: 400 };
-const springSettle = { damping: 18, stiffness: 320 };
 
 function sharedLedgerActionLabel(
   eventType: SharedLedgerNotificationRow["event_type"],
@@ -93,41 +88,6 @@ function resolveSharedActionKind(
   if (eventType === "mismatch_detected") return "compare_now";
   if (eventType === "partner_only_ghost") return "fix_records";
   return "view_status";
-}
-
-/** Wraps content with a pop-in animation when selected. */
-function AnimatedTabIcon({
-  selected,
-  children,
-}: {
-  selected: boolean;
-  children: React.ReactNode;
-}) {
-  const scale = useSharedValue(1);
-  useEffect(() => {
-    if (selected) {
-      scale.value = withSequence(
-        withSpring(1.15, springBounce),
-        withSpring(1.05, springSettle),
-      );
-    } else {
-      scale.value = withSpring(1, springSettle);
-    }
-  }, [selected]);
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-  return (
-    <Animated.View
-      style={[
-        animatedStyle,
-        styles.animatedIconWrap,
-        Platform.OS === "web" && styles.animatedIconWrapWeb,
-      ]}
-    >
-      {children}
-    </Animated.View>
-  );
 }
 
 function AnimatedPress({
@@ -538,6 +498,17 @@ export function DemoTabBar({
   const dockBottom = insets.bottom;
   const verticalPad = Math.max(dockBottom / 4, 4);
   const bottomPad = verticalPad + 6;
+  const mobileNavItems: Array<{
+    id: Exclude<DemoTabId, "resources">;
+    label: string;
+    icon: React.ComponentProps<typeof FontAwesome5>["name"];
+    active: boolean;
+  }> = [
+    { id: "finance", label: "Finance", icon: "wallet", active: isFiscal },
+    { id: "trips", label: "Trips", icon: "map-marked-alt", active: isTrips },
+    { id: "network", label: "Network", icon: "globe", active: isNetwork },
+    { id: "loadCenter", label: "Load", icon: "box", active: isLoadCenter },
+  ];
 
   useEffect(() => {
     if (Platform.OS !== "web") return;
@@ -951,196 +922,86 @@ export function DemoTabBar({
     <View
       style={[
         styles.footerWrap,
+        styles.commandFooterWrap,
         { paddingTop: verticalPad, paddingBottom: bottomPad },
       ]}
+      pointerEvents="box-none"
     >
-      <View style={[styles.mobileFooterRow, isCompactMobile && styles.mobileFooterRowCompact]}>
-        <TouchableOpacity
-          style={[styles.mobileEdgeBtn, isCompactMobile && styles.mobileEdgeBtnCompact]}
-          activeOpacity={0.85}
-          accessibilityLabel="Control hub"
-          accessibilityRole="button"
-        >
-          <Command size={16} color="#ffffff" strokeWidth={2.2} />
-        </TouchableOpacity>
-
-        <View style={[styles.glassDock, isCompactMobile && styles.glassDockCompact]}>
-          <View style={styles.tabsRow}>
-            {/* Column 1: Fiscal — pill behind when active */}
-            <View style={styles.dockColumn}>
-              <View
-                style={[
-                  styles.activePill,
-                  isFiscal && styles.activePillVisible,
-                ]}
-              >
-                <View style={styles.activePillAccent} />
-              </View>
-              <TouchableOpacity
-                style={styles.dockButton}
-                onPress={() => onTabChange("finance")}
-                activeOpacity={0.9}
-                hitSlop={{
-                  top: Layout.touchTargetHitSlop,
-                  bottom: Layout.touchTargetHitSlop,
-                  left: Layout.touchTargetHitSlop,
-                  right: Layout.touchTargetHitSlop,
-                }}
-              >
-                <AnimatedTabIcon selected={isFiscal}>
-                  <FontAwesome5
-                    name="credit-card"
-                    size={18}
-                    color={isFiscal ? "#ffffff" : "#94a3b8"}
-                    solid={isFiscal}
-                  />
-                  <Text style={[styles.dockLabel, isFiscal && styles.dockLabelActive]}>
-                    {t("finance").toUpperCase()}
-                  </Text>
-                </AnimatedTabIcon>
-              </TouchableOpacity>
-            </View>
-
-            {/* Column 2: Trips — route icon (voyage/fleet) */}
-            <View style={styles.dockColumn}>
-              <View
-                style={[styles.activePill, isTrips && styles.activePillVisible]}
-              >
-                <View style={styles.activePillAccent} />
-              </View>
-              <TouchableOpacity
-                style={styles.dockButton}
-                onPress={() => onTabChange("trips")}
-                activeOpacity={0.9}
-                hitSlop={{
-                  top: Layout.touchTargetHitSlop,
-                  bottom: Layout.touchTargetHitSlop,
-                  left: Layout.touchTargetHitSlop,
-                  right: Layout.touchTargetHitSlop,
-                }}
-              >
-                <AnimatedTabIcon selected={isTrips}>
-                  <FontAwesome5
-                    name="route"
-                    size={18}
-                    color={isTrips ? "#ffffff" : "#94a3b8"}
-                    solid={isTrips}
-                  />
-                  <Text style={[styles.dockLabel, isTrips && styles.dockLabelActive]}>
-                    {t("trips").toUpperCase()}
-                  </Text>
-                </AnimatedTabIcon>
-              </TouchableOpacity>
-            </View>
-
-            {/* Column 3: Network */}
-            <View style={styles.dockColumn}>
-              <View
-                style={[
-                  styles.activePill,
-                  isNetwork && styles.activePillVisible,
-                ]}
-              >
-                <View style={styles.activePillAccent} />
-              </View>
-              <TouchableOpacity
-                style={styles.dockButton}
-                onPress={() => onTabChange("network")}
-                activeOpacity={0.9}
-                hitSlop={{
-                  top: Layout.touchTargetHitSlop,
-                  bottom: Layout.touchTargetHitSlop,
-                  left: Layout.touchTargetHitSlop,
-                  right: Layout.touchTargetHitSlop,
-                }}
-              >
-                <AnimatedTabIcon selected={isNetwork}>
-                  <FontAwesome5
-                    name="users"
-                    size={18}
-                    color={isNetwork ? "#ffffff" : "#94a3b8"}
-                    solid={isNetwork}
-                  />
-                  <Text style={[styles.dockLabel, isNetwork && styles.dockLabelActive]}>
-                    {t("network").toUpperCase()}
-                  </Text>
-                </AnimatedTabIcon>
-              </TouchableOpacity>
-            </View>
-
-            {/* Column 4: Load Center */}
-            <View style={styles.dockColumn}>
-              <View
-                style={[
-                  styles.activePill,
-                  isLoadCenter && styles.activePillVisible,
-                ]}
-              >
-                <View style={styles.activePillAccent} />
-              </View>
-              <TouchableOpacity
-                style={styles.dockButton}
-                onPress={() => onTabChange("loadCenter")}
-                activeOpacity={0.9}
-                hitSlop={{
-                  top: Layout.touchTargetHitSlop,
-                  bottom: Layout.touchTargetHitSlop,
-                  left: Layout.touchTargetHitSlop,
-                  right: Layout.touchTargetHitSlop,
-                }}
-              >
-                <AnimatedTabIcon selected={isLoadCenter}>
-                  <FontAwesome5
-                    name="truck-loading"
-                    size={15}
-                    color={
-                      isLoadCenter ? Theme.textOnPrimary : Theme.textMutedDemo
-                    }
-                    solid={isLoadCenter}
-                  />
-                  <Text
-                    style={[
-                      styles.dockLabel,
-                      styles.dockLabelCompact,
-                      isLoadCenter && styles.dockLabelActive,
-                    ]}
-                  >
-                    LOAD
-                  </Text>
-                </AnimatedTabIcon>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
+      <View style={[styles.mobileCommandRow, isCompactMobile && styles.mobileCommandRowCompact]}>
         <TouchableOpacity
           onPress={onProfilePress}
-          style={[styles.mobileProfileBtn, isCompactMobile && styles.mobileProfileBtnCompact]}
+          style={[styles.mobileProfilePortal, isCompactMobile && styles.mobileProfilePortalCompact]}
           activeOpacity={0.85}
           accessibilityLabel="Profile"
           accessibilityRole="button"
         >
-          {profileAvatarUri ? (
-            <Image
-              source={{ uri: profileAvatarUri }}
-              style={styles.mobileProfileAvatar}
-            />
-          ) : (
-            <Text style={styles.mobileAvatarText}>{initials}</Text>
-          )}
+          <View style={styles.mobileProfileAvatarFrame}>
+            {profileAvatarUri ? (
+              <Image
+                source={{ uri: profileAvatarUri }}
+                style={styles.mobileCommandProfileAvatar}
+              />
+            ) : (
+              <Text style={styles.mobileCommandAvatarText}>{initials}</Text>
+            )}
+          </View>
+          <View style={styles.mobileProfileOnlineDot} />
+          <View style={styles.mobileProfileOnlinePulse} />
         </TouchableOpacity>
+
+        <View style={[styles.commandDock, isCompactMobile && styles.commandDockCompact]}>
+          {mobileNavItems.map((item) => (
+              <TouchableOpacity
+              key={item.id}
+              style={[
+                styles.commandNavButton,
+                item.active && styles.commandNavButtonActive,
+                isCompactMobile && styles.commandNavButtonCompact,
+              ]}
+              onPress={() => onTabChange(item.id)}
+                activeOpacity={0.9}
+                hitSlop={{
+                top: 8,
+                bottom: 8,
+                left: 6,
+                right: 6,
+                }}
+              accessibilityLabel={item.label}
+              accessibilityRole="button"
+              accessibilityState={{ selected: item.active }}
+              >
+              <View style={styles.staticIconWrap}>
+                  <FontAwesome5
+                  name={item.icon}
+                  size={isCompactMobile ? 17 : 20}
+                  color={item.active ? "#ffffff" : "#94a3b8"}
+                  solid={item.active}
+                  />
+                <Text
+                  style={[
+                    styles.commandNavLabel,
+                    item.active && styles.commandNavLabelActive,
+                    isCompactMobile && styles.commandNavLabelCompact,
+                  ]}
+                >
+                  {item.label}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+          ))}
+        </View>
+
+        <View style={[styles.mobileCommandSpacer, isCompactMobile && styles.mobileCommandSpacerCompact]} />
+
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  animatedIconWrap: {
+  staticIconWrap: {
     alignItems: "center",
     justifyContent: "center",
-    gap: 3,
-  },
-  animatedIconWrapWeb: {
-    flexDirection: "column",
     gap: 3,
   },
   footerWrap: {
@@ -1157,6 +1018,159 @@ const styles = StyleSheet.create({
   },
   mobileFooterRowCompact: {
     gap: 4,
+  },
+  commandFooterWrap: {
+    paddingHorizontal: 10,
+  },
+  mobileCommandRow: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  mobileCommandRowCompact: {
+    gap: 6,
+  },
+  mobileProfilePortal: {
+    width: 58,
+    height: 58,
+    borderRadius: 22,
+    padding: 5,
+    backgroundColor: "rgba(255,255,255,0.96)",
+    borderWidth: 2,
+    borderColor: "#0f172a",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 18 },
+    shadowOpacity: 0.16,
+    shadowRadius: 28,
+    elevation: 14,
+  },
+  mobileProfilePortalCompact: {
+    width: 50,
+    height: 50,
+    borderRadius: 19,
+    padding: 4,
+  },
+  mobileProfileAvatarFrame: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 18,
+    overflow: "hidden",
+    backgroundColor: "#f1f5f9",
+    borderWidth: 2,
+    borderColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mobileCommandProfileAvatar: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 18,
+  },
+  mobileCommandAvatarText: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#0f172a",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  mobileProfileOnlineDot: {
+    position: "absolute",
+    top: -1,
+    right: -1,
+    width: 15,
+    height: 15,
+    borderRadius: 8,
+    backgroundColor: Theme.darkGreen,
+    borderWidth: 3,
+    borderColor: "#ffffff",
+  },
+  mobileProfileOnlinePulse: {
+    position: "absolute",
+    top: -1,
+    right: -1,
+    width: 15,
+    height: 15,
+    borderRadius: 8,
+    backgroundColor: Theme.darkGreen,
+    opacity: 0.18,
+  },
+  commandDock: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 76,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 5,
+    borderRadius: 34,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    borderWidth: 2,
+    borderColor: "#0f172a",
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 24 },
+    shadowOpacity: 0.2,
+    shadowRadius: 34,
+    elevation: 18,
+  },
+  commandDockCompact: {
+    minHeight: 68,
+    gap: 2,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+    borderRadius: 30,
+  },
+  commandNavButton: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 62,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+    borderRadius: 28,
+    paddingHorizontal: 2,
+  },
+  commandNavButtonActive: {
+    backgroundColor: "#0f172a",
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.22,
+    shadowRadius: 18,
+    elevation: 10,
+  },
+  commandNavButtonCompact: {
+    minHeight: 56,
+    borderRadius: 25,
+  },
+  commandNavLabel: {
+    marginTop: 5,
+    fontSize: 7.5,
+    fontWeight: "900",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 1.1,
+    fontStyle: "italic",
+    textAlign: "center",
+  },
+  commandNavLabelCompact: {
+    fontSize: 6.5,
+    letterSpacing: 0.8,
+  },
+  commandNavLabelActive: {
+    color: "#ffffff",
+  },
+  mobileCommandSpacer: {
+    width: 58,
+    height: 58,
+  },
+  mobileCommandSpacerCompact: {
+    width: 50,
+    height: 50,
   },
   glassDock: {
     flex: 1,

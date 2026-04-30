@@ -732,27 +732,43 @@ export function TripsHubTripCard({
 
         <View style={[styles.fleetMetricsRow, compactMetricGrid && styles.fleetMetricsRowCompact]}>
           <View style={[styles.fleetMetricCell, compactMetricGrid && styles.fleetMetricCellCompact]}>
-            <Text style={styles.fleetMetricLabel}>{tr("tripsHubColCost")}</Text>
-            <Text style={styles.fleetMetricVal}>{formatINR(cost)}</Text>
+            <Text style={styles.fleetMetricLabel} numberOfLines={1}>
+              {tr("tripsHubColCost")}
+            </Text>
+            <Text style={styles.fleetMetricVal} numberOfLines={1}>
+              {formatINR(cost)}
+            </Text>
           </View>
           <View style={[styles.fleetMetricCell, compactMetricGrid && styles.fleetMetricCellCompact]}>
-            <Text style={styles.fleetMetricLabel}>{tr("tripsHubColMargin")}</Text>
-            <Text style={styles.fleetMetricVal}>{formatINR(pnl)}</Text>
-            <Text style={styles.fleetMetricPct}>{marginPct}</Text>
+            <Text style={styles.fleetMetricLabel} numberOfLines={1}>
+              {tr("tripsHubColMargin")}
+            </Text>
+            <Text style={styles.fleetMetricVal} numberOfLines={1}>
+              {formatINR(pnl)}
+            </Text>
+            <Text style={styles.fleetMetricPct} numberOfLines={1}>
+              {marginPct}
+            </Text>
           </View>
           <View style={[styles.fleetMetricCell, compactMetricGrid && styles.fleetMetricCellCompact]}>
-            <Text style={styles.fleetMetricLabel}>{tr("tripsHubColReceived")}</Text>
-            <Text style={styles.fleetMetricVal}>
+            <Text style={styles.fleetMetricLabel} numberOfLines={1}>
+              {tr("tripsHubColReceived")}
+            </Text>
+            <Text style={styles.fleetMetricVal} numberOfLines={1}>
               {ledgerReceivedTotal != null ? formatINR(ledgerReceivedTotal) : "—"}
             </Text>
-            <Text style={styles.fleetMetricMeta}>
+            <Text style={styles.fleetMetricMeta} numberOfLines={1}>
               {tr("tripsHubAmountPaidBook")}: {formatINR(Number(trip.amount_paid ?? 0))}
             </Text>
           </View>
           <View style={[styles.fleetMetricCell, compactMetricGrid && styles.fleetMetricCellCompact]}>
-            <Text style={styles.fleetMetricLabel}>{tr("tripsHubColDue")}</Text>
-            <Text style={styles.fleetMetricVal}>{formatINR(due)}</Text>
-            <Text style={styles.fleetMetricMeta}>
+            <Text style={styles.fleetMetricLabel} numberOfLines={1}>
+              {tr("tripsHubColDue")}
+            </Text>
+            <Text style={styles.fleetMetricVal} numberOfLines={1}>
+              {formatINR(due)}
+            </Text>
+            <Text style={styles.fleetMetricMeta} numberOfLines={1}>
               {ledgerTxnCount != null ? `${ledgerTxnCount} · ${tr("tripsHubColTxns")}` : "—"}
               {lastLedgerDateLabel ? ` · ${lastLedgerDateLabel}` : ""}
             </Text>
@@ -2401,41 +2417,45 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
   },
   fleetMetricCellCompact: {
-    flexBasis: "48%",
+    flex: 1,
+    flexBasis: 0,
     minWidth: 0,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    paddingVertical: 5,
   },
   fleetMetricsRowCompact: {
-    rowGap: 6,
-    columnGap: 6,
+    flexWrap: "nowrap",
+    gap: 4,
   },
   fleetMetricLabel: {
-    fontSize: FS_AMOUNT_LABEL,
+    fontSize: 5.5,
     fontWeight: "900",
     color: Theme.textMuted,
     textTransform: "uppercase",
-    letterSpacing: 0.4,
+    letterSpacing: 0.35,
   },
   fleetMetricVal: {
     marginTop: 2,
-    fontSize: FS_BODY,
+    fontSize: 9.5,
     fontWeight: "900",
     fontStyle: "italic",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.25,
+    letterSpacing: -0.35,
     fontVariant: ["tabular-nums"],
   },
   fleetMetricPct: {
     marginTop: 1,
-    fontSize: FS_CAPTION,
+    fontSize: 6.5,
     fontWeight: "900",
     color: Theme.textSecondary,
   },
   fleetMetricMeta: {
     marginTop: 2,
-    fontSize: FS_AMOUNT_LABEL,
+    fontSize: 5.5,
     fontWeight: "800",
     color: Theme.textMuted,
-    lineHeight: 11,
+    lineHeight: 8,
   },
   auditTableWrap: {
     backgroundColor: Theme.screenBackground,
