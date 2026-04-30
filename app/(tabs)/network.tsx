@@ -762,8 +762,18 @@ export default function NetworkScreen() {
               <View style={styles.commandMainCard}>
                 <View style={styles.commandMainBgOrb} />
                 <View style={styles.commandMainContent}>
-                  <View style={styles.commandMainHead}>
-                    <View style={styles.commandMainKickerRow}>
+                  <View
+                    style={[
+                      styles.commandMainHead,
+                      isMobileLayout && styles.commandMainHeadMobile,
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.commandMainKickerRow,
+                        isMobileLayout && styles.commandMainKickerRowMobile,
+                      ]}
+                    >
                       <Cpu size={12} color={Theme.primary} />
                       <Text style={styles.commandMainKicker}>CORE NODE INTEL</Text>
                     </View>
@@ -772,25 +782,67 @@ export default function NetworkScreen() {
                       <Text style={styles.commandGrowthText}>+{trendPct || 12}%</Text>
                     </View>
                   </View>
-                  <View style={styles.commandMainStatsRow}>
-                    <View style={styles.commandTotalWrap}>
-                      <Text style={styles.commandTotalText}>
+                  <View
+                    style={[
+                      styles.commandMainStatsRow,
+                      isMobileLayout && styles.commandMainStatsRowMobile,
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.commandTotalWrap,
+                        isMobileLayout && styles.commandTotalWrapMobile,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.commandTotalText,
+                          isMobileLayout && styles.commandTotalTextMobile,
+                        ]}
+                      >
                         {String(totalConnections).padStart(2, "0")}
                       </Text>
-                      <Text style={styles.commandTotalSub}>Network Growth</Text>
+                      <Text
+                        style={[
+                          styles.commandTotalSub,
+                          isMobileLayout && styles.commandTotalSubMobile,
+                        ]}
+                      >
+                        Network Growth
+                      </Text>
                     </View>
-                    <View style={styles.commandMetricGrid}>
-                      <View style={styles.commandMetricCell}>
+                    <View
+                      style={[
+                        styles.commandMetricGrid,
+                        isMobileLayout && styles.commandMetricGridMobile,
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.commandMetricCell,
+                          isMobileLayout && styles.commandMetricCellMobile,
+                        ]}
+                      >
                         <Users size={13} color={Theme.primary} />
                         <Text style={styles.commandMetricN}>{String(clientCount).padStart(2, "0")}</Text>
                         <Text style={styles.commandMetricL}>CLIENTS</Text>
                       </View>
-                      <View style={styles.commandMetricCell}>
+                      <View
+                        style={[
+                          styles.commandMetricCell,
+                          isMobileLayout && styles.commandMetricCellMobile,
+                        ]}
+                      >
                         <Globe size={13} color={Theme.primary} />
                         <Text style={styles.commandMetricN}>{String(supplierCount).padStart(2, "0")}</Text>
                         <Text style={styles.commandMetricL}>SUPPLIERS</Text>
                       </View>
-                      <View style={styles.commandMetricCell}>
+                      <View
+                        style={[
+                          styles.commandMetricCell,
+                          isMobileLayout && styles.commandMetricCellMobile,
+                        ]}
+                      >
                         <Truck size={13} color={Theme.primary} />
                         <Text style={styles.commandMetricN}>{String(driverCount).padStart(2, "0")}</Text>
                         <Text style={styles.commandMetricL}>FLEET</Text>
@@ -1151,10 +1203,17 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 8,
   },
+  commandMainHeadMobile: {
+    alignItems: "center",
+  },
   commandMainKickerRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+  },
+  commandMainKickerRowMobile: {
+    flexShrink: 1,
+    minWidth: 0,
   },
   commandMainKicker: {
     fontSize: 11,
@@ -1186,9 +1245,17 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 16,
   },
+  commandMainStatsRowMobile: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: 10,
+  },
   commandTotalWrap: {
     flex: 1,
     minWidth: 0,
+  },
+  commandTotalWrapMobile: {
+    alignItems: "flex-start",
   },
   commandTotalText: {
     fontSize: 72,
@@ -1198,6 +1265,10 @@ const styles = StyleSheet.create({
     letterSpacing: -1,
     lineHeight: 72,
   },
+  commandTotalTextMobile: {
+    fontSize: 56,
+    lineHeight: 56,
+  },
   commandTotalSub: {
     marginTop: 6,
     fontSize: 11,
@@ -1206,11 +1277,20 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textTransform: "uppercase",
   },
+  commandTotalSubMobile: {
+    marginTop: 2,
+    letterSpacing: 0.9,
+  },
   commandMetricGrid: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     marginTop: 0,
+  },
+  commandMetricGridMobile: {
+    width: "100%" as const,
+    justifyContent: "space-between",
+    gap: 6,
   },
   commandMetricCell: {
     width: 84,
@@ -1222,6 +1302,13 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     alignItems: "center",
     gap: 5,
+  },
+  commandMetricCellMobile: {
+    flex: 1,
+    width: "auto" as const,
+    minWidth: 0,
+    borderRadius: 20,
+    paddingHorizontal: 6,
   },
   commandMetricN: {
     fontSize: 24,
