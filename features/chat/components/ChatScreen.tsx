@@ -35,6 +35,7 @@ import {
   Trash2,
 } from "lucide-react-native";
 import Theme from "@/constants/Theme";
+import { ROUTES } from "@/lib/routes";
 import {
   INTEGRATED_QUICK_MESSAGES,
   IntegratedChat,
@@ -133,6 +134,11 @@ export function ChatScreen() {
   const openDetail = () => { if (!isDesktop) setIsMobileDetail(true); };
   const closeDetail = () => { setIsMobileDetail(false); setSelectedTripId(null); setSelectedNetId(null); setSelectedMktId(null); setMessageInput(""); };
 
+  const leaveMessaging = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace(ROUTES.TABS.NETWORK);
+  };
+
   const handleSend = () => {
     const text = messageInput.trim();
     if (!text) return;
@@ -223,7 +229,20 @@ export function ChatScreen() {
       <View style={s.listPanel}>
         {/* Branding header */}
         <View style={s.listHeader}>
-          <Text style={s.brandTitle}>Comms.</Text>
+          <View style={s.listHeaderLeft}>
+            <TouchableOpacity
+              onPress={leaveMessaging}
+              hitSlop={12}
+              style={s.listBackBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Back"
+            >
+              <ArrowLeft size={22} color="#0f172a" />
+            </TouchableOpacity>
+            <Text style={s.brandTitle} numberOfLines={1}>
+              Comms.
+            </Text>
+          </View>
           <TouchableOpacity hitSlop={10}><Filter size={16} color="#94a3b8" /></TouchableOpacity>
         </View>
         {/* Tabs */}
@@ -592,7 +611,18 @@ const s = StyleSheet.create({
   // List panel
   listPanel: { flex: 1, backgroundColor: "transparent" },
   listHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 14 },
-  brandTitle: { fontSize: 22, fontWeight: "900", color: "#0f172a", letterSpacing: -0.8, fontStyle: "italic" },
+  listHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1, minWidth: 0 },
+  listBackBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  brandTitle: { fontSize: 22, fontWeight: "900", color: "#0f172a", letterSpacing: -0.8, fontStyle: "italic", flexShrink: 1 },
 
   // Tabs
   tabRow: { flexDirection: "row", gap: 6, paddingHorizontal: 14, paddingBottom: 10 },
