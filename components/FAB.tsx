@@ -28,8 +28,8 @@ export function FAB({
   const IconComponent = LucideIconComponent ?? Plus;
   const shouldRenderLucideIcon = LucideIconComponent != null;
   const shouldShowPlus = shouldRenderLucideIcon && showPlusSuffix && IconComponent !== Plus;
-  const primaryIconColor = Theme.darkGreen;
-  const plusBadgeColor = Theme.teslaRed;
+  const primaryIconColor = Theme.textOnPrimary;
+  const plusBadgeColor = "#0f172a";
 
   return (
     <TouchableOpacity
@@ -67,19 +67,19 @@ const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
     right: 20,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Theme.darkSurface,
-    borderWidth: 1,
-    borderColor: Theme.driverBorderSubtle,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: Theme.primary,
+    borderWidth: 2.5,
+    borderColor: '#ffffff',
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 1,
-    shadowColor: Theme.darkBackground,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
+    elevation: 10,
+    shadowColor: Theme.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.32,
+    shadowRadius: 16,
   },
   content: {
     justifyContent: 'center',

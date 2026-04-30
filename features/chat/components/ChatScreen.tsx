@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -20,6 +20,7 @@ import {
   ChevronRight,
   Edit3,
   Filter,
+  Hash,
   MessageSquare,
   MoreVertical,
   Plus,
@@ -32,7 +33,7 @@ import {
   Users,
   X,
 } from "lucide-react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import Theme from "@/constants/Theme";
 import { isAggregateTrip } from "@/lib/driverUtils";
 import {
@@ -193,6 +194,11 @@ function tripHasSelectableComposeParty(trip: TripForCompose): boolean {
 
 export function ChatScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    tab?: string | string[];
+    conversationId?: string | string[];
+    openDetail?: string | string[];
+  }>();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
@@ -218,6 +224,7 @@ export function ChatScreen() {
   const [initiating, setInitiating] = useState(false);
   const [showNetCompose, setShowNetCompose] = useState(false);
   const [netComposeSearch, setNetComposeSearch] = useState("");
+  const deepLinkAppliedRef = useRef<string | null>(null);
 
   const { organizationId, conversations, isLoading, sendMessage, markAsRead, getTotalUnreadCount, initiateConversation } =
     useTripChat();
@@ -239,6 +246,55 @@ export function ChatScreen() {
 
   const tripUnread = getTotalUnreadCount();
   const netUnread = netTotal();
+
+  useEffect(() => {
+    const tabParamRaw = Array.isArray(params.tab) ? params.tab[0] : params.tab;
+    const convIdParam = Array.isArray(params.conversationId)
+      ? params.conversationId[0]
+      : params.conversationId;
+    const openDetailParam = Array.isArray(params.openDetail)
+      ? params.openDetail[0]
+      : params.openDetail;
+    const tsParam = Array.isArray(params.ts) ? params.ts[0] : params.ts;
+
+    if (!tabParamRaw || !convIdParam) return;
+    const deepLinkKey = `${tabParamRaw}:${convIdParam}:${tsParam ?? "no-ts"}`;
+    if (deepLinkAppliedRef.current === deepLinkKey) return;
+
+    const tabParam = tabParamRaw === "network" ? "network" : "trips";
+    const shouldOpenDetail = openDetailParam === "1";
+
+    if (tabParam === "trips") {
+      const hit = conversations.find((c) => c.id === convIdParam);
+      if (!hit) return;
+      setActiveTab("trips");
+      setSelectedConvId(convIdParam);
+      setSelectedNetId(null);
+      markAsRead(convIdParam);
+      if (shouldOpenDetail && !isDesktop) setIsMobileDetail(true);
+      deepLinkAppliedRef.current = deepLinkKey;
+      return;
+    }
+
+    const netHit = netChats.find((c) => c.id === convIdParam);
+    if (!netHit) return;
+    setActiveTab("network");
+    setSelectedNetId(convIdParam);
+    setSelectedConvId(null);
+    markNetRead(convIdParam);
+    if (shouldOpenDetail && !isDesktop) setIsMobileDetail(true);
+    deepLinkAppliedRef.current = deepLinkKey;
+  }, [
+    conversations,
+    isDesktop,
+    markAsRead,
+    markNetRead,
+    netChats,
+    params.conversationId,
+    params.openDetail,
+    params.ts,
+    params.tab,
+  ]);
 
   const openDetail = () => {
     if (!isDesktop) setIsMobileDetail(true);
@@ -440,8 +496,8 @@ export function ChatScreen() {
       unread: number;
       Icon: React.ComponentType<{ size: number; color: string }>;
     }[] = [
-      { id: "trips", label: "TRIPS", unread: tripUnread, Icon: MessageSquare },
-      { id: "network", label: "NETWORK", unread: netUnread, Icon: Users },
+      { id: "trips", label: "TRIPS CHAT", unread: tripUnread, Icon: Hash },
+      { id: "network", label: "NETWORK DM", unread: netUnread, Icon: Users },
     ];
 
     return (
@@ -453,13 +509,13 @@ export function ChatScreen() {
               hitSlop={10}
               style={s.backBtn}
             >
-              <ArrowLeft size={18} color="#1e293b" />
+              <ArrowLeft size={18} color="#fff" />
             </TouchableOpacity>
-            <Text style={s.brandTitle}>Comms.</Text>
+            <Text style={s.brandTitle}>Command Hub</Text>
           </View>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
             <TouchableOpacity hitSlop={10}>
-              <Filter size={16} color="#94a3b8" />
+              <Filter size={16} color="rgba(255,255,255,0.72)" />
             </TouchableOpacity>
             {activeTab === "trips" && (
               <TouchableOpacity hitSlop={10} onPress={openCompose} style={s.composeBtn}>
@@ -484,9 +540,15 @@ export function ChatScreen() {
                 onPress={() => setActiveTab(t.id)}
                 activeOpacity={0.75}
               >
-                <t.Icon size={12} color={active ? "#1e293b" : "#94a3b8"} />
+                <t.Icon size={12} color={active ? "#ffffff" : "#94a3b8"} />
                 <Text style={[s.tabPillLabel, active && s.tabPillLabelActive]}>{t.label}</Text>
-                {t.unread > 0 && <Badge count={t.unread} />}
+                {t.unread > 0 && (
+                  <View style={[s.tabUnreadBadge, active && s.tabUnreadBadgeActive]}>
+                    <Text style={[s.tabUnreadText, active && s.tabUnreadTextActive]}>
+                      {t.unread > 9 ? "9+" : String(t.unread)}
+                    </Text>
+                  </View>
+                )}
               </TouchableOpacity>
             );
           })}
@@ -964,7 +1026,7 @@ function EmptyDetail() {
 const s = StyleSheet.create({
   root: { flex: 1 },
   desktop: { flex: 1, flexDirection: "row" },
-  desktopList: { width: 300, borderRightWidth: 1, borderRightColor: "#f1f5f9" },
+  desktopList: { width: 340, borderRightWidth: 1, borderRightColor: "#e2e8f0", backgroundColor: "rgba(255,255,255,0.72)" },
   desktopDetail: { flex: 1, backgroundColor: "transparent" },
 
   listPanel: { flex: 1, backgroundColor: "transparent" },
@@ -972,47 +1034,68 @@ const s = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 14,
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 12,
+    backgroundColor: "#0f172a",
+    borderBottomLeftRadius: 18,
+    borderBottomRightRadius: 18,
   },
   brandTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "900",
-    color: "#0f172a",
-    letterSpacing: -0.8,
+    color: "#fff",
+    letterSpacing: -0.4,
     fontStyle: "italic",
+    textTransform: "uppercase",
   },
 
-  tabRow: { flexDirection: "row", gap: 6, paddingHorizontal: 14, paddingBottom: 10 },
+  tabRow: { flexDirection: "row", gap: 6, paddingHorizontal: 14, paddingBottom: 10, marginTop: 10 },
   tabPill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 6,
     paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 20,
+    paddingVertical: 8,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: "transparent",
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f8fafc",
   },
-  tabPillActive: { borderColor: "#e2e8f0", backgroundColor: "#fff" },
-  tabPillLabel: { fontSize: 11, fontWeight: "700", color: "#94a3b8", letterSpacing: 0.3 },
-  tabPillLabelActive: { color: "#1e293b" },
+  tabPillActive: { borderColor: Theme.primary, backgroundColor: Theme.primary },
+  tabPillLabel: { fontSize: 10, fontWeight: "900", color: "#64748b", letterSpacing: 0.8 },
+  tabPillLabelActive: { color: "#fff" },
+  tabUnreadBadge: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.primary,
+  },
+  tabUnreadBadgeActive: {
+    backgroundColor: "#fff",
+  },
+  tabUnreadText: { fontSize: 9, fontWeight: "900", color: "#fff" },
+  tabUnreadTextActive: { color: Theme.primary },
 
   chatItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: 11,
     padding: 12,
-    borderRadius: 20,
-    backgroundColor: "transparent",
+    borderRadius: 24,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#eef2f7",
   },
-  chatItemActive: { backgroundColor: "#0f172a" },
+  chatItemActive: { backgroundColor: "#0f172a", borderColor: "#0f172a" },
   chatIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: "#f0f0f0",
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: "#0f172a",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1024,11 +1107,11 @@ const s = StyleSheet.create({
     alignItems: "center",
     marginBottom: 2,
   },
-  chatTitle: { fontSize: 13, fontWeight: "700", color: "#1e293b", flex: 1 },
+  chatTitle: { fontSize: 12, fontWeight: "900", color: "#0f172a", flex: 1, textTransform: "uppercase", fontStyle: "italic" },
   chatTitleActive: { color: "#fff" },
-  chatTime: { fontSize: 10, color: "#94a3b8", marginLeft: 8, flexShrink: 0 },
+  chatTime: { fontSize: 9, color: "#94a3b8", marginLeft: 8, flexShrink: 0, textTransform: "uppercase", fontWeight: "700" },
   chatTimeActive: { color: "rgba(255,255,255,0.55)" },
-  chatPartyLabel: { fontSize: 10, fontWeight: "700", color: Theme.primary, letterSpacing: 0.4, marginBottom: 2 },
+  chatPartyLabel: { fontSize: 9, fontWeight: "900", color: Theme.primary, letterSpacing: 0.9, marginBottom: 2 },
   chatPartyLabelActive: { color: "rgba(255,255,255,0.7)" },
   chatSub: { fontSize: 12, color: "#94a3b8", lineHeight: 16 },
   chatSubActive: { color: "rgba(255,255,255,0.65)" },
@@ -1040,22 +1123,22 @@ const s = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
-    backgroundColor: "#fff",
+    borderBottomColor: "#1e293b",
+    backgroundColor: "#0f172a",
   },
   detailIconWrap: {
     width: 38,
     height: 38,
     borderRadius: 12,
-    backgroundColor: "#0f172a",
+    backgroundColor: Theme.primary,
     alignItems: "center",
     justifyContent: "center",
   },
-  detailTitle: { fontSize: 15, fontWeight: "800", color: "#0f172a", letterSpacing: -0.3 },
+  detailTitle: { fontSize: 15, fontWeight: "900", color: "#fff", letterSpacing: -0.2, textTransform: "uppercase", fontStyle: "italic" },
   detailStatus: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#22c55e",
+    color: "#60a5fa",
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
@@ -1101,7 +1184,7 @@ const s = StyleSheet.create({
   bubbleTextOther: { color: "#1e293b" },
   bubbleMeta: { fontSize: 10, color: "#94a3b8", marginTop: 4, letterSpacing: 0.2 },
 
-  inputWrap: { backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: "#f1f5f9" },
+  inputWrap: { backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: "#e2e8f0" },
   inputRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1118,12 +1201,12 @@ const s = StyleSheet.create({
     borderColor: "#e2e8f0",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f8fafc",
+    backgroundColor: "#fff",
   },
   input: {
     flex: 1,
     backgroundColor: "#f1f5f9",
-    borderRadius: 22,
+    borderRadius: 16,
     paddingHorizontal: 16,
     paddingVertical: 10,
     fontSize: 14,
@@ -1135,7 +1218,7 @@ const s = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#0f172a",
+    backgroundColor: Theme.primary,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1213,7 +1296,7 @@ const s = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 10,
-    backgroundColor: "#0f172a",
+    backgroundColor: Theme.primary,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1223,9 +1306,9 @@ const s = StyleSheet.create({
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f1f5f9",
+    backgroundColor: "rgba(255,255,255,0.12)",
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: "rgba(255,255,255,0.22)",
   },
 });
 
@@ -1364,7 +1447,7 @@ function ChatDetailHeader({
     <View style={s.detailHeader}>
       {!isDesktop && (
         <TouchableOpacity onPress={onCloseDetail} hitSlop={10} style={{ marginRight: 8 }}>
-          <ArrowLeft size={20} color="#1e293b" />
+          <ArrowLeft size={20} color="#fff" />
         </TouchableOpacity>
       )}
       <View style={s.detailIconWrap}>
@@ -1380,16 +1463,16 @@ function ChatDetailHeader({
         </Text>
         {subtitle ? (
           <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginTop: 2 }}>
-            <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: "#22c55e" }} />
+            <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: "#60a5fa" }} />
             <Text style={s.detailStatus}>{subtitle}</Text>
           </View>
         ) : null}
       </View>
       <TouchableOpacity hitSlop={10}>
-        <Search size={17} color="#94a3b8" />
+        <Search size={17} color="rgba(255,255,255,0.72)" />
       </TouchableOpacity>
       <TouchableOpacity hitSlop={10} style={{ marginLeft: 8 }}>
-        <MoreVertical size={17} color="#94a3b8" />
+        <MoreVertical size={17} color="rgba(255,255,255,0.72)" />
       </TouchableOpacity>
     </View>
   );

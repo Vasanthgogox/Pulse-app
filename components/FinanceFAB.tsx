@@ -27,7 +27,7 @@ import {
   type StyleProp,
 } from "react-native";
 
-const FAB_SIZE = 46;
+const FAB_SIZE = 56;
 
 export type FABIconName =
   | "plus"
@@ -122,7 +122,7 @@ export function FinanceFAB({
     }).start();
   };
 
-  const fabBgColor = "#1e40af";
+  const fabBgColor = Theme.primary;
   const fabIconColor = "#ffffff";
   const IconComponent = getLucideIcon(icon);
   const shouldShowPlus = showPlusSuffix && icon !== "plus";
@@ -173,26 +173,27 @@ const styles = StyleSheet.create({
     width: FAB_SIZE,
     height: FAB_SIZE,
     borderRadius: FAB_SIZE / 2,
-    borderWidth: 1.5,
-    borderColor: Theme.borderOnDark,
+    borderWidth: 2.5,
+    borderColor: "#ffffff",
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#1e40af",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 6,
+    shadowColor: Theme.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.32,
+    shadowRadius: 16,
+    elevation: 10,
   },
   addBadge: {
     position: "absolute",
-    right: 3,
-    bottom: 3,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: "#1e40af",
-    borderWidth: 1,
-    borderColor: Theme.borderOnDark,
+    right: -4,
+    bottom: -4,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 4,
+    backgroundColor: "#0f172a",
+    borderWidth: 2,
+    borderColor: "#ffffff",
     alignItems: "center",
     justifyContent: "center",
   },

@@ -558,16 +558,14 @@ export default function NotificationsScreen() {
 
                     return (
                       <View key={req.id} style={styles.card}>
-                        <View style={styles.row}>
+                        <View style={styles.driverCardHeader}>
                           <Image
                             source={{ uri: driverAvatarUri }}
                             style={styles.avatar}
                           />
                           <View style={styles.body}>
-                            <Text style={styles.title} numberOfLines={1}>
-                              <Text style={styles.driverName}>
-                                {driverName}
-                              </Text>{" "}
+                            <Text style={styles.title} numberOfLines={2}>
+                              <Text style={styles.driverName}>{driverName}</Text>{" "}
                               requested payment
                             </Text>
                             <View style={styles.metaRow}>
@@ -593,6 +591,8 @@ export default function NotificationsScreen() {
                               ) : null}
                             </View>
                           </View>
+                        </View>
+                        <View style={styles.driverCardFooter}>
                           <View style={styles.amountBlock}>
                             <Text style={styles.amountLabel}>AMOUNT</Text>
                             <Text style={styles.amount}>
@@ -663,12 +663,10 @@ export default function NotificationsScreen() {
                               >
                                 <FontAwesome
                                   name="close"
-                                  size={12}
+                                  size={11}
                                   color={Theme.textPrimaryDark}
                                 />
-                                <Text style={styles.rejectText}>
-                                  {t("reject")}
-                                </Text>
+                                <Text style={styles.rejectText}>{t("reject")}</Text>
                               </TouchableOpacity>
 
                               <TouchableOpacity
@@ -697,7 +695,7 @@ export default function NotificationsScreen() {
                               >
                                 <FontAwesome
                                   name="check"
-                                  size={12}
+                                  size={11}
                                   color={Theme.textOnPrimary}
                                 />
                                 <Text style={styles.payText}>Pay now</Text>
@@ -709,7 +707,7 @@ export default function NotificationsScreen() {
                               >
                                 <FontAwesome
                                   name="ellipsis-v"
-                                  size={13}
+                                  size={12}
                                   color={Theme.textMuted}
                                 />
                               </TouchableOpacity>
@@ -918,14 +916,34 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.border,
     borderRadius: 14,
-    padding: 12,
+    padding: 10,
     backgroundColor: Theme.screenBackground,
   },
-  row: { flexDirection: "row", alignItems: "center", gap: 8 },
+  row: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    width: "100%",
+  },
+  driverCardHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    width: "100%",
+  },
+  driverCardFooter: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    marginTop: 10,
+    width: "100%",
+    gap: 8,
+    flexWrap: "wrap",
+  },
   avatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     borderWidth: 1,
     borderColor: Theme.border,
   },
@@ -947,47 +965,57 @@ const styles = StyleSheet.create({
   metaPillText: { color: Theme.textSecondary, fontSize: 10, fontWeight: "600" },
   dateInline: { flexDirection: "row", alignItems: "center", gap: 4 },
   metaDate: { color: Theme.textMuted, fontSize: 11, fontWeight: "500" },
-  amountBlock: { alignItems: "flex-start", minWidth: 98 },
+  amountBlock: { alignItems: "flex-start", flexShrink: 0, paddingRight: 4 },
   amountLabel: {
     color: Theme.textSecondary,
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "700",
     letterSpacing: 0.5,
   },
   amount: {
     color: Theme.textPrimaryDark,
-    fontSize: 33,
+    fontSize: 21,
     fontWeight: "800",
-    lineHeight: 38,
+    lineHeight: 26,
   },
-  actions: { flexDirection: "row", gap: 8, alignItems: "center" },
+  actions: {
+    flexDirection: "row",
+    gap: 6,
+    alignItems: "center",
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
+    justifyContent: "flex-end",
+    flexWrap: "wrap",
+  },
   actionBtn: {
-    flex: 0,
-    minHeight: 38,
-    borderRadius: 10,
+    flexShrink: 0,
+    minHeight: 34,
+    borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    paddingHorizontal: 13,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
     flexDirection: "row",
-    gap: 6,
+    gap: 4,
   },
   rejectBtn: {
     backgroundColor: Theme.screenBackground,
     borderColor: Theme.border,
-    minWidth: 84,
+    minWidth: 68,
   },
   payBtn: {
     backgroundColor: Theme.textPrimaryDark,
     borderColor: Theme.textPrimaryDark,
-    minWidth: 108,
+    minWidth: 82,
   },
-  rejectText: { color: Theme.textPrimaryDark, fontSize: 12, fontWeight: "700" },
-  payText: { color: Theme.textOnPrimary, fontSize: 12, fontWeight: "800" },
+  rejectText: { color: Theme.textPrimaryDark, fontSize: 11, fontWeight: "700" },
+  payText: { color: Theme.textOnPrimary, fontSize: 11, fontWeight: "800" },
   moreBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 9,
     borderWidth: 1,
     borderColor: Theme.border,
     alignItems: "center",
@@ -997,6 +1025,8 @@ const styles = StyleSheet.create({
   historyFooter: {
     flexDirection: "row",
     justifyContent: "flex-end",
+    alignItems: "center",
+    flexShrink: 0,
   },
   historyStatus: {
     fontSize: 12,

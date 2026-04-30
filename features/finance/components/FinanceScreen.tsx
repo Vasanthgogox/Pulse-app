@@ -134,6 +134,7 @@ export function FinanceScreen() {
   const screenTopPad =
     Platform.OS === "web" ? 0 : insets.top + Layout.headerPaddingBelowInset;
   const { width: screenWidth } = useWindowDimensions();
+  const isMobileViewport = screenWidth < 560;
   const router = useRouter();
   const { t } = useLanguage();
   const { profile } = useAuth();
@@ -1589,9 +1590,14 @@ export function FinanceScreen() {
               styles.fabAbsoluteWrap,
               {
                 bottom:
-                  insets.bottom +
-                  Layout.tabBarBottomPaddingMin +
-                  CHAT_FAB_STACK_OFFSET,
+                  !isMobileViewport && Platform.OS === "web"
+                    ? Layout.demoTabBarScrollBottomInset +
+                      insets.bottom +
+                      Layout.tabBarBottomPaddingMin +
+                      CHAT_FAB_STACK_OFFSET
+                    : insets.bottom +
+                      Layout.tabBarBottomPaddingMin +
+                      CHAT_FAB_STACK_OFFSET,
               },
             ]}
           >

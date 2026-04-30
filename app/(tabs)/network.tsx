@@ -756,12 +756,12 @@ export default function NetworkScreen() {
             </Text>
           </View>
         </View>
-        <View style={[styles.topCluster, isDesktopMatrix && styles.topClusterDesktop]}>
+        <View style={[styles.topCluster, isDesktopMatrix && styles.topClusterDesktop, isCompactPhone && styles.topClusterCompact]}>
           <View style={[styles.topClusterMain, isDesktopMatrix && styles.topClusterMainDesktop]}>
             <View style={styles.commandStatsWrap}>
               <View style={styles.commandMainCard}>
                 <View style={styles.commandMainBgOrb} />
-                <View style={styles.commandMainContent}>
+                <View style={[styles.commandMainContent, isCompactPhone && styles.commandMainContentCompact]}>
                   <View style={styles.commandMainHead}>
                     <View style={styles.commandMainKickerRow}>
                       <Cpu size={12} color={Theme.primary} />
@@ -772,25 +772,25 @@ export default function NetworkScreen() {
                       <Text style={styles.commandGrowthText}>+{trendPct || 12}%</Text>
                     </View>
                   </View>
-                  <View style={styles.commandMainStatsRow}>
+                  <View style={[styles.commandMainStatsRow, isCompactPhone && styles.commandMainStatsRowCompact]}>
                     <View style={styles.commandTotalWrap}>
-                      <Text style={styles.commandTotalText}>
+                      <Text style={[styles.commandTotalText, isCompactPhone && styles.commandTotalTextCompact]}>
                         {String(totalConnections).padStart(2, "0")}
                       </Text>
-                      <Text style={styles.commandTotalSub}>Network Growth</Text>
+                      <Text style={[styles.commandTotalSub, isCompactPhone && styles.commandTotalSubCompact]}>Network Growth</Text>
                     </View>
-                    <View style={styles.commandMetricGrid}>
-                      <View style={styles.commandMetricCell}>
+                    <View style={[styles.commandMetricGrid, isCompactPhone && styles.commandMetricGridCompact]}>
+                      <View style={[styles.commandMetricCell, isCompactPhone && styles.commandMetricCellCompact]}>
                         <Users size={13} color={Theme.primary} />
                         <Text style={styles.commandMetricN}>{String(clientCount).padStart(2, "0")}</Text>
                         <Text style={styles.commandMetricL}>CLIENTS</Text>
                       </View>
-                      <View style={styles.commandMetricCell}>
+                      <View style={[styles.commandMetricCell, isCompactPhone && styles.commandMetricCellCompact]}>
                         <Globe size={13} color={Theme.primary} />
                         <Text style={styles.commandMetricN}>{String(supplierCount).padStart(2, "0")}</Text>
                         <Text style={styles.commandMetricL}>SUPPLIERS</Text>
                       </View>
-                      <View style={styles.commandMetricCell}>
+                      <View style={[styles.commandMetricCell, isCompactPhone && styles.commandMetricCellCompact]}>
                         <Truck size={13} color={Theme.primary} />
                         <Text style={styles.commandMetricN}>{String(driverCount).padStart(2, "0")}</Text>
                         <Text style={styles.commandMetricL}>FLEET</Text>
@@ -800,7 +800,7 @@ export default function NetworkScreen() {
                 </View>
               </View>
             </View>
-            <View style={styles.storyRowShell}>
+            <View style={[styles.storyRowShell, isCompactPhone && styles.storyRowShellCompact]}>
               <NetworkStoryStrip
                 orgId={orgId}
                 orgName={organization?.name ?? ""}
@@ -812,7 +812,13 @@ export default function NetworkScreen() {
           </View>
 
           <View style={[styles.topClusterLogCol, isDesktopMatrix && styles.topClusterLogColDesktop]}>
-            <View style={[styles.commandSideCard, isDesktopMatrix && styles.commandSideCardDesktop]}>
+            <View
+              style={[
+                styles.commandSideCard,
+                isDesktopMatrix && styles.commandSideCardDesktop,
+                isCompactPhone && styles.commandSideCardCompact,
+              ]}
+            >
               <View style={styles.commandSideHead}>
                 <Text style={styles.commandSideKicker}>Activity log</Text>
                 <Signal size={14} color={Theme.primary} />
@@ -846,7 +852,7 @@ export default function NetworkScreen() {
             </View>
           </View>
         </View>
-        <View style={styles.registryHead}>
+        <View style={[styles.registryHead, isCompactPhone && styles.registryHeadCompact]}>
           <View style={styles.registryHeadTopRow}>
             <View style={styles.registryHeadLeft}>
               <View style={styles.registryLine} />
@@ -867,7 +873,7 @@ export default function NetworkScreen() {
               ) : null}
             </Pressable>
           </View>
-          <Text style={styles.registryHeading}>Grow network</Text>
+          <Text style={[styles.registryHeading, isCompactPhone && styles.registryHeadingCompact]}>Grow network</Text>
         </View>
         <View style={[styles.networkMergedRow, !isWideNetwork && styles.networkMergedRowStack]}>
           <View style={[styles.sectionBlock, isWideNetwork && styles.networkMergedPanePrimary]}>
@@ -1091,6 +1097,10 @@ const styles = StyleSheet.create({
     marginTop: 10,
     gap: 12,
   },
+  topClusterCompact: {
+    marginHorizontal: 10,
+    gap: 10,
+  },
   topClusterDesktop: {
     flexDirection: "row",
     alignItems: "stretch",
@@ -1111,6 +1121,9 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
     overflow: "hidden",
+  },
+  storyRowShellCompact: {
+    borderRadius: 20,
   },
   topClusterLogCol: {
     width: "100%",
@@ -1145,16 +1158,28 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
     gap: 14,
   },
+  commandMainContentCompact: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 10,
+  },
   commandMainHead: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 8,
   },
+  commandMainHeadMobile: {
+    alignItems: "center",
+  },
   commandMainKickerRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+  },
+  commandMainKickerRowMobile: {
+    flexShrink: 1,
+    minWidth: 0,
   },
   commandMainKicker: {
     fontSize: 11,
@@ -1186,9 +1211,16 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 16,
   },
+  commandMainStatsRowCompact: {
+    alignItems: "flex-start",
+    gap: 12,
+  },
   commandTotalWrap: {
     flex: 1,
     minWidth: 0,
+  },
+  commandTotalWrapMobile: {
+    alignItems: "flex-start",
   },
   commandTotalText: {
     fontSize: 72,
@@ -1198,6 +1230,10 @@ const styles = StyleSheet.create({
     letterSpacing: -1,
     lineHeight: 72,
   },
+  commandTotalTextCompact: {
+    fontSize: 58,
+    lineHeight: 58,
+  },
   commandTotalSub: {
     marginTop: 6,
     fontSize: 11,
@@ -1206,11 +1242,21 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textTransform: "uppercase",
   },
+  commandTotalSubCompact: {
+    fontSize: 10,
+    letterSpacing: 0.8,
+  },
   commandMetricGrid: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     marginTop: 0,
+  },
+  commandMetricGridCompact: {
+    flex: 1,
+    width: "100%",
+    gap: 6,
+    justifyContent: "space-between",
   },
   commandMetricCell: {
     width: 84,
@@ -1222,6 +1268,14 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     alignItems: "center",
     gap: 5,
+  },
+  commandMetricCellCompact: {
+    flex: 1,
+    width: undefined,
+    minWidth: 0,
+    borderRadius: 18,
+    paddingHorizontal: 6,
+    paddingVertical: 8,
   },
   commandMetricN: {
     fontSize: 24,
@@ -1250,6 +1304,12 @@ const styles = StyleSheet.create({
   commandSideCardDesktop: {
     flex: 1,
     minHeight: 0,
+  },
+  commandSideCardCompact: {
+    borderRadius: 22,
+    minHeight: 168,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
   },
   commandSideHead: {
     flexDirection: "row",
@@ -2020,6 +2080,10 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     gap: 8,
   },
+  registryHeadCompact: {
+    marginHorizontal: 10,
+    marginTop: 14,
+  },
   registryHeadLeft: {
     flexDirection: "row",
     alignItems: "center",
@@ -2051,6 +2115,10 @@ const styles = StyleSheet.create({
     letterSpacing: -0.4,
     textTransform: "uppercase",
     fontStyle: "italic",
+  },
+  registryHeadingCompact: {
+    fontSize: 28,
+    letterSpacing: -0.2,
   },
   registryInviteBtn: {
     width: 32,

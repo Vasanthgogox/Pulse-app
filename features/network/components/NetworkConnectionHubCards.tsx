@@ -163,13 +163,6 @@ export function HubConnectionListCard({
         </View>
 
         <View style={styles.cardFooter}>
-          <View style={styles.operationsLockRow}>
-            <View style={styles.operationsLockLeft}>
-              <ShieldCheck size={14} color={Theme.primary} strokeWidth={2.4} />
-              <Text style={styles.operationsLockLabel}>Operations lock</Text>
-            </View>
-            <Text style={styles.operationsLockValue}>Secured</Text>
-          </View>
           {item.is_integrated ? (
             <View style={styles.joinedBtn}>
               <Zap size={13} color={Theme.textOnPrimary} fill={Theme.textOnPrimary} strokeWidth={2.4} />
@@ -585,7 +578,7 @@ const styles = StyleSheet.create({
     color: Theme.textOnPrimary,
   },
   cardFooter: {
-    minHeight: 92,
+    minHeight: 56,
     paddingHorizontal: 10,
     paddingVertical: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -593,40 +586,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.networkCardBackground,
-  },
-  operationsLockRow: {
-    width: "100%",
-    minHeight: 34,
-    borderRadius: 13,
-    backgroundColor: Theme.textPrimaryDark,
-    borderWidth: 1,
-    borderColor: Theme.borderOnDark,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 10,
-    marginBottom: 8,
-  },
-  operationsLockLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    minWidth: 0,
-    flex: 1,
-  },
-  operationsLockLabel: {
-    fontSize: 8,
-    fontWeight: "900",
-    color: Theme.textOnPrimary,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-  },
-  operationsLockValue: {
-    fontSize: 8,
-    fontWeight: "900",
-    color: Theme.onPrimaryMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
   },
   joinedBtn: {
     minHeight: 38,
