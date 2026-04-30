@@ -10,9 +10,9 @@ import {
     type SalaryRequestWithDriverRow,
 } from "@/services/salaryRequestsService";
 import {
-  getSharedLedgerNotifications,
-  markSharedLedgerNotificationRead,
-  type SharedLedgerNotificationRow,
+    getSharedLedgerNotifications,
+    markSharedLedgerNotificationRead,
+    type SharedLedgerNotificationRow,
 } from "@/services/sharedLedgerNotificationsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -20,7 +20,7 @@ import { useCallback, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
-  Image,
+    Image,
     ScrollView,
     StyleSheet,
     Text,
@@ -55,10 +55,26 @@ function sharedLedgerIcon(
   return "exclamation-triangle";
 }
 
+function sharedLedgerEventMetaLabel(
+  eventType: SharedLedgerNotificationRow["event_type"],
+): string {
+  if (eventType === "dispute_received") return "Dispute";
+  if (eventType === "dispute_status_changed") return "Status";
+  if (eventType === "pending_partner_followup") return "Follow up";
+  if (eventType === "mismatch_detected") return "Mismatch";
+  return "Reconcile";
+}
+
 function resolveSharedActionKind(
   eventType: SharedLedgerNotificationRow["event_type"],
   payload: Record<string, unknown>,
-): "review_dispute" | "raise_dispute" | "fix_records" | "compare_now" | "follow_up" | "view_status" {
+):
+  | "review_dispute"
+  | "raise_dispute"
+  | "fix_records"
+  | "compare_now"
+  | "follow_up"
+  | "view_status" {
   const explicit = typeof payload.cta_kind === "string" ? payload.cta_kind : "";
   if (
     explicit === "review_dispute" ||
@@ -94,23 +110,27 @@ export default function NotificationsScreen() {
   const [activeTab, setActiveTab] = useState<"action_required" | "history">(
     "action_required",
   );
+  const [sharedLoadError, setSharedLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const orgId = currentOrganization?.id ?? "";
     if (!orgId) {
       setRequests([]);
+      setSharedNotifications([]);
+      setSharedLoadError(null);
       setLoading(false);
       return;
     }
     setLoading(true);
-    const [{ requests: rows }, { notifications: sharedRows }] = await Promise.all(
-      [
+    const [{ requests: rows }, sharedRes] =
+      await Promise.all([
         getSalaryRequestsByOrganization(orgId),
         getSharedLedgerNotifications(orgId, "all"),
-      ],
-    );
+      ]);
+    const sharedRows = sharedRes.notifications ?? [];
     setRequests(rows);
     setSharedNotifications(sharedRows);
+    setSharedLoadError(sharedRes.error ? sharedRes.error.message : null);
     const userIds = Array.from(
       new Set(
         rows
@@ -123,13 +143,15 @@ export default function NotificationsScreen() {
         .from("profiles")
         .select("id, avatar_url, avatar_seed")
         .in("id", userIds);
-      const map: Record<string, { avatar_url: string | null; avatar_seed: string | null }> = {};
-      for (const row of
-        (data ?? []) as Array<{
-          id: string;
-          avatar_url: string | null;
-          avatar_seed: string | null;
-        }>) {
+      const map: Record<
+        string,
+        { avatar_url: string | null; avatar_seed: string | null }
+      > = {};
+      for (const row of (data ?? []) as Array<{
+        id: string;
+        avatar_url: string | null;
+        avatar_seed: string | null;
+      }>) {
         map[row.id] = {
           avatar_url: row.avatar_url ?? null,
           avatar_seed: row.avatar_seed ?? null,
@@ -156,7 +178,8 @@ export default function NotificationsScreen() {
     () => requests.filter((row) => row.status !== "pending"),
     [requests],
   );
-  const visibleRows = activeTab === "action_required" ? actionRequiredRows : historyRows;
+  const visibleRows =
+    activeTab === "action_required" ? actionRequiredRows : historyRows;
   const actionRequiredShared = useMemo(
     () => sharedNotifications.filter((n) => n.status === "open"),
     [sharedNotifications],
@@ -167,6 +190,8 @@ export default function NotificationsScreen() {
   );
   const visibleShared =
     activeTab === "action_required" ? actionRequiredShared : historyShared;
+  const actionRequiredCount =
+    actionRequiredRows.length + actionRequiredShared.length;
   const hasRows = visibleRows.length > 0 || visibleShared.length > 0;
   return (
     <View style={styles.root}>
@@ -193,12 +218,18 @@ export default function NotificationsScreen() {
                     else router.replace("/(tabs)/finance");
                   }}
                 >
-                  <FontAwesome name="arrow-left" size={16} color={Theme.textMuted} />
+                  <FontAwesome
+                    name="arrow-left"
+                    size={16}
+                    color={Theme.textMuted}
+                  />
                 </TouchableOpacity>
                 <View>
                   <Text style={styles.workspaceText}>QU. WORKSPACE</Text>
                   <Text style={styles.headerTitle}>Notifications</Text>
-                  <Text style={styles.headerSubtitle}>Driver salary requests need your action.</Text>
+                  <Text style={styles.headerSubtitle}>
+                    Driver requests and shared-ledger updates in one place.
+                  </Text>
                 </View>
               </View>
 
@@ -225,13 +256,15 @@ export default function NotificationsScreen() {
                   >
                     Action Required
                   </Text>
-                  {actionRequiredRows.length > 0 ? (
+                  {actionRequiredCount > 0 ? (
                     <View style={styles.tabCountPill}>
-                      <Text style={styles.tabCountText}>{actionRequiredRows.length}</Text>
+                      <Text style={styles.tabCountText}>{actionRequiredCount}</Text>
                     </View>
                   ) : null}
                 </View>
-                {activeTab === "action_required" ? <View style={styles.tabUnderline} /> : null}
+                {activeTab === "action_required" ? (
+                  <View style={styles.tabUnderline} />
+                ) : null}
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -247,14 +280,32 @@ export default function NotificationsScreen() {
                 >
                   History
                 </Text>
-                {activeTab === "history" ? <View style={styles.tabUnderline} /> : null}
+                {activeTab === "history" ? (
+                  <View style={styles.tabUnderline} />
+                ) : null}
               </TouchableOpacity>
             </View>
 
             <View style={styles.listWrap}>
+              {sharedLoadError ? (
+                <View style={styles.warningCard}>
+                  <FontAwesome
+                    name="exclamation-circle"
+                    size={13}
+                    color={Theme.warning}
+                  />
+                  <Text style={styles.warningText}>
+                    Shared ledger updates are temporarily unavailable.
+                  </Text>
+                </View>
+              ) : null}
               {!hasRows ? (
                 <View style={styles.emptyCard}>
-                  <FontAwesome name="bell-slash" size={24} color={Theme.textMuted} />
+                  <FontAwesome
+                    name="bell-slash"
+                    size={24}
+                    color={Theme.textMuted}
+                  />
                   <Text style={styles.emptyTitle}>All caught up</Text>
                   <Text style={styles.emptySubtitle}>
                     {activeTab === "history"
@@ -282,37 +333,67 @@ export default function NotificationsScreen() {
                         : null;
                     const isActionRequired = item.status === "open";
                     const ctaLabel = sharedLedgerActionLabel(item.event_type);
+                    const eventMeta = sharedLedgerEventMetaLabel(item.event_type);
                     return (
-                      <View key={item.id} style={styles.sharedCard}>
-                        <View style={styles.sharedCardHeader}>
-                          <View style={styles.sharedPill}>
+                      <View key={item.id} style={[styles.card, styles.sharedCard]}>
+                        <View style={styles.row}>
+                          <View style={styles.sharedAvatarWrap}>
                             <FontAwesome
                               name={sharedLedgerIcon(item.event_type)}
-                              size={11}
+                              size={15}
                               color={Theme.primary}
                             />
-                            <Text style={styles.sharedPillText}>
-                              Shared ledger
+                          </View>
+
+                          <View style={styles.body}>
+                            <Text style={styles.title} numberOfLines={1}>
+                              <Text style={styles.driverName}>Shared ledger</Text>{" "}
+                              {eventMeta}
+                            </Text>
+                            <View style={styles.metaRow}>
+                              <View style={styles.metaPill}>
+                                <FontAwesome
+                                  name="link"
+                                  size={10}
+                                  color={Theme.primary}
+                                />
+                                <Text style={styles.metaPillText}>{eventMeta}</Text>
+                              </View>
+                              {created ? (
+                                <View style={styles.dateInline}>
+                                  <FontAwesome
+                                    name="clock-o"
+                                    size={10}
+                                    color={Theme.textMuted}
+                                  />
+                                  <Text style={styles.metaDate}>{created}</Text>
+                                </View>
+                              ) : null}
+                            </View>
+                            <Text style={styles.sharedSubtitle} numberOfLines={1}>
+                              {item.title}
+                            </Text>
+                            {item.subtitle ? (
+                              <Text
+                                style={styles.sharedSubtitleSecondary}
+                                numberOfLines={2}
+                              >
+                                {item.subtitle}
+                              </Text>
+                            ) : null}
+                          </View>
+
+                          <View style={styles.amountBlock}>
+                            <Text style={styles.amountLabel}>AMOUNT</Text>
+                            <Text style={styles.sharedAmount}>
+                              {amountMeta ?? "—"}
                             </Text>
                           </View>
-                          {created ? (
-                            <Text style={styles.sharedDate}>{created}</Text>
-                          ) : null}
-                        </View>
-                        <Text style={styles.sharedTitle}>{item.title}</Text>
-                        {item.subtitle ? (
-                          <Text style={styles.sharedSubtitle}>{item.subtitle}</Text>
-                        ) : null}
-                        <View style={styles.sharedActions}>
-                          {amountMeta ? (
-                            <Text style={styles.sharedAmount}>{amountMeta}</Text>
-                          ) : (
-                            <View />
-                          )}
+
                           {isActionRequired ? (
-                            <View style={styles.sharedActionRow}>
+                            <View style={styles.actions}>
                               <TouchableOpacity
-                                style={styles.sharedGhostBtn}
+                                style={[styles.actionBtn, styles.rejectBtn]}
                                 onPress={async () => {
                                   const { error } =
                                     await markSharedLedgerNotificationRead(
@@ -320,7 +401,10 @@ export default function NotificationsScreen() {
                                       currentOrganization?.id ?? "",
                                     );
                                   if (error) {
-                                    Alert.alert("Could not update", error.message);
+                                    Alert.alert(
+                                      "Could not update",
+                                      error.message,
+                                    );
                                     return;
                                   }
                                   setSharedNotifications((prev) =>
@@ -337,12 +421,16 @@ export default function NotificationsScreen() {
                                 }}
                                 activeOpacity={0.82}
                               >
-                                <Text style={styles.sharedGhostBtnText}>
-                                  Mark read
-                                </Text>
+                                <FontAwesome
+                                  name="check"
+                                  size={12}
+                                  color={Theme.textPrimaryDark}
+                                />
+                                <Text style={styles.rejectText}>Read</Text>
                               </TouchableOpacity>
+
                               <TouchableOpacity
-                                style={styles.sharedPrimaryBtn}
+                                style={[styles.actionBtn, styles.payBtn]}
                                 onPress={async () => {
                                   const payload = item.payload_json ?? {};
                                   const actionKind = resolveSharedActionKind(
@@ -371,7 +459,10 @@ export default function NotificationsScreen() {
                                     router.push(
                                       `/client/${entityId}?${q.toString()}` as const,
                                     );
-                                  } else if (entityType === "SUPPLIER" && entityId) {
+                                  } else if (
+                                    entityType === "SUPPLIER" &&
+                                    entityId
+                                  ) {
                                     const q = new URLSearchParams({
                                       shared: "1",
                                       sharedAction: actionKind,
@@ -381,7 +472,9 @@ export default function NotificationsScreen() {
                                       `/supplier/${entityId}?${q.toString()}` as const,
                                     );
                                   } else if (tripId) {
-                                    router.push(`/trip-ledger/${tripId}` as const);
+                                    router.push(
+                                      `/trip-ledger/${tripId}` as const,
+                                    );
                                   } else {
                                     router.push("/(tabs)/finance");
                                   }
@@ -401,8 +494,7 @@ export default function NotificationsScreen() {
                                           ? {
                                               ...row,
                                               status: "read",
-                                              read_at:
-                                                new Date().toISOString(),
+                                              read_at: new Date().toISOString(),
                                             }
                                           : row,
                                       ),
@@ -411,19 +503,31 @@ export default function NotificationsScreen() {
                                 }}
                                 activeOpacity={0.85}
                               >
-                                <Text style={styles.sharedPrimaryBtnText}>
-                                  {ctaLabel}
-                                </Text>
+                                <FontAwesome
+                                  name="arrow-right"
+                                  size={12}
+                                  color={Theme.textOnPrimary}
+                                />
+                                <Text style={styles.payText}>{ctaLabel}</Text>
                               </TouchableOpacity>
                             </View>
                           ) : (
-                            <Text style={styles.sharedHistoryTag}>
-                              {item.status === "resolved"
-                                ? "Resolved"
-                                : item.status === "handled"
-                                  ? "Handled"
-                                  : "Read"}
-                            </Text>
+                            <View style={styles.historyFooter}>
+                              <Text
+                                style={[
+                                  styles.historyStatus,
+                                  item.status === "resolved"
+                                    ? styles.historyStatusPaid
+                                    : styles.historyStatusNeutral,
+                                ]}
+                              >
+                                {item.status === "resolved"
+                                  ? "Resolved"
+                                  : item.status === "handled"
+                                    ? "Handled"
+                                    : "Read"}
+                              </Text>
+                            </View>
                           )}
                         </View>
                       </View>
@@ -434,9 +538,11 @@ export default function NotificationsScreen() {
                     <Text style={styles.sectionLabel}>Driver requests</Text>
                   ) : null}
                   {visibleRows.map((req) => {
-                    const driverName =
-                      req.drivers?.name?.trim() || t("driver");
-                    const typeLabel = requestTypeLabel(t, req.request_type ?? "");
+                    const driverName = req.drivers?.name?.trim() || t("driver");
+                    const typeLabel = requestTypeLabel(
+                      t,
+                      req.request_type ?? "",
+                    );
                     const created = req.created_at
                       ? new Date(req.created_at).toLocaleDateString("en-IN", {
                           day: "2-digit",
@@ -455,14 +561,17 @@ export default function NotificationsScreen() {
                         : req.status === "approved"
                           ? "Approved"
                           : "Rejected";
-                    const profileUserId = String(req.drivers?.user_id ?? "").trim();
+                    const profileUserId = String(
+                      req.drivers?.user_id ?? "",
+                    ).trim();
                     const profileAvatar = profileAvatarByUserId[profileUserId];
                     const driverAvatarUrl =
                       resolveAvatarPublicUrl(profileAvatar?.avatar_url) ??
                       (profileAvatar?.avatar_url?.trim() || null);
                     const fallbackSeed =
                       (profileAvatar?.avatar_seed ?? "").trim() || "driver-1";
-                    const driverAvatarUri = driverAvatarUrl || getAvatarUriForSeed(fallbackSeed);
+                    const driverAvatarUri =
+                      driverAvatarUrl || getAvatarUriForSeed(fallbackSeed);
 
                     return (
                       <View key={req.id} style={styles.card}>
@@ -473,16 +582,27 @@ export default function NotificationsScreen() {
                           />
                           <View style={styles.body}>
                             <Text style={styles.title} numberOfLines={2}>
-                              <Text style={styles.driverName}>{driverName}</Text> requested payment
+                              <Text style={styles.driverName}>{driverName}</Text>{" "}
+                              requested payment
                             </Text>
                             <View style={styles.metaRow}>
                               <View style={styles.metaPill}>
-                                <FontAwesome name="map-marker" size={10} color={Theme.primary} />
-                                <Text style={styles.metaPillText}>{typeLabel}</Text>
+                                <FontAwesome
+                                  name="map-marker"
+                                  size={10}
+                                  color={Theme.primary}
+                                />
+                                <Text style={styles.metaPillText}>
+                                  {typeLabel}
+                                </Text>
                               </View>
                               {created ? (
                                 <View style={styles.dateInline}>
-                                  <FontAwesome name="clock-o" size={10} color={Theme.textMuted} />
+                                  <FontAwesome
+                                    name="clock-o"
+                                    size={10}
+                                    color={Theme.textMuted}
+                                  />
                                   <Text style={styles.metaDate}>{created}</Text>
                                 </View>
                               ) : null}
@@ -501,7 +621,9 @@ export default function NotificationsScreen() {
                               <Text
                                 style={[
                                   styles.historyStatus,
-                                  req.status === "rejected" ? styles.historyStatusReject : styles.historyStatusPaid,
+                                  req.status === "rejected"
+                                    ? styles.historyStatusReject
+                                    : styles.historyStatusPaid,
                                 ]}
                               >
                                 {historyStatusLabel}
@@ -519,7 +641,9 @@ export default function NotificationsScreen() {
                                       .replace("{{name}}", driverName)
                                       .replace(
                                         "{{amount}}",
-                                        Number(req.amount).toLocaleString("en-IN"),
+                                        Number(req.amount).toLocaleString(
+                                          "en-IN",
+                                        ),
                                       ),
                                     [
                                       { text: t("cancel"), style: "cancel" },
@@ -528,18 +652,24 @@ export default function NotificationsScreen() {
                                         style: "destructive",
                                         onPress: async () => {
                                           setBusyId(req.id);
-                                          const { error } = await updateSalaryRequestStatus(
-                                            req.id,
-                                            "rejected",
-                                          );
+                                          const { error } =
+                                            await updateSalaryRequestStatus(
+                                              req.id,
+                                              "rejected",
+                                            );
                                           setBusyId(null);
                                           if (error) {
-                                            Alert.alert(t("rejectFailed"), error.message);
+                                            Alert.alert(
+                                              t("rejectFailed"),
+                                              error.message,
+                                            );
                                             return;
                                           }
                                           setRequests((prev) =>
                                             prev.map((row) =>
-                                              row.id === req.id ? { ...row, status: "rejected" } : row,
+                                              row.id === req.id
+                                                ? { ...row, status: "rejected" }
+                                                : row,
                                             ),
                                           );
                                         },
@@ -548,7 +678,11 @@ export default function NotificationsScreen() {
                                   );
                                 }}
                               >
-                                <FontAwesome name="close" size={11} color={Theme.textPrimaryDark} />
+                                <FontAwesome
+                                  name="close"
+                                  size={11}
+                                  color={Theme.textPrimaryDark}
+                                />
                                 <Text style={styles.rejectText}>{t("reject")}</Text>
                               </TouchableOpacity>
 
@@ -571,15 +705,28 @@ export default function NotificationsScreen() {
                                   if (isTripBased && req.trip_ids[0]) {
                                     q.set("tripId", req.trip_ids[0]);
                                   }
-                                  router.push(`/(modals)/ledger-sync?${q.toString()}` as const);
+                                  router.push(
+                                    `/(modals)/ledger-sync?${q.toString()}` as const,
+                                  );
                                 }}
                               >
-                                <FontAwesome name="check" size={11} color={Theme.textOnPrimary} />
+                                <FontAwesome
+                                  name="check"
+                                  size={11}
+                                  color={Theme.textOnPrimary}
+                                />
                                 <Text style={styles.payText}>Pay now</Text>
                               </TouchableOpacity>
 
-                              <TouchableOpacity style={styles.moreBtn} activeOpacity={0.75}>
-                                <FontAwesome name="ellipsis-v" size={12} color={Theme.textMuted} />
+                              <TouchableOpacity
+                                style={styles.moreBtn}
+                                activeOpacity={0.75}
+                              >
+                                <FontAwesome
+                                  name="ellipsis-v"
+                                  size={12}
+                                  color={Theme.textMuted}
+                                />
                               </TouchableOpacity>
                             </View>
                           )}
@@ -672,7 +819,11 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0.6,
   },
-  escrowValue: { color: Theme.textPrimaryDark, fontSize: 14, fontWeight: "800" },
+  escrowValue: {
+    color: Theme.textPrimaryDark,
+    fontSize: 14,
+    fontWeight: "800",
+  },
   profileAvatar: {
     width: 32,
     height: 32,
@@ -718,6 +869,24 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.primary,
   },
   listWrap: { padding: 12, gap: 8 },
+  warningCard: {
+    borderWidth: 1,
+    borderColor: Theme.warning,
+    backgroundColor: Theme.surface,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  warningText: {
+    color: Theme.textSecondary,
+    fontSize: 11,
+    fontWeight: "600",
+    flex: 1,
+    minWidth: 0,
+  },
   sectionLabel: {
     color: Theme.textSecondary,
     fontSize: 12,
@@ -728,78 +897,40 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   sharedCard: {
-    borderWidth: 1,
-    borderColor: Theme.border,
-    borderRadius: 14,
-    padding: 12,
-    backgroundColor: Theme.surfaceForm,
-    gap: 8,
-  },
-  sharedCardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  sharedPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.surfaceLight,
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-    borderRadius: 999,
-  },
-  sharedPillText: {
-    color: Theme.textSecondary,
-    fontSize: 10,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-  },
-  sharedDate: { color: Theme.textMuted, fontSize: 11, fontWeight: "600" },
-  sharedTitle: { color: Theme.textPrimaryDark, fontSize: 14, fontWeight: "800" },
-  sharedSubtitle: { color: Theme.textSecondary, fontSize: 12, lineHeight: 17 },
-  sharedActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-  sharedAmount: { color: Theme.textPrimaryDark, fontSize: 16, fontWeight: "800" },
-  sharedActionRow: { flexDirection: "row", gap: 8, alignItems: "center" },
-  sharedGhostBtn: {
-    borderWidth: 1,
-    borderColor: Theme.border,
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
     backgroundColor: Theme.screenBackground,
+    shadowColor: "#000",
+    shadowOpacity: 0.04,
+    shadowOffset: { width: 0, height: 3 },
+    shadowRadius: 8,
+    elevation: 2,
   },
-  sharedGhostBtnText: {
-    color: Theme.textPrimaryDark,
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  sharedPrimaryBtn: {
+  sharedAvatarWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     borderWidth: 1,
-    borderColor: Theme.textPrimaryDark,
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 11,
-    backgroundColor: Theme.textPrimaryDark,
+    borderColor: Theme.border,
+    backgroundColor: Theme.surfaceLight,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  sharedPrimaryBtnText: {
-    color: Theme.textOnPrimary,
-    fontSize: 11,
-    fontWeight: "800",
+  sharedSubtitle: {
+    color: Theme.textPrimaryDark,
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 2,
   },
-  sharedHistoryTag: {
+  sharedSubtitleSecondary: {
     color: Theme.textSecondary,
     fontSize: 11,
-    fontWeight: "700",
-    textTransform: "capitalize",
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  sharedAmount: {
+    color: Theme.textPrimaryDark,
+    fontSize: 22,
+    fontWeight: "800",
+    lineHeight: 28,
   },
   emptyCard: {
     borderWidth: 1,
@@ -822,6 +953,12 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 10,
     backgroundColor: Theme.screenBackground,
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    width: "100%",
   },
   driverCardHeader: {
     flexDirection: "row",
@@ -898,7 +1035,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 4,
   },
-  rejectBtn: { backgroundColor: Theme.screenBackground, borderColor: Theme.border, minWidth: 68 },
+  rejectBtn: {
+    backgroundColor: Theme.screenBackground,
+    borderColor: Theme.border,
+    minWidth: 68,
+  },
   payBtn: {
     backgroundColor: Theme.textPrimaryDark,
     borderColor: Theme.textPrimaryDark,
@@ -937,5 +1078,9 @@ const styles = StyleSheet.create({
   historyStatusReject: {
     color: Theme.negative,
     backgroundColor: Theme.negativeMuted,
+  },
+  historyStatusNeutral: {
+    color: Theme.textSecondary,
+    backgroundColor: Theme.surfaceLight,
   },
 });
