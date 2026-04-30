@@ -52,8 +52,8 @@ import {
 } from "@/lib/capabilities";
 import { tripDayIso } from "@/lib/dateRangePresets";
 import { formatIndianVehicleNumber, formatLedgerDate } from "@/lib/format";
-import { queryKeys } from "@/lib/queryKeys";
 import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
+import { queryKeys } from "@/lib/queryKeys";
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import { useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -651,12 +651,15 @@ export function FinanceScreen() {
         Number(row.expense ?? 0) > 0,
     ).length;
     const activeCashCount = (ledgerTransactions ?? []).filter(
-      (row) => Number(row.amount_in ?? 0) > 0 || Number(row.amount_out ?? 0) > 0,
+      (row) =>
+        Number(row.amount_in ?? 0) > 0 || Number(row.amount_out ?? 0) > 0,
     ).length;
 
     return {
       cash: {
-        value: formatCompactRupee(ledgerTotalsData.totalIn - ledgerTotalsData.totalOut),
+        value: formatCompactRupee(
+          ledgerTotalsData.totalIn - ledgerTotalsData.totalOut,
+        ),
         count: activeCashCount,
         secondaryLabel: "Total Outstanding",
         secondaryValue: formatCompactRupee(ledgerTotalsData.totalOut),

@@ -484,6 +484,35 @@ export function FinanceSummarySection({
             </View>
           </AnimatedFinanceHeroCard>
         </View>
+        <View style={styles.financeDesktopToolbarDock}>
+          <TreasurySummaryCard
+            fullWidth
+            containerStyle={styles.financeDesktopToolbarCard}
+            toolbarTheme="light"
+            searchQuery={searchQuery}
+            onSearchChange={onSearchChange}
+            searchPlaceholder={searchPlaceholder}
+            onReportPress={onReportPress}
+            entityFilter={entityFilter}
+            onEntityFilterChange={onEntityFilterChange}
+            entityFilterLabels={entityFilterLabels}
+            garagePeriodOptions={garagePeriodOptions}
+            garagePeriod={garagePeriod}
+            onGaragePeriodChange={onGaragePeriodChange}
+            garageViewTab={garageViewTab}
+            onGarageViewTabChange={onGarageViewTabChange}
+            showPeriodFilter={showPeriodFilter}
+            periodFilter={periodFilter}
+            onPeriodFilterChange={onPeriodFilterChange}
+            sourceFilter={sourceFilter}
+            onSourceFilterChange={onSourceFilterChange}
+            ledgerCategory={ledgerCategory}
+            onLedgerCategoryChange={onLedgerCategoryChange}
+            cashNetworkLayout
+            onClearFilters={onClearFilters}
+            isAnyFilterActive={isAnyFilterActive}
+          />
+        </View>
       </View>
     </>
   );

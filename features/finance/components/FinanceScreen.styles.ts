@@ -32,6 +32,18 @@ export const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
   },
+  /** Desktop: dock filter toolbar under hero with same dark shell. */
+  financeDesktopToolbarDock: {
+    marginTop: 8,
+    borderRadius: 16,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
+  },
+  financeDesktopToolbarCard: {
+    backgroundColor: Theme.screenBackground,
+  },
   financeBalanceCardPressable: {
     flex: 1,
     position: "relative",
@@ -209,7 +221,7 @@ export const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
   },
   financeBalanceValue: {
-    fontSize: 56,
+    fontSize: 52,
     fontWeight: "800",
     color: Theme.textOnDark,
     letterSpacing: -0.85,
@@ -218,7 +230,7 @@ export const styles = StyleSheet.create({
     paddingLeft: Layout.currencyTextPaddingStartLarge,
     paddingTop: Layout.currencyTextPaddingVertical,
     paddingBottom: Layout.currencyTextPaddingVertical,
-    lineHeight: 70,
+    lineHeight: 66,
   },
   financeBalanceStatsRow: {
     flexDirection: "row",
@@ -267,13 +279,13 @@ export const styles = StyleSheet.create({
     fontStyle: "italic",
   },
   financeBalanceStatValue: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "800",
     color: Theme.textOnDark,
     fontStyle: "italic",
     paddingLeft: Layout.currencyTextPaddingStart,
     paddingTop: Layout.currencyTextPaddingVerticalTight,
-    lineHeight: 30,
+    lineHeight: 28,
   },
   financeCategoryCardsRow: {
     flexDirection: "row",
