@@ -1174,7 +1174,7 @@ export const styles = StyleSheet.create({
   /** FAB wrapper: absolute, outside ScrollView; bottom set in screen; renders above content */
   fabAbsoluteWrap: {
     position: "absolute",
-    right: 16,
+    right: Layout.screenPaddingHorizontal,
     zIndex: 100,
     elevation: 10,
   },

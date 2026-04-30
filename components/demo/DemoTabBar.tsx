@@ -10,14 +10,22 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { useConnectionRequestsReceivedQuery } from "@/lib/queries";
+import { useConnectionRequestsReceivedQuery, useConnectionRequestsSentQuery } from "@/lib/queries";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
-import { getSalaryRequestsByOrganization } from "@/services/salaryRequestsService";
-import { getSharedLedgerNotifications } from "@/services/sharedLedgerNotificationsService";
+import {
+  getSalaryRequestsByOrganization,
+  updateSalaryRequestStatus,
+  type SalaryRequestWithDriverRow,
+} from "@/services/salaryRequestsService";
+import {
+  approveConnectionRequest,
+  cancelConnectionRequest,
+  rejectConnectionRequest,
+} from "@/services/connectionRequestsService";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { Command } from "lucide-react-native";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Image,
   Platform,
@@ -226,9 +234,59 @@ export function DemoTabBar({
   const { currentOrganization } = useOrganization();
   const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
   const [notificationCount, setNotificationCount] = useState(0);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [showInvitations, setShowInvitations] = useState(false);
+  const [notifTab, setNotifTab] = useState<"active" | "history">("active");
+  const [inviteTab, setInviteTab] = useState<"received" | "sent">("received");
+  const [salaryRequests, setSalaryRequests] = useState<SalaryRequestWithDriverRow[]>([]);
+  const [notifActionId, setNotifActionId] = useState<string | null>(null);
+  const [inviteActionId, setInviteActionId] = useState<string | null>(null);
   const orgId = currentOrganization?.id ?? null;
   const receivedQ = useConnectionRequestsReceivedQuery(orgId);
+  const sentQ = useConnectionRequestsSentQuery(orgId);
   const pendingInvites = (receivedQ.data ?? []).filter((r) => r.status === "pending").length;
+  const receivedInviteItems = useMemo(
+    () =>
+      (receivedQ.data ?? [])
+        .filter((r) => r.status === "pending")
+        .slice(0, 6)
+        .map((r) => {
+          const row = r as any;
+          const reqClient = Boolean(row.request_shipper_client);
+          const reqSupplier = Boolean(row.request_carrier_supplier);
+          return {
+            id: String(row.id ?? Math.random()),
+            name:
+              row.from_org_name ??
+              row.requester_name ??
+              row.from_party_name ??
+              "Network user",
+            type: reqClient && reqSupplier ? "CLIENT+SUPPLIER" : reqClient ? "CLIENT" : reqSupplier ? "SUPPLIER" : "PARTY",
+          };
+        }),
+    [receivedQ.data]
+  );
+  const sentInviteItems = useMemo(
+    () =>
+      (sentQ.data ?? [])
+        .filter((r) => r.status === "pending")
+        .slice(0, 6)
+        .map((r) => {
+          const row = r as any;
+          const reqClient = Boolean(row.request_shipper_client);
+          const reqSupplier = Boolean(row.request_carrier_supplier);
+          return {
+            id: String(row.id ?? Math.random()),
+            name:
+              row.to_org_name ??
+              row.receiver_name ??
+              row.to_party_name ??
+              "Network user",
+            type: reqClient && reqSupplier ? "CLIENT+SUPPLIER" : reqClient ? "CLIENT" : reqSupplier ? "SUPPLIER" : "PARTY",
+          };
+        }),
+    [sentQ.data]
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -269,29 +327,84 @@ export function DemoTabBar({
     const orgId = currentOrganization?.id ?? "";
     if (!orgId) {
       setNotificationCount(0);
+      setSalaryRequests([]);
       return;
     }
     const loadNotificationCount = async () => {
-      const [{ requests }, sharedRes] = await Promise.all([
-        getSalaryRequestsByOrganization(orgId, "pending"),
-        getSharedLedgerNotifications(orgId, "action_required"),
-      ]);
-      const sharedCount = sharedRes.notifications.length;
-      if (!cancelled) {
-        setNotificationCount(requests.length + sharedCount);
-      }
+      const { requests } = await getSalaryRequestsByOrganization(orgId);
+      if (cancelled) return;
+      setSalaryRequests(requests);
+      setNotificationCount(requests.filter((r) => r.status === "pending").length);
     };
     void loadNotificationCount();
     return () => {
       cancelled = true;
     };
   }, [currentOrganization?.id, activeTab]);
+  const activeSalaryRequests = useMemo(
+    () => salaryRequests.filter((r) => r.status === "pending"),
+    [salaryRequests]
+  );
+  const historySalaryRequests = useMemo(
+    () => salaryRequests.filter((r) => r.status !== "pending"),
+    [salaryRequests]
+  );
+  const refreshSalaryRequests = async () => {
+    if (!orgId) return;
+    const { requests } = await getSalaryRequestsByOrganization(orgId);
+    setSalaryRequests(requests);
+    setNotificationCount(requests.filter((r) => r.status === "pending").length);
+  };
+  const handleSalaryReject = async (requestId: string) => {
+    setNotifActionId(requestId);
+    const { error } = await updateSalaryRequestStatus(requestId, "rejected");
+    setNotifActionId(null);
+    if (!error) await refreshSalaryRequests();
+  };
+  const handleInviteAction = async (requestId: string, action: "approve" | "reject" | "cancel") => {
+    if (!orgId) return;
+    setInviteActionId(requestId);
+    if (action === "approve") await approveConnectionRequest(requestId, orgId);
+    if (action === "reject") await rejectConnectionRequest(requestId, orgId);
+    if (action === "cancel") await cancelConnectionRequest(requestId);
+    setInviteActionId(null);
+    await Promise.all([receivedQ.refetch(), sentQ.refetch()]);
+  };
 
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const { t } = useLanguage();
+
+  /** Pay now opens ledger-sync prefilled; salary row is marked paid only after successful submit (see ledger-sync). */
+  const openLedgerForSalaryPayment = useCallback(
+    (req: SalaryRequestWithDriverRow) => {
+      const driverName = req.drivers?.name?.trim() || t("driver");
+      const isTripBased =
+        req.request_type === "trip_based" &&
+        Array.isArray(req.trip_ids) &&
+        req.trip_ids.length > 0;
+      const q = new URLSearchParams({
+        entityType: "DRIVER",
+        entityId: req.driver_id,
+        partyName: driverName,
+        partyId: req.driver_id,
+        defaultType: "out",
+        salaryAmount: String(req.amount),
+        defaultDriverPaymentType: isTripBased ? "settlement" : "advance",
+        salaryRequestId: req.id,
+      });
+      if (isTripBased && req.trip_ids[0]) {
+        q.set("tripId", req.trip_ids[0]);
+      }
+      setShowNotifications(false);
+      router.push(`/(modals)/ledger-sync?${q.toString()}` as const);
+    },
+    [router, t],
+  );
+
   const isWeb = Platform.OS === "web";
   const isDesktopWeb = isWeb && windowWidth >= 1024;
+  const isCompactMobile = !isDesktopWeb && windowWidth < 390;
   const isFiscal = activeTab === "finance";
   const isTrips = activeTab === "trips";
   const isNetwork = activeTab === "network";
@@ -377,35 +490,241 @@ export function DemoTabBar({
           </View>
 
           <View style={styles.webUtilityWrap}>
-            <AnimatedPress
-              style={styles.webBellBtn}
-              activeOpacity={0.8}
-              onPress={onNotificationsPress}
-            >
-              <FontAwesome5 name="bell" size={16} color="#64748b" />
-              {notificationCount > 0 ? (
-                <View style={styles.webBellBadge}>
-                  <Text style={styles.webBellBadgeText}>
-                    {notificationCount > 9 ? "9+" : String(notificationCount)}
-                  </Text>
+            <View style={styles.webPopoverAnchor}>
+              <AnimatedPress
+                style={styles.webBellBtn}
+                activeOpacity={0.8}
+                onPress={() => {
+                  setShowNotifications((v) => !v);
+                  setShowInvitations(false);
+                }}
+              >
+                <FontAwesome5 name="bell" size={16} color="#64748b" />
+                {notificationCount > 0 ? (
+                  <View style={styles.webBellBadge}>
+                    <Text style={styles.webBellBadgeText}>
+                      {notificationCount > 9 ? "9+" : String(notificationCount)}
+                    </Text>
+                  </View>
+                ) : null}
+              </AnimatedPress>
+              {showNotifications ? (
+                <View style={styles.webPopoverCard}>
+                  <View style={styles.webPopoverHeadDark}>
+                    <Text style={styles.webPopoverHeadTitle}>Alert Registry</Text>
+                  </View>
+                  <View style={styles.webPopoverTabsWrap}>
+                    <TouchableOpacity
+                      style={[
+                        styles.webPopoverTabBtn,
+                        notifTab === "active" && styles.webPopoverTabBtnActive,
+                      ]}
+                      onPress={() => setNotifTab("active")}
+                    >
+                      <Text
+                        style={[
+                          styles.webPopoverTabBtnText,
+                          notifTab === "active" && styles.webPopoverTabBtnTextActive,
+                        ]}
+                      >
+                        ACTIVE
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.webPopoverTabBtn,
+                        notifTab === "history" && styles.webPopoverTabBtnActive,
+                      ]}
+                      onPress={() => setNotifTab("history")}
+                    >
+                      <Text
+                        style={[
+                          styles.webPopoverTabBtnText,
+                          notifTab === "history" && styles.webPopoverTabBtnTextActive,
+                        ]}
+                      >
+                        HISTORY
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.webPopoverBody}>
+                    {(notifTab === "active" ? activeSalaryRequests : historySalaryRequests).length === 0 ? (
+                      <Text style={styles.webPopoverEmpty}>
+                        {notifTab === "active" ? "No action required" : "No history yet"}
+                      </Text>
+                    ) : (
+                      (notifTab === "active" ? activeSalaryRequests : historySalaryRequests)
+                        .slice(0, 6)
+                        .map((req) => (
+                          <View key={req.id} style={styles.webNotifRow}>
+                            <View style={styles.webNotifLeft}>
+                              <View style={styles.webNotifAvatar}>
+                                <Text style={styles.webNotifAvatarText}>
+                                  {(req.drivers?.name ?? "D").slice(0, 1).toUpperCase()}
+                                </Text>
+                              </View>
+                              <View style={styles.webNotifTextWrap}>
+                                <Text style={styles.webNotifName} numberOfLines={1}>
+                                  {req.drivers?.name ?? "Driver"} requested payment
+                                </Text>
+                                <Text style={styles.webNotifMeta}>
+                                  {req.request_type.replace("_", "-")} · {new Date(req.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                                </Text>
+                              </View>
+                            </View>
+                            <View style={styles.webNotifRight}>
+                              <Text style={styles.webNotifAmount}>{`₹${Number(req.amount ?? 0).toLocaleString("en-IN")}`}</Text>
+                              {notifTab === "active" ? (
+                                <View style={styles.webNotifActions}>
+                                  <TouchableOpacity
+                                    style={styles.webNotifRejectBtn}
+                                    onPress={() => void handleSalaryReject(req.id)}
+                                    disabled={notifActionId === req.id}
+                                  >
+                                    <Text style={styles.webNotifRejectBtnText}>Reject</Text>
+                                  </TouchableOpacity>
+                                  <TouchableOpacity
+                                    style={styles.webNotifPayBtn}
+                                    onPress={() => openLedgerForSalaryPayment(req)}
+                                  >
+                                    <Text style={styles.webNotifPayBtnText}>Pay now</Text>
+                                  </TouchableOpacity>
+                                </View>
+                              ) : (
+                                <Text style={styles.webNotifStatus}>
+                                  {String(req.status ?? "").toUpperCase()}
+                                </Text>
+                              )}
+                            </View>
+                          </View>
+                        ))
+                    )}
+                  </View>
                 </View>
               ) : null}
-            </AnimatedPress>
-            <AnimatedPress
-              style={styles.webBellBtn}
-              activeOpacity={0.8}
-              onPress={() =>
-                router.push({
-                  pathname: "/network",
-                  params: { view: "requests", ts: String(Date.now()) },
-                } as never)
-              }
-            >
-              <View style={styles.webInviteIconWrap}>
-                <FontAwesome5 name="inbox" size={15} color="#64748b" />
-                {pendingInvites > 0 ? <View style={styles.webInviteDot} /> : null}
-              </View>
-            </AnimatedPress>
+            </View>
+            <View style={styles.webPopoverAnchor}>
+              <AnimatedPress
+                style={styles.webBellBtn}
+                activeOpacity={0.8}
+                onPress={() => {
+                  setShowInvitations((v) => !v);
+                  setShowNotifications(false);
+                }}
+              >
+                <View style={styles.webInviteIconWrap}>
+                  <FontAwesome5 name="inbox" size={15} color="#64748b" />
+                  {pendingInvites > 0 ? <View style={styles.webInviteDot} /> : null}
+                </View>
+              </AnimatedPress>
+              {showInvitations ? (
+                <View style={[styles.webPopoverCard, styles.webInvitationPopoverCard]}>
+                  <View style={styles.webPopoverHeadDark}>
+                    <Text style={styles.webPopoverHeadTitle}>Inbound Protocol</Text>
+                    <Text style={styles.webPopoverHeadBadge}>
+                      {pendingInvites} pending
+                    </Text>
+                  </View>
+                  <View style={styles.webPopoverTabsWrap}>
+                    <TouchableOpacity
+                      style={[
+                        styles.webPopoverTabBtn,
+                        inviteTab === "received" && styles.webPopoverTabBtnActive,
+                      ]}
+                      onPress={() => setInviteTab("received")}
+                    >
+                      <Text
+                        style={[
+                          styles.webPopoverTabBtnText,
+                          inviteTab === "received" && styles.webPopoverTabBtnTextActive,
+                        ]}
+                      >
+                        RECEIVED
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.webPopoverTabBtn,
+                        inviteTab === "sent" && styles.webPopoverTabBtnActive,
+                      ]}
+                      onPress={() => setInviteTab("sent")}
+                    >
+                      <Text
+                        style={[
+                          styles.webPopoverTabBtnText,
+                          inviteTab === "sent" && styles.webPopoverTabBtnTextActive,
+                        ]}
+                      >
+                        SENT
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.webPopoverBody}>
+                    {(inviteTab === "received" ? receivedInviteItems : sentInviteItems).length === 0 ? (
+                      <Text style={styles.webPopoverEmpty}>No pending invitations</Text>
+                    ) : (
+                      (inviteTab === "received" ? receivedInviteItems : sentInviteItems).map((item) => (
+                        <View key={item.id} style={styles.webInviteRow}>
+                          <View style={styles.webInviteCode}>
+                            <Text style={styles.webInviteCodeText}>
+                              {item.name.slice(0, 2).toUpperCase()}
+                            </Text>
+                          </View>
+                          <View style={styles.webInviteTextWrap}>
+                            <Text style={styles.webInviteName} numberOfLines={1}>
+                              {item.name}
+                            </Text>
+                            <Text style={styles.webInviteType}>{item.type}</Text>
+                          </View>
+                          {inviteTab === "received" ? (
+                            <View style={styles.webInviteActionsInline}>
+                              <TouchableOpacity
+                                style={styles.webInviteGhostBtn}
+                                onPress={() => void handleInviteAction(item.id, "reject")}
+                                disabled={inviteActionId === item.id}
+                              >
+                                <Text style={styles.webInviteGhostBtnText}>Ignore</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={styles.webInvitePrimaryBtn}
+                                onPress={() => void handleInviteAction(item.id, "approve")}
+                                disabled={inviteActionId === item.id}
+                              >
+                                <Text style={styles.webInvitePrimaryBtnText}>
+                                  {inviteActionId === item.id ? "..." : "Accept"}
+                                </Text>
+                              </TouchableOpacity>
+                            </View>
+                          ) : (
+                            <TouchableOpacity
+                              style={styles.webInviteGhostBtn}
+                              onPress={() => void handleInviteAction(item.id, "cancel")}
+                              disabled={inviteActionId === item.id}
+                            >
+                              <Text style={styles.webInviteGhostBtnText}>
+                                {inviteActionId === item.id ? "..." : "Recall"}
+                              </Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      ))
+                    )}
+                  </View>
+                  <TouchableOpacity
+                    style={styles.webPopoverFooterBtn}
+                    onPress={() => {
+                      setShowInvitations(false);
+                      router.push({
+                        pathname: "/network",
+                        params: { view: "requests", ts: String(Date.now()) },
+                      } as never);
+                    }}
+                  >
+                    <Text style={styles.webPopoverFooterBtnText}>Manage All Requests</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+            </View>
             <AnimatedPress
               onPress={onProfilePress}
               style={styles.webAvatarBtn}
@@ -433,9 +752,9 @@ export function DemoTabBar({
         { paddingTop: verticalPad, paddingBottom: bottomPad },
       ]}
     >
-      <View style={styles.mobileFooterRow}>
+      <View style={[styles.mobileFooterRow, isCompactMobile && styles.mobileFooterRowCompact]}>
         <TouchableOpacity
-          style={styles.mobileEdgeBtn}
+          style={[styles.mobileEdgeBtn, isCompactMobile && styles.mobileEdgeBtnCompact]}
           activeOpacity={0.85}
           accessibilityLabel="Control hub"
           accessibilityRole="button"
@@ -443,7 +762,7 @@ export function DemoTabBar({
           <Command size={16} color="#ffffff" strokeWidth={2.2} />
         </TouchableOpacity>
 
-        <View style={styles.glassDock}>
+        <View style={[styles.glassDock, isCompactMobile && styles.glassDockCompact]}>
           <View style={styles.tabsRow}>
             {/* Column 1: Fiscal — pill behind when active */}
             <View style={styles.dockColumn}>
@@ -593,7 +912,7 @@ export function DemoTabBar({
         </View>
         <TouchableOpacity
           onPress={onProfilePress}
-          style={styles.mobileProfileBtn}
+          style={[styles.mobileProfileBtn, isCompactMobile && styles.mobileProfileBtnCompact]}
           activeOpacity={0.85}
           accessibilityLabel="Profile"
           accessibilityRole="button"
@@ -634,6 +953,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
   },
+  mobileFooterRowCompact: {
+    gap: 4,
+  },
   glassDock: {
     flex: 1,
     height: Layout.tabBarHeight + 6,
@@ -651,6 +973,10 @@ const styles = StyleSheet.create({
     elevation: 8,
     overflow: "hidden",
   },
+  glassDockCompact: {
+    height: Layout.tabBarHeight + 2,
+    borderRadius: 16,
+  },
   mobileEdgeBtn: {
     width: 32,
     height: 32,
@@ -664,6 +990,11 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 6,
   },
+  mobileEdgeBtnCompact: {
+    width: 30,
+    height: 30,
+    borderRadius: 9,
+  },
   mobileProfileBtn: {
     width: 32,
     height: 32,
@@ -674,6 +1005,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
+  },
+  mobileProfileBtnCompact: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
   },
   mobileProfileAvatar: {
     width: "100%",
@@ -837,6 +1173,10 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
     paddingRight: 6,
   },
+  webPopoverAnchor: {
+    position: "relative",
+    zIndex: 40,
+  },
   webBellBtn: {
     width: 36,
     height: 36,
@@ -847,6 +1187,307 @@ const styles = StyleSheet.create({
     borderColor: "#e2e8f0",
     backgroundColor: "#ffffff",
     position: "relative",
+  },
+  webPopoverCard: {
+    position: "absolute",
+    top: 44,
+    right: 0,
+    width: 360,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "rgba(255,255,255,0.98)",
+    overflow: "hidden",
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.14,
+    shadowRadius: 28,
+    elevation: 20,
+  },
+  webInvitationPopoverCard: {
+    width: 390,
+  },
+  webPopoverHeadDark: {
+    backgroundColor: "#0f172a",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  webPopoverHeadTitle: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#ffffff",
+    textTransform: "uppercase",
+    letterSpacing: 1.1,
+  },
+  webPopoverHeadBadge: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: Theme.primary,
+    textTransform: "uppercase",
+  },
+  webPopoverTabsWrap: {
+    flexDirection: "row",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingTop: 10,
+  },
+  webPopoverTabBtn: {
+    flex: 1,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f8fafc",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+  },
+  webPopoverTabBtnActive: {
+    backgroundColor: "#0f172a",
+    borderColor: "#0f172a",
+  },
+  webPopoverTabBtnText: {
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+    color: Theme.textMutedDemo,
+  },
+  webPopoverTabBtnTextActive: {
+    color: "#ffffff",
+  },
+  webPopoverBody: {
+    padding: 10,
+    gap: 8,
+    maxHeight: 360,
+  },
+  webPopoverRow: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "#ffffff",
+  },
+  webPopoverRowTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    marginBottom: 4,
+  },
+  webPopoverRowLabel: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: Theme.primary,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  webPopoverRowTime: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textMutedDemo,
+  },
+  webPopoverRowDesc: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+  },
+  webNotifRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#eef2f7",
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  webNotifLeft: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  webNotifAvatar: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: "#0f172a",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  webNotifAvatarText: {
+    color: "#ffffff",
+    fontSize: 10,
+    fontWeight: "900",
+  },
+  webNotifTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  webNotifName: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  webNotifMeta: {
+    marginTop: 2,
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textMutedDemo,
+    textTransform: "uppercase",
+  },
+  webNotifRight: {
+    alignItems: "flex-end",
+    gap: 6,
+  },
+  webNotifAmount: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.3,
+  },
+  webNotifActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  webNotifRejectBtn: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  webNotifRejectBtnText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textSecondary,
+    textTransform: "uppercase",
+  },
+  webNotifPayBtn: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#0f172a",
+    backgroundColor: "#0f172a",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  webNotifPayBtnText: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#ffffff",
+    textTransform: "uppercase",
+  },
+  webNotifStatus: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: Theme.textMutedDemo,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  webInviteRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    backgroundColor: "#ffffff",
+  },
+  webInviteCode: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: "#0f172a",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  webInviteCodeText: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#ffffff",
+  },
+  webInviteTextWrap: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  webInviteName: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
+  },
+  webInviteType: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textMutedDemo,
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+  },
+  webInviteActionsInline: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  webInviteGhostBtn: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  webInviteGhostBtnText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textSecondary,
+    textTransform: "uppercase",
+  },
+  webInvitePrimaryBtn: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#0f172a",
+    backgroundColor: "#0f172a",
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  webInvitePrimaryBtnText: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#ffffff",
+    textTransform: "uppercase",
+  },
+  webPopoverEmpty: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textMutedDemo,
+    textAlign: "center",
+    paddingVertical: 12,
+  },
+  webPopoverFooterBtn: {
+    borderTopWidth: 1,
+    borderTopColor: "#f1f5f9",
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  webPopoverFooterBtnText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#0f172a",
+    textTransform: "uppercase",
+    letterSpacing: 0.9,
   },
   webBellBadge: {
     position: "absolute",
