@@ -17,8 +17,9 @@ import { OpsAgentBotSvg } from '@/features/ops-agent/components/OpsAgentBotSvg';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 
-const FAB_SIZE = 52;
-const BOT_ICON_SIZE = 28;
+const FAB_SIZE = 46;
+const BOT_ICON_SIZE = 22;
+const CHAT_STACK_OFFSET = FAB_SIZE + 14;
 
 /** Show floating Ops Agent only on home (tab list) pages, not on Ops Agent or detail pages. */
 function useShowFloatingOpsAgent(): boolean {
@@ -41,10 +42,10 @@ export function FloatingOpsAgentButton() {
 
   useEffect(() => {
     if (!show) return;
-    // Gentle breathing/pulse: scale 1 -> 1.08 -> 1 every 2s
+    // Keep a subtle idle feel without large perceived size changes.
     pulse.value = withRepeat(
       withSequence(
-        withTiming(1.08, { duration: 1000 }),
+        withTiming(1.03, { duration: 1000 }),
         withTiming(1, { duration: 1000 })
       ),
       -1,
@@ -61,7 +62,8 @@ export function FloatingOpsAgentButton() {
   const bottom =
     Layout.demoTabBarScrollBottomInset +
     insets.bottom +
-    Layout.tabBarBottomPaddingMin;
+    Layout.tabBarBottomPaddingMin +
+    CHAT_STACK_OFFSET;
 
   return (
     <View
@@ -107,16 +109,16 @@ const styles = StyleSheet.create({
     width: FAB_SIZE,
     height: FAB_SIZE,
     borderRadius: FAB_SIZE / 2,
-    backgroundColor: Theme.fabBackground,
-    borderWidth: 2,
+    backgroundColor: "#1e40af",
+    borderWidth: 1.5,
     borderColor: Theme.borderOnDark,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: Theme.fabBackground,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    elevation: 8,
+    shadowColor: "#1e40af",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 6,
   },
   iconWrap: {
     alignItems: 'center',

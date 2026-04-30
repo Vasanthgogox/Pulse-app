@@ -17,7 +17,7 @@ export function makeQueryClient() {
         gcTime: GC_TIME_MS,
         retry: RETRY,
         retryDelay: RETRY_DELAY_MS,
-        refetchOnWindowFocus: true,
+        refetchOnWindowFocus: false,
         refetchOnReconnect: true,
       },
       mutations: {

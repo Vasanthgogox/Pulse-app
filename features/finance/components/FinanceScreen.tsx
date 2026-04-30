@@ -85,6 +85,8 @@ import { FinanceTabBody } from "./FinanceTabBody";
 import type { FinancialRowData } from "./FinancialRow";
 import type { EntityListFilter } from "./TreasurySummaryCard";
 
+const CHAT_FAB_STACK_OFFSET = 60;
+
 function createReportRow({
   id,
   organizationId,
@@ -1584,9 +1586,9 @@ export function FinanceScreen() {
               styles.fabAbsoluteWrap,
               {
                 bottom:
-                  Layout.demoTabBarScrollBottomInset +
                   insets.bottom +
-                  Layout.tabBarBottomPaddingMin,
+                  Layout.tabBarBottomPaddingMin +
+                  CHAT_FAB_STACK_OFFSET,
               },
             ]}
           >

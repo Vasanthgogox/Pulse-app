@@ -789,7 +789,20 @@ export function onAuthStateChange(
 ): () => void {
   const {
     data: { subscription },
-  } = supabase().auth.onAuthStateChange((_event, session) => {
+  } = supabase().auth.onAuthStateChange((event, session) => {
+    // TOKEN_REFRESHED and INITIAL_SESSION are internal SDK lifecycle events.
+    // The SDK manages token rotation silently; propagating them triggers a full
+    // DB profile re-verification on every tab focus / cold-start subscription
+    // fire, causing unnecessary re-renders and the "reload to Trips" symptom.
+    // USER_UPDATED fires after updateUser() which already calls refreshSession()
+    // in the callers — no need to double-process here.
+    if (
+      event === 'TOKEN_REFRESHED' ||
+      event === 'INITIAL_SESSION' ||
+      event === 'USER_UPDATED'
+    ) {
+      return;
+    }
     if (!session?.user) {
       callback(null);
       return;

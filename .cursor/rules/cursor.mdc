@@ -1,0 +1,26 @@
+# Supabase Remote Query Default
+
+## Default Database Query Behavior
+
+When the user asks to query data (for example: "query anything", "fetch table", "show rows", "count rows", "list records"), always use Supabase CLI against the linked remote database first:
+
+`supabase db query "<SQL>" --linked -o table`
+
+Use other output formats when appropriate:
+- `-o json` for structured outputs or counts
+- `-o csv` for exports
+
+### Examples
+
+```bash
+supabase db query "select now();" --linked -o table
+supabase db query "select * from public.listings order by created_at desc limit 20;" --linked -o table
+supabase db query "select count(*) from public.listings;" --linked -o json
+supabase db query --linked -f query.sql -o csv
+```
+
+## Operational Notes
+
+- Prefer `--linked` remote DB for query requests unless the user explicitly asks for local DB.
+- If shell env loading fails, still run `supabase db query ... --linked` directly when project linking is already configured.
+- Before responding with table/listing answers, run the query and return results based on actual command output.
