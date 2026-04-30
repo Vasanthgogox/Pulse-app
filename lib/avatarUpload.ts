@@ -19,6 +19,8 @@ const MAX_SIZE = 512;
 const QUALITY = 0.85;
 /** Signed URL expiry (seconds). Refresh before expiry when displaying. */
 const SIGNED_URL_EXPIRY_SEC = 3600;
+const SIGNED_URL_CACHE_MS = 55 * 60 * 1000;
+const signedAvatarUrlCache = new Map<string, { url: string; expiresAt: number }>();
 
 function base64ToUint8Array(base64: string): Uint8Array {
   const normalized = base64.replace(/\s/g, '');
@@ -229,11 +231,16 @@ export function resolveAvatarPublicUrl(path: string | null | undefined): string 
  * Accepts path as "userId" or "userId/avatar.jpg".
  */
 export async function getSignedAvatarUrl(path: string): Promise<string | null> {
+  const cacheKey = path.trim();
+  if (cacheKey) {
+    const cached = signedAvatarUrlCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.url;
+    }
+  }
+
   const candidates = await buildAvatarPathCandidates(path);
   if (candidates.length === 0) return null;
-
-  const withCacheBust = (url: string): string =>
-    `${url}${url.includes('?') ? '&' : '?'}cb=${Date.now()}`;
 
   for (const candidate of candidates) {
     const primary = await supabase()
@@ -241,7 +248,14 @@ export async function getSignedAvatarUrl(path: string): Promise<string | null> {
       .from(AVATAR_BUCKET)
       .createSignedUrl(candidate, SIGNED_URL_EXPIRY_SEC);
     if (!primary.error && primary.data?.signedUrl) {
-      return withCacheBust(primary.data.signedUrl);
+      const url = primary.data.signedUrl;
+      if (cacheKey) {
+        signedAvatarUrlCache.set(cacheKey, {
+          url,
+          expiresAt: Date.now() + SIGNED_URL_CACHE_MS,
+        });
+      }
+      return url;
     }
 
     // If bucket is public or signed URL policy is unavailable, try public URL.
@@ -249,7 +263,9 @@ export async function getSignedAvatarUrl(path: string): Promise<string | null> {
       .storage
       .from(AVATAR_BUCKET)
       .getPublicUrl(candidate);
-    if (primaryPublic.data?.publicUrl) return withCacheBust(primaryPublic.data.publicUrl);
+    if (primaryPublic.data?.publicUrl) {
+      return primaryPublic.data.publicUrl;
+    }
   }
 
   // Backward compatibility: old avatars may still be in the previous bucket.
@@ -259,13 +275,22 @@ export async function getSignedAvatarUrl(path: string): Promise<string | null> {
       .from(LEGACY_AVATAR_BUCKET)
       .createSignedUrl(candidate, SIGNED_URL_EXPIRY_SEC);
     if (!legacy.error && legacy.data?.signedUrl) {
-      return withCacheBust(legacy.data.signedUrl);
+      const url = legacy.data.signedUrl;
+      if (cacheKey) {
+        signedAvatarUrlCache.set(cacheKey, {
+          url,
+          expiresAt: Date.now() + SIGNED_URL_CACHE_MS,
+        });
+      }
+      return url;
     }
     const legacyPublic = supabase()
       .storage
       .from(LEGACY_AVATAR_BUCKET)
       .getPublicUrl(candidate);
-    if (legacyPublic.data?.publicUrl) return withCacheBust(legacyPublic.data.publicUrl);
+    if (legacyPublic.data?.publicUrl) {
+      return legacyPublic.data.publicUrl;
+    }
   }
 
   return null;
