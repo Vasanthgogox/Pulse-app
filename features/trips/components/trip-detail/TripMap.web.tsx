@@ -358,6 +358,22 @@ export function TripMap({
       map.fitBounds(boundsCoords as any, { padding: [50, 50], maxZoom: 15 });
 
       map.whenReady(() => {
+        const kickLayout = () => {
+          try {
+            map.invalidateSize(true);
+          } catch {
+            /* ignore */
+          }
+        };
+        kickLayout();
+        requestAnimationFrame(kickLayout);
+        setTimeout(kickLayout, 100);
+        setTimeout(kickLayout, 400);
+        if (typeof ResizeObserver !== 'undefined' && mapRef.current) {
+          const ro = new ResizeObserver(() => kickLayout());
+          ro.observe(mapRef.current);
+          (map as any)._tripMapResizeObserver = ro;
+        }
         setTimeout(() => setIsLoading(false), 800);
       });
     } catch {
@@ -376,8 +392,21 @@ export function TripMap({
     }
     initializeMap();
     return () => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
+      const m = mapInstanceRef.current;
+      if (m) {
+        const ro = (m as any)._tripMapResizeObserver as ResizeObserver | undefined;
+        if (ro && mapRef.current) {
+          try {
+            ro.disconnect();
+          } catch {
+            /* ignore */
+          }
+        }
+        try {
+          m.remove();
+        } catch {
+          /* ignore */
+        }
         mapInstanceRef.current = null;
       }
     };

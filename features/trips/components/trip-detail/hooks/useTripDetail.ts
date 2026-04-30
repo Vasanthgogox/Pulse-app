@@ -698,6 +698,255 @@ export function useTripDetail({
     });
   }, [tripId]);
 
+  /** Resolve audit row IDs to labels (web + shared timeline). Native screen had this inline; hook must own it for `.web.tsx`. */
+  useEffect(() => {
+    const orgId = trip?.organization_id;
+    if (!orgId || assignmentAuditRows.length === 0) {
+      setAssignmentDriverNames({});
+      setAssignmentVehicleLabels({});
+      return;
+    }
+    const driverIds = new Set<string>();
+    const vehicleIds = new Set<string>();
+    for (const row of assignmentAuditRows) {
+      if (row.driver_id_prev) driverIds.add(row.driver_id_prev);
+      if (row.driver_id_new) driverIds.add(row.driver_id_new);
+      if (row.vehicle_id_prev) vehicleIds.add(row.vehicle_id_prev);
+      if (row.vehicle_id_new) vehicleIds.add(row.vehicle_id_new);
+    }
+    let cancelled = false;
+    const resolveDriverDisplay = async (id: string): Promise<string> => {
+      const res = await getDriverById(orgId, id);
+      if (res.driver) return res.driver.name || res.driver.phone || id;
+      if (trip.supplier_id) {
+        const sup = await getSupplierById(orgId, trip.supplier_id);
+        const linkedOrgId = sup.supplier?.linked_organization_id;
+        if (linkedOrgId) {
+          const res2 = await getDriverById(linkedOrgId, id);
+          if (res2.driver) return res2.driver.name || res2.driver.phone || id;
+        }
+      }
+      const viewerOrgId = currentOrganization?.id;
+      if (viewerOrgId && viewerOrgId !== orgId) {
+        const res3 = await getDriverById(viewerOrgId, id);
+        if (res3.driver) return res3.driver.name || res3.driver.phone || id;
+      }
+      return id;
+    };
+    const resolveVehicleDisplay = async (id: string): Promise<string> => {
+      const res = await getVehicleById(orgId, id);
+      if (res.vehicle) {
+        return (
+          [res.vehicle.vehicle_number, res.vehicle.vehicle_type]
+            .filter(Boolean)
+            .join(" · ") || id
+        );
+      }
+      if (trip.supplier_id) {
+        const sup = await getSupplierById(orgId, trip.supplier_id);
+        const linkedOrgId = sup.supplier?.linked_organization_id;
+        if (linkedOrgId) {
+          const res2 = await getVehicleById(linkedOrgId, id);
+          if (res2.vehicle) {
+            return (
+              [res2.vehicle.vehicle_number, res2.vehicle.vehicle_type]
+                .filter(Boolean)
+                .join(" · ") || id
+            );
+          }
+        }
+      }
+      return id;
+    };
+    const driverPromises = Array.from(driverIds).map(async (id) => ({
+      id,
+      name: await resolveDriverDisplay(id),
+    }));
+    const vehiclePromises = Array.from(vehicleIds).map(async (id) => ({
+      id,
+      label: await resolveVehicleDisplay(id),
+    }));
+    Promise.all([Promise.all(driverPromises), Promise.all(vehiclePromises)])
+      .then(([driverResults, vehicleResults]) => {
+        if (cancelled) return;
+        const drivers: Record<string, string> = {};
+        const vehicles: Record<string, string> = {};
+        for (const r of driverResults) drivers[r.id] = r.name;
+        for (const r of vehicleResults) vehicles[r.id] = r.label;
+        setAssignmentDriverNames(drivers);
+        setAssignmentVehicleLabels(vehicles);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAssignmentDriverNames({});
+          setAssignmentVehicleLabels({});
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    trip?.organization_id,
+    trip?.supplier_id,
+    assignmentAuditRows,
+    currentOrganization?.id,
+  ]);
+
+  /** Primary driver card + vehicle label (matches native TripDetailScreen; aggregate drivers may live on supplier org). */
+  useEffect(() => {
+    if (!trip?.organization_id) {
+      setDriverName(null);
+      setDriverAvatarUri(null);
+      setVehicleLabel(null);
+      setVehicleDocs(null);
+      setDriverLinked(false);
+      return;
+    }
+    const fallbackDriverName = (trip.driver_display_name ?? "").trim() || null;
+    let cancelled = false;
+    const orgId = trip.organization_id;
+    const resolveDriverAvatarUri = async (
+      driverId: string,
+      candidateUrl?: string | null,
+    ) => {
+      let rawAvatar = (candidateUrl ?? "").trim();
+      if (!rawAvatar) {
+        const profileRes = await getDriverProfileDisplay(driverId);
+        rawAvatar = (profileRes.profile?.avatarUrl ?? "").trim();
+      }
+      if (!rawAvatar) return null;
+      if (rawAvatar.startsWith("http://") || rawAvatar.startsWith("https://")) {
+        return rawAvatar;
+      }
+      const signed = await getSignedAvatarUrl(rawAvatar);
+      return signed ?? null;
+    };
+    if (trip.driver_id) {
+      setDriverName(fallbackDriverName);
+      setDriverAvatarUri(null);
+      setDriverLinked(false);
+      getDriverById(orgId, trip.driver_id).then((res) => {
+        if (cancelled) return;
+        const d = res.driver;
+        if (d) {
+          const fromDriver = (d.name || d.phone || "").trim() || null;
+          setDriverName(fromDriver ?? fallbackDriverName ?? "—");
+          setDriverLinked(!!d.user_id);
+          void resolveDriverAvatarUri(trip.driver_id!, d.avatar_url ?? null).then(
+            (uri) => {
+              if (!cancelled) setDriverAvatarUri(uri);
+            },
+          );
+          return;
+        }
+        const trySupplierOrgThenViewerOrg = () => {
+          if (!trip.supplier_id) {
+            tryViewerOrg();
+            return;
+          }
+          getSupplierById(orgId, trip.supplier_id).then((r) => {
+            if (cancelled) return;
+            const linkedOrgId = r.supplier?.linked_organization_id;
+            if (linkedOrgId) {
+              getDriverById(linkedOrgId, trip.driver_id!).then((res2) => {
+                if (cancelled) return;
+                const d2 = res2.driver;
+                if (d2) {
+                  const fromDriver2 = (d2.name || d2.phone || "").trim() || null;
+                  setDriverName(fromDriver2 ?? fallbackDriverName ?? "—");
+                  setDriverLinked(!!d2.user_id);
+                  void resolveDriverAvatarUri(trip.driver_id!, d2.avatar_url ?? null).then(
+                    (uri) => {
+                      if (!cancelled) setDriverAvatarUri(uri);
+                    },
+                  );
+                  return;
+                }
+                tryViewerOrg();
+              });
+            } else {
+              tryViewerOrg();
+            }
+          });
+        };
+        const tryViewerOrg = () => {
+          const viewerOrgId = currentOrganization?.id;
+          if (!viewerOrgId || viewerOrgId === orgId) {
+            setDriverName(fallbackDriverName ?? "—");
+            void resolveDriverAvatarUri(trip.driver_id!, null).then((uri) => {
+              if (!cancelled) setDriverAvatarUri(uri);
+            });
+            setDriverLinked(false);
+            return;
+          }
+          getDriverById(viewerOrgId, trip.driver_id!).then((res3) => {
+            if (cancelled) return;
+            const d3 = res3.driver;
+            const fromDriver3 = d3
+              ? (d3.name || d3.phone || "").trim() || null
+              : null;
+            setDriverName(fromDriver3 ?? fallbackDriverName ?? "—");
+            void resolveDriverAvatarUri(trip.driver_id!, d3?.avatar_url ?? null).then(
+              (uri) => {
+                if (!cancelled) setDriverAvatarUri(uri);
+              },
+            );
+            setDriverLinked(!!d3?.user_id);
+          });
+        };
+        trySupplierOrgThenViewerOrg();
+      });
+    } else {
+      setDriverName(fallbackDriverName);
+      setDriverAvatarUri(null);
+      setDriverLinked(false);
+    }
+    const aggregateVehicleDisplay = (trip.vehicle_display_number ?? "").trim();
+    if (isAggregateTrip(trip) && aggregateVehicleDisplay) {
+      setVehicleLabel(formatIndianVehicleNumber(aggregateVehicleDisplay));
+      setVehicleDocs(null);
+    } else if (trip.vehicle_id) {
+      const applyVehicleRow = (v: NonNullable<Awaited<ReturnType<typeof getVehicleById>>["vehicle"]>) => {
+        const parts = [v.vehicle_number];
+        if (v.vehicle_type) parts.push(v.vehicle_type);
+        setVehicleLabel(parts.join(" · "));
+        setVehicleDocs(v.documents ?? null);
+      };
+      getVehicleById(orgId, trip.vehicle_id).then((res) => {
+        if (cancelled) return;
+        if (res.vehicle) {
+          applyVehicleRow(res.vehicle);
+          return;
+        }
+        if (!trip.supplier_id) return;
+        getSupplierById(orgId, trip.supplier_id).then((r) => {
+          if (cancelled) return;
+          const linkedOrgId = r.supplier?.linked_organization_id;
+          if (!linkedOrgId) return;
+          getVehicleById(linkedOrgId, trip.vehicle_id!).then((res2) => {
+            if (cancelled || !res2.vehicle) return;
+            applyVehicleRow(res2.vehicle);
+          });
+        });
+      });
+    } else if (trip.vehicle_display_number?.trim()) {
+      setVehicleLabel(
+        formatIndianVehicleNumber(trip.vehicle_display_number.trim()),
+      );
+      setVehicleDocs(null);
+    } else {
+      setVehicleLabel(null);
+      setVehicleDocs(null);
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [trip, currentOrganization?.id]);
+
+  useEffect(() => {
+    setDisplayVehicleFromInput("");
+  }, [tripId]);
+
   const loadTripOtp = useCallback(() => {
     const hasDriverAssigned = !!trip?.driver_id;
     const hasVehicleAssigned =

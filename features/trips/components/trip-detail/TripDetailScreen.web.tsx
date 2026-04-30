@@ -17,7 +17,7 @@ import { getDocumentViewUrl } from "@/services/tripDocumentsService";
 import Feather from "@expo/vector-icons/Feather";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Image,
@@ -124,6 +124,60 @@ function splitLocationPrimarySecondary(location: string | null | undefined): {
   return { primary, secondary };
 }
 
+/** Straight-line km between coordinates; ~×1.3 used as rough road distance when DB/map omit km. */
+function haversineKmBetween(
+  a: { latitude: number; longitude: number },
+  b: { latitude: number; longitude: number },
+): number | null {
+  const R = 6371;
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  if (
+    !Number.isFinite(a.latitude) ||
+    !Number.isFinite(a.longitude) ||
+    !Number.isFinite(b.latitude) ||
+    !Number.isFinite(b.longitude)
+  )
+    return null;
+  const dLat = toRad(b.latitude - a.latitude);
+  const dLng = toRad(b.longitude - a.longitude);
+  const lat1 = toRad(a.latitude);
+  const lat2 = toRad(b.latitude);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  const km = R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+  return Number.isFinite(km) && km > 0 ? km : null;
+}
+
+const DISTANCE_CITY_COORDS: Record<string, [number, number]> = {
+  mumbai: [19.076, 72.8777],
+  delhi: [28.6139, 77.209],
+  bangalore: [12.9716, 77.5946],
+  bengaluru: [12.9716, 77.5946],
+  chennai: [13.0827, 80.2707],
+  kolkata: [22.5726, 88.3639],
+  hyderabad: [17.385, 78.4867],
+  ahmedabad: [23.0225, 72.5714],
+  pune: [18.5204, 73.8567],
+  shimla: [31.1048, 77.1734],
+};
+
+function inferCoordsFromLocationName(
+  location: string | null | undefined,
+): { latitude: number; longitude: number } | null {
+  const raw = (location ?? "").trim().toLowerCase();
+  if (!raw) return null;
+  const firstPart = raw.split(",")[0]?.trim() ?? raw;
+  const direct = DISTANCE_CITY_COORDS[firstPart];
+  if (direct) return { latitude: direct[0], longitude: direct[1] };
+  for (const [city, coords] of Object.entries(DISTANCE_CITY_COORDS)) {
+    if (firstPart.includes(city) || raw.includes(city)) {
+      return { latitude: coords[0], longitude: coords[1] };
+    }
+  }
+  return null;
+}
+
 export default function TripDetailScreen({
   tripId,
   entryContext,
@@ -168,6 +222,49 @@ export default function TripDetailScreen({
     clientNameFromContext,
     onBack,
   });
+
+  const [mapRouteDistanceKm, setMapRouteDistanceKm] = useState<string | null>(null);
+
+  useEffect(() => {
+    setMapRouteDistanceKm(null);
+  }, [tripId]);
+
+  const resolvedDistanceLabel = useMemo(() => {
+    const tr = detail.trip;
+    if (!tr) return null;
+    const raw = tr.distance;
+    if (raw != null && raw !== "") {
+      const n = typeof raw === "number" ? raw : parseFloat(String(raw));
+      if (Number.isFinite(n) && n >= 0) {
+        const s =
+          Math.abs(n - Math.round(n)) < 1e-9 ? String(Math.round(n)) : n.toFixed(1);
+        return `${s} km`;
+      }
+    }
+    const mapKm = mapRouteDistanceKm?.trim();
+    if (mapKm) return `${mapKm} km`;
+    const o = detail.trackingMapOriginCoordinate;
+    const d = detail.trackingMapDestinationCoordinate;
+    const crow = o && d ? haversineKmBetween(o, d) : null;
+    if (crow != null)
+      return `≈ ${(crow * 1.3).toFixed(1)} km`;
+    const inferredOrigin = inferCoordsFromLocationName(tr.pickup_area);
+    const inferredDestination = inferCoordsFromLocationName(tr.drop_location);
+    const inferredKm =
+      inferredOrigin && inferredDestination
+        ? haversineKmBetween(inferredOrigin, inferredDestination)
+        : null;
+    if (inferredKm != null) return `≈ ${(inferredKm * 1.3).toFixed(1)} km`;
+    return null;
+  }, [
+    detail.trip,
+    detail.trackingMapOriginCoordinate,
+    detail.trackingMapDestinationCoordinate,
+    mapRouteDistanceKm,
+  ]);
+
+  const timelineDistanceKm =
+    resolvedDistanceLabel?.replace(/^≈\s*/, "").replace(/\s*km$/i, "").trim() || undefined;
 
   if (detail.loading && !detail.trip) {
     return <CenteredLoadingView message="Loading trip…" />;
@@ -735,7 +832,11 @@ export default function TripDetailScreen({
                   </View>
                   <View>
                     <Text style={styles.refHeroMetaLabel}>Manifest range</Text>
-                    <Text style={styles.refHeroMetaValue}>{trip.distance ? `${trip.distance} KM` : "—"}</Text>
+                    <Text style={styles.refHeroMetaValue}>
+                      {resolvedDistanceLabel
+                        ? resolvedDistanceLabel.replace(/\s*km$/i, " KM")
+                        : "—"}
+                    </Text>
                   </View>
                 </View>
                 <View style={styles.refHeroMetaDivider} />
@@ -1390,7 +1491,7 @@ export default function TripDetailScreen({
               <View style={dStyles.heroStats}>
                 <View style={dStyles.statBox}>
                   <Text style={dStyles.statLabel}>DISTANCE</Text>
-                  <Text style={dStyles.statValue}>{trip.distance != null ? `${trip.distance} km` : '—'}</Text>
+                  <Text style={dStyles.statValue}>{resolvedDistanceLabel ?? "—"}</Text>
                 </View>
                 <View style={dStyles.statDivider} />
                 <View style={dStyles.statBox}>
@@ -1415,12 +1516,13 @@ export default function TripDetailScreen({
                 </View>
                 <View style={dStyles.telemetryWrap}>
                   <TripMap
-                    source={trip.pickup_area ?? undefined}
-                    destination={trip.drop_location ?? undefined}
+                    source={(trip.pickup_area ?? "").trim() || undefined}
+                    destination={(trip.drop_location ?? "").trim() || undefined}
                     sourceCoords={detail.trackingMapOriginCoordinate ?? undefined}
                     destCoords={detail.trackingMapDestinationCoordinate ?? undefined}
                     truckLocation={detail.driverLocation ?? undefined}
                     height={mapHeight}
+                    onDistanceCalculated={setMapRouteDistanceKm}
                   />
                   <View style={dStyles.telemetryBar}>
                     <FontAwesome name="compass" size={14} color="#60a5fa" style={{ marginRight: 8 }} />
@@ -1756,7 +1858,7 @@ export default function TripDetailScreen({
                   stageLocations={stageLocations}
                   lastUpdatedAt={trip.updated_at}
                   canAdvance={detail.canAssign}
-                  distanceKm={trip.distance ? String(trip.distance) : undefined}
+                  distanceKm={timelineDistanceKm}
                   driverSummaryText={driverSummaryText}
                   onOpenMaps={
                     detail.trackingMapOriginCoordinate &&
@@ -1767,12 +1869,13 @@ export default function TripDetailScreen({
                   mapPreview={
                     <View style={styles.telemetryWrap}>
                       <TripMap
-                        source={trip.pickup_area ?? undefined}
-                        destination={trip.drop_location ?? undefined}
+                        source={(trip.pickup_area ?? "").trim() || undefined}
+                        destination={(trip.drop_location ?? "").trim() || undefined}
                         sourceCoords={detail.trackingMapOriginCoordinate ?? undefined}
                         destCoords={detail.trackingMapDestinationCoordinate ?? undefined}
                         truckLocation={detail.driverLocation ?? undefined}
                         height={520}
+                        onDistanceCalculated={setMapRouteDistanceKm}
                       />
                       <View style={styles.telemetryOverlay}>
                         <FontAwesome name="compass" size={20} color="#60a5fa" />
