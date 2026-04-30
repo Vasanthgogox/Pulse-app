@@ -93,6 +93,8 @@ type DateFilter =
   | "this_month"
   | "custom";
 
+const CHAT_FAB_STACK_OFFSET = 60;
+
 type TripsListLayout = "cards" | "table";
 type HistoryTripMetricId =
   | "due_to_get"
@@ -2386,9 +2388,9 @@ export default function TripsScreen() {
             styles.fabWrap,
             {
               bottom:
-                Layout.demoTabBarScrollBottomInset +
                 insets.bottom +
-                Layout.tabBarBottomPaddingMin,
+                Layout.tabBarBottomPaddingMin +
+                CHAT_FAB_STACK_OFFSET,
             },
           ]}
         >
