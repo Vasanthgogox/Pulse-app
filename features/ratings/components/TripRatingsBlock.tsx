@@ -1678,7 +1678,7 @@ export function TripRatingsBlock({
                   </TouchableOpacity>
                 ))}
               </View>
-              <View style={styles.tagsWrapPulse}>
+              <View style={[styles.tagsWrapPulse, styles.clientTagsWrapPulse]}>
                 {CLIENT_RATING_TAGS.map((tag) => {
                   const selected = clientTags.includes(tag.id);
                   return (
@@ -1687,6 +1687,7 @@ export function TripRatingsBlock({
                       onPress={() => handleClientTagToggle(tag.id)}
                       style={[ 
                         styles.tagChipPulse,
+                        styles.clientTagChipPulse,
                         selected ? styles.tagChipPulseActive : styles.tagChipPulseIdle,
                       ]}
                       activeOpacity={0.85}
@@ -1698,6 +1699,7 @@ export function TripRatingsBlock({
                             ? styles.tagChipTextPulseActive
                             : styles.tagChipTextPulseIdle,
                         ]}
+                        numberOfLines={1}
                       >
                         {tag.label}
                       </Text>
@@ -2693,11 +2695,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 10,
   },
+  clientTagsWrapPulse: {
+    width: '100%',
+    justifyContent: 'space-between',
+    rowGap: 10,
+    columnGap: 0,
+  },
   tagChipPulse: {
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderWidth: 1,
+  },
+  clientTagChipPulse: {
+    width: '48%',
+    minHeight: 44,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tagChipPulseIdle: {
     backgroundColor: Theme.surface,

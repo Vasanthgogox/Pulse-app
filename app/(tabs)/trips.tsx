@@ -143,7 +143,8 @@ export default function TripsScreen() {
   const isLargeScreen = Platform.OS === "web" && width >= 1280;
   const isCompactWeb = Platform.OS === "web" && width < 1180;
   const isMobile = width < 560;
-  const isMobileViewport = width < 560;
+  // Use mobile layout behavior for narrow web widths as well.
+  const isMobileViewport = width < 820;
   const tripsFabSize = isMobile ? TRIPS_FAB_SIZE_MOBILE : TRIPS_FAB_SIZE_DESKTOP;
   const insets = useSafeAreaInsets();
   const webChatFabBaseBottom =
@@ -186,6 +187,13 @@ export default function TripsScreen() {
   const [listLayout, setListLayout] = useState<TripsListLayout>(() =>
     Platform.OS === "web" && !isCompactWeb ? "table" : "cards",
   );
+  useEffect(() => {
+    if (isMobileViewport) setListLayout("cards");
+  }, [isMobileViewport]);
+  /** Mobile: table is hidden; always use card list + hub toolbar. */
+  const effectiveListLayout: TripsListLayout = isMobileViewport
+    ? "cards"
+    : listLayout;
 
   const capabilities = getCapabilitiesFromProfile(
     profile
@@ -557,7 +565,7 @@ export default function TripsScreen() {
   const tripsTableResetKey = useMemo(
     () =>
       [
-        listLayout,
+        effectiveListLayout,
         filtered.length,
         searchQuery,
         tripFilter,
@@ -573,7 +581,7 @@ export default function TripsScreen() {
         customDateTo ?? "",
       ].join("|"),
     [
-      listLayout,
+      effectiveListLayout,
       filtered.length,
       searchQuery,
       tripFilter,
@@ -601,10 +609,9 @@ export default function TripsScreen() {
   );
   const tripsTablePageSafe = Math.min(tripsTablePage, tripsTableTotalPages - 1);
   const tripsTableVisible = useMemo(() => {
-    if (listLayout !== "table") return filtered;
     const start = tripsTablePageSafe * tripsTablePageSize;
     return filtered.slice(start, start + tripsTablePageSize);
-  }, [filtered, listLayout, tripsTablePageSafe, tripsTablePageSize]);
+  }, [filtered, tripsTablePageSafe, tripsTablePageSize]);
 
   useEffect(() => {
     setTripsTablePage(0);
@@ -972,6 +979,56 @@ export default function TripsScreen() {
           hint: tr("tripMetricHintDeliveredDocsPending"),
         },
       }) satisfies Record<TripMetricId, { title: string; hint: string }>,
+    [tr],
+  );
+  const tripMetricVisual = useMemo(
+    () =>
+      ({
+        unassigned: {
+          icon: "user-times",
+          gradient: [Theme.darkBackground, "#0f172a"] as [string, string],
+          accent: "#94A3B8",
+          micro: tr("tripMetricHintUnassigned"),
+        },
+        assigned: {
+          icon: "check-circle",
+          gradient: [Theme.darkBackground, "#14223f"] as [string, string],
+          accent: Theme.primary,
+          micro: tr("tripMetricHintAssigned"),
+        },
+        loading: {
+          icon: "upload",
+          gradient: [Theme.darkBackground, "#162746"] as [string, string],
+          accent: "#F59E0B",
+          micro: tr("tripMetricHintLoading"),
+        },
+        in_transit: {
+          icon: "paper-plane",
+          gradient: [Theme.darkBackground, "#18304f"] as [string, string],
+          accent: "#38BDF8",
+          micro: tr("tripMetricHintInTransit"),
+        },
+        unloading: {
+          icon: "map-marker",
+          gradient: [Theme.darkBackground, "#1b3554"] as [string, string],
+          accent: "#A78BFA",
+          micro: tr("tripMetricHintUnloading"),
+        },
+        delivered_docs_pending: {
+          icon: "flag-checkered",
+          gradient: [Theme.darkBackground, "#1f3b5c"] as [string, string],
+          accent: "#34D399",
+          micro: tr("tripMetricHintDeliveredDocsPending"),
+        },
+      }) satisfies Record<
+        TripMetricId,
+        {
+          icon: React.ComponentProps<typeof FontAwesome>["name"];
+          gradient: [string, string];
+          accent: string;
+          micro: string;
+        }
+      >,
     [tr],
   );
 
@@ -1445,7 +1502,7 @@ export default function TripsScreen() {
           {...tabBarScrollProps}
           onScroll={handleTripsMainScroll}
           scrollEventThrottle={
-            listLayout === "table"
+            effectiveListLayout === "table"
               ? 100
               : (tabBarScrollProps.scrollEventThrottle ?? 64)
           }
@@ -1459,7 +1516,7 @@ export default function TripsScreen() {
         >
           <View style={styles.tripsBodyFiltersBleed}>
             <View style={styles.tripsInlineFilterPanel}>
-              {Platform.OS !== "web" ? (
+              {isMobileViewport ? (
                 <>
                   <ScrollView
                     horizontal
@@ -1529,59 +1586,6 @@ export default function TripsScreen() {
                     contentContainerStyle={styles.tripsToolbarScrollContent}
                     style={styles.tripsToolbarScroll}
                   >
-              <View
-                      style={styles.tripsLayoutToggle}
-                      accessibilityRole="tablist"
-                    >
-                      <TouchableOpacity
-                style={[
-                          styles.tripsLayoutToggleBtn,
-                          listLayout === "cards" &&
-                            styles.tripsLayoutToggleBtnActive,
-                        ]}
-                        onPress={() => setListLayout("cards")}
-                        activeOpacity={0.85}
-                        accessibilityRole="tab"
-                        accessibilityState={{
-                          selected: listLayout === "cards",
-                        }}
-                        accessibilityLabel={tr("tripsViewCards")}
-                      >
-                        <FontAwesome
-                          name="th-large"
-                          size={14}
-                          color={
-                            listLayout === "cards"
-                              ? Theme.textOnDark
-                              : Theme.textSecondary
-                          }
-                        />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[
-                          styles.tripsLayoutToggleBtn,
-                          listLayout === "table" &&
-                            styles.tripsLayoutToggleBtnActive,
-                        ]}
-                        onPress={() => setListLayout("table")}
-                        activeOpacity={0.85}
-                        accessibilityRole="tab"
-                        accessibilityState={{
-                          selected: listLayout === "table",
-                        }}
-                        accessibilityLabel={tr("tripsViewTable")}
-                      >
-                        <FontAwesome
-                          name="list"
-                          size={14}
-                          color={
-                            listLayout === "table"
-                              ? Theme.textOnDark
-                              : Theme.textSecondary
-                          }
-                        />
-                      </TouchableOpacity>
-                    </View>
                     {(
                       [
                         { id: "all" as const, label: tr("all") },
@@ -1658,7 +1662,7 @@ export default function TripsScreen() {
                       isCompactWeb && styles.tripsBottomHeaderRowWebCompact,
                     ]}
                   >
-                    {!isMobile ? (
+                    {!isMobileViewport ? (
                       <View
                         style={[
                           styles.tripsTabClusterWeb,
@@ -1707,7 +1711,7 @@ export default function TripsScreen() {
                         <View
                           style={[
                             styles.tripsMainTabsPillWrap,
-                            isMobile && styles.tripsMainTabsPillWrapMobile,
+                            isMobileViewport && styles.tripsMainTabsPillWrapMobile,
                           ]}
                         >
                           {mainTabs.map((tab) => (
@@ -1715,7 +1719,7 @@ export default function TripsScreen() {
                               key={tab.id}
                               style={[
                                 styles.tripsMainPillWeb,
-                                isMobile && styles.tripsMainPillWebMobile,
+                                isMobileViewport && styles.tripsMainPillWebMobile,
                                 tab.isActive && styles.tripsMainPillActiveWeb,
                               ]}
                               onPress={tab.onPress}
@@ -1735,7 +1739,7 @@ export default function TripsScreen() {
                             </TouchableOpacity>
                           ))}
                         </View>
-                        {!isMobile ? (
+                        {!isMobileViewport ? (
                           <View
                             style={styles.tripsLayoutToggle}
                             accessibilityRole="tablist"
@@ -1797,23 +1801,23 @@ export default function TripsScreen() {
               )}
             </View>
             {tripFilter === "Active" ? (
-              isMobile ? (
+              isMobileViewport ? (
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.tripMetricTabsRow}
-                  style={styles.tripMetricTabsScroll}
+                  contentContainerStyle={styles.metricTagRailMobile}
+                  style={styles.metricTagRailScrollMobile}
                 >
                   {TRIP_METRIC_ORDER.map((metricId) => {
                     const active = activeMetricTab === metricId;
                     const copy = tripMetricCopy[metricId];
+                    const count = metricCounts[metricId];
                     return (
                       <TouchableOpacity
                         key={metricId}
                         style={[
-                          styles.tripsMainPillWeb,
-                          styles.tripMetricTabPill,
-                          active && styles.tripsMainPillActiveWeb,
+                          styles.metricTagChipMobile,
+                          active && styles.metricTagChipMobileActive,
                         ]}
                         onPress={() => setActiveMetricTab(metricId)}
                         activeOpacity={0.8}
@@ -1822,14 +1826,28 @@ export default function TripsScreen() {
                       >
                         <Text
                           style={[
-                            styles.tripsMainPillTextWeb,
-                            styles.tripMetricTabText,
-                            active && styles.tripsMainPillTextActiveWeb,
+                            styles.metricTagLabelMobile,
+                            active && styles.metricTagLabelMobileActive,
                           ]}
                           numberOfLines={1}
                         >
                           {copy.title}
                         </Text>
+                        <View
+                          style={[
+                            styles.metricTagCountMobile,
+                            active && styles.metricTagCountMobileActive,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.metricTagCountTextMobile,
+                              active && styles.metricTagCountTextMobileActive,
+                            ]}
+                          >
+                            {count}
+                          </Text>
+                        </View>
                       </TouchableOpacity>
                     );
                   })}
@@ -1866,6 +1884,7 @@ export default function TripsScreen() {
                   const count = metricCounts[metricId];
                   const active = activeMetricTab === metricId;
                   const copy = tripMetricCopy[metricId];
+                  const visual = tripMetricVisual[metricId];
                   return (
                     <TouchableOpacity
                       key={metricId}
@@ -1883,7 +1902,7 @@ export default function TripsScreen() {
                       accessibilityLabel={`${copy.title}, ${count} trips`}
                     >
                           <LinearGradient
-                            colors={[Theme.darkBackground, "#1e293b"]}
+                            colors={visual.gradient}
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 1 }}
                             style={StyleSheet.absoluteFill}
@@ -1896,16 +1915,21 @@ export default function TripsScreen() {
                             <View style={styles.historyWmHeroBlobB} />
                           </View>
                           <View style={styles.historyMetricInner}>
-                      <Text
-                        style={[
-                                styles.metricBentoValue,
-                                active
-                                  ? styles.tripMetricCountActive
-                                  : styles.metricBentoValueOnDark,
-                        ]}
-                      >
-                        {count}
-                      </Text>
+                            <View style={styles.metricBentoHeadRow}>
+                              <Text
+                                style={[
+                                  styles.metricBentoValue,
+                                  active
+                                    ? styles.tripMetricCountActive
+                                    : styles.metricBentoValueOnDark,
+                                ]}
+                              >
+                                {count}
+                              </Text>
+                              <View style={styles.metricBentoIconWrap}>
+                                <FontAwesome name={visual.icon} size={11} color={visual.accent} />
+                              </View>
+                            </View>
                       <Text
                         style={[
                                 styles.metricBentoLabel,
@@ -1925,7 +1949,7 @@ export default function TripsScreen() {
                               ]}
                               numberOfLines={3}
                             >
-                        {copy.hint}
+                        {visual.micro}
                       </Text>
                           </View>
                     </TouchableOpacity>
@@ -1955,6 +1979,7 @@ export default function TripsScreen() {
                       const count = metricCounts[metricId];
                       const active = activeMetricTab === metricId;
                       const copy = tripMetricCopy[metricId];
+                      const visual = tripMetricVisual[metricId];
                       return (
                         <TouchableOpacity
                           key={metricId}
@@ -1972,7 +1997,7 @@ export default function TripsScreen() {
                           accessibilityLabel={`${copy.title}, ${count} trips`}
                         >
                           <LinearGradient
-                            colors={[Theme.darkBackground, "#1e293b"]}
+                            colors={visual.gradient}
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 1 }}
                             style={StyleSheet.absoluteFill}
@@ -1985,16 +2010,21 @@ export default function TripsScreen() {
                             <View style={styles.historyWmHeroBlobB} />
                           </View>
                           <View style={styles.historyMetricInner}>
-                            <Text
-                              style={[
-                                styles.metricBentoValue,
-                                active
-                                  ? styles.tripMetricCountActive
-                                  : styles.metricBentoValueOnDark,
-                              ]}
-                            >
-                              {count}
-                            </Text>
+                            <View style={styles.metricBentoHeadRow}>
+                              <Text
+                                style={[
+                                  styles.metricBentoValue,
+                                  active
+                                    ? styles.tripMetricCountActive
+                                    : styles.metricBentoValueOnDark,
+                                ]}
+                              >
+                                {count}
+                              </Text>
+                              <View style={styles.metricBentoIconWrap}>
+                                <FontAwesome name={visual.icon} size={11} color={visual.accent} />
+                              </View>
+                            </View>
                             <Text
                               style={[
                                 styles.metricBentoLabel,
@@ -2014,7 +2044,7 @@ export default function TripsScreen() {
                               ]}
                               numberOfLines={3}
                             >
-                              {copy.hint}
+                              {visual.micro}
                             </Text>
                           </View>
                         </TouchableOpacity>
@@ -2270,7 +2300,7 @@ export default function TripsScreen() {
             <Text style={styles.empty}>
               {showCompletedList ? tr("noCompletedTrips") : tr("noTripsYet")}
             </Text>
-          ) : listLayout === "table" ? (
+          ) : effectiveListLayout === "table" ? (
             <View>
               <View style={styles.tripsTablePaginationRow}>
                 <Text style={styles.tripsTablePaginationMeta}>
@@ -2435,55 +2465,206 @@ export default function TripsScreen() {
               </View>
             </View>
           ) : (
-            <View style={isLargeScreen ? styles.gridContainer : undefined}>
-              {filtered.map((t) => {
-                const stage = getStageLabelForTrip(t);
-                const displayClientName =
-                  shipperNameByTripId[t.id] ?? t.client_name ?? "—";
-                const hubLedger = summarizeTripLedgerForHub(
-                  transactionsByTripId.get(t.id) ?? [],
-                );
-                const party = tripHubPartyMetaByTripId.get(t.id);
-                return (
-                  <View
-                    key={t.id}
-                    style={isLargeScreen ? styles.gridItem : undefined}
-                  >
-                    <TripsHubTripCard
-                      trip={t}
-                      currentOrganizationId={currentOrganization?.id ?? null}
-                      financeAdjustments={tripFinanceAdjForHubLookup(
-                        tripFinanceAdjForHub,
-                        t.id,
-                      )}
-                      displayClientName={displayClientName}
-                      displaySupplierName={party?.displaySupplierName ?? ""}
-                      clientAvatarUrl={party?.clientAvatarUrl ?? null}
-                      clientAvatarSeed={party?.clientAvatarSeed ?? null}
-                      clientAvatarFallbackSeed={party?.clientFallbackSeed}
-                      supplierAvatarUrl={party?.supplierAvatarUrl ?? null}
-                      supplierAvatarSeed={party?.supplierAvatarSeed ?? null}
-                      supplierAvatarFallbackSeed={party?.supplierFallbackSeed}
-                      cardDate={getTripCardDate(t)}
-                      stageLabel={stage}
-                      onPress={() => router.push(`/trip/${t.id}` as const)}
-                      tr={tr}
-                      ledgerReceivedTotal={hubLedger.receivedTotal}
-                      ledgerTxnCount={hubLedger.count}
-                      lastLedgerDateLabel={
-                        hubLedger.lastAtIso
-                          ? formatLedgerDate(hubLedger.lastAtIso)
-                          : undefined
-                      }
-                      rowWebStyle={
-                        Platform.OS === "web"
-                          ? ({ cursor: "pointer" } as ViewStyle)
-                          : undefined
-                      }
-                    />
+            <View>
+              <View style={styles.tripsTablePaginationRow}>
+                <Text style={styles.tripsTablePaginationMeta}>
+                  {`Page ${tripsTablePageSafe + 1}/${tripsTableTotalPages} · ${filtered.length}`}
+                </Text>
+                <View style={styles.tripsTablePaginationRight}>
+                  <View style={styles.tripsTablePageSizeWrap}>
+                    {[25, 50].map((n) => (
+                      <TouchableOpacity
+                        key={n}
+                        style={[
+                          styles.tripsTablePageSizePill,
+                          tripsTablePageSize === n &&
+                            styles.tripsTablePageSizePillActive,
+                        ]}
+                        onPress={() => setTripsTablePageSize(n as 25 | 50)}
+                        activeOpacity={0.85}
+                        accessibilityRole="button"
+                        accessibilityState={{
+                          selected: tripsTablePageSize === n,
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.tripsTablePageSizeText,
+                            tripsTablePageSize === n &&
+                              styles.tripsTablePageSizeTextActive,
+                          ]}
+                        >
+                          {n}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
                   </View>
-                );
-              })}
+                  <TouchableOpacity
+                    style={[
+                      styles.tripsTablePageNavBtn,
+                      tripsTablePageSafe <= 0 &&
+                        styles.tripsTablePageNavBtnDisabled,
+                    ]}
+                    onPress={() => setTripsTablePage((p) => Math.max(0, p - 1))}
+                    disabled={tripsTablePageSafe <= 0}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.tripsTablePageNavText}>Prev</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.tripsTablePageNavBtn,
+                      tripsTablePageSafe >= tripsTableTotalPages - 1 &&
+                        styles.tripsTablePageNavBtnDisabled,
+                    ]}
+                    onPress={() =>
+                      setTripsTablePage((p) =>
+                        Math.min(tripsTableTotalPages - 1, p + 1),
+                      )
+                    }
+                    disabled={tripsTablePageSafe >= tripsTableTotalPages - 1}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.tripsTablePageNavText}>Next</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+              <TripsHubTableView
+                trips={tripsTableVisible}
+                currentOrganizationId={currentOrganization?.id ?? null}
+                getStageLabel={getStageLabelForTrip}
+                transactionsByTripId={transactionsByTripId}
+                financeAdjustmentsByTripId={tripFinanceAdjForHub}
+                onOpenTripDetails={(trip) =>
+                  router.push(`/trip/${trip.id}` as const)
+                }
+                tr={tr}
+                onExportLedger={() => setTripLedgerExportOpen(true)}
+                clientNameByTripId={shipperNameByTripId}
+                linkedOrgByOrganizationId={linkedOrgByOrganizationId}
+                partyMetaByTripId={tripHubPartyMetaByTripId}
+                renderBody={(rows) => (
+                  <View style={isLargeScreen ? styles.gridContainer : undefined}>
+                    {rows.map((t) => {
+                      const stage = getStageLabelForTrip(t);
+                      const displayClientName =
+                        shipperNameByTripId[t.id] ?? t.client_name ?? "—";
+                      const hubLedger = summarizeTripLedgerForHub(
+                        transactionsByTripId.get(t.id) ?? [],
+                      );
+                      const party = tripHubPartyMetaByTripId.get(t.id);
+                      return (
+                        <View
+                          key={t.id}
+                          style={isLargeScreen ? styles.gridItem : undefined}
+                        >
+                          <TripsHubTripCard
+                            trip={t}
+                            currentOrganizationId={
+                              currentOrganization?.id ?? null
+                            }
+                            financeAdjustments={tripFinanceAdjForHubLookup(
+                              tripFinanceAdjForHub,
+                              t.id,
+                            )}
+                            displayClientName={displayClientName}
+                            displaySupplierName={party?.displaySupplierName ?? ""}
+                            clientAvatarUrl={party?.clientAvatarUrl ?? null}
+                            clientAvatarSeed={party?.clientAvatarSeed ?? null}
+                            clientAvatarFallbackSeed={party?.clientFallbackSeed}
+                            supplierAvatarUrl={party?.supplierAvatarUrl ?? null}
+                            supplierAvatarSeed={party?.supplierAvatarSeed ?? null}
+                            supplierAvatarFallbackSeed={
+                              party?.supplierFallbackSeed
+                            }
+                            cardDate={getTripCardDate(t)}
+                            stageLabel={stage}
+                            onPress={() =>
+                              router.push(`/trip/${t.id}` as const)
+                            }
+                            tr={tr}
+                            ledgerReceivedTotal={hubLedger.receivedTotal}
+                            ledgerTxnCount={hubLedger.count}
+                            lastLedgerDateLabel={
+                              hubLedger.lastAtIso
+                                ? formatLedgerDate(hubLedger.lastAtIso)
+                                : undefined
+                            }
+                            rowWebStyle={
+                              Platform.OS === "web"
+                                ? ({ cursor: "pointer" } as ViewStyle)
+                                : undefined
+                            }
+                          />
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+              />
+              <View style={styles.tripsTablePaginationRowBottom}>
+                <Text style={styles.tripsTablePaginationMeta}>
+                  {`Page ${tripsTablePageSafe + 1}/${tripsTableTotalPages} · ${filtered.length}`}
+                </Text>
+                <View style={styles.tripsTablePaginationRight}>
+                  <View style={styles.tripsTablePageSizeWrap}>
+                    {[25, 50].map((n) => (
+                      <TouchableOpacity
+                        key={`cards-bottom-${n}`}
+                        style={[
+                          styles.tripsTablePageSizePill,
+                          tripsTablePageSize === n &&
+                            styles.tripsTablePageSizePillActive,
+                        ]}
+                        onPress={() => setTripsTablePageSize(n as 25 | 50)}
+                        activeOpacity={0.85}
+                        accessibilityRole="button"
+                        accessibilityState={{
+                          selected: tripsTablePageSize === n,
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.tripsTablePageSizeText,
+                            tripsTablePageSize === n &&
+                              styles.tripsTablePageSizeTextActive,
+                          ]}
+                        >
+                          {n}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <TouchableOpacity
+                    style={[
+                      styles.tripsTablePageNavBtn,
+                      tripsTablePageSafe <= 0 &&
+                        styles.tripsTablePageNavBtnDisabled,
+                    ]}
+                    onPress={() => setTripsTablePage((p) => Math.max(0, p - 1))}
+                    disabled={tripsTablePageSafe <= 0}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.tripsTablePageNavText}>Prev</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.tripsTablePageNavBtn,
+                      tripsTablePageSafe >= tripsTableTotalPages - 1 &&
+                        styles.tripsTablePageNavBtnDisabled,
+                    ]}
+                    onPress={() =>
+                      setTripsTablePage((p) =>
+                        Math.min(tripsTableTotalPages - 1, p + 1),
+                      )
+                    }
+                    disabled={tripsTablePageSafe >= tripsTableTotalPages - 1}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.tripsTablePageNavText}>Next</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             </View>
           )}
         </ScrollView>
@@ -3444,6 +3625,96 @@ const styles = StyleSheet.create({
   tripMetricTabText: {
     letterSpacing: 0.9,
   },
+  metricTagRailScrollMobile: {
+    marginBottom: 8,
+    borderRadius: 22,
+    backgroundColor: Theme.darkBackground,
+  },
+  metricTagRailMobile: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+  },
+  metricTagChipMobile: {
+    minHeight: 36,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+  },
+  metricTagChipMobileActive: {
+    backgroundColor: Theme.primary,
+    borderColor: Theme.primary,
+  },
+  metricTagLabelMobile: {
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.75,
+    color: "rgba(255,255,255,0.64)",
+  },
+  metricTagLabelMobileActive: {
+    color: Theme.textOnDark,
+  },
+  metricTagCountMobile: {
+    width: 24,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.10)",
+  },
+  metricTagCountMobileActive: {
+    backgroundColor: "rgba(255,255,255,0.22)",
+  },
+  metricTagCountTextMobile: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "rgba(255,255,255,0.72)",
+    fontVariant: ["tabular-nums"],
+  },
+  metricTagCountTextMobileActive: {
+    color: Theme.textOnDark,
+  },
+  metricTabHintMobile: {
+    marginTop: 2,
+    fontSize: 9,
+    fontWeight: "600",
+    color: Theme.textMuted,
+  },
+  metricTabHintMobileActive: {
+    color: "rgba(241,245,249,0.75)",
+  },
+  metricTabCountMobile: {
+    minWidth: 30,
+    paddingHorizontal: 8,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(15,23,42,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(15,23,42,0.12)",
+  },
+  metricTabCountMobileActive: {
+    backgroundColor: "rgba(255,255,255,0.18)",
+    borderColor: "rgba(255,255,255,0.28)",
+  },
+  metricTabCountTextMobile: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+  },
+  metricTabCountTextMobileActive: {
+    color: Theme.textOnDark,
+  },
   tripMetricsGridWeb: {
     justifyContent: "flex-start",
     gap: 12,
@@ -3531,6 +3802,22 @@ const styles = StyleSheet.create({
   metricCardHintAtBottom: {
     marginTop: "auto" as const,
   },
+  metricBentoHeadRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  metricBentoIconWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.35)",
+    backgroundColor: "rgba(15,23,42,0.45)",
+  },
   tripMetricTile: {
     width: 188,
     minHeight: Platform.OS === "web" ? 118 : 102,
@@ -3587,23 +3874,23 @@ const styles = StyleSheet.create({
   },
   /** Bento tile typography — tuned for 188px card width, left-aligned, even vertical rhythm. */
   metricBentoValue: {
-    fontSize: Platform.OS === "web" ? 24 : 20,
+    fontSize: Platform.OS === "web" ? 28 : 22,
     fontWeight: "900",
     fontStyle: "italic",
     letterSpacing: -0.4,
-    lineHeight: Platform.OS === "web" ? 28 : 24,
-    marginBottom: 5,
+    lineHeight: Platform.OS === "web" ? 31 : 26,
+    marginBottom: 4,
     textAlign: "left" as const,
   },
   metricBentoValueOnDark: {
     color: Theme.textOnDark,
   },
   metricBentoLabel: {
-    fontSize: 10.5,
+    fontSize: 10,
     fontWeight: "800",
     textTransform: "uppercase",
-    letterSpacing: 0.4,
-    lineHeight: 13.5,
+    letterSpacing: 0.6,
+    lineHeight: 13,
     textAlign: "left" as const,
     width: "100%" as const,
   },
@@ -3614,9 +3901,9 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.97)",
   },
   metricBentoSubtext: {
-    fontSize: 9.5,
+    fontSize: 9,
     fontWeight: "500",
-    lineHeight: 12.5,
+    lineHeight: 12,
     textAlign: "left" as const,
     width: "100%" as const,
   },

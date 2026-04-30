@@ -506,6 +506,8 @@ export function TripsHubTripCard({
   lastLedgerDateLabel,
   financeAdjustments,
 }: TripsHubTripCardProps) {
+  const { width: cardViewportWidth } = useWindowDimensions();
+  const compactMetricGrid = cardViewportWidth > 0 && cardViewportWidth < 640;
   const aggregate = isAggregateTrip(trip);
   // Keep Trips hub labels aligned with Trip Detail header semantics:
   // aggregate is determined by supplier linkage, not by assignment completeness.
@@ -728,17 +730,17 @@ export function TripsHubTripCard({
           )}
         </View>
 
-        <View style={styles.fleetMetricsRow}>
-          <View style={styles.fleetMetricCell}>
+        <View style={[styles.fleetMetricsRow, compactMetricGrid && styles.fleetMetricsRowCompact]}>
+          <View style={[styles.fleetMetricCell, compactMetricGrid && styles.fleetMetricCellCompact]}>
             <Text style={styles.fleetMetricLabel}>{tr("tripsHubColCost")}</Text>
             <Text style={styles.fleetMetricVal}>{formatINR(cost)}</Text>
           </View>
-          <View style={styles.fleetMetricCell}>
+          <View style={[styles.fleetMetricCell, compactMetricGrid && styles.fleetMetricCellCompact]}>
             <Text style={styles.fleetMetricLabel}>{tr("tripsHubColMargin")}</Text>
             <Text style={styles.fleetMetricVal}>{formatINR(pnl)}</Text>
             <Text style={styles.fleetMetricPct}>{marginPct}</Text>
           </View>
-          <View style={styles.fleetMetricCell}>
+          <View style={[styles.fleetMetricCell, compactMetricGrid && styles.fleetMetricCellCompact]}>
             <Text style={styles.fleetMetricLabel}>{tr("tripsHubColReceived")}</Text>
             <Text style={styles.fleetMetricVal}>
               {ledgerReceivedTotal != null ? formatINR(ledgerReceivedTotal) : "—"}
@@ -747,7 +749,7 @@ export function TripsHubTripCard({
               {tr("tripsHubAmountPaidBook")}: {formatINR(Number(trip.amount_paid ?? 0))}
             </Text>
           </View>
-          <View style={styles.fleetMetricCell}>
+          <View style={[styles.fleetMetricCell, compactMetricGrid && styles.fleetMetricCellCompact]}>
             <Text style={styles.fleetMetricLabel}>{tr("tripsHubColDue")}</Text>
             <Text style={styles.fleetMetricVal}>{formatINR(due)}</Text>
             <Text style={styles.fleetMetricMeta}>
@@ -798,6 +800,11 @@ export type TripsHubTableViewProps = {
    * Trip finance adjustments keyed by normalized trip id; `undefined` while loading (table uses raw rates until then).
    */
   financeAdjustmentsByTripId?: Record<string, TripAdjustment[]>;
+  /**
+   * When set, the manifest table rows are omitted and this render function receives the filtered + sorted trips
+   * (toolbar, search/sort/status pills, and Filters panel behave like table mode).
+   */
+  renderBody?: (templateTrips: TripRow[]) => ReactNode;
 };
 
 function txnAmount(row: LedgerRow): number {
@@ -857,6 +864,7 @@ export function TripsHubTableView({
   linkedOrgByOrganizationId,
   partyMetaByTripId,
   financeAdjustmentsByTripId,
+  renderBody,
 }: TripsHubTableViewProps) {
   const insets = useSafeAreaInsets();
   const { width: layoutWidth } = useWindowDimensions();
@@ -1154,6 +1162,10 @@ export function TripsHubTableView({
         </View>
       ) : null}
 
+      {renderBody ? (
+        renderBody(templateTrips)
+      ) : (
+      <>
       <View style={styles.manifestHeaderRow}>
         <View style={[styles.manifestTh, styles.manifestColIdentity]}>
           <Text style={styles.manifestThText}>Trip identity</Text>
@@ -1804,6 +1816,8 @@ export function TripsHubTableView({
           </View>
         );
       })}
+      </>
+      )}
 
       <View style={styles.auditFooter}>
         <View style={styles.auditFooterLeft}>
@@ -2474,6 +2488,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.borderLight,
   },
+  fleetMetricCellCompact: {
+    flexBasis: "48%",
+    minWidth: 0,
+  },
+  fleetMetricsRowCompact: {
+    rowGap: 6,
+    columnGap: 6,
+  },
   fleetMetricLabel: {
     fontSize: FS_AMOUNT_LABEL,
     fontWeight: "900",
@@ -2488,6 +2510,7 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     color: Theme.textPrimaryDark,
     letterSpacing: -0.25,
+    fontVariant: ["tabular-nums"],
   },
   fleetMetricPct: {
     marginTop: 1,

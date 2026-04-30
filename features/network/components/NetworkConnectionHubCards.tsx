@@ -128,7 +128,7 @@ export function HubConnectionListCard({
           </View>
 
           <Text style={styles.entityName} numberOfLines={1}>
-            {item.name.toUpperCase()}
+            {item.name}
           </Text>
           <Text style={styles.entitySubtitle} numberOfLines={2}>
             {item.role === "CLIENT"
@@ -139,7 +139,7 @@ export function HubConnectionListCard({
           </Text>
           <View style={styles.liveNowRow}>
             <View style={styles.liveNowDot} />
-            <Text style={styles.liveNowText}>ACTIVENOW</Text>
+            <Text style={styles.liveNowText}>ACTIVE NOW</Text>
           </View>
 
           <View style={[styles.cardMetaStack, mutuals === 0 && styles.cardMetaStackCompact]}>
@@ -165,8 +165,8 @@ export function HubConnectionListCard({
         <View style={styles.cardFooter}>
           {item.is_integrated ? (
             <View style={styles.joinedBtn}>
-              <Zap size={13} color={Theme.textOnPrimary} fill={Theme.textOnPrimary} strokeWidth={2.4} />
-              <Text style={styles.joinedBtnText}>Live session</Text>
+              <Zap size={11} color={Theme.textOnPrimary} fill={Theme.textOnPrimary} strokeWidth={2.2} />
+              <Text style={styles.joinedBtnText}>Connected</Text>
             </View>
           ) : (
             <Pressable
@@ -304,10 +304,9 @@ const styles = StyleSheet.create({
   },
   coverWidgetText: {
     fontSize: 7,
-    fontWeight: "600",
-    fontStyle: "italic",
+    fontWeight: "500",
     color: Theme.textSecondary,
-    letterSpacing: 0.7,
+    letterSpacing: 0.45,
   },
   coverRoleChip: {
     position: "absolute",
@@ -322,9 +321,8 @@ const styles = StyleSheet.create({
   },
   coverRoleText: {
     fontSize: 7,
-    fontWeight: "600",
-    fontStyle: "italic",
-    letterSpacing: 0.8,
+    fontWeight: "500",
+    letterSpacing: 0.45,
     color: Theme.textPrimaryDark,
   },
   coverRatingNode: {
@@ -350,13 +348,12 @@ const styles = StyleSheet.create({
   },
   coverRatingText: {
     fontSize: 10,
-    fontWeight: "700",
-    fontStyle: "italic",
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
   },
   coverRatingTextEmpty: {
     fontSize: 7,
-    fontWeight: "700",
+    fontWeight: "500",
     color: Theme.textMutedDemo,
     letterSpacing: -0.1,
   },
@@ -422,17 +419,16 @@ const styles = StyleSheet.create({
   },
   entityName: {
     fontSize: 15,
-    fontWeight: "900",
+    fontWeight: "600",
     color: "#475569",
-    letterSpacing: -0.2,
-    lineHeight: 15,
+    letterSpacing: 0,
+    lineHeight: 18,
     textAlign: "center",
     marginTop: 10,
   },
   entitySubtitle: {
     fontSize: 10.5,
-    fontWeight: "700",
-    fontStyle: "italic",
+    fontWeight: "500",
     color: Theme.textMutedDemo,
     lineHeight: 12,
     textAlign: "center",
@@ -453,8 +449,8 @@ const styles = StyleSheet.create({
   },
   liveNowText: {
     fontSize: 8,
-    fontWeight: "900",
-    letterSpacing: 0.8,
+    fontWeight: "600",
+    letterSpacing: 0.35,
     color: Theme.textSecondary,
   },
   heroAvatar: {
@@ -510,7 +506,7 @@ const styles = StyleSheet.create({
   },
   statusMetaChipText: {
     fontSize: 8,
-    fontWeight: "500",
+    fontWeight: "400",
     color: "#64748B",
   },
   statusMetaChipTextIntegrated: {
@@ -588,15 +584,15 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.networkCardBackground,
   },
   joinedBtn: {
-    minHeight: 38,
+    minHeight: 32,
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 5,
     borderWidth: 1,
     borderColor: Theme.primary,
-    borderRadius: 19,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     backgroundColor: Theme.primary,
     shadowColor: Theme.shadow,
     shadowOpacity: 0.035,
@@ -605,11 +601,10 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   joinedBtnText: {
-    fontSize: 10,
-    fontWeight: "900",
+    fontSize: 9,
+    fontWeight: "600",
     color: Theme.textOnPrimary,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
+    letterSpacing: 0.2,
   },
   inviteBtn: {
     minHeight: 40,
@@ -635,10 +630,9 @@ const styles = StyleSheet.create({
   },
   inviteBtnText: {
     fontSize: 10,
-    fontWeight: "900",
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
+    letterSpacing: 0.2,
   },
   handshakeBtn: {
     width: 40,

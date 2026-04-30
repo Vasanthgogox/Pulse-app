@@ -1,9 +1,9 @@
-import { entityCompanionCardStyles as ecc } from "@/components/entityCompanionCard.styles";
-import { entityHeroScorecardStyles as ehs } from "@/components/entityHeroScorecard.styles";
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { CounterpartyProfileSystemCard } from "@/components/CounterpartyProfileSystemCard";
 import { DatePresetPillBar } from "@/components/DatePresetPillBar";
 import { DateRangePickerModal } from "@/components/DateRangePickerModal";
+import { entityCompanionCardStyles as ecc } from "@/components/entityCompanionCard.styles";
+import { entityHeroScorecardStyles as ehs } from "@/components/entityHeroScorecard.styles";
 import { FinanceFAB } from "@/components/FinanceFAB";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import Layout from "@/constants/Layout";
@@ -14,11 +14,10 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { getDriversByOrganization, type DriverRow } from "@/features/drivers";
 import {
-  getTransactionsByOrganization,
-  LedgerReportModal,
-  SharedLedgerContent,
-  type LedgerEntry,
-  type LedgerRow,
+    getTransactionsByOrganization,
+    LedgerReportModal,
+    SharedLedgerContent,
+    type LedgerRow
 } from "@/features/finance";
 import { LedgerTransactionListView } from "@/features/finance/components/LedgerTransactionListView";
 import { TreasuryDetailLayout } from "@/features/finance/components/TreasuryDetailLayout";
@@ -26,24 +25,24 @@ import { ledgerDayMatchesPeriod } from "@/features/finance/lib/filterLedgerByPer
 import type { FinancePeriodFilter } from "@/features/finance/types";
 import { allocateAmountsToLargestDueTrips } from "@/features/finance/utils/allocateToLargestDue";
 import {
-  getSuppliersByOrganization,
-  type SupplierRow,
+    getSuppliersByOrganization,
+    type SupplierRow,
 } from "@/features/suppliers/services/suppliers.service";
 import { adjustedRevenue } from "@/features/trips/services/tripAdjustments";
 import {
-  getTripDisplayNumber,
-  getTripsByOrganization,
-  getTripsWhereOrgIsSupplier,
-  type TripRow,
+    getTripDisplayNumber,
+    getTripsByOrganization,
+    getTripsWhereOrgIsSupplier,
+    type TripRow,
 } from "@/features/trips/services/trips.service";
 import {
-  buildUniqueLinkedOrgIdMap,
-  isLoadBasedTrip,
+    buildUniqueLinkedOrgIdMap,
+    isLoadBasedTrip,
 } from "@/features/trips/visibility/tripVisibility";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import {
-  canAccessFinance,
-  getCapabilitiesFromProfile,
+    canAccessFinance,
+    getCapabilitiesFromProfile,
 } from "@/lib/capabilities";
 import { tripDayIso } from "@/lib/dateRangePresets";
 import { formatINR, formatLedgerDate } from "@/lib/format";
@@ -51,24 +50,24 @@ import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjust
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
-import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
-  Animated,
-  Easing,
-  Image,
-  Modal,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  Share,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  useWindowDimensions,
-  View,
+    Alert,
+    Animated,
+    Easing,
+    Image,
+    Modal,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    Share,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -1214,11 +1213,6 @@ export default function ClientDetailScreen({
     : isInAppNotIntegrated
       ? "In App - Not Integrated"
       : "Not in app";
-  const statusSubtitle = isIntegrated
-    ? "Ledger sync active"
-    : isInAppNotIntegrated
-      ? "Can request integration"
-      : "Invite to onboard";
   const canSendRequest = isInAppNotIntegrated && !isLinked;
   const canInviteToApp = isNotInApp;
   const profileActionLabel = canSendRequest
@@ -1474,8 +1468,31 @@ export default function ClientDetailScreen({
           </LinearGradient>
           {isWebDesktop ? (
             <View style={styles.profilePreviewCard}>
-              <View style={styles.profilePreviewTopRow}>
-                <Text style={styles.profilePreviewEyebrow}>ENTITY PROFILE</Text>
+              <View style={ecc.dossierHeader}>
+                <View style={styles.profilePreviewTopMetaRow}>
+                  <View style={styles.profilePreviewTopAction}>
+                    <Text style={styles.profilePreviewTopActionText} numberOfLines={1}>
+                      {tripsHandled}
+                    </Text>
+                  </View>
+                  <View style={styles.profilePreviewRatingRow}>
+                    <View style={styles.profilePreviewStars}>
+                      {Array.from({ length: 5 }).map((_, idx) => (
+                        <FontAwesome
+                          key={`client-star-header-${idx}`}
+                          name={idx < ratingFilledStars ? "star" : "star-o"}
+                          size={13}
+                          color={idx < ratingFilledStars ? "#fbbf24" : Theme.borderMedium}
+                        />
+                      ))}
+                    </View>
+                    <View style={styles.profilePreviewRatingBadge}>
+                      <Text style={styles.profilePreviewRatingBadgeText} numberOfLines={1}>
+                        {clientRating.toFixed(1)}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
                 <TouchableOpacity
                   style={styles.profilePreviewTopAction}
                   onPress={() => setShowProfileModal(true)}
@@ -1493,73 +1510,66 @@ export default function ClientDetailScreen({
                 </TouchableOpacity>
               </View>
               <TouchableOpacity
-                style={styles.profilePreviewIdentityTrigger}
+                style={ecc.dossierIdentity}
                 onPress={() => setShowProfileModal(true)}
                 activeOpacity={0.85}
                 accessibilityLabel="Open client full profile"
               >
-                <View style={styles.profilePreviewIdentityRow}>
-                  <View style={styles.profilePreviewIdentityAvatar}>
-                    {profileAvatarUri ? (
-                      <Image source={{ uri: profileAvatarUri }} style={styles.profilePreviewIdentityAvatarImage} />
-                    ) : (
-                      <FontAwesome name="building" size={14} color={Theme.textSecondary} />
-                    )}
+                <View style={ecc.dossierAvatarWrap}>
+                  {profileAvatarUri ? (
+                    <Image source={{ uri: profileAvatarUri }} style={ecc.dossierAvatarImage} />
+                  ) : (
+                    <FontAwesome name="building" size={24} color={Theme.textOnPrimary} />
+                  )}
+                  <View style={ecc.dossierAvatarBadge}>
+                    <FontAwesome name="bolt" size={10} color={Theme.textOnPrimary} />
                   </View>
-                  <View style={styles.profilePreviewIdentityMeta}>
-                    <Text style={styles.profilePreviewIdentityName} numberOfLines={1}>
-                      {clientName}
+                </View>
+                <Text style={ecc.dossierName} numberOfLines={1}>
+                  {clientName}
+                </Text>
+                <Text style={ecc.dossierSub} numberOfLines={1}>
+                  {(client.contact_person ?? "No contact").trim() || "No contact"}
+                </Text>
+                <View style={ecc.dossierBadgeRow}>
+                  <View style={[ecc.dossierBadge, ecc.dossierBadgeBlue]}>
+                    <Text style={ecc.dossierBadgeText}>CLIENT</Text>
+                  </View>
+                  <View style={[ecc.dossierBadge, ecc.dossierBadgeDark]}>
+                    <Text style={[ecc.dossierBadgeText, ecc.dossierBadgeTextDark]}>
+                      {statusTitle}
                     </Text>
-                    <Text style={styles.profilePreviewIdentitySub} numberOfLines={1}>
-                      {(client.contact_person ?? "No contact").trim() || "No contact"}
+                  </View>
+                  <View style={[ecc.dossierBadge, ecc.dossierBadgeMuted]}>
+                    <Text style={[ecc.dossierBadgeText, ecc.dossierBadgeTextMuted]}>
+                      {isIntegrated ? "SECURED" : "LOCAL"}
                     </Text>
                   </View>
                 </View>
               </TouchableOpacity>
-              <View style={styles.profilePreviewRatingRow}>
-                <View style={styles.profilePreviewStars}>
-                  {Array.from({ length: 5 }).map((_, idx) => (
-                    <FontAwesome
-                      key={`client-star-${idx}`}
-                      name={idx < ratingFilledStars ? "star" : "star-o"}
-                      size={13}
-                      color={idx < ratingFilledStars ? "#fbbf24" : Theme.borderMedium}
-                    />
-                  ))}
-                </View>
-                <View style={styles.profilePreviewRatingBadge}>
-                  <Text style={styles.profilePreviewRatingBadgeText}>{clientRating.toFixed(1)}</Text>
-                </View>
-              </View>
-              <View style={styles.profilePreviewExperienceBlock}>
-                <Text style={styles.profilePreviewExperienceEyebrow}>EXPERIENCE</Text>
-                <View style={styles.profilePreviewExperienceRow}>
-                  <View style={styles.profilePreviewExperienceIconWrap}>
-                    <FontAwesome name="road" size={12} color={Theme.textOnPrimary} />
+              <View style={ecc.dossierContactStack}>
+                <View style={ecc.dossierContactRow}>
+                  <View style={ecc.dossierContactIcon}>
+                    <FontAwesome name="envelope-o" size={13} color={Theme.textMuted} />
                   </View>
-                  <Text style={styles.profilePreviewTripsNumber}>{tripsHandled}</Text>
-                  <Text style={styles.profilePreviewExperienceLabel}>Trips Handled</Text>
+                  <View style={ecc.dossierContactText}>
+                    <Text style={ecc.dossierContactLabel}>Encrypted Mail</Text>
+                    <Text style={ecc.dossierContactValue} numberOfLines={1}>
+                      {(client.email ?? "").trim() || "Not available"}
+                    </Text>
+                  </View>
+                  <FontAwesome name="lock" size={10} color={Theme.textSection} />
                 </View>
-              </View>
-              <View style={styles.profilePreviewToggle}>
-                <View
-                  style={[
-                    styles.profilePreviewToggleDot,
-                    isInAppNotIntegrated && styles.profilePreviewToggleDotPending,
-                    isIntegrated && styles.profilePreviewToggleDotActive,
-                  ]}
-                >
-                  {isIntegrated ? (
-                    <FontAwesome name="check" size={11} color={Theme.textOnPrimary} />
-                  ) : isInAppNotIntegrated ? (
-                    <FontAwesome name="send" size={9} color={Theme.financeCardBlueFrom} />
-                  ) : isNotInApp ? (
-                    <FontAwesome name="envelope-o" size={9} color={Theme.textMuted} />
-                  ) : null}
-                </View>
-                <View style={styles.profilePreviewToggleTextWrap}>
-                  <Text style={styles.profilePreviewToggleTitle}>{statusTitle}</Text>
-                  <Text style={styles.profilePreviewToggleSub}>{statusSubtitle}</Text>
+                <View style={ecc.dossierContactRow}>
+                  <View style={ecc.dossierContactIcon}>
+                    <FontAwesome name="phone" size={13} color={Theme.textMuted} />
+                  </View>
+                  <View style={ecc.dossierContactText}>
+                    <Text style={ecc.dossierContactLabel}>Secured Line</Text>
+                    <Text style={ecc.dossierContactValue} numberOfLines={1}>
+                      {(client.phone ?? "").trim() || "Not available"}
+                    </Text>
+                  </View>
                 </View>
               </View>
               <TouchableOpacity
@@ -2799,6 +2809,10 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 8,
   },
+  profilePreviewHeaderEnd: {
+    justifyContent: "flex-end",
+    minHeight: 24,
+  },
   profilePreviewEyebrow: ecc.eyebrow,
   profilePreviewTopAction: {
     flexDirection: "row",
@@ -2819,6 +2833,12 @@ const styles = StyleSheet.create({
     letterSpacing: 0.7,
     textTransform: "uppercase",
   },
+  profilePreviewTopMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    minWidth: 0,
+  },
   profilePreviewIdentityRow: ecc.identityRow,
   profilePreviewIdentityAvatar: ecc.identityAvatar,
   profilePreviewIdentityAvatarImage: ecc.identityAvatarImage,
@@ -2837,7 +2857,6 @@ const styles = StyleSheet.create({
   profilePreviewExperienceEyebrow: ecc.experienceEyebrow,
   profilePreviewExperienceRow: ecc.experienceRow,
   profilePreviewExperienceIconWrap: ecc.experienceIconWrap,
-  profilePreviewTripsNumber: ecc.tripsNumber,
   profilePreviewExperienceLabel: ecc.experienceLabel,
   profilePreviewToggle: ecc.toggle,
   profilePreviewToggleDot: ecc.toggleDot,
