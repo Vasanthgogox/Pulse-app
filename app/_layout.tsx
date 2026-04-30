@@ -1,4 +1,3 @@
-import { FloatingOpsAgentButton } from '@/components/FloatingOpsAgentButton';
 import { FloatingChatButton } from '@/components/FloatingChatButton';
 import { DemoTabBar, type DemoTabId } from '@/components/demo';
 import Theme from '@/constants/Theme';
@@ -289,7 +288,6 @@ function RootLayoutNav() {
             <Stack.Screen name="(modals)" options={{ presentation: 'modal' }} />
           </Stack>
           <RootOverlayTabBar />
-          <FloatingOpsAgentButton />
           <FloatingChatButton />
         </View>
       </DemoTabBarScrollProvider>

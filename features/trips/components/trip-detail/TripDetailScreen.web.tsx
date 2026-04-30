@@ -46,6 +46,7 @@ import { regenerateTripOtp } from "../../services/tripOtp.service";
 import { getTripDisplayNumber } from "../../services/trips.service";
 import { TripAssignmentBlock } from "../TripAssignmentBlock";
 import { TripAdjustmentModal } from "./TripAdjustmentModal";
+import { TripDetailFinanceView } from "./TripDetailFinanceView";
 import type { TripDetailScreenProps } from "./TripDetailScreen.types";
 import { TripMap } from "./TripMap.web";
 import { useTripDetail } from "./hooks/useTripDetail";
@@ -1481,7 +1482,7 @@ export default function TripDetailScreen({
                   </View>
                   <View style={dStyles.routeDivider}>
                     <View style={dStyles.routeLine} />
-                    <FontAwesome name="truck" size={16} color="rgba(255,255,255,0.3)" />
+                    <FontAwesome name="truck" size={16} color="rgba(100,116,139,0.65)" />
                     <View style={dStyles.routeLine} />
                   </View>
                   <View style={dStyles.routeStop}>
@@ -1527,13 +1528,6 @@ export default function TripDetailScreen({
                     height={mapHeight}
                     onDistanceCalculated={setMapRouteDistanceKm}
                   />
-                  <View style={dStyles.telemetryBar}>
-                    <FontAwesome name="compass" size={14} color="#60a5fa" style={{ marginRight: 8 }} />
-                    <View>
-                      <Text style={dStyles.telemetryTitle}>Telemetry Link Secured</Text>
-                      <Text style={dStyles.telemetrySub}>Protocol v4.2 synchronized live</Text>
-                    </View>
-                  </View>
                 </View>
               </View>
 
@@ -1647,7 +1641,7 @@ export default function TripDetailScreen({
                       <Image source={{ uri: detail.driverAvatarUri }} style={dStyles.driverAvatar} />
                     ) : (
                       <View style={dStyles.driverAvatarFallback}>
-                        <FontAwesome name="user" size={20} color="#1d4ed8" />
+                        <FontAwesome name="user" size={20} color={Theme.textSecondary} />
                       </View>
                     )}
                     <View style={{ flex: 1 }}>
@@ -1682,7 +1676,7 @@ export default function TripDetailScreen({
                   </View>
                   <View style={dStyles.vehicleRow}>
                     <View style={dStyles.vehicleIconWrap}>
-                      <FontAwesome name="truck" size={20} color="#059669" />
+                      <FontAwesome name="truck" size={20} color={Theme.textSecondary} />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={dStyles.vehicleName}>
@@ -1707,7 +1701,7 @@ export default function TripDetailScreen({
                 {detail.computedTripDocs.map((doc) => (
                   <TouchableOpacity key={doc.id} style={dStyles.docRow} onPress={() => handleDocOpen(doc)} activeOpacity={0.75}>
                     <View style={dStyles.docIconWrap}>
-                      <FontAwesome name="file-o" size={14} color="rgba(255,255,255,0.4)" />
+                      <FontAwesome name="file-o" size={14} color={Theme.textMuted} />
                     </View>
                     <Text style={dStyles.docLabel} numberOfLines={1}>{doc.label}</Text>
                     <View style={[dStyles.docStatusPill, doc.status === 'Uploaded' ? dStyles.docStatusVerified : dStyles.docStatusPending]}>
@@ -1951,97 +1945,65 @@ export default function TripDetailScreen({
 
         {/* ════════════════════ FINANCE TAB ════════════════════ */}
         {isDesktop && desktopTab === "finance" && (
-          <View style={styles.financeColsRow}>
-            <View style={styles.financeLeftCol}>
-              <View style={styles.yieldCard}>
-                <View style={styles.yieldHeader}>
-                  <Text style={styles.yieldTitle}>Yield Analysis</Text>
-                  <Text style={styles.yieldSub}>Consolidated ledger manifest</Text>
-                </View>
-                <View style={styles.yieldStatsGrid}>
-                  <View style={[styles.yieldStatItem, styles.yieldStatPositive]}>
-                    <FontAwesome name="line-chart" size={20} color="#16a34a" />
-                    <Text style={styles.yieldStatAmount}>{formatINR(baseFreight)}</Text>
-                    <Text style={styles.yieldStatLabel}>Gross Revenue</Text>
-                  </View>
-                  <View style={[styles.yieldStatItem, styles.yieldStatNegative]}>
-                    <FontAwesome name="arrow-down" size={20} color="#dc2626" />
-                    <Text style={styles.yieldStatAmount}>{formatINR(totalExpenses)}</Text>
-                    <Text style={styles.yieldStatLabel}>Voyage Cost</Text>
-                  </View>
-                </View>
-                <View style={styles.netResultCard}>
-                  <Text style={styles.netResultLabel}>Operational Net Result</Text>
-                  <Text style={styles.netResultValue}>
-                    {formatINR(baseFreight + additionalIncome - deductions - totalExpenses)}
-                  </Text>
-                  <View style={styles.netResultTrend}>
-                    <FontAwesome name="arrow-up" size={12} color="#34d399" />
-                    <Text style={styles.netResultTrendText}>Live profitability snapshot</Text>
-                  </View>
-                </View>
-              </View>
-
-              <View style={styles.financeAdjustmentsCard}>
-                <View style={styles.financeAdjustmentsHeader}>
-                  <Text style={styles.financeAdjustmentsTitle}>Adjustments</Text>
-                  <Text style={styles.financeAdjustmentsSub}>Revenue and deduction controls</Text>
-                </View>
-                <View style={styles.financeAdjustmentsRow}>
-                  <View style={styles.financeAdjustmentsMetric}>
-                    <Text style={styles.financeAdjustmentsMetricLabel}>Additional Income</Text>
-                    <Text style={[styles.financeAdjustmentsMetricValue, styles.financeAdjustmentsMetricValuePositive]}>
-                      {formatINR(additionalIncome)}
-                    </Text>
-                  </View>
-                  <TouchableOpacity
-                    onPress={detail.openClientIncomeAdjustment}
-                    style={styles.financeAdjustmentsBtn}
-                    activeOpacity={0.8}
-                  >
-                    <FontAwesome name="plus" size={12} color="#fff" />
-                    <Text style={styles.financeAdjustmentsBtnText}>Add Income</Text>
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.financeAdjustmentsRow}>
-                  <View style={styles.financeAdjustmentsMetric}>
-                    <Text style={styles.financeAdjustmentsMetricLabel}>Deductions</Text>
-                    <Text style={[styles.financeAdjustmentsMetricValue, styles.financeAdjustmentsMetricValueNegative]}>
-                      {formatINR(deductions)}
-                    </Text>
-                  </View>
-                  <TouchableOpacity
-                    onPress={detail.openClientDeductionAdjustment}
-                    style={[styles.financeAdjustmentsBtn, styles.financeAdjustmentsBtnAlt]}
-                    activeOpacity={0.8}
-                  >
-                    <FontAwesome name="minus" size={12} color="#334155" />
-                    <Text style={[styles.financeAdjustmentsBtnText, styles.financeAdjustmentsBtnTextAlt]}>
-                      Add Deduction
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.financeRightCol}>
-              <LedgerCard
-                sales={sales}
-                received={received}
-                pending={pending}
-                totalExpenses={totalExpenses}
-                supplierPaid={supplierPaid}
-                supplierDue={supplierDue}
-                financeHistoryRows={financeHistoryRows}
-                compact={isMobile}
-              />
-
-              <ExpenseListCard
-                expenses={expenseRows}
-                onAddExpense={detail.openAddExpense}
-              />
-            </View>
-          </View>
+          <TripDetailFinanceView
+            trip={trip}
+            tripDetailTab="finance"
+            tripLedgerEntries={detail.tripLedgerEntries}
+            adjustments={detail.adjustments}
+            viewerOrgId={currentOrganization?.id ?? null}
+            viewerOrganizationName={currentOrganization?.name ?? null}
+            clientName={detail.displayClientName ?? trip.client_name ?? null}
+            subcontractRate={detail.subcontractRate}
+            assignmentAuditRows={detail.assignmentAuditRows}
+            assignmentDriverNames={detail.assignmentDriverNames}
+            assignmentVehicleLabels={detail.assignmentVehicleLabels}
+            tripOtp={detail.tripOtp}
+            partnerName={detail.partnerName}
+            driverName={detail.driverName}
+            driverRating={detail.driverRatingAvg}
+            vehicleLabel={
+              isAggregate
+                ? ((detail.displayVehicleFromInput.trim() || detail.vehicleLabel) ?? null)
+                : detail.vehicleLabel
+            }
+            onSaveAdjustment={detail.handleSaveAdjustment}
+            onRemoveAdjustment={detail.handleRemoveAdjustment}
+            currentUserId={detail.currentUserId}
+            tripDocs={detail.computedTripDocs}
+            onOpenDoc={handleDocOpen}
+            assignmentBlock={
+              trip.organization_id ? (
+                <TripAssignmentBlock
+                  trip={trip}
+                  organizationId={currentOrganization?.id ?? ""}
+                  canAssign={detail.canAssign}
+                  onUpdated={detail.handleAssignmentUpdated}
+                  partnerName={detail.partnerName}
+                  driverName={detail.driverName}
+                  vehicleLabel={
+                    isAggregate
+                      ? detail.displayVehicleFromInput.trim() || detail.vehicleLabel || null
+                      : detail.vehicleLabel
+                  }
+                  driverAvatarUri={detail.driverAvatarUri}
+                  showAssignByPhone={detail.showAssignByPhone}
+                  assignmentSource={detail.assignmentSource}
+                  currentUserId={detail.currentUserId}
+                  previousDriverName={detail.previousDriverName}
+                  latestReassignmentSummary={detail.latestReassignmentSummary}
+                  driverAssignOrgId={
+                    detail.showAssignByPhone && currentOrganization?.id
+                      ? currentOrganization.id
+                      : null
+                  }
+                  onVehicleDisplayChange={(value) => {
+                    const normalized = formatIndianVehicleNumber(value ?? "");
+                    detail.setDisplayVehicleFromInput(normalized);
+                  }}
+                />
+              ) : null
+            }
+          />
         )}
 
         <View style={{ height: !isDesktop ? 120 : 48 }} />
@@ -2270,7 +2232,7 @@ function LedgerCard({
       {/* Header */}
       <View style={ldStyles.header}>
         <View style={ldStyles.headerLeft}>
-          <FontAwesome name="book" size={12} color="#3b82f6" />
+          <FontAwesome name="book" size={12} color={Theme.primary} />
           <Text style={ldStyles.headerTitle}>FINANCIAL LEDGER</Text>
         </View>
         <View style={ldStyles.syncBadge}>
@@ -2352,7 +2314,7 @@ function LedgerCard({
                 <FontAwesome
                   name={isIn ? "arrow-down" : "arrow-up"}
                   size={11}
-                  color={isIn ? "#34d399" : "#f43f5e"}
+                  color={isIn ? Theme.positive : Theme.negative}
                 />
               </View>
               <View style={ldStyles.txInfo}>
@@ -2434,7 +2396,7 @@ function ExpenseListCard({
               onPress={onAddExpense}
               activeOpacity={0.8}
             >
-              <FontAwesome name="plus" size={10} color="#fff" />
+              <FontAwesome name="plus" size={10} color={Theme.textOnDark} />
               <Text style={elStyles.addBtnText}>Add</Text>
             </TouchableOpacity>
           )}
@@ -2443,7 +2405,7 @@ function ExpenseListCard({
 
       {expenses.length === 0 ? (
         <View style={elStyles.empty}>
-          <FontAwesome name="inbox" size={24} color="#cbd5e1" />
+          <FontAwesome name="inbox" size={24} color={Theme.textMuted} />
           <Text style={elStyles.emptyText}>No expenses recorded</Text>
         </View>
       ) : (
@@ -2536,14 +2498,19 @@ function FeedbackPlaceholder() {
 
 const fbStyles = StyleSheet.create({
   card: {
-    backgroundColor: Theme.screenBackground,
-    borderRadius: 36,
+    backgroundColor: Theme.surface,
+    borderRadius: 24,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     overflow: "hidden",
     paddingHorizontal: 24,
     paddingVertical: 20,
     marginBottom: 4,
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 3,
   },
   headerRow: {
     flexDirection: "row",
@@ -2686,73 +2653,110 @@ function NavAction({
 }
 
 // ── Dashboard styles ────────────────────────────────────────────────────────────
-const DS_BG = '#F8FAFC';
-const DS_CARD = '#FFFFFF';
-const DS_BORDER = 'rgba(15,23,42,0.08)';
-const DS_TEXT = '#0F172A';
-const DS_MUTED = 'rgba(15,23,42,0.55)';
+const DS_BG = Theme.screenBackground;
+const DS_CARD = Theme.surface;
+const DS_BORDER = Theme.borderLight;
+const DS_TEXT = Theme.textPrimaryDark;
+const DS_MUTED = Theme.textSecondary;
 
 const dStyles = StyleSheet.create({
   heroCard: {
     flexDirection: 'row',
     backgroundColor: DS_CARD,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: DS_BORDER,
-    padding: 24,
-    marginBottom: 16,
-    flexWrap: 'wrap',
-    gap: 20,
-  },
-  heroLeft: { flex: 1, minWidth: 260 },
-  heroTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20, flexWrap: 'wrap' },
-  heroTripId: { fontSize: 26, fontWeight: '800', color: DS_TEXT, letterSpacing: -0.5 },
-  statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999, borderWidth: 1 },
-  statusDot: { width: 7, height: 7, borderRadius: 4 },
-  statusText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
-  routeRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 12 },
-  routeStop: { flex: 1, minWidth: 100 },
-  routeLabel: { fontSize: 9, fontWeight: '700', color: DS_MUTED, letterSpacing: 1.2, marginBottom: 4 },
-  routeCity: { fontSize: 17, fontWeight: '700', color: DS_TEXT },
-  routeDate: { fontSize: 12, color: DS_MUTED, marginTop: 4 },
-  routeDivider: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  routeLine: { height: 1, width: 32, backgroundColor: 'rgba(15,23,42,0.15)' },
-  heroStats: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(15,23,42,0.03)',
-    borderRadius: 12,
+    borderRadius: 24,
     borderWidth: 1,
     borderColor: DS_BORDER,
     padding: 20,
+    marginBottom: 16,
+    flexWrap: 'wrap',
+    gap: 16,
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    elevation: 4,
+  },
+  heroLeft: { flex: 1, minWidth: 260 },
+  heroTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' },
+  heroTripId: { fontSize: 28, fontWeight: '900', color: DS_TEXT, letterSpacing: -0.8, fontStyle: 'italic' },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    backgroundColor: Theme.surfaceGray,
+  },
+  statusDot: { width: 7, height: 7, borderRadius: 4 },
+  statusText: { fontSize: 10, fontWeight: '900', letterSpacing: 1 },
+  routeRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10 },
+  routeStop: { flex: 1, minWidth: 100 },
+  routeLabel: { fontSize: 9, fontWeight: '800', color: Theme.textMuted, letterSpacing: 1.2, marginBottom: 4, textTransform: 'uppercase' },
+  routeCity: { fontSize: 18, fontWeight: '800', color: DS_TEXT },
+  routeDate: { fontSize: 12, color: DS_MUTED, marginTop: 4 },
+  routeDivider: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  routeLine: { height: 1, width: 32, backgroundColor: Theme.borderLight },
+  heroStats: {
+    flexDirection: 'row',
+    backgroundColor: Theme.surfaceGray,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: DS_BORDER,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
     alignItems: 'center',
     alignSelf: 'center',
     minWidth: 200,
   },
   statBox: { flex: 1, alignItems: 'center' },
-  statLabel: { fontSize: 9, fontWeight: '700', color: DS_MUTED, letterSpacing: 1, marginBottom: 6 },
+  statLabel: { fontSize: 9, fontWeight: '800', color: Theme.textMuted, letterSpacing: 1.2, marginBottom: 6, textTransform: 'uppercase' },
   statValue: { fontSize: 22, fontWeight: '800', color: DS_TEXT },
-  statDivider: { width: 1, height: 36, backgroundColor: 'rgba(15,23,42,0.09)', marginHorizontal: 8 },
+  statDivider: { width: 1, height: 36, backgroundColor: DS_BORDER, marginHorizontal: 8 },
   statBoxSm: { alignItems: 'flex-end' },
-  statLabelSm: { fontSize: 9, fontWeight: '700', color: DS_MUTED, letterSpacing: 1, marginBottom: 4 },
+  statLabelSm: { fontSize: 9, fontWeight: '800', color: Theme.textMuted, letterSpacing: 1.1, marginBottom: 4, textTransform: 'uppercase' },
   statValueSm: { fontSize: 14, fontWeight: '700', color: DS_TEXT },
   row: { flexDirection: 'row', gap: 16, marginBottom: 16, flexWrap: 'wrap' },
-  card: { backgroundColor: DS_CARD, borderRadius: 16, borderWidth: 1, borderColor: DS_BORDER, padding: 20 },
+  card: {
+    backgroundColor: DS_CARD,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: DS_BORDER,
+    padding: 18,
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 3,
+  },
   mapCol: { flex: 3, minWidth: 300 },
   auditCol: { flex: 2, minWidth: 260 },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  cardTitle: { fontSize: 14, fontWeight: '700', color: DS_TEXT, flex: 1 },
-  openMapsBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(96,165,250,0.3)', backgroundColor: 'rgba(96,165,250,0.08)' },
-  openMapsBtnText: { fontSize: 11, fontWeight: '600', color: '#60a5fa' },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
+  cardTitle: { fontSize: 13, fontWeight: '800', color: DS_TEXT, flex: 1, letterSpacing: 0.3 },
+  openMapsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceGray,
+  },
+  openMapsBtnText: { fontSize: 10, fontWeight: '800', color: Theme.textSecondary, letterSpacing: 0.4, textTransform: 'uppercase' },
   telemetryWrap: { borderRadius: 10 },
-  telemetryBar: { flexDirection: 'row', alignItems: 'center', padding: 14, backgroundColor: '#0f141a', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' },
+  telemetryBar: { flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: Theme.surfaceGray, borderTopWidth: 1, borderTopColor: DS_BORDER },
   telemetryTitle: { fontSize: 12, fontWeight: '700', color: DS_TEXT },
-  telemetrySub: { fontSize: 10, color: DS_MUTED, marginTop: 1 },
+  telemetrySub: { fontSize: 10, color: Theme.textMuted, marginTop: 1 },
   timelineHeaderIcon: {
     width: 18,
     height: 18,
     borderRadius: 5,
     borderWidth: 1,
-    borderColor: 'rgba(15,23,42,0.2)',
+    borderColor: DS_BORDER,
+    backgroundColor: Theme.surfaceGray,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 8,
@@ -2760,11 +2764,11 @@ const dStyles = StyleSheet.create({
   timelineHeaderTitle: {
     fontSize: 11,
     fontWeight: '800',
-    color: 'rgba(15,23,42,0.8)',
-    letterSpacing: 0.9,
+    color: Theme.textMuted,
+    letterSpacing: 1.1,
   },
-  auditScroll: { maxHeight: 360 },
-  auditItem: { flexDirection: 'row', gap: 12, paddingBottom: 10, marginBottom: 6 },
+  auditScroll: { maxHeight: 360, paddingRight: 2 },
+  auditItem: { flexDirection: 'row', gap: 12, paddingBottom: 12, marginBottom: 8, borderBottomWidth: 1, borderBottomColor: 'rgba(15,23,42,0.06)' },
   auditItemLast: { marginBottom: 0, paddingBottom: 0 },
   auditTrackCol: { width: 18, alignItems: 'center', flexShrink: 0 },
   auditTimelineDot: {
@@ -2811,26 +2815,26 @@ const dStyles = StyleSheet.create({
   },
   reassignInlineBtn: {
     borderRadius: 999,
-    backgroundColor: '#eff6ff',
+    backgroundColor: Theme.surfaceGray,
     borderWidth: 1,
-    borderColor: '#bfdbfe',
+    borderColor: Theme.borderLight,
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 6,
   },
   reassignInlineBtnText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '800',
-    color: '#1d4ed8',
+    color: Theme.textSecondary,
     textTransform: 'uppercase',
-    letterSpacing: 0.3,
+    letterSpacing: 0.6,
   },
   driverAvatarFallback: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#dbeafe',
+    backgroundColor: Theme.surfaceGray,
     borderWidth: 1,
-    borderColor: '#bfdbfe',
+    borderColor: Theme.borderLight,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2841,9 +2845,9 @@ const dStyles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 10,
-    backgroundColor: '#dcfce7',
+    backgroundColor: Theme.surfaceGray,
     borderWidth: 1,
-    borderColor: '#bbf7d0',
+    borderColor: Theme.borderLight,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2858,8 +2862,8 @@ const dStyles = StyleSheet.create({
   docStatusText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
   docStatusTextVerified: { color: '#22c55e' },
   docStatusTextPending: { color: '#f59e0b' },
-  docsBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: 'rgba(15,23,42,0.04)', borderWidth: 1, borderColor: DS_BORDER },
-  docsBadgeText: { fontSize: 10, fontWeight: '700', color: DS_MUTED, letterSpacing: 0.4 },
+  docsBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: Theme.surfaceGray, borderWidth: 1, borderColor: DS_BORDER },
+  docsBadgeText: { fontSize: 9, fontWeight: '800', color: Theme.textMuted, letterSpacing: 0.8, textTransform: 'uppercase' },
 });
 
 // ── Styles ─────────────────────────────────────────────────────────────────────
@@ -4380,6 +4384,124 @@ const styles = StyleSheet.create({
     letterSpacing: 0.7,
     color: "#059669",
   },
+  refSettleHeadRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  refSettleKicker: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+  },
+  refSettleTitle: {
+    marginTop: 4,
+    fontSize: 24,
+    fontWeight: "900",
+    color: "#0f172a",
+    letterSpacing: -0.5,
+    fontStyle: "italic",
+  },
+  refSettleSub: {
+    marginTop: 3,
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  refSettleAmountRow: {
+    marginTop: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  refSettleAmountWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  refSettleAmountLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  refSettleAmountValue: {
+    marginTop: 4,
+    fontSize: 28,
+    fontWeight: "900",
+    color: "#0f172a",
+    letterSpacing: -0.8,
+  },
+  refSettlePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    backgroundColor: "#eff6ff",
+  },
+  refSettlePillText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#1d4ed8",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  refSettleProgressTrack: {
+    marginTop: 12,
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: "#e2e8f0",
+    overflow: "hidden",
+  },
+  refSettleProgressFill: {
+    height: "100%",
+    borderRadius: 999,
+    backgroundColor: "#0f172a",
+  },
+  refSettleMetricsRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    gap: 8,
+  },
+  refSettleMetricCard: {
+    flex: 1,
+    minWidth: 0,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 12,
+    backgroundColor: "#f8fafc",
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  refSettleMetricLabel: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 0.9,
+    marginBottom: 3,
+  },
+  refSettleMetricValue: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  refSettleMetricValueStrong: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#0f172a",
+    letterSpacing: -0.2,
+  },
   refFinanceBreakCard: {
     backgroundColor: "#fff",
     borderRadius: 30,
@@ -5218,23 +5340,102 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
   },
   financeLeftCol: {
-    flex: 0.95,
-    minWidth: 380,
+    flex: 0.78,
+    minWidth: 360,
     gap: 16,
   },
   financeRightCol: {
-    flex: 1.05,
-    minWidth: 420,
+    flex: 1.22,
+    minWidth: 460,
     flexDirection: "column",
-    gap: 20,
+    gap: 16,
   },
-  yieldCard: {
-    backgroundColor: "#fff",
+  financeAdjustmentsDesktopCtas: {
+    marginTop: 12,
+    flexDirection: "row",
+    gap: 10,
+    justifyContent: "flex-end",
+  },
+  financeTxnDesktopList: {
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+    padding: 12,
+    gap: 8,
+  },
+  financeSummaryCard: {
+    backgroundColor: Theme.surface,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    padding: 18,
+    gap: 10,
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  financeSummaryTitle: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+  },
+  financeSummarySub: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 1.1,
+    marginBottom: 2,
+  },
+  financeSummaryGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  financeSummaryCell: {
+    width: "48%",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceGray,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  financeSummaryLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.9,
+    marginBottom: 4,
+  },
+  financeSummaryValue: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.2,
+  },
+  financeSummaryValuePositive: {
+    color: Theme.positive,
+  },
+  financeSummaryValueNegative: {
+    color: Theme.negative,
+  },
+  yieldCard: {
+    backgroundColor: Theme.surface,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
     padding: 20,
     gap: 16,
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    elevation: 4,
   },
   yieldHeader: {
     gap: 4,
@@ -5242,15 +5443,16 @@ const styles = StyleSheet.create({
   yieldTitle: {
     fontSize: 22,
     fontWeight: "900",
-    color: "#0f172a",
+    color: Theme.textPrimaryDark,
     letterSpacing: -0.4,
+    fontStyle: "italic",
   },
   yieldSub: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#94a3b8",
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textMuted,
     textTransform: "uppercase",
-    letterSpacing: 1.1,
+    letterSpacing: 1.2,
   },
   yieldStatsGrid: {
     flexDirection: "row",
@@ -5259,50 +5461,50 @@ const styles = StyleSheet.create({
   yieldStatItem: {
     flex: 1,
     borderWidth: 1,
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 14,
     gap: 8,
   },
   yieldStatPositive: {
-    backgroundColor: "#ecfdf5",
-    borderColor: "#a7f3d0",
+    backgroundColor: Theme.positiveMuted,
+    borderColor: Theme.borderLight,
   },
   yieldStatNegative: {
-    backgroundColor: "#fff1f2",
-    borderColor: "#fecdd3",
+    backgroundColor: Theme.negativeMuted,
+    borderColor: Theme.borderLight,
   },
   yieldStatAmount: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: "900",
-    color: "#0f172a",
-    letterSpacing: -0.3,
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.4,
   },
   yieldStatLabel: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#64748b",
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textMuted,
     textTransform: "uppercase",
-    letterSpacing: 0.9,
+    letterSpacing: 1.1,
   },
   netResultCard: {
-    backgroundColor: "#0f172a",
-    borderRadius: 18,
+    backgroundColor: Theme.darkBackground,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#1e293b",
+    borderColor: Theme.borderOnDark,
     padding: 16,
     gap: 8,
   },
   netResultLabel: {
     fontSize: 9,
     fontWeight: "800",
-    color: "#94a3b8",
+    color: Theme.textMutedOnDark,
     textTransform: "uppercase",
     letterSpacing: 1.1,
   },
   netResultValue: {
     fontSize: 28,
     fontWeight: "900",
-    color: "#f8fafc",
+    color: Theme.textOnDark,
     letterSpacing: -0.8,
   },
   netResultTrend: {
@@ -5313,15 +5515,20 @@ const styles = StyleSheet.create({
   netResultTrendText: {
     fontSize: 11,
     fontWeight: "700",
-    color: "#34d399",
+    color: Theme.positive,
   },
   financeAdjustmentsCard: {
-    backgroundColor: "#fff",
-    borderRadius: 20,
+    backgroundColor: Theme.surface,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: Theme.borderLight,
     padding: 18,
     gap: 12,
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 3,
   },
   financeAdjustmentsHeader: {
     gap: 3,
@@ -5329,38 +5536,38 @@ const styles = StyleSheet.create({
   },
   financeAdjustmentsTitle: {
     fontSize: 14,
-    fontWeight: "800",
-    color: "#0f172a",
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
   },
   financeAdjustmentsSub: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#94a3b8",
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textMuted,
     textTransform: "uppercase",
-    letterSpacing: 0.9,
+    letterSpacing: 1.1,
   },
   financeAdjustmentsRow: {
     borderWidth: 1,
-    borderColor: "#f1f5f9",
-    borderRadius: 14,
+    borderColor: Theme.borderLight,
+    borderRadius: 16,
     paddingHorizontal: 12,
     paddingVertical: 10,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
-    backgroundColor: "#f8fafc",
+    backgroundColor: Theme.surfaceGray,
   },
   financeAdjustmentsMetric: {
     flex: 1,
     minWidth: 0,
   },
   financeAdjustmentsMetricLabel: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#64748b",
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textMuted,
     textTransform: "uppercase",
-    letterSpacing: 0.7,
+    letterSpacing: 1.05,
     marginBottom: 3,
   },
   financeAdjustmentsMetricValue: {
@@ -5369,35 +5576,160 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   financeAdjustmentsMetricValuePositive: {
-    color: "#16a34a",
+    color: Theme.positive,
   },
   financeAdjustmentsMetricValueNegative: {
-    color: "#dc2626",
+    color: Theme.negative,
   },
   financeAdjustmentsBtn: {
-    borderRadius: 10,
-    backgroundColor: "#0f172a",
+    borderRadius: 999,
+    backgroundColor: Theme.darkBackground,
     paddingHorizontal: 10,
     paddingVertical: 8,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     borderWidth: 1,
-    borderColor: "#0f172a",
+    borderColor: Theme.borderOnDark,
   },
   financeAdjustmentsBtnAlt: {
-    backgroundColor: "#e2e8f0",
-    borderColor: "#cbd5e1",
+    backgroundColor: Theme.surfaceGray,
+    borderColor: Theme.borderLight,
   },
   financeAdjustmentsBtnText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#fff",
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textOnDark,
     textTransform: "uppercase",
-    letterSpacing: 0.6,
+    letterSpacing: 0.9,
   },
   financeAdjustmentsBtnTextAlt: {
-    color: "#334155",
+    color: Theme.textSecondary,
+  },
+  financeTxnCard: {
+    backgroundColor: Theme.surface,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    padding: 16,
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  financeTxnHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  financeTxnTitle: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  financeTxnCount: {
+    minWidth: 28,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceGray,
+    textAlign: "center",
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textSecondary,
+  },
+  financeTxnSearchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceGray,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 10,
+  },
+  financeTxnSearchInput: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+  },
+  financeTxnEmpty: {
+    fontSize: 12,
+    color: Theme.textMuted,
+    paddingVertical: 10,
+    textAlign: "center",
+  },
+  financeTxnList: {
+    gap: 8,
+  },
+  financeTxnRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 14,
+    backgroundColor: Theme.surfaceGray,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  financeTxnLeft: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+  },
+  financeTxnIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
+  financeTxnIconIn: {
+    backgroundColor: Theme.positiveMuted,
+    borderColor: Theme.borderLight,
+  },
+  financeTxnIconOut: {
+    backgroundColor: Theme.negativeMuted,
+    borderColor: Theme.borderLight,
+  },
+  financeTxnTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  financeTxnLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  financeTxnMeta: {
+    fontSize: 10,
+    color: Theme.textMuted,
+    marginTop: 2,
+  },
+  financeTxnAmount: {
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  financeTxnAmountIn: {
+    color: Theme.positive,
+  },
+  financeTxnAmountOut: {
+    color: Theme.negative,
   },
 
   // ── Document preview modal (web) ──
@@ -5501,16 +5833,16 @@ const styles = StyleSheet.create({
 
 const ldStyles = StyleSheet.create({
   card: {
-    backgroundColor: "#0b1120",
-    borderRadius: 16,
+    backgroundColor: Theme.surface,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: "#1e293b",
+    borderColor: Theme.borderLight,
     overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 20,
-    elevation: 6,
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    elevation: 4,
   },
   header: {
     flexDirection: "row",
@@ -5519,7 +5851,7 @@ const ldStyles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(30, 41, 59, 0.8)",
+    borderBottomColor: Theme.borderLight,
   },
   headerLeft: {
     flexDirection: "row",
@@ -5529,14 +5861,14 @@ const ldStyles = StyleSheet.create({
   headerTitle: {
     fontSize: 10,
     fontWeight: "800",
-    color: "#fff",
+    color: Theme.textPrimaryDark,
     letterSpacing: 2,
     textTransform: "uppercase",
   },
   syncBadge: {
-    backgroundColor: "rgba(30, 41, 59, 0.5)",
+    backgroundColor: Theme.surfaceGray,
     borderWidth: 1,
-    borderColor: "#334155",
+    borderColor: Theme.borderLight,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 5,
@@ -5544,7 +5876,7 @@ const ldStyles = StyleSheet.create({
   syncText: {
     fontSize: 9,
     fontWeight: "700",
-    color: "#64748b",
+    color: Theme.textMuted,
     textTransform: "uppercase",
     letterSpacing: 1,
   },
@@ -5554,10 +5886,10 @@ const ldStyles = StyleSheet.create({
     flexShrink: 1,
     marginHorizontal: 16,
     marginTop: 14,
-    backgroundColor: "rgba(30, 41, 59, 0.4)",
-    borderRadius: 12,
+    backgroundColor: Theme.surfaceGray,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "rgba(51, 65, 85, 0.5)",
+    borderColor: Theme.borderLight,
     paddingVertical: 14,
     paddingHorizontal: 16,
   },
@@ -5572,32 +5904,32 @@ const ldStyles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "#34d399",
+    backgroundColor: Theme.positive,
   },
   statLabel: {
     fontSize: 9,
     fontWeight: "700",
-    color: "#64748b",
+    color: Theme.textMuted,
     textTransform: "uppercase",
     letterSpacing: 1,
     marginBottom: 6,
   },
-  statLabelGreen: { color: "#34d399" },
-  statLabelRed: { color: "#f43f5e" },
-  statLabelOrange: { color: "#fb923c" },
+  statLabelGreen: { color: Theme.positive },
+  statLabelRed: { color: Theme.negative },
+  statLabelOrange: { color: Theme.warning },
   statValue: {
     fontSize: 16,
     fontWeight: "800",
-    color: "#f8fafc",
+    color: Theme.textPrimaryDark,
     letterSpacing: -0.3,
     flexShrink: 1,
   },
-  statValueGreen: { color: "#34d399" },
-  statValueRed: { color: "#f43f5e" },
-  statValueOrange: { color: "#fb923c" },
+  statValueGreen: { color: Theme.positive },
+  statValueRed: { color: Theme.negative },
+  statValueOrange: { color: Theme.warning },
   statDivider: {
     width: 1,
-    backgroundColor: "rgba(51, 65, 85, 0.5)",
+    backgroundColor: Theme.borderLight,
     marginHorizontal: 12,
     alignSelf: "stretch",
   },
@@ -5615,27 +5947,27 @@ const ldStyles = StyleSheet.create({
   txHeader: {
     fontSize: 9,
     fontWeight: "700",
-    color: "#475569",
+    color: Theme.textMuted,
     letterSpacing: 1.5,
     textTransform: "uppercase",
   },
   txViewAll: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#3b82f6",
+    color: Theme.primary,
     letterSpacing: 0.5,
     textTransform: "uppercase",
   },
-  txEmpty: { fontSize: 13, color: "#475569", paddingVertical: 8 },
+  txEmpty: { fontSize: 13, color: Theme.textSecondary, paddingVertical: 8 },
   txRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(30, 41, 59, 0.3)",
-    borderRadius: 12,
+    backgroundColor: Theme.surfaceGray,
+    borderRadius: 14,
     padding: 14,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: "rgba(51, 65, 85, 0.5)",
+    borderColor: Theme.borderLight,
     gap: 12,
   },
   txIcon: {
@@ -5647,46 +5979,46 @@ const ldStyles = StyleSheet.create({
     borderWidth: 1,
   },
   txIconIn: {
-    backgroundColor: "rgba(52, 211, 153, 0.1)",
-    borderColor: "rgba(52, 211, 153, 0.2)",
+    backgroundColor: Theme.positiveMuted,
+    borderColor: Theme.borderLight,
   },
   txIconOut: {
-    backgroundColor: "rgba(244, 63, 94, 0.1)",
-    borderColor: "rgba(244, 63, 94, 0.2)",
+    backgroundColor: Theme.negativeMuted,
+    borderColor: Theme.borderLight,
   },
   txInfo: { flex: 1, minWidth: 0 },
   txTitle: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#e2e8f0",
+    color: Theme.textPrimaryDark,
     marginBottom: 4,
   },
   txMeta: {
     fontSize: 9,
     fontWeight: "700",
-    color: "#475569",
+    color: Theme.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
   txAmount: { fontSize: 15, fontWeight: "800", letterSpacing: -0.3 },
-  txAmountIn: { color: "#34d399" },
-  txAmountOut: { color: "#f43f5e" },
+  txAmountIn: { color: Theme.positive },
+  txAmountOut: { color: Theme.negative },
 });
 
 // ── Expense list card styles ───────────────────────────────────────────────────
 
 const elStyles = StyleSheet.create({
   card: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
+    backgroundColor: Theme.surface,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: "#f1f5f9",
+    borderColor: Theme.borderLight,
     overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.05,
-    shadowRadius: 16,
-    elevation: 2,
+    shadowRadius: 12,
+    elevation: 3,
   },
   header: {
     flexDirection: "row",
@@ -5695,7 +6027,7 @@ const elStyles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 18,
     borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
+    borderBottomColor: Theme.borderLight,
   },
   headerLeft: {
     flexDirection: "row",
@@ -5705,18 +6037,18 @@ const elStyles = StyleSheet.create({
   title: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#0f172a",
+    color: Theme.textPrimaryDark,
     letterSpacing: -0.2,
   },
   badge: {
-    backgroundColor: "#eff6ff",
+    backgroundColor: Theme.surfaceGray,
     borderWidth: 1,
-    borderColor: "#bfdbfe",
+    borderColor: Theme.borderLight,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 999,
   },
-  badgeText: { fontSize: 11, fontWeight: "700", color: "#2563eb" },
+  badgeText: { fontSize: 10, fontWeight: "800", color: Theme.textSecondary, letterSpacing: 0.5 },
   headerRight: {
     flexDirection: "row",
     alignItems: "center",
@@ -5725,26 +6057,26 @@ const elStyles = StyleSheet.create({
   total: {
     fontSize: 20,
     fontWeight: "900",
-    color: "#0f172a",
+    color: Theme.textPrimaryDark,
     letterSpacing: -0.5,
   },
   addBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    backgroundColor: "#0f172a",
+    backgroundColor: Theme.darkBackground,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 8,
+    borderRadius: 999,
   },
-  addBtnText: { fontSize: 11, fontWeight: "700", color: "#fff" },
+  addBtnText: { fontSize: 10, fontWeight: "800", color: Theme.textOnDark, letterSpacing: 0.5, textTransform: "uppercase" },
   empty: {
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 40,
     gap: 8,
   },
-  emptyText: { fontSize: 13, color: "#94a3b8", fontStyle: "italic" },
+  emptyText: { fontSize: 13, color: Theme.textMuted, fontStyle: "italic" },
   list: { paddingHorizontal: 16, paddingVertical: 8 },
   item: {
     flexDirection: "row",
@@ -5753,10 +6085,10 @@ const elStyles = StyleSheet.create({
     paddingHorizontal: 8,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#f1f5f9",
+    borderColor: Theme.borderLight,
     marginBottom: 8,
     gap: 12,
-    backgroundColor: "#fff",
+    backgroundColor: Theme.surfaceGray,
   },
   itemIcon: {
     width: 40,
@@ -5769,16 +6101,16 @@ const elStyles = StyleSheet.create({
   itemTitle: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#1e293b",
+    color: Theme.textPrimaryDark,
     marginBottom: 3,
   },
-  itemMeta: { fontSize: 10, color: "#94a3b8", fontWeight: "500" },
+  itemMeta: { fontSize: 10, color: Theme.textMuted, fontWeight: "500" },
   itemRight: { alignItems: "flex-end", gap: 4 },
-  itemAmount: { fontSize: 14, fontWeight: "800", color: "#0f172a" },
+  itemAmount: { fontSize: 14, fontWeight: "800", color: Theme.textPrimaryDark },
   itemStatus: {
     paddingHorizontal: 7,
     paddingVertical: 2,
-    borderRadius: 4,
+    borderRadius: 999,
     borderWidth: 1,
   },
   itemStatusText: {
