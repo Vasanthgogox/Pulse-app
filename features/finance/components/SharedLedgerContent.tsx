@@ -76,6 +76,14 @@ export interface SharedTripData {
   paid: number;
 }
 
+export type SharedLedgerNotificationAction =
+  | "review_dispute"
+  | "raise_dispute"
+  | "fix_records"
+  | "compare_now"
+  | "follow_up"
+  | "view_status";
+
 export interface EntityCompareVerifyViewProps {
   entity: {
     id: string;
@@ -109,6 +117,10 @@ export interface EntityCompareVerifyViewProps {
    * flow as Trips tab — while Shared tab is active.
    */
   externalDownloadRequest?: number;
+  /** Optional deep-link context from notifications. */
+  initialNotificationAction?: SharedLedgerNotificationAction | null;
+  /** Optional deep-link trip/transaction id from notifications. */
+  initialNotificationTripId?: string | null;
 }
 
 function formatINR(n: number): string {
@@ -502,6 +514,8 @@ export function SharedLedgerContent({
   onRequestConnection,
   onInviteToApp,
   externalDownloadRequest,
+  initialNotificationAction = null,
+  initialNotificationTripId = null,
 }: EntityCompareVerifyViewProps) {
   const resolutionOptions = entityType === "CLIENT" ? [
     "Partner needs to update Sales amount",
@@ -578,6 +592,7 @@ export function SharedLedgerContent({
   const [sharedReportVisible, setSharedReportVisible] = useState(false);
   const [pendingOpenSharedReport, setPendingOpenSharedReport] = useState(false);
   const prevExternalDownloadRequest = useRef(0);
+  const notificationActionHandledRef = useRef(false);
 
   const insets = useSafeAreaInsets();
 
@@ -1602,6 +1617,7 @@ export function SharedLedgerContent({
       m.set(String(d.transaction_id).trim().toLowerCase(), d);
     return m;
   }, [openReceivedDisputesForView]);
+
   const receivedDisputeMissions = useMemo(() => {
     return openReceivedDisputesForView
       .map((d) => {
@@ -1857,6 +1873,50 @@ export function SharedLedgerContent({
       handleDeclineReceivedDispute,
     ],
   );
+
+  useEffect(() => {
+    if (notificationActionHandledRef.current) return;
+    if (!initialNotificationAction) return;
+    if (!initialNotificationTripId?.trim()) return;
+    if (loadingShared) return;
+
+    const tripKey = normTripKey(initialNotificationTripId);
+    const row =
+      reconciledRows.find((r) => normTripKey(r.tripId) === tripKey) ??
+      reconciledRows.find((r) => normTripKey(r.missionId) === tripKey) ??
+      null;
+
+    if (
+      initialNotificationAction === "review_dispute" &&
+      disputeReceivedByTripId.has(tripKey)
+    ) {
+      reviewReceivedDisputeForTrip(initialNotificationTripId);
+      notificationActionHandledRef.current = true;
+      return;
+    }
+
+    if (initialNotificationAction === "raise_dispute" && row) {
+      setSelectedDispute(row);
+      notificationActionHandledRef.current = true;
+      return;
+    }
+
+    if (
+      initialNotificationAction === "compare_now" ||
+      initialNotificationAction === "follow_up" ||
+      initialNotificationAction === "view_status" ||
+      initialNotificationAction === "fix_records"
+    ) {
+      notificationActionHandledRef.current = true;
+    }
+  }, [
+    initialNotificationAction,
+    initialNotificationTripId,
+    loadingShared,
+    reconciledRows,
+    disputeReceivedByTripId,
+    reviewReceivedDisputeForTrip,
+  ]);
 
   const handleSubmitDispute = useCallback(async () => {
     if (actionLoading) return;
@@ -2193,6 +2253,17 @@ export function SharedLedgerContent({
             integratedPartner={!!integrated}
             partnerOrganizationId={
               partnerOrgId ?? entity.linked_organization_id ?? null
+            }
+            initialTripFocusId={
+              initialNotificationAction &&
+              initialNotificationAction !== "fix_records"
+                ? initialNotificationTripId ?? null
+                : null
+            }
+            initialTxnTripRef={
+              initialNotificationAction === "fix_records"
+                ? initialNotificationTripId ?? null
+                : null
             }
           />
             </>

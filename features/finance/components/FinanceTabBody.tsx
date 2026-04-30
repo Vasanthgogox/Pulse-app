@@ -13,18 +13,18 @@ import type { IndentRow } from "@/features/indents/services/indents.service";
 import { SuppliersTab } from "@/features/suppliers/components/SuppliersTab";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
 import type { TripRow } from "@/features/trips";
+import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
 import type { GarrageViewTab } from "@/features/vehicles/components/GarrageTab";
 import { GarrageTab } from "@/features/vehicles/components/GarrageTab";
 import type { VehicleRow } from "@/features/vehicles/services/vehicles.service";
-import type { ConnectionRequestRow } from "@/services/connectionRequestsService";
 import type { LinkedOrgDisplay } from "@/lib/useLinkedOrgProfileMap";
+import type { ConnectionRequestRow } from "@/services/connectionRequestsService";
 import type { ReactNode } from "react";
 import { Platform, Text, View, useWindowDimensions } from "react-native";
 import type { LedgerRow } from "../services/finance.service";
 import type { FinanceSubTab } from "../types";
-import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
-import { styles } from "./FinanceScreen.styles";
 import { FinanceKanbanTab } from "./FinanceKanbanTab";
+import { styles } from "./FinanceScreen.styles";
 import type { FinancialRowData } from "./FinancialRow";
 import { LedgerTab } from "./LedgerTab";
 import type { EntityListFilter } from "./TreasurySummaryCard";
@@ -147,7 +147,7 @@ export function FinanceTabBody({
 }: FinanceTabBodyProps) {
   const { width: windowWidth } = useWindowDimensions();
   // Kanban only for Web desktop (large screens); mobile/native/tablet uses standard list
-  const isWebLargeScreen = Platform.OS === 'web' && windowWidth >= 1024;
+  const isWebLargeScreen = Platform.OS === "web" && windowWidth >= 1024;
 
   if (financeSubTab === "cash") {
     if (isWebLargeScreen) {
@@ -181,28 +181,28 @@ export function FinanceTabBody({
         {ledgerLoading && ledgerTransactions === null ? (
           <Text style={styles.ledgerLoading}>Loading…</Text>
         ) : (
-        <LedgerTab
-          organizationId={orgId}
-          refreshKey={ledgerRefreshKey}
-          transactions={
-            ledgerTransactions !== null ? filteredLedgerForDisplay : undefined
-          }
-          viewMode="transaction"
-          showFiscalSubTabs={false}
-          onRowSelect={onLedgerRowSelect}
-          onEntitySelect={() => {}}
-          getVehicleNumberForTripId={getVehicleNumberForTripId}
-          tripOptions={trips}
-          tripDetailsMap={tripDetailsMap}
-          onMissionChange={onLedgerMissionChange}
-          onAddTransactionPress={onAddTransactionPress}
-          clientRows={clientRows}
-          supplierRows={supplierRows}
-          driverRows={driverRows}
-          driverProfileImageUrls={profileImages}
-          tripPartyMap={tripPartyMap}
-          linkedOrgDisplayMap={linkedOrgDisplayMap}
-        />
+          <LedgerTab
+            organizationId={orgId}
+            refreshKey={ledgerRefreshKey}
+            transactions={
+              ledgerTransactions !== null ? filteredLedgerForDisplay : undefined
+            }
+            viewMode="transaction"
+            showFiscalSubTabs={false}
+            onRowSelect={onLedgerRowSelect}
+            onEntitySelect={() => {}}
+            getVehicleNumberForTripId={getVehicleNumberForTripId}
+            tripOptions={trips}
+            tripDetailsMap={tripDetailsMap}
+            onMissionChange={onLedgerMissionChange}
+            onAddTransactionPress={onAddTransactionPress}
+            clientRows={clientRows}
+            supplierRows={supplierRows}
+            driverRows={driverRows}
+            driverProfileImageUrls={profileImages}
+            tripPartyMap={tripPartyMap}
+            linkedOrgDisplayMap={linkedOrgDisplayMap}
+          />
         )}
       </View>
     );

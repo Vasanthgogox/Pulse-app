@@ -21,19 +21,17 @@ import {
     type DirectQuoteRow,
     type IndentRow,
 } from "@/features/indents";
-import {
-  acceptAwardedQuote,
-} from "@/features/indents/services/accept-awarded-quote.service";
+import { acceptAwardedQuote } from "@/features/indents/services/accept-awarded-quote.service";
 import { shareDraftIndent } from "@/features/indents/services/indents.service";
+import { indentCanBroadcastToPulseNetwork } from "@/features/network/utils/indentBroadcastEligibility.util";
 import {
     assignAggregateTripDriverByPhone,
     generateTripOtp,
     getDriverAvailabilityByPhone,
     regenerateTripOtp,
     setInitialTripForDetail,
-    updateTripSupplier
+    updateTripSupplier,
 } from "@/features/trips";
-import { indentCanBroadcastToPulseNetwork } from "@/features/network/utils/indentBroadcastEligibility.util";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { formatINR, formatMobileNumber } from "@/lib/format";
 import { validatePhone } from "@/lib/phoneValidation";
@@ -60,25 +58,25 @@ import { useRouter } from "expo-router";
 import { Building2, Package, Share2, Users, X, Zap } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  Image,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  Share,
-  StyleSheet,
-  Easing,
-  Switch,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  useWindowDimensions,
-  View,
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Easing,
+    Image,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    Pressable,
+    RefreshControl,
+    ScrollView,
+    Share,
+    StyleSheet,
+    Switch,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -302,7 +300,8 @@ export function LoadCenterView({
   const queryClient = useQueryClient();
 
   const isClaimedTab = loadSubTab === "AWARDED";
-  const loadSubTabIndex = loadSubTab === "GIVE_LOAD" ? 0 : loadSubTab === "GET_LOAD" ? 1 : 2;
+  const loadSubTabIndex =
+    loadSubTab === "GIVE_LOAD" ? 0 : loadSubTab === "GET_LOAD" ? 1 : 2;
   useEffect(() => {
     Animated.timing(loadTabsActiveAnim, {
       toValue: loadSubTabIndex,
@@ -1081,7 +1080,9 @@ export function LoadCenterView({
         Alert.alert("Could not assign", assignErr.message);
         return;
       }
-      const { error: tripErr, trip } = await acceptAwardedQuote(acceptedQuote.id);
+      const { error: tripErr, trip } = await acceptAwardedQuote(
+        acceptedQuote.id,
+      );
       if (tripErr || !trip) {
         Alert.alert(
           "Could not create trip",
@@ -1433,7 +1434,7 @@ export function LoadCenterView({
         onPress={() => onIndentPress(load)}
         activeOpacity={0.7}
       >
-        <View style={[styles.loadCardOrb, { pointerEvents: 'none' }]} />
+        <View style={[styles.loadCardOrb, { pointerEvents: "none" }]} />
         <View style={styles.loadCardHeroRow}>
           <View style={styles.loadPillRow}>
             <View style={styles.loadTypePill}>
@@ -1576,7 +1577,11 @@ export function LoadCenterView({
                         {
                           translateX: loadTabsActiveAnim.interpolate({
                             inputRange: [0, 1, 2],
-                            outputRange: [0, (loadTabsWrapWidth - 8) / 3, ((loadTabsWrapWidth - 8) / 3) * 2],
+                            outputRange: [
+                              0,
+                              (loadTabsWrapWidth - 8) / 3,
+                              ((loadTabsWrapWidth - 8) / 3) * 2,
+                            ],
                           }),
                         },
                       ],
@@ -1585,15 +1590,30 @@ export function LoadCenterView({
                 />
               ) : null}
               {[
-                { key: "GIVE_LOAD" as const, label: "GIVE LOAD", count: hirePartnerLoads.length },
-                { key: "GET_LOAD" as const, label: "GET LOAD", count: findWorkLoads.length },
-                { key: "AWARDED" as const, label: "CLAIMED", count: awardedLoads.length },
+                {
+                  key: "GIVE_LOAD" as const,
+                  label: "GIVE LOAD",
+                  count: hirePartnerLoads.length,
+                },
+                {
+                  key: "GET_LOAD" as const,
+                  label: "GET LOAD",
+                  count: findWorkLoads.length,
+                },
+                {
+                  key: "AWARDED" as const,
+                  label: "CLAIMED",
+                  count: awardedLoads.length,
+                },
               ].map((tab) => {
                 const active = loadSubTab === tab.key;
                 return (
                   <TouchableOpacity
                     key={tab.key}
-                    style={[styles.loadMainTabPill, active && styles.loadMainTabPillActive]}
+                    style={[
+                      styles.loadMainTabPill,
+                      active && styles.loadMainTabPillActive,
+                    ]}
                     onPress={() => setLoadSubTab(tab.key)}
                     activeOpacity={0.8}
                     accessibilityRole="tab"
@@ -1609,8 +1629,18 @@ export function LoadCenterView({
                       {tab.label}
                     </Text>
                     {tab.count > 0 ? (
-                      <View style={[styles.loadMainTabBadge, active && styles.loadMainTabBadgeActive]}>
-                        <Text style={[styles.loadMainTabBadgeText, active && styles.loadMainTabBadgeTextActive]}>
+                      <View
+                        style={[
+                          styles.loadMainTabBadge,
+                          active && styles.loadMainTabBadgeActive,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.loadMainTabBadgeText,
+                            active && styles.loadMainTabBadgeTextActive,
+                          ]}
+                        >
                           {tab.count}
                         </Text>
                       </View>
@@ -1634,7 +1664,9 @@ export function LoadCenterView({
           ) : null}
           {isSingleRowHeader ? (
             <>
-              <View style={[styles.loadSearchWrap, styles.loadSearchWrapSingle]}>
+              <View
+                style={[styles.loadSearchWrap, styles.loadSearchWrapSingle]}
+              >
                 <FontAwesome
                   name="search"
                   size={15}
@@ -1702,63 +1734,63 @@ export function LoadCenterView({
               isClaimedTab && styles.loadSearchRowClaimed,
             ]}
           >
-          <View style={styles.loadSearchWrap}>
-            <FontAwesome
-              name="search"
-              size={15}
-              color={Theme.textSecondary}
-              style={styles.loadSearchIcon}
-            />
-            <TextInput
-              style={styles.loadSearchInput}
-              placeholder="Search loads by route, load ID, client..."
-              placeholderTextColor={Theme.textSecondary}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-          </View>
-          {!isClaimedTab ? (
-            <View style={styles.loadTypeFilterWrap}>
-              {statusTabsForRole.map((tab) => {
-                const count = statusTabCounts[tab.id];
-                const isActive = statusFilterTab === tab.id;
-                const tabLabel =
-                  loadSubTab === "GIVE_LOAD" && tab.id === "OPEN"
-                    ? "Created"
-                    : tab.label;
-                return (
-                  <TouchableOpacity
-                    key={tab.id}
-                    style={[
-                      styles.loadTypeFilterChip,
-                      isActive && styles.loadTypeFilterChipActive,
-                    ]}
-                    onPress={() => setStatusFilterTab(tab.id)}
-                    activeOpacity={0.8}
-                  >
-                    <Text
-                      style={[
-                        styles.loadTypeFilterChipText,
-                        isActive && styles.loadTypeFilterChipTextActive,
-                      ]}
-                    >
-                      {tabLabel}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.loadTypeFilterChipCount,
-                        isActive && styles.loadTypeFilterChipCountActive,
-                      ]}
-                    >
-                      {count}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+            <View style={styles.loadSearchWrap}>
+              <FontAwesome
+                name="search"
+                size={15}
+                color={Theme.textSecondary}
+                style={styles.loadSearchIcon}
+              />
+              <TextInput
+                style={styles.loadSearchInput}
+                placeholder="Search loads by route, load ID, client..."
+                placeholderTextColor={Theme.textSecondary}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
             </View>
-          ) : null}
+            {!isClaimedTab ? (
+              <View style={styles.loadTypeFilterWrap}>
+                {statusTabsForRole.map((tab) => {
+                  const count = statusTabCounts[tab.id];
+                  const isActive = statusFilterTab === tab.id;
+                  const tabLabel =
+                    loadSubTab === "GIVE_LOAD" && tab.id === "OPEN"
+                      ? "Created"
+                      : tab.label;
+                  return (
+                    <TouchableOpacity
+                      key={tab.id}
+                      style={[
+                        styles.loadTypeFilterChip,
+                        isActive && styles.loadTypeFilterChipActive,
+                      ]}
+                      onPress={() => setStatusFilterTab(tab.id)}
+                      activeOpacity={0.8}
+                    >
+                      <Text
+                        style={[
+                          styles.loadTypeFilterChipText,
+                          isActive && styles.loadTypeFilterChipTextActive,
+                        ]}
+                      >
+                        {tabLabel}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.loadTypeFilterChipCount,
+                          isActive && styles.loadTypeFilterChipCountActive,
+                        ]}
+                      >
+                        {count}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ) : null}
           </View>
         ) : null}
       </View>
@@ -1840,8 +1872,8 @@ export function LoadCenterView({
                     </View>
                     {onShareToNetwork ? (
                       <Text style={styles.loadSectionSub}>
-                        Indents not yet awarded: use Pulse to broadcast a 24h story
-                        to your network.
+                        Indents not yet awarded: use Pulse to broadcast a 24h
+                        story to your network.
                       </Text>
                     ) : null}
                   </View>
@@ -1903,7 +1935,12 @@ export function LoadCenterView({
                           onPress={() => onIndentPress(load)}
                           activeOpacity={0.7}
                         >
-                          <View style={[styles.loadCardOrb, { pointerEvents: 'none' }]} />
+                          <View
+                            style={[
+                              styles.loadCardOrb,
+                              { pointerEvents: "none" },
+                            ]}
+                          />
                           <View style={styles.loadCardHeroRow}>
                             <View style={styles.loadPillRow}>
                               <View style={styles.loadTypePill}>
@@ -1945,7 +1982,8 @@ export function LoadCenterView({
                               weightDetail,
                               loadTypeDetail,
                             )}
-                            {(isAwaitingSupplierDeploy || status === "awarded") &&
+                            {(isAwaitingSupplierDeploy ||
+                              status === "awarded") &&
                             awardedAmount != null ? (
                               <View style={styles.loadCardQuoteHint}>
                                 <Text style={styles.loadCardQuoteHintText}>
@@ -2263,7 +2301,12 @@ export function LoadCenterView({
                         onPress={() => onIndentPress(load)}
                         activeOpacity={0.7}
                       >
-                        <View style={[styles.loadCardOrb, { pointerEvents: 'none' }]} />
+                        <View
+                          style={[
+                            styles.loadCardOrb,
+                            { pointerEvents: "none" },
+                          ]}
+                        />
                         <View style={styles.loadCardHeroRow}>
                           <View style={styles.loadPillRow}>
                             <View style={styles.loadTypePill}>
@@ -2466,7 +2509,7 @@ export function LoadCenterView({
           <View
             style={[
               styles.hirePartnerFabWrap,
-              { bottom: hirePartnerFabBottom, pointerEvents: 'box-none' },
+              { bottom: hirePartnerFabBottom, pointerEvents: "box-none" },
             ]}
           >
             <TouchableOpacity
@@ -2603,7 +2646,9 @@ export function LoadCenterView({
             </View>
             {loadAction?.type === "AWARD" ? (
               <View style={styles.reviewHubHero}>
-                <View style={[styles.reviewHubHeroGlow, { pointerEvents: 'none' }]} />
+                <View
+                  style={[styles.reviewHubHeroGlow, { pointerEvents: "none" }]}
+                />
                 <Text style={styles.reviewHubHeroKicker}>Target route</Text>
                 <Text style={styles.reviewHubHeroRoute} numberOfLines={3}>
                   {(loadAction.load.pickup_area || "—").toUpperCase()} →{" "}
@@ -2801,7 +2846,9 @@ export function LoadCenterView({
               {loadAction?.type === "BID" ? (
                 <View style={styles.bidIndentDetailSection}>
                   <View style={styles.bidHubHero}>
-                    <View style={[styles.bidHubHeroGlow, { pointerEvents: 'none' }]} />
+                    <View
+                      style={[styles.bidHubHeroGlow, { pointerEvents: "none" }]}
+                    />
                     <Text style={styles.bidHubHeroKicker}>
                       You are bidding on
                     </Text>
@@ -3054,683 +3101,696 @@ export function LoadCenterView({
           </View>
           {loadAction?.type === "ASSIGN" && (
             <View style={styles.assignModalBody}>
-            <ScrollView
-              style={styles.assignModalScroll}
-              contentContainerStyle={[
-                styles.assignModalScrollContent,
-                {
-                  paddingBottom:
-                    handshakeStep === "roster" && !deployOtpCode
-                      ? 12
-                      : 24 + insets.bottom,
-                },
-              ]}
-              keyboardShouldPersistTaps="handled"
-            >
-              {/* OTP result (ad hoc flow completed) */}
-              {deployOtpCode ? (
-                <>
-                  <Text style={styles.modalHint}>
-                    Share this code with the driver to claim the trip.
-                  </Text>
-                  <View style={styles.otpCard}>
-                    <Text style={styles.otpCode}>{deployOtpCode}</Text>
-                    {deployOtpExpiresAt ? (
-                      <Text style={styles.otpExpiry}>
-                        Expires {new Date(deployOtpExpiresAt).toLocaleString()}
-                      </Text>
-                    ) : null}
-                    <View style={styles.otpActions}>
-                      <TouchableOpacity
-                        style={styles.otpBtn}
-                        onPress={() => {
-                          Clipboard.setStringAsync(deployOtpCode).then(() =>
-                            triggerSuccess("Copied"),
-                          );
-                        }}
-                      >
-                        <Text style={styles.otpBtnText}>Copy</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.otpBtn}
-                        onPress={() => {
-                          Share.share({
-                            message: `Claim this trip with code: ${deployOtpCode}`,
-                            title: "Trip claim code",
-                          }).catch(() => {});
-                        }}
-                      >
-                        <Text style={styles.otpBtnText}>Share</Text>
-                      </TouchableOpacity>
-                      {deployTripIdForOtp ? (
+              <ScrollView
+                style={styles.assignModalScroll}
+                contentContainerStyle={[
+                  styles.assignModalScrollContent,
+                  {
+                    paddingBottom:
+                      handshakeStep === "roster" && !deployOtpCode
+                        ? 12
+                        : 24 + insets.bottom,
+                  },
+                ]}
+                keyboardShouldPersistTaps="handled"
+              >
+                {/* OTP result (ad hoc flow completed) */}
+                {deployOtpCode ? (
+                  <>
+                    <Text style={styles.modalHint}>
+                      Share this code with the driver to claim the trip.
+                    </Text>
+                    <View style={styles.otpCard}>
+                      <Text style={styles.otpCode}>{deployOtpCode}</Text>
+                      {deployOtpExpiresAt ? (
+                        <Text style={styles.otpExpiry}>
+                          Expires{" "}
+                          {new Date(deployOtpExpiresAt).toLocaleString()}
+                        </Text>
+                      ) : null}
+                      <View style={styles.otpActions}>
                         <TouchableOpacity
                           style={styles.otpBtn}
-                          onPress={async () => {
-                            const { code, expires_at } =
-                              await regenerateTripOtp(deployTripIdForOtp);
-                            if (code) {
-                              setDeployOtpCode(code);
-                              setDeployOtpExpiresAt(expires_at ?? null);
-                              triggerSuccess("OTP regenerated");
-                            }
+                          onPress={() => {
+                            Clipboard.setStringAsync(deployOtpCode).then(() =>
+                              triggerSuccess("Copied"),
+                            );
                           }}
                         >
-                          <Text style={styles.otpBtnText}>Regenerate</Text>
+                          <Text style={styles.otpBtnText}>Copy</Text>
                         </TouchableOpacity>
-                      ) : null}
+                        <TouchableOpacity
+                          style={styles.otpBtn}
+                          onPress={() => {
+                            Share.share({
+                              message: `Claim this trip with code: ${deployOtpCode}`,
+                              title: "Trip claim code",
+                            }).catch(() => {});
+                          }}
+                        >
+                          <Text style={styles.otpBtnText}>Share</Text>
+                        </TouchableOpacity>
+                        {deployTripIdForOtp ? (
+                          <TouchableOpacity
+                            style={styles.otpBtn}
+                            onPress={async () => {
+                              const { code, expires_at } =
+                                await regenerateTripOtp(deployTripIdForOtp);
+                              if (code) {
+                                setDeployOtpCode(code);
+                                setDeployOtpExpiresAt(expires_at ?? null);
+                                triggerSuccess("OTP regenerated");
+                              }
+                            }}
+                          >
+                            <Text style={styles.otpBtnText}>Regenerate</Text>
+                          </TouchableOpacity>
+                        ) : null}
+                      </View>
                     </View>
-                  </View>
-                  <TouchableOpacity
-                    style={[styles.modalSubmit, styles.handshakeBtnModal]}
-                    onPress={() => {
-                      setLoadAction(null);
-                      setDeployOtpCode(null);
-                      setDeployOtpExpiresAt(null);
-                      setDeployTripIdForOtp(null);
-                      setHandshakeStep("flow_choice");
-                      const isShipper =
-                        loadAction?.type === "ASSIGN" &&
-                        loadAction.load.organization_id === orgId;
-                      if (isShipper)
-                        router.push(
-                          "/(tabs)/trips" as import("expo-router").Href,
-                        );
-                    }}
-                    activeOpacity={0.9}
-                  >
-                    <Text style={styles.modalSubmitText}>
-                      {loadAction?.type === "ASSIGN" &&
-                      loadAction.load.organization_id === orgId
-                        ? "Go to Trips"
-                        : "Done"}
+                    <TouchableOpacity
+                      style={[styles.modalSubmit, styles.handshakeBtnModal]}
+                      onPress={() => {
+                        setLoadAction(null);
+                        setDeployOtpCode(null);
+                        setDeployOtpExpiresAt(null);
+                        setDeployTripIdForOtp(null);
+                        setHandshakeStep("flow_choice");
+                        const isShipper =
+                          loadAction?.type === "ASSIGN" &&
+                          loadAction.load.organization_id === orgId;
+                        if (isShipper)
+                          router.push(
+                            "/(tabs)/trips" as import("expo-router").Href,
+                          );
+                      }}
+                      activeOpacity={0.9}
+                    >
+                      <Text style={styles.modalSubmitText}>
+                        {loadAction?.type === "ASSIGN" &&
+                        loadAction.load.organization_id === orgId
+                          ? "Go to Trips"
+                          : "Done"}
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                ) : handshakeStep === "flow_choice" ? (
+                  /* Step 1: How to assign — Roster (driver + vehicle from org) or Ad hoc driver (OTP). */
+                  <>
+                    <Text style={styles.sourceOfSupplySectionTitle}>
+                      How do you want to assign this load?
                     </Text>
-                  </TouchableOpacity>
-                </>
-              ) : handshakeStep === "flow_choice" ? (
-                /* Step 1: How to assign — Roster (driver + vehicle from org) or Ad hoc driver (OTP). */
-                <>
-                  <Text style={styles.sourceOfSupplySectionTitle}>
-                    How do you want to assign this load?
-                  </Text>
-                  <View style={styles.sourceRow}>
-                    <TouchableOpacity
-                      style={[styles.sourceOption, styles.sourceOptionFirst]}
-                      onPress={() => {
-                        setUseAdHocDriver(false);
-                        setAssignVehicleRegistration("");
-                        setAggregateDriverPhone("");
-                        setSubcontractSupplierId(null);
-                        setSubcontractRate("");
-                        setSubcontractPickerOpen(false);
-                        setHandshakeStep("roster");
-                      }}
-                      activeOpacity={0.85}
-                    >
-                      <View style={styles.sourceOptionIconWrap}>
-                        <FontAwesome
-                          name="truck"
-                          size={16}
-                          color={Theme.textMuted}
-                        />
-                      </View>
-                      <Text style={styles.sourceOptionLabel}>Asset</Text>
-                      <Text style={styles.sourceOptionSubtitle}>
-                        Driver & vehicle from my org
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.sourceOption, styles.sourceOptionLast]}
-                      onPress={() => {
-                        setUseAdHocDriver(true);
-                        setAssignDriverId(null);
-                        setAssignVehicleId(undefined);
-                        setAssignVehicleRegistration("");
-                        setAggregateDriverPhone("");
-                        setSubcontractSupplierId(null);
-                        setSubcontractRate("");
-                        setSubcontractPickerOpen(false);
-                        setHandshakeStep("ad_hoc_vehicle");
-                      }}
-                      activeOpacity={0.85}
-                    >
-                      <View style={styles.sourceOptionIconWrap}>
-                        <FontAwesome
-                          name="handshake-o"
-                          size={16}
-                          color={Theme.textMuted}
-                        />
-                      </View>
-                      <Text style={styles.sourceOptionLabel}>Aggregate</Text>
-                      <Text style={styles.sourceOptionSubtitle}>
-                        Share OTP for driver to claim
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </>
-              ) : handshakeStep === "roster" ? (
-                /* Roster: driver + vehicle, then Authorize Voyage */
-                <>
-                  <TouchableOpacity
-                    style={styles.wizardBackBtn}
-                    onPress={() => setHandshakeStep("flow_choice")}
-                  >
-                    <FontAwesome
-                      name="arrow-left"
-                      size={14}
-                      color={Theme.primary}
-                    />
-                    <Text style={styles.wizardBackText}>Back</Text>
-                  </TouchableOpacity>
-                  <Text style={styles.sourceOfSupplySectionTitle}>Asset</Text>
-                  <Text style={styles.modalHint}>
-                    Assign driver and vehicle from your org, then authorize
-                    voyage.
-                  </Text>
-                  {(() => {
-                    const selectedDriver = activeDrivers.find(
-                      (d) => String(d.id) === assignDriverId,
-                    );
-                    const selectedVehicle =
-                      typeof assignVehicleId === "string"
-                        ? vehicles.find((v) => String(v.id) === assignVehicleId)
-                        : null;
-                    return (
-                      <>
-                        <View
-                          style={[
-                            styles.assignSelectionGrid,
-                            width >= 980 && styles.assignSelectionGridDesktop,
-                          ]}
-                        >
-                          <View style={styles.assignPickerCard}>
-                            <View style={styles.assignPickerHeader}>
-                              <Text style={styles.assignPickerTitle}>
-                                Select Driver
-                              </Text>
-                              <View style={styles.assignPickerBadge}>
-                                <Text style={styles.assignPickerBadgeText}>
-                                  {activeDrivers.length} Total
-                                </Text>
-                              </View>
-                            </View>
-                            {activeDrivers.map((d) => (
-                              <TouchableOpacity
-                                key={d.id}
-                                style={[
-                                  styles.assignEntityRow,
-                                  assignDriverId === String(d.id) &&
-                                    styles.assignEntityRowActive,
-                                ]}
-                                onPress={() => setAssignDriverId(String(d.id))}
-                                activeOpacity={0.85}
-                              >
-                                <View style={styles.assignEntityIconWrap}>
-                                  <FontAwesome
-                                    name="user"
-                                    size={16}
-                                    color={
-                                      assignDriverId === String(d.id)
-                                        ? Theme.textOnPrimary
-                                        : Theme.textMuted
-                                    }
-                                  />
-                                </View>
-                                <View style={styles.assignEntityTextCol}>
-                                  <Text style={styles.assignEntityTitle}>
-                                    {d.name ?? d.phone ?? "—"}
-                                  </Text>
-                                  <Text style={styles.assignEntitySubtitle}>
-                                    {d.phone
-                                      ? `Phone: ${d.phone}`
-                                      : "Available"}
-                                  </Text>
-                                </View>
-                                <FontAwesome
-                                  name={
-                                    assignDriverId === String(d.id)
-                                      ? "check-circle"
-                                      : "chevron-right"
-                                  }
-                                  size={15}
-                                  color={
-                                    assignDriverId === String(d.id)
-                                      ? Theme.primary
-                                      : Theme.textMuted
-                                  }
-                                />
-                              </TouchableOpacity>
-                            ))}
-                            {activeDrivers.length === 0 ? (
-                              <View style={styles.assignEmptyState}>
-                                <Text style={styles.assignEmptyText}>
-                                  No asset drivers were found in your
-                                  organization. Add a salaried driver to
-                                  continue with Asset-based assignment, or use
-                                  the Aggregate flow from the previous step.
-                                </Text>
-                                <TouchableOpacity
-                                  style={styles.assignEmptyActionBtn}
-                                  onPress={() => {
-                                    setLoadAction(null);
-                                    setDeployOtpCode(null);
-                                    setDeployOtpExpiresAt(null);
-                                    setDeployTripIdForOtp(null);
-                                    setHandshakeStep("flow_choice");
-                                    setTimeout(
-                                      () => {
-                                        router.push(
-                                          "/(modals)/add-driver" as import("expo-router").Href,
-                                        );
-                                      },
-                                      Platform.OS === "ios" ? 100 : 0,
-                                    );
-                                  }}
-                                  activeOpacity={0.9}
-                                >
-                                  <FontAwesome
-                                    name="plus"
-                                    size={12}
-                                    color={Theme.textOnPrimary}
-                                  />
-                                  <Text style={styles.assignEmptyActionBtnText}>
-                                    Add Driver
-                                  </Text>
-                                </TouchableOpacity>
-                              </View>
-                            ) : null}
-                          </View>
-
-                          <View style={styles.assignPickerCard}>
-                            <View style={styles.assignPickerHeader}>
-                              <Text style={styles.assignPickerTitle}>
-                                Select Vehicle
-                              </Text>
-                              <View style={styles.assignPickerBadge}>
-                                <Text style={styles.assignPickerBadgeText}>
-                                  {vehicles.length} Total
-                                </Text>
-                              </View>
-                            </View>
-                            {vehicles.map((v) => (
-                              <TouchableOpacity
-                                key={v.id}
-                                style={[
-                                  styles.assignEntityRow,
-                                  assignVehicleId === String(v.id) &&
-                                    styles.assignEntityRowActive,
-                                ]}
-                                onPress={() => setAssignVehicleId(String(v.id))}
-                                activeOpacity={0.85}
-                              >
-                                <View style={styles.assignEntityIconWrap}>
-                                  <FontAwesome
-                                    name="truck"
-                                    size={16}
-                                    color={
-                                      assignVehicleId === String(v.id)
-                                        ? Theme.textOnPrimary
-                                        : Theme.textMuted
-                                    }
-                                  />
-                                </View>
-                                <View style={styles.assignEntityTextCol}>
-                                  <Text style={styles.assignEntityTitle}>
-                                    {v.vehicle_number}
-                                  </Text>
-                                  <Text style={styles.assignEntitySubtitle}>
-                                    {v.vehicle_type
-                                      ? `${v.vehicle_type}${
-                                          v.vehicle_body_type
-                                            ? ` · ${v.vehicle_body_type}`
-                                            : ""
-                                        }`
-                                      : "Fleet vehicle"}
-                                  </Text>
-                                </View>
-                                <FontAwesome
-                                  name={
-                                    assignVehicleId === String(v.id)
-                                      ? "check-circle"
-                                      : "chevron-right"
-                                  }
-                                  size={15}
-                                  color={
-                                    assignVehicleId === String(v.id)
-                                      ? Theme.primary
-                                      : Theme.textMuted
-                                  }
-                                />
-                              </TouchableOpacity>
-                            ))}
-                            {vehicles.length === 0 ? (
-                              <View style={styles.assignEmptyState}>
-                                <Text style={styles.assignEmptyText}>
-                                  No vehicles were found in your fleet. Add an
-                                  own vehicle to continue with Asset-based
-                                  assignment.
-                                </Text>
-                                <TouchableOpacity
-                                  style={styles.assignEmptyActionBtn}
-                                  onPress={() => {
-                                    setLoadAction(null);
-                                    setDeployOtpCode(null);
-                                    setDeployOtpExpiresAt(null);
-                                    setDeployTripIdForOtp(null);
-                                    setHandshakeStep("flow_choice");
-                                    setTimeout(
-                                      () => {
-                                        router.push(
-                                          "/(modals)/add-vehicle" as import("expo-router").Href,
-                                        );
-                                      },
-                                      Platform.OS === "ios" ? 100 : 0,
-                                    );
-                                  }}
-                                  activeOpacity={0.9}
-                                >
-                                  <FontAwesome
-                                    name="plus"
-                                    size={12}
-                                    color={Theme.textOnPrimary}
-                                  />
-                                  <Text style={styles.assignEmptyActionBtnText}>
-                                    Add Vehicle
-                                  </Text>
-                                </TouchableOpacity>
-                              </View>
-                            ) : null}
-                          </View>
-                        </View>
-
-                        <View style={styles.assignSummaryBar}>
-                          <View style={styles.assignSummaryRow}>
-                            <View style={styles.assignSummaryBlock}>
-                              <Text style={styles.assignSummaryLabel}>
-                                Selected Driver
-                              </Text>
-                              <Text style={styles.assignSummaryValue}>
-                                {selectedDriver?.name ??
-                                  selectedDriver?.phone ??
-                                  "Not selected"}
-                              </Text>
-                            </View>
-                            <View style={styles.assignSummaryDivider} />
-                            <View style={styles.assignSummaryBlock}>
-                              <Text style={styles.assignSummaryLabel}>
-                                Selected Vehicle
-                              </Text>
-                              <Text style={styles.assignSummaryValue}>
-                                {selectedVehicle?.vehicle_number ??
-                                  "Not selected"}
-                              </Text>
-                            </View>
-                          </View>
-                        </View>
-                      </>
-                    );
-                  })()}
-                </>
-              ) : (
-                /* Aggregate — same fields as before; UI aligned with TripAssignmentBlock (trip detail). */
-                <>
-                  <TouchableOpacity
-                    style={styles.wizardBackBtn}
-                    onPress={() => setHandshakeStep("flow_choice")}
-                  >
-                    <FontAwesome
-                      name="arrow-left"
-                      size={14}
-                      color={Theme.primary}
-                    />
-                    <Text style={styles.wizardBackText}>Back</Text>
-                  </TouchableOpacity>
-                  <Text style={styles.sourceOfSupplySectionTitle}>
-                    Aggregate
-                  </Text>
-                  <Text style={styles.modalHint}>
-                    Assign driver and vehicle for OTP (partner and rate
-                    optional).
-                  </Text>
-
-                  <View style={styles.tripAssignCard}>
-                    <View style={styles.tripAssignCardHeader}>
-                      <Text style={styles.tripAssignCardHeaderTitle}>
-                        Current Node
-                      </Text>
-                      <View
-                        style={[
-                          styles.tripAssignSourceBadge,
-                          styles.tripAssignBadgeUnassigned,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.tripAssignSourceBadgeText,
-                            styles.tripAssignSourceBadgeTextUnassigned,
-                          ]}
-                        >
-                          Unassigned
-                        </Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.tripAssignRow}>
-                      <View style={styles.tripAssignRowLeft}>
-                        <View
-                          style={[
-                            styles.tripAssignIcon,
-                            aggregateHasDriverPhone
-                              ? styles.tripAssignIconDriverActive
-                              : styles.tripAssignIconInactive,
-                          ]}
-                        >
-                          <FontAwesome
-                            name="user"
-                            size={20}
-                            color={
-                              aggregateHasDriverPhone
-                                ? Theme.primary
-                                : Theme.textMuted
-                            }
-                          />
-                        </View>
-                        <View style={styles.tripAssignRowTextCol}>
-                          <Text style={styles.tripAssignRowLabel}>
-                            Driver Node
-                          </Text>
-                          <TextInput
-                            style={styles.tripAssignRowInput}
-                            placeholder="Phone for OTP (optional)"
-                            placeholderTextColor={Theme.textMuted}
-                            value={aggregateDriverPhone}
-                            onChangeText={(t) =>
-                              setAggregateDriverPhone(formatMobileNumber(t))
-                            }
-                            keyboardType="phone-pad"
-                            autoComplete="tel"
-                          />
-                          {aggregatePhoneName ? (
-                            <Text style={styles.phoneModalFound}>
-                              Found: {aggregatePhoneName}
-                            </Text>
-                          ) : aggregatePhoneNotFound ? (
-                            <Text style={styles.phoneModalNotFound}>
-                              No driver found for this number
-                            </Text>
-                          ) : null}
-                          {aggregatePhoneName && aggregatePhoneInTrip ? (
-                            <Text style={styles.phoneModalInTrip}>
-                              Driver is in trip
-                            </Text>
-                          ) : null}
-                        </View>
-                      </View>
-                    </View>
-
-                    <View
-                      style={[styles.tripAssignRow, styles.tripAssignRowLast]}
-                    >
-                      <View style={styles.tripAssignRowLeft}>
-                        <View
-                          style={[
-                            styles.tripAssignIcon,
-                            aggregateHasVehicleText
-                              ? styles.tripAssignIconVehicleActive
-                              : styles.tripAssignIconInactive,
-                          ]}
-                        >
-                          <FontAwesome
-                            name="truck"
-                            size={18}
-                            color={
-                              aggregateHasVehicleText
-                                ? Theme.textPrimaryDark
-                                : Theme.textMuted
-                            }
-                          />
-                        </View>
-                        <View style={styles.tripAssignRowTextCol}>
-                          <Text style={styles.tripAssignRowLabel}>
-                            Vehicle Registry
-                          </Text>
-                          <TextInput
-                            style={styles.tripAssignRowInput}
-                            placeholder="Vehicle registration (optional)"
-                            placeholderTextColor={Theme.textMuted}
-                            value={assignVehicleRegistration}
-                            onChangeText={setAssignVehicleRegistration}
-                            editable={true}
-                          />
-                        </View>
-                      </View>
-                    </View>
-
-                    <View style={styles.tripAssignPartnerBlock}>
-                      <Text style={styles.tripAssignPartnerHint}>
-                        Associated partner (optional). Tag your partner for this
-                        trip and enter the rate you will pay.
-                      </Text>
+                    <View style={styles.sourceRow}>
                       <TouchableOpacity
-                        style={styles.subcontractPickBtn}
-                        onPress={() => setSubcontractPickerOpen(true)}
+                        style={[styles.sourceOption, styles.sourceOptionFirst]}
+                        onPress={() => {
+                          setUseAdHocDriver(false);
+                          setAssignVehicleRegistration("");
+                          setAggregateDriverPhone("");
+                          setSubcontractSupplierId(null);
+                          setSubcontractRate("");
+                          setSubcontractPickerOpen(false);
+                          setHandshakeStep("roster");
+                        }}
                         activeOpacity={0.85}
                       >
-                        <Text style={styles.subcontractPickLabel}>Partner</Text>
-                        <Text
-                          style={styles.subcontractPickValue}
-                          numberOfLines={1}
-                        >
-                          {subcontractSupplierId
-                            ? suppliers.find(
-                                (s) => s.id === subcontractSupplierId,
-                              )?.company_name ||
-                              suppliers.find(
-                                (s) => s.id === subcontractSupplierId,
-                              )?.name ||
-                              suppliers.find(
-                                (s) => s.id === subcontractSupplierId,
-                              )?.contact_person ||
-                              "Selected"
-                            : "Select partner"}
+                        <View style={styles.sourceOptionIconWrap}>
+                          <FontAwesome
+                            name="truck"
+                            size={16}
+                            color={Theme.textMuted}
+                          />
+                        </View>
+                        <Text style={styles.sourceOptionLabel}>Asset</Text>
+                        <Text style={styles.sourceOptionSubtitle}>
+                          Driver & vehicle from my org
                         </Text>
-                        <FontAwesome
-                          name="chevron-down"
-                          size={12}
-                          color={Theme.textMuted}
-                          style={{ marginLeft: 10 }}
-                        />
                       </TouchableOpacity>
-                      <View style={styles.assignInputWrap}>
-                        <TextInput
-                          style={styles.assignVehicleInput}
-                          placeholder="Partner rate (₹)"
-                          placeholderTextColor={Theme.textMuted}
-                          value={subcontractRate}
-                          onChangeText={setSubcontractRate}
-                          keyboardType="decimal-pad"
-                        />
+                      <TouchableOpacity
+                        style={[styles.sourceOption, styles.sourceOptionLast]}
+                        onPress={() => {
+                          setUseAdHocDriver(true);
+                          setAssignDriverId(null);
+                          setAssignVehicleId(undefined);
+                          setAssignVehicleRegistration("");
+                          setAggregateDriverPhone("");
+                          setSubcontractSupplierId(null);
+                          setSubcontractRate("");
+                          setSubcontractPickerOpen(false);
+                          setHandshakeStep("ad_hoc_vehicle");
+                        }}
+                        activeOpacity={0.85}
+                      >
+                        <View style={styles.sourceOptionIconWrap}>
+                          <FontAwesome
+                            name="handshake-o"
+                            size={16}
+                            color={Theme.textMuted}
+                          />
+                        </View>
+                        <Text style={styles.sourceOptionLabel}>Aggregate</Text>
+                        <Text style={styles.sourceOptionSubtitle}>
+                          Share OTP for driver to claim
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                ) : handshakeStep === "roster" ? (
+                  /* Roster: driver + vehicle, then Authorize Voyage */
+                  <>
+                    <TouchableOpacity
+                      style={styles.wizardBackBtn}
+                      onPress={() => setHandshakeStep("flow_choice")}
+                    >
+                      <FontAwesome
+                        name="arrow-left"
+                        size={14}
+                        color={Theme.primary}
+                      />
+                      <Text style={styles.wizardBackText}>Back</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.sourceOfSupplySectionTitle}>Asset</Text>
+                    <Text style={styles.modalHint}>
+                      Assign driver and vehicle from your org, then authorize
+                      voyage.
+                    </Text>
+                    {(() => {
+                      const selectedDriver = activeDrivers.find(
+                        (d) => String(d.id) === assignDriverId,
+                      );
+                      const selectedVehicle =
+                        typeof assignVehicleId === "string"
+                          ? vehicles.find(
+                              (v) => String(v.id) === assignVehicleId,
+                            )
+                          : null;
+                      return (
+                        <>
+                          <View
+                            style={[
+                              styles.assignSelectionGrid,
+                              width >= 980 && styles.assignSelectionGridDesktop,
+                            ]}
+                          >
+                            <View style={styles.assignPickerCard}>
+                              <View style={styles.assignPickerHeader}>
+                                <Text style={styles.assignPickerTitle}>
+                                  Select Driver
+                                </Text>
+                                <View style={styles.assignPickerBadge}>
+                                  <Text style={styles.assignPickerBadgeText}>
+                                    {activeDrivers.length} Total
+                                  </Text>
+                                </View>
+                              </View>
+                              {activeDrivers.map((d) => (
+                                <TouchableOpacity
+                                  key={d.id}
+                                  style={[
+                                    styles.assignEntityRow,
+                                    assignDriverId === String(d.id) &&
+                                      styles.assignEntityRowActive,
+                                  ]}
+                                  onPress={() =>
+                                    setAssignDriverId(String(d.id))
+                                  }
+                                  activeOpacity={0.85}
+                                >
+                                  <View style={styles.assignEntityIconWrap}>
+                                    <FontAwesome
+                                      name="user"
+                                      size={16}
+                                      color={
+                                        assignDriverId === String(d.id)
+                                          ? Theme.textOnPrimary
+                                          : Theme.textMuted
+                                      }
+                                    />
+                                  </View>
+                                  <View style={styles.assignEntityTextCol}>
+                                    <Text style={styles.assignEntityTitle}>
+                                      {d.name ?? d.phone ?? "—"}
+                                    </Text>
+                                    <Text style={styles.assignEntitySubtitle}>
+                                      {d.phone
+                                        ? `Phone: ${d.phone}`
+                                        : "Available"}
+                                    </Text>
+                                  </View>
+                                  <FontAwesome
+                                    name={
+                                      assignDriverId === String(d.id)
+                                        ? "check-circle"
+                                        : "chevron-right"
+                                    }
+                                    size={15}
+                                    color={
+                                      assignDriverId === String(d.id)
+                                        ? Theme.primary
+                                        : Theme.textMuted
+                                    }
+                                  />
+                                </TouchableOpacity>
+                              ))}
+                              {activeDrivers.length === 0 ? (
+                                <View style={styles.assignEmptyState}>
+                                  <Text style={styles.assignEmptyText}>
+                                    No asset drivers were found in your
+                                    organization. Add a salaried driver to
+                                    continue with Asset-based assignment, or use
+                                    the Aggregate flow from the previous step.
+                                  </Text>
+                                  <TouchableOpacity
+                                    style={styles.assignEmptyActionBtn}
+                                    onPress={() => {
+                                      setLoadAction(null);
+                                      setDeployOtpCode(null);
+                                      setDeployOtpExpiresAt(null);
+                                      setDeployTripIdForOtp(null);
+                                      setHandshakeStep("flow_choice");
+                                      setTimeout(
+                                        () => {
+                                          router.push(
+                                            "/(modals)/add-driver" as import("expo-router").Href,
+                                          );
+                                        },
+                                        Platform.OS === "ios" ? 100 : 0,
+                                      );
+                                    }}
+                                    activeOpacity={0.9}
+                                  >
+                                    <FontAwesome
+                                      name="plus"
+                                      size={12}
+                                      color={Theme.textOnPrimary}
+                                    />
+                                    <Text
+                                      style={styles.assignEmptyActionBtnText}
+                                    >
+                                      Add Driver
+                                    </Text>
+                                  </TouchableOpacity>
+                                </View>
+                              ) : null}
+                            </View>
+
+                            <View style={styles.assignPickerCard}>
+                              <View style={styles.assignPickerHeader}>
+                                <Text style={styles.assignPickerTitle}>
+                                  Select Vehicle
+                                </Text>
+                                <View style={styles.assignPickerBadge}>
+                                  <Text style={styles.assignPickerBadgeText}>
+                                    {vehicles.length} Total
+                                  </Text>
+                                </View>
+                              </View>
+                              {vehicles.map((v) => (
+                                <TouchableOpacity
+                                  key={v.id}
+                                  style={[
+                                    styles.assignEntityRow,
+                                    assignVehicleId === String(v.id) &&
+                                      styles.assignEntityRowActive,
+                                  ]}
+                                  onPress={() =>
+                                    setAssignVehicleId(String(v.id))
+                                  }
+                                  activeOpacity={0.85}
+                                >
+                                  <View style={styles.assignEntityIconWrap}>
+                                    <FontAwesome
+                                      name="truck"
+                                      size={16}
+                                      color={
+                                        assignVehicleId === String(v.id)
+                                          ? Theme.textOnPrimary
+                                          : Theme.textMuted
+                                      }
+                                    />
+                                  </View>
+                                  <View style={styles.assignEntityTextCol}>
+                                    <Text style={styles.assignEntityTitle}>
+                                      {v.vehicle_number}
+                                    </Text>
+                                    <Text style={styles.assignEntitySubtitle}>
+                                      {v.vehicle_type
+                                        ? `${v.vehicle_type}${
+                                            v.vehicle_body_type
+                                              ? ` · ${v.vehicle_body_type}`
+                                              : ""
+                                          }`
+                                        : "Fleet vehicle"}
+                                    </Text>
+                                  </View>
+                                  <FontAwesome
+                                    name={
+                                      assignVehicleId === String(v.id)
+                                        ? "check-circle"
+                                        : "chevron-right"
+                                    }
+                                    size={15}
+                                    color={
+                                      assignVehicleId === String(v.id)
+                                        ? Theme.primary
+                                        : Theme.textMuted
+                                    }
+                                  />
+                                </TouchableOpacity>
+                              ))}
+                              {vehicles.length === 0 ? (
+                                <View style={styles.assignEmptyState}>
+                                  <Text style={styles.assignEmptyText}>
+                                    No vehicles were found in your fleet. Add an
+                                    own vehicle to continue with Asset-based
+                                    assignment.
+                                  </Text>
+                                  <TouchableOpacity
+                                    style={styles.assignEmptyActionBtn}
+                                    onPress={() => {
+                                      setLoadAction(null);
+                                      setDeployOtpCode(null);
+                                      setDeployOtpExpiresAt(null);
+                                      setDeployTripIdForOtp(null);
+                                      setHandshakeStep("flow_choice");
+                                      setTimeout(
+                                        () => {
+                                          router.push(
+                                            "/(modals)/add-vehicle" as import("expo-router").Href,
+                                          );
+                                        },
+                                        Platform.OS === "ios" ? 100 : 0,
+                                      );
+                                    }}
+                                    activeOpacity={0.9}
+                                  >
+                                    <FontAwesome
+                                      name="plus"
+                                      size={12}
+                                      color={Theme.textOnPrimary}
+                                    />
+                                    <Text
+                                      style={styles.assignEmptyActionBtnText}
+                                    >
+                                      Add Vehicle
+                                    </Text>
+                                  </TouchableOpacity>
+                                </View>
+                              ) : null}
+                            </View>
+                          </View>
+
+                          <View style={styles.assignSummaryBar}>
+                            <View style={styles.assignSummaryRow}>
+                              <View style={styles.assignSummaryBlock}>
+                                <Text style={styles.assignSummaryLabel}>
+                                  Selected Driver
+                                </Text>
+                                <Text style={styles.assignSummaryValue}>
+                                  {selectedDriver?.name ??
+                                    selectedDriver?.phone ??
+                                    "Not selected"}
+                                </Text>
+                              </View>
+                              <View style={styles.assignSummaryDivider} />
+                              <View style={styles.assignSummaryBlock}>
+                                <Text style={styles.assignSummaryLabel}>
+                                  Selected Vehicle
+                                </Text>
+                                <Text style={styles.assignSummaryValue}>
+                                  {selectedVehicle?.vehicle_number ??
+                                    "Not selected"}
+                                </Text>
+                              </View>
+                            </View>
+                          </View>
+                        </>
+                      );
+                    })()}
+                  </>
+                ) : (
+                  /* Aggregate — same fields as before; UI aligned with TripAssignmentBlock (trip detail). */
+                  <>
+                    <TouchableOpacity
+                      style={styles.wizardBackBtn}
+                      onPress={() => setHandshakeStep("flow_choice")}
+                    >
+                      <FontAwesome
+                        name="arrow-left"
+                        size={14}
+                        color={Theme.primary}
+                      />
+                      <Text style={styles.wizardBackText}>Back</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.sourceOfSupplySectionTitle}>
+                      Aggregate
+                    </Text>
+                    <Text style={styles.modalHint}>
+                      Assign driver and vehicle for OTP (partner and rate
+                      optional).
+                    </Text>
+
+                    <View style={styles.tripAssignCard}>
+                      <View style={styles.tripAssignCardHeader}>
+                        <Text style={styles.tripAssignCardHeaderTitle}>
+                          Current Node
+                        </Text>
+                        <View
+                          style={[
+                            styles.tripAssignSourceBadge,
+                            styles.tripAssignBadgeUnassigned,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.tripAssignSourceBadgeText,
+                              styles.tripAssignSourceBadgeTextUnassigned,
+                            ]}
+                          >
+                            Unassigned
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.tripAssignRow}>
+                        <View style={styles.tripAssignRowLeft}>
+                          <View
+                            style={[
+                              styles.tripAssignIcon,
+                              aggregateHasDriverPhone
+                                ? styles.tripAssignIconDriverActive
+                                : styles.tripAssignIconInactive,
+                            ]}
+                          >
+                            <FontAwesome
+                              name="user"
+                              size={20}
+                              color={
+                                aggregateHasDriverPhone
+                                  ? Theme.primary
+                                  : Theme.textMuted
+                              }
+                            />
+                          </View>
+                          <View style={styles.tripAssignRowTextCol}>
+                            <Text style={styles.tripAssignRowLabel}>
+                              Driver Node
+                            </Text>
+                            <TextInput
+                              style={styles.tripAssignRowInput}
+                              placeholder="Phone for OTP (optional)"
+                              placeholderTextColor={Theme.textMuted}
+                              value={aggregateDriverPhone}
+                              onChangeText={(t) =>
+                                setAggregateDriverPhone(formatMobileNumber(t))
+                              }
+                              keyboardType="phone-pad"
+                              autoComplete="tel"
+                            />
+                            {aggregatePhoneName ? (
+                              <Text style={styles.phoneModalFound}>
+                                Found: {aggregatePhoneName}
+                              </Text>
+                            ) : aggregatePhoneNotFound ? (
+                              <Text style={styles.phoneModalNotFound}>
+                                No driver found for this number
+                              </Text>
+                            ) : null}
+                            {aggregatePhoneName && aggregatePhoneInTrip ? (
+                              <Text style={styles.phoneModalInTrip}>
+                                Driver is in trip
+                              </Text>
+                            ) : null}
+                          </View>
+                        </View>
+                      </View>
+
+                      <View
+                        style={[styles.tripAssignRow, styles.tripAssignRowLast]}
+                      >
+                        <View style={styles.tripAssignRowLeft}>
+                          <View
+                            style={[
+                              styles.tripAssignIcon,
+                              aggregateHasVehicleText
+                                ? styles.tripAssignIconVehicleActive
+                                : styles.tripAssignIconInactive,
+                            ]}
+                          >
+                            <FontAwesome
+                              name="truck"
+                              size={18}
+                              color={
+                                aggregateHasVehicleText
+                                  ? Theme.textPrimaryDark
+                                  : Theme.textMuted
+                              }
+                            />
+                          </View>
+                          <View style={styles.tripAssignRowTextCol}>
+                            <Text style={styles.tripAssignRowLabel}>
+                              Vehicle Registry
+                            </Text>
+                            <TextInput
+                              style={styles.tripAssignRowInput}
+                              placeholder="Vehicle registration (optional)"
+                              placeholderTextColor={Theme.textMuted}
+                              value={assignVehicleRegistration}
+                              onChangeText={setAssignVehicleRegistration}
+                              editable={true}
+                            />
+                          </View>
+                        </View>
+                      </View>
+
+                      <View style={styles.tripAssignPartnerBlock}>
+                        <Text style={styles.tripAssignPartnerHint}>
+                          Associated partner (optional). Tag your partner for
+                          this trip and enter the rate you will pay.
+                        </Text>
+                        <TouchableOpacity
+                          style={styles.subcontractPickBtn}
+                          onPress={() => setSubcontractPickerOpen(true)}
+                          activeOpacity={0.85}
+                        >
+                          <Text style={styles.subcontractPickLabel}>
+                            Partner
+                          </Text>
+                          <Text
+                            style={styles.subcontractPickValue}
+                            numberOfLines={1}
+                          >
+                            {subcontractSupplierId
+                              ? suppliers.find(
+                                  (s) => s.id === subcontractSupplierId,
+                                )?.company_name ||
+                                suppliers.find(
+                                  (s) => s.id === subcontractSupplierId,
+                                )?.name ||
+                                suppliers.find(
+                                  (s) => s.id === subcontractSupplierId,
+                                )?.contact_person ||
+                                "Selected"
+                              : "Select partner"}
+                          </Text>
+                          <FontAwesome
+                            name="chevron-down"
+                            size={12}
+                            color={Theme.textMuted}
+                            style={{ marginLeft: 10 }}
+                          />
+                        </TouchableOpacity>
+                        <View style={styles.assignInputWrap}>
+                          <TextInput
+                            style={styles.assignVehicleInput}
+                            placeholder="Partner rate (₹)"
+                            placeholderTextColor={Theme.textMuted}
+                            value={subcontractRate}
+                            onChangeText={setSubcontractRate}
+                            keyboardType="decimal-pad"
+                          />
+                        </View>
                       </View>
                     </View>
-                  </View>
 
-                  {assigningTripId === loadAction.load.id ? (
+                    {assigningTripId === loadAction.load.id ? (
+                      <View style={styles.loadingWrap}>
+                        <ActivityIndicator size="small" color={Theme.primary} />
+                        <Text style={styles.loadingText}>Creating trip…</Text>
+                      </View>
+                    ) : (
+                      <TouchableOpacity
+                        style={[styles.modalSubmit, styles.handshakeBtnModal]}
+                        onPress={() => handleDeployAdHoc(loadAction.load)}
+                        disabled={
+                          assigningTripId === loadAction.load.id ||
+                          (aggregateDriverPhone.trim().length > 0 &&
+                            aggregatePhoneInTrip)
+                        }
+                        activeOpacity={0.9}
+                      >
+                        <FontAwesome
+                          name="share-alt"
+                          size={18}
+                          color={Theme.textOnPrimary}
+                          style={{ marginRight: 8 }}
+                        />
+                        <Text style={styles.modalSubmitText}>
+                          {aggregateDriverPhone.trim().length > 0 &&
+                          aggregatePhoneInTrip
+                            ? "Driver On Trip"
+                            : "Deploy & get OTP"}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </>
+                )}
+              </ScrollView>
+              {handshakeStep === "roster" && !deployOtpCode ? (
+                <View
+                  style={[
+                    styles.assignHandshakeFooter,
+                    { paddingBottom: Math.max(16, insets.bottom + 8) },
+                  ]}
+                >
+                  {loadAction?.type === "ASSIGN" &&
+                  assigningTripId === loadAction.load.id ? (
                     <View style={styles.loadingWrap}>
                       <ActivityIndicator size="small" color={Theme.primary} />
                       <Text style={styles.loadingText}>Creating trip…</Text>
                     </View>
-                  ) : (
-                    <TouchableOpacity
-                      style={[styles.modalSubmit, styles.handshakeBtnModal]}
-                      onPress={() => handleDeployAdHoc(loadAction.load)}
-                      disabled={
-                        assigningTripId === loadAction.load.id ||
-                        (aggregateDriverPhone.trim().length > 0 &&
-                          aggregatePhoneInTrip)
-                      }
-                      activeOpacity={0.9}
+                  ) : loadAction?.type === "ASSIGN" && rosterReady ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={assigningTripId === loadAction.load.id}
+                      style={({ pressed }) => [
+                        styles.modalSubmit,
+                        styles.handshakeBtnModal,
+                        pressed && { opacity: 0.88 },
+                        Platform.OS === "web" &&
+                          ({ cursor: "pointer" } as const),
+                      ]}
+                      onPress={() => {
+                        if (loadAction?.type === "ASSIGN") {
+                          void handleDeployRoster(loadAction.load);
+                        }
+                      }}
                     >
                       <FontAwesome
-                        name="share-alt"
+                        name="bolt"
                         size={18}
                         color={Theme.textOnPrimary}
                         style={{ marginRight: 8 }}
                       />
-                      <Text style={styles.modalSubmitText}>
-                        {aggregateDriverPhone.trim().length > 0 &&
-                        aggregatePhoneInTrip
-                          ? "Driver On Trip"
-                          : "Deploy & get OTP"}
-                      </Text>
-                    </TouchableOpacity>
+                      <Text style={styles.modalSubmitText}>Assign Trip</Text>
+                    </Pressable>
+                  ) : (
+                    <Text style={[styles.modalHint, { marginBottom: 0 }]}>
+                      Select a driver and a vehicle from your org to continue.
+                    </Text>
                   )}
-                </>
-              )}
-            </ScrollView>
-            {handshakeStep === "roster" && !deployOtpCode ? (
-              <View
-                style={[
-                  styles.assignHandshakeFooter,
-                  { paddingBottom: Math.max(16, insets.bottom + 8) },
-                ]}
-              >
-                {loadAction?.type === "ASSIGN" &&
-                assigningTripId === loadAction.load.id ? (
-                  <View style={styles.loadingWrap}>
-                    <ActivityIndicator size="small" color={Theme.primary} />
-                    <Text style={styles.loadingText}>Creating trip…</Text>
-                  </View>
-                ) : loadAction?.type === "ASSIGN" && rosterReady ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    disabled={assigningTripId === loadAction.load.id}
-                    style={({ pressed }) => [
-                      styles.modalSubmit,
-                      styles.handshakeBtnModal,
-                      pressed && { opacity: 0.88 },
-                      Platform.OS === "web" &&
-                        ({ cursor: "pointer" } as const),
-                    ]}
-                    onPress={() => {
-                      if (loadAction?.type === "ASSIGN") {
-                        void handleDeployRoster(loadAction.load);
-                      }
-                    }}
-                  >
-                    <FontAwesome
-                      name="bolt"
-                      size={18}
-                      color={Theme.textOnPrimary}
-                      style={{ marginRight: 8 }}
-                    />
-                    <Text style={styles.modalSubmitText}>Assign Trip</Text>
-                  </Pressable>
-                ) : (
-                  <Text style={[styles.modalHint, { marginBottom: 0 }]}>
-                    Select a driver and a vehicle from your org to continue.
-                  </Text>
-                )}
-              </View>
-            ) : null}
+                </View>
+              ) : null}
             </View>
           )}
         </View>
@@ -3756,7 +3816,7 @@ export function LoadCenterView({
               {
                 paddingTop: insets.top + 12,
                 paddingBottom: insets.bottom + 12,
-                pointerEvents: 'box-none',
+                pointerEvents: "box-none",
               },
             ]}
           >

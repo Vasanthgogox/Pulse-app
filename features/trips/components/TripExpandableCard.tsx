@@ -749,11 +749,11 @@ const styles = StyleSheet.create({
   },
   cardProgressSegment: {
     flex: 1,
-    height: 8,
-    borderRadius: 6,
+    height: 2,
+    borderRadius: 2,
   },
   cardProgressSegmentFilled: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.positiveMuted,
   },
   cardProgressSegmentEmpty: {
     backgroundColor: Theme.surfaceBorder,

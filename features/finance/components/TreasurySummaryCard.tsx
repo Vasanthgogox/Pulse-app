@@ -5,7 +5,7 @@
 import Theme from '@/constants/Theme';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, useWindowDimensions, View } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -79,6 +79,10 @@ export interface TreasurySummaryCardProps {
   /** When true, a "Clear" button is shown to reset filters. */
   onClearFilters?: () => void;
   isAnyFilterActive?: boolean;
+  /** Optional container override for host-specific theming (e.g. desktop dock). */
+  containerStyle?: StyleProp<ViewStyle>;
+  /** Optional toolbar skin override for desktop-light surfaces. */
+  toolbarTheme?: 'dark' | 'light';
 }
 
 const ENTITY_FILTER_LABELS: Record<EntityListFilter, string> = {
@@ -290,6 +294,8 @@ export function TreasurySummaryCard({
   cashNetworkLayout = false,
   onClearFilters,
   isAnyFilterActive = false,
+  containerStyle,
+  toolbarTheme = 'dark',
 }: TreasurySummaryCardProps) {
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
@@ -305,8 +311,16 @@ export function TreasurySummaryCard({
 
   const effectiveEntityFilterLabels = { ...ENTITY_FILTER_LABELS, ...entityFilterLabels };
   const showSummary = labelIn != null && labelOut != null;
+  const isLightToolbar = toolbarTheme === 'light';
+  const showInlineSourceChips =
+    isLightToolbar &&
+    cashNetworkLayout &&
+    onEntityFilterChange == null &&
+    onSourceFilterChange != null;
   /** Cash tab: Network-style toolbar (search above totals, entity chips in toolbar). */
-  const cashNetworkToolbar = cashNetworkLayout && showSummary;
+  const cashNetworkToolbar =
+    cashNetworkLayout &&
+    (showSummary || showInlineSourceChips);
   const filterLabel =
     onEntityFilterChange != null
       ? effectiveEntityFilterLabels[entityFilter]
@@ -324,7 +338,10 @@ export function TreasurySummaryCard({
                   : periodFilter === 'CUSTOM'
                     ? 'Custom'
                     : String(periodFilter)
-        : cashNetworkToolbar && onLedgerCategoryChange && !showPeriodFilter
+        : cashNetworkToolbar &&
+            onLedgerCategoryChange &&
+            !showPeriodFilter &&
+            !showInlineSourceChips
           ? LEDGER_CATEGORY_LABELS[ledgerCategory]
           : null;
   const sourceFilterLabel = onSourceFilterChange != null ? SOURCE_FILTER_LABELS[sourceFilter] : null;
@@ -388,9 +405,25 @@ export function TreasurySummaryCard({
             }}
             style={styles.filterTrigger}
           >
-            <Animated.View style={[styles.filterTriggerInner, filterAnimatedStyle]}>
-              <FontAwesome name="filter" size={11} color={Theme.textOnDark} />
-              <Text style={styles.filterTriggerText} numberOfLines={1}>
+            <Animated.View
+              style={[
+                styles.filterTriggerInner,
+                isLightToolbar && styles.filterTriggerInnerLight,
+                filterAnimatedStyle,
+              ]}
+            >
+              <FontAwesome
+                name="filter"
+                size={11}
+                color={isLightToolbar ? Theme.textPrimary : Theme.textOnDark}
+              />
+              <Text
+                style={[
+                  styles.filterTriggerText,
+                  isLightToolbar && styles.filterTriggerTextLight,
+                ]}
+                numberOfLines={1}
+              >
                 {filterLabel}
               </Text>
             </Animated.View>
@@ -689,7 +722,7 @@ export function TreasurySummaryCard({
           )}
         </View>
       )}
-      {sourceFilterLabel != null && (
+      {sourceFilterLabel != null && !showInlineSourceChips && (
         <View ref={refSourceFilter} style={styles.filterBlock} collapsable={false}>
           <TouchableOpacity
             activeOpacity={0.8}
@@ -710,9 +743,25 @@ export function TreasurySummaryCard({
             }}
             style={styles.filterTrigger}
           >
-            <Animated.View style={[styles.filterTriggerInner, filterAnimatedStyle]}>
-              <FontAwesome name="database" size={11} color={Theme.textOnDark} />
-              <Text style={styles.filterTriggerText} numberOfLines={1}>
+            <Animated.View
+              style={[
+                styles.filterTriggerInner,
+                isLightToolbar && styles.filterTriggerInnerLight,
+                filterAnimatedStyle,
+              ]}
+            >
+              <FontAwesome
+                name="database"
+                size={11}
+                color={isLightToolbar ? Theme.textPrimary : Theme.textOnDark}
+              />
+              <Text
+                style={[
+                  styles.filterTriggerText,
+                  isLightToolbar && styles.filterTriggerTextLight,
+                ]}
+                numberOfLines={1}
+              >
                 {sourceFilterLabel}
               </Text>
             </Animated.View>
@@ -728,6 +777,7 @@ export function TreasurySummaryCard({
       styles.card,
       fullWidth && styles.cardFullWidth,
       toolbarOnly && styles.cardFullWidthToolbarOnly,
+      containerStyle,
     ]}>
       {topContent != null && (
         <View style={[styles.topContent, cashNetworkLayout && styles.topContentNetwork]}>
@@ -896,19 +946,76 @@ export function TreasurySummaryCard({
         >
           <View style={[styles.toolbarLeft, styles.toolbarLeftNetwork]}>
             <View style={styles.networkSearchRow}>
-              <View style={[styles.searchWrap, styles.searchWrapNetwork]}>
+              {showInlineSourceChips && (
+                <View style={styles.inlineSourceChipRail}>
+                  {(['all', 'asset', 'aggregate'] as const).map((s) => (
+                    <TouchableOpacity
+                      key={s}
+                      style={[
+                        styles.inlineSourceChip,
+                        isLightToolbar && styles.inlineSourceChipLight,
+                        sourceFilter === s && styles.inlineSourceChipActive,
+                        sourceFilter === s &&
+                          isLightToolbar &&
+                          styles.inlineSourceChipActiveLight,
+                      ]}
+                      onPress={() => onSourceFilterChange?.(s)}
+                      activeOpacity={0.8}
+                    >
+                      <FontAwesome
+                        name={s === 'all' ? 'list' : s === 'asset' ? 'truck' : 'sitemap'}
+                        size={11}
+                        color={
+                          sourceFilter === s
+                            ? isLightToolbar
+                              ? Theme.textPrimary
+                              : Theme.textOnDark
+                            : isLightToolbar
+                              ? Theme.textSecondary
+                              : Theme.textOnDarkMuted
+                        }
+                      />
+                      <Text
+                        style={[
+                          styles.inlineSourceChipText,
+                          isLightToolbar && styles.inlineSourceChipTextLight,
+                          sourceFilter === s && styles.inlineSourceChipTextActive,
+                          sourceFilter === s &&
+                            isLightToolbar &&
+                            styles.inlineSourceChipTextActiveLight,
+                        ]}
+                      >
+                        {SOURCE_FILTER_LABELS[s]}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+              <View
+                style={[
+                  styles.searchWrap,
+                  styles.searchWrapNetwork,
+                  isLightToolbar && styles.searchWrapNetworkLight,
+                ]}
+              >
                 <AnimatedIcon
                   name="search"
                   size={14}
-                  color={Theme.textOnDarkMuted}
+                  color={isLightToolbar ? Theme.textSecondary : Theme.textOnDarkMuted}
                   style={styles.searchIcon}
                 />
                 <TextInput
-                  style={[styles.searchInput, styles.searchInputNetwork]}
+                  style={[
+                    styles.searchInput,
+                    styles.searchInputNetwork,
+                    isLightToolbar && styles.searchInputNetworkLight,
+                  ]}
                   value={searchQuery}
                   onChangeText={onSearchChange}
                   placeholder={searchPlaceholder}
-                  placeholderTextColor={Theme.textOnDarkMuted}
+                  placeholderTextColor={
+                    isLightToolbar ? Theme.textSecondary : Theme.textOnDarkMuted
+                  }
                   returnKeyType="search"
                   autoCorrect={false}
                   spellCheck={false}
@@ -919,7 +1026,11 @@ export function TreasurySummaryCard({
                     onPress={() => onSearchChange('')}
                     style={styles.searchClearIcon}
                   >
-                    <FontAwesome name="times-circle" size={14} color={Theme.textOnDarkMuted} />
+                    <FontAwesome
+                      name="times-circle"
+                      size={14}
+                      color={isLightToolbar ? Theme.textSecondary : Theme.textOnDarkMuted}
+                    />
                   </TouchableOpacity>
                 )}
               </View>
@@ -956,10 +1067,24 @@ export function TreasurySummaryCard({
                 <TouchableOpacity
                   onPress={onClearFilters}
                   activeOpacity={0.7}
-                  style={styles.clearFiltersBtn}
+                  style={[
+                    styles.clearFiltersBtn,
+                    isLightToolbar && styles.clearFiltersBtnLight,
+                  ]}
                 >
-                  <FontAwesome name="times" size={10} color={Theme.textOnDark} />
-                  <Text style={styles.clearFiltersText}>Clear</Text>
+                  <FontAwesome
+                    name="times"
+                    size={10}
+                    color={isLightToolbar ? Theme.textPrimary : Theme.textOnDark}
+                  />
+                  <Text
+                    style={[
+                      styles.clearFiltersText,
+                      isLightToolbar && styles.clearFiltersTextLight,
+                    ]}
+                  >
+                    Clear
+                  </Text>
                 </TouchableOpacity>
               )}
 
@@ -975,10 +1100,13 @@ export function TreasurySummaryCard({
             <PressableIcon
               name="file-text-o"
               size={11}
-              color={Theme.textOnDark}
+              color={isLightToolbar ? Theme.textPrimary : Theme.textOnDark}
               onPress={onReportPress}
               pulse
-              style={styles.reportIconBtn}
+              style={[
+                styles.reportIconBtn,
+                isLightToolbar && styles.reportIconBtnLight,
+              ]}
             />
           )}
         </View>
@@ -1010,20 +1138,37 @@ export function TreasurySummaryCard({
               <TouchableOpacity
                 onPress={onClearFilters}
                 activeOpacity={0.7}
-                style={styles.clearFiltersBtn}
+                style={[
+                  styles.clearFiltersBtn,
+                  isLightToolbar && styles.clearFiltersBtnLight,
+                ]}
               >
-                <FontAwesome name="times" size={10} color={Theme.textOnDark} />
-                <Text style={styles.clearFiltersText}>Clear</Text>
+                <FontAwesome
+                  name="times"
+                  size={10}
+                  color={isLightToolbar ? Theme.textPrimary : Theme.textOnDark}
+                />
+                <Text
+                  style={[
+                    styles.clearFiltersText,
+                    isLightToolbar && styles.clearFiltersTextLight,
+                  ]}
+                >
+                  Clear
+                </Text>
               </TouchableOpacity>
             )}
             {!hideReportInToolbar && (
               <PressableIcon
                 name="file-text-o"
                 size={11}
-                color={Theme.textOnDark}
+                color={isLightToolbar ? Theme.textPrimary : Theme.textOnDark}
                 onPress={onReportPress}
                 pulse
-                style={styles.reportIconBtn}
+                style={[
+                  styles.reportIconBtn,
+                  isLightToolbar && styles.reportIconBtnLight,
+                ]}
               />
             )}
           </ScrollView>
@@ -1159,6 +1304,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 0,
   },
+  searchWrapNetworkLight: {
+    backgroundColor: Theme.screenBackground,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
   searchInputNetwork: {
     fontSize: 11,
     lineHeight: 14,
@@ -1168,6 +1318,9 @@ const styles = StyleSheet.create({
         outlineStyle: 'none',
       } as any,
     }),
+  },
+  searchInputNetworkLight: {
+    color: Theme.textPrimary,
   },
   /** Totals band sits below search (Network: content below black block). */
   summaryRowNetwork: {
@@ -1364,6 +1517,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  reportIconBtnLight: {
+    backgroundColor: Theme.screenBackground,
+    borderColor: Theme.borderLight,
+  },
   clearFiltersBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1375,12 +1532,19 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.12)',
     gap: 4,
   },
+  clearFiltersBtnLight: {
+    backgroundColor: Theme.screenBackground,
+    borderColor: Theme.borderLight,
+  },
   clearFiltersText: {
     fontSize: 9,
     fontWeight: '800',
     color: Theme.textOnDark,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  clearFiltersTextLight: {
+    color: Theme.textPrimary,
   },
   searchClearIcon: {
     padding: 4,
@@ -1410,12 +1574,64 @@ const styles = StyleSheet.create({
     boxShadow: "0px 1px 2px 0px rgba(0, 0, 0, 0.12)",
     elevation: 2,
   },
+  filterTriggerInnerLight: {
+    backgroundColor: Theme.screenBackground,
+    borderColor: Theme.borderLight,
+  },
   filterTriggerText: {
     fontSize: 9,
     fontWeight: '800',
     color: Theme.textOnDark,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
+  },
+  filterTriggerTextLight: {
+    color: Theme.textPrimary,
+  },
+  inlineSourceChipRail: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0,
+  },
+  inlineSourceChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+  },
+  inlineSourceChipLight: {
+    backgroundColor: Theme.screenBackground,
+    borderColor: Theme.borderLight,
+  },
+  inlineSourceChipActive: {
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderColor: 'rgba(255,255,255,0.28)',
+  },
+  inlineSourceChipActiveLight: {
+    backgroundColor: Theme.cardBackground,
+    borderColor: Theme.textSecondary,
+  },
+  inlineSourceChipText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: Theme.textOnDarkMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  inlineSourceChipTextLight: {
+    color: Theme.textSecondary,
+  },
+  inlineSourceChipTextActive: {
+    color: Theme.textOnDark,
+  },
+  inlineSourceChipTextActiveLight: {
+    color: Theme.textPrimary,
   },
   filterModalOverlay: {
     flex: 1,

@@ -45,6 +45,7 @@ import {
     useCallback,
     useEffect,
     useMemo,
+    useRef,
     useState,
     type ReactNode,
 } from "react";
@@ -483,6 +484,10 @@ export interface SharedLedgerCommandCenterProps {
   integratedPartner?: boolean;
   /** Linked partner org id — used to keep partner-authored rows in this trip drill (They record). */
   partnerOrganizationId?: string | null;
+  /** Optional trip focus id (trip_id or mission id) for deep links from notifications. */
+  initialTripFocusId?: string | null;
+  /** Optional txn forensic focus (trip_id/trip ref) for "Fix records" deep links. */
+  initialTxnTripRef?: string | null;
 }
 
 /** Tighter type and cards on large browser windows — closer to other Finance screens. */
@@ -610,6 +615,8 @@ export function SharedLedgerCommandCenter({
   partnerContactId = null,
   integratedPartner = false,
   partnerOrganizationId = null,
+  initialTripFocusId = null,
+  initialTxnTripRef = null,
 }: SharedLedgerCommandCenterProps) {
   const insets = useSafeAreaInsets();
   const { currentOrganization } = useOrganization();
@@ -696,6 +703,7 @@ export function SharedLedgerCommandCenter({
   const [mergeSubmitting, setMergeSubmitting] = useState(false);
   /** Trip adjustment registry (AsyncStorage) — explains gaps vs payment lines. */
   const [tripAdjustments, setTripAdjustments] = useState<TripAdjustment[]>([]);
+  const initialDeepLinkHandledRef = useRef({ trip: false, txn: false });
 
   useEffect(() => {
     let cancelled = false;
@@ -921,6 +929,40 @@ export function SharedLedgerCommandCenter({
     setTxnFocus(txn);
     setScreen("txn");
   };
+
+  useEffect(() => {
+    if (initialDeepLinkHandledRef.current.trip) return;
+    const key = norm(initialTripFocusId);
+    if (!key) return;
+    const row =
+      reconciledRows.find(
+        (r) => norm(r.tripId) === key || norm(r.missionId) === key,
+      ) ?? null;
+    if (!row) return;
+    setTripFocus(row);
+    setScreen("trip");
+    initialDeepLinkHandledRef.current.trip = true;
+  }, [initialTripFocusId, reconciledRows, initialDeepLinkHandledRef]);
+
+  useEffect(() => {
+    if (initialDeepLinkHandledRef.current.txn) return;
+    const key = norm(initialTxnTripRef);
+    if (!key) return;
+    const candidate =
+      txnRowsAll.find(
+        (t) =>
+          (norm(t.tripRef) === key || norm(t.tripDbId) === key) &&
+          (t.status === "no_entry" || t.status === "conflict"),
+      ) ??
+      txnRowsAll.find(
+        (t) => norm(t.tripRef) === key || norm(t.tripDbId) === key,
+      ) ??
+      null;
+    if (!candidate) return;
+    setTxnFocus(candidate);
+    setScreen("txn");
+    initialDeepLinkHandledRef.current.txn = true;
+  }, [initialTxnTripRef, txnRowsAll, initialDeepLinkHandledRef]);
 
   const backFromSub = () => {
     setScreen("hub");

@@ -2,12 +2,7 @@ import { DatePresetPillBar } from "@/components/DatePresetPillBar";
 import Theme from "@/constants/Theme";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useEffect, type ReactNode } from "react";
-import {
-    Platform,
-    Pressable,
-    Text,
-    View
-} from "react-native";
+import { Platform, Pressable, Text, View } from "react-native";
 import Animated, {
     Easing,
     interpolate,
@@ -340,150 +335,183 @@ export function FinanceSummarySection({
                 />
               </Animated.View>
               <View style={styles.financeHeroPrimaryBlock}>
-              <View style={styles.financeBalanceTopRow}>
-                <Text style={styles.financeBalanceEyebrow}>
-                  Audited Operating Balance
-                </Text>
-                {datePreset != null && (
-                  <View style={styles.financeRangeDesktopWrap}>
-                    <Text style={styles.financeRangeLabel}>Range</Text>
-                    <View style={styles.financeRangeDesktopPillRow}>
-                      {rangePills.map((pill) => {
-                        const active = datePreset.period === pill.id;
-                        return (
-                          <Pressable
-                            key={pill.id}
-                            onPress={() => datePreset.onPeriodChange(pill.id)}
-                            style={[
-                              styles.financeRangePill,
-                              styles.financeRangePillDesktop,
-                              active && styles.financeRangePillActive,
-                            ]}
-                          >
-                            <Text
+                <View style={styles.financeBalanceTopRow}>
+                  <Text style={styles.financeBalanceEyebrow}>
+                    Audited Operating Balance
+                  </Text>
+                  {datePreset != null && (
+                    <View style={styles.financeRangeDesktopWrap}>
+                      <View style={styles.financeRangeDesktopPillRow}>
+                        {rangePills.map((pill) => {
+                          const active = datePreset.period === pill.id;
+                          return (
+                            <Pressable
+                              key={pill.id}
+                              onPress={() => datePreset.onPeriodChange(pill.id)}
                               style={[
-                                styles.financeRangePillText,
-                                active && styles.financeRangePillTextActive,
+                                styles.financeRangePill,
+                                styles.financeRangePillDesktop,
+                                active && styles.financeRangePillActive,
                               ]}
                             >
-                              {pill.label}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                      <Pressable
-                        onPress={() => {
-                          if (onQuickCustomRange) {
-                            const now = new Date();
-                            const from = new Date(
-                              now.getFullYear(),
-                              now.getMonth() - 1,
-                              1,
-                            );
-                            const to = new Date(
-                              now.getFullYear(),
-                              now.getMonth(),
-                              0,
-                              23,
-                              59,
-                              59,
-                            );
-                            onQuickCustomRange(
-                              from.toISOString(),
-                              to.toISOString(),
-                            );
-                          }
-                        }}
-                        style={[
-                          styles.financeRangePill,
-                          styles.financeRangePillDesktop,
-                          datePreset.period === "CUSTOM" &&
-                            styles.financeRangePillActive,
-                        ]}
-                      >
-                        <Text
+                              <Text
+                                style={[
+                                  styles.financeRangePillText,
+                                  active && styles.financeRangePillTextActive,
+                                ]}
+                              >
+                                {pill.label}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                        <Pressable
+                          onPress={() => {
+                            if (onQuickCustomRange) {
+                              const now = new Date();
+                              const from = new Date(
+                                now.getFullYear(),
+                                now.getMonth() - 1,
+                                1,
+                              );
+                              const to = new Date(
+                                now.getFullYear(),
+                                now.getMonth(),
+                                0,
+                                23,
+                                59,
+                                59,
+                              );
+                              onQuickCustomRange(
+                                from.toISOString(),
+                                to.toISOString(),
+                              );
+                            }
+                          }}
                           style={[
-                            styles.financeRangePillText,
+                            styles.financeRangePill,
+                            styles.financeRangePillDesktop,
                             datePreset.period === "CUSTOM" &&
-                              styles.financeRangePillTextActive,
+                              styles.financeRangePillActive,
                           ]}
                         >
-                          Last Month
-                        </Text>
-                      </Pressable>
-                      <Pressable
-                        onPress={() => datePreset.onCustomRangePress()}
+                          <Text
+                            style={[
+                              styles.financeRangePillText,
+                              datePreset.period === "CUSTOM" &&
+                                styles.financeRangePillTextActive,
+                            ]}
+                          >
+                            Last Month
+                          </Text>
+                        </Pressable>
+                        <Pressable
+                          onPress={() => datePreset.onCustomRangePress()}
+                          style={[
+                            styles.financeRangePill,
+                            styles.financeRangePillDesktop,
+                            styles.financeRangePillCustom,
+                          ]}
+                        >
+                          <FontAwesome
+                            name="calendar"
+                            size={11}
+                            color={Theme.textOnDarkMuted}
+                          />
+                          <Text style={styles.financeRangePillText}>
+                            Custom
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  )}
+                </View>
+                <Text style={styles.financeBalanceValue}>
+                  {formatAmount(auditedNet)}
+                </Text>
+                <View style={styles.financeHeroFooterRow}>
+                  <View style={styles.financeBalanceStatsRow}>
+                    <View style={styles.financeBalanceStat}>
+                      <Animated.View
                         style={[
-                          styles.financeRangePill,
-                          styles.financeRangePillDesktop,
-                          styles.financeRangePillCustom,
+                          styles.financeBalanceStatIconIn,
+                          heroStatPulseStyle,
                         ]}
                       >
                         <FontAwesome
-                          name="calendar"
-                          size={11}
-                          color={Theme.textOnDarkMuted}
+                          name="arrow-circle-down"
+                          size={desktopParity ? 15 : 13}
+                          color={Theme.textOnDark}
                         />
-                        <Text style={styles.financeRangePillText}>Custom</Text>
-                      </Pressable>
+                      </Animated.View>
+                      <View>
+                        <Text style={styles.financeBalanceStatLabel}>
+                          Incoming
+                        </Text>
+                        <Text style={styles.financeBalanceStatValue}>
+                          {formatAmount(auditedIn)}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.financeBalanceStat}>
+                      <Animated.View
+                        style={[
+                          styles.financeBalanceStatIconOut,
+                          heroStatPulseStyle,
+                        ]}
+                      >
+                        <FontAwesome
+                          name="arrow-circle-up"
+                          size={desktopParity ? 15 : 13}
+                          color={Theme.textOnDark}
+                        />
+                      </Animated.View>
+                      <View>
+                        <Text style={styles.financeBalanceStatLabel}>
+                          Outgoing
+                        </Text>
+                        <Text style={styles.financeBalanceStatValue}>
+                          {formatAmount(auditedOut)}
+                        </Text>
+                      </View>
                     </View>
                   </View>
-                )}
-              </View>
-              <Text style={styles.financeBalanceValue}>
-                {formatAmount(auditedNet)}
-              </Text>
-              <View style={styles.financeBalanceStatsRow}>
-                <View style={styles.financeBalanceStat}>
-                  <Animated.View
-                    style={[
-                      styles.financeBalanceStatIconIn,
-                      heroStatPulseStyle,
-                    ]}
-                  >
-                    <FontAwesome
-                      name="arrow-circle-down"
-                      size={desktopParity ? 15 : 13}
-                      color={Theme.textOnDark}
-                    />
-                  </Animated.View>
-                  <View>
-                    <Text style={styles.financeBalanceStatLabel}>Incoming</Text>
-                    <Text style={styles.financeBalanceStatValue}>
-                      {formatAmount(auditedIn)}
-                    </Text>
+                  <View style={styles.financeHeroPillsDockInline}>
+                    <FinanceTabRow activeTab={activeTab} onTabPress={onTabPress} />
                   </View>
                 </View>
-                <View style={styles.financeBalanceStat}>
-                  <Animated.View
-                    style={[
-                      styles.financeBalanceStatIconOut,
-                      heroStatPulseStyle,
-                    ]}
-                  >
-                    <FontAwesome
-                      name="arrow-circle-up"
-                      size={desktopParity ? 15 : 13}
-                      color={Theme.textOnDark}
-                    />
-                  </Animated.View>
-                  <View>
-                    <Text style={styles.financeBalanceStatLabel}>Outgoing</Text>
-                    <Text style={styles.financeBalanceStatValue}>
-                      {formatAmount(auditedOut)}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-              </View>
-              <View style={styles.financeHeroPillsDock}>
-                <FinanceTabRow
-                  activeTab={activeTab}
-                  onTabPress={onTabPress}
-                />
               </View>
             </View>
           </AnimatedFinanceHeroCard>
+        </View>
+        <View style={styles.financeDesktopToolbarDock}>
+          <TreasurySummaryCard
+            fullWidth
+            containerStyle={styles.financeDesktopToolbarCard}
+            toolbarTheme="light"
+            searchQuery={searchQuery}
+            onSearchChange={onSearchChange}
+            searchPlaceholder={searchPlaceholder}
+            onReportPress={onReportPress}
+            entityFilter={entityFilter}
+            onEntityFilterChange={onEntityFilterChange}
+            entityFilterLabels={entityFilterLabels}
+            garagePeriodOptions={garagePeriodOptions}
+            garagePeriod={garagePeriod}
+            onGaragePeriodChange={onGaragePeriodChange}
+            garageViewTab={garageViewTab}
+            onGarageViewTabChange={onGarageViewTabChange}
+            showPeriodFilter={showPeriodFilter}
+            periodFilter={periodFilter}
+            onPeriodFilterChange={onPeriodFilterChange}
+            sourceFilter={sourceFilter}
+            onSourceFilterChange={onSourceFilterChange}
+            ledgerCategory={ledgerCategory}
+            onLedgerCategoryChange={onLedgerCategoryChange}
+            cashNetworkLayout
+            onClearFilters={onClearFilters}
+            isAnyFilterActive={isAnyFilterActive}
+          />
         </View>
       </View>
     </>
