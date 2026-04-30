@@ -28,7 +28,7 @@ function ensureLeafletStylesheet(): Promise<void> {
   const existing = document.getElementById(LEAFLET_CSS_LINK_ID) as HTMLLinkElement | null;
   if (existing?.dataset.loaded === '1') return Promise.resolve();
   if (existing && existing.dataset.loaded !== '1') {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const done = () => {
         existing.dataset.loaded = '1';
         resolve();
@@ -38,12 +38,13 @@ function ensureLeafletStylesheet(): Promise<void> {
         return;
       }
       existing.addEventListener('load', done, { once: true });
-      existing.addEventListener('error', () => reject(new Error('Leaflet CSS failed to load')), {
+      // Don't hard-fail map init if CDN CSS is blocked; Leaflet can still render.
+      existing.addEventListener('error', () => resolve(), {
         once: true,
       });
     });
   }
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const link = document.createElement('link');
     link.id = LEAFLET_CSS_LINK_ID;
     link.rel = 'stylesheet';
@@ -53,7 +54,7 @@ function ensureLeafletStylesheet(): Promise<void> {
       link.dataset.loaded = '1';
       resolve();
     };
-    link.onerror = () => reject(new Error('Leaflet CSS failed to load'));
+    link.onerror = () => resolve();
     document.head.appendChild(link);
   });
 }
@@ -89,7 +90,7 @@ const getCoordinates = async (location: string, retryCount = 0): Promise<[number
     const id = setTimeout(() => controller.abort(), 8000);
     const res = await fetch(
       `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(location)},India&format=json&limit=1&countrycodes=IN`,
-      { signal: controller.signal, headers: { 'User-Agent': 'TripMap/1.0', Accept: 'application/json' }, mode: 'cors' },
+      { signal: controller.signal, headers: { Accept: 'application/json' }, mode: 'cors' },
     );
     clearTimeout(id);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -109,6 +110,23 @@ const getCoordinates = async (location: string, retryCount = 0): Promise<[number
     return getFallbackCoordinates(location);
   }
 };
+
+function isValidCoordinatePair(
+  coords:
+    | { latitude: number; longitude: number }
+    | [number, number]
+    | null
+    | undefined,
+): boolean {
+  if (!coords) return false;
+  const latitude = Array.isArray(coords) ? coords[0] : coords.latitude;
+  const longitude = Array.isArray(coords) ? coords[1] : coords.longitude;
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return false;
+  if (Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return false;
+  // Sentinel/invalid location frequently appears as null-island coordinates.
+  if (Math.abs(latitude) < 0.0001 && Math.abs(longitude) < 0.0001) return false;
+  return true;
+}
 
 // ── Props ───────────────────────────────────────────────────────────────────
 export interface TripMapProps {
@@ -133,26 +151,34 @@ export function TripMap({
 }: TripMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
+  const unmountedRef = useRef(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [geocodingProgress, setGeocodingProgress] = useState({ current: 0, total: 0 });
 
   const initializeMap = async () => {
     try {
+      unmountedRef.current = false;
       setIsLoading(true);
       setError(null);
 
       // Dynamic imports to avoid SSR issues (same pattern as existing LeafletMap.web.tsx)
       const L = (await import('leaflet')).default;
       await ensureLeafletStylesheet();
-      await import('leaflet-routing-machine' as any);
+      let routingAvailable = false;
+      try {
+        await import('leaflet-routing-machine' as any);
+        routingAvailable = true;
+      } catch {
+        routingAvailable = false;
+      }
 
       // ── Resolve source coordinates ───────────────────────────────────────
       const locationsToGeocode = [source, destination, ...intermediateStops].filter(Boolean);
       setGeocodingProgress({ current: 0, total: locationsToGeocode.length });
 
       let srcCoords: [number, number];
-      if (sourceCoords && Number.isFinite(sourceCoords.latitude) && Number.isFinite(sourceCoords.longitude)) {
+      if (isValidCoordinatePair(sourceCoords)) {
         srcCoords = [sourceCoords.latitude, sourceCoords.longitude];
       } else if (source) {
         setGeocodingProgress((p) => ({ ...p, current: 1 }));
@@ -163,7 +189,7 @@ export function TripMap({
 
       // ── Resolve destination coordinates ──────────────────────────────────
       let dstCoords: [number, number];
-      if (destCoords && Number.isFinite(destCoords.latitude) && Number.isFinite(destCoords.longitude)) {
+      if (isValidCoordinatePair(destCoords)) {
         dstCoords = [destCoords.latitude, destCoords.longitude];
       } else if (destination) {
         setGeocodingProgress((p) => ({ ...p, current: 2 }));
@@ -253,7 +279,7 @@ export function TripMap({
           .addTo(map);
       });
 
-      if (truckLocation && Number.isFinite(truckLocation.latitude) && Number.isFinite(truckLocation.longitude)) {
+      if (isValidCoordinatePair(truckLocation)) {
         const truckMarker = L.marker([truckLocation.latitude, truckLocation.longitude], {
           icon: truckIcon,
           zIndexOffset: 1000,
@@ -307,60 +333,89 @@ export function TripMap({
       };
 
       try {
-        const routingControl = (L as any).Routing.control({
-          waypoints,
-          lineOptions: {
-            styles: [{ color: '#2196F3', weight: 4, opacity: 0.8, lineCap: 'round', lineJoin: 'round' }],
-          },
-          routeWhileDragging: false,
-          draggableWaypoints: false,
-          addWaypoints: false,
-          createMarker: () => null,
-          show: false,
-          collapsible: false,
-          router: (L as any).Routing.osrmv1({
-            serviceUrl:
-              typeof window !== 'undefined' && window.location.hostname === 'localhost'
-                ? '/osrm/route/v1'
-                : 'https://router.project-osrm.org/route/v1',
-            profile: 'driving',
-          }),
-        });
-
-        routingControl.on('routesfound', (e: any) => {
-          if (e.routes?.[0] && onDistanceCalculated) {
-            onDistanceCalculated((e.routes[0].summary.totalDistance / 1000).toFixed(1));
-          }
-        });
-
-        routingControl.on('routingerror', () => {
+        if (!routingAvailable || !(L as any).Routing?.control || !(L as any).Routing?.osrmv1) {
           createFallbackRoute();
-        });
+        } else {
+          const routingControl = (L as any).Routing.control({
+            waypoints,
+            lineOptions: {
+              styles: [{ color: '#2196F3', weight: 4, opacity: 0.8, lineCap: 'round', lineJoin: 'round' }],
+            },
+            routeWhileDragging: false,
+            draggableWaypoints: false,
+            addWaypoints: false,
+            createMarker: () => null,
+            show: false,
+            collapsible: false,
+            router: (L as any).Routing.osrmv1({
+              serviceUrl:
+                typeof window !== 'undefined' && window.location.hostname === 'localhost'
+                  ? '/osrm/route/v1'
+                  : 'https://router.project-osrm.org/route/v1',
+              profile: 'driving',
+            }),
+          });
 
-        // Guard against _clearLines crash (same patch as reference)
-        const originalClearLines = routingControl._clearLines;
-        routingControl._clearLines = function () {
-          try {
-            if (typeof originalClearLines === 'function') originalClearLines.call(this);
-          } catch {}
-        };
+          routingControl.on('routesfound', (e: any) => {
+            if (e.routes?.[0] && onDistanceCalculated) {
+              onDistanceCalculated((e.routes[0].summary.totalDistance / 1000).toFixed(1));
+            }
+          });
 
-        routingControl.addTo(map);
+          routingControl.on('routingerror', () => {
+            createFallbackRoute();
+          });
+
+          // Guard against _clearLines crash (same patch as reference)
+          const originalClearLines = routingControl._clearLines;
+          routingControl._clearLines = function () {
+            try {
+              if (typeof originalClearLines === 'function') originalClearLines.call(this);
+            } catch {}
+          };
+
+          routingControl.addTo(map);
+        }
       } catch {
         createFallbackRoute();
       }
 
       // ── Fit bounds ───────────────────────────────────────────────────────
       const boundsCoords: [number, number][] = [srcCoords, dstCoords, ...stopCoords.map((s) => s.coords)];
-      if (truckLocation && Number.isFinite(truckLocation.latitude)) {
+      if (isValidCoordinatePair(truckLocation)) {
         boundsCoords.push([truckLocation.latitude, truckLocation.longitude]);
       }
-      map.fitBounds(boundsCoords as any, { padding: [50, 50], maxZoom: 15 });
+      map.fitBounds(boundsCoords as any, { padding: [50, 50], maxZoom: 15, animate: false });
 
       map.whenReady(() => {
-        setTimeout(() => setIsLoading(false), 800);
+        const kickLayout = () => {
+          if (unmountedRef.current) return;
+          if (mapInstanceRef.current !== map) return;
+          try {
+            map.invalidateSize(true);
+          } catch {
+            /* ignore */
+          }
+        };
+        kickLayout();
+        const rafId = requestAnimationFrame(kickLayout);
+        const t1 = window.setTimeout(kickLayout, 100);
+        const t2 = window.setTimeout(kickLayout, 400);
+        const t3 = window.setTimeout(() => {
+          if (!unmountedRef.current && mapInstanceRef.current === map) {
+            setIsLoading(false);
+          }
+        }, 800);
+        (map as any)._tripMapRafId = rafId;
+        (map as any)._tripMapTimeoutIds = [t1, t2, t3];
+        if (typeof ResizeObserver !== 'undefined' && mapRef.current) {
+          const ro = new ResizeObserver(() => kickLayout());
+          ro.observe(mapRef.current);
+          (map as any)._tripMapResizeObserver = ro;
+        }
       });
-    } catch {
+    } catch (err) {
+      console.error('TripMap initialize failed', err);
       setError('Failed to load map. Please check your internet connection and try again.');
       setIsLoading(false);
     }
@@ -376,8 +431,31 @@ export function TripMap({
     }
     initializeMap();
     return () => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
+      unmountedRef.current = true;
+      const m = mapInstanceRef.current;
+      if (m) {
+        const timeoutIds = (m as any)._tripMapTimeoutIds as number[] | undefined;
+        if (timeoutIds?.length) {
+          timeoutIds.forEach((id) => window.clearTimeout(id));
+        }
+        const rafId = (m as any)._tripMapRafId as number | undefined;
+        if (typeof rafId === 'number') {
+          window.cancelAnimationFrame(rafId);
+        }
+        const ro = (m as any)._tripMapResizeObserver as ResizeObserver | undefined;
+        if (ro && mapRef.current) {
+          try {
+            ro.disconnect();
+          } catch {
+            /* ignore */
+          }
+        }
+        try {
+          if (typeof m.stop === 'function') m.stop();
+          m.remove();
+        } catch {
+          /* ignore */
+        }
         mapInstanceRef.current = null;
       }
     };

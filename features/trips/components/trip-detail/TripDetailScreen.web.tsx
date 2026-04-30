@@ -5,7 +5,6 @@
  */
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { ThemedAlertModal } from "@/components/ThemedAlertModal";
-import { TripMap } from "./TripMap.web";
 import { Theme } from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
@@ -17,7 +16,7 @@ import { getDocumentViewUrl } from "@/services/tripDocumentsService";
 import Feather from "@expo/vector-icons/Feather";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Image,
@@ -35,19 +34,20 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  adjustedCost,
-  adjustedRevenue,
-  COST_REASON_OPTIONS,
-  REVENUE_REASON_OPTIONS,
-  type TripAdjustmentImpact,
-  type TripAdjustmentType,
-  type TripAdjustment,
+    COST_REASON_OPTIONS,
+    REVENUE_REASON_OPTIONS,
+    adjustedCost,
+    adjustedRevenue,
+    type TripAdjustment,
+    type TripAdjustmentImpact,
+    type TripAdjustmentType,
 } from "../../services/tripAdjustments";
 import { regenerateTripOtp } from "../../services/tripOtp.service";
 import { getTripDisplayNumber } from "../../services/trips.service";
 import { TripAssignmentBlock } from "../TripAssignmentBlock";
 import { TripAdjustmentModal } from "./TripAdjustmentModal";
 import type { TripDetailScreenProps } from "./TripDetailScreen.types";
+import { TripMap } from "./TripMap.web";
 import { useTripDetail } from "./hooks/useTripDetail";
 import { type ExpenseRow } from "./sections/ExpensesTable";
 import { LRDocumentsSection } from "./sections/LRDocumentsSection";
@@ -124,6 +124,60 @@ function splitLocationPrimarySecondary(location: string | null | undefined): {
   return { primary, secondary };
 }
 
+/** Straight-line km between coordinates; ~×1.3 used as rough road distance when DB/map omit km. */
+function haversineKmBetween(
+  a: { latitude: number; longitude: number },
+  b: { latitude: number; longitude: number },
+): number | null {
+  const R = 6371;
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  if (
+    !Number.isFinite(a.latitude) ||
+    !Number.isFinite(a.longitude) ||
+    !Number.isFinite(b.latitude) ||
+    !Number.isFinite(b.longitude)
+  )
+    return null;
+  const dLat = toRad(b.latitude - a.latitude);
+  const dLng = toRad(b.longitude - a.longitude);
+  const lat1 = toRad(a.latitude);
+  const lat2 = toRad(b.latitude);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  const km = R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+  return Number.isFinite(km) && km > 0 ? km : null;
+}
+
+const DISTANCE_CITY_COORDS: Record<string, [number, number]> = {
+  mumbai: [19.076, 72.8777],
+  delhi: [28.6139, 77.209],
+  bangalore: [12.9716, 77.5946],
+  bengaluru: [12.9716, 77.5946],
+  chennai: [13.0827, 80.2707],
+  kolkata: [22.5726, 88.3639],
+  hyderabad: [17.385, 78.4867],
+  ahmedabad: [23.0225, 72.5714],
+  pune: [18.5204, 73.8567],
+  shimla: [31.1048, 77.1734],
+};
+
+function inferCoordsFromLocationName(
+  location: string | null | undefined,
+): { latitude: number; longitude: number } | null {
+  const raw = (location ?? "").trim().toLowerCase();
+  if (!raw) return null;
+  const firstPart = raw.split(",")[0]?.trim() ?? raw;
+  const direct = DISTANCE_CITY_COORDS[firstPart];
+  if (direct) return { latitude: direct[0], longitude: direct[1] };
+  for (const [city, coords] of Object.entries(DISTANCE_CITY_COORDS)) {
+    if (firstPart.includes(city) || raw.includes(city)) {
+      return { latitude: coords[0], longitude: coords[1] };
+    }
+  }
+  return null;
+}
+
 export default function TripDetailScreen({
   tripId,
   entryContext,
@@ -168,6 +222,49 @@ export default function TripDetailScreen({
     clientNameFromContext,
     onBack,
   });
+
+  const [mapRouteDistanceKm, setMapRouteDistanceKm] = useState<string | null>(null);
+
+  useEffect(() => {
+    setMapRouteDistanceKm(null);
+  }, [tripId]);
+
+  const resolvedDistanceLabel = useMemo(() => {
+    const tr = detail.trip;
+    if (!tr) return null;
+    const raw = tr.distance;
+    if (raw != null && raw !== "") {
+      const n = typeof raw === "number" ? raw : parseFloat(String(raw));
+      if (Number.isFinite(n) && n >= 0) {
+        const s =
+          Math.abs(n - Math.round(n)) < 1e-9 ? String(Math.round(n)) : n.toFixed(1);
+        return `${s} km`;
+      }
+    }
+    const mapKm = mapRouteDistanceKm?.trim();
+    if (mapKm) return `${mapKm} km`;
+    const o = detail.trackingMapOriginCoordinate;
+    const d = detail.trackingMapDestinationCoordinate;
+    const crow = o && d ? haversineKmBetween(o, d) : null;
+    if (crow != null)
+      return `≈ ${(crow * 1.3).toFixed(1)} km`;
+    const inferredOrigin = inferCoordsFromLocationName(tr.pickup_area);
+    const inferredDestination = inferCoordsFromLocationName(tr.drop_location);
+    const inferredKm =
+      inferredOrigin && inferredDestination
+        ? haversineKmBetween(inferredOrigin, inferredDestination)
+        : null;
+    if (inferredKm != null) return `≈ ${(inferredKm * 1.3).toFixed(1)} km`;
+    return null;
+  }, [
+    detail.trip,
+    detail.trackingMapOriginCoordinate,
+    detail.trackingMapDestinationCoordinate,
+    mapRouteDistanceKm,
+  ]);
+
+  const timelineDistanceKm =
+    resolvedDistanceLabel?.replace(/^≈\s*/, "").replace(/\s*km$/i, "").trim() || undefined;
 
   if (detail.loading && !detail.trip) {
     return <CenteredLoadingView message="Loading trip…" />;
@@ -577,12 +674,7 @@ export default function TripDetailScreen({
       return '—';
     }
   };
-  const driverActivityRows = detail.driverActivityTimelineRows ?? [];
-  const timelineRows = [...driverActivityRows].sort((a, b) => {
-    const aDate = new Date(a.kind === 'status' ? a.changed_at : a.row.changed_at).getTime();
-    const bDate = new Date(b.kind === 'status' ? b.changed_at : b.row.changed_at).getTime();
-    return aDate - bDate;
-  });
+  const timelineRows = detail.driverActivityTimelineRows ?? [];
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -735,7 +827,11 @@ export default function TripDetailScreen({
                   </View>
                   <View>
                     <Text style={styles.refHeroMetaLabel}>Manifest range</Text>
-                    <Text style={styles.refHeroMetaValue}>{trip.distance ? `${trip.distance} KM` : "—"}</Text>
+                    <Text style={styles.refHeroMetaValue}>
+                      {resolvedDistanceLabel
+                        ? resolvedDistanceLabel.replace(/\s*km$/i, " KM")
+                        : "—"}
+                    </Text>
                   </View>
                 </View>
                 <View style={styles.refHeroMetaDivider} />
@@ -1390,7 +1486,7 @@ export default function TripDetailScreen({
               <View style={dStyles.heroStats}>
                 <View style={dStyles.statBox}>
                   <Text style={dStyles.statLabel}>DISTANCE</Text>
-                  <Text style={dStyles.statValue}>{trip.distance != null ? `${trip.distance} km` : '—'}</Text>
+                  <Text style={dStyles.statValue}>{resolvedDistanceLabel ?? "—"}</Text>
                 </View>
                 <View style={dStyles.statDivider} />
                 <View style={dStyles.statBox}>
@@ -1415,12 +1511,13 @@ export default function TripDetailScreen({
                 </View>
                 <View style={dStyles.telemetryWrap}>
                   <TripMap
-                    source={trip.pickup_area ?? undefined}
-                    destination={trip.drop_location ?? undefined}
+                    source={(trip.pickup_area ?? "").trim() || undefined}
+                    destination={(trip.drop_location ?? "").trim() || undefined}
                     sourceCoords={detail.trackingMapOriginCoordinate ?? undefined}
                     destCoords={detail.trackingMapDestinationCoordinate ?? undefined}
                     truckLocation={detail.driverLocation ?? undefined}
                     height={mapHeight}
+                    onDistanceCalculated={setMapRouteDistanceKm}
                   />
                   <View style={dStyles.telemetryBar}>
                     <FontAwesome name="compass" size={14} color="#60a5fa" style={{ marginRight: 8 }} />
@@ -1445,8 +1542,17 @@ export default function TripDetailScreen({
                   ) : timelineRows.map((item, idx) => {
                       const isLast = idx === timelineRows.length - 1;
                       if (item.kind === 'status') {
+                        const tripFullyCompleted =
+                          statusLabel === 'Completed' ||
+                          statusLower.includes('complet') ||
+                          statusLower.includes('deliver') ||
+                          statusLower === 'done';
+                        const markGreen =
+                          tripFullyCompleted ||
+                          item.status_context === 'completed' ||
+                          item.status_context === 'in_transit';
                         const iconTone =
-                          item.status_context === 'completed' || item.status_context === 'in_transit'
+                          markGreen
                             ? '#059669'
                             : 'rgba(15,23,42,0.35)';
                         return (
@@ -1455,7 +1561,7 @@ export default function TripDetailScreen({
                               <View
                                 style={[
                                   dStyles.auditTimelineDot,
-                                  { borderColor: iconTone, backgroundColor: item.status_context === 'completed' || item.status_context === 'in_transit' ? '#ecfdf5' : '#f8fafc' },
+                                  { borderColor: iconTone, backgroundColor: markGreen ? '#ecfdf5' : '#f8fafc' },
                                 ]}
                               >
                                 <View style={[dStyles.auditTimelineDotInner, { backgroundColor: iconTone }]} />
@@ -1465,7 +1571,6 @@ export default function TripDetailScreen({
                             <View style={dStyles.auditContentRow}>
                               <View style={dStyles.auditBody}>
                                 <Text style={dStyles.auditTitle}>{item.status_label}</Text>
-                                <Text style={dStyles.auditDetail}>{item.detail_line}</Text>
                               </View>
                               <View style={dStyles.auditMeta}>
                                 <Text style={dStyles.auditTime}>{fmtTimelineTime(item.changed_at)}</Text>
@@ -1517,13 +1622,24 @@ export default function TripDetailScreen({
             <View style={dStyles.row}>
               <View style={dStyles.bottomLeft}>
                 <View style={dStyles.card}>
-                  <Text style={dStyles.cardMicroLabel}>PRIMARY DRIVER</Text>
+                  <View style={dStyles.cardHeaderRowInline}>
+                    <Text style={dStyles.cardMicroLabel}>PRIMARY DRIVER</Text>
+                    {detail.canAssign ? (
+                      <TouchableOpacity
+                        style={dStyles.reassignInlineBtn}
+                        activeOpacity={0.85}
+                        onPress={() => setShowAssignmentManager(true)}
+                      >
+                        <Text style={dStyles.reassignInlineBtnText}>Reassign</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
                   <View style={dStyles.driverRow}>
                     {detail.driverAvatarUri ? (
                       <Image source={{ uri: detail.driverAvatarUri }} style={dStyles.driverAvatar} />
                     ) : (
                       <View style={dStyles.driverAvatarFallback}>
-                        <FontAwesome name="user" size={20} color="rgba(255,255,255,0.5)" />
+                        <FontAwesome name="user" size={20} color="#1d4ed8" />
                       </View>
                     )}
                     <View style={{ flex: 1 }}>
@@ -1544,10 +1660,21 @@ export default function TripDetailScreen({
                 </View>
 
                 <View style={dStyles.card}>
-                  <Text style={dStyles.cardMicroLabel}>ASSIGNED VEHICLE</Text>
+                  <View style={dStyles.cardHeaderRowInline}>
+                    <Text style={dStyles.cardMicroLabel}>ASSIGNED VEHICLE</Text>
+                    {detail.canAssign ? (
+                      <TouchableOpacity
+                        style={dStyles.reassignInlineBtn}
+                        activeOpacity={0.85}
+                        onPress={() => setShowAssignmentManager(true)}
+                      >
+                        <Text style={dStyles.reassignInlineBtnText}>Reassign</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
                   <View style={dStyles.vehicleRow}>
                     <View style={dStyles.vehicleIconWrap}>
-                      <FontAwesome name="truck" size={20} color="rgba(255,255,255,0.5)" />
+                      <FontAwesome name="truck" size={20} color="#059669" />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={dStyles.vehicleName}>
@@ -1756,7 +1883,7 @@ export default function TripDetailScreen({
                   stageLocations={stageLocations}
                   lastUpdatedAt={trip.updated_at}
                   canAdvance={detail.canAssign}
-                  distanceKm={trip.distance ? String(trip.distance) : undefined}
+                  distanceKm={timelineDistanceKm}
                   driverSummaryText={driverSummaryText}
                   onOpenMaps={
                     detail.trackingMapOriginCoordinate &&
@@ -1767,12 +1894,13 @@ export default function TripDetailScreen({
                   mapPreview={
                     <View style={styles.telemetryWrap}>
                       <TripMap
-                        source={trip.pickup_area ?? undefined}
-                        destination={trip.drop_location ?? undefined}
+                        source={(trip.pickup_area ?? "").trim() || undefined}
+                        destination={(trip.drop_location ?? "").trim() || undefined}
                         sourceCoords={detail.trackingMapOriginCoordinate ?? undefined}
                         destCoords={detail.trackingMapDestinationCoordinate ?? undefined}
                         truckLocation={detail.driverLocation ?? undefined}
                         height={520}
+                        onDistanceCalculated={setMapRouteDistanceKm}
                       />
                       <View style={styles.telemetryOverlay}>
                         <FontAwesome name="compass" size={20} color="#60a5fa" />
@@ -2667,11 +2795,50 @@ const dStyles = StyleSheet.create({
   cardMicroLabel: { fontSize: 9, fontWeight: '700', color: DS_MUTED, letterSpacing: 1.2, marginBottom: 14 },
   driverRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   driverAvatar: { width: 44, height: 44, borderRadius: 22 },
-  driverAvatarFallback: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(15,23,42,0.06)', alignItems: 'center', justifyContent: 'center' },
+  cardHeaderRowInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  reassignInlineBtn: {
+    borderRadius: 999,
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  reassignInlineBtnText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#1d4ed8',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  driverAvatarFallback: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#dbeafe',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   driverName: { fontSize: 15, fontWeight: '700', color: DS_TEXT },
   driverRating: { fontSize: 12, color: '#f59e0b', marginTop: 3 },
   vehicleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  vehicleIconWrap: { width: 44, height: 44, borderRadius: 10, backgroundColor: 'rgba(15,23,42,0.05)', borderWidth: 1, borderColor: DS_BORDER, alignItems: 'center', justifyContent: 'center' },
+  vehicleIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: '#dcfce7',
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   vehicleName: { fontSize: 15, fontWeight: '700', color: DS_TEXT },
   vehicleSub: { fontSize: 12, color: DS_MUTED, marginTop: 3 },
   docRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: 'rgba(15,23,42,0.06)' },
