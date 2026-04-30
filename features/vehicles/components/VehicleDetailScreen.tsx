@@ -391,6 +391,9 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
   const vehicleTypeLabel = [vehicle.vehicle_brand, vehicle.vehicle_model, vehicle.vehicle_body_type]
     .filter(Boolean)
     .join(' ') || vehicle.vehicle_type || '—';
+  const profileIdentitySubtitle = [linkedDriver?.name?.trim(), vehicleTypeLabel?.trim()]
+    .filter((value): value is string => Boolean(value && value !== "—"))
+    .join(" • ") || "—";
 
   const truckImage = getVehicleTypeImage(vehicle.vehicle_type);
   const heroDecorAnimatedStyle = isWebDesktop
@@ -551,7 +554,7 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
                     {vehicle.vehicle_number}
                   </Text>
                   <Text style={styles.profilePreviewIdentitySub} numberOfLines={1}>
-                    {(linkedDriver?.name ?? vehicleTypeLabel ?? "—").trim() || "—"}
+                    {profileIdentitySubtitle}
                   </Text>
                 </View>
               </View>
@@ -573,7 +576,9 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
               <View style={styles.profilePreviewExperienceBlock}>
                 <Text style={styles.profilePreviewExperienceEyebrow}>EXPERIENCE</Text>
                 <View style={styles.profilePreviewExperienceRow}>
-                  <FontAwesome name="history" size={13} color={Theme.textSecondary} />
+                  <View style={styles.profilePreviewExperienceIconWrap}>
+                    <FontAwesome name="road" size={12} color={Theme.textOnPrimary} />
+                  </View>
                   <Text style={styles.profilePreviewTripsNumber}>{tripsHandled}</Text>
                   <Text style={styles.profilePreviewExperienceLabel}>Trips Handled</Text>
                 </View>
@@ -1007,6 +1012,7 @@ const styles = StyleSheet.create({
   profilePreviewExperienceBlock: ecc.experienceBlock,
   profilePreviewExperienceEyebrow: ecc.experienceEyebrow,
   profilePreviewExperienceRow: ecc.experienceRow,
+  profilePreviewExperienceIconWrap: ecc.experienceIconWrap,
   profilePreviewTripsNumber: ecc.tripsNumber,
   profilePreviewExperienceLabel: ecc.experienceLabel,
   profilePreviewDetails: ecc.details,

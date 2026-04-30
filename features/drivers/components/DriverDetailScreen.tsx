@@ -1303,7 +1303,9 @@ export default function DriverDetailScreen({
             <View style={styles.profilePreviewExperienceBlock}>
               <Text style={styles.profilePreviewExperienceEyebrow}>EXPERIENCE</Text>
               <View style={styles.profilePreviewExperienceRow}>
-                <FontAwesome name="history" size={13} color={Theme.textSecondary} />
+                <View style={styles.profilePreviewExperienceIconWrap}>
+                  <FontAwesome name="road" size={12} color={Theme.textOnPrimary} />
+                </View>
                 <Text style={styles.profilePreviewTripsNumber}>{tripsHandled}</Text>
                 <Text style={styles.profilePreviewExperienceLabel}>Trips Handled</Text>
               </View>
@@ -2680,6 +2682,7 @@ const styles = StyleSheet.create({
   profilePreviewExperienceBlock: ecc.experienceBlock,
   profilePreviewExperienceEyebrow: ecc.experienceEyebrow,
   profilePreviewExperienceRow: ecc.experienceRow,
+  profilePreviewExperienceIconWrap: ecc.experienceIconWrap,
   profilePreviewTripsNumber: ecc.tripsNumber,
   profilePreviewExperienceLabel: ecc.experienceLabel,
   profilePreviewDetails: ecc.details,
