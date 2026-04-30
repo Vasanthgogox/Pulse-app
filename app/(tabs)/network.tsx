@@ -680,6 +680,7 @@ export default function NetworkScreen() {
   }
 
   const trendPct = totalConnections > 0 ? Math.round((pendingCount / totalConnections) * 100) : 0;
+  const totalConnectionsDisplay = String(totalConnections).padStart(2, "0");
 
   const handleOpenProfileFromConnection = (item: ConnectedOrg) => {
     setSelectedProfileNode({
@@ -773,10 +774,23 @@ export default function NetworkScreen() {
                     </View>
                   </View>
                   <View style={[styles.commandMainStatsRow, isCompactPhone && styles.commandMainStatsRowCompact]}>
-                    <View style={styles.commandTotalWrap}>
-                      <Text style={[styles.commandTotalText, isCompactPhone && styles.commandTotalTextCompact]}>
-                        {String(totalConnections).padStart(2, "0")}
-                      </Text>
+                    <View style={[styles.commandTotalWrap, isCompactPhone && styles.commandTotalWrapCompact]}>
+                      {isCompactPhone ? (
+                        <View style={styles.commandTotalDigitsRow}>
+                          {totalConnectionsDisplay.split("").map((digit, index) => (
+                            <Text
+                              key={`${digit}-${index}`}
+                              style={[styles.commandTotalText, styles.commandTotalTextCompact]}
+                            >
+                              {digit}
+                            </Text>
+                          ))}
+                        </View>
+                      ) : (
+                        <Text style={styles.commandTotalText} numberOfLines={1}>
+                          {totalConnectionsDisplay}
+                        </Text>
+                      )}
                       <Text style={[styles.commandTotalSub, isCompactPhone && styles.commandTotalSubCompact]}>Network Growth</Text>
                     </View>
                     <View style={[styles.commandMetricGrid, isCompactPhone && styles.commandMetricGridCompact]}>
@@ -1219,6 +1233,12 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
+  commandTotalWrapCompact: {
+    flex: 0,
+    flexShrink: 0,
+    width: 94,
+    minWidth: 94,
+  },
   commandTotalWrapMobile: {
     alignItems: "flex-start",
   },
@@ -1231,8 +1251,19 @@ const styles = StyleSheet.create({
     lineHeight: 72,
   },
   commandTotalTextCompact: {
-    fontSize: 58,
-    lineHeight: 58,
+    fontSize: 54,
+    lineHeight: 54,
+    minWidth: 34,
+    textAlign: "center",
+    includeFontPadding: false,
+  },
+  commandTotalDigitsRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "flex-start",
+    width: 88,
+    flexWrap: "nowrap",
+    overflow: "visible",
   },
   commandTotalSub: {
     marginTop: 6,
@@ -1257,6 +1288,7 @@ const styles = StyleSheet.create({
     width: "100%",
     gap: 6,
     justifyContent: "space-between",
+    minWidth: 0,
   },
   commandMetricCell: {
     width: 84,
