@@ -145,15 +145,6 @@ export default function NotificationsScreen() {
               </View>
 
               <View style={styles.headerRight}>
-                <View style={styles.escrowCard}>
-                  <View style={styles.escrowIconWrap}>
-                    <FontAwesome name="credit-card" size={13} color={Theme.primary} />
-                  </View>
-                  <View>
-                    <Text style={styles.escrowLabel}>ESCROW</Text>
-                    <Text style={styles.escrowValue}>₹45.2K</Text>
-                  </View>
-                </View>
                 <Image
                   source={{ uri: "https://i.pravatar.cc/100?img=64" }}
                   style={styles.profileAvatar}

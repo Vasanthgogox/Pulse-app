@@ -1,12 +1,11 @@
 /**
  * Demo header aligned to Q-unified-base mobile header language.
- * Branded left lockup + right utility cluster (escrow, bell, profile).
+ * Branded left lockup + right utility cluster (bell, profile).
  */
 import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
-import { useWallet } from '@/contexts/WalletContext';
 import { useState, useEffect } from 'react';
 import { getSignedAvatarUrl } from '@/lib/avatarUpload';
 import { DEFAULT_USER_2D_AVATAR_SEED, getUser2DAvatarUriForSeed } from '@/constants/UserAvatars';
@@ -30,7 +29,6 @@ export function TeslaHeader({
   onProfileClick,
 }: TeslaHeaderProps) {
   const { profile } = useAuth();
-  const { balance } = useWallet();
   const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
   const displayName = (profile?.full_name ?? profile?.displayName ?? 'User').trim();
   const initials =
@@ -40,8 +38,6 @@ export function TeslaHeader({
       .slice(0, 2)
       .map((part) => part[0]?.toUpperCase())
       .join('') || 'U';
-  const escrowFormatted = balance > 0 ? `₹${(balance / 1000).toFixed(1)}K` : '₹45.2K';
-
   useEffect(() => {
     let mounted = true;
     const resolveAvatar = async () => {
@@ -89,10 +85,6 @@ export function TeslaHeader({
         </View>
       </View>
       <View style={styles.icons}>
-        <TouchableOpacity style={styles.escrowWrap} hitSlop={8} disabled>
-          <Text style={styles.escrowLabel}>Escrow</Text>
-          <Text style={styles.escrowValue}>{escrowFormatted}</Text>
-        </TouchableOpacity>
         <TouchableOpacity onPress={onNetworkClick} style={styles.iconBtn} hitSlop={8} activeOpacity={0.7}>
           <FontAwesome name="globe" size={15} color={Theme.textPrimaryDark} />
         </TouchableOpacity>
@@ -174,32 +166,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   icons: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  escrowWrap: {
-    flexDirection: 'column',
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-    backgroundColor: Theme.surfaceForm,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 10,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-  },
-  escrowLabel: {
-    fontSize: 8,
-    lineHeight: 10,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-    color: Theme.textMutedDemo,
-  },
-  escrowValue: {
-    fontSize: 10,
-    lineHeight: 12,
-    fontWeight: '900',
-    color: Theme.primary,
-    marginTop: 1,
-  },
   iconBtn: { padding: 4 },
   bellWrap: { position: 'relative' },
   bellDot: {
