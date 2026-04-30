@@ -13,6 +13,7 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import { useConnectionRequestsReceivedQuery } from "@/lib/queries";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { getSalaryRequestsByOrganization } from "@/services/salaryRequestsService";
+import { getSharedLedgerNotifications } from "@/services/sharedLedgerNotificationsService";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { Command } from "lucide-react-native";
 import { useRouter } from "expo-router";
@@ -271,9 +272,13 @@ export function DemoTabBar({
       return;
     }
     const loadNotificationCount = async () => {
-      const { requests } = await getSalaryRequestsByOrganization(orgId, "pending");
+      const [{ requests }, sharedRes] = await Promise.all([
+        getSalaryRequestsByOrganization(orgId, "pending"),
+        getSharedLedgerNotifications(orgId, "action_required"),
+      ]);
+      const sharedCount = sharedRes.notifications.length;
       if (!cancelled) {
-        setNotificationCount(requests.length);
+        setNotificationCount(requests.length + sharedCount);
       }
     };
     void loadNotificationCount();

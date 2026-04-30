@@ -1,6 +1,6 @@
 /**
  * Unified mobile header style (aligned with Q-unified-base):
- * branded left lockup + contextual title/subtitle, and right utility cluster (escrow, bell, profile).
+ * branded left lockup + contextual title/subtitle, and right utility cluster (bell, profile).
  */
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
@@ -9,7 +9,6 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { StyleSheet, Text, TouchableOpacity, View, Image, type TextStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/contexts/AuthContext";
-import { useWallet } from "@/contexts/WalletContext";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { DEFAULT_USER_2D_AVATAR_SEED, getUser2DAvatarUriForSeed } from "@/constants/UserAvatars";
 import { useState, useEffect } from "react";
@@ -68,7 +67,6 @@ export function TeslaHeader({
 }: TeslaHeaderProps) {
   const router = useRouter();
   const { profile } = useAuth();
-  const { balance } = useWallet();
   const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
 
   useEffect(() => {
@@ -109,7 +107,6 @@ export function TeslaHeader({
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase())
     .join("") || "U";
-  const escrowFormatted = balance > 0 ? `₹${(balance / 1000).toFixed(1)}K` : "₹45.2K";
   const handleNotificationPress = () => {
     if (onNotificationClick) {
       onNotificationClick();
@@ -163,16 +160,6 @@ export function TeslaHeader({
       </View>
       {!hideRightIcons && (
       <View style={styles.icons}>
-        <TouchableOpacity
-          onPress={onLoadClick}
-          style={[styles.escrowWrap, isDark && styles.escrowWrapDark]}
-          hitSlop={8}
-          disabled={onLoadClick == null}
-          activeOpacity={0.85}
-        >
-          <Text style={[styles.escrowLabel, isDark && styles.escrowLabelDark]}>Escrow</Text>
-          <Text style={styles.escrowValue}>{escrowFormatted}</Text>
-        </TouchableOpacity>
         {!hideNotificationBell && (
           <View style={styles.iconWithDot}>
             <TouchableOpacity
@@ -324,39 +311,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-  },
-  escrowWrap: {
-    flexDirection: "column",
-    alignItems: "flex-end",
-    justifyContent: "center",
-    backgroundColor: Theme.surfaceForm,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 10,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-  },
-  escrowWrapDark: {
-    backgroundColor: Theme.darkBackground,
-    borderColor: Theme.separatorDark,
-  },
-  escrowLabel: {
-    fontSize: 8,
-    lineHeight: 10,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
-    color: Theme.textMutedDemo,
-  },
-  escrowLabelDark: {
-    color: Theme.textSecondary,
-  },
-  escrowValue: {
-    fontSize: 10,
-    lineHeight: 12,
-    fontWeight: "900",
-    color: Theme.primary,
-    marginTop: 1,
   },
   iconWrap: {
     padding: 4,

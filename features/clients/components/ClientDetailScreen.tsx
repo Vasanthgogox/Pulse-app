@@ -212,12 +212,18 @@ export interface ClientDetailScreenProps {
   clientId: string;
   onBack: () => void;
   autoOpenProfile?: boolean;
+  openSharedFromNotification?: boolean;
+  notificationAction?: string;
+  notificationTripId?: string;
 }
 
 export default function ClientDetailScreen({
   clientId,
   onBack,
   autoOpenProfile,
+  openSharedFromNotification,
+  notificationAction,
+  notificationTripId,
 }: ClientDetailScreenProps) {
   const router = useRouter();
   const { t } = useLanguage();
@@ -310,6 +316,10 @@ export default function ClientDetailScreen({
   useEffect(() => {
     if (autoOpenProfile) setShowProfileModal(true);
   }, [autoOpenProfile]);
+
+  useEffect(() => {
+    if (openSharedFromNotification) setDetailSubTab("shared");
+  }, [openSharedFromNotification]);
 
   useEffect(() => {
     const phone = client?.phone?.trim();
@@ -2195,6 +2205,11 @@ export default function ClientDetailScreen({
               embeddedInOverlay={true}
               externalDownloadRequest={sharedLedgerDownloadSignal}
               onRefresh={load}
+              initialNotificationAction={
+                (notificationAction as import("@/features/finance/components/SharedLedgerContent").SharedLedgerNotificationAction | undefined) ??
+                null
+              }
+              initialNotificationTripId={notificationTripId ?? null}
               onRequestConnection={() => {
                 setIsLinked(true);
                 triggerSuccess("CONNECTION_REQUESTED");

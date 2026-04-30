@@ -116,12 +116,18 @@ export interface SupplierDetailScreenProps {
   supplierId: string;
   onBack: () => void;
   autoOpenProfile?: boolean;
+  openSharedFromNotification?: boolean;
+  notificationAction?: string;
+  notificationTripId?: string;
 }
 
 export default function SupplierDetailScreen({
   supplierId,
   onBack,
   autoOpenProfile,
+  openSharedFromNotification,
+  notificationAction,
+  notificationTripId,
 }: SupplierDetailScreenProps) {
   const router = useRouter();
   const { t } = useLanguage();
@@ -207,6 +213,10 @@ export default function SupplierDetailScreen({
   useEffect(() => {
     if (autoOpenProfile) setShowProfileModal(true);
   }, [autoOpenProfile]);
+
+  useEffect(() => {
+    if (openSharedFromNotification) setDetailSubTab("shared");
+  }, [openSharedFromNotification]);
 
   useEffect(() => {
     const phone = supplier?.phone?.trim();
@@ -1796,6 +1806,11 @@ export default function SupplierDetailScreen({
               embeddedInOverlay={true}
               externalDownloadRequest={sharedLedgerDownloadSignal}
               onRefresh={load}
+              initialNotificationAction={
+                (notificationAction as import("@/features/finance/components/SharedLedgerContent").SharedLedgerNotificationAction | undefined) ??
+                null
+              }
+              initialNotificationTripId={notificationTripId ?? null}
               onRequestConnection={() => {
                 setIsLinked(true);
                 triggerSuccess("CONNECTION_REQUESTED");
