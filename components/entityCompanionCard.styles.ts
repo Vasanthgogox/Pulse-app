@@ -36,6 +36,42 @@ export const entityCompanionCardStyles = StyleSheet.create({
     color: Theme.textMuted,
     textTransform: "uppercase",
   },
+  identityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: -2,
+  },
+  identityAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Theme.surfaceGray,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  identityAvatarImage: {
+    width: "100%",
+    height: "100%",
+  },
+  identityMeta: {
+    flex: 1,
+    minWidth: 0,
+  },
+  identityName: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  identitySub: {
+    marginTop: 1,
+    fontSize: 8,
+    fontWeight: "600",
+    color: Theme.textMuted,
+  },
   ratingRow: {
     flexDirection: "row",
     alignItems: "center",

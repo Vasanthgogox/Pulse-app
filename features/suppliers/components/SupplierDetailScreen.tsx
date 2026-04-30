@@ -1187,6 +1187,23 @@ export default function SupplierDetailScreen({
           {isWebDesktop ? (
             <View style={styles.profilePreviewCard}>
               <Text style={styles.profilePreviewEyebrow}>ENTITY PROFILE</Text>
+              <View style={styles.profilePreviewIdentityRow}>
+                <View style={styles.profilePreviewIdentityAvatar}>
+                  {profileAvatarUri ? (
+                    <Image source={{ uri: profileAvatarUri }} style={styles.profilePreviewIdentityAvatarImage} />
+                  ) : (
+                    <FontAwesome name="building" size={12} color={Theme.textSecondary} />
+                  )}
+                </View>
+                <View style={styles.profilePreviewIdentityMeta}>
+                  <Text style={styles.profilePreviewIdentityName} numberOfLines={1}>
+                    {supplierName}
+                  </Text>
+                  <Text style={styles.profilePreviewIdentitySub} numberOfLines={1}>
+                    {(supplier.contact_person ?? supplier.phone ?? "No contact").trim() || "No contact"}
+                  </Text>
+                </View>
+              </View>
               <View style={styles.profilePreviewRatingRow}>
                 <View style={styles.profilePreviewStars}>
                   {Array.from({ length: 5 }).map((_, idx) => (
@@ -2317,6 +2334,12 @@ const styles = StyleSheet.create({
   scorecardGridDueWebDesktop: ehs.scorecardGridDueWebDesktop,
   profilePreviewCard: ecc.card,
   profilePreviewEyebrow: ecc.eyebrow,
+  profilePreviewIdentityRow: ecc.identityRow,
+  profilePreviewIdentityAvatar: ecc.identityAvatar,
+  profilePreviewIdentityAvatarImage: ecc.identityAvatarImage,
+  profilePreviewIdentityMeta: ecc.identityMeta,
+  profilePreviewIdentityName: ecc.identityName,
+  profilePreviewIdentitySub: ecc.identitySub,
   profilePreviewRatingRow: ecc.ratingRow,
   profilePreviewStars: ecc.stars,
   profilePreviewRatingBadge: ecc.ratingBadge,

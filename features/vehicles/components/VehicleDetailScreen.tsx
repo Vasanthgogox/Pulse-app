@@ -35,8 +35,10 @@ import {
 } from "@/features/finance";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { canAccessFinance, getCapabilitiesFromProfile } from "@/lib/capabilities";
+import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { formatINR, formatLedgerDate, formatRelative, normalizeVehicleNumberForMatch } from "@/lib/format";
 import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntries";
+import { getAvatarUriForSeed } from "@/constants/DriverLevels";
 import { getDriversByOrganization, type DriverRow } from "@/features/drivers";
 import {
   getTripsByOrganization,
@@ -86,6 +88,7 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
   const isRefreshingRef = useRef(false);
   const initialLoadDoneRef = useRef(false);
   const heroDecorProgress = useRef(new Animated.Value(0)).current;
+  const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isWebDesktop) {
@@ -264,6 +267,47 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
     });
     return m;
   }, [trips]);
+
+  const linkedDriver = useMemo(() => {
+    if (!vehicle) return null;
+    return (
+      driverRowsForLedger.find((d) => d.assigned_vehicle_id === vehicle.id) ?? null
+    );
+  }, [driverRowsForLedger, vehicle]);
+
+  useEffect(() => {
+    let mounted = true;
+    const resolveProfileAvatar = async () => {
+      if (!linkedDriver) {
+        if (mounted) setProfileAvatarUri(null);
+        return;
+      }
+
+      const avatarUrl = (linkedDriver.avatar_url ?? "").trim();
+      if (avatarUrl.length > 0) {
+        if (/^https?:\/\//i.test(avatarUrl)) {
+          if (mounted) setProfileAvatarUri(avatarUrl);
+          return;
+        }
+        const signed = await getSignedAvatarUrl(avatarUrl);
+        if (mounted) setProfileAvatarUri(signed);
+        return;
+      }
+
+      const avatarSeed = (linkedDriver.avatar_seed ?? "").trim();
+      if (avatarSeed.length > 0) {
+        if (mounted) setProfileAvatarUri(getAvatarUriForSeed(avatarSeed));
+        return;
+      }
+
+      if (mounted) setProfileAvatarUri(null);
+    };
+
+    void resolveProfileAvatar();
+    return () => {
+      mounted = false;
+    };
+  }, [linkedDriver]);
 
   const contractValue = useMemo(
     () => missionRows.reduce((s, r) => s + r.sales, 0),
@@ -494,6 +538,23 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
           {isWebDesktop ? (
             <View style={styles.profilePreviewCard}>
               <Text style={styles.profilePreviewEyebrow}>VEHICLE PROFILE</Text>
+              <View style={styles.profilePreviewIdentityRow}>
+                <View style={styles.profilePreviewIdentityAvatar}>
+                  {profileAvatarUri ? (
+                    <Image source={{ uri: profileAvatarUri }} style={styles.profilePreviewIdentityAvatarImage} resizeMode="cover" />
+                  ) : (
+                    <Image source={truckImage} style={styles.profilePreviewIdentityAvatarImage} resizeMode="cover" />
+                  )}
+                </View>
+                <View style={styles.profilePreviewIdentityMeta}>
+                  <Text style={styles.profilePreviewIdentityName} numberOfLines={1}>
+                    {vehicle.vehicle_number}
+                  </Text>
+                  <Text style={styles.profilePreviewIdentitySub} numberOfLines={1}>
+                    {(linkedDriver?.name ?? vehicleTypeLabel ?? "—").trim() || "—"}
+                  </Text>
+                </View>
+              </View>
               <View style={styles.profilePreviewRatingRow}>
                 <View style={styles.profilePreviewStars}>
                   {Array.from({ length: 5 }).map((_, idx) => (
@@ -933,6 +994,12 @@ const styles = StyleSheet.create({
   scorecardGridDueWebDesktop: ehs.scorecardGridDueWebDesktop,
   profilePreviewCard: ecc.card,
   profilePreviewEyebrow: ecc.eyebrow,
+  profilePreviewIdentityRow: ecc.identityRow,
+  profilePreviewIdentityAvatar: ecc.identityAvatar,
+  profilePreviewIdentityAvatarImage: ecc.identityAvatarImage,
+  profilePreviewIdentityMeta: ecc.identityMeta,
+  profilePreviewIdentityName: ecc.identityName,
+  profilePreviewIdentitySub: ecc.identitySub,
   profilePreviewRatingRow: ecc.ratingRow,
   profilePreviewStars: ecc.stars,
   profilePreviewRatingBadge: ecc.ratingBadge,
