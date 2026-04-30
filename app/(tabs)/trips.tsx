@@ -94,6 +94,7 @@ type DateFilter =
   | "custom";
 
 const CHAT_FAB_STACK_OFFSET = 60;
+const TRIPS_FAB_GAP_ABOVE_CHAT = 28;
 
 type TripsListLayout = "cards" | "table";
 type HistoryTripMetricId =
@@ -170,9 +171,9 @@ export default function TripsScreen() {
   const [showDateRangePicker, setShowDateRangePicker] = useState(false);
   const [showSortModal, setShowSortModal] = useState(false);
   const [sortAnchorY, setSortAnchorY] = useState(0);
-  /** Web: default to audit table (matches fleet dashboard); native keeps cards first for thumb-scrolling. */
+  /** Mobile (including mobile web) defaults to cards; larger web keeps table-first. */
   const [listLayout, setListLayout] = useState<TripsListLayout>(() =>
-    Platform.OS === "web" ? "table" : "cards",
+    isMobile ? "cards" : Platform.OS === "web" ? "table" : "cards",
   );
 
   const capabilities = getCapabilitiesFromProfile(
@@ -1656,6 +1657,7 @@ export default function TripsScreen() {
                           styles.tripsSearchWrapWeb,
                           styles.tripsSearchWrapWebCompact,
                           isCompactWeb && styles.tripsSearchWrapWebFluid,
+                          isMobile && styles.tripsSearchWrapWebMobile,
                         ]}
                       >
                         <FontAwesome
@@ -1684,55 +1686,63 @@ export default function TripsScreen() {
                           maxLength={120}
                         />
                       </View>
-                      <View style={styles.tripsToolbarActions}>
-                        <TouchableOpacity
-                          style={[
-                            styles.tripsFilterIconBtn,
-                            styles.tripsSupplyChipWeb,
-                          ]}
-                          onPress={(e) => {
-                            const target = e.currentTarget;
-                            if (
-                              target &&
-                              typeof target.measureInWindow === "function"
-                            ) {
-                              target.measureInWindow(
-                                (
-                                  _x: number,
-                                  y: number,
-                                  _w: number,
-                                  h: number,
-                                ) => {
-                                  setSortAnchorY(y + h + 6);
-                                  setShowSortModal(true);
-                                },
-                              );
-                            } else {
-                              setSortAnchorY(100);
-                              setShowSortModal(true);
-                            }
-                          }}
-                          activeOpacity={0.7}
-                        >
-                          <FontAwesome
-                            name="sort"
-                            size={12}
-                            color={Theme.textPrimaryDark}
-                          />
-                        </TouchableOpacity>
-                      </View>
+                      {!isMobile ? (
+                        <View style={styles.tripsToolbarActions}>
+                          <TouchableOpacity
+                            style={[
+                              styles.tripsFilterIconBtn,
+                              styles.tripsSupplyChipWeb,
+                            ]}
+                            onPress={(e) => {
+                              const target = e.currentTarget;
+                              if (
+                                target &&
+                                typeof target.measureInWindow === "function"
+                              ) {
+                                target.measureInWindow(
+                                  (
+                                    _x: number,
+                                    y: number,
+                                    _w: number,
+                                    h: number,
+                                  ) => {
+                                    setSortAnchorY(y + h + 6);
+                                    setShowSortModal(true);
+                                  },
+                                );
+                              } else {
+                                setSortAnchorY(100);
+                                setShowSortModal(true);
+                              }
+                            }}
+                            activeOpacity={0.7}
+                          >
+                            <FontAwesome
+                              name="sort"
+                              size={12}
+                              color={Theme.textPrimaryDark}
+                            />
+                          </TouchableOpacity>
+                        </View>
+                      ) : null}
                       <View
                         style={[
                           styles.tripsMainTabsRowWeb,
                           isCompactWeb && styles.tripsMainTabsRowWebCompact,
                         ]}
                       >
-                        <View style={styles.tripsMainTabsPillWrap}>
+                        <View
+                          style={[
+                            styles.tripsMainTabsPillWrap,
+                            isMobile && styles.tripsMainTabsPillWrapMobile,
+                          ]}
+                        >
                           {mainTabs.map((tab) => (
                             <TouchableOpacity
                               key={tab.id}
                               style={[
                                 styles.tripsMainPillWeb,
+                                isMobile && styles.tripsMainPillWebMobile,
                                 tab.isActive && styles.tripsMainPillActiveWeb,
                               ]}
                               onPress={tab.onPress}
@@ -1752,10 +1762,11 @@ export default function TripsScreen() {
                             </TouchableOpacity>
                           ))}
                         </View>
-                        <View
-                          style={styles.tripsLayoutToggle}
-                          accessibilityRole="tablist"
-                        >
+                        {!isMobile ? (
+                          <View
+                            style={styles.tripsLayoutToggle}
+                            accessibilityRole="tablist"
+                          >
                           <TouchableOpacity
                             style={[
                               styles.tripsLayoutToggleBtn,
@@ -1804,7 +1815,8 @@ export default function TripsScreen() {
                               }
                             />
                           </TouchableOpacity>
-                        </View>
+                          </View>
+                        ) : null}
                       </View>
                     </View>
                   </View>
@@ -1812,6 +1824,44 @@ export default function TripsScreen() {
               )}
             </View>
             {tripFilter === "Active" ? (
+              isMobile ? (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.tripMetricTabsRow}
+                  style={styles.tripMetricTabsScroll}
+                >
+                  {TRIP_METRIC_ORDER.map((metricId) => {
+                    const active = activeMetricTab === metricId;
+                    const copy = tripMetricCopy[metricId];
+                    return (
+                      <TouchableOpacity
+                        key={metricId}
+                        style={[
+                          styles.tripsMainPillWeb,
+                          styles.tripMetricTabPill,
+                          active && styles.tripsMainPillActiveWeb,
+                        ]}
+                        onPress={() => setActiveMetricTab(metricId)}
+                        activeOpacity={0.8}
+                        accessibilityRole="tab"
+                        accessibilityState={{ selected: active }}
+                      >
+                        <Text
+                          style={[
+                            styles.tripsMainPillTextWeb,
+                            styles.tripMetricTabText,
+                            active && styles.tripsMainPillTextActiveWeb,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {copy.title}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              ) : (
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -2000,6 +2050,7 @@ export default function TripsScreen() {
                   </View>
                 </View>
               </ScrollView>
+              )
             ) : (
               <ScrollView
                 horizontal
@@ -2393,7 +2444,9 @@ export default function TripsScreen() {
               bottom:
                 insets.bottom +
                 Layout.tabBarBottomPaddingMin +
-                CHAT_FAB_STACK_OFFSET,
+                Layout.demoTabBarScrollBottomInset +
+                CHAT_FAB_STACK_OFFSET +
+                TRIPS_FAB_GAP_ABOVE_CHAT,
             },
           ]}
         >
@@ -2401,6 +2454,8 @@ export default function TripsScreen() {
             onPress={() => router.push("/add-trip")}
             accessibilityLabel={tr("addTrip")}
             icon="road"
+            size={isMobile ? 40 : 46}
+            iconSize={isMobile ? 17 : 20}
           />
         </View>
       )}
@@ -3098,8 +3153,11 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   tripsMainTabsRowWebCompact: {
-    width: "100%",
-    justifyContent: "flex-start",
+    width: "auto" as const,
+    alignSelf: "auto",
+    justifyContent: "flex-end",
+    marginLeft: "auto",
+    flexShrink: 0,
   },
   tripsTopHeaderSpacer: {
     flex: 1,
@@ -3119,6 +3177,10 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 0,
   },
+  tripsMainTabsPillWrapMobile: {
+    gap: 2,
+    padding: 3,
+  },
   tripsMainPillWeb: {
     minWidth: 104,
     borderRadius: 999,
@@ -3131,6 +3193,11 @@ const styles = StyleSheet.create({
         outlineStyle: "none",
       } as any,
     }),
+  },
+  tripsMainPillWebMobile: {
+    minWidth: 86,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
   },
   tripsMainPillActiveWeb: {
     backgroundColor: Theme.darkBackground,
@@ -3162,6 +3229,7 @@ const styles = StyleSheet.create({
   tripsTabClusterWeb: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 4,
     flexShrink: 0,
     backgroundColor: Theme.liquidPillBg,
@@ -3177,7 +3245,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   tripsTabClusterWebCompact: {
-    alignSelf: "flex-start",
+    alignSelf: "center",
     maxWidth: "100%",
     flexWrap: "wrap",
   },
@@ -3245,14 +3313,18 @@ const styles = StyleSheet.create({
   },
   tripsToolbarWebCompact: {
     width: "100%",
-    justifyContent: "flex-start",
-    rowGap: 8,
+    justifyContent: "space-between",
+    flexWrap: "nowrap",
+    rowGap: 0,
   },
   tripsSearchWrapWebFluid: {
     flex: 1,
     width: "auto" as const,
     minWidth: 190,
     maxWidth: "100%" as const,
+  },
+  tripsSearchWrapWebMobile: {
+    minWidth: 140,
   },
   tripsDateInlineRowWeb: {
     flexDirection: "row",
@@ -3273,6 +3345,27 @@ const styles = StyleSheet.create({
     paddingBottom: 2,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
+  },
+  tripMetricTabsScroll: {
+    marginBottom: 10,
+    paddingBottom: 2,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderLight,
+  },
+  tripMetricTabsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingBottom: 10,
+  },
+  tripMetricTabPill: {
+    minWidth: 104,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+  },
+  tripMetricTabText: {
+    letterSpacing: 0.9,
   },
   tripMetricsGridWeb: {
     justifyContent: "flex-start",
