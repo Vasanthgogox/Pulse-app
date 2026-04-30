@@ -253,9 +253,6 @@ export function FinanceTabBody({
         onRowSelect={onEntityRowSelect}
         searchQuery={searchQuery}
         entityFilter={entityFilter}
-        pendingSupplierInvites={connectionRequestsSent.filter(
-          (r) => r.request_carrier_supplier && r.status === "pending",
-        )}
         tripPartyMap={tripPartyMap}
         topContent={topContent}
         refreshing={refreshing}

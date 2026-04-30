@@ -1425,119 +1425,6 @@ export default function DriverRadarScreen() {
    * Keep pending assignments in Notifications only.
    * Dashboard should surface only the selected/accepted trip flow.
    */
-  const showPendingInboxOnDashboard = true;
-  /** In-dashboard inbox for trips still awaiting accept — disabled by flow rules. */
-  const renderOtherPendingTripsInbox = useCallback(() => {
-    if (!showPendingInboxOnDashboard) return null;
-    if (assignableIncomingNotificationsWithMeta.length === 0) return null;
-    return (
-      <View style={[styles.centerCardConstraint, styles.otherPendingTripsWrap]}>
-        <View style={[styles.centerCardWrap, styles.notificationListIntro]}>
-          <Text style={[styles.notificationListTitle, { color: colors.text }]}>
-            Other trips ({assignableIncomingNotificationsWithMeta.length})
-          </Text>
-          <Text
-            style={[styles.notificationListSubtitle, { color: colors.textMuted }]}
-          >
-            Pending assignments — tap when you are ready. Your current trip stays
-            active.
-          </Text>
-        </View>
-        <ScrollView
-          style={styles.invitesScroll}
-          contentContainerStyle={styles.invitesScrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {assignableIncomingNotificationsWithMeta.map((item) => (
-            <TouchableOpacity
-              key={item.trip.id}
-              activeOpacity={0.85}
-              onPress={() => setSelectedIncomingTripId(item.trip.id)}
-              style={[
-                styles.centerCardWrap,
-                styles.notificationSelectCard,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                },
-              ]}
-            >
-              <View style={styles.notificationSelectHeader}>
-                <Text style={[styles.notificationSelectTripId, { color: colors.text }]}>
-                  {getDriverTripDisplayNumber(item.trip, driverTripNumberById)}
-                </Text>
-                {item.requiresOtp ? (
-                  <View
-                    style={[
-                      styles.notificationOtpBadgeMinimal,
-                      {
-                        borderColor: colors.border,
-                        backgroundColor: colors.surface,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.notificationOtpBadgeMinimalText,
-                        { color: colors.textMuted },
-                      ]}
-                    >
-                      OTP
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-              <Text
-                style={[styles.notificationSelectRoute, { color: colors.text }]}
-                numberOfLines={2}
-              >
-                {item.trip.pickup_area?.trim() || "Pickup"} →{" "}
-                {item.trip.drop_location?.trim() || "Drop-off"}
-              </Text>
-              <Text style={styles.notificationAssignedByLine} numberOfLines={2}>
-                <Text
-                  style={[styles.notificationAssignedByPrefix, { color: colors.textMuted }]}
-                >
-                  Assigned by{" "}
-                </Text>
-                <Text style={[styles.notificationAssignedByName, { color: colors.text }]}>
-                  {item.assignerPersonDisplay}
-                </Text>
-              </Text>
-              <Text
-                style={[
-                  styles.notificationSelectMeta,
-                  { color: colors.textMuted, marginTop: 6 },
-                ]}
-              >
-                {item.commissionForTrip > 0
-                  ? `Est. earning ${formatINR(item.commissionForTrip)}`
-                  : "Est. earning · Salary"}
-              </Text>
-              <View style={styles.notificationSelectFooter}>
-                <Text
-                  style={[
-                    styles.notificationSelectActionTextMuted,
-                    { color: colors.textMuted },
-                  ]}
-                >
-                  Open
-                </Text>
-                <FontAwesome name="chevron-right" size={12} color={colors.textMuted} />
-              </View>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-    );
-  }, [
-    assignableIncomingNotificationsWithMeta,
-    colors.border,
-    colors.surface,
-    colors.text,
-    colors.textMuted,
-    showPendingInboxOnDashboard,
-  ]);
   const selectedIncomingMeta =
     incomingNotificationsWithMeta.find(
       (item) => item.trip.id === effectiveFirstIncoming?.id,
@@ -3614,7 +3501,6 @@ export default function DriverRadarScreen() {
                   }
                 : {})}
             />
-            {renderOtherPendingTripsInbox()}
           </>
         ) : effectiveFirstIncoming &&
           acceptedTripId &&
@@ -3649,7 +3535,6 @@ export default function DriverRadarScreen() {
                   }
                 : {})}
             />
-            {renderOtherPendingTripsInbox()}
           </>
         ) : assignmentFeedback === "accepted" ? (
           <View style={styles.feedbackBlock}>
@@ -4832,6 +4717,12 @@ const styles = StyleSheet.create({
   },
   notificationListIntro: {
     marginBottom: 2,
+  },
+  notificationListHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
   },
   notificationListTitle: {
     fontSize: 17,
