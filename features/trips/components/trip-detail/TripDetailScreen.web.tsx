@@ -12,7 +12,6 @@ import type { LedgerRow } from "@/features/finance/services/finance.service";
 import { TripRatingsBlock } from "@/features/ratings/components/TripRatingsBlock";
 import { isAggregateTrip } from "@/lib/driverUtils";
 import { formatINR, formatIndianVehicleNumber } from "@/lib/format";
-import { getDocumentViewUrl } from "@/services/tripDocumentsService";
 import Feather from "@expo/vector-icons/Feather";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
@@ -43,11 +42,13 @@ import {
     type TripAdjustmentType,
 } from "../../services/tripAdjustments";
 import { regenerateTripOtp } from "../../services/tripOtp.service";
-import { getTripDisplayNumber } from "../../services/trips.service";
+import { getTripDisplayNumber, updateTripStatus, type TripRow } from "../../services/trips.service";
+import { supabase } from "@/lib/supabase";
 import { TripAssignmentBlock } from "../TripAssignmentBlock";
 import { TripAdjustmentModal } from "./TripAdjustmentModal";
 import { TripDetailFinanceView } from "./TripDetailFinanceView";
 import type { TripDetailScreenProps } from "./TripDetailScreen.types";
+import { getOptimalRoute } from "@/services/routingService";
 import { TripMap } from "./TripMap.web";
 import { useTripDetail } from "./hooks/useTripDetail";
 import { type ExpenseRow } from "./sections/ExpensesTable";
@@ -58,6 +59,58 @@ import {
 } from "./sections/TripStatusTimeline";
 
 type Tab = "trip" | "finance" | "tracking" | "docs";
+
+type TripWebExtra = {
+  pickup_state?: string | null;
+  drop_state?: string | null;
+  driver_name?: string | null;
+  vehicle_number?: string | null;
+  supplier_name?: string | null;
+  duration_minutes?: number | null;
+  vehicle_type?: string | null;
+  truck_type?: string | null;
+  capacity?: string | null;
+  vehicle_capacity?: string | null;
+};
+
+type LedgerWebExtra = LedgerRow & {
+  reference_no?: string | null;
+};
+
+function NeoPartyAvatar({
+  uri,
+  name,
+  icon,
+  tone = "indigo",
+}: {
+  uri?: string | null;
+  name: string;
+  icon: "briefcase" | "truck";
+  tone?: "indigo" | "rose";
+}) {
+  const initial = name.trim().slice(0, 1).toUpperCase() || "•";
+  return (
+    <View
+      style={[
+        neoStyles.heroPartyIcon,
+        tone === "rose" && neoStyles.heroPartyIconRose,
+      ]}
+    >
+      {uri ? (
+        <Image source={{ uri }} style={neoStyles.heroPartyAvatarImage} resizeMode="cover" />
+      ) : (
+        <>
+          <Feather
+            name={icon}
+            size={15}
+            color={tone === "rose" ? "#fb7185" : "#818cf8"}
+          />
+          <Text style={neoStyles.heroPartyAvatarInitial}>{initial}</Text>
+        </>
+      )}
+    </View>
+  );
+}
 
 function formatLedgerDate(s: string | null | undefined) {
   if (!s) return "—";
@@ -94,6 +147,28 @@ function adjustmentsCountingAsDeductions(adjustments: TripAdjustment[]) {
       (a.type === "revenue" && a.impact === "minus") ||
       (a.type === "cost" && a.impact === "plus"),
   );
+}
+
+const FINANCE_PROTOCOL_CHIPS = [
+  "Loading",
+  "Unloading",
+  "Detention",
+  "Damage",
+  "Toll",
+  "RTO",
+] as const;
+
+function protocolSupplierChipAdjustment(chip: (typeof FINANCE_PROTOCOL_CHIPS)[number]): {
+  type: TripAdjustmentType;
+  impact: TripAdjustmentImpact;
+  reasonSeed: string;
+} {
+  if (chip === "Loading") return { type: "cost", impact: "plus", reasonSeed: "Loading Charges" };
+  if (chip === "Unloading") return { type: "cost", impact: "plus", reasonSeed: "Unloading Charges" };
+  if (chip === "Detention") return { type: "cost", impact: "plus", reasonSeed: "Detention" };
+  if (chip === "Damage") return { type: "cost", impact: "plus", reasonSeed: "Damages / Missing" };
+  if (chip === "Toll") return { type: "cost", impact: "plus", reasonSeed: "Pass Debit" };
+  return { type: "cost", impact: "plus", reasonSeed: "Other" };
 }
 
 function getInlineReasonOptions(
@@ -190,6 +265,7 @@ export default function TripDetailScreen({
   const router = useRouter();
   const { currentOrganization } = useOrganization();
   const { t } = useLanguage();
+  void t;
   const { width: screenWidth } = useWindowDimensions();
   const [activeTab, setActiveTab] = useState<Tab>("trip");
   const [financeSubTab, setFinanceSubTab] = useState<"summary" | "transactions">(
@@ -225,10 +301,45 @@ export default function TripDetailScreen({
   });
 
   const [mapRouteDistanceKm, setMapRouteDistanceKm] = useState<string | null>(null);
+  const [simConfirmStep, setSimConfirmStep] = useState<{
+    label: string;
+    targetStatus: string;
+    started_at?: string;
+    completed_at?: string;
+    driverLat: number | null;
+    driverLng: number | null;
+    driverLocLabel: string | null;
+  } | null>(null);
+  const [simulating, setSimulating] = useState(false);
+  const [simError, setSimError] = useState<string | null>(null);
 
   useEffect(() => {
     setMapRouteDistanceKm(null);
   }, [tripId]);
+
+  // Proactively fetch road distance as soon as coordinates are available.
+  // This updates mapRouteDistanceKm before TripMap finishes its own async routing.
+  useEffect(() => {
+    const o = detail.trackingMapOriginCoordinate;
+    const d = detail.trackingMapDestinationCoordinate;
+    if (!o || !d) return;
+    let cancelled = false;
+    getOptimalRoute(o, d)
+      .then((result) => {
+        if (!cancelled && result) {
+          setMapRouteDistanceKm((result.distance / 1000).toFixed(1));
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    detail.trackingMapOriginCoordinate?.latitude,
+    detail.trackingMapOriginCoordinate?.longitude,
+    detail.trackingMapDestinationCoordinate?.latitude,
+    detail.trackingMapDestinationCoordinate?.longitude,
+  ]);
 
   const resolvedDistanceLabel = useMemo(() => {
     const tr = detail.trip;
@@ -266,6 +377,27 @@ export default function TripDetailScreen({
 
   const timelineDistanceKm =
     resolvedDistanceLabel?.replace(/^≈\s*/, "").replace(/\s*km$/i, "").trim() || undefined;
+
+  // Parse simulation log entries stored in trip.notes.
+  // Format: [BISIM|status|timestamp|lat|lng|userName]
+  const simLogEntries = useMemo(() => {
+    const notes = detail.trip?.notes;
+    if (!notes) return [];
+    return notes
+      .split("\n")
+      .filter((line) => line.startsWith("[BISIM|"))
+      .map((line) => {
+        const inner = line.slice(7, -1);
+        const [status, timestamp, lat, lng, userName] = inner.split("|");
+        return {
+          status,
+          timestamp,
+          lat: parseFloat(lat) || null,
+          lng: parseFloat(lng) || null,
+          userName: userName || "Business",
+        };
+      });
+  }, [detail.trip?.notes]);
 
   if (detail.loading && !detail.trip) {
     return <CenteredLoadingView message="Loading trip…" />;
@@ -483,28 +615,88 @@ export default function TripDetailScreen({
       }
     : { latitude: 20.5937, longitude: 78.9629 };
 
+  const tripExtra = trip as TripRow & TripWebExtra;
   const originSplit = splitLocationPrimarySecondary(trip.pickup_area);
   const destinationSplit = splitLocationPrimarySecondary(trip.drop_location);
-  const pickupAny = trip as any;
   const originStateLabel =
-    originSplit.secondary || String(pickupAny.pickup_state ?? "").trim() || "Origin Node";
+    originSplit.secondary || String(tripExtra.pickup_state ?? "").trim() || "Origin Node";
   const destinationStateLabel =
-    destinationSplit.secondary || String(pickupAny.drop_state ?? "").trim() || "Destination Node";
+    destinationSplit.secondary || String(tripExtra.drop_state ?? "").trim() || "Destination Node";
   const allocatedDriverName =
     detail.driverName?.trim() ||
-    String((trip as any).driver_name ?? "").trim() ||
+    String(tripExtra.driver_name ?? "").trim() ||
     "Unassigned";
   const allocatedVehicleLabel =
     (detail.displayVehicleFromInput?.trim() ||
       detail.vehicleLabel?.trim() ||
       String(trip.vehicle_display_number ?? "").trim() ||
-      String((trip as any).vehicle_number ?? "").trim() ||
+      String(tripExtra.vehicle_number ?? "").trim() ||
       "Pending");
   const supplierName =
-    detail.partnerName?.trim() || String((trip as any).supplier_name ?? "").trim() || "Supplier N/A";
+    detail.partnerName?.trim() || String(tripExtra.supplier_name ?? "").trim() || "Supplier N/A";
   const clientNameCard =
     detail.displayClientName?.trim() || String(trip.client_name ?? "").trim() || "Client N/A";
   const isIntegratedTrip = Boolean(trip.indent_id);
+
+  // Determine current step index (0=Assigned, 1=Pickup, 2=In-Transit, 3=Delivered)
+  const currentStepIndex = (() => {
+    const s = String(trip.status ?? "").toLowerCase();
+    if (["completed", "delivered", "done", "at_drop"].includes(s) || !!trip.completed_at) return 3;
+    if (s === "in_transit") return 2;
+    if (["in_progress", "picked_up", "pickup"].includes(s)) return 1;
+    return 0;
+  })();
+
+  // Next step the business can simulate
+  const nextSimulateStep = (() => {
+    const s = String(trip.status ?? "").toLowerCase();
+    const loc = detail.driverLocation;
+    const driverLat = loc?.latitude ?? null;
+    const driverLng = loc?.longitude ?? null;
+    const driverLocLabel = detail.driverLocationAddress?.trim() || null;
+    const now = new Date().toISOString();
+    if (["draft", "assigned"].includes(s))
+      return { label: "Driver arrived at pickup", targetStatus: "in_progress", started_at: now, driverLat, driverLng, driverLocLabel };
+    if (["in_progress", "picked_up"].includes(s))
+      return { label: "Package collected — in transit", targetStatus: "in_transit", driverLat, driverLng, driverLocLabel };
+    if (s === "in_transit")
+      return { label: "Driver arrived at drop-off", targetStatus: "at_drop", driverLat, driverLng, driverLocLabel };
+    if (s === "at_drop")
+      return { label: "Trip delivered & completed", targetStatus: "completed", completed_at: now, driverLat, driverLng, driverLocLabel };
+    return null;
+  })();
+
+  // Execute simulation: advance status + append log marker to notes
+  const handleConfirmSimulate = async () => {
+    if (!simConfirmStep) return;
+    setSimulating(true);
+    setSimError(null);
+    try {
+      const updateData: { status: string; started_at?: string; completed_at?: string } = {
+        status: simConfirmStep.targetStatus,
+      };
+      if (simConfirmStep.started_at) updateData.started_at = simConfirmStep.started_at;
+      if (simConfirmStep.completed_at) updateData.completed_at = simConfirmStep.completed_at;
+
+      const { error } = await updateTripStatus(trip.id, updateData);
+      if (error) { setSimError(error.message); setSimulating(false); return; }
+
+      const userName = detail.profile?.full_name?.trim() || "Business";
+      const simEntry = `[BISIM|${simConfirmStep.targetStatus}|${new Date().toISOString()}|${simConfirmStep.driverLat ?? ""}|${simConfirmStep.driverLng ?? ""}|${userName}]`;
+      const existingNotes = trip.notes?.trim() || "";
+      await supabase()
+        .from("trips")
+        .update({ notes: existingNotes ? `${existingNotes}\n${simEntry}` : simEntry })
+        .eq("id", trip.id);
+
+      setSimConfirmStep(null);
+      detail.handleRefresh();
+    } catch (e: unknown) {
+      setSimError(e instanceof Error ? e.message : "Simulation failed");
+    } finally {
+      setSimulating(false);
+    }
+  };
 
   const journeyLogs = [
     {
@@ -568,27 +760,35 @@ export default function TripDetailScreen({
     const n = Number(trip.amount_paid ?? 0);
     return Number.isFinite(n) ? `₹${n.toLocaleString("en-IN")}` : "₹0";
   })();
-  const tripAny = trip as any;
-  const durationLabel = tripAny.duration_minutes
-    ? `${Math.floor(tripAny.duration_minutes / 60)}h ${tripAny.duration_minutes % 60}m`
+  const durationLabel = tripExtra.duration_minutes
+    ? `${Math.floor(tripExtra.duration_minutes / 60)}h ${tripExtra.duration_minutes % 60}m`
     : "—";
   const driverRatingLabel =
     detail.driverRatingAvg != null && Number.isFinite(Number(detail.driverRatingAvg))
       ? Number(detail.driverRatingAvg).toFixed(1)
       : "—";
   const vehicleTypeLabel =
-    String((trip as any).vehicle_type ?? "").trim() ||
-    String((trip as any).truck_type ?? "").trim() ||
+    String(tripExtra.vehicle_type ?? "").trim() ||
+    String(tripExtra.truck_type ?? "").trim() ||
     "MXL";
   const vehicleCapacityLabel =
-    String((trip as any).capacity ?? "").trim() ||
-    String((trip as any).vehicle_capacity ?? "").trim() ||
+    String(tripExtra.capacity ?? "").trim() ||
+    String(tripExtra.vehicle_capacity ?? "").trim() ||
     "—";
   const adjSales = adjustedRevenue(sales, detail.adjustments);
   const adjCost = adjustedCost(cost, detail.adjustments);
   const netManifestYield = Math.max(0, adjSales - adjCost - totalExpenses);
   const revenueSideDelta = adjSales - sales;
   const costSideDelta = adjCost - cost;
+  const selectedProvisionAdjustments = detail.adjustments.filter((adj) =>
+    showFinanceProvisionPanel === "client" ? adj.type === "revenue" : adj.type === "cost",
+  );
+  const provisionSummaryRows = [
+    { label: "Base Sale", value: formatINR(sales), tone: "sale" as const },
+    { label: "Sale Adjusted", value: formatINR(adjSales), tone: "sale" as const },
+    { label: "Base Cost", value: formatINR(cost), tone: "cost" as const },
+    { label: "Cost Adjusted", value: formatINR(adjCost), tone: "cost" as const },
+  ];
   const filteredFinanceRows = financeHistoryRows.filter((row) => {
     const q = searchTerm.trim().toLowerCase();
     if (!q) return true;
@@ -596,49 +796,46 @@ export default function TripDetailScreen({
       ledgerHistoryTitle(row.tx, row.isIn),
       row.tx.description ?? "",
       row.tx.payment_mode ?? "",
-      (row.tx as any).reference_no ?? "",
+      (row.tx as LedgerWebExtra).reference_no ?? "",
       formatLedgerDate(row.tx.transaction_date),
     ]
       .join(" ")
       .toLowerCase();
     return text.includes(q);
   });
-  const vaultDocs = detail.computedTripDocs.slice(0, 4);
+  const vaultDocs = detail.computedTripDocs.slice(0, 3);
+  const canUploadTripDocs =
+    !!currentOrganization?.id &&
+    !!trip.organization_id &&
+    currentOrganization.id === trip.organization_id;
 
   const openDriverDetails = () => {
     if (!trip.driver_id) return;
-    router.push(`/driver/${trip.driver_id}` as any);
+    router.push(`/driver/${trip.driver_id}` as never);
   };
 
   const openVehicleDetails = () => {
     if (!trip.vehicle_id) return;
-    router.push(`/vehicle/${trip.vehicle_id}` as any);
+    router.push(`/vehicle/${trip.vehicle_id}` as never);
   };
 
   const openTripDocumentsFlow = () => {
-    router.push(`/log-incoming-pods?tripId=${encodeURIComponent(trip.id)}` as any);
+    router.push(`/log-incoming-pods?tripId=${encodeURIComponent(trip.id)}` as never);
   };
 
-  const handleDocOpen = async (doc: (typeof detail.computedTripDocs)[number]) => {
-    if (doc.id === "vehicle-documents") {
-      if (trip.vehicle_id) router.push(`/vehicle/${trip.vehicle_id}` as any);
-      else openTripDocumentsFlow();
+  const handleDocOpen = (doc: (typeof detail.computedTripDocs)[number]) => {
+    const isUploaded = doc.status !== "Pending" || !!doc.storagePath;
+    if (isUploaded) {
+      detail.setSelectedDoc(doc);
       return;
     }
-
-    if (doc.id === "pod" && doc.storagePath) {
-      try {
-        const url = await getDocumentViewUrl(doc.storagePath);
-        if (typeof window !== "undefined") {
-          window.open(url, "_blank", "noopener,noreferrer");
-        }
-      } catch {
-        openTripDocumentsFlow();
-      }
+    if (canUploadTripDocs) {
+      openTripDocumentsFlow();
       return;
     }
-
-    openTripDocumentsFlow();
+    if (doc.id === "vehicle-documents" && trip.vehicle_id) {
+      router.push(`/vehicle/${trip.vehicle_id}` as never);
+    }
   };
 
   const hasDriverAssigned = !!trip.driver_id;
@@ -708,6 +905,17 @@ export default function TripDetailScreen({
     }
   };
   const timelineRows = detail.driverActivityTimelineRows ?? [];
+  void baseFreight;
+  void additionalIncome;
+  void deductions;
+  void pending;
+  void supplierDue;
+  void hasDest;
+  void mapCenter;
+  void isIntegratedTrip;
+  void openDriverDetails;
+  void openVehicleDetails;
+  void fmtAuditDate;
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -715,45 +923,37 @@ export default function TripDetailScreen({
       <View style={[styles.navBar, { paddingHorizontal: hPad }, !isDesktop && styles.navBarMobile]}>
         {isDesktop ? (
           <>
-            <View style={styles.navLeft}>
+            <View style={neoStyles.manifestNavLeft}>
               <TouchableOpacity
                 onPress={onBack}
-                style={styles.navBackBtn}
+                style={neoStyles.manifestBackBtn}
                 activeOpacity={0.8}
               >
-                <FontAwesome name="chevron-left" size={11} color="#94a3b8" />
-                {!isMobile && <Text style={styles.navBackText}>Back</Text>}
+                <FontAwesome name="chevron-left" size={13} color="#0f172a" />
               </TouchableOpacity>
-              <View style={styles.navTitleWrap}>
-                <Text style={[styles.navTitle, isMobile && { fontSize: 13 }]} numberOfLines={1}>
-                  {getTripDisplayNumber(trip)}
-                </Text>
-                {!isMobile && (
-                  <View
-                    style={[
-                      styles.navPill,
-                      isAggregate ? styles.navPillAggregate : styles.navPillAsset,
-                    ]}
-                  >
-                    <Text style={styles.navPillText}>
-                      {isAggregate ? "AGGREGATE" : "ASSET"}
+              <View style={neoStyles.manifestNavDivider} />
+              <View>
+                <Text style={neoStyles.manifestNavKicker}>Manifest Management</Text>
+                <View style={neoStyles.manifestNavTitleRow}>
+                  <Text style={neoStyles.manifestNavTripId} numberOfLines={1}>
+                    {getTripDisplayNumber(trip)}
+                  </Text>
+                  <View style={neoStyles.manifestStatusBadge}>
+                    <Text style={neoStyles.manifestStatusBadgeText}>
+                      {statusLabel === "Completed" ? "DEPLOYED" : statusLabel.toUpperCase()}
                     </Text>
                   </View>
-                )}
+                </View>
               </View>
             </View>
-            <View style={styles.navActions}>
-              <NavAction
-                icon="plus"
-                label={isMobile ? "" : "Add Expense"}
-                onPress={detail.openAddExpense}
-              />
-              <NavAction
-                icon="file-text-o"
-                label={isMobile ? "" : "Generate Memo"}
-                onPress={() => {}}
-                primary
-              />
+            <View style={neoStyles.manifestNavActions}>
+              <TouchableOpacity style={neoStyles.auditBtn} activeOpacity={0.85}>
+                <Feather name="clock" size={16} color="#94a3b8" />
+                <Text style={neoStyles.auditBtnText}>Audit Log</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={neoStyles.manifestShareBtn} activeOpacity={0.85}>
+                <Feather name="share-2" size={18} color="#94a3b8" />
+              </TouchableOpacity>
             </View>
           </>
         ) : (
@@ -779,7 +979,7 @@ export default function TripDetailScreen({
       </View>
 
       {/* ── Tab bar ───────────────────────────────────────────────────────────── */}
-      {isDesktop ? (
+      {false && isDesktop ? (
         <View style={[styles.tabBar, { paddingHorizontal: hPad }]}>
           <TabButton
             label="Tracking"
@@ -801,7 +1001,7 @@ export default function TripDetailScreen({
       {/* ── Scrollable content ────────────────────────────────────────────────── */}
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, { padding: isMobile ? 16 : 22 }]}
+        contentContainerStyle={[styles.scrollContent, { padding: isDesktop ? 8 : isMobile ? 16 : 22 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -1485,8 +1685,733 @@ export default function TripDetailScreen({
           </>
         ) : null}
 
+        {isDesktop ? (
+          <View style={neoStyles.shell}>
+            <View style={neoStyles.grid}>
+              <View style={neoStyles.mainCol}>
+                <View style={neoStyles.hero}>
+                  <View style={neoStyles.heroGlow} />
+                  <View style={neoStyles.heroBridge}>
+                    <View style={neoStyles.heroParty}>
+                      <NeoPartyAvatar
+                        uri={detail.clientAvatarUri}
+                        name={clientNameCard}
+                        icon="briefcase"
+                      />
+                      <View style={neoStyles.heroPartyText}>
+                        <Text style={neoStyles.heroKicker}>Client Supply Node</Text>
+                        <Text style={neoStyles.heroPartyName} numberOfLines={1}>
+                          {clientNameCard}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={neoStyles.swapIcon}>
+                      <FontAwesome name="exchange" size={11} color="#64748b" />
+                    </View>
+                    <View style={[neoStyles.heroParty, neoStyles.heroPartyRight]}>
+                      <View style={neoStyles.heroPartyTextRight}>
+                        <Text style={[neoStyles.heroKicker, neoStyles.alignRight]}>
+                          Carrier Provision
+                        </Text>
+                        <Text style={neoStyles.heroPartyName} numberOfLines={1}>
+                          {supplierName}
+                        </Text>
+                      </View>
+                      <NeoPartyAvatar
+                        uri={detail.supplierAvatarUri}
+                        name={supplierName}
+                        icon="truck"
+                        tone="rose"
+                      />
+                    </View>
+                  </View>
+
+                  <View style={neoStyles.routeHeroRow}>
+                    <View style={neoStyles.routeHeroSide}>
+                      <Text style={neoStyles.routeHeroCity} numberOfLines={2}>
+                        {originSplit.primary.toUpperCase()}
+                      </Text>
+                      <Text style={neoStyles.routeHeroSub}>
+                        {originStateLabel.toUpperCase()}
+                      </Text>
+                    </View>
+                    <View style={neoStyles.routeVector}>
+                      <View style={neoStyles.routeVectorLine} />
+                      <View style={neoStyles.routeVectorTruck}>
+                        <Feather name="truck" size={15} color="#cbd5e1" />
+                      </View>
+                      <View style={neoStyles.routeVectorLine} />
+                    </View>
+                    <View style={[neoStyles.routeHeroSide, neoStyles.routeHeroSideRight]}>
+                      <Text style={[neoStyles.routeHeroCity, neoStyles.alignRight]} numberOfLines={2}>
+                        {destinationSplit.primary.toUpperCase()}
+                      </Text>
+                      <Text style={[neoStyles.routeHeroSub, neoStyles.alignRight]}>
+                        {destinationStateLabel.toUpperCase()}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={neoStyles.heroMetrics}>
+                    <View style={neoStyles.heroMetric}>
+                      <Text style={neoStyles.heroMetricLabel}>Manifest Range</Text>
+                      <Text style={neoStyles.heroMetricValue}>
+                        {resolvedDistanceLabel ? resolvedDistanceLabel.replace(/\s*km$/i, " KM") : "—"}
+                      </Text>
+                    </View>
+                    <View style={neoStyles.heroMetricDivider} />
+                    <View style={neoStyles.heroMetric}>
+                      <Text style={neoStyles.heroMetricLabel}>ETE Manifest</Text>
+                      <Text style={neoStyles.heroMetricValue}>{durationLabel}</Text>
+                    </View>
+                    <View style={neoStyles.heroMetricDivider} />
+                    <View style={neoStyles.heroMetric}>
+                      <Text style={neoStyles.heroMetricLabel}>Status</Text>
+                      <Text style={[neoStyles.heroMetricValue, { color: statusColor }]}>
+                        {statusLabel.toUpperCase()}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View style={neoStyles.tabShell}>
+                  {[
+                    { id: "trip" as const, label: "Journey Log", icon: "activity" as const },
+                    { id: "finance" as const, label: "Finance Hub", icon: "credit-card" as const },
+                    { id: "docs" as const, label: "Asset Vault", icon: "shield" as const },
+                  ].map((tab) => {
+                    const active = activeTab === tab.id;
+                    return (
+                      <TouchableOpacity
+                        key={tab.id}
+                        style={[neoStyles.neoTab, active && neoStyles.neoTabActive]}
+                        onPress={() => setActiveTab(tab.id)}
+                        activeOpacity={0.86}
+                      >
+                        <Feather
+                          name={tab.icon}
+                          size={15}
+                          color={active ? "#818cf8" : "#94a3b8"}
+                        />
+                        <Text style={[neoStyles.neoTabText, active && neoStyles.neoTabTextActive]}>
+                          {tab.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                {activeTab === "trip" ? (
+                  <View style={neoStyles.journeyGrid}>
+                    <View style={neoStyles.timelineCard}>
+                      <View style={neoStyles.cardTitleRow}>
+                        <Feather name="activity" size={16} color="#4f46e5" />
+                        <Text style={neoStyles.cardTitleDark}>Manifest Pulse</Text>
+                        {nextSimulateStep && currentStepIndex < 3 ? (
+                          <TouchableOpacity
+                            style={neoStyles.simBtn}
+                            onPress={() => setSimConfirmStep(nextSimulateStep)}
+                            activeOpacity={0.85}
+                          >
+                            <Feather name="zap" size={11} color="#f59e0b" />
+                            <Text style={neoStyles.simBtnText}>Simulate</Text>
+                          </TouchableOpacity>
+                        ) : null}
+                      </View>
+                      {journeyLogs.map((log, index) => {
+                        const expanded = expandedLog === index;
+                        const isLast = index === journeyLogs.length - 1;
+                        const isReached = index <= currentStepIndex;
+                        const isCurrent = index === currentStepIndex && currentStepIndex < 3;
+                        // Find simulation log entries for this step
+                        const stepStatusMap: Record<number, string[]> = {
+                          1: ["in_progress", "picked_up"],
+                          2: ["in_transit"],
+                          3: ["at_drop", "completed", "delivered", "done"],
+                        };
+                        const stepSimLogs = simLogEntries.filter((e) =>
+                          (stepStatusMap[index] ?? []).includes(e.status),
+                        );
+                        return (
+                          <View key={`${log.status}-${index}`} style={neoStyles.timelineItemWrap}>
+                            {!isLast ? (
+                              <View style={[neoStyles.timelineConnector, isReached && { backgroundColor: "#4f46e5" }]} />
+                            ) : null}
+                            <TouchableOpacity
+                              style={[neoStyles.timelineItem, expanded && neoStyles.timelineItemActive]}
+                              onPress={() => setExpandedLog(expanded ? null : index)}
+                              activeOpacity={0.9}
+                            >
+                              <View style={[neoStyles.timelineDot, isReached && { backgroundColor: "#10b981" }, isCurrent && { backgroundColor: "#4f46e5" }]}>
+                                <FontAwesome name={isCurrent ? "circle" : "check"} size={isCurrent ? 6 : 10} color="#fff" />
+                              </View>
+                              <View style={neoStyles.timelineBody}>
+                                <View style={neoStyles.timelineTop}>
+                                  <Text style={[neoStyles.timelineStatus, !isReached && { opacity: 0.4 }]}>{log.status}</Text>
+                                  <Text style={neoStyles.timelineTime}>{log.time}</Text>
+                                </View>
+                                <Text style={[neoStyles.timelineLocation, !isReached && { opacity: 0.4 }]} numberOfLines={1}>
+                                  {log.location}
+                                </Text>
+                                {expanded ? (
+                                  <Text style={neoStyles.timelineDetails}>{log.details}</Text>
+                                ) : null}
+                                {/* Business simulation log badges */}
+                                {stepSimLogs.map((sim, si) => (
+                                  <View key={si} style={neoStyles.simLogBadge}>
+                                    <Feather name="zap" size={10} color="#f59e0b" />
+                                    <View style={{ flex: 1, minWidth: 0 }}>
+                                      <Text style={neoStyles.simLogBadgeText}>
+                                        Business simulated · {sim.userName}
+                                      </Text>
+                                      {sim.timestamp ? (
+                                        <Text style={neoStyles.simLogBadgeTime}>
+                                          {new Date(sim.timestamp).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                                          {sim.lat && sim.lng ? `  ·  ${sim.lat.toFixed(4)}°N, ${sim.lng.toFixed(4)}°E` : ""}
+                                        </Text>
+                                      ) : null}
+                                    </View>
+                                  </View>
+                                ))}
+                              </View>
+                            </TouchableOpacity>
+                          </View>
+                        );
+                      })}
+                    </View>
+
+                    {/* Business Simulate Confirmation Modal */}
+                    {simConfirmStep ? (
+                      <Modal transparent animationType="fade" visible onRequestClose={() => setSimConfirmStep(null)}>
+                        <View style={neoStyles.simModalBackdrop}>
+                          <View style={neoStyles.simModal}>
+                            <View style={neoStyles.simModalHeader}>
+                              <Feather name="zap" size={18} color="#f59e0b" />
+                              <Text style={neoStyles.simModalTitle}>Simulate Stage</Text>
+                            </View>
+                            <Text style={neoStyles.simModalAction}>{simConfirmStep.label}</Text>
+                            <View style={neoStyles.simModalDivider} />
+                            {simConfirmStep.driverLat != null ? (
+                              <View style={neoStyles.simModalLocRow}>
+                                <Feather name="map-pin" size={13} color="#10b981" />
+                                <View style={{ flex: 1, minWidth: 0 }}>
+                                  <Text style={neoStyles.simModalLocLabel}>Driver location</Text>
+                                  <Text style={neoStyles.simModalLocValue} numberOfLines={2}>
+                                    {simConfirmStep.driverLocLabel ||
+                                      `${simConfirmStep.driverLat.toFixed(5)}°N, ${simConfirmStep.driverLng?.toFixed(5) ?? "—"}°E`}
+                                  </Text>
+                                  <Text style={neoStyles.simModalLocCoords}>
+                                    {simConfirmStep.driverLat.toFixed(5)}°N  {simConfirmStep.driverLng?.toFixed(5) ?? "—"}°E
+                                  </Text>
+                                </View>
+                              </View>
+                            ) : (
+                              <Text style={neoStyles.simModalNoLoc}>No driver GPS data available</Text>
+                            )}
+                            {simError ? (
+                              <Text style={neoStyles.simModalError}>{simError}</Text>
+                            ) : null}
+                            <View style={neoStyles.simModalBtns}>
+                              <TouchableOpacity
+                                style={neoStyles.simModalCancel}
+                                onPress={() => { setSimConfirmStep(null); setSimError(null); }}
+                                activeOpacity={0.8}
+                              >
+                                <Text style={neoStyles.simModalCancelText}>Cancel</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={[neoStyles.simModalConfirm, simulating && { opacity: 0.6 }]}
+                                onPress={handleConfirmSimulate}
+                                disabled={simulating}
+                                activeOpacity={0.85}
+                              >
+                                {simulating ? (
+                                  <ActivityIndicator size="small" color="#fff" />
+                                ) : (
+                                  <Feather name="zap" size={14} color="#fff" />
+                                )}
+                                <Text style={neoStyles.simModalConfirmText}>
+                                  {simulating ? "Simulating…" : "Confirm Simulate"}
+                                </Text>
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+                        </View>
+                      </Modal>
+                    ) : null}
+
+                    <View style={neoStyles.radarCard}>
+                      <View style={neoStyles.radarMapLayer}>
+                        <TripMap
+                          source={(trip.pickup_area ?? "").trim() || undefined}
+                          destination={(trip.drop_location ?? "").trim() || undefined}
+                          sourceCoords={detail.trackingMapOriginCoordinate ?? undefined}
+                          destCoords={detail.trackingMapDestinationCoordinate ?? undefined}
+                          truckLocation={detail.driverLocation ?? undefined}
+                          height={380}
+                          onDistanceCalculated={setMapRouteDistanceKm}
+                        />
+                      </View>
+                      <View style={neoStyles.radarMapScrim} />
+                      <View style={neoStyles.radarTopLeft}>
+                        <TouchableOpacity
+                          style={neoStyles.radarControl}
+                          onPress={openTripDirectionsInMaps}
+                          activeOpacity={0.85}
+                        >
+                          <Feather name="compass" size={18} color="#fff" />
+                        </TouchableOpacity>
+                        <TouchableOpacity style={neoStyles.radarControl} activeOpacity={0.85}>
+                          <Feather name="layers" size={18} color="#fff" />
+                        </TouchableOpacity>
+                      </View>
+                      <View style={neoStyles.radarLive}>
+                        <View style={neoStyles.radarLiveDot} />
+                        <Text style={neoStyles.radarLiveText}>Live Telemetry</Text>
+                      </View>
+                      <View style={neoStyles.radarBottom}>
+                        <View style={neoStyles.radarBottomLeft}>
+                          <Text style={neoStyles.radarMetaLabel}>Active Node</Text>
+                          <Text style={neoStyles.radarMetaValue} numberOfLines={2}>
+                            {detail.driverLocationAddress?.trim() ||
+                              (detail.driverLocation ? "Live driver location" : statusLabel)}
+                          </Text>
+                        </View>
+                        <View style={neoStyles.radarBottomRight}>
+                          <Text style={neoStyles.radarMetaLabel}>Distance / ETA</Text>
+                          <Text style={neoStyles.radarSpeed}>
+                            {resolvedDistanceLabel ?? "Calculating"}{" "}
+                            <Text style={neoStyles.radarSpeedUnit}>
+                              · {trip.estimated_duration ? String(trip.estimated_duration) : durationLabel}
+                            </Text>
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+                ) : activeTab === "finance" ? (
+                  <View style={neoStyles.financeStack}>
+                    <View style={neoStyles.financeSubTabs}>
+                      {(["summary", "transactions"] as const).map((sub) => {
+                        const active = financeSubTab === sub;
+                        return (
+                          <TouchableOpacity
+                            key={sub}
+                            style={neoStyles.financeSubTab}
+                            onPress={() => setFinanceSubTab(sub)}
+                            activeOpacity={0.86}
+                          >
+                            <Text style={[neoStyles.financeSubTabText, active && neoStyles.financeSubTabTextActive]}>
+                              {sub}
+                            </Text>
+                            {active ? <View style={neoStyles.financeSubLine} /> : null}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                    {financeSubTab === "summary" ? (
+                      <>
+                        <View style={neoStyles.financeSummaryWorkspace}>
+                          <View style={neoStyles.financeSummaryMain}>
+                            <View style={neoStyles.yieldCard}>
+                              <View style={neoStyles.yieldOrb} />
+                              <Text style={neoStyles.yieldLabel}>Net Manifest Yield</Text>
+                              <Text style={neoStyles.yieldValue}>{formatINR(netManifestYield)}</Text>
+                              <View style={neoStyles.yieldFormula}>
+                                <View style={neoStyles.yieldFormulaItem}>
+                                  <Text style={neoStyles.yieldFormulaLabel}>Sales</Text>
+                                  <Text style={neoStyles.yieldFormulaValue}>{formatINR(adjSales)}</Text>
+                                </View>
+                                <Text style={neoStyles.yieldFormulaOperator}>−</Text>
+                                <View style={neoStyles.yieldFormulaItem}>
+                                  <Text style={neoStyles.yieldFormulaLabel}>Cost</Text>
+                                  <Text style={[neoStyles.yieldFormulaValue, neoStyles.yieldFormulaCost]}>
+                                    {formatINR(adjCost)}
+                                  </Text>
+                                </View>
+                                <Text style={neoStyles.yieldFormulaOperator}>−</Text>
+                                <View style={neoStyles.yieldFormulaItem}>
+                                  <Text style={neoStyles.yieldFormulaLabel}>Expense</Text>
+                                  <Text style={neoStyles.yieldFormulaValue}>{formatINR(totalExpenses)}</Text>
+                                </View>
+                              </View>
+                              <View style={neoStyles.expenseStrip}>
+                                <Text style={neoStyles.expenseStripLabel}>Ledger snapshot</Text>
+                                <Text style={neoStyles.expenseStripValue}>
+                                  {financeHistoryRows.length} transaction{financeHistoryRows.length === 1 ? "" : "s"}
+                                </Text>
+                              </View>
+                            </View>
+                          </View>
+
+                          <View style={neoStyles.financeSideRail}>
+                            <TouchableOpacity
+                              style={neoStyles.financeRailCard}
+                              onPress={() => setShowFinanceProvisionPanel("client")}
+                              activeOpacity={0.88}
+                            >
+                              <View style={neoStyles.financeRailHead}>
+                                <View style={neoStyles.greenDot} />
+                                <Text style={neoStyles.financeRailLabel}>Adjusted Client Sales</Text>
+                                <View style={neoStyles.yieldMiniBtn}>
+                                  <FontAwesome name="plus" size={9} color="#059669" />
+                                </View>
+                              </View>
+                              <Text style={neoStyles.financeRailValue}>{formatINR(adjSales)}</Text>
+                              <Text style={neoStyles.financeRailMeta}>
+                                Base {formatINR(sales)} · Adj {revenueSideDelta >= 0 ? "+" : "−"}
+                                {formatINR(Math.abs(revenueSideDelta))}
+                              </Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                              style={neoStyles.financeRailCard}
+                              onPress={() => setShowFinanceProvisionPanel("supplier")}
+                              activeOpacity={0.88}
+                            >
+                              <View style={neoStyles.financeRailHead}>
+                                <View style={neoStyles.redDot} />
+                                <Text style={neoStyles.financeRailLabel}>Adjusted Supplier Cost</Text>
+                                <View style={[neoStyles.yieldMiniBtn, neoStyles.yieldMiniBtnRed]}>
+                                  <FontAwesome name="minus" size={9} color="#e11d48" />
+                                </View>
+                              </View>
+                              <Text style={[neoStyles.financeRailValue, neoStyles.financeRailCost]}>
+                                {formatINR(adjCost)}
+                              </Text>
+                              <Text style={neoStyles.financeRailMeta}>
+                                Base {formatINR(cost)} · Adj {costSideDelta >= 0 ? "+" : "−"}
+                                {formatINR(Math.abs(costSideDelta))}
+                              </Text>
+                            </TouchableOpacity>
+
+                            <View style={neoStyles.financeRailCard}>
+                              <View style={neoStyles.financeRailHead}>
+                                <View style={neoStyles.financeRailExpenseDot} />
+                                <Text style={neoStyles.financeRailLabel}>Voyage Expense</Text>
+                              </View>
+                              <Text style={neoStyles.financeRailExpenseValue}>{formatINR(totalExpenses)}</Text>
+                              <Text style={neoStyles.financeRailMeta}>Petty cash and trip outflow</Text>
+                            </View>
+                          </View>
+                        </View>
+
+                        <View style={neoStyles.adjustmentLedgerCard}>
+                          <View style={neoStyles.adjustmentLedgerHeader}>
+                            <View>
+                              <Text style={neoStyles.adjustmentLedgerTitle}>Adjustment Registry</Text>
+                              <Text style={neoStyles.adjustmentLedgerSub}>
+                                Sale and cost provisions applied to this manifest
+                              </Text>
+                            </View>
+                            <View style={neoStyles.adjustmentLedgerCount}>
+                              <Text style={neoStyles.adjustmentLedgerCountText}>
+                                {detail.adjustments.length}
+                              </Text>
+                            </View>
+                          </View>
+                          {detail.adjustments.length === 0 ? (
+                            <Text style={neoStyles.adjustmentLedgerEmpty}>No adjustments added yet</Text>
+                          ) : (
+                            <View style={neoStyles.adjustmentLedgerRows}>
+                              {detail.adjustments.map((adj) => {
+                                const isRevenue = adj.type === "revenue";
+                                const isPlus = adj.impact === "plus";
+                                return (
+                                  <View key={adj.id} style={neoStyles.adjustmentLedgerRow}>
+                                    <View
+                                      style={[
+                                        neoStyles.adjustmentLedgerDot,
+                                        isRevenue
+                                          ? neoStyles.adjustmentLedgerDotSale
+                                          : neoStyles.adjustmentLedgerDotCost,
+                                      ]}
+                                    />
+                                    <View style={neoStyles.adjustmentLedgerInfo}>
+                                      <Text style={neoStyles.adjustmentLedgerReason} numberOfLines={1}>
+                                        {adj.reason || "Adjustment"}
+                                      </Text>
+                                      <Text style={neoStyles.adjustmentLedgerMeta}>
+                                        {isRevenue ? "Sale" : "Cost"} · {isPlus ? "Add-on" : "Deduction"}
+                                      </Text>
+                                    </View>
+                                    <Text
+                                      style={[
+                                        neoStyles.adjustmentLedgerAmount,
+                                        isRevenue
+                                          ? neoStyles.adjustmentLedgerAmountSale
+                                          : neoStyles.adjustmentLedgerAmountCost,
+                                      ]}
+                                    >
+                                      {isPlus ? "+" : "−"}{formatINR(adj.amount)}
+                                    </Text>
+                                  </View>
+                                );
+                              })}
+                            </View>
+                          )}
+                        </View>
+
+                        {false && showFinanceProvisionPanel ? (
+                          <View style={neoStyles.provisionPanel}>
+                            <View style={neoStyles.provisionHeader}>
+                              <View>
+                                <Text style={neoStyles.provisionTitle}>Provision Adjustments</Text>
+                                <Text style={neoStyles.provisionSub}>
+                                  {showFinanceProvisionPanel === "client"
+                                    ? "Client sale adjustment"
+                                    : "Supplier cost adjustment"}
+                                </Text>
+                              </View>
+                              <TouchableOpacity
+                                onPress={() => setShowFinanceProvisionPanel(null)}
+                                style={neoStyles.provisionClose}
+                                activeOpacity={0.85}
+                              >
+                                <Feather name="x" size={18} color="#fff" />
+                              </TouchableOpacity>
+                            </View>
+                            <View style={neoStyles.provisionChips}>
+                              {FINANCE_PROTOCOL_CHIPS.map((chip) => (
+                                <TouchableOpacity
+                                  key={chip}
+                                  style={neoStyles.provisionChip}
+                                  onPress={() =>
+                                    openInlineAdjustmentForm(
+                                      showFinanceProvisionPanel === "supplier"
+                                        ? protocolSupplierChipAdjustment(chip)
+                                        : { type: "revenue", impact: "plus", reasonSeed: chip },
+                                    )
+                                  }
+                                  activeOpacity={0.86}
+                                >
+                                  <Text style={neoStyles.provisionChipText}>{chip}</Text>
+                                </TouchableOpacity>
+                              ))}
+                            </View>
+                            {showInlineAdjustmentForm ? (
+                              <View style={neoStyles.provisionForm}>
+                                <View style={neoStyles.provisionFormHead}>
+                                  <View>
+                                    <Text style={neoStyles.provisionFormTitle}>Add Adjustment</Text>
+                                    <Text style={neoStyles.provisionFormMeta}>
+                                      {`${inlineAdjType === "revenue" ? "Sale / revenue" : "Supplier cost"} · ${
+                                        inlineAdjImpact === "plus" ? "Debit add-on" : "Credit deduction"
+                                      }`}
+                                    </Text>
+                                  </View>
+                                  <TouchableOpacity
+                                    style={neoStyles.provisionFormClose}
+                                    onPress={() => setShowInlineAdjustmentForm(false)}
+                                    activeOpacity={0.85}
+                                  >
+                                    <Feather name="x" size={14} color="#475569" />
+                                  </TouchableOpacity>
+                                </View>
+
+                                <Text style={neoStyles.provisionInputLabel}>Amount</Text>
+                                <View style={neoStyles.provisionAmountRow}>
+                                  <Text style={neoStyles.provisionCurrency}>₹</Text>
+                                  <TextInput
+                                    value={inlineAdjAmount}
+                                    onChangeText={setInlineAdjAmount}
+                                    style={neoStyles.provisionAmountInput}
+                                    keyboardType="numeric"
+                                    placeholder="0"
+                                    placeholderTextColor="#94a3b8"
+                                    maxLength={14}
+                                  />
+                                </View>
+
+                                <Text style={neoStyles.provisionInputLabel}>Reason</Text>
+                                <View style={neoStyles.provisionReasonWrap}>
+                                  {inlineReasonOptions.map((reason) => (
+                                    <TouchableOpacity
+                                      key={reason}
+                                      style={[
+                                        neoStyles.provisionReasonChip,
+                                        inlineAdjReason === reason && neoStyles.provisionReasonChipActive,
+                                      ]}
+                                      onPress={() => setInlineAdjReason(reason)}
+                                      activeOpacity={0.82}
+                                    >
+                                      <Text
+                                        style={[
+                                          neoStyles.provisionReasonText,
+                                          inlineAdjReason === reason && neoStyles.provisionReasonTextActive,
+                                        ]}
+                                      >
+                                        {reason}
+                                      </Text>
+                                    </TouchableOpacity>
+                                  ))}
+                                </View>
+
+                                {inlineAdjReason === "Other" ? (
+                                  <TextInput
+                                    value={inlineAdjOtherReason}
+                                    onChangeText={setInlineAdjOtherReason}
+                                    style={neoStyles.provisionOtherInput}
+                                    placeholder="Describe reason..."
+                                    placeholderTextColor="#94a3b8"
+                                    maxLength={80}
+                                  />
+                                ) : null}
+
+                                <TouchableOpacity
+                                  style={[
+                                    neoStyles.provisionSaveBtn,
+                                    !canSaveInlineAdjustment && neoStyles.provisionSaveBtnDisabled,
+                                  ]}
+                                  onPress={() => void saveInlineAdjustment()}
+                                  disabled={!canSaveInlineAdjustment}
+                                  activeOpacity={0.86}
+                                >
+                                  <Text style={neoStyles.provisionSaveText}>Save Adjustment</Text>
+                                </TouchableOpacity>
+                              </View>
+                            ) : null}
+                          </View>
+                        ) : null}
+                      </>
+                    ) : (
+                      <View style={neoStyles.txnList}>
+                        {filteredFinanceRows.length === 0 ? (
+                          <Text style={neoStyles.emptyText}>No transaction rows found</Text>
+                        ) : (
+                          filteredFinanceRows.map((row) => (
+                            <View key={row.key} style={neoStyles.txnRow}>
+                              <View style={[neoStyles.txnIcon, row.isIn ? neoStyles.txnIconIn : neoStyles.txnIconOut]}>
+                                <Feather
+                                  name={row.isIn ? "arrow-down-left" : "arrow-up-right"}
+                                  size={20}
+                                  color={row.isIn ? "#10b981" : "#f43f5e"}
+                                />
+                              </View>
+                              <View style={neoStyles.txnInfo}>
+                                <Text style={neoStyles.txnTitle}>{ledgerHistoryTitle(row.tx, row.isIn)}</Text>
+                                <Text style={neoStyles.txnMeta}>
+                                  {formatLedgerDate(row.tx.transaction_date)} · {row.tx.payment_mode || "Wallet"}
+                                </Text>
+                              </View>
+                              <Text style={[neoStyles.txnAmount, row.isIn ? neoStyles.txnAmountIn : neoStyles.txnAmountOut]}>
+                                {formatINR(row.amount)}
+                              </Text>
+                            </View>
+                          ))
+                        )}
+                      </View>
+                    )}
+                  </View>
+                ) : (
+                  <View style={neoStyles.vaultGrid}>
+                    {vaultDocs.map((doc) => (
+                      <View key={doc.id} style={neoStyles.vaultCard}>
+                        <Feather
+                          name={doc.status === "Pending" ? "upload-cloud" : "file-text"}
+                          size={34}
+                          color={doc.status === "Pending" ? "#cbd5e1" : "#94a3b8"}
+                        />
+                        <Text style={neoStyles.vaultTitle} numberOfLines={2}>
+                          {doc.label}
+                        </Text>
+                        <Text style={neoStyles.vaultSub}>{doc.status}</Text>
+                        <TouchableOpacity
+                          onPress={() => void handleDocOpen(doc)}
+                          style={[
+                            neoStyles.vaultBtn,
+                            doc.status === "Pending" && neoStyles.vaultBtnUpload,
+                          ]}
+                          activeOpacity={0.85}
+                        >
+                          <Feather
+                            name={doc.status === "Pending" ? "upload" : "eye"}
+                            size={12}
+                            color="#fff"
+                          />
+                          <Text style={neoStyles.vaultBtnText}>
+                            {doc.status === "Pending"
+                              ? canUploadTripDocs
+                                ? "Upload"
+                                : "Pending"
+                              : "Preview"}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              <View style={neoStyles.sideCol}>
+                <View style={neoStyles.sideCard}>
+                  <View style={neoStyles.sideSection}>
+                    <View style={neoStyles.sideHeading}>
+                      <Feather name="activity" size={14} color="#cbd5e1" />
+                      <Text style={neoStyles.sideHeadingText}>Manifest Assets</Text>
+                    </View>
+                    <View style={neoStyles.assetCard}>
+                      <View style={neoStyles.assetLeft}>
+                        <View style={neoStyles.assetIcon}>
+                          <Feather name="user" size={18} color="#4f46e5" />
+                        </View>
+                        <View>
+                          <Text style={neoStyles.assetLabel}>Pilot Node</Text>
+                          <Text style={neoStyles.assetValue} numberOfLines={1}>{allocatedDriverName}</Text>
+                        </View>
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => setShowAssignmentManager(true)}
+                        style={neoStyles.assetChangeBtn}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={neoStyles.assetChangeText}>Change</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <View style={neoStyles.assetCard}>
+                      <View style={neoStyles.assetLeft}>
+                        <View style={[neoStyles.assetIcon, neoStyles.assetIconDark]}>
+                          <Feather name="truck" size={18} color="#fff" />
+                        </View>
+                        <View>
+                          <Text style={neoStyles.assetLabel}>Vehicle Asset</Text>
+                          <Text style={neoStyles.assetValue} numberOfLines={1}>{allocatedVehicleLabel}</Text>
+                        </View>
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => setShowAssignmentManager(true)}
+                        style={neoStyles.assetChangeBtn}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={neoStyles.assetChangeText}>Change</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+
+                <View style={[neoStyles.sideCard, neoStyles.feedbackSideCard]}>
+                  <TripRatingsBlock
+                    trip={trip}
+                    organizationId={currentOrganization?.id ?? null}
+                    partnerName={detail.partnerName}
+                    driverName={detail.driverName}
+                    driverAvatarUri={detail.driverAvatarUri}
+                    clientName={detail.displayClientName ?? trip.client_name ?? null}
+                    paymentCaptured={detail.tripLedgerEntries.some(
+                      (row) =>
+                        row.contact_type === "client" &&
+                        Number(row.amount_in ?? 0) > 0,
+                    )}
+                    layoutVariant="registry"
+                  />
+                </View>
+              </View>
+            </View>
+          </View>
+        ) : null}
+
         {/* ════════════════════ TRACKING TAB ════════════════════ */}
-        {isDesktop && desktopTab === "tracking" && (
+        {false && isDesktop && desktopTab === "tracking" && (
           <>
             {/* ── Hero Card ── */}
             <View style={dStyles.heroCard}>
@@ -1711,7 +2636,7 @@ export default function TripDetailScreen({
                   </View>
                   <View style={dStyles.driverRow}>
                     {detail.driverAvatarUri ? (
-                      <Image source={{ uri: detail.driverAvatarUri }} style={dStyles.driverAvatar} />
+                      <Image source={{ uri: detail.driverAvatarUri as string }} style={dStyles.driverAvatar} />
                     ) : (
                       <View style={dStyles.driverAvatarFallback}>
                         <FontAwesome name="user" size={20} color={Theme.textSecondary} />
@@ -1727,7 +2652,7 @@ export default function TripDetailScreen({
                       <View style={dStyles.statBoxSm}>
                         <Text style={dStyles.statLabelSm}>STARTED</Text>
                         <Text style={dStyles.statValueSm}>
-                          {new Date(trip.started_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                          {new Date(String(trip.started_at)).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
                         </Text>
                       </View>
                     ) : null}
@@ -1994,7 +2919,7 @@ export default function TripDetailScreen({
                 {detail.tripCompleted ? (
                   <TripRatingsBlock
                     trip={trip}
-                    organizationId={currentOrganization.id}
+                    organizationId={currentOrganization?.id ?? null}
                     partnerName={detail.partnerName}
                     driverName={detail.driverName}
                     driverAvatarUri={detail.driverAvatarUri}
@@ -2017,7 +2942,7 @@ export default function TripDetailScreen({
         )}
 
         {/* ════════════════════ FINANCE TAB ════════════════════ */}
-        {isDesktop && desktopTab === "finance" && (
+        {false && isDesktop && desktopTab === "finance" && (
           <TripDetailFinanceView
             trip={trip}
             tripDetailTab="finance"
@@ -2067,9 +2992,7 @@ export default function TripDetailScreen({
                   previousDriverName={detail.previousDriverName}
                   latestReassignmentSummary={detail.latestReassignmentSummary}
                   driverAssignOrgId={
-                    detail.showAssignByPhone && currentOrganization?.id
-                      ? currentOrganization.id
-                      : null
+                    detail.showAssignByPhone ? currentOrganization?.id ?? null : null
                   }
                   onVehicleDisplayChange={(value) => {
                     const normalized = formatIndianVehicleNumber(value ?? "");
@@ -2091,6 +3014,192 @@ export default function TripDetailScreen({
         onClose={detail.closeTripAdjustmentModal}
         onSave={detail.handleSaveAdjustment}
       />
+      <Modal
+        visible={!!showFinanceProvisionPanel}
+        animationType="fade"
+        transparent
+        onRequestClose={() => {
+          setShowFinanceProvisionPanel(null);
+          setShowInlineAdjustmentForm(false);
+        }}
+      >
+        <View style={neoStyles.provisionModalBackdrop}>
+          <View style={neoStyles.provisionModalCard}>
+            <View style={neoStyles.provisionPanel}>
+              <View style={neoStyles.provisionHeader}>
+                <View>
+                  <Text style={neoStyles.provisionTitle}>Provision Adjustments</Text>
+                  <Text style={neoStyles.provisionSub}>
+                    {showFinanceProvisionPanel === "client"
+                      ? "Client sale adjustment"
+                      : "Supplier cost adjustment"}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => {
+                    setShowFinanceProvisionPanel(null);
+                    setShowInlineAdjustmentForm(false);
+                  }}
+                  style={neoStyles.provisionClose}
+                  activeOpacity={0.85}
+                >
+                  <Feather name="x" size={18} color="#fff" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={neoStyles.provisionSummaryGrid}>
+                {provisionSummaryRows.map((row) => (
+                  <View key={row.label} style={neoStyles.provisionSummaryCard}>
+                    <Text style={neoStyles.provisionSummaryLabel}>{row.label}</Text>
+                    <Text
+                      style={[
+                        neoStyles.provisionSummaryValue,
+                        row.tone === "cost" && neoStyles.provisionSummaryValueCost,
+                      ]}
+                    >
+                      {row.value}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+
+              <View style={neoStyles.provisionChips}>
+                {FINANCE_PROTOCOL_CHIPS.map((chip) => (
+                  <TouchableOpacity
+                    key={chip}
+                    style={neoStyles.provisionChip}
+                    onPress={() =>
+                      openInlineAdjustmentForm(
+                        showFinanceProvisionPanel === "supplier"
+                          ? protocolSupplierChipAdjustment(chip)
+                          : { type: "revenue", impact: "plus", reasonSeed: chip },
+                      )
+                    }
+                    activeOpacity={0.86}
+                  >
+                    <Text style={neoStyles.provisionChipText}>{chip}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {showInlineAdjustmentForm ? (
+                <View style={neoStyles.provisionForm}>
+                  <View style={neoStyles.provisionFormHead}>
+                    <View>
+                      <Text style={neoStyles.provisionFormTitle}>Add Adjustment</Text>
+                      <Text style={neoStyles.provisionFormMeta}>
+                        {`${inlineAdjType === "revenue" ? "Sale / revenue" : "Supplier cost"} · ${
+                          inlineAdjImpact === "plus" ? "Debit add-on" : "Credit deduction"
+                        }`}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={neoStyles.provisionFormClose}
+                      onPress={() => setShowInlineAdjustmentForm(false)}
+                      activeOpacity={0.85}
+                    >
+                      <Feather name="x" size={14} color="#475569" />
+                    </TouchableOpacity>
+                  </View>
+
+                  <Text style={neoStyles.provisionInputLabel}>Amount</Text>
+                  <View style={neoStyles.provisionAmountRow}>
+                    <Text style={neoStyles.provisionCurrency}>₹</Text>
+                    <TextInput
+                      value={inlineAdjAmount}
+                      onChangeText={setInlineAdjAmount}
+                      style={neoStyles.provisionAmountInput}
+                      keyboardType="numeric"
+                      placeholder="0"
+                      placeholderTextColor="#94a3b8"
+                      maxLength={14}
+                    />
+                  </View>
+
+                  <Text style={neoStyles.provisionInputLabel}>Reason</Text>
+                  <View style={neoStyles.provisionReasonWrap}>
+                    {inlineReasonOptions.map((reason) => (
+                      <TouchableOpacity
+                        key={reason}
+                        style={[
+                          neoStyles.provisionReasonChip,
+                          inlineAdjReason === reason && neoStyles.provisionReasonChipActive,
+                        ]}
+                        onPress={() => setInlineAdjReason(reason)}
+                        activeOpacity={0.82}
+                      >
+                        <Text
+                          style={[
+                            neoStyles.provisionReasonText,
+                            inlineAdjReason === reason && neoStyles.provisionReasonTextActive,
+                          ]}
+                        >
+                          {reason}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  {inlineAdjReason === "Other" ? (
+                    <TextInput
+                      value={inlineAdjOtherReason}
+                      onChangeText={setInlineAdjOtherReason}
+                      style={neoStyles.provisionOtherInput}
+                      placeholder="Describe reason..."
+                      placeholderTextColor="#94a3b8"
+                      maxLength={80}
+                    />
+                  ) : null}
+
+                  <TouchableOpacity
+                    style={[
+                      neoStyles.provisionSaveBtn,
+                      !canSaveInlineAdjustment && neoStyles.provisionSaveBtnDisabled,
+                    ]}
+                    onPress={() => void saveInlineAdjustment()}
+                    disabled={!canSaveInlineAdjustment}
+                    activeOpacity={0.86}
+                  >
+                    <Text style={neoStyles.provisionSaveText}>Save Adjustment</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+
+              <View style={neoStyles.provisionAppliedList}>
+                <Text style={neoStyles.provisionAppliedTitle}>Added Adjustments</Text>
+                {selectedProvisionAdjustments.length === 0 ? (
+                  <Text style={neoStyles.provisionAppliedEmpty}>
+                    No {showFinanceProvisionPanel === "client" ? "sale" : "cost"} adjustment added yet.
+                  </Text>
+                ) : (
+                  selectedProvisionAdjustments.map((adj) => (
+                    <View key={adj.id} style={neoStyles.provisionAppliedRow}>
+                      <View style={neoStyles.provisionAppliedInfo}>
+                        <Text style={neoStyles.provisionAppliedReason} numberOfLines={1}>
+                          {adj.reason || "Adjustment"}
+                        </Text>
+                        <Text style={neoStyles.provisionAppliedMeta}>
+                          {adj.impact === "plus" ? "Add-on" : "Deduction"}
+                        </Text>
+                      </View>
+                      <Text style={neoStyles.provisionAppliedAmount}>
+                        {adj.impact === "plus" ? "+" : "−"}{formatINR(adj.amount)}
+                      </Text>
+                      <TouchableOpacity
+                        style={neoStyles.provisionAppliedRemove}
+                        onPress={() => void detail.handleRemoveAdjustment(adj.id)}
+                        activeOpacity={0.82}
+                      >
+                        <Feather name="trash-2" size={12} color="#94a3b8" />
+                      </TouchableOpacity>
+                    </View>
+                  ))
+                )}
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
       <ThemedAlertModal
         visible={detail.showDriverRejectedModal}
         title="Driver Rejected"
@@ -2727,6 +3836,10 @@ function NavAction({
   );
 }
 
+void LedgerCard;
+void ExpenseListCard;
+void NavAction;
+
 // ── Dashboard styles ────────────────────────────────────────────────────────────
 const DS_BG = Theme.screenBackground;
 const DS_CARD = Theme.surface;
@@ -2964,6 +4077,1726 @@ const dStyles = StyleSheet.create({
   docStatusTextPending: { color: '#f59e0b' },
   docsBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: Theme.surfaceGray, borderWidth: 1, borderColor: DS_BORDER },
   docsBadgeText: { fontSize: 9, fontWeight: '800', color: Theme.textMuted, letterSpacing: 0.8, textTransform: 'uppercase' },
+});
+
+const neoStyles = StyleSheet.create({
+  manifestNavLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 28,
+    minWidth: 0,
+  },
+  manifestBackBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.04,
+    shadowRadius: 14,
+  },
+  manifestNavDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: "#f1f5f9",
+  },
+  manifestNavKicker: {
+    color: "#cbd5e1",
+    fontSize: 10,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 4,
+    marginBottom: 5,
+  },
+  manifestNavTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  manifestNavTripId: {
+    color: "#0f172a",
+    fontSize: 20,
+    fontWeight: "900",
+    fontStyle: "italic",
+    letterSpacing: -0.9,
+  },
+  manifestStatusBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: "#ecfdf5",
+    borderWidth: 1,
+    borderColor: "#d1fae5",
+  },
+  manifestStatusBadgeText: {
+    color: "#047857",
+    fontSize: 9,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1.4,
+    fontStyle: "italic",
+  },
+  manifestNavActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 18,
+  },
+  auditBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 18,
+    paddingHorizontal: 24,
+    paddingVertical: 13,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.04,
+    shadowRadius: 14,
+  },
+  auditBtnText: {
+    color: "#94a3b8",
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1.4,
+  },
+  manifestShareBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.04,
+    shadowRadius: 14,
+  },
+  shell: {
+    maxWidth: 1710,
+    width: "111.111%",
+    alignSelf: "center",
+    transform: [{ scale: 0.9 }],
+    transformOrigin: "top center" as never,
+  },
+  grid: {
+    flexDirection: "row",
+    gap: 18,
+    alignItems: "flex-start",
+  },
+  mainCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 24,
+  },
+  sideCol: {
+    width: 340,
+    position: "sticky" as never,
+    top: 82,
+    gap: 18,
+  },
+  hero: {
+    position: "relative",
+    overflow: "hidden",
+    backgroundColor: "#0f172a",
+    borderRadius: 42,
+    padding: 34,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 40 },
+    shadowOpacity: 0.28,
+    shadowRadius: 54,
+  },
+  heroGlow: {
+    position: "absolute",
+    right: -90,
+    top: -90,
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    backgroundColor: "rgba(79,70,229,0.08)",
+  },
+  heroBridge: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 14,
+    paddingBottom: 18,
+    marginBottom: 28,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.06)",
+  },
+  heroParty: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  heroPartyRight: {
+    justifyContent: "flex-end",
+  },
+  heroPartyIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(99,102,241,0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(99,102,241,0.18)",
+  },
+  heroPartyIconRose: {
+    backgroundColor: "rgba(244,63,94,0.1)",
+    borderColor: "rgba(244,63,94,0.18)",
+  },
+  heroPartyAvatarImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 13,
+  },
+  heroPartyAvatarInitial: {
+    position: "absolute",
+    bottom: 2,
+    right: 2,
+    color: "#fff",
+    fontSize: 6,
+    fontWeight: "900",
+  },
+  heroPartyText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  heroPartyTextRight: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: "flex-end",
+  },
+  heroKicker: {
+    fontSize: 7.5,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1.4,
+    color: "#64748b",
+    marginBottom: 4,
+  },
+  heroPartyName: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#fff",
+    textTransform: "uppercase",
+    letterSpacing: -0.25,
+  },
+  swapIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.03)",
+  },
+  alignRight: {
+    textAlign: "right",
+  },
+  routeHeroRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 20,
+  },
+  routeHeroSide: {
+    flex: 1,
+    minWidth: 0,
+  },
+  routeHeroSideRight: {
+    alignItems: "flex-end",
+  },
+  routeHeroCity: {
+    color: "#fff",
+    fontSize: 42,
+    lineHeight: 45,
+    fontWeight: "900",
+    fontStyle: "italic",
+    letterSpacing: -2.2,
+  },
+  routeHeroSub: {
+    marginTop: 12,
+    color: "#64748b",
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  routeVector: {
+    width: 70,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  routeVectorLine: {
+    width: 22,
+    height: 1,
+    backgroundColor: "rgba(148,163,184,0.28)",
+  },
+  routeVectorTruck: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.05)",
+  },
+  heroMetrics: {
+    marginTop: 22,
+    alignSelf: "center",
+    width: "60%",
+    minWidth: 560,
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  heroMetric: {
+    flex: 1,
+    alignItems: "center",
+  },
+  heroMetricDivider: {
+    width: 1,
+    height: 26,
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  heroMetricLabel: {
+    fontSize: 8,
+    color: "#64748b",
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+    marginBottom: 5,
+  },
+  heroMetricValue: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "900",
+    fontStyle: "italic",
+  },
+  tabShell: {
+    alignSelf: "center",
+    width: "64%",
+    minWidth: 480,
+    flexDirection: "row",
+    gap: 8,
+    padding: 8,
+    borderRadius: 34,
+    backgroundColor: "rgba(241,245,249,0.8)",
+    borderWidth: 1,
+    borderColor: "#fff",
+  },
+  neoTab: {
+    flex: 1,
+    borderRadius: 24,
+    paddingVertical: 13,
+    paddingHorizontal: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 12,
+  },
+  neoTabActive: {
+    backgroundColor: "#0f172a",
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 18 },
+    shadowOpacity: 0.22,
+    shadowRadius: 24,
+  },
+  neoTabText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 2,
+  },
+  neoTabTextActive: {
+    color: "#fff",
+  },
+  journeyGrid: {
+    flexDirection: "row",
+    gap: 18,
+  },
+  timelineCard: {
+    flex: 5,
+    minWidth: 300,
+    backgroundColor: "#fff",
+    borderRadius: 44,
+    borderWidth: 1,
+    borderColor: "#f8fafc",
+    padding: 32,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.04,
+    shadowRadius: 28,
+  },
+  cardTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 26,
+  },
+  cardTitleDark: {
+    fontSize: 18,
+    fontWeight: "900",
+    fontStyle: "italic",
+    color: "#171a20",
+    textTransform: "uppercase",
+    letterSpacing: -0.7,
+  },
+  timelineItemWrap: {
+    position: "relative",
+  },
+  timelineConnector: {
+    position: "absolute",
+    left: 13,
+    top: 40,
+    width: 2,
+    bottom: -24,
+    backgroundColor: "#f1f5f9",
+  },
+  timelineItem: {
+    flexDirection: "row",
+    gap: 22,
+    padding: 16,
+    borderRadius: 28,
+    marginBottom: 24,
+  },
+  timelineItemActive: {
+    backgroundColor: "#f8fafc",
+  },
+  timelineDot: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#10b981",
+    borderWidth: 4,
+    borderColor: "#fff",
+    shadowColor: "#10b981",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+  },
+  timelineBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  timelineTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  timelineStatus: {
+    color: "#0f172a",
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+  },
+  timelineTime: {
+    color: "#cbd5e1",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  timelineLocation: {
+    color: "#64748b",
+    fontSize: 12,
+    marginTop: 5,
+    fontWeight: "600",
+  },
+  timelineDetails: {
+    color: "#94a3b8",
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 10,
+  },
+  simBtn: {
+    marginLeft: "auto",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    backgroundColor: "rgba(245,158,11,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(245,158,11,0.3)",
+  },
+  simBtnText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#f59e0b",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  simLogBadge: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 10,
+    backgroundColor: "rgba(245,158,11,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(245,158,11,0.2)",
+  },
+  simLogBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#f59e0b",
+  },
+  simLogBadgeTime: {
+    fontSize: 10,
+    color: "#94a3b8",
+    marginTop: 2,
+  },
+  simModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  simModal: {
+    width: "100%",
+    maxWidth: 400,
+    backgroundColor: "#0f172a",
+    borderRadius: 24,
+    padding: 28,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+  },
+  simModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 8,
+  },
+  simModalTitle: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+  },
+  simModalAction: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#fff",
+    marginBottom: 20,
+    lineHeight: 26,
+  },
+  simModalDivider: {
+    height: 1,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    marginBottom: 16,
+  },
+  simModalLocRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    marginBottom: 20,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: "rgba(16,185,129,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(16,185,129,0.2)",
+  },
+  simModalLocLabel: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 3,
+  },
+  simModalLocValue: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#fff",
+    lineHeight: 18,
+  },
+  simModalLocCoords: {
+    fontSize: 10,
+    color: "#64748b",
+    marginTop: 4,
+    fontVariant: ["tabular-nums"],
+  },
+  simModalNoLoc: {
+    fontSize: 12,
+    color: "#64748b",
+    fontStyle: "italic",
+    marginBottom: 20,
+    textAlign: "center",
+  },
+  simModalError: {
+    fontSize: 12,
+    color: "#f87171",
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  simModalBtns: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  simModalCancel: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+  },
+  simModalCancelText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#94a3b8",
+  },
+  simModalConfirm: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+    backgroundColor: "#f59e0b",
+  },
+  simModalConfirmText: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#fff",
+  },
+  radarCard: {
+    flex: 7,
+    minHeight: 380,
+    borderRadius: 42,
+    overflow: "hidden",
+    backgroundColor: "#0f172a",
+    position: "relative",
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 28 },
+    shadowOpacity: 0.24,
+    shadowRadius: 40,
+  },
+  radarMapLayer: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#0f172a",
+  },
+  radarMapScrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(15,23,42,0.18)",
+    pointerEvents: "none" as never,
+  },
+  radarGrid: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.18,
+    backgroundColor: "rgba(79,70,229,0.08)",
+  },
+  radarTopLeft: {
+    position: "absolute",
+    top: 24,
+    left: 24,
+    zIndex: 3,
+    gap: 8,
+  },
+  radarControl: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+  },
+  radarLive: {
+    position: "absolute",
+    top: 24,
+    right: 24,
+    zIndex: 3,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: "rgba(16,185,129,0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(16,185,129,0.2)",
+  },
+  radarLiveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#10b981",
+  },
+  radarLiveText: {
+    color: "#34d399",
+    fontSize: 10,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1.4,
+  },
+  radarRouteLine: {
+    position: "absolute",
+    left: "18%",
+    bottom: "22%",
+    width: "68%",
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#6366f1",
+    transform: [{ rotate: "-39deg" }],
+    shadowColor: "#6366f1",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.75,
+    shadowRadius: 14,
+  },
+  radarNode: {
+    position: "absolute",
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 3,
+    borderColor: "#fff",
+  },
+  radarNodeOrigin: {
+    left: "16%",
+    bottom: "18%",
+    backgroundColor: "#4f46e5",
+  },
+  radarNodeDestination: {
+    right: "17%",
+    top: "18%",
+    backgroundColor: "#ec4899",
+  },
+  radarTruck: {
+    position: "absolute",
+    left: "61%",
+    top: "35%",
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)",
+  },
+  radarBottom: {
+    position: "absolute",
+    left: 32,
+    right: 32,
+    bottom: 30,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    gap: 24,
+  },
+  radarBottomRight: {
+    alignItems: "flex-end",
+    flex: 0.85,
+    minWidth: 0,
+  },
+  radarBottomLeft: {
+    flex: 1,
+    minWidth: 0,
+  },
+  radarMetaLabel: {
+    color: "#64748b",
+    fontSize: 10,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1.5,
+    marginBottom: 4,
+  },
+  radarMetaValue: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "900",
+    fontStyle: "italic",
+  },
+  radarSpeed: {
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: "900",
+    fontStyle: "italic",
+  },
+  radarSpeedUnit: {
+    fontSize: 11,
+    color: "rgba(255,255,255,0.42)",
+    fontStyle: "normal",
+    textTransform: "uppercase",
+  },
+  financeStack: {
+    gap: 14,
+  },
+  financeSummaryWorkspace: {
+    flexDirection: "row",
+    gap: 16,
+    alignItems: "stretch",
+  },
+  financeSummaryMain: {
+    flex: 1.35,
+    minWidth: 0,
+  },
+  financeSideRail: {
+    flex: 0.85,
+    minWidth: 300,
+    gap: 10,
+  },
+  financeSubTabs: {
+    flexDirection: "row",
+    gap: 42,
+    paddingHorizontal: 32,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
+  financeSubTab: {
+    paddingBottom: 14,
+  },
+  financeSubTabText: {
+    color: "#cbd5e1",
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 2.5,
+  },
+  financeSubTabTextActive: {
+    color: "#171a20",
+  },
+  financeSubLine: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: -1,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: "#4f46e5",
+  },
+  yieldCard: {
+    position: "relative",
+    overflow: "hidden",
+    backgroundColor: "#fff",
+    borderRadius: 26,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
+    alignItems: "center",
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
+  },
+  yieldFormula: {
+    width: "100%",
+    marginTop: 18,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#f8fafc",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 14,
+  },
+  yieldFormulaItem: {
+    minWidth: 84,
+    alignItems: "center",
+  },
+  yieldFormulaLabel: {
+    color: "#cbd5e1",
+    fontSize: 8,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1.4,
+    marginBottom: 4,
+  },
+  yieldFormulaValue: {
+    color: "#059669",
+    fontSize: 16,
+    fontWeight: "900",
+    fontStyle: "italic",
+  },
+  yieldFormulaCost: {
+    color: "#e11d48",
+  },
+  yieldFormulaOperator: {
+    color: "#cbd5e1",
+    fontSize: 18,
+    fontWeight: "900",
+  },
+  yieldOrb: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    width: 120,
+    height: 120,
+    borderBottomLeftRadius: 120,
+    backgroundColor: "rgba(79,70,229,0.05)",
+  },
+  yieldLabel: {
+    color: "#cbd5e1",
+    fontSize: 7.5,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 3,
+    marginBottom: 8,
+  },
+  yieldValue: {
+    color: "#0f172a",
+    fontSize: 34,
+    fontWeight: "900",
+    letterSpacing: -1.4,
+  },
+  yieldSplit: {
+    width: "100%",
+    flexDirection: "row",
+    gap: 20,
+    marginTop: 18,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#f8fafc",
+  },
+  yieldCol: {
+    flex: 1,
+    gap: 6,
+  },
+  yieldColRight: {
+    alignItems: "flex-end",
+  },
+  yieldHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  greenDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: "#10b981",
+  },
+  redDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: "#f43f5e",
+  },
+  yieldColLabel: {
+    flex: 1,
+    color: "#94a3b8",
+    fontSize: 7.5,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  yieldMiniBtn: {
+    width: 20,
+    height: 20,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ecfdf5",
+  },
+  yieldMiniBtnRed: {
+    backgroundColor: "#fff1f2",
+  },
+  yieldSales: {
+    color: "#059669",
+    fontSize: 19,
+    fontWeight: "900",
+    fontStyle: "italic",
+  },
+  yieldCost: {
+    color: "#e11d48",
+    textAlign: "right",
+  },
+  financeRailCard: {
+    flex: 1,
+    minHeight: 0,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
+    backgroundColor: "#fff",
+    padding: 16,
+    justifyContent: "center",
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.045,
+    shadowRadius: 16,
+  },
+  financeRailHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
+  financeRailLabel: {
+    flex: 1,
+    color: "#94a3b8",
+    fontSize: 8,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1.1,
+  },
+  financeRailValue: {
+    color: "#059669",
+    fontSize: 22,
+    fontWeight: "900",
+    fontStyle: "italic",
+  },
+  financeRailCost: {
+    color: "#e11d48",
+  },
+  financeRailExpenseValue: {
+    color: "#0f172a",
+    fontSize: 18,
+    fontWeight: "900",
+    fontStyle: "italic",
+  },
+  financeRailExpenseDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: "#94a3b8",
+  },
+  financeRailMeta: {
+    marginTop: 6,
+    color: "#cbd5e1",
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+  },
+  adjustmentLedgerCard: {
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
+    backgroundColor: "#fff",
+    padding: 16,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.035,
+    shadowRadius: 14,
+  },
+  adjustmentLedgerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 12,
+  },
+  adjustmentLedgerTitle: {
+    color: "#0f172a",
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: -0.3,
+  },
+  adjustmentLedgerSub: {
+    marginTop: 3,
+    color: "#94a3b8",
+    fontSize: 8,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  adjustmentLedgerCount: {
+    minWidth: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f8fafc",
+  },
+  adjustmentLedgerCountText: {
+    color: "#0f172a",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  adjustmentLedgerEmpty: {
+    color: "#94a3b8",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  adjustmentLedgerRows: {
+    gap: 8,
+  },
+  adjustmentLedgerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 14,
+    backgroundColor: "#f8fafc",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  adjustmentLedgerDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  adjustmentLedgerDotSale: {
+    backgroundColor: "#10b981",
+  },
+  adjustmentLedgerDotCost: {
+    backgroundColor: "#f43f5e",
+  },
+  adjustmentLedgerInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  adjustmentLedgerReason: {
+    color: "#0f172a",
+    fontSize: 10,
+    fontWeight: "900",
+  },
+  adjustmentLedgerMeta: {
+    marginTop: 2,
+    color: "#94a3b8",
+    fontSize: 7.5,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  adjustmentLedgerAmount: {
+    fontSize: 11,
+    fontWeight: "900",
+    fontStyle: "italic",
+  },
+  adjustmentLedgerAmountSale: {
+    color: "#059669",
+  },
+  adjustmentLedgerAmountCost: {
+    color: "#e11d48",
+  },
+  yieldDivider: {
+    width: 1,
+    backgroundColor: "#f8fafc",
+  },
+  expenseStrip: {
+    width: "100%",
+    marginTop: 14,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#f8fafc",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  expenseStripLabel: {
+    color: "#94a3b8",
+    fontSize: 7.5,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1.5,
+  },
+  expenseStripValue: {
+    color: "#0f172a",
+    fontSize: 10,
+    fontWeight: "900",
+  },
+  provisionPanel: {
+    backgroundColor: "#171a20",
+    borderRadius: 24,
+    padding: 18,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+  },
+  provisionModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(15,23,42,0.58)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  provisionModalCard: {
+    width: "100%",
+    maxWidth: 620,
+  },
+  provisionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 14,
+  },
+  provisionTitle: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "900",
+    fontStyle: "italic",
+    textTransform: "uppercase",
+    letterSpacing: -1,
+  },
+  provisionSub: {
+    marginTop: 2,
+    color: "#64748b",
+    fontSize: 7.5,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 1.4,
+  },
+  provisionClose: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  provisionChips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 7,
+    marginTop: 12,
+  },
+  provisionSummaryGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  provisionSummaryCard: {
+    flexGrow: 1,
+    flexBasis: "48%",
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    padding: 12,
+  },
+  provisionSummaryLabel: {
+    color: "#64748b",
+    fontSize: 7.5,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 5,
+  },
+  provisionSummaryValue: {
+    color: "#34d399",
+    fontSize: 14,
+    fontWeight: "900",
+    fontStyle: "italic",
+  },
+  provisionSummaryValueCost: {
+    color: "#fb7185",
+  },
+  provisionChip: {
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  provisionChipText: {
+    color: "#fff",
+    fontSize: 7.5,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  provisionForm: {
+    marginTop: 12,
+    borderRadius: 16,
+    backgroundColor: "#fff",
+    padding: 12,
+    gap: 8,
+  },
+  provisionFormHead: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  provisionFormTitle: {
+    color: "#0f172a",
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: -0.2,
+  },
+  provisionFormMeta: {
+    color: "#64748b",
+    fontSize: 7.5,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginTop: 2,
+  },
+  provisionFormClose: {
+    width: 24,
+    height: 24,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  provisionInputLabel: {
+    color: "#94a3b8",
+    fontSize: 7.5,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1.1,
+    marginTop: 2,
+  },
+  provisionAmountRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 11,
+    backgroundColor: "#f8fafc",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  provisionCurrency: {
+    color: "#334155",
+    fontSize: 16,
+    fontWeight: "800",
+    marginRight: 7,
+  },
+  provisionAmountInput: {
+    flex: 1,
+    color: "#0f172a",
+    fontSize: 16,
+    fontWeight: "900",
+    paddingVertical: 0,
+    ...Platform.select({
+      web: { outlineStyle: "none" } as never,
+      default: {},
+    }),
+  },
+  provisionReasonWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  provisionReasonChip: {
+    borderRadius: 9,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#fff",
+  },
+  provisionReasonChipActive: {
+    backgroundColor: "#eef2ff",
+    borderColor: "#818cf8",
+  },
+  provisionReasonText: {
+    color: "#64748b",
+    fontSize: 7.5,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  provisionReasonTextActive: {
+    color: "#3730a3",
+  },
+  provisionOtherInput: {
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 10,
+    backgroundColor: "#f8fafc",
+    color: "#0f172a",
+    fontSize: 10,
+    fontWeight: "700",
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+    ...Platform.select({
+      web: { outlineStyle: "none" } as never,
+      default: {},
+    }),
+  },
+  provisionSaveBtn: {
+    marginTop: 2,
+    borderRadius: 10,
+    backgroundColor: "#0f172a",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+  },
+  provisionSaveBtnDisabled: {
+    opacity: 0.45,
+  },
+  provisionSaveText: {
+    color: "#fff",
+    fontSize: 7.5,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+  },
+  provisionAppliedList: {
+    marginTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.08)",
+    paddingTop: 12,
+    gap: 8,
+  },
+  provisionAppliedTitle: {
+    color: "#fff",
+    fontSize: 9,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1.1,
+  },
+  provisionAppliedEmpty: {
+    color: "#64748b",
+    fontSize: 9,
+    fontWeight: "800",
+  },
+  provisionAppliedRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 13,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  provisionAppliedInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  provisionAppliedReason: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "900",
+  },
+  provisionAppliedMeta: {
+    marginTop: 2,
+    color: "#64748b",
+    fontSize: 7.5,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  provisionAppliedAmount: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "900",
+    fontStyle: "italic",
+  },
+  provisionAppliedRemove: {
+    width: 26,
+    height: 26,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
+  txnList: {
+    gap: 16,
+  },
+  emptyText: {
+    color: "#94a3b8",
+    fontSize: 13,
+    fontWeight: "700",
+    textAlign: "center",
+    paddingVertical: 32,
+  },
+  txnRow: {
+    backgroundColor: "#fff",
+    borderRadius: 40,
+    borderWidth: 1,
+    borderColor: "#f8fafc",
+    padding: 32,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 26,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.05,
+    shadowRadius: 24,
+  },
+  txnIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  txnIconIn: {
+    backgroundColor: "#ecfdf5",
+  },
+  txnIconOut: {
+    backgroundColor: "#fff1f2",
+  },
+  txnInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  txnTitle: {
+    color: "#0f172a",
+    fontSize: 18,
+    fontWeight: "900",
+  },
+  txnMeta: {
+    color: "#cbd5e1",
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+    marginTop: 7,
+  },
+  txnAmount: {
+    fontSize: 28,
+    fontWeight: "900",
+    fontStyle: "italic",
+  },
+  txnAmountIn: {
+    color: "#059669",
+  },
+  txnAmountOut: {
+    color: "#e11d48",
+  },
+  vaultGrid: {
+    backgroundColor: "rgba(248,250,252,0.8)",
+    borderRadius: 38,
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
+    padding: 24,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 14,
+  },
+  vaultCard: {
+    flexGrow: 0,
+    flexShrink: 1,
+    flexBasis: "31.8%",
+    minWidth: 0,
+    backgroundColor: "#fff",
+    borderRadius: 28,
+    padding: 24,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#fff",
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.04,
+    shadowRadius: 18,
+  },
+  vaultTitle: {
+    marginTop: 14,
+    color: "#0f172a",
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    textAlign: "center",
+    letterSpacing: 1.3,
+  },
+  vaultSub: {
+    marginTop: 7,
+    color: "#cbd5e1",
+    fontSize: 8.5,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1.6,
+  },
+  vaultBtn: {
+    marginTop: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    borderRadius: 13,
+    backgroundColor: "#0f172a",
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+  },
+  vaultBtnUpload: {
+    backgroundColor: "#4f46e5",
+  },
+  vaultBtnText: {
+    color: "#fff",
+    fontSize: 8,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1.4,
+  },
+  sideCard: {
+    backgroundColor: "#fff",
+    borderRadius: 36,
+    padding: 22,
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.045,
+    shadowRadius: 24,
+  },
+  feedbackSideCard: {
+    paddingTop: 24,
+  },
+  sideSection: {
+    gap: 16,
+  },
+  sideSectionBorder: {
+    paddingTop: 28,
+    borderTopWidth: 1,
+    borderTopColor: "#f8fafc",
+  },
+  sideHeading: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 2,
+  },
+  sideHeadingText: {
+    color: "#cbd5e1",
+    fontSize: 9,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 3.2,
+  },
+  assetCard: {
+    borderRadius: 28,
+    backgroundColor: "rgba(248,250,252,0.72)",
+    borderWidth: 1,
+    borderColor: "#f8fafc",
+    padding: 15,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  assetLeft: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  assetIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+  },
+  assetIconDark: {
+    backgroundColor: "#171a20",
+  },
+  assetLabel: {
+    color: "#cbd5e1",
+    fontSize: 9,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1.8,
+    marginBottom: 3,
+  },
+  assetValue: {
+    color: "#0f172a",
+    fontSize: 13,
+    fontWeight: "900",
+    maxWidth: 145,
+  },
+  assetChangeBtn: {
+    borderRadius: 13,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  assetChangeText: {
+    color: "#64748b",
+    fontSize: 8,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  feedbackNode: {
+    position: "relative",
+    overflow: "hidden",
+    backgroundColor: "#fff",
+    borderRadius: 26,
+    borderWidth: 1,
+    borderColor: "#f8fafc",
+    padding: 15,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.035,
+    shadowRadius: 16,
+  },
+  feedbackAvatar: {
+    width: 46,
+    height: 46,
+    borderRadius: 18,
+    backgroundColor: "#0f172a",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#fff",
+  },
+  feedbackAvatarText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "900",
+    fontStyle: "italic",
+  },
+  feedbackInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  feedbackRole: {
+    color: "#cbd5e1",
+    fontSize: 9,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1.8,
+    marginBottom: 4,
+  },
+  feedbackName: {
+    color: "#0f172a",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  feedbackScore: {
+    alignItems: "center",
+    gap: 2,
+  },
+  feedbackScoreText: {
+    color: "#171a20",
+    fontSize: 20,
+    fontWeight: "900",
+    fontStyle: "italic",
+  },
 });
 
 // ── Styles ─────────────────────────────────────────────────────────────────────
@@ -4177,7 +7010,7 @@ const styles = StyleSheet.create({
     fontWeight: "300",
     color: "#0f172a",
     ...Platform.select({
-      web: { outlineStyle: "none" } as any,
+      web: { outlineStyle: "none" } as never,
       default: {},
     }),
   },
@@ -4218,7 +7051,7 @@ const styles = StyleSheet.create({
     color: "#0f172a",
     backgroundColor: "#ffffff",
     ...Platform.select({
-      web: { outlineStyle: "none" } as any,
+      web: { outlineStyle: "none" } as never,
       default: {},
     }),
   },

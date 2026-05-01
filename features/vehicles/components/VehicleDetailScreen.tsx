@@ -334,8 +334,6 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
     (vehicle?.status ?? "active").toLowerCase() === "active"
       ? "Active"
       : "Inactive";
-  const vehicleStatusSub =
-    vehicleStatusTitle === "Active" ? "Operational in fleet" : "Not currently operating";
   const docsCount = vehicle?.documents ? Object.keys(vehicle.documents).length : 0;
 
   const handleVehicleEntrySubmit = useCallback(
@@ -531,8 +529,31 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
           </LinearGradient>
           {isWebDesktop ? (
             <View style={styles.profilePreviewCard}>
-              <View style={styles.profilePreviewTopRow}>
-                <Text style={styles.profilePreviewEyebrow}>VEHICLE PROFILE</Text>
+              <View style={ecc.dossierHeader}>
+                <View style={styles.profilePreviewTopMetaRow}>
+                  <View style={styles.profilePreviewTopAction}>
+                    <Text style={styles.profilePreviewTopActionText} numberOfLines={1}>
+                      {tripsHandled}
+                    </Text>
+                  </View>
+                  <View style={styles.profilePreviewRatingRow}>
+                    <View style={styles.profilePreviewStars}>
+                      {Array.from({ length: 5 }).map((_, idx) => (
+                        <FontAwesome
+                          key={`vehicle-star-header-${idx}`}
+                          name={idx < performanceStars ? "star" : "star-o"}
+                          size={13}
+                          color={idx < performanceStars ? "#fbbf24" : Theme.borderMedium}
+                        />
+                      ))}
+                    </View>
+                    <View style={styles.profilePreviewRatingBadge}>
+                      <Text style={styles.profilePreviewRatingBadgeText} numberOfLines={1}>
+                        {performanceScore.toFixed(1)}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
                 <TouchableOpacity
                   style={styles.profilePreviewTopAction}
                   onPress={() => setShowProfileModal(true)}
@@ -550,90 +571,65 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
                 </TouchableOpacity>
               </View>
               <TouchableOpacity
-                style={styles.profilePreviewIdentityTrigger}
+                style={ecc.dossierIdentity}
                 onPress={() => setShowProfileModal(true)}
                 activeOpacity={0.85}
                 accessibilityLabel="Open vehicle full profile"
               >
-                <View style={styles.profilePreviewIdentityRow}>
-                  <View style={styles.profilePreviewIdentityAvatar}>
-                    {profileAvatarUri ? (
-                      <Image source={{ uri: profileAvatarUri }} style={styles.profilePreviewIdentityAvatarImage} resizeMode="cover" />
-                    ) : (
-                      <Image source={truckImage} style={styles.profilePreviewIdentityAvatarImage} resizeMode="cover" />
-                    )}
+                <View style={ecc.dossierAvatarWrap}>
+                  {profileAvatarUri ? (
+                    <Image source={{ uri: profileAvatarUri }} style={ecc.dossierAvatarImage} resizeMode="cover" />
+                  ) : (
+                    <Image source={truckImage} style={ecc.dossierAvatarImage} resizeMode="cover" />
+                  )}
+                  <View style={ecc.dossierAvatarBadge}>
+                    <FontAwesome name="truck" size={10} color={Theme.textOnPrimary} />
                   </View>
-                  <View style={styles.profilePreviewIdentityMeta}>
-                    <Text style={styles.profilePreviewIdentityName} numberOfLines={1}>
-                      {vehicle.vehicle_number}
+                </View>
+                <Text style={ecc.dossierName} numberOfLines={1}>
+                  {vehicle.vehicle_number}
+                </Text>
+                <Text style={ecc.dossierSub} numberOfLines={1}>
+                  {profileIdentitySubtitle}
+                </Text>
+                <View style={ecc.dossierBadgeRow}>
+                  <View style={[ecc.dossierBadge, ecc.dossierBadgeBlue]}>
+                    <Text style={ecc.dossierBadgeText}>VEHICLE</Text>
+                  </View>
+                  <View style={[ecc.dossierBadge, ecc.dossierBadgeDark]}>
+                    <Text style={[ecc.dossierBadgeText, ecc.dossierBadgeTextDark]}>
+                      {vehicleStatusTitle}
                     </Text>
-                    <Text style={styles.profilePreviewIdentitySub} numberOfLines={1}>
-                      {profileIdentitySubtitle}
+                  </View>
+                  <View style={[ecc.dossierBadge, ecc.dossierBadgeMuted]}>
+                    <Text style={[ecc.dossierBadgeText, ecc.dossierBadgeTextMuted]}>
+                      {docsCount} DOCS
                     </Text>
                   </View>
                 </View>
               </TouchableOpacity>
-              <View style={styles.profilePreviewRatingRow}>
-                <View style={styles.profilePreviewStars}>
-                  {Array.from({ length: 5 }).map((_, idx) => (
-                    <FontAwesome
-                      key={`vehicle-star-${idx}`}
-                      name={idx < performanceStars ? "star" : "star-o"}
-                      size={13}
-                      color={idx < performanceStars ? "#fbbf24" : Theme.borderMedium}
-                    />
-                  ))}
-                </View>
-                <View style={styles.profilePreviewRatingBadge}>
-                  <Text style={styles.profilePreviewRatingBadgeText}>{performanceScore.toFixed(1)}</Text>
-                </View>
-              </View>
-              <View style={styles.profilePreviewExperienceBlock}>
-                <Text style={styles.profilePreviewExperienceEyebrow}>EXPERIENCE</Text>
-                <View style={styles.profilePreviewExperienceRow}>
-                  <View style={styles.profilePreviewExperienceIconWrap}>
-                    <FontAwesome name="road" size={12} color={Theme.textOnPrimary} />
+              <View style={ecc.dossierContactStack}>
+                <View style={ecc.dossierContactRow}>
+                  <View style={ecc.dossierContactIcon}>
+                    <FontAwesome name="truck" size={13} color={Theme.textMuted} />
                   </View>
-                  <Text style={styles.profilePreviewTripsNumber}>{tripsHandled}</Text>
-                  <Text style={styles.profilePreviewExperienceLabel}>Trips Handled</Text>
+                  <View style={ecc.dossierContactText}>
+                    <Text style={ecc.dossierContactLabel}>Vehicle Type</Text>
+                    <Text style={ecc.dossierContactValue} numberOfLines={1}>
+                      {vehicleTypeLabel}
+                    </Text>
+                  </View>
                 </View>
-              </View>
-              <View style={styles.profilePreviewDetails}>
-                <View style={styles.profilePreviewDetailRow}>
-                  <Text style={styles.profilePreviewDetailLabel}>Number</Text>
-                  <Text style={styles.profilePreviewDetailValue} numberOfLines={1}>
-                    {vehicle.vehicle_number}
-                  </Text>
-                </View>
-                <View style={styles.profilePreviewDetailRow}>
-                  <Text style={styles.profilePreviewDetailLabel}>Type</Text>
-                  <Text style={styles.profilePreviewDetailValue} numberOfLines={1}>
-                    {vehicleTypeLabel}
-                  </Text>
-                </View>
-                <View style={styles.profilePreviewDetailRow}>
-                  <Text style={styles.profilePreviewDetailLabel}>Docs</Text>
-                  <Text style={styles.profilePreviewDetailValue} numberOfLines={1}>
-                    {docsCount} attached
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.profilePreviewToggle}>
-                <View
-                  style={[
-                    styles.profilePreviewToggleDot,
-                    vehicleStatusTitle === "Active" && styles.profilePreviewToggleDotActive,
-                  ]}
-                >
-                  {vehicleStatusTitle === "Active" ? (
-                    <FontAwesome name="check" size={11} color={Theme.textOnPrimary} />
-                  ) : (
-                    <FontAwesome name="minus" size={10} color={Theme.textMuted} />
-                  )}
-                </View>
-                <View style={styles.profilePreviewToggleTextWrap}>
-                  <Text style={styles.profilePreviewToggleTitle}>{vehicleStatusTitle}</Text>
-                  <Text style={styles.profilePreviewToggleSub}>{vehicleStatusSub}</Text>
+                <View style={ecc.dossierContactRow}>
+                  <View style={ecc.dossierContactIcon}>
+                    <FontAwesome name="id-card-o" size={13} color={Theme.textMuted} />
+                  </View>
+                  <View style={ecc.dossierContactText}>
+                    <Text style={ecc.dossierContactLabel}>Documents</Text>
+                    <Text style={ecc.dossierContactValue} numberOfLines={1}>
+                      {docsCount} attached
+                    </Text>
+                  </View>
                 </View>
               </View>
               <TouchableOpacity
@@ -1014,6 +1010,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   profilePreviewEyebrow: ecc.eyebrow,
+  profilePreviewTopMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    minWidth: 0,
+    flexShrink: 1,
+  },
   profilePreviewTopAction: {
     flexDirection: "row",
     alignItems: "center",

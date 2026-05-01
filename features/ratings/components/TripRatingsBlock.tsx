@@ -79,13 +79,6 @@ export interface TripRatingsBlockProps {
   layoutVariant?: 'default' | 'workspace' | 'registry';
 }
 
-function initialsFromDisplayName(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return '••';
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0] ?? ''}${parts[parts.length - 1][0] ?? ''}`.toUpperCase();
-}
-
 type RateFlow = { type: 'client_supplier' } | { type: 'supplier_driver' } | null;
 type CommentPayload = { tags: string[]; note: string };
 type LocalClientFeedback = {
@@ -301,6 +294,7 @@ export function TripRatingsBlock({
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { currentOrganization } = useOrganization();
+  void paymentCaptured;
   const [ratings, setRatings] = useState<RatingRow[]>([]);
   const [clientAvatarUri, setClientAvatarUri] = useState<string | null>(null);
   const [supplierAvatarUri, setSupplierAvatarUri] = useState<string | null>(null);
@@ -371,6 +365,7 @@ export function TripRatingsBlock({
       !!trip.client_id &&
       r.rated_id === trip.client_id,
   );
+  void hasRatedClient;
 
   const hasSupplier = !!trip.supplier_id;
   const hasClient = !!trip.client_id;
@@ -495,7 +490,7 @@ export function TripRatingsBlock({
   useEffect(() => {
     let cancelled = false;
     const ownerOrg = trip.organization_id;
-    const tripAny = trip as Record<string, unknown>;
+    const tripAny = trip as unknown as Record<string, unknown>;
     const tripClientAvatar =
       typeof tripAny.client_avatar_url === 'string'
         ? tripAny.client_avatar_url
@@ -566,7 +561,7 @@ export function TripRatingsBlock({
 
   useEffect(() => {
     let cancelled = false;
-    const tripAny = trip as Record<string, unknown>;
+    const tripAny = trip as unknown as Record<string, unknown>;
     const tripDriverAvatar =
       typeof tripAny.driver_avatar_url === 'string'
         ? tripAny.driver_avatar_url
@@ -1066,6 +1061,8 @@ export function TripRatingsBlock({
                 </View>
               </View>
   ) : null;
+  void ratingsList;
+  void clientFeedbackList;
 
   const renderRegistryCard = (
     roleKicker: string,
@@ -1105,13 +1102,15 @@ export function TripRatingsBlock({
             <PartyAvatar
               uri={avatarUri}
               name={partyName}
-              size={40}
+              size={34}
               containerStyle={styles.regInitialMark}
               initialTextStyle={{ color: Theme.textOnPrimary }}
             />
             <View style={styles.regCardLeftText}>
-              <Text style={styles.regKicker}>{roleKicker.toUpperCase()} NODE</Text>
-              <Text style={styles.regPartyName} numberOfLines={2}>
+              <Text style={styles.regKicker} numberOfLines={1}>
+                {roleKicker.toUpperCase()} NODE
+              </Text>
+              <Text style={styles.regPartyName} numberOfLines={1}>
                 {partyName}
               </Text>
               <View style={styles.regTagRow}>
@@ -1137,7 +1136,9 @@ export function TripRatingsBlock({
                 <Text style={styles.regScoreWord}>SCORE</Text>
               </View>
             </View>
-            <Text style={[styles.regPerfLbl, { color: perfColor }]}>{perfLabel}</Text>
+            <Text style={[styles.regPerfLbl, { color: perfColor }]} numberOfLines={1}>
+              {perfLabel}
+            </Text>
           </View>
         </View>
         <View style={styles.regCardFoot}>
@@ -2337,13 +2338,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  regStack: { gap: 14 },
+  regStack: { gap: 10 },
   regCard: {
-    borderRadius: 28,
+    borderRadius: 22,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
-    padding: 22,
+    padding: 14,
     overflow: 'hidden',
   },
   regCardDecor: {
@@ -2358,15 +2359,22 @@ const styles = StyleSheet.create({
   },
   regCardTop: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 10,
+    gap: 8,
     zIndex: 1,
   },
-  regCardLeft: { flexDirection: 'row', gap: 14, flex: 1, minWidth: 0 },
+  regCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    minWidth: 0,
+  },
   regInitialMark: {
-    width: 52,
-    height: 52,
-    borderRadius: 20,
+    width: 34,
+    height: 34,
+    borderRadius: 13,
     backgroundColor: Theme.textPrimaryDark,
     alignItems: 'center',
     justifyContent: 'center',
@@ -2385,14 +2393,14 @@ const styles = StyleSheet.create({
   },
   regCardLeftText: { flex: 1, minWidth: 0, gap: 2 },
   regKicker: {
-    fontSize: 9,
+    fontSize: 7,
     fontWeight: '900',
     color: Theme.textMuted,
-    letterSpacing: 1,
+    letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
   regPartyName: {
-    fontSize: 15,
+    fontSize: 12,
     fontWeight: '900',
     color: Theme.textPrimaryDark,
     marginTop: 2,
@@ -2401,19 +2409,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 6,
+    gap: 5,
+    marginTop: 5,
   },
   regTagPill: {
     borderRadius: 999,
     borderWidth: 1,
     borderColor: Theme.primary,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
     backgroundColor: Theme.surface,
   },
   regTagPillText: {
-    fontSize: 7,
+    fontSize: 6.5,
     fontWeight: '900',
     color: Theme.primary,
     textTransform: 'uppercase',
@@ -2422,45 +2430,45 @@ const styles = StyleSheet.create({
   regGlobalPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 4,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
     backgroundColor: Theme.surfaceGray,
   },
   regGlobalPillText: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: '900',
     color: Theme.textSecondary,
   },
-  regCardRight: { alignItems: 'flex-end', minWidth: 84 },
-  regScoreRow: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
+  regCardRight: { alignItems: 'flex-end', flexShrink: 0, minWidth: 58 },
+  regScoreRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   regTripBig: {
-    fontSize: 30,
+    fontSize: 22,
     fontWeight: '900',
     fontStyle: 'italic',
     color: Theme.textPrimaryDark,
     letterSpacing: -0.6,
   },
-  regScoreStarCol: { alignItems: 'center', gap: 2 },
+  regScoreStarCol: { alignItems: 'center', gap: 1 },
   regScoreWord: {
-    fontSize: 7,
+    fontSize: 6,
     fontWeight: '900',
     color: Theme.textMuted,
     letterSpacing: 0.5,
   },
   regPerfLbl: {
-    marginTop: 4,
-    fontSize: 8,
+    marginTop: 3,
+    fontSize: 6.5,
     fontWeight: '900',
     textTransform: 'uppercase',
     letterSpacing: 0.3,
   },
   regCardFoot: {
-    marginTop: 18,
-    paddingTop: 16,
+    marginTop: 12,
+    paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: Theme.borderLight,
     flexDirection: 'row',
@@ -2468,12 +2476,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     zIndex: 1,
   },
-  regRungRow: { flexDirection: 'row', gap: 6 },
+  regRungRow: { flexDirection: 'row', gap: 4 },
   regRungDot: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
+    width: 17,
+    height: 17,
+    borderRadius: 9,
+    borderWidth: 1,
     borderColor: Theme.screenBackground,
     alignItems: 'center',
     justifyContent: 'center',
@@ -2483,9 +2491,9 @@ const styles = StyleSheet.create({
   },
   regRungDotOn: { backgroundColor: Theme.primary },
   regRungDotOff: { backgroundColor: Theme.surfaceGray },
-  regAuditTap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  regAuditTap: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   regAuditTxt: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: '900',
     color: Theme.primary,
     textTransform: 'uppercase',

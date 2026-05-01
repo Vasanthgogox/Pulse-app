@@ -1,23 +1,8 @@
 /**
- * Web-only trip map using Leaflet + leaflet-routing-machine with OSRM.
- * Mirrors the reference implementation at:
- *   /Users/nihas/Desktop/trips/src/pages/trips/TripMap.jsx
+ * Web-only trip map using Leaflet with road routing via routingService.ts.
  */
+import { getOptimalRoute, type RouteResult } from '@/services/routingService';
 import React, { useEffect, useRef, useState } from 'react';
-
-// Hide the routing instructions panel injected by leaflet-routing-machine
-const ROUTING_CSS = `
-  .leaflet-routing-container { display: none !important; }
-  .leaflet-routing-alternatives-container { display: none !important; }
-`;
-if (typeof document !== 'undefined') {
-  if (!document.getElementById('trip-map-routing-styles')) {
-    const s = document.createElement('style');
-    s.id = 'trip-map-routing-styles';
-    s.innerText = ROUTING_CSS;
-    document.head.appendChild(s);
-  }
-}
 
 /** Metro web cannot bundle leaflet.css (relative url(images/...) in CSS). Load from CDN instead. */
 const LEAFLET_CSS_VERSION = '1.9.4';
@@ -165,14 +150,6 @@ export function TripMap({
       // Dynamic imports to avoid SSR issues (same pattern as existing LeafletMap.web.tsx)
       const L = (await import('leaflet')).default;
       await ensureLeafletStylesheet();
-      let routingAvailable = false;
-      try {
-        await import('leaflet-routing-machine' as any);
-        routingAvailable = true;
-      } catch {
-        routingAvailable = false;
-      }
-
       // ── Resolve source coordinates ───────────────────────────────────────
       const locationsToGeocode = [source, destination, ...intermediateStops].filter(Boolean);
       setGeocodingProgress({ current: 0, total: locationsToGeocode.length });
@@ -305,13 +282,7 @@ export function TripMap({
         truckMarker.addTo(map);
       }
 
-      // ── OSRM routing via leaflet-routing-machine (matches reference) ─────
-      const waypoints = [
-        (L as any).latLng(srcCoords[0], srcCoords[1]),
-        ...stopCoords.map((s) => (L as any).latLng(s.coords[0], s.coords[1])),
-        (L as any).latLng(dstCoords[0], dstCoords[1]),
-      ];
-
+      // ── Road routing via routingService.ts (OSRM → Netlify proxy → Mapbox → Google) ──
       const isMapReadyForDrawing = () => {
         if (unmountedRef.current) return false;
         if (mapInstanceRef.current !== map) return false;
@@ -340,8 +311,7 @@ export function TripMap({
             Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
           totalDist += R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         }
-        const roadDist = (totalDist * 1.3).toFixed(1);
-        if (onDistanceCalculated) onDistanceCalculated(roadDist);
+        if (onDistanceCalculated) onDistanceCalculated((totalDist * 1.3).toFixed(1));
         try {
           L.polyline(allPoints, {
             color: '#2196F3',
@@ -354,54 +324,50 @@ export function TripMap({
         }
       };
 
-      try {
-        if (!routingAvailable || !(L as any).Routing?.control || !(L as any).Routing?.osrmv1) {
-          createFallbackRoute();
-        } else {
-          const routingControl = (L as any).Routing.control({
-            waypoints,
-            lineOptions: {
-              styles: [{ color: '#2196F3', weight: 4, opacity: 0.8, lineCap: 'round', lineJoin: 'round' }],
-            },
-            routeWhileDragging: false,
-            draggableWaypoints: false,
-            addWaypoints: false,
-            createMarker: () => null,
-            show: false,
-            collapsible: false,
-            router: (L as any).Routing.osrmv1({
-              serviceUrl:
-                typeof window !== 'undefined' && window.location.hostname === 'localhost'
-                  ? '/osrm/route/v1'
-                  : 'https://router.project-osrm.org/route/v1',
-              profile: 'driving',
-            }),
-          });
+      // Build ordered waypoints: source → intermediate stops → destination
+      const routePoints: { latitude: number; longitude: number }[] = [
+        { latitude: srcCoords[0], longitude: srcCoords[1] },
+        ...stopCoords.map((s) => ({ latitude: s.coords[0], longitude: s.coords[1] })),
+        { latitude: dstCoords[0], longitude: dstCoords[1] },
+      ];
 
-          routingControl.on('routesfound', (e: any) => {
-            if (!isMapReadyForDrawing()) return;
-            if (e.routes?.[0] && onDistanceCalculated) {
-              onDistanceCalculated((e.routes[0].summary.totalDistance / 1000).toFixed(1));
+      void (async () => {
+        try {
+          // Fetch each segment in parallel; null means that segment failed
+          const segments = await Promise.all(
+            routePoints.slice(0, -1).map((from, i) =>
+              getOptimalRoute(from, routePoints[i + 1]).catch(() => null),
+            ),
+          );
+          if (!isMapReadyForDrawing()) return;
+
+          const validSegments = segments.filter((s): s is RouteResult => !!s);
+          if (validSegments.length === routePoints.length - 1) {
+            const allLatLngs = validSegments.flatMap((s) =>
+              s.coordinates.map((c) => [c.latitude, c.longitude] as [number, number]),
+            );
+            const totalDistM = validSegments.reduce((sum, s) => sum + s.distance, 0);
+            if (allLatLngs.length > 1) {
+              try {
+                L.polyline(allLatLngs, {
+                  color: '#2196F3',
+                  weight: 4,
+                  opacity: 0.85,
+                  lineCap: 'round',
+                  lineJoin: 'round',
+                }).addTo(map);
+                onDistanceCalculated?.((totalDistM / 1000).toFixed(1));
+              } catch {
+                // Map torn down
+              }
+              return;
             }
-          });
-
-          routingControl.on('routingerror', () => {
-            createFallbackRoute();
-          });
-
-          // Guard against _clearLines crash (same patch as reference)
-          const originalClearLines = routingControl._clearLines;
-          routingControl._clearLines = function () {
-            try {
-              if (typeof originalClearLines === 'function') originalClearLines.call(this);
-            } catch {}
-          };
-
-          routingControl.addTo(map);
+          }
+          createFallbackRoute();
+        } catch {
+          createFallbackRoute();
         }
-      } catch {
-        createFallbackRoute();
-      }
+      })();
 
       // ── Fit bounds ───────────────────────────────────────────────────────
       const boundsCoords: [number, number][] = [srcCoords, dstCoords, ...stopCoords.map((s) => s.coords)];

@@ -1,5 +1,7 @@
 export {
   createRating,
+  getRatingsForClient,
+  getRatingsForClients,
   getRatingsForTrip,
   getRatingsForSupplier,
   getRatingsForSuppliers,

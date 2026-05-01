@@ -47,6 +47,8 @@ export const LeafletMapRnMaps = React.forwardRef<
           duration,
         );
       },
+      // react-native-maps (Expo Go) does not expose fitBounds on MapView
+      fitBounds: (_ne, _sw, _paddingPx) => {},
     }));
 
     const safePolyline = useMemo(

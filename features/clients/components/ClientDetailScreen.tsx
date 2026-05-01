@@ -24,6 +24,7 @@ import { TreasuryDetailLayout } from "@/features/finance/components/TreasuryDeta
 import { ledgerDayMatchesPeriod } from "@/features/finance/lib/filterLedgerByPeriod";
 import type { FinancePeriodFilter } from "@/features/finance/types";
 import { allocateAmountsToLargestDueTrips } from "@/features/finance/utils/allocateToLargestDue";
+import { averageScore, getRatingsForClient } from "@/features/ratings";
 import {
     getSuppliersByOrganization,
     type SupplierRow,
@@ -305,11 +306,13 @@ export default function ClientDetailScreen({
   const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
   const [isInApp, setIsInApp] = useState(false);
   const [sendingInvitation, setSendingInvitation] = useState(false);
+  const [clientRatingAvg, setClientRatingAvg] = useState<number | null>(null);
   const initialLoadDoneRef = useRef(false);
   const heroDecorProgress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     setIsLinked(false);
+    setClientRatingAvg(null);
   }, [clientId]);
 
   useEffect(() => {
@@ -387,6 +390,7 @@ export default function ClientDetailScreen({
       getTransactionsByOrganization(orgId),
       getSuppliersByOrganization(orgId),
       getDriversByOrganization(orgId),
+      getRatingsForClient(clientId),
     ])
       .then(
         ([
@@ -397,10 +401,12 @@ export default function ClientDetailScreen({
           txRes,
           suppliersRes,
           driversRes,
+          ratingsRes,
         ]) => {
           if (clientRes.error) {
             setError(clientRes.error.message);
             setClient(null);
+            setClientRatingAvg(null);
           } else {
             setClient(clientRes.client ?? null);
           }
@@ -466,6 +472,11 @@ export default function ClientDetailScreen({
             suppliersRes.error ? [] : (suppliersRes.suppliers ?? []),
           );
           setDrivers(driversRes.error ? [] : (driversRes.drivers ?? []));
+          setClientRatingAvg(
+            clientRes.error || ratingsRes.error
+              ? null
+              : averageScore(ratingsRes.ratings ?? []),
+          );
           const forClientTx = allTx.filter((tx) => {
             return (
               tx.contact_type === "client" &&
@@ -1196,17 +1207,7 @@ export default function ClientDetailScreen({
   const isIntegrated = Boolean(client.is_integrated || client.linked_organization_id);
   const isInAppNotIntegrated = !isIntegrated && isInApp;
   const isNotInApp = !isIntegrated && !isInApp;
-  const clientRating = Number(
-    (
-      client.linked_organization_id
-        ? 4.7
-        : client.is_integrated
-          ? 4.5
-          : isInApp
-            ? 4.2
-            : 3.9
-    ).toFixed(1),
-  );
+  const clientRating = clientRatingAvg ?? 0;
   const ratingFilledStars = Math.max(0, Math.min(5, Math.round(clientRating)));
   const statusTitle = isIntegrated
     ? "Integrated"

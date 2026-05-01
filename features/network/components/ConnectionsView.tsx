@@ -8,12 +8,14 @@ import {
   getOrganizationLocationsByNames,
 } from '@/features/organization/services/organization.service';
 import {
+  HUB_CAROUSEL_MIN_HEIGHT,
   HubConnectionListCard,
   type HubConnectionItem,
 } from "@/features/network/components/NetworkConnectionHubCards";
 import { runConnectionInvite } from "@/features/network/utils/connectionInvite.util";
 import {
   averageScore,
+  getRatingsForClients,
   getRatingsForDrivers,
   getRatingsForSuppliers,
 } from '@/features/ratings';
@@ -36,6 +38,7 @@ import {
   FlatList,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -278,10 +281,15 @@ export function ConnectionsView({
   const [isGrid, setIsGrid] = useState(!hubMode);
   const [refreshing, setRefreshing] = useState(false);
   const [invitingId, setInvitingId] = useState<string | null>(null);
+  const [clientRatingsById, setClientRatingsById] = useState<Record<string, number | null>>({});
   const [supplierRatingsById, setSupplierRatingsById] = useState<Record<string, number | null>>({});
   const [driverRatingsById, setDriverRatingsById] = useState<Record<string, number | null>>({});
+  const [globalAverages, setGlobalAverages] = useState<{
+    client: number | null;
+    supplier: number | null;
+    driver: number | null;
+  }>({ client: null, supplier: null, driver: null });
   const gridNumColumns = windowWidth >= 1200 ? 4 : windowWidth >= 900 ? 3 : 2;
-  const hubNumColumns = windowWidth >= 1280 ? 7 : windowWidth >= 1180 ? 5 : 2;
 
   const clientsQ = useClientsQuery(orgId);
   const suppliersQ = useSuppliersQuery(orgId);
@@ -363,9 +371,37 @@ export function ConnectionsView({
 
   useEffect(() => {
     let cancelled = false;
+    const clientIds = ((clientsQ.data ?? []) as { id: string; linked_organization_id?: string | null }[])
+      .flatMap((c) => [c.id, c.linked_organization_id])
+      .filter((id): id is string => Boolean(id));
+    if (clientIds.length === 0) {
+      setClientRatingsById({});
+      setGlobalAverages((prev) => ({ ...prev, client: null }));
+      return;
+    }
+    getRatingsForClients(clientIds).then(({ byClientId }) => {
+      if (cancelled) return;
+      const next: Record<string, number | null> = {};
+      clientIds.forEach((id) => {
+        next[id] = averageScore(byClientId[id] ?? []);
+      });
+      setClientRatingsById(next);
+      setGlobalAverages((prev) => ({
+        ...prev,
+        client: averageScore(Object.values(byClientId).flat()),
+      }));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [clientsQ.data]);
+
+  useEffect(() => {
+    let cancelled = false;
     const supplierIds = ((suppliersQ.data ?? []) as { id: string }[]).map((s) => s.id);
     if (supplierIds.length === 0) {
       setSupplierRatingsById({});
+      setGlobalAverages((prev) => ({ ...prev, supplier: null }));
       return;
     }
     getRatingsForSuppliers(supplierIds).then(({ bySupplierId }) => {
@@ -375,6 +411,10 @@ export function ConnectionsView({
         next[id] = averageScore(bySupplierId[id] ?? []);
       });
       setSupplierRatingsById(next);
+      setGlobalAverages((prev) => ({
+        ...prev,
+        supplier: averageScore(Object.values(bySupplierId).flat()),
+      }));
     });
     return () => {
       cancelled = true;
@@ -388,6 +428,7 @@ export function ConnectionsView({
       .map((d) => d.id);
     if (driverIds.length === 0) {
       setDriverRatingsById({});
+      setGlobalAverages((prev) => ({ ...prev, driver: null }));
       return;
     }
     getRatingsForDrivers(driverIds).then(({ byDriverId }) => {
@@ -397,6 +438,10 @@ export function ConnectionsView({
         next[id] = averageScore(byDriverId[id] ?? []);
       });
       setDriverRatingsById(next);
+      setGlobalAverages((prev) => ({
+        ...prev,
+        driver: averageScore(Object.values(byDriverId).flat()),
+      }));
     });
     return () => {
       cancelled = true;
@@ -424,7 +469,12 @@ export function ConnectionsView({
       avatar_url: c.avatar_url ?? null,
       avatar_seed: c.avatar_seed ?? null,
       mutual_count: c.mutual_count ?? c.mutual_connections_count ?? null,
-      rating: c.rating ?? c.average_rating ?? null,
+      rating:
+        c.rating ??
+        c.average_rating ??
+        clientRatingsById[c.id] ??
+        clientRatingsById[c.linked_organization_id ?? ""] ??
+        globalAverages.client,
       phone: c.phone ?? null,
       linked_organization_id: c.linked_organization_id ?? null,
       city:
@@ -454,7 +504,7 @@ export function ConnectionsView({
       avatar_url: s.avatar_url ?? null,
       avatar_seed: s.avatar_seed ?? null,
       mutual_count: s.mutual_count ?? s.mutual_connections_count ?? null,
-      rating: s.rating ?? s.average_rating ?? supplierRatingsById[s.id] ?? null,
+      rating: s.rating ?? s.average_rating ?? supplierRatingsById[s.id] ?? globalAverages.supplier,
       phone: s.phone ?? null,
       linked_organization_id: s.linked_organization_id ?? null,
       city:
@@ -490,7 +540,7 @@ export function ConnectionsView({
         rating: (d as { rating?: number | null; average_rating?: number | null }).rating ??
           (d as { rating?: number | null; average_rating?: number | null }).average_rating ??
           driverRatingsById[d.id] ??
-          null,
+          globalAverages.driver,
         phone: (d as { phone?: string | null }).phone ?? null,
         city: (d as { city?: string | null }).city ?? null,
         state: (d as { state?: string | null }).state ?? null,
@@ -512,8 +562,10 @@ export function ConnectionsView({
     driversQ.data,
     effectiveSearch,
     effectiveFilter,
+    clientRatingsById,
     supplierRatingsById,
     driverRatingsById,
+    globalAverages,
     organizationLocationById,
     organizationLocationByName,
   ]);
@@ -562,10 +614,6 @@ export function ConnectionsView({
     () => chunkForGrid(connections, gridNumColumns),
     [connections, gridNumColumns],
   );
-  const hubRows = useMemo(
-    () => chunkForGrid(connections.slice(0, hubNumColumns * 2), hubNumColumns),
-    [connections, hubNumColumns],
-  );
   const showChrome = !hubMode;
 
   useEffect(() => {
@@ -583,25 +631,24 @@ export function ConnectionsView({
         <EmptyState />
       </View>
     ) : (
-      <View style={styles.hubGridEmbedded}>
-        {hubRows.map((row, ri) => (
-          <View key={`hub-row-${ri}`} style={styles.hubGridRow}>
-            {row.map((item) => (
+      <ScrollView
+        horizontal
+        nestedScrollEnabled
+        showsHorizontalScrollIndicator={false}
+        style={styles.hubScrollViewport}
+        contentContainerStyle={styles.hubScrollContent}
+      >
+        {connections.map((item) => (
+          <View key={`hub-scroll-${item.role}-${item.id}`} style={styles.hubScrollCardWrap}>
               <HubConnectionListCard
-                key={`hub-${item.role}-${item.id}`}
                 item={toHubItem(item)}
+                layout="carousel"
                 onActionPress={() => void inviteOffAppParty(item)}
                 onCardPress={() => onOpenProfile?.(item)}
               />
-            ))}
-            {row.length < hubNumColumns
-              ? Array.from({ length: hubNumColumns - row.length }).map((_, i) => (
-                  <View key={`hub-spacer-${ri}-${i}`} style={styles.hubGridSpacer} />
-                ))
-              : null}
           </View>
         ))}
-      </View>
+      </ScrollView>
     )
   ) : isLoading ? (
     <View style={styles.embeddedLoading}>
@@ -795,10 +842,32 @@ const styles = StyleSheet.create({
   },
   listContentEmbedded: { paddingHorizontal: 22, paddingBottom: 16, gap: 8 },
   hubGridEmbedded: {
-    paddingHorizontal: 22,
+    paddingHorizontal: 14,
     paddingTop: 8,
     paddingBottom: 18,
     gap: 12,
+  },
+  hubScrollViewport: {
+    height: HUB_CAROUSEL_MIN_HEIGHT + 30,
+    minHeight: HUB_CAROUSEL_MIN_HEIGHT + 30,
+    maxHeight: HUB_CAROUSEL_MIN_HEIGHT + 30,
+    paddingTop: 8,
+    paddingBottom: 14,
+  },
+  hubScrollContent: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingHorizontal: 14,
+    gap: 12,
+    height: HUB_CAROUSEL_MIN_HEIGHT,
+    minHeight: HUB_CAROUSEL_MIN_HEIGHT,
+  },
+  hubScrollCardWrap: {
+    width: 176,
+    height: HUB_CAROUSEL_MIN_HEIGHT,
+    minHeight: HUB_CAROUSEL_MIN_HEIGHT,
+    flexGrow: 0,
+    flexShrink: 0,
   },
   hubGridRow: {
     flexDirection: "row",

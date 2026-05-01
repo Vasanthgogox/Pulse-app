@@ -24,6 +24,13 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
           nativeRef.current?.focusCurrentLocation(currentCenter, currentZoom);
         }
       },
+      fitBounds: (ne, sw, paddingPx) => {
+        if (Platform.OS === "web") {
+          webRef.current?.fitBounds(ne, sw, paddingPx);
+        } else {
+          nativeRef.current?.fitBounds(ne, sw, paddingPx);
+        }
+      },
     }));
 
     if (Platform.OS === "web") {

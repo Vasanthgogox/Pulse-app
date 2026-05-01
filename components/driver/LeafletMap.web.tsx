@@ -27,6 +27,7 @@ type LeafletMapProps = {
 
 export type LeafletMapRef = {
   focusCurrentLocation: (center: LeafletLatLng, zoom?: number) => void;
+  fitBounds: (ne: LeafletLatLng, sw: LeafletLatLng, paddingPx?: number) => void;
 };
 
 // Inline OSM raster style avoids external style/sprite/glyph failures on web.
@@ -462,6 +463,20 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
           zoom: currentZoom,
           duration: lowPower ? 0 : 450,
         });
+      },
+      fitBounds: (ne, sw, paddingPx = 80) => {
+        if (!mapRef.current) return;
+        try {
+          mapRef.current.fitBounds(
+            [
+              [Math.min(sw.longitude, ne.longitude), Math.min(sw.latitude, ne.latitude)],
+              [Math.max(sw.longitude, ne.longitude), Math.max(sw.latitude, ne.latitude)],
+            ],
+            { padding: paddingPx, duration: lowPower ? 0 : 600 },
+          );
+        } catch {
+          // Map may not be ready
+        }
       },
     }));
 
