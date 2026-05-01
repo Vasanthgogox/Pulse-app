@@ -28,6 +28,7 @@ export const LeafletMapRnMaps = React.forwardRef<
       polyline = [],
       polylineColor = "#3b82f6",
       lowPower = false,
+      interactionLocked = false,
     },
     ref,
   ) => {
@@ -74,6 +75,8 @@ export const LeafletMapRnMaps = React.forwardRef<
           }}
           rotateEnabled={false}
           pitchEnabled={false}
+          scrollEnabled={!interactionLocked}
+          zoomEnabled={!interactionLocked}
         >
           {safePolyline.length >= 2 ? (
             <Polyline

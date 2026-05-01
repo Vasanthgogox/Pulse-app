@@ -1551,8 +1551,18 @@ export default function TripsScreen() {
             />
           }
         >
-          <View style={styles.tripsBodyFiltersBleed}>
-            <View style={styles.tripsInlineFilterPanel}>
+          <View
+            style={[
+              styles.tripsBodyFiltersBleed,
+              isMobileViewport && styles.tripsBodyFiltersBleedMobileDark,
+            ]}
+          >
+            <View
+              style={[
+                styles.tripsInlineFilterPanel,
+                isMobileViewport && styles.tripsInlineFilterPanelMobileDark,
+              ]}
+            >
               {isMobileViewport ? (
                 <>
                   <ScrollView
@@ -1569,7 +1579,10 @@ export default function TripsScreen() {
                         style={[
                           styles.tab,
                           styles.tripsMobileTab,
-                          tab.isActive && styles.tabActive,
+                          tab.isActive &&
+                            (isMobileViewport
+                              ? styles.tabActiveMobileDark
+                              : styles.tabActive),
                         ]}
                         onPress={tab.onPress}
                         activeOpacity={0.7}
@@ -1579,7 +1592,13 @@ export default function TripsScreen() {
                         <Text
                           style={[
                             styles.tabText,
-                            tab.isActive && styles.tabTextActive,
+                            isMobileViewport
+                              ? tab.isActive
+                                ? styles.tabTextActiveMobileDark
+                                : styles.tabTextMobileDark
+                              : tab.isActive
+                                ? styles.tabTextActive
+                                : null,
                           ]}
                         >
                           {tab.label}
@@ -1623,6 +1642,10 @@ export default function TripsScreen() {
                           styles.tripsMobileDateChip,
                           dateRangeFilter === id &&
                             styles.tripsBodyDateChipActive,
+                          isMobileViewport && styles.tripsBodyDateChipMobileDark,
+                          dateRangeFilter === id &&
+                            isMobileViewport &&
+                            styles.tripsBodyDateChipActiveMobileDark,
                         ]}
                         onPress={() => {
                           setDateRangeFilter(id);
@@ -1636,6 +1659,11 @@ export default function TripsScreen() {
                             styles.tripsBodyDateChipText,
                             dateRangeFilter === id &&
                               styles.tripsBodyDateChipTextActive,
+                            isMobileViewport &&
+                              styles.tripsBodyDateChipTextMobileDark,
+                            dateRangeFilter === id &&
+                              isMobileViewport &&
+                              styles.tripsBodyDateChipTextActiveMobileDark,
                           ]}
                           numberOfLines={1}
                         >
@@ -1648,6 +1676,8 @@ export default function TripsScreen() {
                         styles.tripsBodyDateRangeIconBtn,
                         dateRangeFilter === "custom" &&
                           styles.tripsDateRangeIconBtnActive,
+                        isMobileViewport &&
+                          styles.tripsBodyDateRangeIconBtnMobileDark,
                       ]}
                       onPress={() => setShowDateRangePicker(true)}
                       activeOpacity={0.8}
@@ -1660,7 +1690,9 @@ export default function TripsScreen() {
                         color={
                           dateRangeFilter === "custom"
                             ? Theme.textOnDark
-                            : Theme.textPrimaryDark
+                            : isMobileViewport
+                              ? Theme.textOnDarkMuted
+                              : Theme.textPrimaryDark
                         }
                       />
                     </TouchableOpacity>
@@ -2784,6 +2816,15 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
   },
   tabTextActive: { color: Theme.textPrimaryDark },
+  tabActiveMobileDark: {
+    backgroundColor: "transparent",
+  },
+  tabTextMobileDark: {
+    color: Theme.textOnDarkMuted,
+  },
+  tabTextActiveMobileDark: {
+    color: Theme.textOnDark,
+  },
   tabUnderline: {
     position: "absolute",
     bottom: 2,
@@ -3352,6 +3393,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
   },
+  /** Narrow web / mobile: one continuous dark strip (tabs + date chips + metric rail). */
+  tripsBodyFiltersBleedMobileDark: {
+    backgroundColor: Theme.darkBackground,
+    borderBottomColor: Theme.separatorDark,
+  },
   tripsInlineFilterPanel: {
     marginBottom: 12,
     backgroundColor: Theme.screenBackground,
@@ -3360,6 +3406,15 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
     borderRadius: 20,
     overflow: "hidden",
+  },
+  tripsInlineFilterPanelMobileDark: {
+    marginBottom: 6,
+    backgroundColor: "transparent",
+    borderTopWidth: 0,
+    borderBottomWidth: 0,
+    borderColor: "transparent",
+    borderRadius: 0,
+    overflow: "visible",
   },
   tripsInlineFilterRowWeb: {
     flexDirection: "row",
@@ -3623,6 +3678,8 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     borderRadius: 22,
     backgroundColor: Theme.darkBackground,
+    borderWidth: 1,
+    borderColor: Theme.separatorDark,
   },
   metricTagRailMobile: {
     flexDirection: "row",
@@ -4126,6 +4183,24 @@ const styles = StyleSheet.create({
   },
   tripsBodyDateChipTextActive: {
     color: Theme.textPrimaryDark,
+  },
+  tripsBodyDateChipMobileDark: {
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderColor: "rgba(255,255,255,0.10)",
+  },
+  tripsBodyDateChipActiveMobileDark: {
+    backgroundColor: "rgba(255,255,255,0.14)",
+    borderColor: "rgba(255,255,255,0.22)",
+  },
+  tripsBodyDateChipTextMobileDark: {
+    color: "rgba(255,255,255,0.62)",
+  },
+  tripsBodyDateChipTextActiveMobileDark: {
+    color: Theme.textOnDark,
+  },
+  tripsBodyDateRangeIconBtnMobileDark: {
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(255,255,255,0.12)",
   },
   tripsBodyDateRangeIconBtn: {
     width: 32,

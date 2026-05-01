@@ -343,7 +343,10 @@ export function ConnectionsView({
     queryKey: ['network', 'connections', 'organization-locations', locationLookupOrganizationIds],
     queryFn: async () => {
       const { error: orgErr, locations } = await getOrganizationLocationsByIds(locationLookupOrganizationIds);
-      if (orgErr) throw orgErr;
+      if (orgErr) {
+        if (__DEV__) console.warn('[ConnectionsView] organization locations:', orgErr.message);
+        return [];
+      }
       return locations;
     },
     enabled: locationLookupOrganizationIds.length > 0,
@@ -365,7 +368,10 @@ export function ConnectionsView({
     queryKey: ['network', 'connections', 'organization-locations-by-name', locationLookupNames],
     queryFn: async () => {
       const { error: orgErr, locations } = await getOrganizationLocationsByNames(locationLookupNames);
-      if (orgErr) throw orgErr;
+      if (orgErr) {
+        if (__DEV__) console.warn('[ConnectionsView] organization locations by name:', orgErr.message);
+        return [];
+      }
       return locations;
     },
     enabled: locationLookupNames.length > 0,

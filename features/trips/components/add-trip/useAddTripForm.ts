@@ -16,6 +16,109 @@ import { getOptimalRoute } from '@/services/routingService';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { AddTripFormData, AddTripFormState } from './types';
 
+export type AddTripIssueField =
+  | 'pickup'
+  | 'drop'
+  | 'tripDate'
+  | 'tons'
+  | 'client'
+  | 'clientPrice'
+  | 'partner'
+  | 'partnerRate'
+  | 'vehicleNumber'
+  | 'driverName'
+  | 'driverPhone'
+  | 'driverConfirm'
+  | 'advancePaid'
+  | 'notes'
+  | 'assetDriver'
+  | 'assetVehicle';
+
+export interface AddTripValidationIssue {
+  field: AddTripIssueField;
+  message: string;
+}
+
+/** Collects every blocking validation issue (same rules as legacy single-message validation). */
+function computeValidationIssues(state: AddTripFormState): AddTripValidationIssue[] {
+  const issues: AddTripValidationIssue[] = [];
+  const push = (field: AddTripIssueField, message: string) => {
+    issues.push({ field, message });
+  };
+
+  const errPick = runValidators(state.pickupArea, [required(), maxLength(255)]);
+  if (errPick) push('pickup', `Pickup area: ${errPick}`);
+
+  const errDrop = runValidators(state.dropLocation, [required(), maxLength(255)]);
+  if (errDrop) push('drop', `Drop location: ${errDrop}`);
+
+  if (state.tripStartDate.trim()) {
+    const dateIsoRe = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateIsoRe.test(state.tripStartDate.trim())) {
+      push('tripDate', 'Trip start date: use YYYY-MM-DD');
+    }
+  }
+
+  if (state.tons.trim()) {
+    const tonsNum = Number(state.tons);
+    if (!Number.isFinite(tonsNum) || tonsNum < 0) {
+      push('tons', 'Tons: enter a valid non-negative number');
+    }
+  }
+
+  const errClient = runValidators(state.clientName, [required(), maxLength(VALIDATION.CLIENT_SUPPLIER_NAME_MAX_LENGTH)]);
+  if (errClient) push('client', `Client: ${errClient}`);
+
+  const errPrice = positiveAmount()(state.clientPrice);
+  if (errPrice) push('clientPrice', `Client price: ${errPrice}`);
+
+  if (state.supplySource === 'aggregate') {
+    if (!state.supplierId) {
+      push('partner', 'Select a transport partner');
+    }
+    const err5 = nonNegativeAmount()(state.supplierRate);
+    if (err5) push('partnerRate', `Partner rate: ${err5}`);
+
+    if (!state.assignLater) {
+      const vehicleTrimmed = state.aggregateVehicleText.trim();
+      if (!vehicleTrimmed) push('vehicleNumber', 'Vehicle: required for aggregate trips');
+      const nameTrimmed = state.aggregateDriverName.trim();
+      if (!nameTrimmed) push('driverName', 'Driver name: required for aggregate trips');
+      else if (nameTrimmed.length < 2) push('driverName', 'Driver name: enter at least 2 characters');
+      const driverPhoneTrimmed = state.driverPhone.trim();
+      if (!driverPhoneTrimmed) push('driverPhone', 'Driver for tracking: required for aggregate trips');
+    }
+  }
+
+  if (state.supplySource === 'asset' && !state.assignLater) {
+    if (!state.driverId) push('assetDriver', 'Driver: required');
+    if (!state.vehicleId) push('assetVehicle', 'Vehicle: required');
+  }
+
+  if (state.advancePaid.trim()) {
+    const err6 = nonNegativeAmount()(state.advancePaid);
+    if (err6) push('advancePaid', `Advance paid: ${err6}`);
+  }
+
+  const notesWithVehicle =
+    state.supplySource === 'aggregate' && state.aggregateVehicleText.trim()
+      ? (state.notes.trim() ? state.notes.trim() + '\n' : '') + 'Vehicle: ' + state.aggregateVehicleText.trim()
+      : state.notes;
+  const err7 = maxLength(VALIDATION.NOTES_MAX_LENGTH)(notesWithVehicle);
+  if (err7) push('notes', `Notes: ${err7}`);
+
+  if (state.supplySource === 'aggregate' && state.driverPhone.trim()) {
+    const err8 = validatePhone(state.driverPhone.trim());
+    if (err8) push('driverPhone', `Driver for tracking: ${err8}`);
+  }
+
+  if (state.supplySource === 'aggregate' && state.driverPhoneName && !state.driverPhoneConfirmed) {
+    push('driverConfirm', `Tap to confirm the driver: ${state.driverPhoneName}`);
+  }
+
+  return issues;
+}
+
 const initialState: AddTripFormState = {
   pickupArea: '',
   dropLocation: '',
@@ -129,43 +232,6 @@ export function useAddTripForm() {
   const setAggregateDriverName = useCallback((v: string) => setState((s) => ({ ...s, aggregateDriverName: v })), []);
 
   const clearClientSelection = useCallback(() => setState((s) => ({ ...s, clientId: null, clientName: '' })), []);
-
-  const canSubmit = (() => {
-    if (!state.pickupArea.trim() || !state.dropLocation.trim()) return false;
-    // Manual trips can be created with just a typed client name (client_id optional).
-    if (!state.clientName.trim()) return false;
-    const cp = parseFloat(state.clientPrice) || 0;
-    if (cp <= 0 || cp > VALIDATION.AMOUNT_MAX) return false;
-    const sr = parseFloat(state.supplierRate) || 0;
-    if (state.supplySource === 'asset') {
-      if (!state.assignLater && (!state.driverId || !state.vehicleId)) return false;
-      return true;
-    }
-    if (state.supplySource === 'aggregate') {
-      const supplierOk = !!(
-        state.supplierId &&
-        sr >= 0 &&
-        sr <= VALIDATION.AMOUNT_MAX &&
-        (state.assignLater || state.aggregateVehicleText.trim().length > 0)
-      );
-
-      // If we found a driver by phone, require explicit confirmation before enabling "Create Trip".
-      const driverFound = !!(state.driverPhoneName && state.driverPhone.trim());
-      const nameOk =
-        state.assignLater ||
-        (state.aggregateDriverName.trim().length >= 2);
-      const driverOk = state.assignLater
-        ? (state.driverPhone.trim() ? (!driverFound || state.driverPhoneConfirmed) : true)
-        : (
-            state.driverPhone.trim().length === 10 &&
-            nameOk &&
-            (!driverFound || state.driverPhoneConfirmed)
-          );
-
-      return supplierOk && !!driverOk;
-    }
-    return false;
-  })();
 
   const computeEtaInterval = (durationSeconds: number): string => {
     const totalSeconds = Math.max(0, Math.round(durationSeconds));
@@ -295,75 +361,25 @@ export function useAddTripForm() {
     // Intentionally use pickup/drop coords only; other fields don't affect route calculation.
   }, [state.pickupLat, state.pickupLon, state.dropLat, state.dropLon]);
 
-  /** Single-pass validation; returns first error message or null. */
-  const getValidationError = useCallback((): string | null => {
-    const err = runValidators(state.pickupArea, [required(), maxLength(255)]);
-    if (err) return `Pickup area: ${err}`;
-    const err2 = runValidators(state.dropLocation, [required(), maxLength(255)]);
-    if (err2) return `Drop location: ${err2}`;
-    if (state.tripStartDate.trim()) {
-      const dateIsoRe = /^\d{4}-\d{2}-\d{2}$/;
-      if (!dateIsoRe.test(state.tripStartDate.trim())) {
-        return 'Trip start date: use YYYY-MM-DD';
-      }
-    }
-    if (state.tons.trim()) {
-      const tonsNum = Number(state.tons);
-      if (!Number.isFinite(tonsNum) || tonsNum < 0) {
-        return 'Tons: enter a valid non-negative number';
-      }
-    }
-    const err3 = runValidators(state.clientName, [required(), maxLength(VALIDATION.CLIENT_SUPPLIER_NAME_MAX_LENGTH)]);
-    if (err3) return `Client: ${err3}`;
-    const err4 = positiveAmount()(state.clientPrice);
-    if (err4) return `Client price: ${err4}`;
-    // Supplier rate required only for aggregate (partner) trips; asset trips use own driver/vehicle, so no partner rate.
-    if (state.supplySource === 'aggregate') {
-      const err5 = nonNegativeAmount()(state.supplierRate);
-      if (err5) return `Supplier rate: ${err5}`;
-      if (!state.assignLater) {
-        const vehicleTrimmed = state.aggregateVehicleText.trim();
-        if (!vehicleTrimmed) return 'Vehicle: required for aggregate trips';
-        const nameTrimmed = state.aggregateDriverName.trim();
-        if (!nameTrimmed) return 'Driver name: required for aggregate trips';
-        if (nameTrimmed.length < 2) return 'Driver name: enter at least 2 characters';
-        const driverPhoneTrimmed = state.driverPhone.trim();
-        if (!driverPhoneTrimmed) return 'Driver for tracking: required for aggregate trips';
-        if (driverPhoneTrimmed.length !== 10) {
-          return 'Driver for tracking: enter a 10-digit Indian mobile number';
-        }
-      }
-    }
-    if (state.supplySource === 'asset' && !state.assignLater) {
-      if (!state.driverId) return 'Driver: required';
-      if (!state.vehicleId) return 'Vehicle: required';
-    }
-    if (state.advancePaid.trim()) {
-      const err6 = nonNegativeAmount()(state.advancePaid);
-      if (err6) return `Advance paid: ${err6}`;
-    }
-    const notesWithVehicle =
-      state.supplySource === 'aggregate' && state.aggregateVehicleText.trim()
-        ? (state.notes.trim() ? state.notes.trim() + '\n' : '') + 'Vehicle: ' + state.aggregateVehicleText.trim()
-        : state.notes;
-    const err7 = maxLength(VALIDATION.NOTES_MAX_LENGTH)(notesWithVehicle);
-    if (err7) return `Notes: ${err7}`;
-    if (state.supplySource === 'aggregate' && state.driverPhone.trim()) {
-      const err8 = validatePhone(state.driverPhone.trim());
-      if (err8) return `Driver for tracking: ${err8}`;
-    }
+  const validationIssues = useMemo(() => computeValidationIssues(state), [state]);
 
-    if (state.supplySource === 'aggregate' && state.driverPhoneName && !state.driverPhoneConfirmed) {
-      return `Tap again to confirm the driver: ${state.driverPhoneName}`;
-    }
-    return null;
-  }, [state]);
+  /** Single source of truth with field-level validation (see `computeValidationIssues`). */
+  const canSubmit = validationIssues.length === 0;
+
+  /** First blocking message (footer / alerts); full list is `validationIssues`. */
+  const getValidationError = useCallback((): string | null => {
+    return validationIssues[0]?.message ?? null;
+  }, [validationIssues]);
 
   const buildPayload = useCallback((): AddTripFormData => {
-    const clientPrice = parseFloat(state.clientPrice) || 0;
+    const parseAmount = (raw: string) => {
+      const n = parseFloat(String(raw ?? '').replace(/,/g, ''));
+      return Number.isFinite(n) ? n : 0;
+    };
+    const clientPrice = parseAmount(state.clientPrice);
     // Asset: no partner; use 0. Aggregate: validated above.
-    const supplierRate = state.supplySource === 'asset' ? 0 : (parseFloat(state.supplierRate) || 0);
-    const advancePaid = parseFloat(state.advancePaid) || 0;
+    const supplierRate = state.supplySource === 'asset' ? 0 : parseAmount(state.supplierRate);
+    const advancePaid = parseAmount(state.advancePaid);
     let notes = state.notes.trim();
     if (state.tons.trim()) {
       notes = (notes ? notes + '\n' : '') + `Load: ${state.tons.trim()} Tons`;
@@ -475,5 +491,6 @@ export function useAddTripForm() {
     canSubmit,
     buildPayload,
     getValidationError,
+    validationIssues,
   };
 }

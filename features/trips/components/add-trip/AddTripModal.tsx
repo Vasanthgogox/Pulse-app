@@ -3,6 +3,7 @@
  * Thin container; logic lives in useAddTripForm and useClientsForTrip.
  * Waits for onComplete (e.g. createTrip) to finish before closing so lists refetch with new data.
  */
+import { normalizeIndianPhoneForMetadata } from "@/lib/phoneValidation";
 import { useState } from "react";
 import { Alert, View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -43,15 +44,22 @@ export function AddTripModal({
 
   const handleSubmit = async () => {
     if (submitting) return;
-    if (validationMessage) {
-      Alert.alert("Missing required details", validationMessage);
+    const errNow = form.getValidationError();
+    if (errNow) {
+      Alert.alert("Missing required details", errNow);
       return;
     }
     setSubmitting(true);
     try {
+      const rawDriverPhone = form.state.driverPhone.trim();
+      const normalized =
+        rawDriverPhone.length > 0
+          ? normalizeIndianPhoneForMetadata(rawDriverPhone)
+          : null;
+      const normalizedDriver = (normalized ?? rawDriverPhone) || undefined;
       const options: AddTripCompleteOptions = {
         supplySource: form.state.supplySource,
-        driverPhone: form.state.driverPhone.trim() || undefined,
+        driverPhone: normalizedDriver,
       };
       const result = await Promise.resolve(onComplete(form.buildPayload(), options));
       const typed = result as AddTripCompleteResult | undefined;
@@ -162,6 +170,7 @@ export function AddTripModal({
           onSubmit={handleSubmit}
           canSubmit={canCreateTrip}
           validationMessage={validationMessage}
+          validationIssues={form.validationIssues}
           submitting={submitting}
           showInlineCta={!showStickyFooter}
         />

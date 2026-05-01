@@ -104,7 +104,9 @@ export default function AddTripPage() {
           contact_id: supplierIdAgg,
           contact_type: 'supplier',
         });
-        if (ledgerErr) throw ledgerErr;
+        if (ledgerErr) {
+          console.warn('[add-trip] Trip created but advance ledger entry failed:', ledgerErr.message);
+        }
       }
       if (trip && options?.driverPhone?.trim()) {
         const { error: assignErr } = await assignTripDriverByPhone(trip.id, orgId, options.driverPhone.trim(), { trackingOnly: true });
@@ -168,7 +170,9 @@ export default function AddTripPage() {
         contact_id: supplierId,
         contact_type: 'supplier',
       });
-      if (ledgerErr) throw ledgerErr;
+      if (ledgerErr) {
+        console.warn('[add-trip] Trip created but advance ledger entry failed:', ledgerErr.message);
+      }
     }
     if (trip) {
       await refreshTripsAfterCreate(orgId);

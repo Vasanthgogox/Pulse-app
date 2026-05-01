@@ -12,6 +12,7 @@ import {
   type ConnectionFilterTab,
 } from "@/features/network/components/ConnectionsView";
 import { DiscoverView } from "@/features/network/components/DiscoverView";
+import { NetworkTabErrorBoundary } from "@/components/network/NetworkTabErrorBoundary";
 import { StoryReel } from "@/features/network/components/StoryReel";
 import { isPostVisibleForOrg, type PostRow } from "@/features/network/services/posts.service";
 import {
@@ -68,6 +69,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   type TextStyle,
   useWindowDimensions,
   View,
@@ -210,7 +212,7 @@ function useAnimatedCount(target: number, durationMs = 720): number {
   return displayValue;
 }
 
-export default function NetworkScreen() {
+function NetworkScreenInner() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const searchParams = useLocalSearchParams<{ view?: string }>();
@@ -220,7 +222,12 @@ export default function NetworkScreen() {
   const isCompactPhone = width < 420;
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
-  const { currentOrganization: organization } = useOrganization();
+  const {
+    currentOrganization: organization,
+    isLoading: orgLoading,
+    error: organizationError,
+    refreshOrganization,
+  } = useOrganization();
   const orgId = organization?.id ?? null;
   const [refreshing, setRefreshing] = useState(false);
   const [connSearch, setConnSearch] = useState("");
@@ -471,9 +478,45 @@ export default function NetworkScreen() {
   }, [selectedProfileNode?.id]);
 
   if (!orgId) {
+    if (orgLoading) {
+      return (
+        <View style={[styles.container, { paddingTop: insets.top }]}>
+          <ActivityIndicator color={Theme.teslaRed} style={{ marginTop: 60 }} />
+        </View>
+      );
+    }
+    if (organizationError) {
+      return (
+        <View style={[styles.container, styles.orgGateWrap, { paddingTop: insets.top + 24 }]}>
+          <Text style={styles.orgGateTitle}>Connection issue</Text>
+          <Text style={styles.orgGateMessage}>
+            Couldn&apos;t load your workspace. Check your connection and try again.
+          </Text>
+          <TouchableOpacity
+            style={styles.orgGateBtn}
+            onPress={() => void refreshOrganization()}
+            accessibilityRole="button"
+            accessibilityLabel="Try again"
+          >
+            <Text style={styles.orgGateBtnText}>Try again</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <ActivityIndicator color={Theme.teslaRed} style={{ marginTop: 60 }} />
+      <View style={[styles.container, styles.orgGateWrap, { paddingTop: insets.top + 24 }]}>
+        <Text style={styles.orgGateTitle}>No organization linked</Text>
+        <Text style={styles.orgGateMessage}>
+          You&apos;re signed in, but we couldn&apos;t find an organization for this account yet.
+        </Text>
+        <TouchableOpacity
+          style={styles.orgGateBtn}
+          onPress={() => void refreshOrganization()}
+          accessibilityRole="button"
+          accessibilityLabel="Refresh"
+        >
+          <Text style={styles.orgGateBtnText}>Refresh</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -878,9 +921,9 @@ export default function NetworkScreen() {
                   ]}
                 >
                   <History
-                    size={isDesktopMatrix ? 13 : 15}
-                    color={Theme.primary}
-                    strokeWidth={2.2}
+                    size={isDesktopMatrix ? 12 : 13}
+                    color={Theme.textOnDarkMuted}
+                    strokeWidth={2}
                   />
                 </View>
               </View>
@@ -1369,11 +1412,52 @@ export default function NetworkScreen() {
   );
 }
 
+export default function NetworkScreen() {
+  return (
+    <NetworkTabErrorBoundary>
+      <NetworkScreenInner />
+    </NetworkTabErrorBoundary>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Theme.screenBackground,
     minHeight: 0,
+  },
+  orgGateWrap: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 24,
+  },
+  orgGateTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: Theme.textPrimary,
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  orgGateMessage: {
+    fontSize: 15,
+    color: Theme.textSecondary,
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+  orgGateBtn: {
+    backgroundColor: Theme.buttonPrimary,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 12,
+    minWidth: 160,
+    alignItems: "center",
+  },
+  orgGateBtnText: {
+    color: Theme.buttonPrimaryText,
+    fontSize: 16,
+    fontWeight: "600",
   },
   scroll: { flex: 1 },
   scrollContent: {
@@ -1649,18 +1733,18 @@ const styles = StyleSheet.create({
     width: "100%",
     minWidth: 0,
     minHeight: 196,
-    borderRadius: 28,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: "rgba(148,163,184,0.2)",
-    backgroundColor: Theme.surface,
+    borderColor: Theme.borderOnDark,
+    backgroundColor: Theme.darkBackground,
     paddingHorizontal: 14,
-    paddingVertical: 16,
-    gap: 12,
-    shadowColor: "#0f172a",
-    shadowOpacity: 0.04,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 1,
+    paddingVertical: 14,
+    gap: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.35,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 2,
   },
   commandSideCardDesktop: {
     flex: 1,
@@ -1671,7 +1755,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   commandSideCardCompact: {
-    borderRadius: 22,
+    borderRadius: 20,
     minHeight: 168,
     paddingHorizontal: 12,
     paddingVertical: 12,
@@ -1691,44 +1775,44 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   commandSideHeadIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    backgroundColor: Theme.screenBackground,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.06)",
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: "rgba(255,255,255,0.1)",
     alignItems: "center",
     justifyContent: "center",
   },
   commandSideHeadIconDesktop: {
-    width: 26,
-    height: 26,
+    width: 28,
+    height: 28,
     borderRadius: 9,
   },
   commandSideKicker: {
-    fontSize: 11,
-    fontWeight: "900",
-    color: Theme.textMutedDemo,
-    letterSpacing: 1.3,
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textOnDark,
+    letterSpacing: 1.15,
     textTransform: "uppercase",
   },
   commandSideKickerDesktop: {
-    fontSize: 9,
-    letterSpacing: 1,
+    fontSize: 8,
+    letterSpacing: 0.95,
   },
   commandSideSub: {
-    marginTop: 4,
-    fontSize: 11,
-    fontWeight: "600",
-    color: Theme.textSecondary,
-    letterSpacing: 0.2,
+    marginTop: 3,
+    fontSize: 10,
+    fontWeight: "500",
+    color: Theme.textOnDarkMuted,
+    letterSpacing: 0.15,
   },
   commandSideSubLabelDesktop: {
     marginTop: 2,
-    fontSize: 9,
-    fontWeight: "600",
-    color: Theme.textSecondary,
-    letterSpacing: 0.15,
+    fontSize: 8,
+    fontWeight: "500",
+    color: Theme.textOnDarkMuted,
+    letterSpacing: 0.12,
   },
   /** No maxHeight on mobile: fixed 220px clipped the last log row while the gray shell still had room below. */
   commandLogScroll: {
@@ -1741,55 +1825,55 @@ const styles = StyleSheet.create({
     minHeight: 0,
   },
   commandLogScrollContent: {
-    gap: 12,
-    paddingBottom: 16,
-  },
-  commandLogScrollContentDesktop: {
     gap: 8,
     paddingBottom: 14,
+  },
+  commandLogScrollContentDesktop: {
+    gap: 6,
+    paddingBottom: 12,
     flexGrow: 1,
   },
   commandLogEntry: {
     flexDirection: "row",
     alignItems: "stretch",
     gap: 0,
-    borderRadius: 18,
+    borderRadius: 14,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "rgba(148,163,184,0.12)",
-    backgroundColor: "#1a2332",
-    shadowColor: "#020617",
-    shadowOpacity: 0.45,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+    borderColor: "rgba(255,255,255,0.07)",
+    backgroundColor: "#151d2a",
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
   commandLogEntryDesktop: {
-    borderRadius: 14,
-    backgroundColor: "#1a2332",
+    borderRadius: 12,
+    backgroundColor: "#151d2a",
   },
   commandLogAccent: {
-    width: 4,
-    minHeight: 56,
+    width: 3,
+    minHeight: 52,
   },
   commandLogAccentDesktop: {
-    width: 3,
-    minHeight: 44,
+    width: 2,
+    minHeight: 40,
   },
   commandLogEntryMain: {
     flex: 1,
     minWidth: 0,
-    paddingVertical: 14,
-    paddingRight: 14,
-    paddingLeft: 12,
-    gap: 10,
+    paddingVertical: 10,
+    paddingRight: 12,
+    paddingLeft: 10,
+    gap: 7,
     justifyContent: "center",
   },
   commandLogEntryMainDesktop: {
-    paddingVertical: 6,
+    paddingVertical: 5,
     paddingLeft: 8,
-    paddingRight: 10,
-    gap: 5,
+    paddingRight: 9,
+    gap: 4,
   },
   commandLogEntryTop: {
     flexDirection: "row",
@@ -1803,29 +1887,29 @@ const styles = StyleSheet.create({
   commandLogName: {
     flex: 1,
     minWidth: 0,
-    fontSize: 14,
-    fontWeight: "800",
+    fontSize: 11,
+    fontWeight: "700",
     color: "#f1f5f9",
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-  },
-  commandLogNameDesktop: {
-    fontSize: 12,
-    fontWeight: "800",
     letterSpacing: 0.45,
     textTransform: "uppercase",
   },
-  commandLogWhen: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "rgba(203,213,225,0.72)",
-    flexShrink: 0,
-    paddingTop: 1,
+  commandLogNameDesktop: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.35,
+    textTransform: "uppercase",
   },
-  commandLogWhenDesktop: {
+  commandLogWhen: {
     fontSize: 9,
     fontWeight: "600",
-    color: "rgba(203,213,225,0.75)",
+    color: "rgba(203,213,225,0.65)",
+    flexShrink: 0,
+    paddingTop: 0,
+  },
+  commandLogWhenDesktop: {
+    fontSize: 8,
+    fontWeight: "600",
+    color: "rgba(203,213,225,0.68)",
     paddingTop: 0,
   },
   commandLogEntryBottom: {
@@ -1833,55 +1917,55 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "flex-start",
     flexWrap: "wrap",
-    gap: 10,
+    gap: 8,
     width: "100%",
   },
   commandLogEntryBottomDesktop: {
     flexWrap: "nowrap",
     justifyContent: "space-between",
-    gap: 8,
+    gap: 6,
     alignItems: "center",
   },
   commandLogRolePill: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
     borderWidth: 1,
     flexShrink: 0,
     alignSelf: "center",
   },
   commandLogRolePillDesktop: {
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 7,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
   },
   commandLogRolePillText: {
-    fontSize: 10,
+    fontSize: 8,
     fontWeight: "800",
-    letterSpacing: 0.6,
+    letterSpacing: 0.5,
     textTransform: "uppercase",
   },
   commandLogRolePillTextDesktop: {
-    fontSize: 8,
-    letterSpacing: 0.45,
+    fontSize: 7,
+    letterSpacing: 0.4,
   },
   commandLogStatus: {
-    fontSize: 11,
+    fontSize: 9,
     fontWeight: "600",
     flex: 1,
     minWidth: 0,
     textAlign: "left",
-    lineHeight: 15,
+    lineHeight: 13,
   },
   commandLogStatusDesktop: {
     flexBasis: 0,
     flexGrow: 1,
     textAlign: "right",
-    lineHeight: 13,
-    paddingLeft: 6,
+    lineHeight: 12,
+    paddingLeft: 4,
   },
   commandLogStatusFontDesktop: {
-    fontSize: 9,
+    fontSize: 8,
   },
   commandLogStatusLive: {
     color: "#a7f3d0",
@@ -1890,31 +1974,31 @@ const styles = StyleSheet.create({
     color: "#fde68a",
   },
   commandLogEmpty: {
-    minHeight: 88,
-    borderRadius: 16,
+    minHeight: 84,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: Theme.borderMedium,
+    borderColor: "rgba(255,255,255,0.12)",
     borderStyle: "dashed",
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: "rgba(255,255,255,0.04)",
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 14,
-    paddingVertical: 16,
-    gap: 6,
+    paddingVertical: 14,
+    gap: 5,
   },
   commandLogEmptyText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: Theme.textPrimaryDark,
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textOnDark,
     textAlign: "center",
-    letterSpacing: 0.2,
+    letterSpacing: 0.15,
   },
   commandLogEmptyHint: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "500",
-    color: Theme.textSecondary,
+    color: Theme.textOnDarkMuted,
     textAlign: "center",
-    lineHeight: 16,
+    lineHeight: 15,
   },
   profileModalBackdrop: {
     flex: 1,

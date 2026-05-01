@@ -3,6 +3,7 @@
  * "Tracking" tab (default): TripInfo + Assignment + Timeline + Map + LR Docs
  * "Finance" tab: Expenses + Finance Overview + Receivables
  */
+import { PartyAvatar } from "@/components/PartyAvatar";
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { ThemedAlertModal } from "@/components/ThemedAlertModal";
 import { Theme } from "@/constants/Theme";
@@ -23,6 +24,7 @@ import {
     Linking,
     Modal,
     Platform,
+    Pressable,
     RefreshControl,
     ScrollView,
     StyleSheet,
@@ -38,6 +40,7 @@ import {
     REVENUE_REASON_OPTIONS,
     adjustedCost,
     adjustedRevenue,
+    isAdjustmentVoided,
     type TripAdjustment,
     type TripAdjustmentImpact,
     type TripAdjustmentType,
@@ -78,41 +81,6 @@ type LedgerWebExtra = LedgerRow & {
   reference_no?: string | null;
 };
 
-function NeoPartyAvatar({
-  uri,
-  name,
-  icon,
-  tone = "indigo",
-}: {
-  uri?: string | null;
-  name: string;
-  icon: "briefcase" | "truck";
-  tone?: "indigo" | "rose";
-}) {
-  const initial = name.trim().slice(0, 1).toUpperCase() || "•";
-  return (
-    <View
-      style={[
-        neoStyles.heroPartyIcon,
-        tone === "rose" && neoStyles.heroPartyIconRose,
-      ]}
-    >
-      {uri ? (
-        <Image source={{ uri }} style={neoStyles.heroPartyAvatarImage} resizeMode="cover" />
-      ) : (
-        <>
-          <Feather
-            name={icon}
-            size={15}
-            color={tone === "rose" ? "#fb7185" : "#818cf8"}
-          />
-          <Text style={neoStyles.heroPartyAvatarInitial}>{initial}</Text>
-        </>
-      )}
-    </View>
-  );
-}
-
 function formatLedgerDate(s: string | null | undefined) {
   if (!s) return "—";
   const d = s.slice(0, 10);
@@ -136,8 +104,9 @@ function ledgerHistoryTitle(tx: LedgerRow, isIn: boolean) {
 function adjustmentsCountingAsIncome(adjustments: TripAdjustment[]) {
   return adjustments.filter(
     (a) =>
-      (a.type === "revenue" && a.impact === "plus") ||
-      (a.type === "cost" && a.impact === "minus"),
+      !isAdjustmentVoided(a) &&
+      ((a.type === "revenue" && a.impact === "plus") ||
+        (a.type === "cost" && a.impact === "minus")),
   );
 }
 
@@ -145,8 +114,9 @@ function adjustmentsCountingAsIncome(adjustments: TripAdjustment[]) {
 function adjustmentsCountingAsDeductions(adjustments: TripAdjustment[]) {
   return adjustments.filter(
     (a) =>
-      (a.type === "revenue" && a.impact === "minus") ||
-      (a.type === "cost" && a.impact === "plus"),
+      !isAdjustmentVoided(a) &&
+      ((a.type === "revenue" && a.impact === "minus") ||
+        (a.type === "cost" && a.impact === "plus")),
   );
 }
 
@@ -158,6 +128,14 @@ const FINANCE_PROTOCOL_CHIPS = [
   "Toll",
   "RTO",
 ] as const;
+
+/** Labels for embedded provision rows (aligned with adjustment registry copy). */
+function provisionLineMetaLabel(adj: TripAdjustment): string {
+  if (adj.type === "revenue") {
+    return adj.impact === "plus" ? "SALE · ADD-ON" : "SALE · DEDUCTION";
+  }
+  return adj.impact === "plus" ? "COST · ADD-ON" : "COST · DEDUCTION";
+}
 
 function protocolSupplierChipAdjustment(chip: (typeof FINANCE_PROTOCOL_CHIPS)[number]): {
   type: TripAdjustmentType;
@@ -266,7 +244,6 @@ export default function TripDetailScreen({
   const router = useRouter();
   const { currentOrganization } = useOrganization();
   const { t } = useLanguage();
-  void t;
   const { width: screenWidth } = useWindowDimensions();
   const [activeTab, setActiveTab] = useState<Tab>("trip");
   const [financeSubTab, setFinanceSubTab] = useState<"summary" | "transactions">(
@@ -277,6 +254,12 @@ export default function TripDetailScreen({
   const [showFinanceProvisionPanel, setShowFinanceProvisionPanel] = useState<
     "client" | "supplier" | null
   >(null);
+  const [provisionConfirm, setProvisionConfirm] = useState<
+    { mode: "delete" | "edit"; adjustment: TripAdjustment } | null
+  >(null);
+  const [editingProvisionAdjustmentId, setEditingProvisionAdjustmentId] = useState<string | null>(
+    null,
+  );
   const [showInlineAdjustmentForm, setShowInlineAdjustmentForm] = useState(false);
   const [inlineAdjType, setInlineAdjType] = useState<TripAdjustmentType>("revenue");
   const [inlineAdjImpact, setInlineAdjImpact] = useState<TripAdjustmentImpact>("plus");
@@ -285,6 +268,15 @@ export default function TripDetailScreen({
   const [inlineAdjOtherReason, setInlineAdjOtherReason] = useState("");
   const [showAssignmentManager, setShowAssignmentManager] = useState(false);
   const [otpResending, setOtpResending] = useState(false);
+  const [provisionVoidReason, setProvisionVoidReason] = useState("");
+
+  const closeFinanceProvisionModal = () => {
+    setShowFinanceProvisionPanel(null);
+    setShowInlineAdjustmentForm(false);
+    setProvisionConfirm(null);
+    setProvisionVoidReason("");
+    setEditingProvisionAdjustmentId(null);
+  };
 
   const isMobile = screenWidth < 640;
   const isTablet = screenWidth >= 640 && screenWidth < 1024;
@@ -457,6 +449,7 @@ export default function TripDetailScreen({
     impact: TripAdjustmentImpact;
     reasonSeed?: string;
   }) => {
+    setEditingProvisionAdjustmentId(null);
     if (preset) {
       setInlineAdjType(preset.type);
       setInlineAdjImpact(preset.impact);
@@ -482,14 +475,47 @@ export default function TripDetailScreen({
     setShowInlineAdjustmentForm(true);
   };
 
+  const beginInlineEditFromAdjustment = (adj: TripAdjustment) => {
+    if (isAdjustmentVoided(adj)) return;
+    setEditingProvisionAdjustmentId(adj.id);
+    setInlineAdjType(adj.type);
+    setInlineAdjImpact(adj.impact);
+    setInlineAdjAmount(adj.amount > 0 ? String(adj.amount) : "");
+    const opts = adj.type === "revenue" ? REVENUE_REASON_OPTIONS : COST_REASON_OPTIONS;
+    const r = (adj.reason ?? "").trim();
+    if (r && (opts as readonly string[]).includes(r)) {
+      setInlineAdjReason(r);
+      setInlineAdjOtherReason("");
+    } else if (r) {
+      setInlineAdjReason("Other");
+      setInlineAdjOtherReason(r);
+    } else {
+      setInlineAdjReason("");
+      setInlineAdjOtherReason("");
+    }
+    setShowInlineAdjustmentForm(true);
+  };
+
   const saveInlineAdjustment = async () => {
     if (!canSaveInlineAdjustment) return;
-    await detail.handleSaveAdjustment({
-      type: inlineAdjType,
-      impact: inlineAdjImpact,
-      amount: inlineAmountNum,
-      reason: inlineFinalReason,
-    });
+    if (editingProvisionAdjustmentId) {
+      const existing = detail.adjustments.find((a) => a.id === editingProvisionAdjustmentId);
+      if (existing && isAdjustmentVoided(existing)) return;
+      await detail.handleUpdateAdjustment(editingProvisionAdjustmentId, {
+        type: inlineAdjType,
+        impact: inlineAdjImpact,
+        amount: inlineAmountNum,
+        reason: inlineFinalReason,
+      });
+      setEditingProvisionAdjustmentId(null);
+    } else {
+      await detail.handleSaveAdjustment({
+        type: inlineAdjType,
+        impact: inlineAdjImpact,
+        amount: inlineAmountNum,
+        reason: inlineFinalReason,
+      });
+    }
     setInlineAdjAmount("");
     setInlineAdjReason("");
     setInlineAdjOtherReason("");
@@ -571,6 +597,11 @@ export default function TripDetailScreen({
     (s, tx) => s + Number(tx.amount_in ?? 0),
     0,
   );
+  const receivedFromClient = detail.tripLedgerEntries.reduce(
+    (s, tx) =>
+      tx.contact_type === "client" ? s + Number(tx.amount_in ?? 0) : s,
+    0,
+  );
   const pending = Math.max(0, sales - received);
 
   const supplierPaid = detail.tripLedgerEntries.reduce(
@@ -633,10 +664,13 @@ export default function TripDetailScreen({
       String(trip.vehicle_display_number ?? "").trim() ||
       String(tripExtra.vehicle_number ?? "").trim() ||
       "Pending");
-  const supplierName =
-    detail.partnerName?.trim() || String(tripExtra.supplier_name ?? "").trim() || "Supplier N/A";
-  const clientNameCard =
-    detail.displayClientName?.trim() || String(trip.client_name ?? "").trim() || "Client N/A";
+  const awaitingDataLabel = t("tripsHubAwaitingData");
+  const clientNameForParty =
+    detail.displayClientName?.trim() || String(trip.client_name ?? "").trim() || awaitingDataLabel;
+  const supplierNameForParty =
+    detail.partnerName?.trim() || String(tripExtra.supplier_name ?? "").trim() || awaitingDataLabel;
+  const clientNameCard = clientNameForParty.toUpperCase();
+  const supplierName = supplierNameForParty.toUpperCase();
   const isIntegratedTrip = Boolean(trip.indent_id);
 
   // Determine current step index (0=Assigned, 1=Pickup, 2=In-Transit, 3=Delivered)
@@ -768,6 +802,27 @@ export default function TripDetailScreen({
   const durationLabel = tripExtra.duration_minutes
     ? `${Math.floor(tripExtra.duration_minutes / 60)}h ${tripExtra.duration_minutes % 60}m`
     : "—";
+
+  /** ETA for tracking HUD: prefer DB interval / duration string, else manifest minutes. */
+  const trackingEtaLabel = useMemo(() => {
+    const raw = trip.estimated_duration;
+    if (raw != null && String(raw).trim()) {
+      const s = String(raw).trim();
+      const m = s.match(/^(\d{1,3}):(\d{2}):(\d{2})/);
+      if (m) {
+        const h = parseInt(m[1], 10);
+        const min = parseInt(m[2], 10);
+        if (!Number.isNaN(h) || !Number.isNaN(min)) {
+          if (h > 0 && min > 0) return `${h}h ${min}m`;
+          if (h > 0) return `${h}h`;
+          if (min > 0) return `${min}m`;
+        }
+      }
+      if (/^\d+h\s*\d+m$/i.test(s) || /^\d+[hm]/i.test(s)) return s;
+      return s.length > 14 ? s.slice(0, 14) + "…" : s;
+    }
+    return durationLabel !== "—" ? durationLabel : "—";
+  }, [trip.estimated_duration, durationLabel]);
   const driverRatingLabel =
     detail.driverRatingAvg != null && Number.isFinite(Number(detail.driverRatingAvg))
       ? Number(detail.driverRatingAvg).toFixed(1)
@@ -785,6 +840,13 @@ export default function TripDetailScreen({
   const netManifestYield = Math.max(0, adjSales - adjCost - totalExpenses);
   const revenueSideDelta = adjSales - sales;
   const costSideDelta = adjCost - cost;
+  const receivableAfterAdjustments = Math.max(0, adjSales - receivedFromClient);
+  const revenueAdjLineCount = detail.adjustments.filter(
+    (a) => a.type === "revenue" && !isAdjustmentVoided(a),
+  ).length;
+  const costAdjLineCount = detail.adjustments.filter(
+    (a) => a.type === "cost" && !isAdjustmentVoided(a),
+  ).length;
   const selectedProvisionAdjustments = detail.adjustments.filter((adj) =>
     showFinanceProvisionPanel === "client" ? adj.type === "revenue" : adj.type === "cost",
   );
@@ -794,6 +856,229 @@ export default function TripDetailScreen({
     { label: "Base Cost", value: formatINR(cost), tone: "cost" as const },
     { label: "Cost Adjusted", value: formatINR(adjCost), tone: "cost" as const },
   ];
+
+  const revenueProvisionAdjustments = detail.adjustments.filter((a) => a.type === "revenue");
+  const costProvisionAdjustments = detail.adjustments.filter((a) => a.type === "cost");
+
+  const financeAdjustmentSummaryCardEl = (
+      <View style={neoStyles.adjustmentSummaryCard}>
+        <View style={neoStyles.adjustmentSummaryHeader}>
+          <Text style={neoStyles.adjustmentSummaryTitle}>Adjustment summary</Text>
+          <View style={neoStyles.adjustmentSummaryBadge}>
+            <Text style={neoStyles.adjustmentSummaryBadgeText}>{detail.adjustments.length}</Text>
+          </View>
+        </View>
+        <Text style={neoStyles.adjustmentSummaryHint}>Totals after sale & cost provisions</Text>
+        <View style={neoStyles.adjustmentSummaryRows}>
+          <View style={neoStyles.adjustmentSummaryStat}>
+            <Text style={neoStyles.adjustmentSummaryStatLabel}>Total adjusted sale</Text>
+            <Text style={neoStyles.adjustmentSummaryStatValueSale}>{formatINR(adjSales)}</Text>
+            <Text style={neoStyles.adjustmentSummaryStatMeta}>
+              Base {formatINR(sales)} · Net delta {revenueSideDelta >= 0 ? "+" : "−"}
+              {formatINR(Math.abs(revenueSideDelta))} · {revenueAdjLineCount} line
+              {revenueAdjLineCount === 1 ? "" : "s"}
+            </Text>
+          </View>
+          <View style={neoStyles.adjustmentSummaryDivider} />
+          <View style={neoStyles.adjustmentSummaryStat}>
+            <Text style={neoStyles.adjustmentSummaryStatLabel}>Total adjusted cost</Text>
+            <Text style={neoStyles.adjustmentSummaryStatValueCost}>{formatINR(adjCost)}</Text>
+            <Text style={neoStyles.adjustmentSummaryStatMeta}>
+              Base {formatINR(cost)} · Net delta {costSideDelta >= 0 ? "+" : "−"}
+              {formatINR(Math.abs(costSideDelta))} · {costAdjLineCount} line
+              {costAdjLineCount === 1 ? "" : "s"}
+            </Text>
+          </View>
+        </View>
+        <TouchableOpacity
+          style={neoStyles.capturePaymentBtn}
+          onPress={() => {
+            const tripNum = getTripDisplayNumber(trip);
+            const dueHint = Math.max(0, Math.round(receivableAfterAdjustments));
+            const q = new URLSearchParams({
+              tripId: trip.id,
+              tripNumber: tripNum,
+              defaultType: "in",
+              dueAmountIn: String(dueHint),
+            });
+            if (trip.client_id) {
+              q.set("partyContext", "customers");
+              q.set("partyId", trip.client_id);
+              q.set("partyName", clientNameForParty);
+              q.set("entityType", "CLIENT");
+              q.set("entityId", trip.client_id);
+            }
+            router.push(`/(modals)/ledger-sync?${q.toString()}` as never);
+          }}
+          activeOpacity={0.88}
+        >
+          <Feather name="credit-card" size={16} color="#fff" />
+          <Text style={neoStyles.capturePaymentBtnText}>Capture payment</Text>
+        </TouchableOpacity>
+        <Text style={neoStyles.capturePaymentHint}>
+          {trip.client_id
+            ? `Suggested cash-in: ${formatINR(receivableAfterAdjustments)} vs adjusted sale`
+            : "Link a client on the trip to pre-fill customer receipt"}
+        </Text>
+      </View>
+  );
+
+  /** Shared mobile + desktop: net yield, sale/cost columns with adjustment line items, voyage expense row. */
+  const financeManifestSummaryBlock = (
+    <View style={[styles.refSettleCard, styles.refFinanceManifestHero]}>
+      <Text style={styles.refSettleLabel}>Net Manifest Yield</Text>
+      <Text style={styles.refManifestNetHuge}>{formatINR(netManifestYield)}</Text>
+      <Text style={styles.refSettleHint}>
+        After adjusted revenue, adjusted supplier cost, and voyage spend
+      </Text>
+
+      <View style={[styles.refManifestHeroSplit, isDesktop && styles.refManifestHeroSplitDesktop]}>
+        <View style={styles.refManifestCol}>
+          <View style={styles.refManifestColHead}>
+            <View style={styles.refManifestColHeadLeft}>
+              <View style={[styles.refManifestDot, styles.refManifestDotSales]} />
+              <Text style={styles.refManifestColTitle}>Adjusted sales</Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => setShowFinanceProvisionPanel("client")}
+              style={styles.refManifestMiniPlus}
+              activeOpacity={0.85}
+            >
+              <FontAwesome name="plus" size={10} color="#4f46e5" />
+            </TouchableOpacity>
+          </View>
+          <Text style={[styles.refManifestColAmount, styles.refManifestSalesAmt]}>{formatINR(adjSales)}</Text>
+          <View style={styles.refManifestMicroBox}>
+            <Text style={styles.refManifestMicroLine}>Base · {formatINR(sales)}</Text>
+            <Text style={styles.refManifestMicroAdjSales}>
+              Adj · {revenueSideDelta >= 0 ? "+" : "−"}
+              {formatINR(Math.abs(revenueSideDelta))}
+            </Text>
+          </View>
+          {revenueProvisionAdjustments.length > 0 ? (
+            <View style={neoStyles.financeRailBreakdown}>
+              {revenueProvisionAdjustments.map((adj) => {
+                const voided = isAdjustmentVoided(adj);
+                return (
+                  <View key={adj.id} style={neoStyles.financeRailBreakdownRow}>
+                    <View
+                      style={[neoStyles.financeRailBreakdownDot, neoStyles.financeRailBreakdownDotSale]}
+                    />
+                    <View style={neoStyles.financeRailBreakdownMid}>
+                      <Text
+                        style={[
+                          neoStyles.financeRailBreakdownReason,
+                          voided && neoStyles.financeRailBreakdownStruck,
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {(adj.reason ?? "").trim() || "—"}
+                      </Text>
+                      <Text style={neoStyles.financeRailBreakdownMeta}>{provisionLineMetaLabel(adj)}</Text>
+                      {voided ? (
+                        <Text style={neoStyles.financeRailBreakdownVoidNote} numberOfLines={3}>
+                          Voided: {(adj.void_reason ?? "").trim() || "—"}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <Text
+                      style={[
+                        neoStyles.financeRailBreakdownAmt,
+                        neoStyles.financeRailBreakdownAmtSale,
+                        voided && neoStyles.financeRailBreakdownStruck,
+                      ]}
+                    >
+                      {adj.impact === "plus" ? "+" : "−"}
+                      {formatINR(adj.amount)}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          ) : null}
+        </View>
+
+        <View style={styles.refManifestHeroSep} />
+
+        <View style={[styles.refManifestCol, styles.refManifestColRight]}>
+          <View style={styles.refManifestColHead}>
+            <TouchableOpacity
+              onPress={() => setShowFinanceProvisionPanel("supplier")}
+              style={[styles.refManifestMiniPlus, styles.refManifestMiniPlusMuted]}
+              activeOpacity={0.85}
+            >
+              <FontAwesome name="plus" size={10} color="#e11d48" />
+            </TouchableOpacity>
+            <View style={styles.refManifestColHeadRight}>
+              <Text style={styles.refManifestColTitle}>Adjusted cost</Text>
+              <View style={[styles.refManifestDot, styles.refManifestDotCost]} />
+            </View>
+          </View>
+          <Text style={[styles.refManifestColAmount, styles.refManifestCostAmt]}>{formatINR(adjCost)}</Text>
+          <View style={styles.refManifestMicroBox}>
+            <Text style={[styles.refManifestMicroLine, styles.refManifestMicroRight]}>
+              Base · {formatINR(cost)}
+            </Text>
+            <Text style={styles.refManifestMicroAdjCost}>
+              Adj · {costSideDelta >= 0 ? "+" : "−"}
+              {formatINR(Math.abs(costSideDelta))}
+            </Text>
+          </View>
+          {costProvisionAdjustments.length > 0 ? (
+            <View style={neoStyles.financeRailBreakdown}>
+              {costProvisionAdjustments.map((adj) => {
+                const voided = isAdjustmentVoided(adj);
+                return (
+                  <View key={adj.id} style={neoStyles.financeRailBreakdownRow}>
+                    <View
+                      style={[neoStyles.financeRailBreakdownDot, neoStyles.financeRailBreakdownDotCost]}
+                    />
+                    <View style={neoStyles.financeRailBreakdownMid}>
+                      <Text
+                        style={[
+                          neoStyles.financeRailBreakdownReason,
+                          voided && neoStyles.financeRailBreakdownStruck,
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {(adj.reason ?? "").trim() || "—"}
+                      </Text>
+                      <Text style={neoStyles.financeRailBreakdownMeta}>{provisionLineMetaLabel(adj)}</Text>
+                      {voided ? (
+                        <Text style={neoStyles.financeRailBreakdownVoidNote} numberOfLines={3}>
+                          Voided: {(adj.void_reason ?? "").trim() || "—"}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <Text
+                      style={[
+                        neoStyles.financeRailBreakdownAmt,
+                        neoStyles.financeRailBreakdownAmtCost,
+                        voided && neoStyles.financeRailBreakdownStruck,
+                      ]}
+                    >
+                      {adj.impact === "plus" ? "+" : "−"}
+                      {formatINR(adj.amount)}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          ) : null}
+        </View>
+      </View>
+
+      <View style={styles.refSettleExpenseRow}>
+        <Text style={styles.refSettleExpenseLabel}>Petty / voyage expense</Text>
+        <Text style={styles.refSettleExpenseVal}>{formatINR(totalExpenses)}</Text>
+      </View>
+    </View>
+  );
+
+  const financeAdjustmentSummaryWrappedEl = financeAdjustmentSummaryCardEl ? (
+    <View style={{ marginTop: 12 }}>{financeAdjustmentSummaryCardEl}</View>
+  ) : null;
+
   const filteredFinanceRows = financeHistoryRows.filter((row) => {
     const q = searchTerm.trim().toLowerCase();
     if (!q) return true;
@@ -1022,21 +1307,45 @@ export default function TripDetailScreen({
               <View style={styles.refHeroBridgeRow}>
                 <View style={styles.refHeroBridgeCol}>
                   <View style={styles.refHeroBridgeIconWrap}>
-                    <Feather name="briefcase" size={12} color="#818cf8" />
+                    <PartyAvatar
+                      name={clientNameForParty}
+                      entityType="client"
+                      size={26}
+                      organizationImageUrl={
+                        detail.clientPartyAvatarFields?.organizationImageUrl ?? undefined
+                      }
+                      organizationAvatarSeed={
+                        detail.clientPartyAvatarFields?.organizationAvatarSeed ?? undefined
+                      }
+                      avatarUrl={detail.clientPartyAvatarFields?.avatarUrl ?? undefined}
+                      avatarSeed={detail.clientPartyAvatarFields?.avatarSeed ?? undefined}
+                    />
                   </View>
                   <View>
-                    <Text style={styles.refHeroBridgeLabel}>Client Hub</Text>
+                    <Text style={styles.refHeroBridgeLabel}>CLIENT</Text>
                     <Text style={styles.refHeroBridgeValue} numberOfLines={1}>{clientNameCard}</Text>
                   </View>
                 </View>
                 <FontAwesome name="exchange" size={12} color="#64748b" />
                 <View style={[styles.refHeroBridgeCol, styles.refHeroBridgeColRight]}>
                   <View>
-                    <Text style={[styles.refHeroBridgeLabel, styles.refHeroBridgeLabelRight]}>Supplier Node</Text>
+                    <Text style={[styles.refHeroBridgeLabel, styles.refHeroBridgeLabelRight]}>SUPPLIER</Text>
                     <Text style={styles.refHeroBridgeValue} numberOfLines={1}>{supplierName}</Text>
                   </View>
                   <View style={[styles.refHeroBridgeIconWrap, styles.refHeroBridgeIconWrapRose]}>
-                    <Feather name="truck" size={12} color="#fb7185" />
+                    <PartyAvatar
+                      name={supplierNameForParty}
+                      entityType="supplier"
+                      size={26}
+                      organizationImageUrl={
+                        detail.supplierPartyAvatarFields?.organizationImageUrl ?? undefined
+                      }
+                      organizationAvatarSeed={
+                        detail.supplierPartyAvatarFields?.organizationAvatarSeed ?? undefined
+                      }
+                      avatarUrl={detail.supplierPartyAvatarFields?.avatarUrl ?? undefined}
+                      avatarSeed={detail.supplierPartyAvatarFields?.avatarSeed ?? undefined}
+                    />
                   </View>
                 </View>
               </View>
@@ -1252,76 +1561,8 @@ export default function TripDetailScreen({
 
                 {financeSubTab === "summary" ? (
                   <>
-                    <View style={[styles.refSettleCard, styles.refFinanceManifestHero]}>
-                      <Text style={styles.refSettleLabel}>Net Manifest Yield</Text>
-                      <Text style={styles.refManifestNetHuge}>{formatINR(netManifestYield)}</Text>
-                      <Text style={styles.refSettleHint}>
-                        After adjusted revenue, adjusted supplier cost, and voyage spend
-                      </Text>
-
-                      <View style={styles.refManifestHeroSplit}>
-                        <View style={styles.refManifestCol}>
-                          <View style={styles.refManifestColHead}>
-                            <View style={styles.refManifestColHeadLeft}>
-                              <View style={[styles.refManifestDot, styles.refManifestDotSales]} />
-                              <Text style={styles.refManifestColTitle}>Adjusted sales</Text>
-                            </View>
-                            <TouchableOpacity
-                              onPress={() => setShowFinanceProvisionPanel("client")}
-                              style={styles.refManifestMiniPlus}
-                              activeOpacity={0.85}
-                            >
-                              <FontAwesome name="plus" size={10} color="#4f46e5" />
-                            </TouchableOpacity>
-                          </View>
-                          <Text style={[styles.refManifestColAmount, styles.refManifestSalesAmt]}>
-                            {formatINR(adjSales)}
-                          </Text>
-                          <View style={styles.refManifestMicroBox}>
-                            <Text style={styles.refManifestMicroLine}>Base · {formatINR(sales)}</Text>
-                            <Text style={styles.refManifestMicroAdjSales}>
-                              Adj · {revenueSideDelta >= 0 ? "+" : "−"}
-                              {formatINR(Math.abs(revenueSideDelta))}
-                            </Text>
-                          </View>
-                        </View>
-
-                        <View style={styles.refManifestHeroSep} />
-
-                        <View style={[styles.refManifestCol, styles.refManifestColRight]}>
-                          <View style={styles.refManifestColHead}>
-                            <TouchableOpacity
-                              onPress={() => setShowFinanceProvisionPanel("supplier")}
-                              style={[styles.refManifestMiniPlus, styles.refManifestMiniPlusMuted]}
-                              activeOpacity={0.85}
-                            >
-                              <FontAwesome name="plus" size={10} color="#e11d48" />
-                            </TouchableOpacity>
-                            <View style={styles.refManifestColHeadRight}>
-                              <Text style={styles.refManifestColTitle}>Adjusted cost</Text>
-                              <View style={[styles.refManifestDot, styles.refManifestDotCost]} />
-                            </View>
-                          </View>
-                          <Text style={[styles.refManifestColAmount, styles.refManifestCostAmt]}>
-                            {formatINR(adjCost)}
-                          </Text>
-                          <View style={styles.refManifestMicroBox}>
-                            <Text style={[styles.refManifestMicroLine, styles.refManifestMicroRight]}>
-                              Base · {formatINR(cost)}
-                            </Text>
-                            <Text style={styles.refManifestMicroAdjCost}>
-                              Adj · {costSideDelta >= 0 ? "+" : "−"}
-                              {formatINR(Math.abs(costSideDelta))}
-                            </Text>
-                          </View>
-                        </View>
-                      </View>
-
-                      <View style={styles.refSettleExpenseRow}>
-                        <Text style={styles.refSettleExpenseLabel}>Petty / voyage expense</Text>
-                        <Text style={styles.refSettleExpenseVal}>{formatINR(totalExpenses)}</Text>
-                      </View>
-                    </View>
+                    {financeManifestSummaryBlock}
+                    {financeAdjustmentSummaryWrappedEl}
 
                     {showFinanceProvisionPanel ? (
                       <View style={styles.refProvisionWrap}>
@@ -1475,127 +1716,6 @@ export default function TripDetailScreen({
                         ) : null}
                       </View>
                     ) : null}
-
-                    <View style={styles.refManifestSplitSection}>
-                      <View style={styles.refManifestSplitHead}>
-                        <Feather name="activity" size={16} color="#cbd5e1" />
-                        <Text style={styles.refManifestSplitTitle}>Manifest adjustments split</Text>
-                      </View>
-                      <View style={styles.refManifestBands}>
-                        <View style={styles.refManifestBand}>
-                          <View style={styles.refManifestBandLblRow}>
-                            <Text style={[styles.refManifestBandLbl, styles.refManifestBandLblIn]}>
-                              Sales inbound
-                            </Text>
-                            <Feather name="arrow-up-right" size={14} color="#16a34a" />
-                          </View>
-                          {incomeAdjustmentRows.length === 0 ? (
-                            <Text style={styles.refManifestBandEmpty}>No inbound adjustments yet</Text>
-                          ) : (
-                            incomeAdjustmentRows.map((adj) => (
-                              <View key={adj.id} style={[styles.refManifestBandRow, styles.refManifestBandRowIn]}>
-                                <View style={styles.refManifestBandRowInner}>
-                                  <Feather name="plus" size={12} color="#16a34a" />
-                                  <Text style={styles.refManifestBandReason} numberOfLines={2}>
-                                    {(adj.reason || "").trim() || "Adjustment"}
-                                  </Text>
-                                </View>
-                                <Text style={styles.refManifestBandAmtIn}>{formatINR(adj.amount)}</Text>
-                              </View>
-                            ))
-                          )}
-                        </View>
-
-                        <View style={styles.refManifestBandSep} />
-
-                        <View style={styles.refManifestBand}>
-                          <View style={styles.refManifestBandLblRow}>
-                            <Text style={[styles.refManifestBandLbl, styles.refManifestBandLblOut]}>
-                              Cost outbound
-                            </Text>
-                            <Feather name="activity" size={14} color="#f43f5e" />
-                          </View>
-                          {deductionAdjustmentRows.length === 0 ? (
-                            <Text style={styles.refManifestBandEmpty}>No outbound adjustments yet</Text>
-                          ) : (
-                            deductionAdjustmentRows.map((adj) => (
-                              <View key={adj.id} style={[styles.refManifestBandRow, styles.refManifestBandRowOut]}>
-                                <View style={styles.refManifestBandRowInner}>
-                                  <Feather name="zap" size={12} color="#f43f5e" />
-                                  <Text style={styles.refManifestBandReason} numberOfLines={2}>
-                                    {(adj.reason || "").trim() || "Adjustment"}
-                                  </Text>
-                                </View>
-                                <Text style={styles.refManifestBandAmtOut}>{formatINR(adj.amount)}</Text>
-                              </View>
-                            ))
-                          )}
-                        </View>
-                      </View>
-                    </View>
-
-                    <View style={styles.refFinanceBreakCard}>
-                      <View style={styles.refAdjRegHeader}>
-                        <Text style={styles.refAdjRegTitle}>Adjustment registry</Text>
-                      </View>
-                      {detail.adjustments.length === 0 ? (
-                        <Text style={styles.refFinanceEmpty}>No adjustments yet</Text>
-                      ) : (
-                        detail.adjustments.map((adj) => {
-                          const isRev = adj.type === "revenue";
-                          const isPlus = adj.impact === "plus";
-                          const iconName = !isRev
-                            ? isPlus
-                              ? "arrow-up-right"
-                              : "arrow-down-left"
-                            : isPlus
-                              ? "trending-up"
-                              : "trending-down";
-                          const tint = !isRev
-                            ? isPlus
-                              ? "#f43f5e"
-                              : "#10b981"
-                            : isPlus
-                              ? "#10b981"
-                              : "#f43f5e";
-                          return (
-                            <View key={adj.id} style={styles.refFinanceRow}>
-                              <View style={styles.refFinanceRowLeft}>
-                                <View style={styles.refFinanceRowIcon}>
-                                  <Feather name={iconName as never} size={13} color={tint} />
-                                </View>
-                                <View style={styles.refAdjLabelCol}>
-                                  <Text style={styles.refFinanceRowLabel}>{(adj.reason || "").trim() || "Adjustment"}</Text>
-                                  <Text style={styles.refAdjPartyTag}>
-                                    {adj.type === "revenue" ? "Revenue" : "Supplier cost"}
-                                  </Text>
-                                </View>
-                              </View>
-                              <View style={styles.refAdjRight}>
-                                <Text
-                                  style={[
-                                    styles.refFinanceRowValue,
-                                    (isRev ? isPlus : !isPlus)
-                                      ? styles.refFinanceRowValuePositive
-                                      : styles.refFinanceRowValueNegative,
-                                  ]}
-                                >
-                                  {`${isRev ? (isPlus ? "+" : "−") : isPlus ? "+" : "−"}${formatINR(adj.amount)}`}
-                                </Text>
-                                <TouchableOpacity
-                                  onPress={() => void detail.handleRemoveAdjustment(adj.id)}
-                                  hitSlop={10}
-                                  style={styles.refAdjTrash}
-                                  accessibilityLabel="Remove adjustment"
-                                >
-                                  <FontAwesome name="times-circle" size={15} color="#cbd5e1" />
-                                </TouchableOpacity>
-                              </View>
-                            </View>
-                          );
-                        })
-                      )}
-                    </View>
                   </>
                 ) : (
                   <>
@@ -1698,13 +1818,21 @@ export default function TripDetailScreen({
                   <View style={neoStyles.heroGlow} />
                   <View style={neoStyles.heroBridge}>
                     <View style={neoStyles.heroParty}>
-                      <NeoPartyAvatar
-                        uri={detail.clientAvatarUri}
-                        name={clientNameCard}
-                        icon="briefcase"
+                      <PartyAvatar
+                        name={clientNameForParty}
+                        entityType="client"
+                        size={34}
+                        organizationImageUrl={
+                          detail.clientPartyAvatarFields?.organizationImageUrl ?? undefined
+                        }
+                        organizationAvatarSeed={
+                          detail.clientPartyAvatarFields?.organizationAvatarSeed ?? undefined
+                        }
+                        avatarUrl={detail.clientPartyAvatarFields?.avatarUrl ?? undefined}
+                        avatarSeed={detail.clientPartyAvatarFields?.avatarSeed ?? undefined}
                       />
                       <View style={neoStyles.heroPartyText}>
-                        <Text style={neoStyles.heroKicker}>Client Supply Node</Text>
+                        <Text style={neoStyles.heroKicker}>CLIENT</Text>
                         <Text style={neoStyles.heroPartyName} numberOfLines={1}>
                           {clientNameCard}
                         </Text>
@@ -1715,18 +1843,23 @@ export default function TripDetailScreen({
                     </View>
                     <View style={[neoStyles.heroParty, neoStyles.heroPartyRight]}>
                       <View style={neoStyles.heroPartyTextRight}>
-                        <Text style={[neoStyles.heroKicker, neoStyles.alignRight]}>
-                          Carrier Provision
-                        </Text>
+                        <Text style={[neoStyles.heroKicker, neoStyles.alignRight]}>SUPPLIER</Text>
                         <Text style={neoStyles.heroPartyName} numberOfLines={1}>
                           {supplierName}
                         </Text>
                       </View>
-                      <NeoPartyAvatar
-                        uri={detail.supplierAvatarUri}
-                        name={supplierName}
-                        icon="truck"
-                        tone="rose"
+                      <PartyAvatar
+                        name={supplierNameForParty}
+                        entityType="supplier"
+                        size={34}
+                        organizationImageUrl={
+                          detail.supplierPartyAvatarFields?.organizationImageUrl ?? undefined
+                        }
+                        organizationAvatarSeed={
+                          detail.supplierPartyAvatarFields?.organizationAvatarSeed ?? undefined
+                        }
+                        avatarUrl={detail.supplierPartyAvatarFields?.avatarUrl ?? undefined}
+                        avatarSeed={detail.supplierPartyAvatarFields?.avatarSeed ?? undefined}
                       />
                     </View>
                   </View>
@@ -1953,11 +2086,21 @@ export default function TripDetailScreen({
                           sourceCoords={detail.trackingMapOriginCoordinate ?? undefined}
                           destCoords={detail.trackingMapDestinationCoordinate ?? undefined}
                           truckLocation={detail.driverLocation ?? undefined}
-                          height={380}
+                          truckStatus={
+                            detail.driverLocation
+                              ? {
+                                  truckNo: allocatedVehicleLabel,
+                                  speed: 0,
+                                  ignitionStatus: false,
+                                  location: detail.driverLocationAddress?.trim() || undefined,
+                                  lastUpdated: detail.driverLocation.recorded_at,
+                                }
+                              : null
+                          }
+                          height="100%"
                           onDistanceCalculated={setMapRouteDistanceKm}
                         />
                       </View>
-                      <View style={neoStyles.radarMapScrim} />
                       <View style={neoStyles.radarTopLeft}>
                         <TouchableOpacity
                           style={neoStyles.radarControl}
@@ -1987,7 +2130,7 @@ export default function TripDetailScreen({
                           <Text style={neoStyles.radarSpeed}>
                             {resolvedDistanceLabel ?? "Calculating"}{" "}
                             <Text style={neoStyles.radarSpeedUnit}>
-                              · {trip.estimated_duration ? String(trip.estimated_duration) : durationLabel}
+                              · ETA {trackingEtaLabel}
                             </Text>
                           </Text>
                         </View>
@@ -2016,145 +2159,87 @@ export default function TripDetailScreen({
                     </View>
                     {financeSubTab === "summary" ? (
                       <>
-                        <View style={neoStyles.financeSummaryWorkspace}>
-                          <View style={neoStyles.financeSummaryMain}>
-                            <View style={neoStyles.yieldCard}>
-                              <View style={neoStyles.yieldOrb} />
-                              <Text style={neoStyles.yieldLabel}>Net Manifest Yield</Text>
-                              <Text style={neoStyles.yieldValue}>{formatINR(netManifestYield)}</Text>
-                              <View style={neoStyles.yieldFormula}>
-                                <View style={neoStyles.yieldFormulaItem}>
-                                  <Text style={neoStyles.yieldFormulaLabel}>Sales</Text>
-                                  <Text style={neoStyles.yieldFormulaValue}>{formatINR(adjSales)}</Text>
-                                </View>
-                                <Text style={neoStyles.yieldFormulaOperator}>−</Text>
-                                <View style={neoStyles.yieldFormulaItem}>
-                                  <Text style={neoStyles.yieldFormulaLabel}>Cost</Text>
-                                  <Text style={[neoStyles.yieldFormulaValue, neoStyles.yieldFormulaCost]}>
-                                    {formatINR(adjCost)}
+                        <View style={neoStyles.financeSummaryTwoPane}>
+                          <View style={neoStyles.financeSummaryPaneLeft}>
+                            <View style={neoStyles.financeManifestInPane}>
+                              {financeManifestSummaryBlock}
+                              {financeAdjustmentSummaryWrappedEl}
+                            </View>
+                          </View>
+                          <View style={neoStyles.financeSummaryPaneRight}>
+                            <View style={neoStyles.financeLedgerPreviewCard}>
+                              <View style={neoStyles.financeLedgerPreviewHead}>
+                                <Text style={neoStyles.financeLedgerPreviewTitle}>Ledger snapshot</Text>
+                                <TouchableOpacity
+                                  style={neoStyles.financeLedgerPreviewLink}
+                                  onPress={() => setFinanceSubTab("transactions")}
+                                  activeOpacity={0.85}
+                                  accessibilityRole="button"
+                                  accessibilityLabel="View full transaction list"
+                                >
+                                  <Text style={neoStyles.financeLedgerPreviewLinkText}>View all</Text>
+                                  <Feather name="chevron-right" size={14} color="#4f46e5" />
+                                </TouchableOpacity>
+                              </View>
+                              <Text style={neoStyles.financeLedgerPreviewSub}>
+                                {financeHistoryRows.length === 0
+                                  ? "No cash movements on this trip yet"
+                                  : `${financeHistoryRows.length} movement${
+                                      financeHistoryRows.length === 1 ? "" : "s"
+                                    } · newest first`}
+                              </Text>
+                              <ScrollView
+                                style={neoStyles.financeLedgerPreviewScroll}
+                                contentContainerStyle={neoStyles.financeLedgerPreviewScrollContent}
+                                nestedScrollEnabled
+                                showsVerticalScrollIndicator={false}
+                              >
+                                {financeHistoryRows.length === 0 ? (
+                                  <Text style={neoStyles.financeLedgerPreviewEmpty}>
+                                    Trip ledger entries appear here when you record receipts or payouts.
                                   </Text>
-                                </View>
-                                <Text style={neoStyles.yieldFormulaOperator}>−</Text>
-                                <View style={neoStyles.yieldFormulaItem}>
-                                  <Text style={neoStyles.yieldFormulaLabel}>Expense</Text>
-                                  <Text style={neoStyles.yieldFormulaValue}>{formatINR(totalExpenses)}</Text>
-                                </View>
-                              </View>
-                              <View style={neoStyles.expenseStrip}>
-                                <Text style={neoStyles.expenseStripLabel}>Ledger snapshot</Text>
-                                <Text style={neoStyles.expenseStripValue}>
-                                  {financeHistoryRows.length} transaction{financeHistoryRows.length === 1 ? "" : "s"}
-                                </Text>
-                              </View>
-                            </View>
-                          </View>
-
-                          <View style={neoStyles.financeSideRail}>
-                            <TouchableOpacity
-                              style={neoStyles.financeRailCard}
-                              onPress={() => setShowFinanceProvisionPanel("client")}
-                              activeOpacity={0.88}
-                            >
-                              <View style={neoStyles.financeRailHead}>
-                                <View style={neoStyles.greenDot} />
-                                <Text style={neoStyles.financeRailLabel}>Adjusted Client Sales</Text>
-                                <View style={neoStyles.yieldMiniBtn}>
-                                  <FontAwesome name="plus" size={9} color="#059669" />
-                                </View>
-                              </View>
-                              <Text style={neoStyles.financeRailValue}>{formatINR(adjSales)}</Text>
-                              <Text style={neoStyles.financeRailMeta}>
-                                Base {formatINR(sales)} · Adj {revenueSideDelta >= 0 ? "+" : "−"}
-                                {formatINR(Math.abs(revenueSideDelta))}
-                              </Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                              style={neoStyles.financeRailCard}
-                              onPress={() => setShowFinanceProvisionPanel("supplier")}
-                              activeOpacity={0.88}
-                            >
-                              <View style={neoStyles.financeRailHead}>
-                                <View style={neoStyles.redDot} />
-                                <Text style={neoStyles.financeRailLabel}>Adjusted Supplier Cost</Text>
-                                <View style={[neoStyles.yieldMiniBtn, neoStyles.yieldMiniBtnRed]}>
-                                  <FontAwesome name="minus" size={9} color="#e11d48" />
-                                </View>
-                              </View>
-                              <Text style={[neoStyles.financeRailValue, neoStyles.financeRailCost]}>
-                                {formatINR(adjCost)}
-                              </Text>
-                              <Text style={neoStyles.financeRailMeta}>
-                                Base {formatINR(cost)} · Adj {costSideDelta >= 0 ? "+" : "−"}
-                                {formatINR(Math.abs(costSideDelta))}
-                              </Text>
-                            </TouchableOpacity>
-
-                            <View style={neoStyles.financeRailCard}>
-                              <View style={neoStyles.financeRailHead}>
-                                <View style={neoStyles.financeRailExpenseDot} />
-                                <Text style={neoStyles.financeRailLabel}>Voyage Expense</Text>
-                              </View>
-                              <Text style={neoStyles.financeRailExpenseValue}>{formatINR(totalExpenses)}</Text>
-                              <Text style={neoStyles.financeRailMeta}>Petty cash and trip outflow</Text>
-                            </View>
-                          </View>
-                        </View>
-
-                        <View style={neoStyles.adjustmentLedgerCard}>
-                          <View style={neoStyles.adjustmentLedgerHeader}>
-                            <View>
-                              <Text style={neoStyles.adjustmentLedgerTitle}>Adjustment Registry</Text>
-                              <Text style={neoStyles.adjustmentLedgerSub}>
-                                Sale and cost provisions applied to this manifest
-                              </Text>
-                            </View>
-                            <View style={neoStyles.adjustmentLedgerCount}>
-                              <Text style={neoStyles.adjustmentLedgerCountText}>
-                                {detail.adjustments.length}
-                              </Text>
-                            </View>
-                          </View>
-                          {detail.adjustments.length === 0 ? (
-                            <Text style={neoStyles.adjustmentLedgerEmpty}>No adjustments added yet</Text>
-                          ) : (
-                            <View style={neoStyles.adjustmentLedgerRows}>
-                              {detail.adjustments.map((adj) => {
-                                const isRevenue = adj.type === "revenue";
-                                const isPlus = adj.impact === "plus";
-                                return (
-                                  <View key={adj.id} style={neoStyles.adjustmentLedgerRow}>
-                                    <View
-                                      style={[
-                                        neoStyles.adjustmentLedgerDot,
-                                        isRevenue
-                                          ? neoStyles.adjustmentLedgerDotSale
-                                          : neoStyles.adjustmentLedgerDotCost,
-                                      ]}
-                                    />
-                                    <View style={neoStyles.adjustmentLedgerInfo}>
-                                      <Text style={neoStyles.adjustmentLedgerReason} numberOfLines={1}>
-                                        {adj.reason || "Adjustment"}
-                                      </Text>
-                                      <Text style={neoStyles.adjustmentLedgerMeta}>
-                                        {isRevenue ? "Sale" : "Cost"} · {isPlus ? "Add-on" : "Deduction"}
+                                ) : (
+                                  financeHistoryRows.slice(0, 8).map((row) => (
+                                    <View key={row.key} style={neoStyles.financePreviewTxnRow}>
+                                      <View
+                                        style={[
+                                          neoStyles.financePreviewTxnIcon,
+                                          row.isIn
+                                            ? neoStyles.financePreviewTxnIconIn
+                                            : neoStyles.financePreviewTxnIconOut,
+                                        ]}
+                                      >
+                                        <Feather
+                                          name={row.isIn ? "arrow-down-left" : "arrow-up-right"}
+                                          size={14}
+                                          color={row.isIn ? "#10b981" : "#f43f5e"}
+                                        />
+                                      </View>
+                                      <View style={neoStyles.financePreviewTxnMid}>
+                                        <Text style={neoStyles.financePreviewTxnTitle} numberOfLines={1}>
+                                          {ledgerHistoryTitle(row.tx, row.isIn)}
+                                        </Text>
+                                        <Text style={neoStyles.financePreviewTxnMeta} numberOfLines={1}>
+                                          {formatLedgerDate(row.tx.transaction_date)} ·{" "}
+                                          {row.tx.payment_mode || "Wallet"}
+                                        </Text>
+                                      </View>
+                                      <Text
+                                        style={[
+                                          neoStyles.financePreviewTxnAmt,
+                                          row.isIn
+                                            ? neoStyles.financePreviewTxnAmtIn
+                                            : neoStyles.financePreviewTxnAmtOut,
+                                        ]}
+                                      >
+                                        {formatINR(row.amount)}
                                       </Text>
                                     </View>
-                                    <Text
-                                      style={[
-                                        neoStyles.adjustmentLedgerAmount,
-                                        isRevenue
-                                          ? neoStyles.adjustmentLedgerAmountSale
-                                          : neoStyles.adjustmentLedgerAmountCost,
-                                      ]}
-                                    >
-                                      {isPlus ? "+" : "−"}{formatINR(adj.amount)}
-                                    </Text>
-                                  </View>
-                                );
-                              })}
+                                  ))
+                                )}
+                              </ScrollView>
                             </View>
-                          )}
+                          </View>
                         </View>
 
                         {false && showFinanceProvisionPanel ? (
@@ -2972,7 +3057,7 @@ export default function TripDetailScreen({
                 : detail.vehicleLabel
             }
             onSaveAdjustment={detail.handleSaveAdjustment}
-            onRemoveAdjustment={detail.handleRemoveAdjustment}
+            onRemoveAdjustment={detail.handleVoidAdjustment}
             currentUserId={detail.currentUserId}
             tripDocs={detail.computedTripDocs}
             onOpenDoc={handleDocOpen}
@@ -3023,10 +3108,7 @@ export default function TripDetailScreen({
         visible={!!showFinanceProvisionPanel}
         animationType="fade"
         transparent
-        onRequestClose={() => {
-          setShowFinanceProvisionPanel(null);
-          setShowInlineAdjustmentForm(false);
-        }}
+        onRequestClose={closeFinanceProvisionModal}
       >
         <View style={neoStyles.provisionModalBackdrop}>
           <View style={neoStyles.provisionModalCard}>
@@ -3041,10 +3123,7 @@ export default function TripDetailScreen({
                   </Text>
                 </View>
                 <TouchableOpacity
-                  onPress={() => {
-                    setShowFinanceProvisionPanel(null);
-                    setShowInlineAdjustmentForm(false);
-                  }}
+                  onPress={closeFinanceProvisionModal}
                   style={neoStyles.provisionClose}
                   activeOpacity={0.85}
                 >
@@ -3066,6 +3145,39 @@ export default function TripDetailScreen({
                   </Text>
                   </View>
                 ))}
+              </View>
+
+              <View style={neoStyles.provisionCnDnRow}>
+                <TouchableOpacity
+                  style={[neoStyles.provisionCnDnBtn, neoStyles.provisionCnDnBtnCredit]}
+                  onPress={() => {
+                    if (!showFinanceProvisionPanel) return;
+                    openInlineAdjustmentForm({
+                      type: showFinanceProvisionPanel === "client" ? "revenue" : "cost",
+                      impact: "minus",
+                      reasonSeed: "Other",
+                    });
+                  }}
+                  activeOpacity={0.88}
+                >
+                  <Feather name="plus" size={18} color="#a5b4fc" />
+                  <Text style={neoStyles.provisionCnDnLabel}>Credit (CN)</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[neoStyles.provisionCnDnBtn, neoStyles.provisionCnDnBtnDebit]}
+                  onPress={() => {
+                    if (!showFinanceProvisionPanel) return;
+                    openInlineAdjustmentForm({
+                      type: showFinanceProvisionPanel === "client" ? "revenue" : "cost",
+                      impact: "plus",
+                      reasonSeed: "Other",
+                    });
+                  }}
+                  activeOpacity={0.88}
+                >
+                  <Feather name="minus" size={18} color="#fca5a5" />
+                  <Text style={neoStyles.provisionCnDnLabel}>Debit (DN)</Text>
+                </TouchableOpacity>
               </View>
 
               <View style={neoStyles.provisionChips}>
@@ -3091,16 +3203,21 @@ export default function TripDetailScreen({
                 <View style={neoStyles.provisionForm}>
                   <View style={neoStyles.provisionFormHead}>
                     <View>
-                      <Text style={neoStyles.provisionFormTitle}>Add Adjustment</Text>
+                      <Text style={neoStyles.provisionFormTitle}>
+                        {editingProvisionAdjustmentId ? "Edit adjustment" : "Add adjustment"}
+                      </Text>
                       <Text style={neoStyles.provisionFormMeta}>
                         {`${inlineAdjType === "revenue" ? "Sale / revenue" : "Supplier cost"} · ${
-                          inlineAdjImpact === "plus" ? "Debit add-on" : "Credit deduction"
+                          inlineAdjImpact === "plus" ? "Debit note (DN)" : "Credit note (CN)"
                         }`}
                     </Text>
                   </View>
                   <TouchableOpacity
                       style={neoStyles.provisionFormClose}
-                      onPress={() => setShowInlineAdjustmentForm(false)}
+                      onPress={() => {
+                        setShowInlineAdjustmentForm(false);
+                        setEditingProvisionAdjustmentId(null);
+                      }}
                       activeOpacity={0.85}
                     >
                       <Feather name="x" size={14} color="#475569" />
@@ -3165,46 +3282,189 @@ export default function TripDetailScreen({
                     disabled={!canSaveInlineAdjustment}
                     activeOpacity={0.86}
                   >
-                    <Text style={neoStyles.provisionSaveText}>Save Adjustment</Text>
+                    <Text style={neoStyles.provisionSaveText}>
+                      {editingProvisionAdjustmentId ? "Save changes" : "Save adjustment"}
+                    </Text>
                   </TouchableOpacity>
             </View>
               ) : null}
 
               <View style={neoStyles.provisionAppliedList}>
-                <Text style={neoStyles.provisionAppliedTitle}>Added Adjustments</Text>
+                <Text style={neoStyles.provisionAppliedTitle}>Added adjustments</Text>
                 {selectedProvisionAdjustments.length === 0 ? (
                   <Text style={neoStyles.provisionAppliedEmpty}>
                     No {showFinanceProvisionPanel === "client" ? "sale" : "cost"} adjustment added yet.
                   </Text>
                 ) : (
-                  selectedProvisionAdjustments.map((adj) => (
-                    <View key={adj.id} style={neoStyles.provisionAppliedRow}>
-                      <View style={neoStyles.provisionAppliedInfo}>
-                        <Text style={neoStyles.provisionAppliedReason} numberOfLines={1}>
-                          {adj.reason || "Adjustment"}
+                  selectedProvisionAdjustments.map((adj) => {
+                    const voided = isAdjustmentVoided(adj);
+                    return (
+                      <View key={adj.id} style={neoStyles.provisionAppliedRow}>
+                        <View style={neoStyles.provisionAppliedInfo}>
+                          <Text
+                            style={[neoStyles.provisionAppliedReason, voided && neoStyles.financeRailBreakdownStruck]}
+                            numberOfLines={voided ? 2 : 1}
+                          >
+                            {adj.reason || "Adjustment"}
+                          </Text>
+                          <Text style={neoStyles.provisionAppliedMeta}>
+                            {adj.impact === "plus" ? "Debit note (DN)" : "Credit note (CN)"}
+                          </Text>
+                          {voided ? (
+                            <Text style={neoStyles.financeRailBreakdownVoidNote} numberOfLines={3}>
+                              Voided: {(adj.void_reason ?? "").trim() || "—"}
+                            </Text>
+                          ) : null}
+                        </View>
+                        <Text
+                          style={[
+                            neoStyles.provisionAppliedAmount,
+                            voided && neoStyles.financeRailBreakdownStruck,
+                          ]}
+                        >
+                          {adj.impact === "plus" ? "+" : "−"}
+                          {formatINR(adj.amount)}
                         </Text>
-                        <Text style={neoStyles.provisionAppliedMeta}>
-                          {adj.impact === "plus" ? "Add-on" : "Deduction"}
-                        </Text>
-          </View>
-                      <Text style={neoStyles.provisionAppliedAmount}>
-                        {adj.impact === "plus" ? "+" : "−"}{formatINR(adj.amount)}
-                      </Text>
-                      <TouchableOpacity
-                        style={neoStyles.provisionAppliedRemove}
-                        onPress={() => void detail.handleRemoveAdjustment(adj.id)}
-                        activeOpacity={0.82}
-                      >
-                        <Feather name="trash-2" size={12} color="#94a3b8" />
-                      </TouchableOpacity>
-                    </View>
-                  ))
+                        {!voided ? (
+                          <View style={neoStyles.provisionAppliedActions}>
+                            <TouchableOpacity
+                              style={neoStyles.provisionAppliedEdit}
+                              onPress={() => setProvisionConfirm({ mode: "edit", adjustment: adj })}
+                              activeOpacity={0.82}
+                              accessibilityLabel="Edit adjustment"
+                            >
+                              <Feather name="edit-2" size={12} color="#94a3b8" />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={neoStyles.provisionAppliedRemove}
+                              onPress={() => {
+                                setProvisionVoidReason("");
+                                setProvisionConfirm({ mode: "delete", adjustment: adj });
+                              }}
+                              activeOpacity={0.82}
+                              accessibilityLabel="Void adjustment"
+                            >
+                              <Feather name="trash-2" size={12} color="#94a3b8" />
+                            </TouchableOpacity>
+                          </View>
+                        ) : null}
+                      </View>
+                    );
+                  })
                 )}
               </View>
             </View>
           </View>
         </View>
       </Modal>
+
+      <Modal
+        visible={provisionConfirm !== null}
+        animationType="fade"
+        transparent
+        onRequestClose={() => {
+          setProvisionConfirm(null);
+          setProvisionVoidReason("");
+        }}
+      >
+        <View style={neoStyles.provisionConfirmBackdrop}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => {
+              setProvisionConfirm(null);
+              setProvisionVoidReason("");
+            }}
+          />
+          <View style={neoStyles.provisionConfirmCard} pointerEvents="box-none">
+            <Text style={neoStyles.provisionConfirmTitle}>
+              {provisionConfirm?.mode === "delete" ? "Void adjustment?" : "Edit adjustment?"}
+            </Text>
+            {provisionConfirm ? (
+              <>
+                <View style={neoStyles.provisionConfirmBlock}>
+                  <Text style={neoStyles.provisionConfirmLine}>
+                    {provisionConfirm.adjustment.type === "revenue" ? "Client sale" : "Supplier cost"} ·{" "}
+                    {provisionConfirm.adjustment.impact === "plus"
+                      ? "Debit note (DN)"
+                      : "Credit note (CN)"}
+                  </Text>
+                  <Text style={neoStyles.provisionConfirmLine}>
+                    Amount: {provisionConfirm.adjustment.impact === "plus" ? "+" : "−"}
+                    {formatINR(provisionConfirm.adjustment.amount)}
+                  </Text>
+                  <Text style={neoStyles.provisionConfirmLine} numberOfLines={3}>
+                    Reason: {(provisionConfirm.adjustment.reason ?? "").trim() || "—"}
+                  </Text>
+                </View>
+                {provisionConfirm.mode === "delete" ? (
+                  <>
+                    <Text style={neoStyles.provisionVoidReasonLabel}>Reason for voiding</Text>
+                    <TextInput
+                      value={provisionVoidReason}
+                      onChangeText={setProvisionVoidReason}
+                      placeholder="Required — why should this line be voided?"
+                      placeholderTextColor="#94a3b8"
+                      style={neoStyles.provisionVoidReasonInput}
+                      multiline
+                      maxLength={240}
+                    />
+                  </>
+                ) : null}
+                <Text style={neoStyles.provisionConfirmHint}>
+                  {provisionConfirm.mode === "delete"
+                    ? "The line stays in the list as struck-through with your note. Adjusted totals will exclude it."
+                    : "Next you can change amount, credit/debit type, or reason in the form."}
+                </Text>
+              </>
+            ) : null}
+            <View style={neoStyles.provisionConfirmActions}>
+              <TouchableOpacity
+                style={neoStyles.provisionConfirmCancel}
+                onPress={() => {
+                  setProvisionConfirm(null);
+                  setProvisionVoidReason("");
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={neoStyles.provisionConfirmCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  provisionConfirm?.mode === "delete"
+                    ? neoStyles.provisionConfirmDanger
+                    : neoStyles.provisionConfirmPrimary,
+                  provisionConfirm?.mode === "delete" &&
+                    !provisionVoidReason.trim() &&
+                    neoStyles.provisionConfirmDangerDisabled,
+                ]}
+                disabled={
+                  provisionConfirm?.mode === "delete" && !String(provisionVoidReason ?? "").trim()
+                }
+                onPress={() => {
+                  if (!provisionConfirm) return;
+                  if (provisionConfirm.mode === "delete") {
+                    const r = String(provisionVoidReason ?? "").trim();
+                    if (!r) return;
+                    void detail.handleVoidAdjustment(provisionConfirm.adjustment.id, r);
+                    setProvisionConfirm(null);
+                    setProvisionVoidReason("");
+                  } else {
+                    const adj = provisionConfirm.adjustment;
+                    setProvisionConfirm(null);
+                    beginInlineEditFromAdjustment(adj);
+                  }
+                }}
+                activeOpacity={0.88}
+              >
+                <Text style={neoStyles.provisionConfirmOkText}>
+                  {provisionConfirm?.mode === "delete" ? "Void line" : "Continue"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <ThemedAlertModal
         visible={detail.showDriverRejectedModal}
         title="Driver Rejected"
@@ -4442,6 +4702,7 @@ const neoStyles = StyleSheet.create({
   journeyGrid: {
     flexDirection: "row",
     gap: 18,
+    alignItems: "flex-start",
   },
   timelineCard: {
     flex: 5,
@@ -4701,7 +4962,9 @@ const neoStyles = StyleSheet.create({
   },
   radarCard: {
     flex: 7,
-    minHeight: 380,
+    minWidth: 280,
+    minHeight: 480,
+    height: 520,
     borderRadius: 42,
     overflow: "hidden",
     backgroundColor: "#0f172a",
@@ -4714,11 +4977,6 @@ const neoStyles = StyleSheet.create({
   radarMapLayer: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "#0f172a",
-  },
-  radarMapScrim: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(15,23,42,0.18)",
-    pointerEvents: "none" as never,
   },
   radarGrid: {
     ...StyleSheet.absoluteFillObject,
@@ -4817,13 +5075,19 @@ const neoStyles = StyleSheet.create({
   },
   radarBottom: {
     position: "absolute",
-    left: 32,
-    right: 32,
-    bottom: 30,
+    left: 14,
+    right: 14,
+    bottom: 16,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-end",
-    gap: 24,
+    gap: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 18,
+    backgroundColor: "rgba(15, 23, 42, 0.88)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
   },
   radarBottomRight: {
     alignItems: "flex-end",
@@ -4863,19 +5127,178 @@ const neoStyles = StyleSheet.create({
   financeStack: {
     gap: 14,
   },
+  /** Desktop finance summary: same manifest + adjustment stack as mobile, max width for readability. */
+  financeManifestDesktopWrap: {
+    width: "100%" as const,
+    maxWidth: 1040,
+    alignSelf: "center",
+    gap: 0,
+  },
+  /** Full-width manifest column inside two-pane (no maxWidth cap). */
+  financeManifestInPane: {
+    width: "100%" as const,
+    gap: 0,
+  },
+  financeSummaryTwoPane: {
+    flexDirection: "row",
+    gap: 18,
+    alignItems: "flex-start",
+    width: "100%" as const,
+  },
+  financeSummaryPaneLeft: {
+    flex: 1.28,
+    minWidth: 0,
+  },
+  financeSummaryPaneRight: {
+    flex: 0.85,
+    minWidth: 268,
+    maxWidth: 400,
+  },
+  financeLedgerPreviewCard: {
+    width: "100%",
+    backgroundColor: "#fff",
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#eef2f7",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.05,
+    shadowRadius: 18,
+    elevation: 2,
+  },
+  financeLedgerPreviewHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 6,
+  },
+  financeLedgerPreviewTitle: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#64748b",
+    letterSpacing: 1.8,
+    textTransform: "uppercase",
+  },
+  financeLedgerPreviewLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    flexShrink: 0,
+  },
+  financeLedgerPreviewLinkText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#4f46e5",
+  },
+  financeLedgerPreviewSub: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#94a3b8",
+    marginBottom: 10,
+    lineHeight: 15,
+  },
+  financeLedgerPreviewScroll: {
+    maxHeight: 420,
+  },
+  financeLedgerPreviewScrollContent: {
+    gap: 8,
+    paddingBottom: 4,
+  },
+  financeLedgerPreviewEmpty: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#94a3b8",
+    lineHeight: 18,
+    paddingVertical: 12,
+  },
+  financePreviewTxnRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 11,
+    borderRadius: 14,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
+  },
+  financePreviewTxnIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  financePreviewTxnIconIn: {
+    backgroundColor: "#ecfdf5",
+  },
+  financePreviewTxnIconOut: {
+    backgroundColor: "#fff1f2",
+  },
+  financePreviewTxnMid: {
+    flex: 1,
+    minWidth: 0,
+  },
+  financePreviewTxnTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  financePreviewTxnMeta: {
+    marginTop: 2,
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  financePreviewTxnAmt: {
+    fontSize: 13,
+    fontWeight: "900",
+    fontStyle: "italic",
+    flexShrink: 0,
+  },
+  financePreviewTxnAmtIn: {
+    color: "#059669",
+  },
+  financePreviewTxnAmtOut: {
+    color: "#e11d48",
+  },
   financeSummaryWorkspace: {
     flexDirection: "row",
     gap: 16,
     alignItems: "stretch",
   },
+  /** Below desktop breakpoint: stack yield, then rail cards (sales → cost → voyage → summary). */
+  financeSummaryWorkspaceStack: {
+    flexDirection: "column",
+  },
   financeSummaryMain: {
-    flex: 1.35,
+    flex: 1.25,
     minWidth: 0,
   },
+  financeSummaryMainStack: {
+    flexGrow: 0,
+    flexShrink: 0,
+    width: "100%",
+    alignSelf: "stretch",
+  },
   financeSideRail: {
-    flex: 0.85,
+    flex: 1,
     minWidth: 300,
     gap: 10,
+  },
+  financeSideRailStack: {
+    flexGrow: 0,
+    minWidth: 0,
+    width: "100%",
+    alignSelf: "stretch",
   },
   financeSubTabs: {
     flexDirection: "row",
@@ -5051,11 +5474,14 @@ const neoStyles = StyleSheet.create({
     borderColor: "#f1f5f9",
     backgroundColor: "#fff",
     padding: 16,
-    justifyContent: "center",
+    justifyContent: "flex-start",
     shadowColor: "#0f172a",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.045,
     shadowRadius: 16,
+  },
+  financeRailCardTap: {
+    width: "100%",
   },
   financeRailHead: {
     flexDirection: "row",
@@ -5099,6 +5525,180 @@ const neoStyles = StyleSheet.create({
     fontWeight: "800",
     textTransform: "uppercase",
     letterSpacing: 0.7,
+  },
+  financeRailBreakdown: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#f1f5f9",
+    gap: 8,
+    width: "100%",
+  },
+  financeRailBreakdownRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  financeRailBreakdownDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginTop: 4,
+  },
+  financeRailBreakdownDotSale: {
+    backgroundColor: "#10b981",
+  },
+  financeRailBreakdownDotCost: {
+    backgroundColor: "#f43f5e",
+  },
+  financeRailBreakdownMid: {
+    flex: 1,
+    minWidth: 0,
+  },
+  financeRailBreakdownReason: {
+    color: "#0f172a",
+    fontSize: 10,
+    fontWeight: "800",
+    lineHeight: 14,
+  },
+  financeRailBreakdownMeta: {
+    marginTop: 3,
+    color: "#94a3b8",
+    fontSize: 7.5,
+    fontWeight: "900",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  financeRailBreakdownAmt: {
+    fontSize: 10,
+    fontWeight: "900",
+    fontStyle: "italic",
+    flexShrink: 0,
+  },
+  financeRailBreakdownAmtSale: {
+    color: "#059669",
+  },
+  financeRailBreakdownAmtCost: {
+    color: "#e11d48",
+  },
+  financeRailBreakdownStruck: {
+    textDecorationLine: "line-through",
+    opacity: 0.72,
+  },
+  financeRailBreakdownVoidNote: {
+    marginTop: 6,
+    color: "#64748b",
+    fontSize: 8,
+    fontWeight: "700",
+    fontStyle: "italic",
+    lineHeight: 12,
+  },
+  adjustmentSummaryCard: {
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#e8ecf4",
+    backgroundColor: "#fff",
+    padding: 16,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.05,
+    shadowRadius: 16,
+    marginBottom: 2,
+  },
+  adjustmentSummaryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  adjustmentSummaryTitle: {
+    flex: 1,
+    color: "#0f172a",
+    fontSize: 10,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+  },
+  adjustmentSummaryBadge: {
+    minWidth: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: `${Theme.primary}14`,
+  },
+  adjustmentSummaryBadgeText: {
+    color: Theme.primary,
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  adjustmentSummaryHint: {
+    marginTop: 6,
+    color: "#94a3b8",
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.2,
+  },
+  adjustmentSummaryRows: {
+    marginTop: 14,
+    gap: 12,
+  },
+  adjustmentSummaryStat: {
+    gap: 4,
+  },
+  adjustmentSummaryStatLabel: {
+    color: "#94a3b8",
+    fontSize: 8,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  adjustmentSummaryStatValueSale: {
+    color: "#059669",
+    fontSize: 20,
+    fontWeight: "900",
+    fontStyle: "italic",
+  },
+  adjustmentSummaryStatValueCost: {
+    color: "#e11d48",
+    fontSize: 20,
+    fontWeight: "900",
+    fontStyle: "italic",
+  },
+  adjustmentSummaryStatMeta: {
+    color: "#cbd5e1",
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+    lineHeight: 12,
+  },
+  adjustmentSummaryDivider: {
+    height: 1,
+    backgroundColor: "#f1f5f9",
+  },
+  capturePaymentBtn: {
+    marginTop: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: Theme.primary,
+  },
+  capturePaymentBtnText: {
+    color: Theme.buttonPrimaryText,
+    fontSize: 14,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+  },
+  capturePaymentHint: {
+    marginTop: 8,
+    color: "#94a3b8",
+    fontSize: 8,
+    fontWeight: "700",
+    textAlign: "center",
+    lineHeight: 12,
   },
   adjustmentLedgerCard: {
     borderRadius: 22,
@@ -5314,6 +5914,35 @@ const neoStyles = StyleSheet.create({
   provisionSummaryValueCost: {
     color: "#fb7185",
   },
+  provisionCnDnRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 14,
+  },
+  provisionCnDnBtn: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 6,
+  },
+  provisionCnDnBtnCredit: {
+    borderColor: "rgba(99,102,241,0.45)",
+    backgroundColor: "rgba(99,102,241,0.12)",
+  },
+  provisionCnDnBtnDebit: {
+    borderColor: "rgba(244,63,94,0.45)",
+    backgroundColor: "rgba(244,63,94,0.12)",
+  },
+  provisionCnDnLabel: {
+    color: "#e2e8f0",
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+  },
   provisionChip: {
     borderRadius: 10,
     paddingHorizontal: 12,
@@ -5513,6 +6142,19 @@ const neoStyles = StyleSheet.create({
     fontWeight: "900",
     fontStyle: "italic",
   },
+  provisionAppliedActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  provisionAppliedEdit: {
+    width: 26,
+    height: 26,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
   provisionAppliedRemove: {
     width: 26,
     height: 26,
@@ -5520,6 +6162,119 @@ const neoStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.06)",
+  },
+  provisionConfirmBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(15,23,42,0.72)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  provisionConfirmCard: {
+    width: "100%",
+    maxWidth: 380,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+    backgroundColor: "#0f172a",
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+    gap: 12,
+    zIndex: 2,
+    ...(Platform.OS === "web"
+      ? ({ boxShadow: "0 24px 48px rgba(0,0,0,0.45)" } as Record<string, unknown>)
+      : {}),
+  },
+  provisionConfirmTitle: {
+    color: "#f8fafc",
+    fontSize: 13,
+    fontWeight: "900",
+    letterSpacing: 0.4,
+  },
+  provisionConfirmBlock: {
+    gap: 6,
+    paddingVertical: 4,
+  },
+  provisionConfirmLine: {
+    color: "#cbd5e1",
+    fontSize: 11,
+    fontWeight: "700",
+    lineHeight: 16,
+  },
+  provisionConfirmHint: {
+    color: "#64748b",
+    fontSize: 10,
+    fontWeight: "700",
+    lineHeight: 15,
+  },
+  provisionVoidReasonLabel: {
+    marginTop: 10,
+    color: "#94a3b8",
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  provisionVoidReasonInput: {
+    marginTop: 8,
+    minHeight: 72,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: "#e2e8f0",
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 18,
+  },
+  provisionConfirmActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 4,
+  },
+  provisionConfirmCancel: {
+    flex: 1,
+    paddingVertical: 11,
+    borderRadius: 11,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(255,255,255,0.05)",
+  },
+  provisionConfirmCancelText: {
+    color: "#94a3b8",
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  provisionConfirmDanger: {
+    flex: 1,
+    paddingVertical: 11,
+    borderRadius: 11,
+    alignItems: "center",
+    backgroundColor: "rgba(244,63,94,0.22)",
+    borderWidth: 1,
+    borderColor: "rgba(244,63,94,0.45)",
+  },
+  provisionConfirmDangerDisabled: {
+    opacity: 0.45,
+  },
+  provisionConfirmPrimary: {
+    flex: 1,
+    paddingVertical: 11,
+    borderRadius: 11,
+    alignItems: "center",
+    backgroundColor: Theme.primary,
+  },
+  provisionConfirmOkText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
   },
   txnList: {
     gap: 16,
@@ -5832,19 +6587,12 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   refHeroBridgeIconWrap: {
-    width: 24,
-    height: 24,
-    borderRadius: 8,
+    width: 28,
+    height: 28,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(99,102,241,0.14)",
-    borderWidth: 1,
-    borderColor: "rgba(129,140,248,0.35)",
   },
-  refHeroBridgeIconWrapRose: {
-    backgroundColor: "rgba(244,63,94,0.14)",
-    borderColor: "rgba(251,113,133,0.35)",
-  },
+  refHeroBridgeIconWrapRose: {},
   refHeroBridgeLabel: {
     fontSize: 8,
     fontWeight: "800",
@@ -6756,6 +7504,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     width: "100%",
+  },
+  /** Wider gap between sale/cost columns on desktop trip finance. */
+  refManifestHeroSplitDesktop: {
+    gap: 16,
+    alignItems: "flex-start",
   },
   refManifestCol: { flex: 1, minWidth: 0 },
   refManifestColRight: { alignItems: "stretch" },

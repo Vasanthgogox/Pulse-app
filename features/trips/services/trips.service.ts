@@ -377,7 +377,10 @@ async function ensurePublicUserRecord(userId?: string | null): Promise<void> {
     ) {
       return;
     }
-    throw new Error(error.message);
+    // Never block trip creation: insert uses FK fallbacks; upsert can fail on transient/network quirks.
+    if (__DEV__) {
+      console.warn("[ensurePublicUserRecord] users upsert skipped:", error.message);
+    }
   }
 }
 

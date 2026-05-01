@@ -26,6 +26,8 @@ export interface DocumentShareMetadata {
   document_type: string;
   storage_path: string;
   document_name: string;
+  /** From trip_documents.mime_type — improves image preview when file_name has no extension. */
+  mime_type?: string | null;
   entity_type: "vehicle" | "driver";
   entity_id: string;
 }

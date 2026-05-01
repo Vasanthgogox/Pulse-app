@@ -20,6 +20,7 @@ import {
   adjustedCost,
   adjustedRevenue,
   COST_REASON_OPTIONS,
+  isAdjustmentVoided,
   REVENUE_REASON_OPTIONS,
 } from "@/features/trips/services/tripAdjustments";
 import type { TripRow } from "@/features/trips/services/trips.service";
@@ -31,6 +32,7 @@ import {
   LayoutAnimation,
   Modal,
   Platform,
+  Pressable,
   StyleSheet,
   Text,
   TextInput,
@@ -173,8 +175,8 @@ export interface TripDetailFinanceViewProps {
     amount: number;
     reason: string;
   }) => void | Promise<void>;
-  /** When set, user can remove an adjustment (e.g. long-press or delete icon). */
-  onRemoveAdjustment?: (adjustmentId: string) => void;
+  /** Soft-void an adjustment (requires reason); parent persists void state. */
+  onRemoveAdjustment?: (adjustmentId: string, voidReason: string) => void | Promise<void>;
   /** Assignment / reassignment history for this trip (newest first). */
   assignmentAuditRows?: TripAssignmentAuditRow[];
   /** Resolved driver id → display name for assignment audit rows. */
@@ -1143,6 +1145,8 @@ export function TripDetailFinanceView({
   const [draftAmount, setDraftAmount] = useState("");
   const [draftReason, setDraftReason] = useState("");
   const [draftOtherReason, setDraftOtherReason] = useState("");
+  const [voidPromptAdj, setVoidPromptAdj] = useState<TripAdjustment | null>(null);
+  const [voidPromptReason, setVoidPromptReason] = useState("");
   const activeTab: TripDetailTab = tripDetailTab ?? "finance";
   const showTrackingSection = !tabsEnabled || activeTab === "tracking";
   const showFinanceSection = !tabsEnabled || activeTab === "finance";
@@ -2114,25 +2118,51 @@ export function TripDetailFinanceView({
           
           {revenueAdjustments.length > 0 && (
             <View style={styles.financeAdjustmentsWrap}>
-              {revenueAdjustments.map((adj) => (
-                <View key={adj.id} style={styles.financeAdjRow}>
-                  <Text style={styles.financeAdjReason} numberOfLines={1}>{adj.impact === "plus" ? "+" : "−"} {adj.reason}</Text>
-                  <View style={styles.financeAdjRight}>
-                    <Text style={[styles.financeAdjAmount, adj.impact === "plus" ? { color: Theme.darkGreen } : { color: Theme.teslaRed }]}>
-                      {adj.impact === "plus" ? "+" : "−"}{formatINR(adj.amount)}
-                    </Text>
-                    {onRemoveAdjustment && (
-                      <TouchableOpacity
-                        onPress={() => onRemoveAdjustment(adj.id)}
-                        hitSlop={8}
-                        style={styles.financeAdjRemoveBtn}
+              {revenueAdjustments.map((adj) => {
+                const voided = isAdjustmentVoided(adj);
+                return (
+                  <View key={adj.id} style={styles.financeAdjRow}>
+                    <View style={styles.financeAdjLeftCol}>
+                      <Text
+                        style={[styles.financeAdjReason, voided && styles.financeAdjVoided]}
+                        numberOfLines={voided ? 2 : 1}
                       >
-                        <FontAwesome name="times" size={14} color={Theme.textMuted} />
-                      </TouchableOpacity>
-                    )}
+                        {adj.impact === "plus" ? "+" : "−"} {adj.reason}
+                      </Text>
+                      {voided ? (
+                        <Text style={styles.financeAdjVoidNote} numberOfLines={3}>
+                          Voided: {(adj.void_reason ?? "").trim() || "—"}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <View style={styles.financeAdjRight}>
+                      <Text
+                        style={[
+                          styles.financeAdjAmount,
+                          voided && styles.financeAdjVoided,
+                          adj.impact === "plus" ? { color: Theme.darkGreen } : { color: Theme.teslaRed },
+                        ]}
+                      >
+                        {adj.impact === "plus" ? "+" : "−"}
+                        {formatINR(adj.amount)}
+                      </Text>
+                      {onRemoveAdjustment && !voided ? (
+                        <TouchableOpacity
+                          onPress={() => {
+                            setVoidPromptAdj(adj);
+                            setVoidPromptReason("");
+                          }}
+                          hitSlop={8}
+                          style={styles.financeAdjRemoveBtn}
+                          accessibilityLabel="Void adjustment"
+                        >
+                          <FontAwesome name="times" size={14} color={Theme.textMuted} />
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
                   </View>
-                </View>
-              ))}
+                );
+              })}
             </View>
           )}
 
@@ -2171,25 +2201,51 @@ export function TripDetailFinanceView({
           
           {costAdjustments.length > 0 && (
             <View style={styles.financeAdjustmentsWrap}>
-              {costAdjustments.map((adj) => (
-                <View key={adj.id} style={styles.financeAdjRow}>
-                  <Text style={styles.financeAdjReason} numberOfLines={1}>{adj.impact === "plus" ? "+" : "−"} {adj.reason}</Text>
-                  <View style={styles.financeAdjRight}>
-                    <Text style={[styles.financeAdjAmount, adj.impact === "plus" ? { color: Theme.darkGreen } : { color: Theme.teslaRed }]}>
-                      {adj.impact === "plus" ? "+" : "−"}{formatINR(adj.amount)}
-                    </Text>
-                    {onRemoveAdjustment && (
-                      <TouchableOpacity
-                        onPress={() => onRemoveAdjustment(adj.id)}
-                        hitSlop={8}
-                        style={styles.financeAdjRemoveBtn}
+              {costAdjustments.map((adj) => {
+                const voided = isAdjustmentVoided(adj);
+                return (
+                  <View key={adj.id} style={styles.financeAdjRow}>
+                    <View style={styles.financeAdjLeftCol}>
+                      <Text
+                        style={[styles.financeAdjReason, voided && styles.financeAdjVoided]}
+                        numberOfLines={voided ? 2 : 1}
                       >
-                        <FontAwesome name="times" size={14} color={Theme.textMuted} />
-                      </TouchableOpacity>
-                    )}
+                        {adj.impact === "plus" ? "+" : "−"} {adj.reason}
+                      </Text>
+                      {voided ? (
+                        <Text style={styles.financeAdjVoidNote} numberOfLines={3}>
+                          Voided: {(adj.void_reason ?? "").trim() || "—"}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <View style={styles.financeAdjRight}>
+                      <Text
+                        style={[
+                          styles.financeAdjAmount,
+                          voided && styles.financeAdjVoided,
+                          adj.impact === "plus" ? { color: Theme.darkGreen } : { color: Theme.teslaRed },
+                        ]}
+                      >
+                        {adj.impact === "plus" ? "+" : "−"}
+                        {formatINR(adj.amount)}
+                      </Text>
+                      {onRemoveAdjustment && !voided ? (
+                        <TouchableOpacity
+                          onPress={() => {
+                            setVoidPromptAdj(adj);
+                            setVoidPromptReason("");
+                          }}
+                          hitSlop={8}
+                          style={styles.financeAdjRemoveBtn}
+                          accessibilityLabel="Void adjustment"
+                        >
+                          <FontAwesome name="times" size={14} color={Theme.textMuted} />
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
                   </View>
-                </View>
-              ))}
+                );
+              })}
             </View>
           )}
 
@@ -2687,6 +2743,79 @@ export function TripDetailFinanceView({
       </View>
       </>
       ) : null}
+
+      <Modal
+        visible={voidPromptAdj !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setVoidPromptAdj(null);
+          setVoidPromptReason("");
+        }}
+      >
+        <View style={styles.voidPromptBackdrop}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => {
+              setVoidPromptAdj(null);
+              setVoidPromptReason("");
+            }}
+          />
+          <View style={styles.voidPromptCard}>
+            <Text style={styles.voidPromptTitle}>Void adjustment</Text>
+            {voidPromptAdj ? (
+              <Text style={styles.voidPromptMeta} numberOfLines={3}>
+                {(voidPromptAdj.reason ?? "").trim() || "Adjustment"} ·{" "}
+                {voidPromptAdj.impact === "plus" ? "+" : "−"}
+                {formatINR(voidPromptAdj.amount)}
+              </Text>
+            ) : null}
+            <Text style={styles.voidPromptLabel}>Reason for voiding</Text>
+            <TextInput
+              value={voidPromptReason}
+              onChangeText={setVoidPromptReason}
+              placeholder="Required — explain why this line is voided"
+              placeholderTextColor={Theme.textMuted}
+              style={styles.voidPromptInput}
+              multiline
+              maxLength={240}
+            />
+            <View style={styles.voidPromptActions}>
+              <TouchableOpacity
+                style={styles.voidPromptCancelBtn}
+                onPress={() => {
+                  setVoidPromptAdj(null);
+                  setVoidPromptReason("");
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.voidPromptCancelTxt}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.voidPromptConfirmBtn,
+                  !voidPromptReason.trim() && styles.voidPromptConfirmBtnDisabled,
+                ]}
+                disabled={!voidPromptReason.trim()}
+                onPress={() => {
+                  if (!voidPromptAdj || !onRemoveAdjustment) return;
+                  const r = voidPromptReason.trim();
+                  if (!r) return;
+                  const id = voidPromptAdj.id;
+                  void (async () => {
+                    await Promise.resolve(onRemoveAdjustment(id, r));
+                    setVoidPromptAdj(null);
+                    setVoidPromptReason("");
+                  })();
+                }}
+                activeOpacity={0.88}
+              >
+                <Text style={styles.voidPromptConfirmTxt}>Void line</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -3921,15 +4050,29 @@ const styles = StyleSheet.create({
   financeAdjRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
     paddingVertical: 4,
+  },
+  financeAdjLeftCol: {
+    flex: 1,
+    marginRight: 8,
+    minWidth: 0,
   },
   financeAdjReason: {
     fontSize: 11,
     fontWeight: "600",
     color: Theme.textSecondary,
-    flex: 1,
-    marginRight: 8,
+  },
+  financeAdjVoided: {
+    textDecorationLine: "line-through",
+    opacity: 0.72,
+  },
+  financeAdjVoidNote: {
+    marginTop: 4,
+    fontSize: 9,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    fontStyle: "italic",
   },
   financeAdjRight: {
     flexDirection: "row",
@@ -3943,6 +4086,84 @@ const styles = StyleSheet.create({
   financeAdjRemoveBtn: {
     marginLeft: 8,
     padding: 4,
+  },
+  voidPromptBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(15,23,42,0.45)",
+    justifyContent: "center",
+    padding: 24,
+  },
+  voidPromptCard: {
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 18,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    maxWidth: 400,
+    alignSelf: "center",
+    width: "100%",
+  },
+  voidPromptTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+    marginBottom: 8,
+  },
+  voidPromptMeta: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.textSecondary,
+    marginBottom: 14,
+  },
+  voidPromptLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginBottom: 6,
+  },
+  voidPromptInput: {
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: Theme.textPrimaryDark,
+    minHeight: 72,
+    textAlignVertical: "top",
+    marginBottom: 16,
+  },
+  voidPromptActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 10,
+  },
+  voidPromptCancelBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: Theme.surfaceGray,
+  },
+  voidPromptCancelTxt: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: Theme.textSecondary,
+  },
+  voidPromptConfirmBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: Theme.teslaRed,
+  },
+  voidPromptConfirmBtnDisabled: {
+    opacity: 0.45,
+  },
+  voidPromptConfirmTxt: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#fff",
   },
   financeTotalRow: {
     flexDirection: "row",

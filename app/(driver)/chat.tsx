@@ -15,14 +15,23 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft, MessageSquare, Send, Smile, X } from "lucide-react-native";
+import { ArrowLeft, MessageSquare, Send, Smile } from "lucide-react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useDriverChat } from "@/features/chat/contexts/DriverChatContext";
-import { ChatSystemEventCard } from "@/features/chat/components/ChatEventCard";
+import { ChatLedgerEventCard, ChatSystemEventCard } from "@/features/chat/components/ChatEventCard";
 import { DocumentShareCard } from "@/features/chat/components/DocumentShareCard";
 import type { TripConversation, TripMessageRow } from "@/features/chat/types/chat.types";
+import {
+  appendDriverStatusNote,
+  deriveDriverFlowStepFromTrip,
+  DRIVER_PREDEFINED_STATUS_BY_STEP,
+  parseDriverUpdatesFromNotes,
+  type ParsedDriverStatusNote,
+} from "@/lib/driverTripStatusNotes.util";
+import type { TripRow } from "@/services/tripsService";
+import * as tripsService from "@/services/tripsService";
 
 const QUICK_EMOJIS = ["👍", "🚛", "📍", "✅", "📦", "⚠️", "🕒", "📞", "💯"];
 
@@ -130,6 +139,28 @@ function ConvListItem({ conv, active, onPress }: {
   );
 }
 
+function DriverStatusNoteCard({ u }: { u: ParsedDriverStatusNote }) {
+  let displayTime = u.timestamp;
+  try {
+    displayTime = new Date(u.timestamp).toLocaleTimeString("en-IN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  } catch {
+    // keep raw
+  }
+  return (
+    <View style={dr.statusNoteCard}>
+      <View style={dr.statusNoteDot} />
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={dr.statusNoteMsg}>{u.message}</Text>
+        <Text style={dr.statusNoteTime}>{displayTime}</Text>
+      </View>
+    </View>
+  );
+}
+
 function MessageThread({
   conv,
   messageInput,
@@ -148,6 +179,90 @@ function MessageThread({
   onBack: () => void;
 }) {
   const scrollRef = useRef<ScrollView>(null);
+  const [trip, setTrip] = useState<TripRow | null>(null);
+  const [statusSending, setStatusSending] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setTrip(null);
+    void tripsService.getTripById(conv.trip_id).then(({ trip: t }) => {
+      if (!cancelled) setTrip(t);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [conv.trip_id]);
+
+  const statusNotes = useMemo(
+    () => parseDriverUpdatesFromNotes(trip?.notes ?? null),
+    [trip?.notes],
+  );
+
+  const merged = useMemo(() => {
+    type Row =
+      | { key: string; kind: "msg"; m: TripMessageRow }
+      | { key: string; kind: "status"; u: ParsedDriverStatusNote };
+    const items: Row[] = [];
+    for (const m of conv.messages) {
+      items.push({ key: `m-${m.id}`, kind: "msg", m });
+    }
+    statusNotes.forEach((u, i) => {
+      items.push({
+        key: `s-${u.timestamp}-${i}-${u.message.slice(0, 12)}`,
+        kind: "status",
+        u,
+      });
+    });
+    items.sort((a, b) => {
+      const ta = a.kind === "msg" ? new Date(a.m.created_at).getTime() : new Date(a.u.timestamp).getTime();
+      const tb = b.kind === "msg" ? new Date(b.m.created_at).getTime() : new Date(b.u.timestamp).getTime();
+      return ta - tb;
+    });
+    return items;
+  }, [conv.messages, statusNotes]);
+
+  const flowStep = trip ? deriveDriverFlowStepFromTrip(trip) : "completed";
+  const predefinedForStep = DRIVER_PREDEFINED_STATUS_BY_STEP[flowStep] ?? [];
+
+  const sendStatusLine = async (label: string) => {
+    if (!trip || flowStep === "completed") return;
+    setStatusSending(label);
+    const res = await appendDriverStatusNote(trip.id, flowStep, label);
+    if (!res.error) {
+      const { trip: next } = await tripsService.getTripById(conv.trip_id);
+      if (next) setTrip(next);
+    }
+    setStatusSending(null);
+  };
+
+  const renderMessage = (m: TripMessageRow) => {
+    if (m.message_type === "system") {
+      return <ChatSystemEventCard message={m} />;
+    }
+    if (m.message_type === "document_share") {
+      return <DocumentShareCard message={m} isOwn={m.sender_role === "driver"} />;
+    }
+    if (m.message_type === "ledger_event") {
+      return (
+        <ChatLedgerEventCard
+          message={m}
+          currentOrgId={conv.organization_id}
+          conversationPartyName={conv.party_name}
+          readOnly
+          onAddToBook={() => {}}
+          onDispute={() => {}}
+        />
+      );
+    }
+    return (
+      <ChatBubble
+        isOwn={m.sender_role === "driver"}
+        content={m.content}
+        timestamp={m.created_at}
+        senderName={m.sender_role !== "driver" ? m.sender_name : undefined}
+      />
+    );
+  };
 
   return (
     <View style={{ flex: 1 }}>
@@ -164,43 +279,28 @@ function MessageThread({
         </View>
       </View>
 
-      {/* Messages */}
+      {/* Messages + trip status notes (same timeline) */}
       <ScrollView
         ref={scrollRef}
         style={{ flex: 1 }}
         contentContainerStyle={{ padding: 16, gap: 10, paddingBottom: 24 }}
         onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
       >
-        {conv.messages.length === 0 && (
+        {merged.length === 0 ? (
           <View style={{ alignItems: "center", paddingVertical: 32 }}>
-            <Text style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>No messages yet</Text>
+            <Text style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>
+              No messages yet — use quick status or reply below.
+            </Text>
           </View>
+        ) : (
+          merged.map((row) =>
+            row.kind === "status" ? (
+              <DriverStatusNoteCard key={row.key} u={row.u} />
+            ) : (
+              <View key={row.key}>{renderMessage(row.m)}</View>
+            ),
+          )
         )}
-        {conv.messages.map((m) => {
-          if (m.message_type === "system") {
-            return <ChatSystemEventCard key={m.id} message={m} />;
-          }
-          if (m.message_type === "document_share") {
-            return <DocumentShareCard key={m.id} message={m} isOwn={m.sender_role === "driver"} />;
-          }
-          // ledger_event: show read-only (no add-to-book for driver)
-          if (m.message_type === "ledger_event") {
-            return (
-              <View key={m.id} style={dr.ledgerReadOnly}>
-                <Text style={dr.ledgerReadOnlyText}>{m.content}</Text>
-              </View>
-            );
-          }
-          return (
-            <ChatBubble
-              key={m.id}
-              isOwn={m.sender_role === "driver"}
-              content={m.content}
-              timestamp={m.created_at}
-              senderName={m.sender_role !== "driver" ? m.sender_name : undefined}
-            />
-          );
-        })}
       </ScrollView>
 
       {/* Input */}
@@ -219,6 +319,32 @@ function MessageThread({
             ))}
           </View>
         )}
+        {predefinedForStep.length > 0 ? (
+          <View style={dr.quickStatusBlock}>
+            <Text style={dr.quickStatusLabel}>Quick status</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={dr.quickStatusChipRow}
+            >
+              {predefinedForStep.map((label) => (
+                <TouchableOpacity
+                  key={label}
+                  style={[dr.quickStatusChip, statusSending === label && dr.quickStatusChipBusy]}
+                  onPress={() => void sendStatusLine(label)}
+                  disabled={!!statusSending || !trip}
+                  activeOpacity={0.75}
+                >
+                  {statusSending === label ? (
+                    <ActivityIndicator size="small" color="#0f172a" />
+                  ) : (
+                    <Text style={dr.quickStatusChipText} numberOfLines={2}>{label}</Text>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        ) : null}
         {/* Quick message chips */}
         <ScrollView
           horizontal
@@ -549,18 +675,58 @@ const dr = StyleSheet.create({
   bubbleTextOther: { color: "#1e293b" },
   bubbleMeta: { fontSize: 9, color: "#94a3b8", marginTop: 3, letterSpacing: 0.2 },
 
-  ledgerReadOnly: {
-    alignSelf: "center",
-    backgroundColor: "#f0f9ff",
+  statusNoteCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#bae6fd",
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    maxWidth: "85%",
-    marginVertical: 4,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#f8fafc",
+    maxWidth: "90%",
+    alignSelf: "flex-start",
   },
-  ledgerReadOnlyText: { fontSize: 12, color: "#0369a1", fontWeight: "500", textAlign: "center" },
+  statusNoteDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: "#10b981",
+    marginTop: 5,
+  },
+  statusNoteMsg: { fontSize: 14, fontWeight: "600", color: "#0f172a", lineHeight: 20 },
+  statusNoteTime: { fontSize: 11, color: "#94a3b8", marginTop: 3, fontWeight: "500" },
+
+  quickStatusBlock: {
+    paddingHorizontal: 14,
+    paddingTop: 8,
+    paddingBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
+  quickStatusLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#94a3b8",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    marginBottom: 8,
+  },
+  quickStatusChipRow: { gap: 8, paddingBottom: 4, alignItems: "stretch" },
+  quickStatusChip: {
+    maxWidth: 200,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 14,
+    backgroundColor: "#ecfdf5",
+    borderWidth: 1,
+    borderColor: "#a7f3d0",
+    minHeight: 40,
+    justifyContent: "center",
+  },
+  quickStatusChipBusy: { opacity: 0.7 },
+  quickStatusChipText: { fontSize: 11, color: "#047857", fontWeight: "600" },
 
   inputWrap: { backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: "#e2e8f0", paddingBottom: 8 },
   emojiRow: {

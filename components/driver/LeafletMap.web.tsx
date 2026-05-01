@@ -23,6 +23,7 @@ type LeafletMapProps = {
     northEast: LeafletLatLng;
   };
   lowPower?: boolean;
+  interactionLocked?: boolean;
 };
 
 export type LeafletMapRef = {
@@ -128,6 +129,32 @@ function clampToBounds(
   };
 }
 
+function applyMapInteractionLock(map: unknown, locked: boolean): void {
+  if (!map) return;
+  const m = map as Record<
+    string,
+    { disable?: () => void; enable?: () => void } | undefined
+  >;
+  const names = [
+    "dragPan",
+    "scrollZoom",
+    "boxZoom",
+    "keyboard",
+    "doubleClickZoom",
+    "touchZoomRotate",
+  ];
+  try {
+    names.forEach((key) => {
+      const h = m[key];
+      if (!h || typeof h.disable !== "function") return;
+      if (locked) h.disable();
+      else if (typeof h.enable === "function") h.enable();
+    });
+  } catch {
+    /* noop */
+  }
+}
+
 export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
   (
     {
@@ -139,10 +166,13 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
       polylineColor = "#3b82f6",
       maxBounds,
       lowPower = false,
+      interactionLocked = false,
     },
     ref,
   ) => {
     const mapRef = useRef<MapLibreMapLike | null>(null);
+    const interactionLockedRef = useRef(interactionLocked);
+    interactionLockedRef.current = interactionLocked;
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const markersRef = useRef<MapLibreMarkerLike[]>([]);
     const lastPolylineStrRef = useRef<string>("");
@@ -253,6 +283,7 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
                 // ignore
               }
             }, 120);
+            applyMapInteractionLock(map, interactionLockedRef.current);
           });
         });
       };
@@ -271,6 +302,10 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
         }
       };
     }, []);
+
+    useEffect(() => {
+      applyMapInteractionLock(mapRef.current, interactionLocked);
+    }, [interactionLocked]);
 
     useEffect(() => {
       if (!mapRef.current || typeof window === "undefined") {

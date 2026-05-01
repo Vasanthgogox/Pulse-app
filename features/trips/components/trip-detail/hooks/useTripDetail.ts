@@ -73,7 +73,8 @@ import type {
 import {
   addTripAdjustment,
   getTripAdjustments,
-  removeTripAdjustment,
+  voidTripAdjustment,
+  updateTripAdjustment,
 } from "../../../services/tripAdjustments";
 import { getTripOtpForDisplay } from "../../../services/tripOtp.service";
 import {
@@ -142,6 +143,28 @@ type TripMapCoordinateFields = TripRow & {
   drop_lon?: unknown;
 };
 
+/** Linked org + contact fields for global {@link PartyAvatar} resolution. */
+export type TripPartyAvatarFields = {
+  organizationImageUrl: string | null;
+  organizationAvatarSeed: string | null;
+  avatarUrl: string | null;
+  avatarSeed: string | null;
+};
+
+function emptyTripPartyAvatarFields(): TripPartyAvatarFields {
+  return {
+    organizationImageUrl: null,
+    organizationAvatarSeed: null,
+    avatarUrl: null,
+    avatarSeed: null,
+  };
+}
+
+function nStr(s: string | null | undefined): string | null {
+  const v = (s ?? "").trim();
+  return v.length ? v : null;
+}
+
 export interface UseTripDetailOptions {
   tripId: string;
   entryContext?: "supplier" | "vehicle" | "client";
@@ -182,6 +205,10 @@ export function useTripDetail({
   const [partnerName, setPartnerName] = useState<string | null>(null);
   const [clientAvatarUri, setClientAvatarUri] = useState<string | null>(null);
   const [supplierAvatarUri, setSupplierAvatarUri] = useState<string | null>(null);
+  const [clientPartyAvatarFields, setClientPartyAvatarFields] =
+    useState<TripPartyAvatarFields | null>(null);
+  const [supplierPartyAvatarFields, setSupplierPartyAvatarFields] =
+    useState<TripPartyAvatarFields | null>(null);
   const [counterpartyIntegrated, setCounterpartyIntegrated] = useState<boolean | null>(null);
   const [partnerOrgId, setPartnerOrgId] = useState<string | null>(null);
   const [clientPartyRes, setClientPartyRes] = useState<{
@@ -991,12 +1018,26 @@ export function useTripDetail({
 
     setClientAvatarUri(null);
     setSupplierAvatarUri(null);
+    setClientPartyAvatarFields(null);
+    setSupplierPartyAvatarFields(null);
     if (!trip || !ownerOrg) return;
 
     void (async () => {
       if (trip.client_id) {
+        const fields = emptyTripPartyAvatarFields();
         let rawAvatar = "";
         const details = await getClientDetails(trip.client_id);
+        if (!cancelled && details.client) {
+          fields.avatarUrl = nStr(details.client.avatar_url);
+          fields.avatarSeed = nStr(details.client.avatar_seed);
+          if (details.client.linked_organization_id) {
+            const linked = await getLinkedOrgProfile(details.client.linked_organization_id);
+            if (!cancelled && linked.profile) {
+              fields.organizationImageUrl = nStr(linked.profile.avatarUrl);
+              fields.organizationAvatarSeed = nStr(linked.profile.avatarSeed);
+            }
+          }
+        }
         if (!cancelled && details.client?.avatar_url) rawAvatar = details.client.avatar_url;
         if (!rawAvatar && details.client?.linked_organization_id) {
           const linked = await getLinkedOrgProfile(details.client.linked_organization_id);
@@ -1004,19 +1045,49 @@ export function useTripDetail({
         }
         if (!rawAvatar) {
           const { client } = await getClientById(ownerOrg, trip.client_id);
-          if (!cancelled && client?.avatar_url) rawAvatar = client.avatar_url;
-          if (!rawAvatar && client?.linked_organization_id) {
-            const linked = await getLinkedOrgProfile(client.linked_organization_id);
-            if (!cancelled && linked.profile?.avatarUrl) rawAvatar = linked.profile.avatarUrl;
+          if (!cancelled && client) {
+            if (!fields.avatarUrl) fields.avatarUrl = nStr(client.avatar_url);
+            if (!fields.avatarSeed) fields.avatarSeed = nStr(client.avatar_seed);
+            if (!fields.organizationImageUrl && client.linked_organization_id) {
+              const linked = await getLinkedOrgProfile(client.linked_organization_id);
+              if (!cancelled && linked.profile) {
+                if (!fields.organizationImageUrl)
+                  fields.organizationImageUrl = nStr(linked.profile.avatarUrl);
+                if (!fields.organizationAvatarSeed)
+                  fields.organizationAvatarSeed = nStr(linked.profile.avatarSeed);
+              }
+            }
+            if (!cancelled && client.avatar_url) rawAvatar = client.avatar_url;
+            if (!rawAvatar && client.linked_organization_id) {
+              const linked = await getLinkedOrgProfile(client.linked_organization_id);
+              if (!cancelled && linked.profile?.avatarUrl) rawAvatar = linked.profile.avatarUrl;
+            }
           }
         }
         const uri = await resolvePartyAvatarUri(rawAvatar || null);
-        if (!cancelled) setClientAvatarUri(uri);
+        if (!cancelled) {
+          setClientPartyAvatarFields(fields);
+          setClientAvatarUri(uri);
+        }
       }
 
       if (trip.supplier_id) {
+        const fields = emptyTripPartyAvatarFields();
         let rawAvatar = "";
         const details = await getSupplierDetails(trip.supplier_id);
+        if (!cancelled && details.supplier) {
+          fields.avatarUrl = nStr(details.supplier.avatar_url);
+          fields.avatarSeed = nStr(details.supplier.avatar_seed);
+          if (details.supplier.linked_organization_id) {
+            const linked = await getLinkedOrgProfileForSupplier(
+              details.supplier.linked_organization_id,
+            );
+            if (!cancelled && linked.profile) {
+              fields.organizationImageUrl = nStr(linked.profile.avatarUrl);
+              fields.organizationAvatarSeed = nStr(linked.profile.avatarSeed);
+            }
+          }
+        }
         if (!cancelled && details.supplier?.avatar_url) rawAvatar = details.supplier.avatar_url;
         if (!rawAvatar && details.supplier?.linked_organization_id) {
           const linked = await getLinkedOrgProfileForSupplier(details.supplier.linked_organization_id);
@@ -1024,10 +1095,23 @@ export function useTripDetail({
         }
         if (!rawAvatar) {
           const { supplier } = await getSupplierById(ownerOrg, trip.supplier_id);
-          if (!cancelled && supplier?.avatar_url) rawAvatar = supplier.avatar_url;
-          if (!rawAvatar && supplier?.linked_organization_id) {
-            const linked = await getLinkedOrgProfileForSupplier(supplier.linked_organization_id);
-            if (!cancelled && linked.profile?.avatarUrl) rawAvatar = linked.profile.avatarUrl;
+          if (!cancelled && supplier) {
+            if (!fields.avatarUrl) fields.avatarUrl = nStr(supplier.avatar_url);
+            if (!fields.avatarSeed) fields.avatarSeed = nStr(supplier.avatar_seed);
+            if (!fields.organizationImageUrl && supplier.linked_organization_id) {
+              const linked = await getLinkedOrgProfileForSupplier(supplier.linked_organization_id);
+              if (!cancelled && linked.profile) {
+                if (!fields.organizationImageUrl)
+                  fields.organizationImageUrl = nStr(linked.profile.avatarUrl);
+                if (!fields.organizationAvatarSeed)
+                  fields.organizationAvatarSeed = nStr(linked.profile.avatarSeed);
+              }
+            }
+            if (!cancelled && supplier.avatar_url) rawAvatar = supplier.avatar_url;
+            if (!rawAvatar && supplier.linked_organization_id) {
+              const linked = await getLinkedOrgProfileForSupplier(supplier.linked_organization_id);
+              if (!cancelled && linked.profile?.avatarUrl) rawAvatar = linked.profile.avatarUrl;
+            }
           }
         }
         const viewerOrgId = currentOrganization?.id;
@@ -1036,7 +1120,10 @@ export function useTripDetail({
           if (!cancelled && supplier?.avatar_url) rawAvatar = supplier.avatar_url;
         }
         const uri = await resolvePartyAvatarUri(rawAvatar || null);
-        if (!cancelled) setSupplierAvatarUri(uri);
+        if (!cancelled) {
+          setSupplierPartyAvatarFields(fields);
+          setSupplierAvatarUri(uri);
+        }
       }
     })();
 
@@ -1525,10 +1612,32 @@ export function useTripDetail({
     [trip, currentOrganization?.id, loadAdjustments, queryClient],
   );
 
-  const handleRemoveAdjustment = useCallback(
-    async (adjustmentId: string) => {
+  const handleVoidAdjustment = useCallback(
+    async (adjustmentId: string, voidReason: string) => {
       if (!trip?.id) return;
-      await removeTripAdjustment(trip.id, adjustmentId);
+      const r = String(voidReason ?? "").trim();
+      if (!r) return;
+      await voidTripAdjustment(trip.id, adjustmentId, r);
+      await loadAdjustments();
+      void queryClient.invalidateQueries({
+        queryKey: [...queryKeys.tripFinanceAdjustmentsRoot],
+      });
+    },
+    [trip?.id, loadAdjustments, queryClient],
+  );
+
+  const handleUpdateAdjustment = useCallback(
+    async (
+      adjustmentId: string,
+      params: {
+        type: TripAdjustmentType;
+        impact: TripAdjustmentImpact;
+        amount: number;
+        reason: string;
+      },
+    ) => {
+      if (!trip?.id) return;
+      await updateTripAdjustment(trip.id, adjustmentId, params);
       await loadAdjustments();
       void queryClient.invalidateQueries({
         queryKey: [...queryKeys.tripFinanceAdjustmentsRoot],
@@ -1964,6 +2073,8 @@ export function useTripDetail({
     partnerName,
     clientAvatarUri,
     supplierAvatarUri,
+    clientPartyAvatarFields,
+    supplierPartyAvatarFields,
     counterpartyIntegrated,
     partnerOrgId,
     clientPartyRes,
@@ -2060,7 +2171,8 @@ export function useTripDetail({
     openCompareVerifyFromTrip,
     handleAddAdjustment,
     handleSaveAdjustment,
-    handleRemoveAdjustment,
+    handleVoidAdjustment,
+    handleUpdateAdjustment,
     handleRecordDriverPayment,
     fetchDriverLocationFromDb,
 

@@ -1,4 +1,5 @@
 import { DriverHeader } from "@/components/driver/DriverHeader";
+import { LiveRouteInfoCard } from "@/components/driver/LiveRouteInfoCard";
 import { DriverInviteCard } from "@/components/driver/DriverInviteCard";
 import {
     LeafletMap,
@@ -58,6 +59,11 @@ import {
     type RouteResult,
 } from "@/services/routingService";
 import * as tripsService from "@/services/tripsService";
+import {
+  formatGeocodedCityState,
+  formatGeocodedPlaceLine,
+  reverseGeocodeCityStateLabel,
+} from "@/lib/reverseGeocodePlace.util";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import BottomSheet, {
     BottomSheetScrollView,
@@ -345,6 +351,30 @@ function formatRoadDistanceM(meters: number): string {
   return `${km.toFixed(1)} km`;
 }
 
+/** ETA from routing API remaining duration (seconds). */
+function formatEtaFromRouteSeconds(seconds: number | null | undefined): string {
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return "—";
+  const totalMin = Math.max(1, Math.round(seconds / 60));
+  if (totalMin < 60) return `${totalMin} min`;
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return m > 0 ? `${h} hr ${m} min` : `${h} hr`;
+}
+
+function formatEtaArrivalClock(seconds: number | null | undefined): string | null {
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return null;
+  try {
+    const d = new Date(Date.now() + seconds * 1000);
+    return d.toLocaleTimeString("en-IN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  } catch {
+    return null;
+  }
+}
+
 function formatTripDistance(distance: unknown): string {
   if (distance == null) return "—";
   const raw = typeof distance === "string" ? distance.trim() : "";
@@ -564,6 +594,9 @@ export default function DriverRadarScreen() {
   const lastGuidanceKeyRef = useRef<string | null>(null);
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
   const [isFollowingLocation, setIsFollowingLocation] = useState(false);
+  /** Tap Tracking pill to show distance + ETA card (toggle). */
+  const [showTrackingInfoCard, setShowTrackingInfoCard] = useState(false);
+  /** Default off = map-first (ref 1); tap route icon to show FROM/distance/TO overlay (ref 2). */
   const [showRouteSummary, setShowRouteSummary] = useState(false);
   const locationWatchRef = useRef<any>(null);
   const initialLoadDoneRef = useRef(false);
@@ -881,12 +914,12 @@ export default function DriverRadarScreen() {
 
         if (results && results.length > 0) {
           const place = results[0];
-          const parts = [
-            place.name || place.street || null,
-            place.city || place.subregion || null,
-          ].filter(Boolean) as string[];
-          if (parts.length > 0) {
-            setLocationLabel(parts.join(", "));
+          const cityState = formatGeocodedCityState(place).trim();
+          if (cityState) {
+            setLocationLabel(cityState);
+          } else {
+            const fallback = formatGeocodedPlaceLine(place).trim();
+            if (fallback) setLocationLabel(fallback);
           }
         }
       } catch {
@@ -902,6 +935,26 @@ export default function DriverRadarScreen() {
   useEffect(() => {
     fetchLocation();
   }, [fetchLocation]);
+
+  const liveDriverGeocodeCoord = useMemo(
+    () => truckPosition ?? driverMapPosition,
+    [truckPosition, driverMapPosition],
+  );
+
+  useEffect(() => {
+    const c = liveDriverGeocodeCoord;
+    if (!c || !Number.isFinite(c.latitude) || !Number.isFinite(c.longitude)) return;
+    let cancelled = false;
+    const t = setTimeout(() => {
+      void reverseGeocodeCityStateLabel(c.latitude, c.longitude).then((label) => {
+        if (!cancelled && label) setLocationLabel(label);
+      });
+    }, 750);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [liveDriverGeocodeCoord?.latitude, liveDriverGeocodeCoord?.longitude]);
 
   // Refetch on focus and re-read accepted trip id (e.g. after OTP claim) so Dashboard shows "View trip" not "Accept & Enter OTP".
   useFocusEffect(
@@ -1789,9 +1842,9 @@ export default function DriverRadarScreen() {
     }
     const mid = Math.round(Dimensions.get("window").height * 0.5); // Fixed half-screen
     const min = Math.max(
-      220,
-      Math.min(mid - 60, Math.round(Dimensions.get("window").height * 0.28)),
-    ); // Smaller card
+      200,
+      Math.min(mid - 60, Math.round(Dimensions.get("window").height * 0.22)),
+    ); // Tighter card → more map
     const expanded = Math.max(
       mid + 80,
       Math.min(
@@ -1997,6 +2050,7 @@ export default function DriverRadarScreen() {
   // Smoothly follow the driver marker with `animateCamera` (avoid jitter from `fitToCoordinates`).
   useEffect(() => {
     if (!shouldShowMap) return;
+    if (!isFollowingLocation) return;
     if (!driverMapPosition) return;
 
     const showLeaflet =
@@ -2051,6 +2105,7 @@ export default function DriverRadarScreen() {
     driverMapPosition?.latitude,
     driverMapPosition?.longitude,
     shouldShowMap,
+    isFollowingLocation,
   ]);
 
   const [optimalRoute, setOptimalRoute] = useState<RouteResult | null>(null);
@@ -2185,6 +2240,19 @@ export default function DriverRadarScreen() {
   useEffect(() => {
     setShowRouteSummary(false);
   }, [activeMission?.id]);
+
+  /** Default camera to driver-tracking for the active leg (long-press "Tracking" to pan the map freely). */
+  useEffect(() => {
+    if (!activeMission?.id) {
+      setIsFollowingLocation(false);
+      return;
+    }
+    setIsFollowingLocation(true);
+  }, [activeMission?.id]);
+
+  useEffect(() => {
+    setShowTrackingInfoCard(false);
+  }, [activeMission?.id, shouldShowMap]);
 
   // Status-driven truck animation:
   // - accepted/pickup: animate current -> pickup
@@ -2555,11 +2623,12 @@ export default function DriverRadarScreen() {
   useEffect(() => {
     if (!shouldShowMap) return;
     if (!optimalRoute?.coordinates?.length) return;
+    if (isFollowingLocation) return;
     const t = setTimeout(() => {
       fitMapToActiveContext(mapRef, { force: true });
     }, 150);
     return () => clearTimeout(t);
-  }, [optimalRoute, shouldShowMap, fitMapToActiveContext]);
+  }, [optimalRoute, shouldShowMap, fitMapToActiveContext, isFollowingLocation]);
 
   // Pulsating circle when searching for assignments (online, no mission, nothing to decide).
   // When multiple assignments exist, incoming is surfaced via notifications only — do not treat as "searching".
@@ -2781,11 +2850,12 @@ export default function DriverRadarScreen() {
 
   useEffect(() => {
     if (!isFullMapVisible) return;
+    if (isFollowingLocation) return;
     const timer = setTimeout(() => {
       fitMapToActiveContext(fullMapRef, { isFullScreen: true, force: true });
     }, 250);
     return () => clearTimeout(timer);
-  }, [defaultBoundsTripKey, fitMapToActiveContext, isFullMapVisible]);
+  }, [defaultBoundsTripKey, fitMapToActiveContext, isFullMapVisible, isFollowingLocation]);
 
   const handleSetOffline = useCallback(() => {
     setIsOnline(false);
@@ -2799,6 +2869,9 @@ export default function DriverRadarScreen() {
     const isFullScreen = options?.fullScreen === true;
     const mapInteractionsLocked = Boolean(otpClaimTripId);
     const controlsVariant = options?.controlsVariant ?? "modal";
+    /** Lock pan/zoom while GPS-tracking so the map stays on the driver + route leg. */
+    const mapViewportLocked =
+      mapInteractionsLocked || isFollowingLocation;
 
     const mapCenter = driverMapPosition ?? DEFAULT_MAP_REGION;
 
@@ -2929,6 +3002,7 @@ export default function DriverRadarScreen() {
             polyline={leafletPolyline}
             polylineColor={Theme.primary}
             lowPower={false}
+            interactionLocked={mapViewportLocked}
           />
         ) : (
           <MapView
@@ -2951,10 +3025,10 @@ export default function DriverRadarScreen() {
             userInterfaceStyle={mapIsDark ? ("dark" as any) : ("light" as any)}
             customMapStyle={mapIsDark ? (darkMapStyle as any) : undefined}
             showsUserLocation={false}
-            scrollEnabled={!mapInteractionsLocked}
-            zoomEnabled={!mapInteractionsLocked}
+            scrollEnabled={!mapViewportLocked}
+            zoomEnabled={!mapViewportLocked}
             rotateEnabled={false}
-            pitchEnabled={!mapInteractionsLocked}
+            pitchEnabled={!mapViewportLocked}
             moveOnMarkerPress={false}
             pointerEvents="auto"
             onMapReady={() => {
@@ -3156,14 +3230,24 @@ export default function DriverRadarScreen() {
           </MapView>
         )}
 
-        {/* Guidance chip — bottom-left in split view, top-left in full screen */}
-        {activeGuidance ? (
+        {/* Primary trip HUD: one surface — hide when route overview or Live route card is open */}
+        {activeGuidance &&
+        !showRouteSummary &&
+        !showTrackingInfoCard &&
+        otpClaimTripId == null ? (
           <View
             pointerEvents="none"
             style={[
               styles.mapGuidanceChip,
               isFullScreen
-                ? { top: insets.top + 16, left: 16, right: 76 }
+                ? {
+                    top:
+                      (controlsVariant === "embedded"
+                        ? insets.top + 96
+                        : insets.top + 10) + 54,
+                    left: Layout.screenPaddingHorizontal,
+                    right: Layout.screenPaddingHorizontal,
+                  }
                 : { left: 14, right: 72, bottom: 18 },
               { backgroundColor: colors.surface, borderColor: colors.border },
             ]}
@@ -3305,7 +3389,8 @@ export default function DriverRadarScreen() {
                     onPress={() => {
                       const next = !showRouteSummary;
                       setShowRouteSummary(next);
-                      if (next) {
+                      if (next) setShowTrackingInfoCard(false);
+                      if (next && !isFollowingLocation) {
                         if (showLeaflet) {
                           handleFitBoundsLeaflet();
                         } else {
@@ -3354,10 +3439,15 @@ export default function DriverRadarScreen() {
                     { backgroundColor: colors.surface, borderColor: colors.border },
                   ]}
                   onPress={async () => {
+                    setShowRouteSummary(false);
+                    setShowTrackingInfoCard(true);
                     const ok = await handleFocusCurrentLocation();
                     if (ok) setIsFollowingLocation(true);
                   }}
-                  onLongPress={() => setIsFollowingLocation(false)}
+                  onLongPress={() => {
+                    setIsFollowingLocation(false);
+                    setShowTrackingInfoCard(false);
+                  }}
                   accessibilityLabel="Track current location"
                   accessibilityRole="button"
                   disabled={isFetchingLocation}
@@ -3376,6 +3466,52 @@ export default function DriverRadarScreen() {
                 </TouchableOpacity>
               </View>
             </View>
+
+            {/* Tracking tap — distance to current guidance target + route ETA */}
+            {showTrackingInfoCard &&
+            otpClaimTripId == null &&
+            (activeMission || effectiveFirstIncoming)
+              ? (() => {
+                  const toLabel =
+                    activeGuidanceStep === "accepted" || activeGuidanceStep === "pickup"
+                      ? "pickup"
+                      : "destination";
+                  const distM =
+                    distanceToTargetKm != null
+                      ? formatRoadDistanceM(distanceToTargetKm * 1000)
+                      : null;
+                  const etaText = formatEtaFromRouteSeconds(optimalRoute?.duration);
+                  const arrivalClock = formatEtaArrivalClock(optimalRoute?.duration);
+                  const cardTop =
+                    (controlsVariant === "embedded" ? insets.top + 96 : insets.top + 10) +
+                    54;
+                  const bottomHint =
+                    !arrivalClock && !activeMission
+                      ? "Start the trip to see live ETA from your location."
+                      : !arrivalClock && activeMission && distM == null
+                        ? "Getting GPS / route…"
+                        : undefined;
+                  return (
+                    <View
+                      pointerEvents="box-none"
+                      style={[
+                        styles.trackingInfoCardWrap,
+                        { top: cardTop, right: Layout.screenPaddingHorizontal },
+                      ]}
+                    >
+                      <LiveRouteInfoCard
+                        colors={colors}
+                        toLabel={toLabel}
+                        distanceDisplay={distM}
+                        etaDisplay={etaText ?? "—"}
+                        arrivalClock={arrivalClock}
+                        bottomHint={bottomHint}
+                        onDismiss={() => setShowTrackingInfoCard(false)}
+                      />
+                    </View>
+                  );
+                })()
+              : null}
 
             {/* Route summary panel — readable pickup/drop addresses */}
             {showRouteSummary && (activeMission || effectiveFirstIncoming) ? (() => {
@@ -3475,39 +3611,6 @@ export default function DriverRadarScreen() {
                         {(trip.drop_location || (trip as any).drop_area)?.trim() || "—"}
                       </Text>
                     </View>
-                  </View>
-                </View>
-              );
-            })() : null}
-
-            {/* Trip preview info bar — mirrors TripDetailScreen radarBottom */}
-            {(activeMission || effectiveFirstIncoming) && activeGuidance ? (() => {
-              const trip = (activeMission || effectiveFirstIncoming) as tripsService.TripRow;
-              const etaLabel = trip.estimated_duration ? String(trip.estimated_duration) : null;
-              return (
-                <View
-                  pointerEvents="none"
-                  style={[
-                    styles.mapPreviewBar,
-                    { bottom: isFullScreen ? insets.bottom + 20 : 20 },
-                  ]}
-                >
-                  <View style={styles.mapPreviewBarLeft}>
-                    <Text style={styles.mapPreviewBarLabel}>Active Node</Text>
-                    <Text style={styles.mapPreviewBarValue} numberOfLines={2}>
-                      {activeGuidance.title}
-                    </Text>
-                  </View>
-                  <View style={styles.mapPreviewBarRight}>
-                    <Text style={[styles.mapPreviewBarLabel, { textAlign: "right" }]}>Distance / ETA</Text>
-                    <Text style={styles.mapPreviewBarSpeed} numberOfLines={1}>
-                      {distanceToTargetKm != null
-                        ? formatRoadDistanceM(distanceToTargetKm * 1000)
-                        : "—"}
-                      {etaLabel ? (
-                        <Text style={styles.mapPreviewBarSpeedUnit}>{" · "}{etaLabel}</Text>
-                      ) : null}
-                    </Text>
                   </View>
                 </View>
               );
@@ -3734,6 +3837,9 @@ export default function DriverRadarScreen() {
               trip={activeMission}
               commissionAmount={activeMissionCommission}
               distanceToTargetKm={distanceToTargetKmGlobal}
+              driverLatitude={(truckPosition ?? driverMapPosition)?.latitude ?? null}
+              driverLongitude={(truckPosition ?? driverMapPosition)?.longitude ?? null}
+              driverLocationLabel={locationLabel}
               onRefresh={fetch}
               onTripCompleted={() => {
                 setJustCompletedTrip(true);
@@ -3769,6 +3875,9 @@ export default function DriverRadarScreen() {
               trip={effectiveFirstIncoming}
               commissionAmount={newAssignmentCommission}
               distanceToTargetKm={distanceToTargetKmGlobal}
+              driverLatitude={(truckPosition ?? driverMapPosition)?.latitude ?? null}
+              driverLongitude={(truckPosition ?? driverMapPosition)?.longitude ?? null}
+              driverLocationLabel={locationLabel}
               onRefresh={fetch}
               onTripCompleted={() => {
                 setJustCompletedTrip(true);
@@ -5810,8 +5919,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    zIndex: 10,
-    elevation: 20,
+    zIndex: 60,
+    elevation: 24,
   },
   mapTopPillButton: {
     flexDirection: "row",
@@ -5831,7 +5940,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     letterSpacing: 0.2,
-    maxWidth: 120,
+    maxWidth: 108,
+  },
+  trackingInfoCardWrap: {
+    position: "absolute",
+    zIndex: 36,
+    maxWidth: 288,
   },
   /** Scrollable inbox below active / accepted trip flow — never blocks with a modal. */
   otherPendingTripsWrap: {
@@ -6097,58 +6211,6 @@ const styles = StyleSheet.create({
   routeSummaryBadgeText: {
     fontSize: 11,
     fontWeight: "700",
-  },
-  mapPreviewBar: {
-    position: "absolute",
-    left: 20,
-    right: 20,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
-    gap: 16,
-    backgroundColor: "rgba(15,20,30,0.82)",
-    borderRadius: 20,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.1)",
-    zIndex: 20,
-  },
-  mapPreviewBarLeft: {
-    flex: 1,
-    minWidth: 0,
-  },
-  mapPreviewBarRight: {
-    alignItems: "flex-end",
-    flex: 0.9,
-    minWidth: 0,
-  },
-  mapPreviewBarLabel: {
-    color: "#64748b",
-    fontSize: 9,
-    fontWeight: "900",
-    textTransform: "uppercase",
-    letterSpacing: 1.5,
-    marginBottom: 4,
-  },
-  mapPreviewBarValue: {
-    color: "#fff",
-    fontSize: 13,
-    fontWeight: "900",
-    fontStyle: "italic",
-  },
-  mapPreviewBarSpeed: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "900",
-    fontStyle: "italic",
-    textAlign: "right",
-  },
-  mapPreviewBarSpeedUnit: {
-    fontSize: 10,
-    color: "rgba(255,255,255,0.42)",
-    fontStyle: "normal",
-    textTransform: "uppercase",
   },
   mapControlBtn: {
     width: 44,

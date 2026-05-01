@@ -39,6 +39,7 @@ export const LeafletMapMapLibre = React.forwardRef<
       polyline = [],
       polylineColor = "#3b82f6",
       lowPower = false,
+      interactionLocked = false,
     },
     ref,
   ) => {
@@ -79,6 +80,8 @@ export const LeafletMapMapLibre = React.forwardRef<
           attributionEnabled={false}
           compassEnabled={false}
           scaleBarEnabled={false}
+          scrollEnabled={!interactionLocked}
+          zoomEnabled={!interactionLocked}
         >
           <MapLibreGL.Camera
             ref={cameraRef}

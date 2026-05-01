@@ -479,7 +479,10 @@ export function DiscoverView({
     queryKey: ['network', 'discover', 'organization-locations', discoverOrgIds],
     queryFn: async () => {
       const { error: orgErr, locations } = await getOrganizationLocationsByIds(discoverOrgIds);
-      if (orgErr) throw orgErr;
+      if (orgErr) {
+        if (__DEV__) console.warn('[DiscoverView] organization locations:', orgErr.message);
+        return [];
+      }
       return locations;
     },
     enabled: discoverOrgIds.length > 0,
