@@ -35,12 +35,14 @@ const initialState: AddTripFormState = {
   supplierRate: '',
   supplySource: 'asset',
   supplierId: null,
+  supplierDisplayName: '',
   advancePaid: '',
   assignLater: false,
   notes: '',
   driverId: null,
   vehicleId: null,
   driverPhone: '',
+  aggregateDriverName: '',
   driverPhoneName: null,
   driverPhoneConfirmed: false,
   aggregateVehicleText: '',
@@ -72,6 +74,7 @@ export function useAddTripForm() {
     ...s,
     supplySource: v,
     supplierId: v === 'aggregate' ? s.supplierId : null,
+    supplierDisplayName: v === 'aggregate' ? s.supplierDisplayName : '',
     driverId: v === 'asset' ? s.driverId : null,
     vehicleId: v === 'asset' ? s.vehicleId : null,
     driverPhone: v === 'asset' ? '' : s.driverPhone,
@@ -79,7 +82,15 @@ export function useAddTripForm() {
     driverPhoneConfirmed: v === 'asset' ? false : s.driverPhoneConfirmed,
     aggregateVehicleText: v === 'asset' ? '' : s.aggregateVehicleText,
   })), []);
-  const setSupplierId = useCallback((v: string | null) => setState((s) => ({ ...s, supplierId: v })), []);
+  const setSupplierSelection = useCallback(
+    (id: string | null, displayName?: string | null) =>
+      setState((s) => ({
+        ...s,
+        supplierId: id,
+        supplierDisplayName: id ? String(displayName ?? '').trim() : '',
+      })),
+    [],
+  );
   const setAdvancePaid = useCallback((v: string) => setState((s) => ({ ...s, advancePaid: v })), []);
   const setAssignLater = useCallback((v: boolean) =>
     setState((s) => ({
@@ -91,6 +102,7 @@ export function useAddTripForm() {
       ...(v && s.supplySource === 'aggregate'
         ? {
             driverPhone: '',
+            aggregateDriverName: '',
             driverPhoneName: null as string | null,
             driverPhoneConfirmed: false,
             aggregateVehicleText: '',
@@ -114,6 +126,7 @@ export function useAddTripForm() {
   const setDriverPhoneName = useCallback((v: string | null) => setState((s) => ({ ...s, driverPhoneName: v })), []);
   const setDriverPhoneConfirmed = useCallback((v: boolean) => setState((s) => ({ ...s, driverPhoneConfirmed: v })), []);
   const setAggregateVehicleText = useCallback((v: string) => setState((s) => ({ ...s, aggregateVehicleText: v })), []);
+  const setAggregateDriverName = useCallback((v: string) => setState((s) => ({ ...s, aggregateDriverName: v })), []);
 
   const clearClientSelection = useCallback(() => setState((s) => ({ ...s, clientId: null, clientName: '' })), []);
 
@@ -138,9 +151,16 @@ export function useAddTripForm() {
 
       // If we found a driver by phone, require explicit confirmation before enabling "Create Trip".
       const driverFound = !!(state.driverPhoneName && state.driverPhone.trim());
+      const nameOk =
+        state.assignLater ||
+        (state.aggregateDriverName.trim().length >= 2);
       const driverOk = state.assignLater
         ? (state.driverPhone.trim() ? (!driverFound || state.driverPhoneConfirmed) : true)
-        : (state.driverPhone.trim() && (!driverFound || state.driverPhoneConfirmed));
+        : (
+            state.driverPhone.trim().length === 10 &&
+            nameOk &&
+            (!driverFound || state.driverPhoneConfirmed)
+          );
 
       return supplierOk && !!driverOk;
     }
@@ -304,8 +324,14 @@ export function useAddTripForm() {
       if (!state.assignLater) {
         const vehicleTrimmed = state.aggregateVehicleText.trim();
         if (!vehicleTrimmed) return 'Vehicle: required for aggregate trips';
+        const nameTrimmed = state.aggregateDriverName.trim();
+        if (!nameTrimmed) return 'Driver name: required for aggregate trips';
+        if (nameTrimmed.length < 2) return 'Driver name: enter at least 2 characters';
         const driverPhoneTrimmed = state.driverPhone.trim();
         if (!driverPhoneTrimmed) return 'Driver for tracking: required for aggregate trips';
+        if (driverPhoneTrimmed.length !== 10) {
+          return 'Driver for tracking: enter a 10-digit Indian mobile number';
+        }
       }
     }
     if (state.supplySource === 'asset' && !state.assignLater) {
@@ -342,6 +368,12 @@ export function useAddTripForm() {
     if (state.tons.trim()) {
       notes = (notes ? notes + '\n' : '') + `Load: ${state.tons.trim()} Tons`;
     }
+    if (state.supplySource === 'aggregate' && state.aggregateDriverName.trim()) {
+      notes =
+        (notes ? notes + '\n' : '') +
+        'Driver name (tracking): ' +
+        state.aggregateDriverName.trim();
+    }
     if (state.supplySource === 'aggregate' && state.aggregateVehicleText.trim()) {
       notes = (notes ? notes + '\n' : '') + 'Vehicle: ' + state.aggregateVehicleText.trim();
     }
@@ -360,6 +392,10 @@ export function useAddTripForm() {
       client_price: clientPrice,
       supplier_rate: supplierRate,
       supplier_id: state.supplySource === 'aggregate' ? state.supplierId || null : null,
+      supplier_name:
+        state.supplySource === 'aggregate' && state.supplierId
+          ? state.supplierDisplayName.trim() || null
+          : null,
       advance_paid: state.supplySource === 'aggregate' && advancePaid > 0 ? advancePaid : undefined,
       notes: notes || null,
       driver_id:
@@ -392,7 +428,7 @@ export function useAddTripForm() {
       setClientPrice,
       setSupplierRate,
       setSupplySource,
-      setSupplierId,
+      setSupplierSelection,
       setAdvancePaid,
       setAssignLater,
       setNotes,
@@ -402,6 +438,7 @@ export function useAddTripForm() {
       setDriverPhoneName,
       setDriverPhoneConfirmed,
       setAggregateVehicleText,
+      setAggregateDriverName,
       clearClientSelection,
     }),
     [
@@ -417,7 +454,7 @@ export function useAddTripForm() {
       setClientPrice,
       setSupplierRate,
       setSupplySource,
-      setSupplierId,
+      setSupplierSelection,
       setAdvancePaid,
       setAssignLater,
       setNotes,
@@ -427,6 +464,7 @@ export function useAddTripForm() {
       setDriverPhoneName,
       setDriverPhoneConfirmed,
       setAggregateVehicleText,
+      setAggregateDriverName,
       clearClientSelection,
     ],
   );

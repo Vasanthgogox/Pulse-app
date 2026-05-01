@@ -5,7 +5,6 @@
  * - Indent-based: Client→Supplier, Client→Driver, Supplier→Driver
  */
 import Theme from '@/constants/Theme';
-import { isAggregateTrip } from '@/lib/driverUtils';
 import {
   getClientById,
   getClientDetails,
@@ -305,6 +304,8 @@ export function TripRatingsBlock({
   const [histDriverAvg, setHistDriverAvg] = useState<number | null>(null);
   /** All-time average from `ratings` for this supplier (all trips). */
   const [histSupplierAvg, setHistSupplierAvg] = useState<number | null>(null);
+  /** When trip has supplier_id but no denormalized/display name yet. */
+  const [supplierResolvedLabel, setSupplierResolvedLabel] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [flow, setFlow] = useState<RateFlow>(null);
   const [score, setScore] = useState(0);
@@ -319,6 +320,7 @@ export function TripRatingsBlock({
   const [clientComment, setClientComment] = useState('');
   const [clientSubmitting, setClientSubmitting] = useState(false);
   const [clientFeedback, setClientFeedback] = useState<LocalClientFeedback | null>(null);
+  const [clientFeedbackLoaded, setClientFeedbackLoaded] = useState(false);
   const hasAutoOpenedRef = useRef(false);
   const hasAutoOpenedClientRef = useRef(false);
   const modalOpacity = useRef(new Animated.Value(0)).current;
@@ -467,20 +469,66 @@ export function TripRatingsBlock({
 
   useEffect(() => {
     let cancelled = false;
+    const sid = trip.supplier_id?.trim();
+    if (!sid) {
+      setSupplierResolvedLabel(null);
+      return;
+    }
+    const fromTrip = (trip.supplier_name ?? '').trim();
+    const fromPartner = (partnerName ?? "").trim();
+    if (fromTrip || fromPartner) {
+      setSupplierResolvedLabel(null);
+      return;
+    }
+    const ownerOrg = trip.organization_id;
+    const pickSupplierDisplayName = (s: {
+      company_name?: string | null;
+      name?: string | null;
+      contact_person?: string | null;
+    } | null) => (s?.company_name || s?.name || s?.contact_person || "").trim() || null;
+
+    void (async () => {
+      const { supplier: fromRpc } = await getSupplierDetails(sid);
+      if (cancelled) return;
+      let label = pickSupplierDisplayName(fromRpc);
+      if (!label && ownerOrg) {
+        const { supplier } = await getSupplierById(ownerOrg, sid);
+        if (cancelled) return;
+        label = pickSupplierDisplayName(supplier);
+      }
+      const viewerOrgId = currentOrganization?.id;
+      if (!label && viewerOrgId && viewerOrgId !== ownerOrg) {
+        const { supplier: supViewer } = await getSupplierById(viewerOrgId, sid);
+        if (cancelled) return;
+        label = pickSupplierDisplayName(supViewer);
+      }
+      if (!cancelled) setSupplierResolvedLabel(label);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [trip.supplier_id, trip.organization_id, partnerName, trip.supplier_name, currentOrganization?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
     AsyncStorage.getItem(clientFeedbackStorageKey)
       .then((raw) => {
-        if (cancelled || !raw) return;
-        try {
-          const parsed = JSON.parse(raw) as LocalClientFeedback;
-          if (parsed && typeof parsed.score === 'number') {
-            setClientFeedback(parsed);
+        if (cancelled) return;
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw) as LocalClientFeedback;
+            if (parsed && typeof parsed.score === 'number') {
+              setClientFeedback(parsed);
+            }
+          } catch {
+            // ignore bad local payload
           }
-        } catch {
-          // ignore bad local payload
         }
+        setClientFeedbackLoaded(true);
       })
       .catch(() => {
-        // ignore local storage failures
+        if (!cancelled) setClientFeedbackLoaded(true);
       });
     return () => {
       cancelled = true;
@@ -710,13 +758,6 @@ export function TripRatingsBlock({
     }
   }, [loading, isCompleted, canRateSupplier, canRateDriver, hasRatedSupplier, hasRatedDriver]);
 
-  useEffect(() => {
-    if (loading || !isCompleted || hasAutoOpenedClientRef.current) return;
-    if (!canRateClient) return;
-    hasAutoOpenedClientRef.current = true;
-    setShowClientFeedbackModal(true);
-  }, [loading, isCompleted, canRateClient]);
-
   const resetComposer = (nextFlow: RateFlow) => {
     setFlow(nextFlow);
     setScore(0);
@@ -850,14 +891,28 @@ export function TripRatingsBlock({
   const supplierTripAvg = supplierTripRating?.score ?? null;
   const driverTripAvg = driverTripRating?.score ?? null;
   const clientTripAvg = clientTripRating?.score ?? clientFeedback?.score ?? null;
+
+  useEffect(() => {
+    if (loading || !isCompleted || !clientFeedbackLoaded) return;
+    if (hasAutoOpenedClientRef.current) return;
+    if (!canRateClient) return;
+    // Only auto-open if no rating has been given yet (DB or local)
+    if (clientTripRating || clientFeedback) return;
+    hasAutoOpenedClientRef.current = true;
+    setShowClientFeedbackModal(true);
+  }, [loading, isCompleted, canRateClient, clientFeedbackLoaded, clientTripRating, clientFeedback]);
+
   const displaySupplierAvg = histSupplierAvg;
   const displayDriverAvg = histDriverAvg;
   const displayClientAvg = histClientAvg;
   const clientDisplayName = (clientName || trip.client_name || 'Client').trim();
-  const hasSupplierParty = !!trip.supplier_id && isAggregateTrip(trip);
-  const supplierDisplayName = hasSupplierParty
-    ? (partnerName || 'Supplier').trim()
-    : 'No supplier';
+  const resolvedPartnerLabel =
+    (partnerName ?? '').trim() ||
+    (trip.supplier_name ?? '').trim() ||
+    (supplierResolvedLabel ?? '').trim() ||
+    'Supplier';
+  const hasSupplierParty = !!trip.supplier_id?.trim();
+  const supplierDisplayName = hasSupplierParty ? resolvedPartnerLabel : 'No supplier';
   const driverDisplayName = (
     driverName ||
     trip.driver_display_name ||
@@ -868,7 +923,7 @@ export function TripRatingsBlock({
   const isWidePanel = isWorkspace || isRegistry;
   const isCompactWorkspace = isWidePanel && width < 1100;
   const activeSubjectName = flow?.type === 'client_supplier'
-    ? (partnerName || 'Supplier')
+    ? resolvedPartnerLabel
     : (driverName || trip.driver_display_name || 'Driver');
   const activeSubjectMeta = flow?.type === 'client_supplier'
     ? (trip.display_trip_id || trip.trip_number || 'Trip')
@@ -904,6 +959,7 @@ export function TripRatingsBlock({
 
   if (
     layoutVariant !== 'registry' &&
+    layoutVariant !== 'workspace' &&
     !canRateSupplier &&
     !canRateDriver &&
     !canRateClient &&
@@ -1064,6 +1120,14 @@ export function TripRatingsBlock({
   void ratingsList;
   void clientFeedbackList;
 
+  const driverRegistryFeedback = parseCommentPayload(driverTripRating?.comment ?? null);
+  const supplierRegistryFeedback = parseCommentPayload(supplierTripRating?.comment ?? null);
+  const clientRegistryFeedback: CommentPayload = clientTripRating
+    ? parseCommentPayload(clientTripRating.comment)
+    : clientFeedback
+      ? { tags: clientFeedback.tags, note: clientFeedback.note }
+      : { tags: [], note: '' };
+
   const renderRegistryCard = (
     roleKicker: string,
     tag: string,
@@ -1073,10 +1137,12 @@ export function TripRatingsBlock({
     globalScore: number | null,
     onAudit: () => void,
     auditDisabled: boolean,
-    onSelectScore?: (score: number) => void,
+    onSelectScore: ((score: number) => void) | undefined,
+    feedback: CommentPayload,
+    ratedTypeForTags: RatedType,
   ) => {
-    const tripVal = tripScore ?? 0;
-    const rungs = Math.min(5, Math.max(0, Math.floor(tripVal)));
+    const filledStars =
+      tripScore != null ? Math.min(5, Math.max(0, Math.round(Number(tripScore)))) : 0;
     const perfUp =
       tripScore != null &&
       globalScore != null &&
@@ -1085,14 +1151,16 @@ export function TripRatingsBlock({
       tripScore == null || globalScore == null
         ? 'Baseline pending'
         : perfUp
-          ? 'Performance optimized'
-          : 'Below baseline';
+          ? 'Above global avg'
+          : 'Below global avg';
     const perfColor =
       tripScore == null || globalScore == null
         ? Theme.textMuted
         : perfUp
           ? Theme.positive
           : Theme.warning;
+    const noteTrimmed = (feedback.note ?? '').trim();
+    const hasFeedbackBody = feedback.tags.length > 0 || !!noteTrimmed;
 
     return (
       <View style={styles.regCard}>
@@ -1117,16 +1185,20 @@ export function TripRatingsBlock({
                 <View style={styles.regTagPill}>
                   <Text style={styles.regTagPillText}>{tag}</Text>
                 </View>
-                <View style={styles.regGlobalPill}>
-                  <FontAwesome name="star" size={8} color={Theme.feedbackModalStarActive} />
-                  <Text style={styles.regGlobalPillText}>
-                    {globalScore != null ? globalScore.toFixed(1) : '—'}
-                  </Text>
+                <View style={styles.regGlobalAvgCluster}>
+                  <Text style={styles.regMetricEyebrowMuted}>GLOBAL AVG</Text>
+                  <View style={styles.regGlobalPill}>
+                    <FontAwesome name="star" size={9} color={Theme.feedbackModalStarActive} />
+                    <Text style={styles.regGlobalPillText}>
+                      {globalScore != null ? globalScore.toFixed(1) : '—'}
+                    </Text>
+                  </View>
                 </View>
               </View>
             </View>
           </View>
           <View style={styles.regCardRight}>
+            <Text style={styles.regMetricEyebrowMuted}>THIS TRIP</Text>
             <View style={styles.regScoreRow}>
               <Text style={styles.regTripBig}>
                 {tripScore != null ? tripScore.toFixed(1) : '—'}
@@ -1141,25 +1213,48 @@ export function TripRatingsBlock({
             </Text>
           </View>
         </View>
+        {hasFeedbackBody ? (
+          <View style={styles.regFeedbackSection}>
+            <Text style={styles.regFeedbackHeading}>Given feedback</Text>
+            {feedback.tags.length > 0 ? (
+              <View style={styles.regFeedbackTags}>
+                {feedback.tags.map((tagId) => (
+                  <View key={tagId} style={styles.regFeedbackTagChip}>
+                    <Text style={styles.regFeedbackTagText}>
+                      {getQuickTagLabel(tagId, ratedTypeForTags)}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+            {noteTrimmed ? (
+              <Text style={styles.regFeedbackNote} numberOfLines={4}>
+                {noteTrimmed}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
         <View style={styles.regCardFoot}>
-          <View style={styles.regRungRow}>
-            {[1, 2, 3, 4, 5].map((step) => (
-              <TouchableOpacity
-                key={step}
-                disabled={auditDisabled || !onSelectScore}
-                activeOpacity={0.8}
-                onPress={() => onSelectScore?.(step)}
-                style={[
-                  styles.regRungDot,
-                  step <= rungs ? styles.regRungDotOn : styles.regRungDotOff,
-                  auditDisabled || !onSelectScore ? null : styles.regRungDotTap,
-                ]}
-              >
-                {step <= rungs ? (
-                  <Feather name="check" size={9} color={Theme.textOnPrimary} />
-                ) : null}
-              </TouchableOpacity>
-            ))}
+          <View style={styles.regStarsRow}>
+            {[1, 2, 3, 4, 5].map((step) => {
+              const filled = tripScore != null && step <= filledStars;
+              return (
+                <TouchableOpacity
+                  key={step}
+                  disabled={auditDisabled || !onSelectScore}
+                  activeOpacity={0.8}
+                  onPress={() => onSelectScore?.(step)}
+                  style={[styles.regStarHit, auditDisabled || !onSelectScore ? null : styles.regRungDotTap]}
+                  hitSlop={{ top: 6, bottom: 6, left: 2, right: 2 }}
+                >
+                  <FontAwesome
+                    name={filled ? 'star' : 'star-o'}
+                    size={15}
+                    color={filled ? Theme.feedbackModalStarActive : Theme.borderMedium}
+                  />
+                </TouchableOpacity>
+              );
+            })}
           </View>
           <TouchableOpacity
             disabled={auditDisabled}
@@ -1222,6 +1317,8 @@ export function TripRatingsBlock({
                     },
                     !canOpenDriverRate,
                     canOpenDriverRate ? openRateDriverAtScore : undefined,
+                    driverRegistryFeedback,
+                    'driver',
                   )}
                   {renderRegistryCard(
                     'Client Hub',
@@ -1235,6 +1332,8 @@ export function TripRatingsBlock({
                     },
                     !canOpenClientRate,
                     canOpenClientRate ? openRateClientAtScore : undefined,
+                    clientRegistryFeedback,
+                    'client',
                   )}
                   {renderRegistryCard(
                     'Supplier Node',
@@ -1248,6 +1347,8 @@ export function TripRatingsBlock({
                     },
                     !canOpenSupplierRate || !hasSupplierParty,
                     canOpenSupplierRate ? openRateSupplierAtScore : undefined,
+                    supplierRegistryFeedback,
+                    'supplier',
                   )}
                 </View>
               </View>
@@ -1264,13 +1365,9 @@ export function TripRatingsBlock({
                     <Text style={styles.wsSubtitle}>Track service quality across completed trips</Text>
                   </View>
                 </View>
-                {(displaySupplierAvg != null ||
-                  displayDriverAvg != null ||
-                  displayClientAvg != null) && (
-                  <View style={[styles.wsPillRow, isCompactWorkspace && styles.wsPillRowCompact]}>
-                    {summaryPillsEl}
-                  </View>
-                )}
+                <View style={[styles.wsPillRow, isCompactWorkspace && styles.wsPillRowCompact]}>
+                  {summaryPillsEl}
+                </View>
               </View>
             ) : null}
 
@@ -2435,15 +2532,31 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.borderLight,
     paddingHorizontal: 7,
-    paddingVertical: 2,
+    paddingVertical: 3,
     backgroundColor: Theme.surfaceGray,
+  },
+  regGlobalAvgCluster: {
+    alignItems: 'flex-start',
+    gap: 3,
+  },
+  regMetricEyebrowMuted: {
+    fontSize: 6,
+    fontWeight: '900',
+    color: Theme.textMuted,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
   },
   regGlobalPillText: {
     fontSize: 8,
     fontWeight: '900',
     color: Theme.textSecondary,
   },
-  regCardRight: { alignItems: 'flex-end', flexShrink: 0, minWidth: 58 },
+  regCardRight: {
+    alignItems: 'flex-end',
+    flexShrink: 0,
+    minWidth: 72,
+    gap: 3,
+  },
   regScoreRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   regTripBig: {
     fontSize: 22,
@@ -2474,23 +2587,63 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 10,
     zIndex: 1,
   },
-  regRungRow: { flexDirection: 'row', gap: 4 },
-  regRungDot: {
-    width: 17,
-    height: 17,
-    borderRadius: 9,
-    borderWidth: 1,
-    borderColor: Theme.screenBackground,
+  regStarsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  regStarHit: {
+    paddingVertical: 4,
+    paddingHorizontal: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  regRungDotTap: {
-    cursor: 'pointer',
+  regFeedbackSection: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
+    gap: 6,
+    zIndex: 1,
   },
-  regRungDotOn: { backgroundColor: Theme.primary },
-  regRungDotOff: { backgroundColor: Theme.surfaceGray },
+  regFeedbackHeading: {
+    fontSize: 7,
+    fontWeight: '900',
+    color: Theme.textMuted,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  regFeedbackTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 5,
+  },
+  regFeedbackTagChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  regFeedbackTagText: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: Theme.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.2,
+  },
+  regFeedbackNote: {
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '600',
+    color: Theme.textPrimaryDark,
+    fontStyle: 'italic',
+  },
   regAuditTap: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   regAuditTxt: {
     fontSize: 8,

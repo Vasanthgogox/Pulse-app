@@ -8,7 +8,10 @@ import { FinanceFAB } from "@/components/FinanceFAB";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
-import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
+import {
+  useDemoTabBarVisibilityProgressOptional,
+  useTabBarAwareScrollProps,
+} from "@/contexts/DemoTabBarScrollContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { LedgerReportModal } from "@/features/finance";
@@ -56,6 +59,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import {
     Modal,
     NativeScrollEvent,
@@ -93,9 +97,9 @@ type DateFilter =
   | "this_month"
   | "custom";
 
-const TRIPS_FAB_SIZE_MOBILE = 40;
-const TRIPS_FAB_SIZE_DESKTOP = 46;
-const CHAT_FAB_STACK_OFFSET = 60;
+const TRIPS_FAB_SIZE_MOBILE = 56;
+const TRIPS_FAB_SIZE_DESKTOP = 56;
+const CHAT_FAB_STACK_OFFSET = 68;
 
 type TripsListLayout = "cards" | "table";
 type HistoryTripMetricId =
@@ -165,6 +169,13 @@ export default function TripsScreen() {
     Layout.tabBarBottomPaddingMin;
   const tripsFabBottom = webChatFabBaseBottom + CHAT_FAB_STACK_OFFSET;
   const tabBarScrollProps = useTabBarAwareScrollProps();
+  const fallbackFabVisibilityProgress = useSharedValue(1);
+  const fabVisibilityProgress =
+    useDemoTabBarVisibilityProgressOptional() ?? fallbackFabVisibilityProgress;
+  const fabVisibilityStyle = useAnimatedStyle(() => ({
+    opacity: fabVisibilityProgress.value,
+    transform: [{ scale: 0.92 + fabVisibilityProgress.value * 0.08 }],
+  }));
   const screenTopPad =
     Platform.OS === "web" ? 0 : insets.top + Layout.headerPaddingBelowInset;
   const tripsScrollBottomPad =
@@ -2638,7 +2649,7 @@ export default function TripsScreen() {
         </ScrollView>
       )}
       {canAccess && (
-        <View
+        <Animated.View
           style={[
             styles.fabWrap,
             {
@@ -2646,6 +2657,7 @@ export default function TripsScreen() {
               right: Layout.screenPaddingHorizontal,
               bottom: tripsFabBottom,
             },
+            fabVisibilityStyle,
           ]}
         >
           <FinanceFAB
@@ -2653,9 +2665,9 @@ export default function TripsScreen() {
             accessibilityLabel={tr("addTrip")}
             icon="road"
             size={tripsFabSize}
-            iconSize={isMobile ? 17 : 20}
+            iconSize={20}
           />
-        </View>
+        </Animated.View>
       )}
       <LedgerReportModal
         visible={tripLedgerExportOpen}

@@ -1029,9 +1029,10 @@ export default function DriverWalletScreen() {
     );
   }, [cashCardSparklePulse, cashCardWatermarkDrift]);
 
+  /** Narrow band so the Sparkles glyph reads as steady (wide opacity looked like flashing). */
   const cashSparkleAnimStyle = useAnimatedStyle(() => ({
-    opacity: 0.5 + cashCardSparklePulse.value * 0.5,
-    transform: [{ scale: 0.92 + cashCardSparklePulse.value * 0.14 }],
+    opacity: 0.88 + cashCardSparklePulse.value * 0.12,
+    transform: [{ scale: 0.97 + cashCardSparklePulse.value * 0.03 }],
   }));
 
   const cashWatermarkAnimStyle = useAnimatedStyle(() => ({

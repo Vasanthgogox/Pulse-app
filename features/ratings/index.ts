@@ -1,4 +1,7 @@
 export {
+  averageRatingForRatedParty,
+  averageScore,
+  averageScoreDeduped,
   createRating,
   getRatingsForClient,
   getRatingsForClients,
@@ -7,8 +10,7 @@ export {
   getRatingsForSuppliers,
   getRatingsForDriver,
   getRatingsForDrivers,
-  averageScore,
-} from './services/ratings.service';
+} from "./services/ratings.service";
 export type {
   RatingRow,
   RaterType,

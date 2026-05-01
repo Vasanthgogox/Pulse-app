@@ -11,6 +11,7 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import { TripRatingsBlock } from "@/features/ratings/components/TripRatingsBlock";
 import { isAggregateTrip } from "@/lib/driverUtils";
+import { notifyTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
 import { formatINR, formatIndianVehicleNumber } from "@/lib/format";
 import Feather from "@expo/vector-icons/Feather";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -681,6 +682,10 @@ export default function TripDetailScreen({
       const { error } = await updateTripStatus(trip.id, updateData);
       if (error) { setSimError(error.message); setSimulating(false); return; }
 
+      // DB trigger posts Trip System lines to `trip_messages`; refetch in-app trip chat
+      // (realtime may be unavailable). Same pattern as ledger → chat bridge.
+      notifyTripChatMessagesChanged();
+
       const userName = detail.profile?.full_name?.trim() || "Business";
       const simEntry = `[BISIM|${simConfirmStep.targetStatus}|${new Date().toISOString()}|${simConfirmStep.driverLat ?? ""}|${simConfirmStep.driverLng ?? ""}|${userName}]`;
       const existingNotes = trip.notes?.trim() || "";
@@ -830,7 +835,7 @@ export default function TripDetailScreen({
       return;
     }
     if (canUploadTripDocs) {
-      openTripDocumentsFlow();
+        openTripDocumentsFlow();
       return;
     }
     if (doc.id === "vehicle-documents" && trip.vehicle_id) {
@@ -936,15 +941,15 @@ export default function TripDetailScreen({
                 <Text style={neoStyles.manifestNavKicker}>Manifest Management</Text>
                 <View style={neoStyles.manifestNavTitleRow}>
                   <Text style={neoStyles.manifestNavTripId} numberOfLines={1}>
-                    {getTripDisplayNumber(trip)}
-                  </Text>
+                  {getTripDisplayNumber(trip)}
+                </Text>
                   <View style={neoStyles.manifestStatusBadge}>
                     <Text style={neoStyles.manifestStatusBadgeText}>
                       {statusLabel === "Completed" ? "DEPLOYED" : statusLabel.toUpperCase()}
                     </Text>
                   </View>
-                </View>
               </View>
+            </View>
             </View>
             <View style={neoStyles.manifestNavActions}>
               <TouchableOpacity style={neoStyles.auditBtn} activeOpacity={0.85}>
@@ -3045,7 +3050,7 @@ export default function TripDetailScreen({
                 >
                   <Feather name="x" size={18} color="#fff" />
                 </TouchableOpacity>
-              </View>
+                  </View>
 
               <View style={neoStyles.provisionSummaryGrid}>
                 {provisionSummaryRows.map((row) => (
@@ -3058,7 +3063,7 @@ export default function TripDetailScreen({
                       ]}
                     >
                       {row.value}
-                    </Text>
+                  </Text>
                   </View>
                 ))}
               </View>
@@ -3080,7 +3085,7 @@ export default function TripDetailScreen({
                     <Text style={neoStyles.provisionChipText}>{chip}</Text>
                   </TouchableOpacity>
                 ))}
-              </View>
+                </View>
 
               {showInlineAdjustmentForm ? (
                 <View style={neoStyles.provisionForm}>
@@ -3091,16 +3096,16 @@ export default function TripDetailScreen({
                         {`${inlineAdjType === "revenue" ? "Sale / revenue" : "Supplier cost"} · ${
                           inlineAdjImpact === "plus" ? "Debit add-on" : "Credit deduction"
                         }`}
-                      </Text>
-                    </View>
-                    <TouchableOpacity
+                    </Text>
+                  </View>
+                  <TouchableOpacity
                       style={neoStyles.provisionFormClose}
                       onPress={() => setShowInlineAdjustmentForm(false)}
                       activeOpacity={0.85}
                     >
                       <Feather name="x" size={14} color="#475569" />
-                    </TouchableOpacity>
-                  </View>
+                  </TouchableOpacity>
+                </View>
 
                   <Text style={neoStyles.provisionInputLabel}>Amount</Text>
                   <View style={neoStyles.provisionAmountRow}>
@@ -3119,7 +3124,7 @@ export default function TripDetailScreen({
                   <Text style={neoStyles.provisionInputLabel}>Reason</Text>
                   <View style={neoStyles.provisionReasonWrap}>
                     {inlineReasonOptions.map((reason) => (
-                      <TouchableOpacity
+                  <TouchableOpacity
                         key={reason}
                         style={[
                           neoStyles.provisionReasonChip,
@@ -3135,10 +3140,10 @@ export default function TripDetailScreen({
                           ]}
                         >
                           {reason}
-                        </Text>
-                      </TouchableOpacity>
+                    </Text>
+                  </TouchableOpacity>
                     ))}
-                  </View>
+            </View>
 
                   {inlineAdjReason === "Other" ? (
                     <TextInput
@@ -3162,7 +3167,7 @@ export default function TripDetailScreen({
                   >
                     <Text style={neoStyles.provisionSaveText}>Save Adjustment</Text>
                   </TouchableOpacity>
-                </View>
+            </View>
               ) : null}
 
               <View style={neoStyles.provisionAppliedList}>
@@ -3181,7 +3186,7 @@ export default function TripDetailScreen({
                         <Text style={neoStyles.provisionAppliedMeta}>
                           {adj.impact === "plus" ? "Add-on" : "Deduction"}
                         </Text>
-                      </View>
+          </View>
                       <Text style={neoStyles.provisionAppliedAmount}>
                         {adj.impact === "plus" ? "+" : "−"}{formatINR(adj.amount)}
                       </Text>
@@ -3236,6 +3241,9 @@ export default function TripDetailScreen({
                     await detail.handleAssignmentUpdated();
                     setShowAssignmentManager(false);
                   }}
+                  onBeforeRegisterNavigate={() =>
+                    setShowAssignmentManager(false)
+                  }
                   partnerName={detail.partnerName}
                   driverName={detail.driverName}
                   vehicleLabel={
@@ -6468,13 +6476,18 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 8,
-    paddingHorizontal: 4,
+    gap: 12,
+    marginBottom: 12,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    minHeight: 44,
   },
   assignModalTitle: {
-    fontSize: 14,
-    fontWeight: "800",
+    flex: 1,
+    fontSize: 18,
+    fontWeight: "700",
     color: "#0f172a",
+    letterSpacing: -0.2,
   },
   assignModalClose: {
     width: 30,

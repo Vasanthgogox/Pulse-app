@@ -21,10 +21,18 @@
  * - Re-invite after existing connection: duplicate insert prevented as above; existing client/supplier rows are updated by trigger when linked_organization_id already exists.
  */
 import { supabase } from '@/lib/supabase';
+import { todayPendingInviteCountFromSent } from '@/lib/todayPendingInviteCount';
 
-/** Shown when backend enforces a daily cap on `connection_requests` (deploy in Q-unified-base). */
+export { todayPendingInviteCountFromSent };
+
+/** Max pending connection requests you can send per local day (UI + `runConnectionInvite` preflight). */
+export const DAILY_CONNECTION_INVITE_LIMIT = 5;
+
+/** Shown when the user hits the daily cap (client preflight, hub invite, or backend / rate limit). */
+export const CONNECTION_REQUEST_DAILY_LIMIT_TITLE = "Daily limit exceeded";
+
 export const CONNECTION_REQUEST_DAILY_LIMIT_MESSAGE =
-  "You've reached today's connection limit. Try again tomorrow.";
+  "Daily invite limit reached. Try again after 24 hours.";
 
 export function looksLikeConnectionRateLimitError(message: string): boolean {
   const m = message.toLowerCase();
@@ -319,6 +327,17 @@ export async function getConnectionRequestsSent(orgId: string): Promise<{
   return { error: null, requests: (data ?? []) as ConnectionRequestRow[] };
 }
 
+/** True if today’s pending sent count is at or above the daily cap (extra fetch; server still enforces). */
+export async function isDailyConnectionInviteLimitReached(
+  orgId: string,
+): Promise<boolean> {
+  const { requests, error } = await getConnectionRequestsSent(orgId);
+  if (error) return false;
+  return (
+    todayPendingInviteCountFromSent(requests) >= DAILY_CONNECTION_INVITE_LIMIT
+  );
+}
+
 /**
  * Approve a connection request (caller must be member of to_organization_id).
  * Updates only when status is pending; trigger creates organization_relations and client/supplier rows.
@@ -382,21 +401,22 @@ export async function rejectConnectionRequest(requestId: string, receivingOrgId?
 }
 
 /**
- * Cancel a connection request that you have sent (caller must be member of from_organization_id).
- * Deletes the request so it can be re-sent later if needed. Only works when status is pending.
+ * Withdraw a connection request that you have sent.
+ * Sets status to 'cancelled' so it remains visible in the history tab.
+ * Only works when status is pending.
  */
 export async function cancelConnectionRequest(requestId: string): Promise<{
   error: Error | null;
   deleted: boolean;
 }> {
-  const { data: deleteData, error } = await supabase()
+  const { data, error } = await supabase()
     .from('connection_requests')
-    .delete()
+    .update({ status: 'cancelled', responded_at: new Date().toISOString() })
     .eq('id', requestId)
     .eq('status', 'pending')
     .select('id');
   if (error) return { error: new Error(error.message), deleted: false };
-  const deleted = Array.isArray(deleteData) && deleteData.length > 0;
+  const deleted = Array.isArray(data) && data.length > 0;
   return { error: null, deleted };
 }
 
@@ -404,14 +424,14 @@ export async function cancelPendingConnectionRequestByOrgPair(
   fromOrgId: string,
   toOrgId: string,
 ): Promise<{ error: Error | null; deleted: boolean }> {
-  const { data: deleteData, error } = await supabase()
+  const { data, error } = await supabase()
     .from('connection_requests')
-    .delete()
+    .update({ status: 'cancelled', responded_at: new Date().toISOString() })
     .eq('from_organization_id', fromOrgId)
     .eq('to_organization_id', toOrgId)
     .eq('status', 'pending')
     .select('id');
   if (error) return { error: new Error(error.message), deleted: false };
-  const deleted = Array.isArray(deleteData) && deleteData.length > 0;
+  const deleted = Array.isArray(data) && data.length > 0;
   return { error: null, deleted };
 }

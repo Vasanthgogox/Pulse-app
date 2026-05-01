@@ -3,8 +3,10 @@
  */
 import {
     CONNECTION_REQUEST_DAILY_LIMIT_MESSAGE,
+    CONNECTION_REQUEST_DAILY_LIMIT_TITLE,
     createConnectionRequest,
     getConnectionInviteeByPhone,
+    isDailyConnectionInviteLimitReached,
     looksLikeConnectionRateLimitError,
 } from "@/services/connectionRequestsService";
 import { Alert, Share } from "react-native";
@@ -27,6 +29,15 @@ export async function runConnectionInvite(
   }
   if (!item.phone?.trim()) {
     Alert.alert("Phone missing", `Add a phone number for ${item.name} before sending an invite.`);
+    return;
+  }
+
+  const atDailyLimit = await isDailyConnectionInviteLimitReached(orgId);
+  if (atDailyLimit) {
+    Alert.alert(
+      CONNECTION_REQUEST_DAILY_LIMIT_TITLE,
+      CONNECTION_REQUEST_DAILY_LIMIT_MESSAGE,
+    );
     return;
   }
 
@@ -53,9 +64,13 @@ export async function runConnectionInvite(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Could not send invite";
-    Alert.alert(
-      "Could not send invite",
-      looksLikeConnectionRateLimitError(message) ? CONNECTION_REQUEST_DAILY_LIMIT_MESSAGE : message,
-    );
+    if (looksLikeConnectionRateLimitError(message)) {
+      Alert.alert(
+        CONNECTION_REQUEST_DAILY_LIMIT_TITLE,
+        CONNECTION_REQUEST_DAILY_LIMIT_MESSAGE,
+      );
+    } else {
+      Alert.alert("Could not send invite", message);
+    }
   }
 }

@@ -6,11 +6,14 @@ import {
   type AddClientFormData,
   type ConnectionInviteeMatch,
 } from "@/features/clients";
+import { PartyRegistrationPortal } from "@/features/finance/components/PartyRegistrationPortal";
+import { usePartyPortalRouteHandlers } from "@/features/finance/hooks/usePartyPortalRouteHandlers";
 import { queryKeys } from "@/lib/queryKeys";
 import { useInvalidateClients } from "@/lib/queries/useClientsQuery";
 import { ROUTES } from "@/lib/routes";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
+import { Platform } from "react-native";
 import {
   getConnectionInviteeByPhone,
   createConnectionRequest,
@@ -40,6 +43,7 @@ export default function AddClientScreen() {
   const params = useLocalSearchParams<{ returnTo?: string | string[] }>();
   const queryClient = useQueryClient();
   const invalidateClients = useInvalidateClients();
+  const partyPortal = usePartyPortalRouteHandlers();
   const { currentOrganization, isLoading, refreshOrganization } = useOrganization();
   const returnToParam = Array.isArray(params.returnTo)
     ? params.returnTo[0]
@@ -98,6 +102,25 @@ export default function AddClientScreen() {
 
   if (isLoading) {
     return <CenteredLoadingView message="Loading organization…" />;
+  }
+
+  if (Platform.OS === "web") {
+    return (
+      <PartyRegistrationPortal
+        visible
+        initialKind="client"
+        onClose={() => closeModal(router, returnTo)}
+        organizationId={partyPortal.organizationId}
+        noOrganizationMessage={
+          currentOrganization ? null : partyPortal.NO_ORG_MESSAGE
+        }
+        onRefreshOrganization={partyPortal.refreshOrganization}
+        onAddClient={partyPortal.handleAddClientComplete}
+        onAddSupplier={partyPortal.handleAddSupplierComplete}
+        onAddDriver={partyPortal.handleAddDriverDirect}
+        onAddVehicle={partyPortal.handleAddVehicleComplete}
+      />
+    );
   }
 
   return (

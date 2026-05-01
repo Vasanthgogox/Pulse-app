@@ -3,18 +3,23 @@
  * Smart recommendations: scored by mutual connections, location match, lane overlap.
  * Shows "WHY" reason chips per card. Sort: recommended first, then alphabetical.
  */
-import Theme from '@/constants/Theme';
+import Layout from "@/constants/Layout";
+import Theme from "@/constants/Theme";
 import { PartyAvatar } from '@/components/PartyAvatar';
 import { discoverOrganizations, type DiscoverOrg } from '@/features/network/services/discover.service';
 import { getOrganizationLocationsByIds } from '@/features/organization/services/organization.service';
+import { showAppAlert } from "@/lib/appAlert";
+import { todayPendingInviteCountFromSent } from "@/lib/todayPendingInviteCount";
 import {
   cancelPendingConnectionRequestByOrgPair,
   CONNECTION_REQUEST_DAILY_LIMIT_MESSAGE,
+  CONNECTION_REQUEST_DAILY_LIMIT_TITLE,
   createConnectionRequest,
+  DAILY_CONNECTION_INVITE_LIMIT,
   type ConnectionRequestRow,
   looksLikeConnectionRateLimitError,
-} from '@/services/connectionRequestsService';
-import { useIndentsQuery, useInvalidateNetwork, useNetworkFeedQuery } from '@/lib/queries';
+} from "@/services/connectionRequestsService";
+import { useConnectionRequestsSentQuery, useIndentsQuery, useInvalidateNetwork, useNetworkFeedQuery } from '@/lib/queries';
 import { queryKeys } from '@/lib/queryKeys';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -52,6 +57,10 @@ interface DiscoverViewProps {
   onSearchChange?: (value: string) => void;
   showSearchChrome?: boolean;
   onOpenProfile?: (org: DiscoverOrg & { rating_value?: number | null; location_value?: string | null }) => void;
+  /** Called whenever the daily invite count changes so the parent can display it inline. */
+  onInviteCountChange?: (count: number, limit: number) => void;
+  /** When true (e.g. header shows max invites), block Send request with daily-limit alert even if query count lags. */
+  inviteDailyCapReached?: boolean;
 }
 
 // --- Scoring ---
@@ -114,6 +123,15 @@ function getBusinessLocation(
 function extractCity(location: string | null | undefined): string {
   if (!location) return '';
   return location.split(',')[0].trim().toLowerCase();
+}
+
+function chunkBySize<T>(arr: T[], size: number): T[][] {
+  if (size < 1) return arr.length ? [arr] : [];
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) {
+    out.push(arr.slice(i, i + size));
+  }
+  return out;
 }
 
 function scoreOrgs(
@@ -313,6 +331,17 @@ function SectionLabel({ label, count }: { label: string; count?: number }) {
 
 // --- Main view ---
 
+/** Matches Network tab `isMobileLayout` (<820): 2 cols × 3 rows. Else desktop: 7 cols × 2 rows. */
+const DISCOVER_GRID_BREAKPOINT = 820;
+const DISCOVER_COLS_DESKTOP = 7;
+const DISCOVER_ROWS_DESKTOP = 2;
+const DISCOVER_COLS_MOBILE = 2;
+const DISCOVER_ROWS_MOBILE = 3;
+const LIST_STATIC_HORIZONTAL_PAD = 14 * 2;
+const DISCOVER_GRID_GAP_PX = 12;
+/** Before `onLayout` reports width, cap provisional outer width so 7-up math stays modest vs narrow columns. */
+const DISCOVER_EMBEDDED_PROVISIONAL_OUTER_CAP = 520;
+
 export function DiscoverView({
   orgId,
   embedded,
@@ -320,9 +349,16 @@ export function DiscoverView({
   onSearchChange,
   showSearchChrome = true,
   onOpenProfile,
+  onInviteCountChange,
+  inviteDailyCapReached = false,
 }: DiscoverViewProps) {
   const { width: windowWidth } = useWindowDimensions();
-  const [internalSearch, setInternalSearch] = useState('');
+  /** Measured width of the embedded discover grid (list or outer container), for fixed card columns. */
+  const [embeddedListWidth, setEmbeddedListWidth] = useState(0);
+  const recordEmbeddedListWidth = useCallback((w: number) => {
+    if (w > 0) setEmbeddedListWidth((prev) => Math.max(prev, w));
+  }, []);
+  const [internalSearch, setInternalSearch] = useState("");
   const [orgs, setOrgs] = useState<DiscoverOrg[]>([]);
   const [loading, setLoading] = useState(false);
   const [connecting, setConnecting] = useState<string | null>(null);
@@ -330,6 +366,32 @@ export function DiscoverView({
   const [error, setError] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const queryClient = useQueryClient();
+
+  const sentQ = useConnectionRequestsSentQuery(orgId);
+
+  // Org IDs we've already sent a pending request to (exclude from discover)
+  const sentOrgIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const r of sentQ.data ?? []) {
+      if (r.status === 'pending') ids.add(r.to_organization_id);
+    }
+    return ids;
+  }, [sentQ.data]);
+
+  const todayInviteCount = useMemo(
+    () => todayPendingInviteCountFromSent(sentQ.data ?? []),
+    [sentQ.data],
+  );
+
+  const atDailyInviteLimit = useMemo(
+    () =>
+      todayInviteCount >= DAILY_CONNECTION_INVITE_LIMIT || inviteDailyCapReached === true,
+    [todayInviteCount, inviteDailyCapReached],
+  );
+
+  useEffect(() => {
+    onInviteCountChange?.(todayInviteCount, DAILY_CONNECTION_INVITE_LIMIT);
+  }, [todayInviteCount, onInviteCountChange]);
 
   const feedQ = useNetworkFeedQuery(orgId);
   const indentsQ = useIndentsQuery(orgId);
@@ -367,9 +429,48 @@ export function DiscoverView({
     return scored.sort((a, b) => b.score !== a.score ? b.score - a.score : a.name.localeCompare(b.name));
   }, [orgs, myLocations, feedOrgLocations]);
 
-  const recommended = scoredOrgs.filter((o) => o.score > 0 && o.connection_status === 'none');
-  const rest = scoredOrgs.filter((o) => o.score <= 0 || o.connection_status !== 'none');
-  const radarCardWidth = windowWidth >= 1280 ? "13.15%" : windowWidth >= 1180 ? "18.5%" : "48%";
+  const connectableOrgs = useMemo(
+    () => scoredOrgs.filter((o) => {
+      const status = String(o.connection_status ?? 'none').toLowerCase();
+      return status === 'none' && !sentOrgIds.has(o.id);
+    }),
+    [scoredOrgs, sentOrgIds],
+  );
+  const recommended = connectableOrgs.filter((o) => o.score > 0);
+  const rest = connectableOrgs.filter((o) => o.score <= 0);
+  /**
+   * Column count follows the viewport only — wide window = 7 columns, narrow = 2.
+   * Do not use embedded list width here: a narrow discover pane on a desktop would wrongly flip to 2-up.
+   */
+  const isDiscoverDesktopGrid = windowWidth >= DISCOVER_GRID_BREAKPOINT;
+  const discoverColumnCount = isDiscoverDesktopGrid
+    ? DISCOVER_COLS_DESKTOP
+    : DISCOVER_COLS_MOBILE;
+  const discoverRowCap = isDiscoverDesktopGrid
+    ? DISCOVER_ROWS_DESKTOP
+    : DISCOVER_ROWS_MOBILE;
+  const discoverMaxVisible = discoverColumnCount * discoverRowCap;
+
+  /**
+   * Fixed pixel width per card column (same as a full 7- or 2-up row). Rows use `justifyContent:
+   * 'flex-start'` so short rows do not stretch cards. Uses measured list/container width when
+   * available; until then a capped provisional width avoids one card filling the row.
+   */
+  const embeddedDiscoverCellWidth = useMemo(() => {
+    if (!embedded) return null;
+    const cols = discoverColumnCount;
+    const gaps = Math.max(0, cols - 1) * DISCOVER_GRID_GAP_PX;
+    const windowOuter = Math.max(0, windowWidth - Layout.screenPaddingHorizontal * 2);
+    const listOuter =
+      embeddedListWidth > 0
+        ? embeddedListWidth
+        : Math.min(windowOuter, DISCOVER_EMBEDDED_PROVISIONAL_OUTER_CAP);
+    const inner = Math.max(0, listOuter - LIST_STATIC_HORIZONTAL_PAD);
+    const raw = (inner - gaps) / cols;
+    const cell = Number.isFinite(raw) && raw > 0 ? raw : inner / Math.max(cols, 1);
+    return Math.max(36, cell);
+  }, [embedded, embeddedListWidth, windowWidth, discoverColumnCount]);
+
   const discoverOrgIds = useMemo(
     () => [...new Set(orgs.map((org) => org.id).filter(Boolean))].sort(),
     [orgs],
@@ -415,7 +516,26 @@ export function DiscoverView({
     setRequestRoleModalOrg(null);
   }, [connecting]);
 
+  const showInviteLimitExceededAlert = useCallback(() => {
+    showAppAlert(CONNECTION_REQUEST_DAILY_LIMIT_TITLE, CONNECTION_REQUEST_DAILY_LIMIT_MESSAGE);
+  }, []);
+
+  const tryBeginConnectionRequest = useCallback(
+    (org: ScoredOrg) => {
+      if (atDailyInviteLimit) {
+        showInviteLimitExceededAlert();
+        return;
+      }
+      setRequestRoleModalOrg(org);
+    },
+    [atDailyInviteLimit, showInviteLimitExceededAlert],
+  );
+
   const handleConnect = async (org: ScoredOrg, mode: "client" | "supplier") => {
+    if (atDailyInviteLimit) {
+      showInviteLimitExceededAlert();
+      return;
+    }
     setConnecting(org.id);
     setRequestRoleModalOrg(null);
     const { error, alreadyInvited, requestId } = await createConnectionRequest(orgId, org.id, {
@@ -425,18 +545,19 @@ export function DiscoverView({
     setConnecting(null);
     if (error) {
       const msg = error.message;
-      Alert.alert(
-        'Could not connect',
-        looksLikeConnectionRateLimitError(msg) ? CONNECTION_REQUEST_DAILY_LIMIT_MESSAGE : msg,
-      );
+      if (looksLikeConnectionRateLimitError(msg)) {
+        showInviteLimitExceededAlert();
+      } else {
+        Alert.alert("Could not connect", msg);
+      }
       return;
     }
     if (alreadyInvited) {
-      setOrgs((prev) => prev.map((o) => (o.id === org.id ? { ...o, connection_status: 'pending' } : o)));
+      setOrgs((prev) => prev.filter((o) => o.id !== org.id));
       invalidateNetwork();
       return;
     }
-    setOrgs((prev) => prev.map((o) => (o.id === org.id ? { ...o, connection_status: 'pending' } : o)));
+    setOrgs((prev) => prev.filter((o) => o.id !== org.id));
     if (requestId) {
       queryClient.setQueryData<ConnectionRequestRow[]>(
         queryKeys.connectionRequests.sent(orgId),
@@ -488,16 +609,42 @@ export function DiscoverView({
 
   const listData = useMemo<ListItem[]>(() => {
     const items: ListItem[] = [];
-    const display = (search ? scoredOrgs : [...recommended, ...rest]).slice(0, 14);
+    const display = (search ? connectableOrgs : [...recommended, ...rest]).slice(
+      0,
+      discoverMaxVisible,
+    );
     if (search && display.length > 0) {
-      items.push({ _type: 'header', label: 'Search results', count: scoredOrgs.length });
+      items.push({ _type: 'header', label: 'Fresh profiles', count: connectableOrgs.length });
     }
     for (const org of display) items.push({ _type: 'org', org });
     return items;
-  }, [recommended, rest, scoredOrgs, search]);
+  }, [connectableOrgs, recommended, rest, search, discoverMaxVisible]);
+
+  const embeddedDiscoverSections = useMemo(() => {
+    const orgItems = listData.filter(
+      (item): item is Extract<ListItem, { _type: "org" }> =>
+        item._type === "org",
+    );
+    const header =
+      listData.find(
+        (item): item is Extract<ListItem, { _type: "header" }> =>
+          item._type === "header",
+      ) ?? null;
+    return {
+      header,
+      rows: chunkBySize(orgItems, discoverColumnCount),
+    };
+  }, [listData, discoverColumnCount]);
 
   return (
-    <View style={[styles.container, embedded && styles.containerEmbedded]}>
+    <View
+      style={[styles.container, embedded && styles.containerEmbedded]}
+      onLayout={
+        embedded
+          ? (e) => recordEmbeddedListWidth(e.nativeEvent.layout.width)
+          : undefined
+      }
+    >
       {showSearchChrome ? (
         <View style={styles.searchBox}>
           <Search size={16} color={Theme.textSecondary} />
@@ -540,38 +687,72 @@ export function DiscoverView({
                   : "Search for companies, clients, and suppliers across the country"}
               </Text>
             </View>
+          ) : listData.length === 0 && loading ? (
+            <View style={styles.embeddedGridLoading}>
+              <ActivityIndicator size="small" color={Theme.primary} />
+            </View>
           ) : (
-            <View style={styles.listStatic}>
-              {listData.map((item, i) => {
-                if (item._type === "header") {
-                  return (
-                    <View key={`h-${i}-${item.label}`} style={styles.gridHeaderCell}>
-                      <SectionLabel
-                        label={item.label}
-                        count={item.count}
-                      />
+            <View
+              style={styles.listStatic}
+              onLayout={(e) => recordEmbeddedListWidth(e.nativeEvent.layout.width)}
+            >
+              {embeddedDiscoverSections.header ? (
+                <View style={styles.gridHeaderCell}>
+                  <SectionLabel
+                    label={embeddedDiscoverSections.header.label}
+                    count={embeddedDiscoverSections.header.count}
+                  />
+                </View>
+              ) : null}
+              {embeddedDiscoverSections.rows.map((row, ri) => (
+                <View key={`discover-grid-${ri}`} style={styles.discoverGridRow}>
+                  {row.map((item) => (
+                    <View
+                      key={item.org.id}
+                      style={[
+                        styles.discoverGridCell,
+                        embedded &&
+                          embeddedDiscoverCellWidth != null && {
+                            width: embeddedDiscoverCellWidth,
+                            minWidth: embeddedDiscoverCellWidth,
+                            maxWidth: embeddedDiscoverCellWidth,
+                            flexGrow: 0,
+                            flexShrink: 0,
+                            alignSelf: "flex-start",
+                          },
+                      ]}
+                    >
+                      <View style={styles.discoverGridCardWrap}>
+                        <OrgCard
+                          org={item.org}
+                          locationFallback={
+                            organizationLocationById[item.org.id]
+                          }
+                          onConnect={() =>
+                            tryBeginConnectionRequest(item.org)
+                          }
+                          onCancel={() =>
+                            void handleCancelRequest(item.org)
+                          }
+                          loading={connecting === item.org.id}
+                          onOpenProfile={() =>
+                            onOpenProfile?.({
+                              ...item.org,
+                              rating_value:
+                                item.org.rating ??
+                                item.org.average_rating ??
+                                null,
+                              location_value: getBusinessLocation(
+                                item.org,
+                              ),
+                            })
+                          }
+                        />
+                      </View>
                     </View>
-                  );
-                }
-                return (
-                  <View key={item.org.id} style={[styles.radarCardCell, { width: radarCardWidth }]}>
-                    <OrgCard
-                      org={item.org}
-                      locationFallback={organizationLocationById[item.org.id]}
-                      onConnect={() => setRequestRoleModalOrg(item.org)}
-                      onCancel={() => void handleCancelRequest(item.org)}
-                      loading={connecting === item.org.id}
-                      onOpenProfile={() =>
-                        onOpenProfile?.({
-                          ...item.org,
-                          rating_value: item.org.rating ?? item.org.average_rating ?? null,
-                          location_value: getBusinessLocation(item.org),
-                        })
-                      }
-                    />
-                  </View>
-                );
-              })}
+                  ))}
+                </View>
+              ))}
             </View>
           )}
         </View>
@@ -587,7 +768,7 @@ export function DiscoverView({
               <OrgCard
                 org={item.org}
                 locationFallback={organizationLocationById[item.org.id]}
-                onConnect={() => setRequestRoleModalOrg(item.org)}
+                onConnect={() => tryBeginConnectionRequest(item.org)}
                 onCancel={() => void handleCancelRequest(item.org)}
                 loading={connecting === item.org.id}
                 onOpenProfile={() =>
@@ -699,7 +880,12 @@ export function DiscoverView({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
-  containerEmbedded: { flex: 0, flexGrow: 0 },
+  containerEmbedded: {
+    flex: 0,
+    flexGrow: 0,
+    alignSelf: "stretch",
+    width: "100%",
+  },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -746,17 +932,33 @@ const styles = StyleSheet.create({
   listStatic: {
     paddingHorizontal: 14,
     paddingBottom: 24,
-    flexDirection: "row",
-    flexWrap: "wrap",
+    width: "100%",
+    flexDirection: "column",
     gap: 12,
     alignItems: "stretch",
   },
   gridHeaderCell: { width: "100%" },
-  radarCardCell: {
+  discoverGridRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    flexWrap: "nowrap",
+    width: "100%",
+    maxWidth: "100%",
+    gap: DISCOVER_GRID_GAP_PX,
+    justifyContent: "flex-start",
+  },
+  discoverGridCell: {
+    flexGrow: 0,
+    flexShrink: 0,
+    flexBasis: "auto",
+    minWidth: 0,
+  },
+  discoverGridCardWrap: {
+    width: "100%",
     minWidth: 0,
   },
   card: {
-    flex: 1,
+    width: "100%",
     backgroundColor: Theme.screenBackground,
     borderRadius: 32,
     borderWidth: 1,
@@ -1134,6 +1336,12 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { fontSize: 17, fontWeight: '800', color: Theme.textPrimary, letterSpacing: -0.3, textAlign: 'center' },
   emptySub: { fontSize: 13, color: Theme.textSecondary, textAlign: 'center', lineHeight: 20 },
+  embeddedGridLoading: {
+    minHeight: 200,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 48,
+  },
   requestRoleModalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(15, 23, 42, 0.44)",
@@ -1218,5 +1426,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
+  },
+  inviteCounterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 14,
+    paddingBottom: 8,
+  },
+  inviteCounterText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Theme.textSecondary,
+    letterSpacing: 0.3,
   },
 });

@@ -14,13 +14,15 @@ import {
 } from "@/features/network/components/NetworkConnectionHubCards";
 import { runConnectionInvite } from "@/features/network/utils/connectionInvite.util";
 import {
-  averageScore,
+  averageRatingForRatedParty,
+  averageScoreDeduped,
   getRatingsForClients,
   getRatingsForDrivers,
   getRatingsForSuppliers,
-} from '@/features/ratings';
-import { useClientsQuery, useDriversQuery, useSuppliersQuery } from '@/lib/queries';
+} from "@/features/ratings";
+import { useClientsQuery, useDriversQuery, useSuppliersQuery, useTripsQuery } from '@/lib/queries';
 import { getInitials } from '@/lib/stringUtils';
+import { supabase } from '@/lib/supabase';
 import {
   LayoutGrid,
   List,
@@ -103,6 +105,7 @@ export interface ConnectedOrg {
   location?: string | null;
   business_location?: string | null;
   headquarters?: string | null;
+  total_trips?: number | null;
 }
 
 function getConnectionLocation(item: ConnectedOrg): string | null {
@@ -284,6 +287,7 @@ export function ConnectionsView({
   const [clientRatingsById, setClientRatingsById] = useState<Record<string, number | null>>({});
   const [supplierRatingsById, setSupplierRatingsById] = useState<Record<string, number | null>>({});
   const [driverRatingsById, setDriverRatingsById] = useState<Record<string, number | null>>({});
+  const [ratingsVersion, setRatingsVersion] = useState(0);
   const [globalAverages, setGlobalAverages] = useState<{
     client: number | null;
     supplier: number | null;
@@ -294,13 +298,35 @@ export function ConnectionsView({
   const clientsQ = useClientsQuery(orgId);
   const suppliersQ = useSuppliersQuery(orgId);
   const driversQ = useDriversQuery(orgId);
+  const tripsQ = useTripsQuery(orgId);
+  const tripCountByClientId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const t of tripsQ.data ?? []) {
+      if (t.client_id) map.set(t.client_id, (map.get(t.client_id) ?? 0) + 1);
+    }
+    return map;
+  }, [tripsQ.data]);
+  const tripCountBySupplierId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const t of tripsQ.data ?? []) {
+      if (t.supplier_id) map.set(t.supplier_id, (map.get(t.supplier_id) ?? 0) + 1);
+    }
+    return map;
+  }, [tripsQ.data]);
+  const tripCountByDriverId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const t of tripsQ.data ?? []) {
+      if (t.driver_id) map.set(t.driver_id, (map.get(t.driver_id) ?? 0) + 1);
+    }
+    return map;
+  }, [tripsQ.data]);
   const locationLookupOrganizationIds = useMemo(
     () => [
       ...new Set([
-        ...((clientsQ.data ?? []) as { linked_organization_id?: string | null }[])
+        ...((clientsQ.data ?? []) as { id: string; linked_organization_id?: string | null }[])
           .map((row) => row.id)
           .filter((id): id is string => Boolean(id)),
-        ...((suppliersQ.data ?? []) as { linked_organization_id?: string | null }[])
+        ...((suppliersQ.data ?? []) as { id: string; linked_organization_id?: string | null }[])
           .map((row) => row.id)
           .filter((id): id is string => Boolean(id)),
         ...((clientsQ.data ?? []) as { linked_organization_id?: string | null }[])
@@ -370,6 +396,22 @@ export function ConnectionsView({
   }, [organizationLocationsByNameQ.data]);
 
   useEffect(() => {
+    if (!orgId) return;
+    const channel = supabase()
+      .channel(`network-ratings-${orgId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'ratings' },
+        () => setRatingsVersion((version) => version + 1),
+      )
+      .subscribe();
+
+    return () => {
+      supabase().removeChannel(channel);
+    };
+  }, [orgId]);
+
+  useEffect(() => {
     let cancelled = false;
     const clientIds = ((clientsQ.data ?? []) as { id: string; linked_organization_id?: string | null }[])
       .flatMap((c) => [c.id, c.linked_organization_id])
@@ -382,23 +424,47 @@ export function ConnectionsView({
     getRatingsForClients(clientIds).then(({ byClientId }) => {
       if (cancelled) return;
       const next: Record<string, number | null> = {};
-      clientIds.forEach((id) => {
-        next[id] = averageScore(byClientId[id] ?? []);
-      });
+      const clients = (clientsQ.data ?? []) as Array<{
+        id: string;
+        linked_organization_id?: string | null;
+      }>;
+      for (const c of clients) {
+        const score = averageRatingForRatedParty(
+          byClientId,
+          c.id,
+          c.linked_organization_id,
+        );
+        next[c.id] = score;
+        if (c.linked_organization_id) {
+          next[c.linked_organization_id] = score;
+        }
+      }
+      for (const id of clientIds) {
+        if (next[id] === undefined) {
+          next[id] = averageScoreDeduped(byClientId[id] ?? []);
+        }
+      }
       setClientRatingsById(next);
       setGlobalAverages((prev) => ({
         ...prev,
-        client: averageScore(Object.values(byClientId).flat()),
+        client: averageScoreDeduped(Object.values(byClientId).flat()),
       }));
     });
     return () => {
       cancelled = true;
     };
-  }, [clientsQ.data]);
+  }, [clientsQ.data, ratingsVersion]);
 
   useEffect(() => {
     let cancelled = false;
-    const supplierIds = ((suppliersQ.data ?? []) as { id: string }[]).map((s) => s.id);
+    const supplierIds = (
+      (suppliersQ.data ?? []) as Array<{
+        id: string;
+        linked_organization_id?: string | null;
+      }>
+    )
+      .flatMap((s) => [s.id, s.linked_organization_id])
+      .filter((id): id is string => Boolean(id));
     if (supplierIds.length === 0) {
       setSupplierRatingsById({});
       setGlobalAverages((prev) => ({ ...prev, supplier: null }));
@@ -407,19 +473,36 @@ export function ConnectionsView({
     getRatingsForSuppliers(supplierIds).then(({ bySupplierId }) => {
       if (cancelled) return;
       const next: Record<string, number | null> = {};
-      supplierIds.forEach((id) => {
-        next[id] = averageScore(bySupplierId[id] ?? []);
-      });
+      const supplierRows = (suppliersQ.data ?? []) as Array<{
+        id: string;
+        linked_organization_id?: string | null;
+      }>;
+      for (const s of supplierRows) {
+        const score = averageRatingForRatedParty(
+          bySupplierId,
+          s.id,
+          s.linked_organization_id,
+        );
+        next[s.id] = score;
+        if (s.linked_organization_id) {
+          next[s.linked_organization_id] = score;
+        }
+      }
+      for (const id of supplierIds) {
+        if (next[id] === undefined) {
+          next[id] = averageScoreDeduped(bySupplierId[id] ?? []);
+        }
+      }
       setSupplierRatingsById(next);
       setGlobalAverages((prev) => ({
         ...prev,
-        supplier: averageScore(Object.values(bySupplierId).flat()),
+        supplier: averageScoreDeduped(Object.values(bySupplierId).flat()),
       }));
     });
     return () => {
       cancelled = true;
     };
-  }, [suppliersQ.data]);
+  }, [suppliersQ.data, ratingsVersion]);
 
   useEffect(() => {
     let cancelled = false;
@@ -435,18 +518,18 @@ export function ConnectionsView({
       if (cancelled) return;
       const next: Record<string, number | null> = {};
       driverIds.forEach((id) => {
-        next[id] = averageScore(byDriverId[id] ?? []);
+        next[id] = averageScoreDeduped(byDriverId[id] ?? []);
       });
       setDriverRatingsById(next);
       setGlobalAverages((prev) => ({
         ...prev,
-        driver: averageScore(Object.values(byDriverId).flat()),
+        driver: averageScoreDeduped(Object.values(byDriverId).flat()),
       }));
     });
     return () => {
       cancelled = true;
     };
-  }, [driversQ.data]);
+  }, [driversQ.data, ratingsVersion]);
 
   const effectiveSearch = hubMode ? (hubSearch ?? '') : search;
   const effectiveFilter: ConnectionFilterTab = hubMode ? (hubFilter ?? 'ALL') : filter;
@@ -454,6 +537,7 @@ export function ConnectionsView({
   const handleRefresh = async () => {
     setRefreshing(true);
     await Promise.all([clientsQ.refetch(), suppliersQ.refetch(), driversQ.refetch()]);
+    setRatingsVersion((version) => version + 1);
     setRefreshing(false);
     onRefresh?.();
   };
@@ -470,10 +554,10 @@ export function ConnectionsView({
       avatar_seed: c.avatar_seed ?? null,
       mutual_count: c.mutual_count ?? c.mutual_connections_count ?? null,
       rating:
-        c.rating ??
-        c.average_rating ??
         clientRatingsById[c.id] ??
         clientRatingsById[c.linked_organization_id ?? ""] ??
+        c.rating ??
+        c.average_rating ??
         globalAverages.client,
       phone: c.phone ?? null,
       linked_organization_id: c.linked_organization_id ?? null,
@@ -492,6 +576,7 @@ export function ConnectionsView({
       location: c.location ?? null,
       business_location: c.business_location ?? null,
       headquarters: c.headquarters ?? null,
+      total_trips: tripCountByClientId.get(c.id) ?? null,
     }));
 
     const suppliers: ConnectedOrg[] = ((suppliersQ.data ?? []) as {
@@ -504,7 +589,12 @@ export function ConnectionsView({
       avatar_url: s.avatar_url ?? null,
       avatar_seed: s.avatar_seed ?? null,
       mutual_count: s.mutual_count ?? s.mutual_connections_count ?? null,
-      rating: s.rating ?? s.average_rating ?? supplierRatingsById[s.id] ?? globalAverages.supplier,
+      rating:
+        supplierRatingsById[s.id] ??
+        supplierRatingsById[s.linked_organization_id ?? ""] ??
+        s.rating ??
+        s.average_rating ??
+        globalAverages.supplier,
       phone: s.phone ?? null,
       linked_organization_id: s.linked_organization_id ?? null,
       city:
@@ -522,6 +612,7 @@ export function ConnectionsView({
       location: s.location ?? null,
       business_location: s.business_location ?? null,
       headquarters: s.headquarters ?? null,
+      total_trips: tripCountBySupplierId.get(s.id) ?? null,
     }));
 
     const driverRows = driversQ.data ?? [];
@@ -537,9 +628,10 @@ export function ConnectionsView({
         mutual_count: (d as { mutual_count?: number | null; mutual_connections_count?: number | null }).mutual_count ??
           (d as { mutual_count?: number | null; mutual_connections_count?: number | null }).mutual_connections_count ??
           null,
-        rating: (d as { rating?: number | null; average_rating?: number | null }).rating ??
-          (d as { rating?: number | null; average_rating?: number | null }).average_rating ??
+        rating:
           driverRatingsById[d.id] ??
+          (d as { rating?: number | null; average_rating?: number | null }).rating ??
+          (d as { rating?: number | null; average_rating?: number | null }).average_rating ??
           globalAverages.driver,
         phone: (d as { phone?: string | null }).phone ?? null,
         city: (d as { city?: string | null }).city ?? null,
@@ -547,6 +639,7 @@ export function ConnectionsView({
         location: (d as { location?: string | null }).location ?? null,
         business_location: (d as { business_location?: string | null }).business_location ?? null,
         headquarters: (d as { headquarters?: string | null }).headquarters ?? null,
+        total_trips: tripCountByDriverId.get(d.id) ?? null,
       }));
 
     let all = [...clients, ...suppliers, ...drivers].sort((a, b) => a.name.localeCompare(b.name));
@@ -568,6 +661,9 @@ export function ConnectionsView({
     globalAverages,
     organizationLocationById,
     organizationLocationByName,
+    tripCountByClientId,
+    tripCountBySupplierId,
+    tripCountByDriverId,
   ]);
 
   const toHubItem = (c: ConnectedOrg): HubConnectionItem => ({
@@ -584,6 +680,7 @@ export function ConnectionsView({
     actionLabel: c.is_integrated ? "Connected" : "Send invite",
     actionLoading: invitingId === c.id,
     actionDisabled: c.role === "DRIVER" && !c.phone,
+    totalTrips: c.total_trips ?? null,
   });
 
   const inviteOffAppParty = async (item: ConnectedOrg) => {

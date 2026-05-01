@@ -39,7 +39,6 @@ import {
     ListChecks,
     MapPin,
     Navigation,
-    Phone,
     PlusCircle,
     Truck,
     User,
@@ -147,6 +146,8 @@ export function AddTripFormFields({
   const { width: winW } = useWindowDimensions();
   const isCompactMobile = winW < 480;
   const isWide = winW >= 720;
+  /** Driver + vehicle side-by-side only on wide screens; 720px caused cramped overlap on tablets. */
+  const allocationWideLayout = winW >= 920;
   const isDesktopPreview = winW >= 1180;
   const showFloatingPreview = winW >= 480 && !isDesktopPreview;
   const floatingPreviewWidth = Math.min(336, Math.max(280, winW - 24));
@@ -173,6 +174,7 @@ export function AddTripFormFields({
   const clientPriceInputRef = useRef<TextInput>(null);
   const supplierRateInputRef = useRef<TextInput>(null);
   const advancePaidInputRef = useRef<TextInput>(null);
+  const aggregateDriverNameInputRef = useRef<TextInput>(null);
   const driverPhoneInputRef = useRef<TextInput>(null);
   const aggregateVehicleInputRef = useRef<TextInput>(null);
   const notesInputRef = useRef<TextInput>(null);
@@ -392,7 +394,10 @@ export function AddTripFormFields({
           vehicles.find((v) => v.id === state.vehicleId)?.vehicle_number ?? "",
         ) || ""
       : "";
-  const aggregateDriverDisplay = state.driverPhoneName?.trim() || state.driverPhone.trim();
+  const aggregateDriverDisplay =
+    state.aggregateDriverName?.trim() ||
+    state.driverPhoneName?.trim() ||
+    state.driverPhone.trim();
   const previewFooterValue = supplyIsAsset
     ? state.assignLater
       ? "Assign later"
@@ -1020,12 +1025,23 @@ export function AddTripFormFields({
                 ) : null}
 
                 {!state.assignLater ? (
-                  <View style={[styles.gridRow, isWide && styles.gridRowWide]}>
-                    <View style={styles.gridCol}>
+                  <View
+                    style={[
+                      styles.gridRow,
+                      styles.gridRowFleet,
+                      allocationWideLayout && styles.gridRowWide,
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.gridCol,
+                        !allocationWideLayout && styles.gridColFleetStack,
+                      ]}
+                    >
                       <View
                         style={[
                           styles.sectionLabelRow,
-                          !isWide && styles.sectionLabelRowStack,
+                          !allocationWideLayout && styles.sectionLabelRowFleetStack,
                         ]}
                       >
                         <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
@@ -1034,7 +1050,7 @@ export function AddTripFormFields({
                         <TouchableOpacity
                           style={[
                             styles.addClientBtn,
-                            !isWide && styles.addClientBtnCompact,
+                            !allocationWideLayout && styles.addClientBtnFleetFullWidth,
                             Platform.OS === "web"
                               ? ({ cursor: "pointer" } as ViewStyle)
                               : null,
@@ -1111,7 +1127,8 @@ export function AddTripFormFields({
                         <ScrollView
                           style={[
                             styles.clientList,
-                            isCompactMobile && styles.clientListCompact,
+                            (!allocationWideLayout || isCompactMobile) &&
+                              styles.clientListCompact,
                           ]}
                           nestedScrollEnabled={!isCompactMobile}
                           scrollEnabled={!isCompactMobile}
@@ -1167,11 +1184,17 @@ export function AddTripFormFields({
                         </ScrollView>
                       )}
                     </View>
-                    <View style={styles.gridCol}>
+                    <View
+                      style={[
+                        styles.gridCol,
+                        !allocationWideLayout && styles.gridColFleetStack,
+                        !allocationWideLayout && styles.gridColFleetVehicle,
+                      ]}
+                    >
                       <View
                         style={[
                           styles.sectionLabelRow,
-                          !isWide && styles.sectionLabelRowStack,
+                          !allocationWideLayout && styles.sectionLabelRowFleetStack,
                         ]}
                       >
                         <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
@@ -1180,7 +1203,7 @@ export function AddTripFormFields({
                         <TouchableOpacity
                           style={[
                             styles.addClientBtn,
-                            !isWide && styles.addClientBtnCompact,
+                            !allocationWideLayout && styles.addClientBtnFleetFullWidth,
                             Platform.OS === "web"
                               ? ({ cursor: "pointer" } as ViewStyle)
                               : null,
@@ -1253,7 +1276,8 @@ export function AddTripFormFields({
                         <ScrollView
                           style={[
                             styles.clientList,
-                            isCompactMobile && styles.clientListCompact,
+                            (!allocationWideLayout || isCompactMobile) &&
+                              styles.clientListCompact,
                           ]}
                           nestedScrollEnabled={!isCompactMobile}
                           scrollEnabled={!isCompactMobile}
@@ -1395,8 +1419,12 @@ export function AddTripFormFields({
                           key={s.id}
                           style={[styles.clientCard, selected && styles.clientCardOn, Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null]}
                           onPress={() => {
-                            setters.setSupplierId(selected ? null : s.id);
-                            if (!selected) setPartnerListExpanded(false);
+                            if (selected) {
+                              setters.setSupplierSelection(null);
+                            } else {
+                              setters.setSupplierSelection(s.id, primary);
+                              setPartnerListExpanded(false);
+                            }
                           }}
                           activeOpacity={0.85}
                         >
@@ -1463,7 +1491,7 @@ export function AddTripFormFields({
                         if (state.assignLater) {
                           focusField(notesInputRef);
                         } else {
-                          focusField(driverPhoneInputRef);
+                          focusField(aggregateDriverNameInputRef);
                         }
                       }}
                     />
@@ -1472,32 +1500,60 @@ export function AddTripFormFields({
 
                 {!state.assignLater ? (
                   <>
+                    <View style={{ width: "100%", marginTop: 8 }}>
+                      <Text style={[styles.label, labelStyle]}>
+                        Driver name (tracking) *
+                      </Text>
+                      <View style={styles.iconField}>
+                        <User
+                          size={18}
+                          color={Theme.iconMuted}
+                          style={styles.iconInField}
+                        />
+                        <TextInput
+                          style={[styles.iconInput, inputStyle]}
+                          placeholder="e.g. Suresh Kumar"
+                          placeholderTextColor={Theme.placeholder}
+                          value={state.aggregateDriverName}
+                          onChangeText={setters.setAggregateDriverName}
+                          ref={aggregateDriverNameInputRef}
+                          autoCapitalize="words"
+                          returnKeyType="next"
+                          onSubmitEditing={() =>
+                            focusField(driverPhoneInputRef)
+                          }
+                        />
+                      </View>
+                    </View>
+
                     <View
                       style={[
                         styles.gridRow,
                         isWide && styles.gridRowWide,
-                        { marginTop: 8 },
                       ]}
                     >
                       <View style={styles.gridCol}>
                         <Text style={[styles.label, labelStyle]}>
                           Driver phone (tracking) *
                         </Text>
-                        <View style={styles.iconField}>
-                          <Phone
-                            size={18}
-                            color={Theme.iconMuted}
-                            style={styles.iconInField}
-                          />
+                        <View style={styles.inPhoneOuter}>
+                          <Text
+                            style={styles.inPhoneFlag}
+                            accessibilityLabel="India"
+                          >
+                            🇮🇳
+                          </Text>
+                          <Text style={styles.inPhoneCc}>+91</Text>
                           <TextInput
-                            style={[styles.iconInput, inputStyle]}
-                            placeholder="e.g. +91 98765 43210"
+                            style={styles.inPhoneInput}
+                            placeholder="98765 43210"
                             placeholderTextColor={Theme.placeholder}
                             value={state.driverPhone}
                             onChangeText={(v) =>
                               setters.setDriverPhone(formatMobileNumber(v))
                             }
-                            keyboardType="phone-pad"
+                            keyboardType="number-pad"
+                            maxLength={10}
                             ref={driverPhoneInputRef}
                             returnKeyType="next"
                             onSubmitEditing={() =>
@@ -1505,6 +1561,18 @@ export function AddTripFormFields({
                             }
                           />
                         </View>
+                        {state.driverPhone.length > 0 &&
+                        state.driverPhone.length < 10 ? (
+                          <Text style={styles.phoneDigitHint}>
+                            {state.driverPhone.length}/10 digits
+                          </Text>
+                        ) : null}
+                        {state.driverPhone.trim() &&
+                        validatePhone(state.driverPhone.trim()) ? (
+                          <Text style={[styles.warningText, { marginTop: 4 }]}>
+                            {validatePhone(state.driverPhone.trim())}
+                          </Text>
+                        ) : null}
                       </View>
                       <View style={styles.gridCol}>
                         <Text style={[styles.label, labelStyle]}>
@@ -1583,12 +1651,6 @@ export function AddTripFormFields({
                           }
                         />
                       </TouchableOpacity>
-                    ) : null}
-                    {state.driverPhone.trim() &&
-                    validatePhone(state.driverPhone.trim()) ? (
-                      <Text style={[styles.warningText, { marginTop: 4 }]}>
-                        {validatePhone(state.driverPhone.trim())}
-                      </Text>
                     ) : null}
                   </>
                 ) : (
@@ -1981,8 +2043,24 @@ const styles = StyleSheet.create({
     letterSpacing: -0.25,
   },
   gridRow: { gap: 14 },
+  /** Extra gap when driver + vehicle stack vertically so sections don’t feel glued. */
+  gridRowFleet: {
+    gap: 18,
+  },
   gridRowWide: { flexDirection: "row", alignItems: "stretch", gap: 20 },
   gridCol: { flex: 1, minWidth: 0 },
+  gridColFleetStack: {
+    flexBasis: "auto",
+    width: "100%",
+    maxWidth: "100%",
+    minWidth: 0,
+  },
+  gridColFleetVehicle: {
+    marginTop: 4,
+    paddingTop: 18,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
+  },
   aggregateSplit: {
     gap: 14,
   },
@@ -2010,6 +2088,15 @@ const styles = StyleSheet.create({
   sectionLabelRowStack: {
     alignItems: "flex-start",
     justifyContent: "flex-start",
+  },
+  /** Mobile / narrow: label on its own row, full-width add action — avoids overlap with cards. */
+  sectionLabelRowFleetStack: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    justifyContent: "flex-start",
+    gap: 10,
+    marginBottom: 12,
+    width: "100%",
   },
   sectionLabelActions: {
     flexDirection: "row",
@@ -2053,6 +2140,13 @@ const styles = StyleSheet.create({
   addClientBtnCompact: {
     marginTop: 2,
     alignSelf: "flex-start",
+  },
+  addClientBtnFleetFullWidth: {
+    alignSelf: "stretch",
+    width: "100%",
+    justifyContent: "center",
+    paddingVertical: 12,
+    marginTop: 0,
   },
   addClientBtnText: {
     fontSize: 10,
@@ -2116,6 +2210,45 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surfaceForm,
     color: Theme.textPrimary,
     ...Platform.select({ web: { outlineStyle: "none" } as any }),
+  },
+  inPhoneOuter: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 2,
+    borderRadius: 12,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceForm,
+    minHeight: 52,
+    paddingLeft: 10,
+    paddingRight: 12,
+    gap: 6,
+    marginBottom: 12,
+  },
+  inPhoneFlag: {
+    fontSize: 20,
+    lineHeight: 24,
+  },
+  inPhoneCc: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+  },
+  inPhoneInput: {
+    flex: 1,
+    minWidth: 0,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    fontSize: 14,
+    fontWeight: "500",
+    color: Theme.textPrimary,
+    ...Platform.select({ web: { outlineStyle: "none" } as any }),
+  },
+  phoneDigitHint: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    marginTop: 4,
+    marginBottom: 4,
   },
   fakeInput: {
     flexDirection: "row",
@@ -2302,7 +2435,8 @@ const styles = StyleSheet.create({
   clientListCompact: { maxHeight: undefined },
   mobileListWrap: {
     gap: 10,
-    marginBottom: 2,
+    marginBottom: 4,
+    width: "100%",
   },
   emptyListCard: {
     borderRadius: 12,
@@ -2331,6 +2465,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.surfaceLight,
+    flexShrink: 0,
   },
   busyPillText: {
     fontSize: 9,
@@ -2350,6 +2485,7 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
     marginBottom: 10,
     backgroundColor: Theme.cardWhite,
+    overflow: "hidden",
   },
   clientMain: {
     flex: 1,
@@ -2407,6 +2543,7 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
   radioOuterOn: {
     borderColor: Theme.darkBackground,
