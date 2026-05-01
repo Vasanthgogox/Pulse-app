@@ -17,6 +17,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowLeft, MessageSquare, Send, Smile, X } from "lucide-react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useDriverChat } from "@/features/chat/contexts/DriverChatContext";
 import { ChatSystemEventCard } from "@/features/chat/components/ChatEventCard";
@@ -268,6 +269,15 @@ function MessageThread({
 export default function DriverChatScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  /** Match `app/(driver)/index.tsx` — tab bar is `position: 'absolute'`, so content must clear the glass dock. */
+  const driverTabBarClearance = useMemo(() => {
+    const tabBarVerticalPad = Math.max(insets.bottom / 4, 4);
+    return Layout.tabBarDockHeight + tabBarVerticalPad + (tabBarVerticalPad + 6);
+  }, [insets.bottom]);
+  const screenPadding = useMemo(
+    () => ({ paddingTop: insets.top, paddingBottom: driverTabBarClearance }),
+    [insets.top, driverTabBarClearance],
+  );
   const params = useLocalSearchParams<{ tripId?: string | string[] }>();
   const normalizedTripId = useMemo(() => {
     const raw = params.tripId;
@@ -336,7 +346,7 @@ export default function DriverChatScreen() {
   if (normalizedTripId) {
     if (openingTripThread) {
       return (
-        <View style={[dr.root, { paddingTop: insets.top }]}>
+        <View style={[dr.root, screenPadding]}>
           <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
             <ActivityIndicator color={Theme.primary} size="large" />
           </View>
@@ -345,7 +355,7 @@ export default function DriverChatScreen() {
     }
     if (tripThreadError) {
       return (
-        <View style={[dr.root, { paddingTop: insets.top, paddingHorizontal: 24 }]}>
+        <View style={[dr.root, screenPadding, { paddingHorizontal: 24 }]}>
           <View style={{ flex: 1, justifyContent: "center", alignItems: "center", gap: 16 }}>
             <MessageSquare size={40} color="#e2e8f0" />
             <Text style={{ fontSize: 15, color: "#475569", textAlign: "center" }}>{tripThreadError}</Text>
@@ -369,7 +379,7 @@ export default function DriverChatScreen() {
     }
     if (selectedId && !selectedConv) {
       return (
-        <View style={[dr.root, { paddingTop: insets.top }]}>
+        <View style={[dr.root, screenPadding]}>
           <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
             <ActivityIndicator color={Theme.primary} size="large" />
           </View>
@@ -378,7 +388,7 @@ export default function DriverChatScreen() {
     }
     if (selectedConv) {
       return (
-        <View style={[dr.root, { paddingTop: insets.top }]}>
+        <View style={[dr.root, screenPadding]}>
           <MessageThread
             conv={selectedConv}
             messageInput={messageInput}
@@ -397,7 +407,7 @@ export default function DriverChatScreen() {
       );
     }
     return (
-      <View style={[dr.root, { paddingTop: insets.top }]}>
+      <View style={[dr.root, screenPadding]}>
         <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
           <ActivityIndicator color={Theme.primary} size="large" />
         </View>
@@ -406,7 +416,7 @@ export default function DriverChatScreen() {
   }
 
   return (
-    <View style={[dr.root, { paddingTop: insets.top }]}>
+    <View style={[dr.root, screenPadding]}>
       {/* List or detail */}
       {!selectedConv ? (
         <View style={{ flex: 1 }}>
