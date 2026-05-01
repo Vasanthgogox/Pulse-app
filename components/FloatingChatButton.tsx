@@ -16,6 +16,8 @@ function useShouldShow(): boolean {
   const pathname = usePathname();
   if (!pathname) return false;
   if (pathname.includes("chat")) return false;
+  // Driver shell has its own trip chat entry points — avoid stacking this FAB over driver UI (web/native).
+  if (pathname.includes("(driver)")) return false;
   const p = pathname.replace(/\/$/, "");
   const ungrouped = p.replace("/(tabs)", "");
   return (

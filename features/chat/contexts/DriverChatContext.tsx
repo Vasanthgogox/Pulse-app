@@ -9,6 +9,7 @@ import React, {
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { getLinkedDriversForCurrentUser } from "@/features/drivers/services/drivers.service";
+import * as tripsService from "@/services/tripsService";
 import * as chatService from "../services/chat.service";
 import type { TripConversation, TripMessageRow } from "../types/chat.types";
 
@@ -19,7 +20,9 @@ interface DriverChatContextType {
   sendMessage: (conversationId: string, organizationId: string, content: string) => Promise<void>;
   markAsRead: (conversationId: string) => Promise<void>;
   getTotalUnreadCount: () => number;
-  refreshConversations: () => Promise<void>;
+  refreshConversations: () => Promise<TripConversation[]>;
+  /** Ensures the driver's 1:1 trip thread exists and reloads conversations; returns conversation id or null. */
+  ensureDriverTripConversation: (tripId: string) => Promise<string | null>;
 }
 
 const DriverChatContext = createContext<DriverChatContextType | undefined>(undefined);
@@ -46,22 +49,66 @@ export function DriverChatProvider({ children }: { children: ReactNode }) {
       .catch(() => setDriverIds([]));
   }, [uid]);
 
-  const loadConversations = useCallback(async () => {
-    if (!driverIds.length) return;
+  const loadConversations = useCallback(async (): Promise<TripConversation[]> => {
+    if (!driverIds.length) {
+      setConversations([]);
+      setIsLoading(false);
+      return [];
+    }
     setIsLoading(true);
     try {
       const data = await chatService.getConversationsByDriverIds(driverIds);
       setConversations(data);
+      return data;
     } catch {
-      // Tables may not exist yet; fail silently
+      setConversations([]);
+      return [];
     } finally {
       setIsLoading(false);
     }
   }, [driverIds]);
 
   useEffect(() => {
-    loadConversations();
+    void loadConversations();
   }, [loadConversations]);
+
+  const ensureDriverTripConversation = useCallback(
+    async (tripId: string): Promise<string | null> => {
+      const id = String(tripId ?? "").trim();
+      if (!id || !uid) return null;
+      let resolvedDriverIds = driverIds;
+      if (!resolvedDriverIds.length) {
+        const { drivers } = await getLinkedDriversForCurrentUser(uid);
+        resolvedDriverIds = drivers.map((d) => d.id);
+        if (resolvedDriverIds.length) {
+          setDriverIds(resolvedDriverIds);
+        }
+      }
+      if (!resolvedDriverIds.length) return null;
+      const { error, trip } = await tripsService.getTripById(id);
+      if (error || !trip?.driver_id || !trip.organization_id) return null;
+      if (!resolvedDriverIds.includes(trip.driver_id)) return null;
+      const partyName =
+        (profile as { full_name?: string; displayName?: string })?.full_name ||
+        (profile as { displayName?: string })?.displayName ||
+        "Driver";
+      try {
+        await chatService.getOrCreateConversation({
+          tripId: trip.id,
+          partyType: "driver",
+          partyName,
+          organizationId: trip.organization_id,
+          partyId: trip.driver_id,
+        });
+      } catch {
+        return null;
+      }
+      const list = await loadConversations();
+      const conv = list.find((c) => String(c.trip_id) === String(trip.id));
+      return conv?.id ?? null;
+    },
+    [driverIds, profile, loadConversations, uid],
+  );
 
   // Realtime subscription for new messages in driver conversations
   useEffect(() => {
@@ -199,6 +246,7 @@ export function DriverChatProvider({ children }: { children: ReactNode }) {
         markAsRead,
         getTotalUnreadCount,
         refreshConversations: loadConversations,
+        ensureDriverTripConversation,
       }}
     >
       {children}

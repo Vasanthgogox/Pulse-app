@@ -32,7 +32,7 @@ import * as tripsService from "@/services/tripsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { type Href, useRouter } from "expo-router";
 import {
     ArrowDownToLine,
     Banknote,
@@ -45,6 +45,7 @@ import {
     FileImage,
     Info,
     MapPinned,
+    MessageSquare,
     Navigation,
     Route,
     Search as SearchIcon,
@@ -1364,25 +1365,50 @@ export default function DriverTripsScreen() {
                   />
                 </View>
               </View>
-              <TouchableOpacity
-                style={[
-                  styles.detailBack,
-                  styles.detailBackStyled,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  },
-                ]}
-                onPress={() => {
-                  void Share.share({
-                    message: `Trip ${getDriverTripDisplayNumber(selectedTrip, driverTripNumberById)}`,
-                  }).catch(() => {});
-                }}
-                activeOpacity={0.75}
-                accessibilityLabel="Share trip"
-              >
-                <Share2 size={20} color={colors.text} />
-              </TouchableOpacity>
+              <View style={styles.detailHeaderActions}>
+                {selectedTrip.driver_id ? (
+                  <TouchableOpacity
+                    style={[
+                      styles.detailBack,
+                      styles.detailBackStyled,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                    onPress={() => {
+                      const id = encodeURIComponent(String(selectedTrip.id));
+                      setSelectedTrip(null);
+                      setTimeout(() => {
+                        router.push(`/(driver)/chat?tripId=${id}` as Href);
+                      }, 0);
+                    }}
+                    activeOpacity={0.75}
+                    accessibilityLabel="Trip chat"
+                  >
+                    <MessageSquare size={20} color={colors.text} />
+                  </TouchableOpacity>
+                ) : null}
+                <TouchableOpacity
+                  style={[
+                    styles.detailBack,
+                    styles.detailBackStyled,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                  onPress={() => {
+                    void Share.share({
+                      message: `Trip ${getDriverTripDisplayNumber(selectedTrip, driverTripNumberById)}`,
+                    }).catch(() => {});
+                  }}
+                  activeOpacity={0.75}
+                  accessibilityLabel="Share trip"
+                >
+                  <Share2 size={20} color={colors.text} />
+                </TouchableOpacity>
+              </View>
             </View>
             <ScrollView
               style={[
@@ -2553,6 +2579,12 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 20,
     borderWidth: 1,
+  },
+  detailHeaderActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexShrink: 0,
   },
   detailTitleWrap: {
     flex: 1,

@@ -1,6 +1,6 @@
 /**
  * Driver app layout (route group). When user has role=driver they land here after login.
- * Tabs: Dashboard, Trip, History, Wallet.
+ * Tabs: Dashboard, Trip, History, Earnings. Trip chat opens from trip detail (hidden route).
  * Not to be confused with app/driver/ which is for dispatchers (e.g. /driver/[id] = driver detail).
  */
 import { DriverTabBar } from '@/components/driver/DriverTabBar';
@@ -44,7 +44,8 @@ function DriverTabsNavigator() {
       <Tabs.Screen name="control" options={{ title: 'Trip', href: null }} />
       <Tabs.Screen name="trip-history" options={{ title: 'History' }} />
       <Tabs.Screen name="wallet" options={{ title: 'Transactions' }} />
-      <Tabs.Screen name="chat" options={{ title: 'Messages' }} />
+      {/* Not listed in DriverTabBar TAB_CONFIG; omit href: null so router.push / query params work on web */}
+      <Tabs.Screen name="chat" options={{ title: 'Trip chat' }} />
 
       {/* Hidden routes */}
       <Tabs.Screen name="notifications" options={{ title: 'Notifications', href: null }} />

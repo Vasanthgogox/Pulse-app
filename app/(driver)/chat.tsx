@@ -3,7 +3,7 @@
  * Drivers can read all messages (including system events) and reply as "driver" role.
  * Ledger cards and doc-share are visible but actions are read-only (no add-to-book or share).
  */
-import React, { useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -16,7 +16,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowLeft, MessageSquare, Send, Smile, X } from "lucide-react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import Theme from "@/constants/Theme";
 import { useDriverChat } from "@/features/chat/contexts/DriverChatContext";
 import { ChatSystemEventCard } from "@/features/chat/components/ChatEventCard";
@@ -268,10 +268,53 @@ function MessageThread({
 export default function DriverChatScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { conversations, isLoading, sendMessage, markAsRead } = useDriverChat();
+  const params = useLocalSearchParams<{ tripId?: string | string[] }>();
+  const normalizedTripId = useMemo(() => {
+    const raw = params.tripId;
+    const v = typeof raw === "string" ? raw : raw?.[0];
+    const t = v?.trim();
+    return t ? t : null;
+  }, [params.tripId]);
+
+  const {
+    conversations,
+    isLoading,
+    sendMessage,
+    markAsRead,
+    ensureDriverTripConversation,
+  } = useDriverChat();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
   const [showEmoji, setShowEmoji] = useState(false);
+  const [openingTripThread, setOpeningTripThread] = useState(false);
+  const [tripThreadError, setTripThreadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!normalizedTripId) {
+      setOpeningTripThread(false);
+      setTripThreadError(null);
+      return;
+    }
+    let cancelled = false;
+    setOpeningTripThread(true);
+    setTripThreadError(null);
+    setSelectedId(null);
+    setMessageInput("");
+    setShowEmoji(false);
+    void ensureDriverTripConversation(normalizedTripId).then((convId) => {
+      if (cancelled) return;
+      setOpeningTripThread(false);
+      if (convId) {
+        setSelectedId(convId);
+        void markAsRead(convId);
+      } else {
+        setTripThreadError("Could not open chat for this trip.");
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [normalizedTripId, ensureDriverTripConversation, markAsRead]);
 
   const selectedConv = conversations.find((c) => c.id === selectedId) ?? null;
 
@@ -289,6 +332,78 @@ export default function DriverChatScreen() {
     setMessageInput("");
     setShowEmoji(false);
   };
+
+  if (normalizedTripId) {
+    if (openingTripThread) {
+      return (
+        <View style={[dr.root, { paddingTop: insets.top }]}>
+          <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+            <ActivityIndicator color={Theme.primary} size="large" />
+          </View>
+        </View>
+      );
+    }
+    if (tripThreadError) {
+      return (
+        <View style={[dr.root, { paddingTop: insets.top, paddingHorizontal: 24 }]}>
+          <View style={{ flex: 1, justifyContent: "center", alignItems: "center", gap: 16 }}>
+            <MessageSquare size={40} color="#e2e8f0" />
+            <Text style={{ fontSize: 15, color: "#475569", textAlign: "center" }}>{tripThreadError}</Text>
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={{
+                marginTop: 4,
+                backgroundColor: "#0f172a",
+                paddingHorizontal: 22,
+                paddingVertical: 12,
+                borderRadius: 12,
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
+            >
+              <Text style={{ fontSize: 14, fontWeight: "700", color: "#fff" }}>Go back</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      );
+    }
+    if (selectedId && !selectedConv) {
+      return (
+        <View style={[dr.root, { paddingTop: insets.top }]}>
+          <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+            <ActivityIndicator color={Theme.primary} size="large" />
+          </View>
+        </View>
+      );
+    }
+    if (selectedConv) {
+      return (
+        <View style={[dr.root, { paddingTop: insets.top }]}>
+          <MessageThread
+            conv={selectedConv}
+            messageInput={messageInput}
+            setMessageInput={setMessageInput}
+            showEmoji={showEmoji}
+            setShowEmoji={setShowEmoji}
+            onSend={handleSend}
+            onBack={() => {
+              setSelectedId(null);
+              setMessageInput("");
+              setShowEmoji(false);
+              router.back();
+            }}
+          />
+        </View>
+      );
+    }
+    return (
+      <View style={[dr.root, { paddingTop: insets.top }]}>
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+          <ActivityIndicator color={Theme.primary} size="large" />
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={[dr.root, { paddingTop: insets.top }]}>
@@ -315,7 +430,7 @@ export default function DriverChatScreen() {
               <MessageSquare size={36} color="#e2e8f0" />
               <Text style={{ fontSize: 14, color: "#94a3b8" }}>No trip messages yet</Text>
               <Text style={{ fontSize: 12, color: "#94a3b8", textAlign: "center", paddingHorizontal: 32, lineHeight: 18 }}>
-                Your dispatcher will start a chat when you are assigned a trip.
+                Open messages from Trip (active trip) or Trip history detail — chats are tied to each trip.
               </Text>
             </View>
           ) : (
