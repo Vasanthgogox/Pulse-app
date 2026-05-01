@@ -384,6 +384,7 @@ export default function SignIn() {
         </View>
 
         <TouchableOpacity
+          testID="signin-submit-btn"
           onPress={handleSignIn}
           style={[styles.primaryBtn, (loading || waitingForAuthState || !isOnline) && styles.disabledBtn]}
           disabled={loading || waitingForAuthState || !isOnline}
