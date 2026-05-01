@@ -1308,8 +1308,6 @@ export default function DriverRadarScreen() {
   const hasAssignableIncomingTrip = visibleAssignableIncomingTrips.length > 0;
   const hasSingleAssignableIncomingTrip =
     visibleAssignableIncomingTrips.length === 1;
-  const hasMultipleAssignableIncomingTrips =
-    visibleAssignableIncomingTrips.length > 1;
   const showDeferredInviteCard = Boolean(
     showNotification &&
       pendingInvite &&
@@ -1464,28 +1462,6 @@ export default function DriverRadarScreen() {
     assignerDisplayByTripId,
     organizationNamesById,
   ]);
-  const notificationHistoryTrips = useMemo(
-    () =>
-      notificationHistory
-        .map((entry) => {
-          const trip = mergedIncomingTrips.find((row) => row.id === entry.tripId);
-          return trip
-            ? { trip, reason: entry.reason, movedAt: entry.movedAt }
-            : null;
-        })
-        .filter(
-          (
-            row,
-          ): row is {
-            trip: tripsService.TripRow;
-            reason: "accepted_other" | "declined";
-            movedAt: string;
-          } => row != null,
-        )
-        .slice(-3)
-        .reverse(),
-    [notificationHistory, mergedIncomingTrips],
-  );
   useEffect(() => {
     if (activeMission) return;
     if (
@@ -2585,9 +2561,14 @@ export default function DriverRadarScreen() {
     return () => clearTimeout(t);
   }, [optimalRoute, shouldShowMap, fitMapToActiveContext]);
 
-  // Pulsating circle when searching for assignments (online, no mission, no incoming)
+  // Pulsating circle when searching for assignments (online, no mission, nothing to decide).
+  // When multiple assignments exist, incoming is surfaced via notifications only — do not treat as "searching".
   const showSearchingOverlay = Boolean(
-    driver && isOnline && !activeMission && !effectiveFirstIncoming,
+    driver &&
+      isOnline &&
+      !activeMission &&
+      !effectiveFirstIncoming &&
+      !hasAssignableIncomingTrip,
   );
 
   useEffect(() => {
@@ -3952,149 +3933,6 @@ export default function DriverRadarScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
-        ) : !effectiveFirstIncoming &&
-          hasAssignableIncomingTrip &&
-          !assignableTripsNotifyOnlyAfterMission ? (
-          <View
-            style={[
-              styles.centerCardConstraint,
-              styles.notificationListSection,
-            ]}
-          >
-            <View style={[styles.centerCardWrap, styles.notificationListIntro]}>
-              <Text style={[styles.notificationListTitle, { color: colors.text }]}>
-                New trips ({assignableIncomingNotificationsWithMeta.length})
-              </Text>
-              <Text style={[styles.notificationListSubtitle, { color: colors.textMuted }]}>
-                {hasMultipleAssignableIncomingTrips
-                  ? "You have multiple assigned trips. Accept one to start trip progress."
-                  : "Accept this trip to start trip progress."}
-              </Text>
-            </View>
-            <View style={styles.invitesScrollContent}>
-              {assignableIncomingNotificationsWithMeta.map((item) => (
-                <View
-                  key={item.trip.id}
-                  style={[
-                    styles.centerCardWrap,
-                    styles.notificationSelectCard,
-                    {
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                    },
-                  ]}
-                >
-                  <TouchableOpacity
-                    activeOpacity={0.85}
-                    onPress={() => setSelectedIncomingTripId(item.trip.id)}
-                  >
-                    <View style={styles.notificationSelectHeader}>
-                      <Text style={[styles.notificationSelectTripId, { color: colors.text }]}>
-                        {getDriverTripDisplayNumber(item.trip, driverTripNumberById)}
-                      </Text>
-                      {item.requiresOtp ? (
-                        <View
-                          style={[
-                            styles.notificationOtpBadgeMinimal,
-                            {
-                              borderColor: colors.border,
-                              backgroundColor: colors.surface,
-                            },
-                          ]}
-                        >
-                          <Text style={[styles.notificationOtpBadgeMinimalText, { color: colors.textMuted }]}>
-                            OTP
-                          </Text>
-                        </View>
-                      ) : null}
-                    </View>
-                    <Text
-                      style={[styles.notificationSelectRoute, { color: colors.text }]}
-                      numberOfLines={2}
-                    >
-                      {item.trip.pickup_area?.trim() || "Pickup"} →{" "}
-                      {item.trip.drop_location?.trim() || "Drop-off"}
-                    </Text>
-                    <Text style={styles.notificationAssignedByLine} numberOfLines={2}>
-                      <Text style={[styles.notificationAssignedByPrefix, { color: colors.textMuted }]}>
-                        Assigned by{" "}
-                      </Text>
-                      <Text style={[styles.notificationAssignedByName, { color: colors.text }]}>
-                        {item.assignerPersonDisplay}
-                      </Text>
-                    </Text>
-                    <Text
-                      style={[styles.notificationSelectMeta, { color: colors.textMuted, marginTop: 6 }]}
-                    >
-                      {item.commissionForTrip > 0
-                        ? `Est. earning ${formatINR(item.commissionForTrip)}`
-                        : "Est. earning · Salary"}
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.goOnlineBtn,
-                      {
-                        backgroundColor: colors.text,
-                        marginTop: 10,
-                      },
-                    ]}
-                    onPress={() => handleAcceptMission(item.trip)}
-                    activeOpacity={0.85}
-                    disabled={acceptLoading || declineLoading}
-                  >
-                    <View style={styles.notificationAcceptButtonSideSpacer} />
-                    <Text style={styles.goOnlineBtnText}>
-                      {item.requiresOtp ? "Accept and verify OTP" : "Accept trip"}
-                    </Text>
-                    <FontAwesome
-                      name="chevron-right"
-                      size={14}
-                      color={Theme.textOnPrimary}
-                    />
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </View>
-            {assignableIncomingNotificationsWithMeta.length > 2 ? (
-              <TouchableOpacity
-                style={styles.notificationViewAllLinkWrap}
-                onPress={() => router.push("/(driver)/notifications")}
-                activeOpacity={0.75}
-              >
-                <Text style={[styles.notificationViewAllLinkText, { color: colors.text }]}>
-                  View All
-                </Text>
-              </TouchableOpacity>
-            ) : null}
-            {notificationHistory.length > 0 ? (
-              <View style={styles.notificationHistoryWrap}>
-                <Text
-                  style={[
-                    styles.notificationHistoryHint,
-                    { color: colors.textMuted },
-                  ]}
-                >
-                  {notificationHistory.length} notification
-                  {notificationHistory.length > 1 ? "s" : ""} moved to history.
-                </Text>
-                {notificationHistoryTrips.map((item) => (
-                  <Text
-                    key={`${item.trip.id}-${item.movedAt}`}
-                    style={[
-                      styles.notificationHistoryItem,
-                      { color: colors.textMuted },
-                    ]}
-                  >
-                    {getDriverTripDisplayNumber(item.trip, driverTripNumberById)} -{" "}
-                    {item.reason === "declined"
-                      ? "declined"
-                      : "moved after another trip was accepted"}
-                  </Text>
-                ))}
-              </View>
-            ) : null}
-          </View>
         ) : showNewAssignmentCard &&
           effectiveFirstIncoming &&
           !assignmentFeedback ? (

@@ -28,7 +28,7 @@ import { getOptimalRoute } from "@/services/routingService";
 import * as tripDocumentsService from "@/services/tripDocumentsService";
 import * as tripsService from "@/services/tripsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { type Href, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable as HoldPressable } from "react-native-gesture-handler";
 import {
@@ -440,6 +440,25 @@ export default function DriverControlScreen() {
             </Text>
           </View>
         </View>
+        <TouchableOpacity
+          style={[
+            styles.headerChatBtn,
+            {
+              borderColor: colors.border,
+              backgroundColor: colors.whiteMuted,
+            },
+          ]}
+          onPress={() => {
+            const q = encodeURIComponent(String(trip.id));
+            router.push(`/(driver)/chat?tripId=${q}` as Href);
+          }}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Trip chat"
+          accessibilityHint="Open messages for this trip"
+        >
+          <FontAwesome name="comments" size={18} color={colors.text} />
+        </TouchableOpacity>
         <View style={styles.eta}>
           <Text style={[styles.etaLabel, { color: colors.textMuted }]}>
             Est. time
@@ -1466,6 +1485,15 @@ const styles = StyleSheet.create({
     gap: Layout.driverHeaderGap,
     flex: 1,
     minWidth: 0,
+  },
+  headerChatBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
   },
   headerTextWrap: {
     flex: 1,
