@@ -5,7 +5,7 @@ import Theme from "@/constants/Theme";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import { getInitials } from "@/lib/stringUtils";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
-import { Check, Send, ShieldCheck, Star, Users, Zap } from "lucide-react-native";
+import { Send, ShieldCheck, Star, Users, Zap } from "lucide-react-native";
 import React from "react";
 import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -48,7 +48,7 @@ function subtleAvatarBg(id: string): string {
 }
 
 /** Min height for horizontal hub connection row (carousel / side-scroll). Kept exported for callers & stable bundles. */
-export const HUB_CAROUSEL_MIN_HEIGHT = 400;
+export const HUB_CAROUSEL_MIN_HEIGHT = 252;
 
 export function HubConnectionListCard({
   item,
@@ -122,7 +122,7 @@ export function HubConnectionListCard({
               avatarUrl={item.avatarUrl}
               avatarSeed={item.avatarSeed}
               entityType={item.entityType ?? (isDriver ? "driver" : item.role === "SUPPLIER" ? "supplier" : "client")}
-              size={62}
+              size={isCarousel ? 48 : 62}
               borderStyle={styles.heroAvatarImage}
             />
           </View>
@@ -142,21 +142,20 @@ export function HubConnectionListCard({
             <Text style={styles.liveNowText}>ACTIVE NOW</Text>
           </View>
 
-          <View style={[styles.cardMetaStack, mutuals === 0 && styles.cardMetaStackCompact]}>
-            {mutuals > 0 ? (
-              <View style={styles.metaChip}>
-                <Users size={10} color={Theme.textSecondary} strokeWidth={2.4} />
-                <Text style={styles.metaChipText} numberOfLines={1}>
-                  {`${mutuals} mutual${mutuals === 1 ? "" : "s"}`}
-                </Text>
-              </View>
-            ) : null}
-            <View style={[styles.metaChip, item.is_integrated && styles.metaChipIntegrated]}>
-              {item.is_integrated ? (
-                <Check size={10} color={Theme.textPrimaryDark} strokeWidth={2.8} />
-              ) : null}
-              <Text style={[styles.statusMetaChipText, item.is_integrated && styles.statusMetaChipTextIntegrated]} numberOfLines={1}>
-                {item.is_integrated ? "Operational access" : "Not in app"}
+          <View style={styles.cardMetaStack}>
+            <View style={[styles.metaChip, mutuals > 0 && styles.metaChipStrong]}>
+              <Users
+                size={10}
+                color={mutuals > 0 ? Theme.textOnPrimary : Theme.textSecondary}
+                strokeWidth={2.5}
+              />
+              <Text
+                style={[styles.metaChipText, mutuals > 0 && styles.metaChipTextStrong]}
+                numberOfLines={1}
+              >
+                {mutuals > 0
+                  ? `${mutuals} mutual${mutuals === 1 ? "" : "s"}`
+                  : "No mutuals"}
               </Text>
             </View>
           </View>
@@ -165,7 +164,7 @@ export function HubConnectionListCard({
         <View style={styles.cardFooter}>
           {item.is_integrated ? (
             <View style={styles.joinedBtn}>
-              <Zap size={11} color={Theme.textOnPrimary} fill={Theme.textOnPrimary} strokeWidth={2.2} />
+              <Zap size={11} color={Theme.textPrimaryDark} fill={Theme.textPrimaryDark} strokeWidth={2.2} />
               <Text style={styles.joinedBtnText}>Connected</Text>
             </View>
           ) : (
@@ -223,39 +222,44 @@ const styles = StyleSheet.create({
   cardPress: {
     flex: 1,
     minWidth: 0,
+    minHeight: 282,
   },
   cardPressCarousel: {
-    width: 220,
+    width: 176,
+    height: HUB_CAROUSEL_MIN_HEIGHT,
+    minHeight: HUB_CAROUSEL_MIN_HEIGHT,
     flex: 0,
+    flexBasis: 176,
     flexGrow: 0,
     flexShrink: 0,
-    marginRight: 12,
+    marginRight: 0,
   },
   cardOuter: {
     flex: 1,
-    backgroundColor: Theme.networkCardBackground,
+    backgroundColor: Theme.screenBackground,
     borderRadius: 32,
-    marginBottom: 12,
     borderWidth: 1,
-    borderColor: Theme.networkCardBorder,
+    borderColor: Theme.surfaceBorder,
     shadowColor: Theme.shadow,
-    shadowOpacity: 0.065,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 9 },
+    shadowOpacity: 0.055,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 7 },
     elevation: 2,
     overflow: "hidden",
   },
   cardOuterCarousel: {
     flex: 0,
     width: "100%",
+    height: HUB_CAROUSEL_MIN_HEIGHT,
+    minHeight: HUB_CAROUSEL_MIN_HEIGHT,
     marginBottom: 0,
   },
   coverBg: {
-    height: 96,
+    height: 58,
     overflow: "hidden",
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.networkCardBorder,
-    backgroundColor: Theme.networkPageBackground,
+    borderBottomColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceGray,
   },
   coverOrbLarge: {
     position: "absolute",
@@ -264,8 +268,8 @@ const styles = StyleSheet.create({
     borderRadius: 66,
     top: -20,
     left: -28,
-    backgroundColor: "rgba(148,163,184,0.18)",
-    transform: [{ rotate: "-10deg" }],
+    backgroundColor: Theme.borderLight,
+    transform: [{ rotate: "-9deg" }],
   },
   coverOrbSmall: {
     position: "absolute",
@@ -274,8 +278,8 @@ const styles = StyleSheet.create({
     borderRadius: 46,
     right: -22,
     bottom: -16,
-    backgroundColor: "rgba(255,255,255,0.72)",
-    transform: [{ rotate: "14deg" }],
+    backgroundColor: Theme.surface,
+    transform: [{ rotate: "12deg" }],
   },
   coverPlane: {
     position: "absolute",
@@ -284,26 +288,26 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     right: 28,
     top: 10,
-    backgroundColor: "rgba(255,255,255,0.68)",
-    opacity: 0.55,
+    backgroundColor: Theme.screenBackground,
+    opacity: 0.58,
     transform: [{ rotate: "-8deg" }],
   },
   coverWidget: {
     position: "absolute",
     top: 8,
     right: 8,
-    minHeight: 20,
+    minHeight: 18,
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    paddingHorizontal: 6,
+    paddingHorizontal: 5,
     borderRadius: 10,
-    backgroundColor: Theme.networkCardBackground,
+    backgroundColor: Theme.screenBackground,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.networkCardBorder,
+    borderColor: Theme.borderLight,
   },
   coverWidgetText: {
-    fontSize: 7,
+    fontSize: 6.5,
     fontWeight: "500",
     color: Theme.textSecondary,
     letterSpacing: 0.45,
@@ -312,15 +316,15 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 8,
     top: 8,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
     borderRadius: 10,
     backgroundColor: Theme.screenBackground,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.networkCardBorder,
+    borderColor: Theme.borderLight,
   },
   coverRoleText: {
-    fontSize: 7,
+    fontSize: 6.5,
     fontWeight: "500",
     letterSpacing: 0.45,
     color: Theme.textPrimaryDark,
@@ -329,25 +333,25 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 8,
     bottom: 8,
-    minHeight: 23,
+    minHeight: 18,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 4,
-    paddingHorizontal: 8,
-    borderRadius: 12,
+    paddingHorizontal: 6,
+    borderRadius: 10,
     backgroundColor: "rgba(255,255,255,0.86)",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.networkCardBorder,
+    borderColor: Theme.borderLight,
   },
   coverRatingNodeEmpty: {
-    minHeight: 18,
-    paddingHorizontal: 5,
+    minHeight: 17,
+    paddingHorizontal: 4,
     borderRadius: 9,
     backgroundColor: "rgba(255,255,255,0.72)",
   },
   coverRatingText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "600",
     color: Theme.textPrimaryDark,
   },
@@ -414,29 +418,29 @@ const styles = StyleSheet.create({
   },
   profileBlock: {
     alignItems: "center",
-    paddingHorizontal: 12,
-    paddingBottom: 14,
+    paddingHorizontal: 9,
+    paddingBottom: 2,
   },
   entityName: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: "600",
     color: "#475569",
     letterSpacing: 0,
-    lineHeight: 18,
+    lineHeight: 16,
     textAlign: "center",
-    marginTop: 10,
+    marginTop: 5,
   },
   entitySubtitle: {
-    fontSize: 10.5,
+    fontSize: 9,
     fontWeight: "500",
     color: Theme.textMutedDemo,
-    lineHeight: 12,
+    lineHeight: 11,
     textAlign: "center",
-    marginTop: 3,
-    minHeight: 24,
+    marginTop: 2,
+    minHeight: 20,
   },
   liveNowRow: {
-    marginTop: 6,
+    marginTop: 3,
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
@@ -454,15 +458,15 @@ const styles = StyleSheet.create({
     color: Theme.textSecondary,
   },
   heroAvatar: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     overflow: "hidden",
-    backgroundColor: Theme.networkCardBackground,
+    backgroundColor: Theme.screenBackground,
     alignItems: "center",
     justifyContent: "center",
     alignSelf: "center",
-    marginTop: -31,
+    marginTop: -24,
     shadowColor: Theme.shadow,
     shadowOpacity: 0.12,
     shadowRadius: 14,
@@ -471,46 +475,41 @@ const styles = StyleSheet.create({
   },
   heroAvatarImage: {
     borderWidth: 2,
-    borderColor: Theme.networkCardBackground,
+    borderColor: Theme.screenBackground,
   },
   cardMetaStack: {
     width: "100%",
-    gap: 6,
-    marginTop: 12,
+    gap: 4,
+    paddingHorizontal: 4,
+    marginTop: 1,
+    marginBottom: 3,
     alignItems: "center",
   },
-  cardMetaStackCompact: {
-    marginTop: 8,
-  },
   metaChip: {
-    minHeight: 22,
+    minHeight: 18,
     maxWidth: "100%",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 4,
-    paddingHorizontal: 8,
-    borderRadius: 11,
-    backgroundColor: Theme.networkPageBackground,
+    paddingHorizontal: 7,
+    borderRadius: 10,
+    backgroundColor: Theme.surface,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.networkCardBorder,
+    borderColor: Theme.borderLight,
   },
-  metaChipIntegrated: {
-    backgroundColor: Theme.networkPageBackground,
-    borderColor: Theme.networkCardBorder,
+  metaChipStrong: {
+    backgroundColor: Theme.textPrimaryDark,
+    borderColor: Theme.textPrimaryDark,
   },
   metaChipText: {
     fontSize: 8,
-    fontWeight: "500",
+    fontWeight: "700",
+    fontStyle: "italic",
     color: Theme.textSecondary,
   },
-  statusMetaChipText: {
-    fontSize: 8,
-    fontWeight: "400",
-    color: "#64748B",
-  },
-  statusMetaChipTextIntegrated: {
-    color: Theme.textSecondary,
+  metaChipTextStrong: {
+    color: Theme.textOnPrimary,
   },
   metricStack: {
     marginTop: 12,
@@ -574,51 +573,51 @@ const styles = StyleSheet.create({
     color: Theme.textOnPrimary,
   },
   cardFooter: {
-    minHeight: 56,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
+    minHeight: 36,
+    paddingHorizontal: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Theme.networkCardBackground,
+    backgroundColor: Theme.screenBackground,
   },
   joinedBtn: {
-    minHeight: 32,
+    minHeight: 28,
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 6,
     borderWidth: 1,
-    borderColor: Theme.primary,
-    borderRadius: 16,
+    borderColor: Theme.borderMedium,
+    borderRadius: 17,
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: Theme.primary,
+    paddingVertical: 5,
+    backgroundColor: Theme.screenBackground,
     shadowColor: Theme.shadow,
-    shadowOpacity: 0.035,
+    shadowOpacity: 0.03,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 3 },
     elevation: 1,
   },
   joinedBtnText: {
     fontSize: 9,
-    fontWeight: "600",
-    color: Theme.textOnPrimary,
+    fontWeight: "700",
+    fontStyle: "italic",
+    color: Theme.textPrimaryDark,
     letterSpacing: 0.2,
   },
   inviteBtn: {
-    minHeight: 40,
+    minHeight: 30,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    borderRadius: 20,
-    paddingHorizontal: 18,
-    paddingVertical: 8,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     backgroundColor: Theme.screenBackground,
     borderWidth: 1,
     borderColor: Theme.textPrimaryDark,
-    minWidth: 118,
+    minWidth: 112,
     shadowColor: Theme.shadow,
     shadowOpacity: 0.04,
     shadowRadius: 7,

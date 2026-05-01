@@ -18,6 +18,12 @@ type CameraRefLike = {
     zoomLevel?: number;
     animationDuration?: number;
   }) => void;
+  fitBounds?: (
+    ne: [number, number],
+    sw: [number, number],
+    padding?: number,
+    animationDuration?: number,
+  ) => void;
 };
 
 export const LeafletMapMapLibre = React.forwardRef<
@@ -45,6 +51,14 @@ export const LeafletMapMapLibre = React.forwardRef<
           zoomLevel: currentZoom,
           animationDuration: lowPower ? 0 : 450,
         });
+      },
+      fitBounds: (ne, sw, paddingPx = 80) => {
+        cameraRef.current?.fitBounds?.(
+          [ne.longitude, ne.latitude],
+          [sw.longitude, sw.latitude],
+          paddingPx,
+          lowPower ? 0 : 600,
+        );
       },
     }));
 

@@ -79,6 +79,34 @@ export async function getRatingsForClient(clientId: string): Promise<{
   return { error: null, ratings: (data ?? []) as RatingRow[] };
 }
 
+/** Bulk fetch client ratings for many clients (one query). */
+export async function getRatingsForClients(clientIds: string[]): Promise<{
+  error: Error | null;
+  byClientId: Record<string, RatingRow[]>;
+}> {
+  if (clientIds.length === 0) {
+    return { error: null, byClientId: {} };
+  }
+  const { data, error } = await supabase()
+    .from('ratings')
+    .select('*')
+    .eq('rated_type', 'client')
+    .in('rated_id', clientIds)
+    .order('created_at', { ascending: false });
+
+  if (error) return { error: new Error(error.message), byClientId: {} };
+  const rows = (data ?? []) as RatingRow[];
+  const byClientId: Record<string, RatingRow[]> = {};
+  for (const id of clientIds) {
+    byClientId[id] = [];
+  }
+  for (const r of rows) {
+    if (!byClientId[r.rated_id]) byClientId[r.rated_id] = [];
+    byClientId[r.rated_id].push(r);
+  }
+  return { error: null, byClientId };
+}
+
 /** Bulk fetch supplier ratings for many suppliers (one query). */
 export async function getRatingsForSuppliers(supplierIds: string[]): Promise<{
   error: Error | null;

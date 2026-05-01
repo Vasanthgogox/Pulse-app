@@ -3,6 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { isAggregateTrip } from '@/lib/driverUtils';
 import { formatINR } from '@/lib/format';
+import { supabase } from '@/lib/supabase';
 import * as tripDocumentsService from '@/services/tripDocumentsService';
 import * as tripsService from '@/services/tripsService';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
@@ -35,6 +36,52 @@ const holdCompleteWebStyle = {
   touchAction: 'none' as 'none' | 'auto' | 'manipulation',
   userSelect: 'none' as 'none' | 'auto' | 'text' | 'contain' | 'all',
 };
+
+const PREDEFINED_UPDATES: Record<StepId, string[]> = {
+  accepted: [
+    'On my way to pickup',
+    'Arrived at pickup location',
+    'Loading in progress',
+    'Slight delay — will arrive soon',
+    'Waiting at gate',
+  ],
+  pickup: [
+    'Loading complete',
+    'Documents collected',
+    'Package secured',
+    'Ready to depart',
+    'Waiting for documents',
+  ],
+  transit: [
+    'En route to destination',
+    'Traffic ahead — slight delay',
+    'Taking alternate route',
+    'Approaching destination',
+    'Stopped for mandatory break',
+  ],
+  reached: [
+    'Arrived at destination',
+    'Unloading in progress',
+    'Delivery confirmed by recipient',
+    'Recipient not available',
+    'Documents handed over',
+  ],
+  completed: [],
+};
+
+// Parse [UPDATE|step|timestamp|message] entries from trip.notes
+function parseDriverUpdates(notes: string | null): { step: string; timestamp: string; message: string }[] {
+  if (!notes) return [];
+  return notes
+    .split('\n')
+    .filter((l) => l.startsWith('[UPDATE|'))
+    .map((l) => {
+      const inner = l.slice(8, -1);
+      const [step, timestamp, ...msgParts] = inner.split('|');
+      return { step, timestamp, message: msgParts.join('|') };
+    })
+    .reverse(); // newest first
+}
 
 function deriveStepFromTrip(t: tripsService.TripRow): StepId {
   const s = String(t.status ?? '').toLowerCase();
@@ -84,6 +131,8 @@ export interface DriverTripFlowCardProps {
   trip: tripsService.TripRow;
   /** Precomputed commission for non-aggregate trips (to match existing dashboard calc). */
   commissionAmount?: number;
+  /** Road distance in km from driver's current position to the active target (pickup or drop). */
+  distanceToTargetKm?: number | null;
   /** Called after any server write succeeds (so dashboard can refetch). */
   onRefresh?: () => void;
   /** Optional: collapse/expand toggle (UI only). */
@@ -104,9 +153,16 @@ export interface DriverTripFlowCardProps {
   variant?: 'card' | 'page';
 }
 
+function fmtKm(km: number): string {
+  if (km >= 100) return `${Math.round(km)} km`;
+  if (km >= 10) return `${km.toFixed(1)} km`;
+  return `${km.toFixed(1)} km`;
+}
+
 export function DriverTripFlowCard({
   trip,
   commissionAmount,
+  distanceToTargetKm,
   onRefresh,
   onToggleCollapse,
   collapsed = false,
@@ -139,9 +195,18 @@ export function DriverTripFlowCard({
   const holdTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const holdStartRef = useRef(0);
 
+  // Quick update panel state
+  const [showUpdatePanel, setShowUpdatePanel] = useState(false);
+  const [updateSending, setUpdateSending] = useState(false);
+  const [stagePhotoUploading, setStagePhotoUploading] = useState(false);
+  // Optimistic local updates list (merged with parsed trip.notes entries)
+  const [localUpdates, setLocalUpdates] = useState<{ step: string; timestamp: string; message: string }[]>([]);
+
   useEffect(() => {
     setLocalTrip(trip);
     setStep(deriveStepFromTrip(trip));
+    // Sync notes-based updates when trip refreshes
+    setLocalUpdates(parseDriverUpdates(trip.notes));
   }, [trip]);
 
   const tripIsAggregate = useMemo(() => isAggregateTrip(localTrip), [localTrip]);
@@ -268,6 +333,78 @@ export function DriverTripFlowCard({
     onRefresh?.();
   };
 
+  const sendPredefinedUpdate = async (message: string) => {
+    const id = localTrip?.id;
+    if (!id || updateSending) return;
+    setUpdateSending(true);
+    const now = new Date().toISOString();
+    const entry = `[UPDATE|${step}|${now}|${message}]`;
+    try {
+      const existing = localTrip.notes?.trim() || '';
+      await supabase()
+        .from('trips')
+        .update({ notes: existing ? `${existing}\n${entry}` : entry })
+        .eq('id', id);
+      // Optimistic update
+      setLocalUpdates((prev) => [{ step, timestamp: now, message }, ...prev]);
+      setLocalTrip((prev) => ({ ...prev, notes: existing ? `${existing}\n${entry}` : entry }));
+    } finally {
+      setUpdateSending(false);
+      setShowUpdatePanel(false);
+    }
+  };
+
+  const uploadStagePhoto = async () => {
+    const id = localTrip?.id;
+    if (!id || !profile?.uid || stagePhotoUploading) return;
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      setStepError('Permission to access photos is required');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: false,
+      quality: 0.85,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    setStepError(null);
+    setStagePhotoUploading(true);
+    const uri = result.assets[0].uri;
+    const fileName = `stage-${step}-${Date.now()}.jpg`;
+    const mimeType = result.assets[0].mimeType ?? 'image/jpeg';
+    try {
+      let arrayBuffer: ArrayBuffer;
+      if (Platform.OS === 'web') {
+        const response = await fetch(uri);
+        arrayBuffer = await response.arrayBuffer();
+      } else {
+        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' as const });
+        arrayBuffer = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)).buffer;
+      }
+      if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+        setStepError('Could not read image file');
+        setStagePhotoUploading(false);
+        return;
+      }
+      const { error } = await tripDocumentsService.uploadTripDocument(id, profile.uid, {
+        arrayBuffer,
+        fileName,
+        mimeType,
+      });
+      if (error) setStepError(error.message);
+      else {
+        // Post a quick update noting the photo was sent
+        await sendPredefinedUpdate(`📷 Photo sent — ${step === 'accepted' ? 'at pickup area' : step === 'transit' ? 'en route' : step === 'reached' ? 'at drop-off' : 'stage photo'}`);
+        onRefresh?.();
+      }
+    } catch (e) {
+      setStepError(e instanceof Error ? e.message : 'Upload failed');
+    } finally {
+      setStagePhotoUploading(false);
+    }
+  };
+
   const uploadPod = async () => {
     const id = localTrip?.id;
     if (!id || !profile?.uid || podUploading) return;
@@ -293,7 +430,7 @@ export function DriverTripFlowCard({
         const response = await fetch(uri);
         arrayBuffer = await response.arrayBuffer();
       } else {
-        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' as const });
         arrayBuffer = Uint8Array.from(atob(base64), c => c.charCodeAt(0)).buffer;
       }
       
@@ -414,7 +551,54 @@ export function DriverTripFlowCard({
         <Text style={[styles.subtitle, { color: Theme.textMuted }]} numberOfLines={2}>
           {subtitle}
         </Text>
+        {distanceToTargetKm != null && (step === 'accepted' || step === 'transit') ? (
+          <View style={[styles.distanceChip, { backgroundColor: colors.emeraldMuted }]}>
+            <FontAwesome name="location-arrow" size={10} color={colors.emerald} />
+            <Text style={[styles.distanceChipText, { color: colors.emerald }]}>
+              {fmtKm(distanceToTargetKm)}{' '}
+              <Text style={{ opacity: 0.7 }}>{step === 'accepted' ? 'to pickup' : 'to drop-off'}</Text>
+            </Text>
+          </View>
+        ) : null}
       </View>
+
+      {/* Route summary: FROM → total distance + ETA → TO */}
+      {step !== 'completed' && (localTrip.pickup_area || localTrip.drop_location) ? (
+        <View style={[styles.routeSummary, { borderColor: Theme.border }]}>
+          <View style={styles.routeSummaryRow}>
+            <View style={[styles.routeSummaryDot, { backgroundColor: colors.emerald }]} />
+            <View style={styles.routeSummaryTexts}>
+              <Text style={[styles.routeSummaryLabel, { color: Theme.textMuted }]}>FROM</Text>
+              <Text style={[styles.routeSummaryPlace, { color: Theme.textPrimaryDark }]} numberOfLines={1}>
+                {localTrip.pickup_area?.trim() || '—'}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.routeSummaryConnector}>
+            <View style={[styles.routeSummaryLine, { backgroundColor: Theme.border }]} />
+            {(localTrip.distance != null || localTrip.estimated_duration) ? (
+              <View style={[styles.routeSummaryMeta, { backgroundColor: Theme.screenBackground, borderColor: Theme.border }]}>
+                <Text style={[styles.routeSummaryMetaText, { color: Theme.textMuted }]}>
+                  {localTrip.distance != null && Number(localTrip.distance) > 0
+                    ? `${fmtKm(Number(localTrip.distance))}`
+                    : null}
+                  {localTrip.distance != null && Number(localTrip.distance) > 0 && localTrip.estimated_duration ? '  ·  ' : null}
+                  {localTrip.estimated_duration ? String(localTrip.estimated_duration) : null}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+          <View style={styles.routeSummaryRow}>
+            <View style={[styles.routeSummaryDot, { backgroundColor: '#f59e0b' }]} />
+            <View style={styles.routeSummaryTexts}>
+              <Text style={[styles.routeSummaryLabel, { color: Theme.textMuted }]}>TO</Text>
+              <Text style={[styles.routeSummaryPlace, { color: Theme.textPrimaryDark }]} numberOfLines={1}>
+                {(localTrip.drop_location || (localTrip as any).drop_area)?.trim() || '—'}
+              </Text>
+            </View>
+          </View>
+        </View>
+      ) : null}
 
       {stepError ? (
         <View style={[styles.errorWrap, { backgroundColor: Theme.negativeMuted, borderColor: Theme.negative }]}>
@@ -426,40 +610,97 @@ export function DriverTripFlowCard({
       ) : null}
 
       {step !== 'completed' ? (
-        <View style={styles.actionIconsRow}>
-          <TouchableOpacity
-            style={[styles.actionIconBtn, { backgroundColor: Theme.surfaceLight, borderColor: Theme.border, opacity: 0.45 }]}
-            activeOpacity={0.8}
-            disabled
-            accessibilityLabel="Call (not available)"
-          >
-            <FontAwesome name="phone" size={20} color={Theme.textPrimaryDark} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionIconBtn, { backgroundColor: Theme.surfaceLight, borderColor: Theme.border, opacity: 0.45 }]}
-            activeOpacity={0.8}
-            disabled
-            accessibilityLabel="Message (not available)"
-          >
-            <FontAwesome name="comment" size={20} color={Theme.textPrimaryDark} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.actionIconBtn,
-              { backgroundColor: Theme.surfaceLight, borderColor: Theme.border, opacity: step === 'reached' ? 1 : 0.45 },
-            ]}
-            activeOpacity={0.8}
-            disabled={step !== 'reached' || podUploading}
-            onPress={uploadPod}
-            accessibilityLabel="Upload POD"
-          >
-            {podUploading ? (
-              <ActivityIndicator size="small" color={Theme.textPrimaryDark} />
-            ) : (
-              <FontAwesome name="camera" size={20} color={Theme.textPrimaryDark} />
-            )}
-          </TouchableOpacity>
-        </View>
+        <>
+          {/* Communication action row */}
+          <View style={styles.actionIconsRow}>
+            {/* Phone — placeholder, disabled */}
+            <TouchableOpacity
+              style={[styles.actionIconBtn, { backgroundColor: Theme.surfaceLight, borderColor: Theme.border, opacity: 0.35 }]}
+              activeOpacity={0.8}
+              disabled
+              accessibilityLabel="Call (not available)"
+            >
+              <FontAwesome name="phone" size={20} color={Theme.textPrimaryDark} />
+            </TouchableOpacity>
+
+            {/* Quick update panel trigger */}
+            <TouchableOpacity
+              style={[
+                styles.actionIconBtn,
+                { backgroundColor: showUpdatePanel ? colors.emeraldMuted : Theme.surfaceLight, borderColor: showUpdatePanel ? colors.emerald : Theme.border },
+              ]}
+              activeOpacity={0.8}
+              onPress={() => setShowUpdatePanel((v) => !v)}
+              accessibilityLabel="Send quick update"
+            >
+              {updateSending ? (
+                <ActivityIndicator size="small" color={colors.emerald} />
+              ) : (
+                <FontAwesome name="comment-o" size={20} color={showUpdatePanel ? colors.emerald : Theme.textPrimaryDark} />
+              )}
+            </TouchableOpacity>
+
+            {/* Stage photo */}
+            <TouchableOpacity
+              style={[styles.actionIconBtn, { backgroundColor: Theme.surfaceLight, borderColor: Theme.border }]}
+              activeOpacity={0.8}
+              onPress={uploadStagePhoto}
+              disabled={stagePhotoUploading}
+              accessibilityLabel="Send photo update"
+            >
+              {stagePhotoUploading ? (
+                <ActivityIndicator size="small" color={Theme.textPrimaryDark} />
+              ) : (
+                <FontAwesome name="camera" size={20} color={Theme.textPrimaryDark} />
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {/* Quick update panel */}
+          {showUpdatePanel ? (
+            <View style={[styles.updatePanel, { backgroundColor: Theme.screenBackground, borderColor: Theme.border }]}>
+              <Text style={[styles.updatePanelHeader, { color: Theme.textMuted }]}>QUICK UPDATE</Text>
+              {(PREDEFINED_UPDATES[step] ?? []).map((msg) => (
+                <TouchableOpacity
+                  key={msg}
+                  style={[styles.updateOption, { borderColor: Theme.border }]}
+                  onPress={() => sendPredefinedUpdate(msg)}
+                  activeOpacity={0.75}
+                  disabled={updateSending}
+                >
+                  <View style={[styles.updateOptionDot, { backgroundColor: colors.emerald }]} />
+                  <Text style={[styles.updateOptionText, { color: Theme.textPrimaryDark }]}>{msg}</Text>
+                  <FontAwesome name="send-o" size={13} color={colors.emerald} style={{ opacity: 0.7 }} />
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                style={[styles.updatePhotoRow, { borderColor: Theme.border }]}
+                onPress={() => { setShowUpdatePanel(false); uploadStagePhoto(); }}
+                activeOpacity={0.75}
+              >
+                <FontAwesome name="camera" size={14} color={colors.emerald} />
+                <Text style={[styles.updatePhotoText, { color: colors.emerald }]}>Add photo update</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
+          {/* Recent updates feed (show up to 3) */}
+          {localUpdates.length > 0 ? (
+            <View style={styles.recentUpdates}>
+              {localUpdates.slice(0, 3).map((u, i) => (
+                <View key={i} style={[styles.recentUpdateRow, { borderColor: Theme.border }]}>
+                  <View style={[styles.recentUpdateDot, { backgroundColor: colors.emerald }]} />
+                  <View style={styles.recentUpdateBody}>
+                    <Text style={[styles.recentUpdateMsg, { color: Theme.textPrimaryDark }]} numberOfLines={2}>{u.message}</Text>
+                    <Text style={[styles.recentUpdateTime, { color: Theme.textMuted }]}>
+                      {new Date(u.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : null}
+        </>
       ) : null}
 
       {step === 'accepted' ? (
@@ -798,10 +1039,91 @@ const styles = StyleSheet.create({
   handleBar: { width: 36, height: 4, borderRadius: 999, opacity: 0.5 },
   progressSegments: { flexDirection: 'row', gap: 8, width: '100%', marginBottom: 12 },
   progressSegment: { height: 6, flex: 1, borderRadius: 999 },
-  titleBlock: { alignItems: 'center', paddingBottom: 12 },
+  titleBlock: { alignItems: 'center', paddingBottom: 8 },
   title: { fontSize: 22, fontWeight: '900', letterSpacing: -0.5, textAlign: 'center' },
   subtitle: { marginTop: 4, fontSize: 14, fontWeight: '600', textAlign: 'center', opacity: 0.8 },
-  actionIconsRow: { flexDirection: 'row', gap: 12, paddingTop: 4, paddingBottom: 10 },
+  distanceChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+  },
+  distanceChipText: { fontSize: 12, fontWeight: '800' },
+  routeSummary: {
+    width: '100%',
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  routeSummaryRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  routeSummaryDot: { width: 10, height: 10, borderRadius: 5, flexShrink: 0 },
+  routeSummaryTexts: { flex: 1, minWidth: 0 },
+  routeSummaryLabel: { fontSize: 9, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1 },
+  routeSummaryPlace: { fontSize: 13, fontWeight: '700', marginTop: 1 },
+  routeSummaryConnector: { flexDirection: 'row', alignItems: 'center', marginLeft: 4, marginVertical: 6, gap: 8 },
+  routeSummaryLine: { width: 2, height: 20 },
+  routeSummaryMeta: {
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  routeSummaryMetaText: { fontSize: 11, fontWeight: '700' },
+  actionIconsRow: { flexDirection: 'row', gap: 12, paddingTop: 4, paddingBottom: 8 },
+  updatePanel: {
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 10,
+    gap: 2,
+  },
+  updatePanelHeader: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  updateOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  updateOptionDot: { width: 7, height: 7, borderRadius: 4, flexShrink: 0 },
+  updateOptionText: { flex: 1, fontSize: 14, fontWeight: '600', lineHeight: 18 },
+  updatePhotoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingTop: 12,
+    paddingHorizontal: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    marginTop: 4,
+  },
+  updatePhotoText: { fontSize: 13, fontWeight: '700' },
+  recentUpdates: { gap: 6, marginBottom: 8 },
+  recentUpdateRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  recentUpdateDot: { width: 7, height: 7, borderRadius: 4, flexShrink: 0, marginTop: 4 },
+  recentUpdateBody: { flex: 1, minWidth: 0 },
+  recentUpdateMsg: { fontSize: 13, fontWeight: '600', lineHeight: 18 },
+  recentUpdateTime: { fontSize: 11, fontWeight: '500', marginTop: 2 },
   actionIconBtn: {
     flex: 1,
     height: 48,

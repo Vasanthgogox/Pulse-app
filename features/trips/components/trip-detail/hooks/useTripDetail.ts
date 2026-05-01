@@ -6,7 +6,11 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { getClientById } from "@/features/clients/services/clients.service";
+import {
+  getClientById,
+  getClientDetails,
+  getLinkedOrgProfile,
+} from "@/features/clients/services/clients.service";
 import {
   getDriverById,
   getDriverProfileDisplay,
@@ -18,6 +22,7 @@ import { averageScore, getRatingsForTrip } from "@/features/ratings/services/rat
 import {
   getSupplierById,
   getSupplierDetails,
+  getLinkedOrgProfileForSupplier,
 } from "@/features/suppliers/services/suppliers.service";
 import { getVehicleById } from "@/features/vehicles/services/vehicles.service";
 import { getVehicleDocumentViewUrl } from "@/features/vehicles/services/vehicleDocuments.service";
@@ -101,19 +106,6 @@ async function safeReverseGeocode(
   }
 }
 
-function formatLocationUpdatedAt(recordedAt: string): string {
-  const then = new Date(recordedAt).getTime();
-  const now = Date.now();
-  const diffMs = now - then;
-  const diffM = Math.floor(diffMs / 60000);
-  if (diffM < 1) return "Updated just now";
-  if (diffM === 1) return "Updated 1 min ago";
-  if (diffM < 60) return `Updated ${diffM} min ago`;
-  const diffH = Math.floor(diffM / 60);
-  if (diffH === 1) return "Updated 1 hr ago";
-  return `Updated ${diffH} hr ago`;
-}
-
 function docTypeFromFileName(fileName: string): string {
   const ext = fileName.split(".").pop()?.toLowerCase() || "";
   if (ext === "heic" || ext === "heif") return "HEIC";
@@ -143,6 +135,13 @@ export type DriverActivityTimelineRow =
       detail_line: string;
     };
 
+type TripMapCoordinateFields = TripRow & {
+  pickup_lat?: unknown;
+  pickup_lon?: unknown;
+  drop_lat?: unknown;
+  drop_lon?: unknown;
+};
+
 export interface UseTripDetailOptions {
   tripId: string;
   entryContext?: "supplier" | "vehicle" | "client";
@@ -163,6 +162,7 @@ export function useTripDetail({
   const { profile, user } = useAuth();
   const { currentOrganization } = useOrganization();
   const queryClient = useQueryClient();
+  void onBack;
 
   // ── Trip data ─────────────────────────────────────────────────────────────
   const [trip, setTrip] = useState<TripRow | null>(null);
@@ -180,6 +180,8 @@ export function useTripDetail({
 
   // ── Partner / supplier / client ───────────────────────────────────────────
   const [partnerName, setPartnerName] = useState<string | null>(null);
+  const [clientAvatarUri, setClientAvatarUri] = useState<string | null>(null);
+  const [supplierAvatarUri, setSupplierAvatarUri] = useState<string | null>(null);
   const [counterpartyIntegrated, setCounterpartyIntegrated] = useState<boolean | null>(null);
   const [partnerOrgId, setPartnerOrgId] = useState<string | null>(null);
   const [clientPartyRes, setClientPartyRes] = useState<{
@@ -272,7 +274,6 @@ export function useTripDetail({
   const isRefreshingRef = useRef(false);
   const initialLoadDoneRef = useRef(false);
   const refetchTransactionsRef = useRef<() => void>(() => {});
-  const prevDriverIdRef = useRef<string | null>(null);
   const podModalRefetchDoneRef = useRef(false);
   const loadCompletedForIdRef = useRef<string | null>(null);
   const supplierRetryForTripIdRef = useRef<string | null>(null);
@@ -398,6 +399,7 @@ export function useTripDetail({
     if (!trip) return [];
 
     const rows: DriverActivityTimelineRow[] = [];
+    const tripStatusMeta = trip as TripRow & { status_updated_at?: string | null };
     if (trip.created_at) {
       rows.push({
         kind: "status",
@@ -475,7 +477,7 @@ export function useTripDetail({
         status_label: "In transit",
         changed_at:
           trip.started_at ??
-          trip.status_updated_at ??
+          tripStatusMeta.status_updated_at ??
           trip.updated_at ??
           new Date().toISOString(),
         status_context: "in_transit",
@@ -494,7 +496,7 @@ export function useTripDetail({
         status_label: "Delivered",
         changed_at:
           trip.completed_at ??
-          trip.status_updated_at ??
+          tripStatusMeta.status_updated_at ??
           trip.updated_at ??
           new Date().toISOString(),
         status_context: "completed",
@@ -542,15 +544,17 @@ export function useTripDetail({
 
   // ── Map coordinates ───────────────────────────────────────────────────────
   const trackingMapOriginCoordinate = useMemo(() => {
-    const latitude = Number((trip as any)?.pickup_lat);
-    const longitude = Number((trip as any)?.pickup_lon);
+    const tripWithCoords = trip as TripMapCoordinateFields | null;
+    const latitude = Number(tripWithCoords?.pickup_lat);
+    const longitude = Number(tripWithCoords?.pickup_lon);
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
     return { latitude, longitude };
   }, [trip]);
 
   const trackingMapDestinationCoordinate = useMemo(() => {
-    const latitude = Number((trip as any)?.drop_lat);
-    const longitude = Number((trip as any)?.drop_lon);
+    const tripWithCoords = trip as TripMapCoordinateFields | null;
+    const latitude = Number(tripWithCoords?.drop_lat);
+    const longitude = Number(tripWithCoords?.drop_lon);
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
     return { latitude, longitude };
   }, [trip]);
@@ -651,7 +655,7 @@ export function useTripDetail({
     loadAssignmentAudit();
     setFinanceRefreshKey((k) => k + 1);
     refetchTransactionsRef.current();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   // Subscribe immediately using route tripId so realtime starts even before trip row is loaded.
   useRealtimeTrip(tripId ?? null, handleRealtimeTripUpdate);
@@ -976,6 +980,78 @@ export function useTripDetail({
   }, [trip, currentOrganization?.id]);
 
   useEffect(() => {
+    let cancelled = false;
+    const ownerOrg = trip?.organization_id ?? currentOrganization?.id ?? null;
+    const resolvePartyAvatarUri = async (raw: string | null | undefined) => {
+      const value = (raw ?? "").trim();
+      if (!value) return null;
+      if (value.startsWith("http://") || value.startsWith("https://")) return value;
+      return (await getSignedAvatarUrl(value)) ?? null;
+    };
+
+    setClientAvatarUri(null);
+    setSupplierAvatarUri(null);
+    if (!trip || !ownerOrg) return;
+
+    void (async () => {
+      if (trip.client_id) {
+        let rawAvatar = "";
+        const details = await getClientDetails(trip.client_id);
+        if (!cancelled && details.client?.avatar_url) rawAvatar = details.client.avatar_url;
+        if (!rawAvatar && details.client?.linked_organization_id) {
+          const linked = await getLinkedOrgProfile(details.client.linked_organization_id);
+          if (!cancelled && linked.profile?.avatarUrl) rawAvatar = linked.profile.avatarUrl;
+        }
+        if (!rawAvatar) {
+          const { client } = await getClientById(ownerOrg, trip.client_id);
+          if (!cancelled && client?.avatar_url) rawAvatar = client.avatar_url;
+          if (!rawAvatar && client?.linked_organization_id) {
+            const linked = await getLinkedOrgProfile(client.linked_organization_id);
+            if (!cancelled && linked.profile?.avatarUrl) rawAvatar = linked.profile.avatarUrl;
+          }
+        }
+        const uri = await resolvePartyAvatarUri(rawAvatar || null);
+        if (!cancelled) setClientAvatarUri(uri);
+      }
+
+      if (trip.supplier_id) {
+        let rawAvatar = "";
+        const details = await getSupplierDetails(trip.supplier_id);
+        if (!cancelled && details.supplier?.avatar_url) rawAvatar = details.supplier.avatar_url;
+        if (!rawAvatar && details.supplier?.linked_organization_id) {
+          const linked = await getLinkedOrgProfileForSupplier(details.supplier.linked_organization_id);
+          if (!cancelled && linked.profile?.avatarUrl) rawAvatar = linked.profile.avatarUrl;
+        }
+        if (!rawAvatar) {
+          const { supplier } = await getSupplierById(ownerOrg, trip.supplier_id);
+          if (!cancelled && supplier?.avatar_url) rawAvatar = supplier.avatar_url;
+          if (!rawAvatar && supplier?.linked_organization_id) {
+            const linked = await getLinkedOrgProfileForSupplier(supplier.linked_organization_id);
+            if (!cancelled && linked.profile?.avatarUrl) rawAvatar = linked.profile.avatarUrl;
+          }
+        }
+        const viewerOrgId = currentOrganization?.id;
+        if (!rawAvatar && viewerOrgId && viewerOrgId !== ownerOrg) {
+          const { supplier } = await getSupplierById(viewerOrgId, trip.supplier_id);
+          if (!cancelled && supplier?.avatar_url) rawAvatar = supplier.avatar_url;
+        }
+        const uri = await resolvePartyAvatarUri(rawAvatar || null);
+        if (!cancelled) setSupplierAvatarUri(uri);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    trip?.id,
+    trip?.client_id,
+    trip?.supplier_id,
+    trip?.organization_id,
+    currentOrganization?.id,
+  ]);
+
+  useEffect(() => {
     setDisplayVehicleFromInput("");
   }, [tripId]);
 
@@ -1277,7 +1353,7 @@ export function useTripDetail({
       const targetPartyRes = partyType === "client" ? clientPartyRes : supplierPartyRes;
       const orgToUse = targetPartyRes?.orgId ?? partnerOrgId;
       if (!orgToUse) return;
-      router.push(`/(modals)/compare-verify?tripId=${trip.id}&partnerOrgId=${orgToUse}` as any);
+      router.push(`/(modals)/compare-verify?tripId=${trip.id}&partnerOrgId=${orgToUse}` as never);
     },
     [trip?.id, clientPartyRes, supplierPartyRes, partnerOrgId, router],
   );
@@ -1886,6 +1962,8 @@ export function useTripDetail({
     setDisplayVehicleFromInput,
     driverLinked,
     partnerName,
+    clientAvatarUri,
+    supplierAvatarUri,
     counterpartyIntegrated,
     partnerOrgId,
     clientPartyRes,

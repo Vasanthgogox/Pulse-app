@@ -339,6 +339,12 @@ function subsampleRouteCoordinates<
   return out;
 }
 
+function formatRoadDistanceM(meters: number): string {
+  const km = meters / 1000;
+  if (!Number.isFinite(km) || km < 0) return "—";
+  return `${km.toFixed(1)} km`;
+}
+
 function formatTripDistance(distance: unknown): string {
   if (distance == null) return "—";
   const raw = typeof distance === "string" ? distance.trim() : "";
@@ -558,6 +564,7 @@ export default function DriverRadarScreen() {
   const lastGuidanceKeyRef = useRef<string | null>(null);
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
   const [isFollowingLocation, setIsFollowingLocation] = useState(false);
+  const [showRouteSummary, setShowRouteSummary] = useState(false);
   const locationWatchRef = useRef<any>(null);
   const initialLoadDoneRef = useRef(false);
   const isRefreshingRef = useRef(false);
@@ -2157,6 +2164,15 @@ export default function DriverRadarScreen() {
     lastAnimatedStepKeyRef.current = null;
   }, [activeGuidanceTrip?.id]);
 
+  // Road distance from driver's current position to the active guidance target (pickup or drop).
+  const distanceToTargetKmGlobal = useMemo(
+    () =>
+      activeMission && driverMapPosition && optimalRoute
+        ? optimalRoute.distance / 1000
+        : null,
+    [activeMission, driverMapPosition, optimalRoute],
+  );
+
   // Stop any in-flight animation when the map closes.
   useEffect(() => {
     if (shouldShowMap) return;
@@ -2164,6 +2180,11 @@ export default function DriverRadarScreen() {
     if (truckRafRef.current != null) cancelAnimationFrame(truckRafRef.current);
     truckRafRef.current = null;
   }, [shouldShowMap]);
+
+  // Reset route summary when the active trip changes.
+  useEffect(() => {
+    setShowRouteSummary(false);
+  }, [activeMission?.id]);
 
   // Status-driven truck animation:
   // - accepted/pickup: animate current -> pickup
@@ -2839,6 +2860,53 @@ export default function DriverRadarScreen() {
           ? fallbackCoordinates
           : [];
 
+    // Road distance from driver to current guidance target (pickup or drop)
+    const distanceToTargetKm =
+      activeMission && driverMapPosition && optimalRoute
+        ? optimalRoute.distance / 1000
+        : null;
+
+    // Fit Leaflet map to show all route points
+    const handleFitBoundsLeaflet = () => {
+      const leafRef = isFullScreen ? fullLeafletRef : leafletRef;
+      if (!leafRef.current) return;
+      const pts = [driverMapPosition, pickup, drop].filter(
+        (p): p is { latitude: number; longitude: number } => !!p,
+      );
+      if (pts.length < 2) return;
+      const lats = pts.map((p) => p.latitude);
+      const lngs = pts.map((p) => p.longitude);
+      leafRef.current.fitBounds(
+        { latitude: Math.max(...lats), longitude: Math.max(...lngs) },
+        { latitude: Math.min(...lats), longitude: Math.min(...lngs) },
+        80,
+      );
+    };
+
+    // Zoom native map to driver's current location
+    const handleZoomToDriver = () => {
+      if (!driverMapPosition) return;
+      if (showLeaflet) {
+        const leafRef = isFullScreen ? fullLeafletRef : leafletRef;
+        leafRef.current?.focusCurrentLocation(driverMapPosition, 16);
+      } else {
+        const mapAny = targetRef.current as any;
+        try {
+          if (mapAny?.animateCamera) {
+            mapAny.animateCamera(
+              { center: driverMapPosition, zoom: 16, pitch: 0 },
+              { duration: 450 },
+            );
+          } else if (mapAny?.animateToRegion) {
+            mapAny.animateToRegion(
+              { ...driverMapPosition, latitudeDelta: 0.005, longitudeDelta: 0.005 },
+              450,
+            );
+          }
+        } catch {}
+      }
+    };
+
     return (
       <View
         style={isFullScreen ? styles.fullMapContainer : styles.assignedMapHalf}
@@ -3088,6 +3156,7 @@ export default function DriverRadarScreen() {
           </MapView>
         )}
 
+        {/* Guidance chip — bottom-left in split view, top-left in full screen */}
         {activeGuidance ? (
           <View
             pointerEvents="none"
@@ -3125,118 +3194,325 @@ export default function DriverRadarScreen() {
             >
               {activeGuidance.subtitle}
             </Text>
+            {distanceToTargetKm != null &&
+              (activeGuidanceStep === "accepted" ||
+                activeGuidanceStep === "transit") ? (
+              <Text
+                style={[styles.mapGuidanceDistance, { color: colors.emerald }]}
+                numberOfLines={1}
+              >
+                {formatRoadDistanceM(distanceToTargetKm * 1000)}{" "}
+                {activeGuidanceStep === "accepted"
+                  ? "to pickup"
+                  : "to destination"}
+              </Text>
+            ) : null}
           </View>
         ) : null}
 
-        {/* Full route (modal) + live location — top of map, aligned.
-            Hide controls during OTP entry UI. */}
+        {/* Map controls + route summary — hidden during OTP entry */}
         {otpClaimTripId == null ? (
-          <View
-            style={[
-              styles.mapTopControlsRow,
-              {
-                // IMPORTANT:
-                // - In the main Driver screen, the map is rendered "fullScreen" behind the header.
-                //   So controls must be pushed down below the header (embedded variant).
-                // - In the modal full-map view, controls should sit at the top safe area.
-                top:
-                  controlsVariant === "embedded"
-                    ? insets.top + 96
-                    : insets.top + 10,
-              },
-            ]}
-            pointerEvents="box-none"
-          >
-            {controlsVariant === "embedded" ? (
-              <TouchableOpacity
-                style={[
-                  styles.mapTopPillButton,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  },
-                ]}
-                onPress={() => {
-                  setIsFullMapVisible(true);
-                  setTimeout(() => {
-                    try {
-                      fitMapToActiveContext(fullMapRef, {
-                        isFullScreen: true,
-                        force: true,
-                      });
-                    } catch {}
-                  }, 350);
-                }}
-                activeOpacity={0.88}
-                accessibilityLabel="Open full screen map"
-                accessibilityRole="button"
-              >
-                <FontAwesome name="expand" size={15} color={colors.text} />
-                <Text
-                  style={[styles.mapTopPillLabel, { color: colors.text }]}
-                  numberOfLines={1}
-                >
-                  Full view
-                </Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={[
-                  styles.mapTopPillButton,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  },
-                ]}
-                onPress={() => {
-                  setIsFullMapVisible(false);
-                  setTimeout(() => {
-                    try {
-                      fitMapToActiveContext(mapRef, { force: true });
-                    } catch {}
-                  }, 200);
-                }}
-                activeOpacity={0.88}
-                accessibilityLabel="Close full screen map"
-                accessibilityRole="button"
-              >
-                <FontAwesome name="compress" size={15} color={colors.text} />
-                <Text
-                  style={[styles.mapTopPillLabel, { color: colors.text }]}
-                  numberOfLines={1}
-                >
-                  Done
-                </Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity
+          <>
+            {/* Top controls row */}
+            <View
               style={[
-                styles.mapTopPillButton,
-                { backgroundColor: colors.surface, borderColor: colors.border },
+                styles.mapTopControlsRow,
+                {
+                  top:
+                    controlsVariant === "embedded"
+                      ? insets.top + 96
+                      : insets.top + 10,
+                },
               ]}
-              onPress={async () => {
-                // First: center immediately. Only enable follow if we got a real fix.
-                const ok = await handleFocusCurrentLocation();
-                if (ok) setIsFollowingLocation(true);
-              }}
-              onLongPress={() => setIsFollowingLocation(false)}
-              accessibilityLabel="Track current location"
-              accessibilityRole="button"
-              disabled={isFetchingLocation}
+              pointerEvents="box-none"
             >
-              {isFetchingLocation ? (
-                <ActivityIndicator size="small" color={Theme.primary} />
+              {/* Left: Full view / Done */}
+              {controlsVariant === "embedded" ? (
+                <TouchableOpacity
+                  style={[
+                    styles.mapTopPillButton,
+                    { backgroundColor: colors.surface, borderColor: colors.border },
+                  ]}
+                  onPress={() => {
+                    setIsFullMapVisible(true);
+                    setTimeout(() => {
+                      try {
+                        fitMapToActiveContext(fullMapRef, {
+                          isFullScreen: true,
+                          force: true,
+                        });
+                      } catch {}
+                    }, 350);
+                  }}
+                  activeOpacity={0.88}
+                  accessibilityLabel="Open full screen map"
+                  accessibilityRole="button"
+                >
+                  <FontAwesome name="expand" size={15} color={colors.text} />
+                  <Text
+                    style={[styles.mapTopPillLabel, { color: colors.text }]}
+                    numberOfLines={1}
+                  >
+                    Full view
+                  </Text>
+                </TouchableOpacity>
               ) : (
-                <FontAwesome name="crosshairs" size={17} color={colors.text} />
+                <TouchableOpacity
+                  style={[
+                    styles.mapTopPillButton,
+                    { backgroundColor: colors.surface, borderColor: colors.border },
+                  ]}
+                  onPress={() => {
+                    setIsFullMapVisible(false);
+                    setTimeout(() => {
+                      try {
+                        fitMapToActiveContext(mapRef, { force: true });
+                      } catch {}
+                    }, 200);
+                  }}
+                  activeOpacity={0.88}
+                  accessibilityLabel="Close full screen map"
+                  accessibilityRole="button"
+                >
+                  <FontAwesome name="compress" size={15} color={colors.text} />
+                  <Text
+                    style={[styles.mapTopPillLabel, { color: colors.text }]}
+                    numberOfLines={1}
+                  >
+                    Done
+                  </Text>
+                </TouchableOpacity>
               )}
-              <Text
-                style={[styles.mapTopPillLabel, { color: colors.text }]}
-                numberOfLines={1}
-              >
-                {isFollowingLocation ? "Tracking" : "My location"}
-              </Text>
-            </TouchableOpacity>
-          </View>
+
+              {/* Right group: Route icon + Driver location icon + Tracking pill */}
+              <View style={styles.mapTopRightGroup}>
+                {/* Route button — fit to full route + toggle summary panel */}
+                {(activeMission || effectiveFirstIncoming) &&
+                  pickup &&
+                  drop ? (
+                  <TouchableOpacity
+                    style={[
+                      styles.mapTopIconBtn,
+                      {
+                        backgroundColor: showRouteSummary
+                          ? colors.emerald
+                          : colors.surface,
+                        borderColor: showRouteSummary
+                          ? colors.emerald
+                          : colors.border,
+                      },
+                    ]}
+                    onPress={() => {
+                      const next = !showRouteSummary;
+                      setShowRouteSummary(next);
+                      if (next) {
+                        if (showLeaflet) {
+                          handleFitBoundsLeaflet();
+                        } else {
+                          try {
+                            const ref = isFullScreen ? fullMapRef : mapRef;
+                            fitMapToActiveContext(ref, {
+                              isFullScreen,
+                              force: true,
+                            });
+                          } catch {}
+                        }
+                      }
+                    }}
+                    activeOpacity={0.88}
+                    accessibilityLabel="Show route summary"
+                    accessibilityRole="button"
+                  >
+                    <FontAwesome
+                      name="map-o"
+                      size={15}
+                      color={
+                        showRouteSummary ? "#fff" : colors.text
+                      }
+                    />
+                  </TouchableOpacity>
+                ) : null}
+
+                {/* Driver location button — zoom to current GPS */}
+                <TouchableOpacity
+                  style={[
+                    styles.mapTopIconBtn,
+                    { backgroundColor: colors.surface, borderColor: colors.border },
+                  ]}
+                  onPress={handleZoomToDriver}
+                  disabled={!driverMapPosition}
+                  accessibilityLabel="Center on my location"
+                  accessibilityRole="button"
+                >
+                  <FontAwesome name="street-view" size={15} color={colors.text} />
+                </TouchableOpacity>
+
+                {/* Tracking pill (existing) */}
+                <TouchableOpacity
+                  style={[
+                    styles.mapTopPillButton,
+                    { backgroundColor: colors.surface, borderColor: colors.border },
+                  ]}
+                  onPress={async () => {
+                    const ok = await handleFocusCurrentLocation();
+                    if (ok) setIsFollowingLocation(true);
+                  }}
+                  onLongPress={() => setIsFollowingLocation(false)}
+                  accessibilityLabel="Track current location"
+                  accessibilityRole="button"
+                  disabled={isFetchingLocation}
+                >
+                  {isFetchingLocation ? (
+                    <ActivityIndicator size="small" color={Theme.primary} />
+                  ) : (
+                    <FontAwesome name="crosshairs" size={17} color={colors.text} />
+                  )}
+                  <Text
+                    style={[styles.mapTopPillLabel, { color: colors.text }]}
+                    numberOfLines={1}
+                  >
+                    {isFollowingLocation ? "Tracking" : "My location"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Route summary panel — readable pickup/drop addresses */}
+            {showRouteSummary && (activeMission || effectiveFirstIncoming) ? (() => {
+              const trip = (activeMission || effectiveFirstIncoming) as tripsService.TripRow;
+              return (
+                <View
+                  pointerEvents="none"
+                  style={[
+                    styles.routeSummaryPanel,
+                    {
+                      top:
+                        (controlsVariant === "embedded"
+                          ? insets.top + 96
+                          : insets.top + 10) + 54,
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
+                  {/* FROM */}
+                  <View style={styles.routeSummaryRow}>
+                    <View
+                      style={[
+                        styles.routeSummaryDot,
+                        { backgroundColor: colors.emerald },
+                      ]}
+                    />
+                    <View style={styles.routeSummaryTextWrap}>
+                      <Text
+                        style={[
+                          styles.routeSummaryLabel,
+                          { color: colors.textMuted },
+                        ]}
+                      >
+                        FROM
+                      </Text>
+                      <Text
+                        style={[
+                          styles.routeSummaryAddress,
+                          { color: colors.text },
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {trip.pickup_area?.trim() || "—"}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Connector + distance */}
+                  <View style={styles.routeSummaryConnector}>
+                    <View
+                      style={[
+                        styles.routeSummaryLine,
+                        { backgroundColor: colors.border },
+                      ]}
+                    />
+                    {optimalRoute?.distance != null ? (
+                      <View
+                        style={[
+                          styles.routeSummaryBadge,
+                          { borderColor: colors.border },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.routeSummaryBadgeText,
+                            { color: colors.textMuted },
+                          ]}
+                        >
+                          {formatRoadDistanceM(optimalRoute.distance)}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+
+                  {/* TO */}
+                  <View style={styles.routeSummaryRow}>
+                    <View
+                      style={[styles.routeSummaryDot, { backgroundColor: "#f59e0b" }]}
+                    />
+                    <View style={styles.routeSummaryTextWrap}>
+                      <Text
+                        style={[
+                          styles.routeSummaryLabel,
+                          { color: colors.textMuted },
+                        ]}
+                      >
+                        TO
+                      </Text>
+                      <Text
+                        style={[
+                          styles.routeSummaryAddress,
+                          { color: colors.text },
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {(trip.drop_location || (trip as any).drop_area)?.trim() || "—"}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              );
+            })() : null}
+
+            {/* Trip preview info bar — mirrors TripDetailScreen radarBottom */}
+            {(activeMission || effectiveFirstIncoming) && activeGuidance ? (() => {
+              const trip = (activeMission || effectiveFirstIncoming) as tripsService.TripRow;
+              const etaLabel = trip.estimated_duration ? String(trip.estimated_duration) : null;
+              return (
+                <View
+                  pointerEvents="none"
+                  style={[
+                    styles.mapPreviewBar,
+                    { bottom: isFullScreen ? insets.bottom + 20 : 20 },
+                  ]}
+                >
+                  <View style={styles.mapPreviewBarLeft}>
+                    <Text style={styles.mapPreviewBarLabel}>Active Node</Text>
+                    <Text style={styles.mapPreviewBarValue} numberOfLines={2}>
+                      {activeGuidance.title}
+                    </Text>
+                  </View>
+                  <View style={styles.mapPreviewBarRight}>
+                    <Text style={[styles.mapPreviewBarLabel, { textAlign: "right" }]}>Distance / ETA</Text>
+                    <Text style={styles.mapPreviewBarSpeed} numberOfLines={1}>
+                      {distanceToTargetKm != null
+                        ? formatRoadDistanceM(distanceToTargetKm * 1000)
+                        : "—"}
+                      {etaLabel ? (
+                        <Text style={styles.mapPreviewBarSpeedUnit}>{" · "}{etaLabel}</Text>
+                      ) : null}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })() : null}
+          </>
         ) : null}
       </View>
     );
@@ -3457,6 +3733,7 @@ export default function DriverRadarScreen() {
             <DriverTripFlowCard
               trip={activeMission}
               commissionAmount={activeMissionCommission}
+              distanceToTargetKm={distanceToTargetKmGlobal}
               onRefresh={fetch}
               onTripCompleted={() => {
                 setJustCompletedTrip(true);
@@ -3491,6 +3768,7 @@ export default function DriverRadarScreen() {
             <DriverTripFlowCard
               trip={effectiveFirstIncoming}
               commissionAmount={newAssignmentCommission}
+              distanceToTargetKm={distanceToTargetKmGlobal}
               onRefresh={fetch}
               onTripCompleted={() => {
                 setJustCompletedTrip(true);
@@ -5729,6 +6007,148 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     lineHeight: 16,
+  },
+  mapGuidanceDistance: {
+    marginTop: 5,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.2,
+  },
+  mapTopRightGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  mapTopIconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  routeSummaryPanel: {
+    position: "absolute",
+    left: Layout.screenPaddingHorizontal,
+    right: Layout.screenPaddingHorizontal,
+    zIndex: 40,
+    elevation: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    ...(Platform.OS === "ios"
+      ? {
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.1,
+          shadowRadius: 12,
+        }
+      : {}),
+  },
+  routeSummaryRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  routeSummaryDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginTop: 4,
+    flexShrink: 0,
+  },
+  routeSummaryTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  routeSummaryLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 1,
+    marginBottom: 2,
+  },
+  routeSummaryAddress: {
+    fontSize: 13,
+    fontWeight: "600",
+    lineHeight: 17,
+  },
+  routeSummaryConnector: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginLeft: 4,
+    marginVertical: 5,
+    gap: 8,
+  },
+  routeSummaryLine: {
+    width: 2,
+    height: 18,
+  },
+  routeSummaryBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  routeSummaryBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  mapPreviewBar: {
+    position: "absolute",
+    left: 20,
+    right: 20,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    gap: 16,
+    backgroundColor: "rgba(15,20,30,0.82)",
+    borderRadius: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.1)",
+    zIndex: 20,
+  },
+  mapPreviewBarLeft: {
+    flex: 1,
+    minWidth: 0,
+  },
+  mapPreviewBarRight: {
+    alignItems: "flex-end",
+    flex: 0.9,
+    minWidth: 0,
+  },
+  mapPreviewBarLabel: {
+    color: "#64748b",
+    fontSize: 9,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1.5,
+    marginBottom: 4,
+  },
+  mapPreviewBarValue: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "900",
+    fontStyle: "italic",
+  },
+  mapPreviewBarSpeed: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "900",
+    fontStyle: "italic",
+    textAlign: "right",
+  },
+  mapPreviewBarSpeedUnit: {
+    fontSize: 10,
+    color: "rgba(255,255,255,0.42)",
+    fontStyle: "normal",
+    textTransform: "uppercase",
   },
   mapControlBtn: {
     width: 44,

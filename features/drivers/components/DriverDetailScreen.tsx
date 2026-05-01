@@ -1033,11 +1033,6 @@ export default function DriverDetailScreen({
     : isInAppNotIntegrated
       ? "In App - Not Integrated"
       : "Not in app";
-  const statusSubtitle = isIntegrated
-    ? "Driver account linked"
-    : isInAppNotIntegrated
-      ? "Can request integration"
-      : "Invite to onboard";
   const ratingValue =
     driverRatingAvg && driverRatingAvg > 0 ? driverRatingAvg : 0;
   const ratingFilledStars = Math.max(0, Math.min(5, Math.round(ratingValue)));
@@ -1247,8 +1242,33 @@ export default function DriverDetailScreen({
         </LinearGradient>
         {isWebDesktop ? (
           <View style={styles.profilePreviewCard}>
-            <View style={styles.profilePreviewTopRow}>
-              <Text style={styles.profilePreviewEyebrow}>ENTITY PROFILE</Text>
+            <View style={ecc.dossierHeader}>
+              <View style={styles.profilePreviewTopMetaRow}>
+                <View style={styles.profilePreviewTopAction}>
+                  <Text style={styles.profilePreviewTopActionText} numberOfLines={1}>
+                    {tripsHandled}
+                  </Text>
+                </View>
+                <View style={styles.profilePreviewRatingRow}>
+                  <View style={styles.profilePreviewStars}>
+                    {Array.from({ length: 5 }).map((_, idx) => (
+                      <FontAwesome
+                        key={`driver-star-header-${idx}`}
+                        name={idx < ratingFilledStars ? "star" : "star-o"}
+                        size={13}
+                        color={
+                          idx < ratingFilledStars ? "#fbbf24" : Theme.borderMedium
+                        }
+                      />
+                    ))}
+                  </View>
+                  <View style={styles.profilePreviewRatingBadge}>
+                    <Text style={styles.profilePreviewRatingBadgeText} numberOfLines={1}>
+                      {ratingValue.toFixed(1)}
+                    </Text>
+                  </View>
+                </View>
+              </View>
               <TouchableOpacity
                 style={styles.profilePreviewTopAction}
                 onPress={() => setShowProfileModal(true)}
@@ -1266,146 +1286,73 @@ export default function DriverDetailScreen({
               </TouchableOpacity>
             </View>
             <TouchableOpacity
-              style={styles.profilePreviewIdentityTrigger}
+              style={ecc.dossierIdentity}
               onPress={() => setShowProfileModal(true)}
               activeOpacity={0.85}
               accessibilityLabel="Open driver full profile"
             >
-              <View style={styles.profilePreviewIdentityRow}>
-                <View style={styles.profilePreviewIdentityAvatar}>
-                  {profileAvatarUri ? (
-                    <Image
-                      source={{ uri: profileAvatarUri }}
-                      style={styles.profilePreviewIdentityAvatarImage}
-                    />
-                  ) : (
-                    <FontAwesome
-                      name="user"
-                      size={14}
-                      color={Theme.textSecondary}
-                    />
-                  )}
+              <View style={ecc.dossierAvatarWrap}>
+                {profileAvatarUri ? (
+                  <Image
+                    source={{ uri: profileAvatarUri }}
+                    style={ecc.dossierAvatarImage}
+                  />
+                ) : (
+                  <FontAwesome
+                    name="user"
+                    size={24}
+                    color={Theme.textOnPrimary}
+                  />
+                )}
+                <View style={ecc.dossierAvatarBadge}>
+                  <FontAwesome name="road" size={10} color={Theme.textOnPrimary} />
                 </View>
-                <View style={styles.profilePreviewIdentityMeta}>
-                  <Text
-                    style={styles.profilePreviewIdentityName}
-                    numberOfLines={1}
-                  >
-                    {(driver.name ?? "Driver").trim() || "Driver"}
+              </View>
+              <Text style={ecc.dossierName} numberOfLines={1}>
+                {(driver.name ?? "Driver").trim() || "Driver"}
+              </Text>
+              <Text style={ecc.dossierSub} numberOfLines={1}>
+                {(driver.phone ?? driver.email ?? "No contact").trim() || "No contact"}
+              </Text>
+              <View style={ecc.dossierBadgeRow}>
+                <View style={[ecc.dossierBadge, ecc.dossierBadgeBlue]}>
+                  <Text style={ecc.dossierBadgeText}>DRIVER</Text>
+                </View>
+                <View style={[ecc.dossierBadge, ecc.dossierBadgeDark]}>
+                  <Text style={[ecc.dossierBadgeText, ecc.dossierBadgeTextDark]}>
+                    {statusTitle}
                   </Text>
-                  <Text
-                    style={styles.profilePreviewIdentitySub}
-                    numberOfLines={1}
-                  >
-                    {(driver.phone ?? driver.email ?? "No contact").trim() ||
-                      "No contact"}
+                </View>
+                <View style={[ecc.dossierBadge, ecc.dossierBadgeMuted]}>
+                  <Text style={[ecc.dossierBadgeText, ecc.dossierBadgeTextMuted]}>
+                    {isIntegrated ? "LINKED" : "LOCAL"}
                   </Text>
                 </View>
               </View>
             </TouchableOpacity>
-            <View style={styles.profilePreviewRatingRow}>
-              <View style={styles.profilePreviewStars}>
-                {Array.from({ length: 5 }).map((_, idx) => (
-                  <FontAwesome
-                    key={`driver-star-${idx}`}
-                    name={idx < ratingFilledStars ? "star" : "star-o"}
-                    size={13}
-                    color={
-                      idx < ratingFilledStars ? "#fbbf24" : Theme.borderMedium
-                    }
-                  />
-                ))}
-              </View>
-              <View style={styles.profilePreviewRatingBadge}>
-                <Text style={styles.profilePreviewRatingBadgeText}>
-                  {ratingValue.toFixed(1)}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.profilePreviewExperienceBlock}>
-              <Text style={styles.profilePreviewExperienceEyebrow}>
-                EXPERIENCE
-              </Text>
-              <View style={styles.profilePreviewExperienceRow}>
-                <View style={styles.profilePreviewExperienceIconWrap}>
-                  <FontAwesome
-                    name="road"
-                    size={12}
-                    color={Theme.textOnPrimary}
-                  />
+            <View style={ecc.dossierContactStack}>
+              <View style={ecc.dossierContactRow}>
+                <View style={ecc.dossierContactIcon}>
+                  <FontAwesome name="envelope-o" size={13} color={Theme.textMuted} />
                 </View>
-                <Text style={styles.profilePreviewTripsNumber}>
-                  {tripsHandled}
-                </Text>
-                <Text style={styles.profilePreviewExperienceLabel}>
-                  Trips Handled
-                </Text>
+                <View style={ecc.dossierContactText}>
+                  <Text style={ecc.dossierContactLabel}>Encrypted Mail</Text>
+                  <Text style={ecc.dossierContactValue} numberOfLines={1}>
+                    {(driver.email ?? "").trim() || "Not available"}
+                  </Text>
+                </View>
+                <FontAwesome name="lock" size={10} color={Theme.textSection} />
               </View>
-            </View>
-            <View style={styles.profilePreviewDetails}>
-              <View style={styles.profilePreviewDetailRow}>
-                <Text style={styles.profilePreviewDetailLabel}>Name</Text>
-                <Text
-                  style={styles.profilePreviewDetailValue}
-                  numberOfLines={1}
-                >
-                  {(driver.name ?? "—").trim() || "—"}
-                </Text>
-              </View>
-              <View style={styles.profilePreviewDetailRow}>
-                <Text style={styles.profilePreviewDetailLabel}>Phone</Text>
-                <Text
-                  style={styles.profilePreviewDetailValue}
-                  numberOfLines={1}
-                >
-                  {(driver.phone ?? "—").trim() || "—"}
-                </Text>
-              </View>
-              <View style={styles.profilePreviewDetailRow}>
-                <Text style={styles.profilePreviewDetailLabel}>Email</Text>
-                <Text
-                  style={styles.profilePreviewDetailValue}
-                  numberOfLines={1}
-                >
-                  {(driver.email ?? "—").trim() || "—"}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.profilePreviewToggle}>
-              <View
-                style={[
-                  styles.profilePreviewToggleDot,
-                  isInAppNotIntegrated && styles.profilePreviewToggleDotPending,
-                  isIntegrated && styles.profilePreviewToggleDotActive,
-                ]}
-              >
-                {isIntegrated ? (
-                  <FontAwesome
-                    name="check"
-                    size={11}
-                    color={Theme.textOnPrimary}
-                  />
-                ) : isInAppNotIntegrated ? (
-                  <FontAwesome
-                    name="send"
-                    size={9}
-                    color={Theme.financeCardGreenFrom}
-                  />
-                ) : isNotInApp ? (
-                  <FontAwesome
-                    name="envelope-o"
-                    size={9}
-                    color={Theme.textMuted}
-                  />
-                ) : null}
-              </View>
-              <View style={styles.profilePreviewToggleTextWrap}>
-                <Text style={styles.profilePreviewToggleTitle}>
-                  {statusTitle}
-                </Text>
-                <Text style={styles.profilePreviewToggleSub}>
-                  {statusSubtitle}
-                </Text>
+              <View style={ecc.dossierContactRow}>
+                <View style={ecc.dossierContactIcon}>
+                  <FontAwesome name="phone" size={13} color={Theme.textMuted} />
+                </View>
+                <View style={ecc.dossierContactText}>
+                  <Text style={ecc.dossierContactLabel}>Secured Line</Text>
+                  <Text style={ecc.dossierContactValue} numberOfLines={1}>
+                    {(driver.phone ?? "").trim() || "Not available"}
+                  </Text>
+                </View>
               </View>
             </View>
             <TouchableOpacity
@@ -2622,6 +2569,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   profilePreviewEyebrow: ecc.eyebrow,
+  profilePreviewTopMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    minWidth: 0,
+    flexShrink: 1,
+  },
   profilePreviewTopAction: {
     flexDirection: "row",
     alignItems: "center",

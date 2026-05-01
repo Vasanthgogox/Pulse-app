@@ -27,4 +27,5 @@ export type LeafletMapProps = {
 
 export type LeafletMapRef = {
   focusCurrentLocation: (center: LeafletLatLng, zoom?: number) => void;
+  fitBounds: (ne: LeafletLatLng, sw: LeafletLatLng, paddingPx?: number) => void;
 };
