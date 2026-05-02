@@ -5,5 +5,5 @@
     "paths": { "@/*": ["./*"] }
   },
   "include": ["**/*.ts", "**/*.tsx", "**/*.d.ts", ".expo/types/**/*.ts", "expo-env.d.ts"],
-  "exclude": ["**/__tests__/**"]
+  "exclude": ["node_modules", "**/__tests__/**"]
 }
