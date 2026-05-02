@@ -114,7 +114,7 @@ export async function getTripsByOrganization(
     return { error: null, trips: resultTrips, hasMore };
   }
 
-  const { data, error } = await q;
+  const { data, error } = await q.limit(200);
   if (error) return { error: new Error(error.message), trips: [] };
   return { error: null, trips: processData(data) };
 }

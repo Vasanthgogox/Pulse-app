@@ -17,7 +17,7 @@ export function useNetworkFeedQuery(orgId: string | null) {
       return res.posts;
     },
     enabled: !!orgId,
-    staleTime: 30_000,
+    staleTime: 300_000,
   });
 }
 

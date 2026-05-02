@@ -168,7 +168,7 @@ export async function getConversationsByOrganization(
   const selectConv = `
       *,
       trips!inner ( trip_number, pickup_area, drop_location ),
-      trip_messages ( * )
+      trip_messages ( id, conversation_id, content, sender_role, sender_name, sender_user_id, created_at, is_read, message_type, metadata )
     `;
 
   const [{ data: ownOrgRows, error: ownErr }, supplierTripsRes] = await Promise.all([
@@ -228,7 +228,7 @@ export async function getTripConversationById(
   const selectConv = `
       *,
       trips!inner ( trip_number, pickup_area, drop_location ),
-      trip_messages ( * )
+      trip_messages ( id, conversation_id, content, sender_role, sender_name, sender_user_id, created_at, is_read, message_type, metadata )
     `;
   const { data, error } = await supabase()
     .from("trip_conversations")
@@ -404,10 +404,11 @@ export async function getMessagesByConversation(
     .from("trip_messages")
     .select("*")
     .eq("conversation_id", conversationId)
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: false })
+    .limit(100);
 
   if (error) throw error;
-  return data ?? [];
+  return (data ?? []).reverse();
 }
 
 // ── Network conversations ─────────────────────────────────────────────────────
@@ -417,7 +418,7 @@ export async function getNetworkConversationsByOrg(
 ): Promise<NetworkConversation[]> {
   const { data, error } = await supabase()
     .from("network_conversations")
-    .select(`*, network_messages(*)`)
+    .select(`*, network_messages(id, conversation_id, content, sender_org_id, sender_name, sender_user_id, created_at, is_read_by_other, read_at)`)
     .or(`org_a_id.eq.${orgId},org_b_id.eq.${orgId}`)
     .order("last_message_at", { ascending: false, nullsFirst: false });
 
@@ -565,7 +566,7 @@ export async function getConversationsByDriverIds(
       `
       *,
       trips!inner ( trip_number, pickup_area, drop_location ),
-      trip_messages ( * )
+      trip_messages ( id, conversation_id, content, sender_role, sender_name, sender_user_id, created_at, is_read, message_type, metadata )
     `,
     )
     .in("driver_id", driverIds)

@@ -19,7 +19,7 @@ export function useBidsForPostQuery(postId: string | null) {
       return res.bids;
     },
     enabled: !!postId,
-    staleTime: 20_000,
+    staleTime: 300_000,
   });
 }
 
@@ -32,7 +32,7 @@ export function useMyBidQuery(postId: string | null, orgId: string | null) {
       return res.bid;
     },
     enabled: !!postId && !!orgId,
-    staleTime: 20_000,
+    staleTime: 300_000,
   });
 }
 
