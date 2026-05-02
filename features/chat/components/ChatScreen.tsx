@@ -186,24 +186,35 @@ type ComposePartyRow =
   | { kind: "unassigned_driver" };
 
 /** Compose list rows: supplier only for aggregate (integrated) trips; driver shows Not assigned when empty. */
+function isPartyLinkedForTripChat(
+  trip: TripForCompose,
+  partyType: ConversationPartyType,
+): boolean {
+  if (partyType === "client")
+    return Boolean(trip.client_id && trip.client_linked_organization_id);
+  if (partyType === "supplier")
+    return Boolean(trip.supplier_id && trip.supplier_linked_organization_id);
+  return Boolean(trip.driver_id);
+}
+
 function getComposePartyRows(trip: TripForCompose): ComposePartyRow[] {
   const rows: ComposePartyRow[] = [];
   const aggregate = isAggregateTrip(trip);
 
-  if (trip.client_id)
+  if (isPartyLinkedForTripChat(trip, "client"))
     rows.push({
       kind: "selectable",
       partyType: "client",
       name: trip.client_name?.trim() || "Client",
-      id: trip.client_id,
+      id: trip.client_id!,
     });
 
-  if (aggregate && trip.supplier_id)
+  if (aggregate && isPartyLinkedForTripChat(trip, "supplier"))
     rows.push({
       kind: "selectable",
       partyType: "supplier",
       name: trip.supplier_name?.trim() || "Supplier",
-      id: trip.supplier_id,
+      id: trip.supplier_id!,
     });
 
   const hasSelectableOther = rows.some((r) => r.kind === "selectable");
@@ -550,6 +561,13 @@ export function ChatScreen() {
     partyName: string,
     partyId: string
   ) => {
+    if (!isPartyLinkedForTripChat(trip, partyType)) {
+      Alert.alert(
+        "Chat unavailable",
+        "This party is not linked to an app organization yet. Link both sides first, then start chat.",
+      );
+      return;
+    }
     setInitiating(true);
     const convId = await initiateConversation({
       tripId: trip.id,
@@ -1152,8 +1170,8 @@ export function ChatScreen() {
           <View style={{ paddingTop: 48, alignItems: "center", gap: 8, paddingHorizontal: 24 }}>
             <MessageSquare size={28} color="#e2e8f0" />
             <Text style={{ fontSize: 13, color: "#94a3b8", textAlign: "center", lineHeight: 20 }}>
-              Trips matched your filters, but none have a linked client, supplier, or driver ID on the
-              trip record. Assign parties on each trip first, then return here to start chat.
+              Trips matched your filters, but none have a chat-ready linked party. Clients/suppliers
+              must be connected to an app organization, and drivers must be assigned on the trip.
             </Text>
           </View>
         ) : (

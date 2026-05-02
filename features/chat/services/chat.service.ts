@@ -29,6 +29,8 @@ export interface TripForCompose {
   supplier_name: string | null;
   driver_id: string | null;
   driver_display_name: string | null;
+  client_linked_organization_id: string | null;
+  supplier_linked_organization_id: string | null;
 }
 
 export async function getTripsForCompose(
@@ -59,22 +61,53 @@ export async function getTripsForCompose(
     driver_id: (row.driver_id as string | null | undefined) ?? null,
     driver_display_name:
       (row.driver_display_name as string | null | undefined) ?? null,
+    client_linked_organization_id: null,
+    supplier_linked_organization_id: null,
   }));
 
-  // Resolve supplier display names when trips table doesn't carry denormalized supplier_name.
+  const clientIds = Array.from(
+    new Set(trips.map((t) => t.client_id).filter((v): v is string => !!v)),
+  );
   const supplierIds = Array.from(
     new Set(trips.map((t) => t.supplier_id).filter((v): v is string => !!v)),
   );
-  if (supplierIds.length === 0) return trips;
+  if (clientIds.length === 0 && supplierIds.length === 0) return trips;
 
-  const { data: suppliers } = await supabase()
-    .from("suppliers")
-    .select("id, company_name, name")
-    .in("id", supplierIds);
+  const [clientsResp, suppliersResp] = await Promise.all([
+    clientIds.length
+      ? supabase()
+          .from("clients")
+          .select("id, linked_organization_id")
+          .in("id", clientIds)
+      : Promise.resolve({
+          data: [] as { id: string; linked_organization_id: string | null }[],
+        }),
+    supplierIds.length
+      ? supabase()
+          .from("suppliers")
+          .select("id, company_name, name, linked_organization_id")
+          .in("id", supplierIds)
+      : Promise.resolve({
+          data: [] as {
+            id: string;
+            company_name: string | null;
+            name: string | null;
+            linked_organization_id: string | null;
+          }[],
+        }),
+  ]);
+
+  const clientLinkedOrgById = new Map<string, string | null>();
+  for (const c of clientsResp.data ?? []) {
+    clientLinkedOrgById.set(c.id, c.linked_organization_id ?? null);
+  }
+
   const supplierNameById = new Map<string, string>();
-  for (const s of suppliers ?? []) {
+  const supplierLinkedOrgById = new Map<string, string | null>();
+  for (const s of suppliersResp.data ?? []) {
     const label = (s.company_name ?? "").trim() || (s.name ?? "").trim();
     if (label) supplierNameById.set(s.id, label);
+    supplierLinkedOrgById.set(s.id, s.linked_organization_id ?? null);
   }
 
   return trips.map((t) => ({
@@ -82,6 +115,10 @@ export async function getTripsForCompose(
     supplier_name:
       t.supplier_name?.trim() ||
       (t.supplier_id ? (supplierNameById.get(t.supplier_id) ?? null) : null),
+    client_linked_organization_id:
+      t.client_id ? (clientLinkedOrgById.get(t.client_id) ?? null) : null,
+    supplier_linked_organization_id:
+      t.supplier_id ? (supplierLinkedOrgById.get(t.supplier_id) ?? null) : null,
   }));
 }
 
@@ -337,6 +374,30 @@ export async function getOrCreateConversation(params: {
           .includes("ensure_driver_trip_conversation"));
     if (!missingRpc && error) throw error;
     /* Fallback until migration is applied */
+  }
+
+  if (partyType === "client") {
+    const { data: client, error } = await supabase()
+      .from("clients")
+      .select("id, linked_organization_id")
+      .eq("id", partyId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!client?.linked_organization_id) {
+      throw new Error("Client is not linked to an app organization");
+    }
+  }
+
+  if (partyType === "supplier") {
+    const { data: supplier, error } = await supabase()
+      .from("suppliers")
+      .select("id, linked_organization_id")
+      .eq("id", partyId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!supplier?.linked_organization_id) {
+      throw new Error("Supplier is not linked to an app organization");
+    }
   }
 
   const payload = {

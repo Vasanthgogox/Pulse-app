@@ -5,6 +5,20 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "@/lib/supabase";
 
+const ADJ_SELECT_FULL =
+  "id, trip_id, organization_id, type, impact, amount, reason, mission_key, created_at, voided_at, void_reason";
+const ADJ_SELECT_LEGACY =
+  "id, trip_id, organization_id, type, impact, amount, reason, created_at";
+
+function isMissingAdjustmentColumnError(err: { message?: string; code?: string } | null): boolean {
+  if (!err?.message) return false;
+  const m = err.message.toLowerCase();
+  return (
+    (m.includes("voided_at") || m.includes("void_reason") || m.includes("mission_key")) &&
+    (m.includes("does not exist") || m.includes("column") || m.includes("schema cache") || err.code === "42703")
+  );
+}
+
 const STORAGE_KEY_PREFIX = "q_mobile_trip_adjustments:";
 
 export type TripAdjustmentType = "revenue" | "cost";
@@ -94,19 +108,26 @@ function rowFromRemote(row: TripFinanceAdjustmentRowDb): TripAdjustment {
 }
 
 async function loadRemoteForTrip(tripId: string): Promise<TripAdjustment[]> {
-  try {
-    const { data, error } = await supabase()
+  const query = (select: string) =>
+    supabase()
       .from("trip_finance_adjustments")
-      .select(
-        "id, trip_id, organization_id, type, impact, amount, reason, mission_key, created_at, voided_at, void_reason",
-      )
+      .select(select)
       .eq("trip_id", tripId)
       .order("created_at", { ascending: true });
-    if (error || !data?.length) return [];
-    return (data as TripFinanceAdjustmentRowDb[]).map(rowFromRemote);
-  } catch {
+
+  let { data, error } = await query(ADJ_SELECT_FULL);
+
+  if (error && isMissingAdjustmentColumnError(error)) {
+    if (__DEV__) console.warn("[tripAdjustments] schema drift — retrying without new columns:", error.message);
+    ({ data, error } = await query(ADJ_SELECT_LEGACY));
+  }
+
+  if (error) {
+    if (__DEV__) console.warn("[tripAdjustments] loadRemoteForTrip failed:", error.message);
     return [];
   }
+  if (!data?.length) return [];
+  return (data as unknown as TripFinanceAdjustmentRowDb[]).map(rowFromRemote);
 }
 
 export async function getTripAdjustments(tripId: string): Promise<TripAdjustment[]> {
