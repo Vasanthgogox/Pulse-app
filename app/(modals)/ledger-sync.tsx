@@ -499,6 +499,31 @@ export default function LedgerSyncScreen() {
           : options?.entryId && editingEntry?.transaction_date
             ? editingEntry.transaction_date.slice(0, 10)
             : today;
+
+      const ledgerRuns: {
+        data: AddTransactionData;
+        options?: AddTransactionSubmitOptions;
+      }[] =
+        data.tripAllocations &&
+        data.tripAllocations.length > 0 &&
+        !options?.entryId
+          ? data.tripAllocations.map((alloc) => ({
+              data: {
+                ...data,
+                tripId: alloc.tripId,
+                amount: alloc.amount,
+                tripNumber: alloc.tripNumber ?? null,
+                indentId: alloc.indentId ?? null,
+                tripAllocations: undefined,
+              },
+              options: undefined,
+            }))
+          : [{ data, options }];
+
+      for (let runIdx = 0; runIdx < ledgerRuns.length; runIdx++) {
+        const data = ledgerRuns[runIdx].data;
+        const options = ledgerRuns[runIdx].options;
+
       const driverPaymentLabel =
         data.type === "out" &&
         data.driverPaymentType &&
@@ -676,6 +701,8 @@ export default function LedgerSyncScreen() {
         });
       }
 
+      }
+
       if (params.salaryRequestId) {
         await updateSalaryRequestStatus(params.salaryRequestId, "paid");
       }
@@ -711,8 +738,9 @@ export default function LedgerSyncScreen() {
         }
       } else {
         // No context (e.g. opened from table view or generic add): go to the detail page where the entry is visible (trip or entity).
-        if (data.tripId) {
-          router.replace(`/trip/${data.tripId}`);
+        const tripNavId = data.tripAllocations?.[0]?.tripId ?? data.tripId;
+        if (tripNavId) {
+          router.replace(`/trip/${tripNavId}`);
           return;
         }
         const partyId = data.partyId ?? null;
