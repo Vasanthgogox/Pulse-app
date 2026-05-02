@@ -18,7 +18,6 @@ import {
   Navigation,
   Clock,
 } from "lucide-react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import Theme from "@/constants/Theme";
 import type { LedgerEventMetadata, TripMessageRow } from "../types/chat.types";
 
@@ -158,7 +157,6 @@ export function ChatLedgerEventCard({
   const isReceiver = meta.receiver_org_id === currentOrgId;
   const isSender = meta.sender_org_id === currentOrgId;
 
-  const categoryLabel = String(meta.category ?? "Payment").trim() || "Payment";
   const paymentModeLabel = String(meta.payment_mode ?? "Cash").trim() || "Cash";
   const safeAmount = Number(meta.amount ?? 0);
   const flow: "in" | "out" = meta.flow === "out" ? "out" : "in";
@@ -169,7 +167,6 @@ export function ChatLedgerEventCard({
     maximumFractionDigits: 0,
   }).format(Number.isFinite(safeAmount) ? safeAmount : 0);
 
-  const flowColor = flow === "in" ? "#059669" : "#be123c";
   const flowPrefix = flow === "in" ? "+" : "−";
   const isAcknowledged = !!meta.acknowledged_at;
   const isDisputed = !!meta.disputed;
@@ -189,88 +186,145 @@ export function ChatLedgerEventCard({
   const { from: fromParty, to: toParty } = splitOrgLine(orgLine);
 
   const flowHeadline = flow === "in" ? "Payment received" : "Payment sent";
-  const stripColors =
-    flow === "in"
-      ? (["#34d399", "#059669"] as const)
-      : (["#fb7185", "#be123c"] as const);
-  const cardTintColors =
-    flow === "in"
-      ? (["#f0fdf4", "#ffffff"] as const)
-      : (["#fff1f2", "#ffffff"] as const);
-  const iconRingColors =
-    flow === "in"
-      ? (["#a7f3d0", "#34d399"] as const)
-      : (["#fecdd3", "#fb7185"] as const);
+  const isCredit = flow === "in";
+  const palette = isCredit
+    ? {
+        kicker: "#059669",
+        headline: "#0f172a",
+        amount: "#047857",
+        badgeBg: "#ecfdf5",
+        badgeText: "#047857",
+        badgeBorder: "#d1fae5",
+        iconBg: "#ecfdf5",
+        iconColor: "#059669",
+        iconBorder: "#d1fae5",
+        pathBg: "#f8fafc",
+        pathBorder: "#e2e8f0",
+        pathLabel: "#94a3b8",
+        pathName: "#0f172a",
+        track: "#e2e8f0",
+        fill: "#10b981",
+        bar: "#10b981",
+        systemBadge: "SYSTEM_CREDITED",
+        tripTag: "TRIP_CREDIT",
+      }
+    : {
+        kicker: "#e11d48",
+        headline: "#0f172a",
+        amount: "#e11d48",
+        badgeBg: "#fff1f2",
+        badgeText: "#be123c",
+        badgeBorder: "#fecdd3",
+        iconBg: "#fff1f2",
+        iconColor: "#e11d48",
+        iconBorder: "#fecdd3",
+        pathBg: "#f8fafc",
+        pathBorder: "#e2e8f0",
+        pathLabel: "#94a3b8",
+        pathName: "#0f172a",
+        track: "#e2e8f0",
+        fill: "#f43f5e",
+        bar: "#f43f5e",
+        systemBadge: "SYSTEM_DEBITED",
+        tripTag: "TRIP_PAYMENT",
+      };
 
   return (
-    <View style={s.ledgerCardOuter}>
-      <LinearGradient colors={stripColors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.ledgerAccentStrip} />
-
-      <LinearGradient colors={cardTintColors} style={s.ledgerCardGradient}>
-        <View style={s.ledgerCard}>
-          <View style={s.ledgerTopRow}>
-            <LinearGradient colors={iconRingColors} style={s.ledgerIconRing}>
-              <View style={s.ledgerIconInner}>
-                <CreditCard size={13} color={flow === "in" ? "#047857" : "#9f1239"} />
+    <View style={s.payOuter}>
+      <View style={s.payCard}>
+        <View style={s.payBody}>
+          <View style={s.payHeaderRow}>
+            <View style={s.payHeaderLeft}>
+              <View
+                style={[
+                  s.payIconNode,
+                  {
+                    backgroundColor: palette.iconBg,
+                    borderColor: palette.iconBorder,
+                  },
+                ]}
+              >
+                <CreditCard size={24} color={palette.iconColor} strokeWidth={2.2} />
               </View>
-            </LinearGradient>
-            <View style={s.ledgerTitleBlock}>
-              <Text style={s.ledgerCategory}>{categoryLabel.toUpperCase()}</Text>
-              <Text style={s.ledgerFlowHeadline} numberOfLines={1}>
-                {flowHeadline}
-              </Text>
+              <View style={s.payHeaderTitles}>
+                <Text style={[s.payKicker, { color: palette.kicker }]}>{palette.tripTag}</Text>
+                <Text style={[s.payHeadline, { color: palette.headline }]} numberOfLines={2}>
+                  {flowHeadline}
+                </Text>
+              </View>
             </View>
-            <View style={s.ledgerAmountBlock}>
-              <Text style={[s.ledgerAmount, { color: flowColor }]} numberOfLines={1}>
+            <View style={s.payHeaderRight}>
+              <Text style={[s.payAmount, { color: palette.amount }]} numberOfLines={1}>
                 {flowPrefix}
                 {amountLabel}
               </Text>
-              <Text style={s.ledgerAmountCaption}>{flow === "in" ? "Credited" : "Debited"}</Text>
+              <View
+                style={[
+                  s.paySystemBadge,
+                  { backgroundColor: palette.badgeBg, borderColor: palette.badgeBorder },
+                ]}
+              >
+                <Text style={[s.paySystemBadgeText, { color: palette.badgeText }]}>{palette.systemBadge}</Text>
+              </View>
             </View>
           </View>
 
-          <View style={s.ledgerFlowRow}>
-            <Text style={s.ledgerFlowParty} numberOfLines={1}>
-              {fromParty}
-            </Text>
-            <ArrowRight size={11} color="#cbd5e1" />
-            <Text style={s.ledgerFlowParty} numberOfLines={1}>
-              {toParty || "—"}
-            </Text>
+          <View style={[s.payPathWrap, { backgroundColor: palette.pathBg, borderColor: palette.pathBorder }]}>
+            <View style={s.payPathCol}>
+              <Text style={[s.payPathLabel, { color: palette.pathLabel }]}>SOURCE_NODE</Text>
+              <Text style={[s.payPathName, { color: palette.pathName }]} numberOfLines={2}>
+                {fromParty}
+              </Text>
+            </View>
+            <View style={s.payPathCenter}>
+              <View style={[s.payProgressTrack, { backgroundColor: palette.track }]}>
+                <View style={[s.payProgressFill, { backgroundColor: palette.fill }]} />
+              </View>
+              <ArrowRight size={18} color="#94a3b8" />
+            </View>
+            <View style={[s.payPathCol, s.payPathColEnd]}>
+              <Text style={[s.payPathLabel, s.payPathLabelEnd, { color: palette.pathLabel }]}>TARGET_NODE</Text>
+              <Text
+                style={[s.payPathName, s.payPathNameEnd, { color: palette.pathName }]}
+                numberOfLines={2}
+              >
+                {toParty || "—"}
+              </Text>
+            </View>
           </View>
 
-          <View style={s.ledgerBottomBar}>
-            <View style={s.ledgerModePill}>
-              <Text style={s.ledgerModePillText}>{paymentModeLabel}</Text>
+          <View style={s.payMetaRow}>
+            <View style={s.payModePill}>
+              <Text style={s.payModePillText}>{paymentModeLabel}</Text>
             </View>
-            <View style={s.ledgerBottomRight}>
+            <View style={s.payMetaRight}>
               {meta.reference_number ? (
-                <Text style={s.ledgerRefInline} numberOfLines={1}>
+                <Text style={s.payRefInline} numberOfLines={1}>
                   #{meta.reference_number}
                 </Text>
               ) : null}
-              <Text style={s.ledgerTime}>{displayTime}</Text>
+              <Text style={s.payTime}>{displayTime}</Text>
             </View>
           </View>
 
           {meta.notes ? (
-            <Text style={s.ledgerNotes} numberOfLines={2}>
+            <Text style={s.payNotes} numberOfLines={3}>
               {meta.notes}
             </Text>
           ) : null}
 
           {isAcknowledged ? (
-            <View style={s.ledgerStatus}>
-              <CheckCircle size={11} color="#059669" />
-              <Text style={[s.ledgerStatusText, { color: "#047857" }]}>Added to book</Text>
+            <View style={s.payStatus}>
+              <CheckCircle size={12} color="#059669" />
+              <Text style={[s.payStatusText, { color: "#047857" }]}>Added to book</Text>
             </View>
           ) : isDisputed ? (
-            <View style={s.ledgerStatus}>
-              <AlertTriangle size={11} color="#d97706" />
-              <Text style={[s.ledgerStatusText, { color: "#b45309" }]}>Dispute raised</Text>
+            <View style={s.payStatus}>
+              <AlertTriangle size={12} color="#d97706" />
+              <Text style={[s.payStatusText, { color: "#b45309" }]}>Dispute raised</Text>
             </View>
           ) : !readOnly && isReceiver && !isSender ? (
-            <View style={s.ledgerActions}>
+            <View style={s.payActions}>
               <TouchableOpacity
                 style={s.addToBookBtn}
                 onPress={() => onAddToBook(message)}
@@ -294,7 +348,8 @@ export function ChatLedgerEventCard({
             </View>
           ) : null}
         </View>
-      </LinearGradient>
+        <View style={[s.paySecurityBar, { backgroundColor: palette.bar }]} />
+      </View>
     </View>
   );
 }
@@ -341,166 +396,243 @@ const s = StyleSheet.create({
     letterSpacing: 0.4,
   },
 
-  // Ledger card — compact “statement line” (~half prior height)
-  ledgerCardOuter: {
-    marginVertical: 3,
+  // Ledger / trip payment card — high-contrast “protocol finance” layout
+  payOuter: {
+    marginVertical: 8,
     maxWidth: "88%",
     width: "88%",
     alignSelf: "center",
-    borderRadius: 14,
+  },
+  payCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: "#0f172a",
     overflow: "hidden",
-    shadowColor: "#0f172a",
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 6,
   },
-  ledgerAccentStrip: {
-    height: 2,
-    width: "100%",
+  payBody: {
+    paddingHorizontal: 14,
+    paddingTop: 16,
+    paddingBottom: 14,
+    gap: 12,
   },
-  ledgerCardGradient: {
-    borderBottomLeftRadius: 14,
-    borderBottomRightRadius: 14,
-  },
-  ledgerCard: {
-    paddingHorizontal: 11,
-    paddingTop: 9,
-    paddingBottom: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(148, 163, 184, 0.28)",
-    borderTopWidth: 0,
-    backgroundColor: "transparent",
-  },
-  ledgerTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  ledgerIconRing: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    padding: 1.5,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-  ledgerIconInner: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 13,
-    backgroundColor: "#fff",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  ledgerTitleBlock: {
-    flex: 1,
-    minWidth: 0,
-  },
-  ledgerCategory: {
-    fontSize: 8,
-    fontWeight: "800",
-    color: "#64748b",
-    letterSpacing: 1,
-    textTransform: "uppercase",
-  },
-  ledgerFlowHeadline: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#0f172a",
-    marginTop: 1,
-    letterSpacing: -0.2,
-  },
-  ledgerAmountBlock: {
-    alignItems: "flex-end",
-    flexShrink: 0,
-    maxWidth: "44%",
-  },
-  ledgerAmount: {
-    fontSize: 15,
-    fontWeight: "800",
-    letterSpacing: -0.5,
-    fontVariant: ["tabular-nums"],
-  },
-  ledgerAmountCaption: {
-    fontSize: 8,
-    fontWeight: "700",
-    color: "#94a3b8",
-    marginTop: 1,
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
-  },
-  ledgerFlowRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    marginTop: 7,
-    paddingTop: 7,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "rgba(148, 163, 184, 0.35)",
-  },
-  ledgerFlowParty: {
-    flex: 1,
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#334155",
-    minWidth: 0,
-  },
-  ledgerBottomBar: {
+  payHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 8,
-    marginTop: 6,
-    flexWrap: "wrap",
+    gap: 10,
   },
-  ledgerModePill: {
-    backgroundColor: "rgba(15, 23, 42, 0.05)",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(148, 163, 184, 0.35)",
-  },
-  ledgerModePillText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#475569",
-  },
-  ledgerBottomRight: {
+  payHeaderLeft: {
+    flex: 1,
     flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    minWidth: 0,
+  },
+  payIconNode: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    borderWidth: 2,
     alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  payHeaderTitles: {
+    flex: 1,
+    minWidth: 0,
+  },
+  payKicker: {
+    fontSize: 9,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1.4,
+    marginBottom: 4,
+    fontStyle: "italic",
+  },
+  payHeadline: {
+    fontSize: 20,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    fontStyle: "italic",
+    letterSpacing: -0.6,
+    lineHeight: 22,
+  },
+  payHeaderRight: {
+    alignItems: "flex-end",
+    justifyContent: "center",
+    flexShrink: 0,
+    maxWidth: "40%",
+  },
+  payAmount: {
+    fontSize: 19,
+    fontWeight: "900",
+    fontStyle: "italic",
+    letterSpacing: -0.6,
+    fontVariant: ["tabular-nums"],
+    textAlign: "right",
+  },
+  paySystemBadge: {
+    marginTop: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    borderWidth: 2,
+  },
+  paySystemBadgeText: {
+    fontSize: 9,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    fontStyle: "italic",
+  },
+  payPathWrap: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 18,
+    borderWidth: 2,
+  },
+  payPathCol: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "center",
+  },
+  payPathColEnd: {
+    alignItems: "flex-end",
+  },
+  payPathLabel: {
+    fontSize: 9,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+    marginBottom: 6,
+    fontStyle: "italic",
+  },
+  payPathLabelEnd: {
+    textAlign: "right",
+    width: "100%",
+  },
+  payPathName: {
+    fontSize: 14,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    fontStyle: "italic",
+    letterSpacing: -0.35,
+    lineHeight: 17,
+  },
+  payPathNameEnd: {
+    textAlign: "right",
+    width: "100%",
+  },
+  payPathCenter: {
+    width: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    flexShrink: 0,
+    alignSelf: "stretch",
+  },
+  payProgressTrack: {
+    width: 36,
+    height: 6,
+    borderRadius: 3,
+    overflow: "hidden",
+  },
+  payProgressFill: {
+    width: "66%",
+    height: "100%",
+    borderRadius: 4,
+  },
+  payMetaRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: 8,
+    flexWrap: "wrap",
+    marginTop: 2,
+  },
+  payModePill: {
+    backgroundColor: "#f1f5f9",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  payModePillText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#334155",
+    textTransform: "capitalize",
+  },
+  payMetaRight: {
+    flexDirection: "row",
+    alignItems: "baseline",
     gap: 6,
     flexShrink: 1,
     justifyContent: "flex-end",
     minWidth: 0,
   },
-  ledgerRefInline: {
+  payRefInline: {
     fontSize: 9,
-    fontWeight: "600",
+    fontWeight: "700",
     color: "#94a3b8",
     flexShrink: 1,
   },
-  ledgerNotes: {
+  payNotes: {
+    fontSize: 11,
+    color: "#64748b",
+    lineHeight: 15,
+    fontWeight: "600",
+  },
+  payActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 4,
+  },
+  payStatus: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: "#f8fafc",
+    borderRadius: 12,
+    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  payStatusText: {
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  payTime: {
     fontSize: 10,
     color: "#64748b",
-    lineHeight: 13,
-    marginTop: 5,
+    fontWeight: "800",
+    letterSpacing: 0.2,
   },
-  ledgerActions: {
-    flexDirection: "row",
-    gap: 6,
-    marginTop: 7,
+  paySecurityBar: {
+    height: 10,
+    width: "100%",
+    opacity: 0.85,
   },
   addToBookBtn: {
     flex: 1,
     backgroundColor: Theme.primary,
-    borderRadius: 10,
-    paddingVertical: 6,
+    borderRadius: 14,
+    paddingVertical: 10,
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 30,
+    minHeight: 36,
   },
   addToBookText: {
     fontSize: 11,
@@ -510,38 +642,17 @@ const s = StyleSheet.create({
   disputeBtn: {
     flex: 1,
     backgroundColor: "#fff",
-    borderRadius: 10,
-    borderWidth: 1,
+    borderRadius: 14,
+    borderWidth: 2,
     borderColor: "#fbbf24",
-    paddingVertical: 6,
+    paddingVertical: 10,
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 30,
+    minHeight: 36,
   },
   disputeText: {
     fontSize: 11,
     fontWeight: "700",
     color: "#b45309",
-  },
-  ledgerStatus: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    marginTop: 6,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    backgroundColor: "rgba(255,255,255,0.55)",
-    borderRadius: 8,
-    alignSelf: "flex-start",
-  },
-  ledgerStatusText: {
-    fontSize: 10,
-    fontWeight: "700",
-  },
-  ledgerTime: {
-    fontSize: 9,
-    color: "#94a3b8",
-    fontWeight: "700",
-    letterSpacing: 0.2,
   },
 });

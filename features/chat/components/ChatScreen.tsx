@@ -17,12 +17,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import {
   ArrowLeft,
+  Bell,
   Briefcase,
   ChevronDown,
   ChevronRight,
-  Edit3,
   Filter,
   Hash,
+  MapPin,
   MessageSquare,
   MoreVertical,
   Plus,
@@ -75,11 +76,9 @@ import {
 } from "@/features/chat/utils/tripConversationSort";
 
 type TabId = "trips" | "network";
-type TripStatusFilter = "active" | "terminal";
 
 const QUICK_EMOJIS = ["👍", "🤝", "🚛", "📍", "✅", "📦", "⚠️", "🕒", "😊", "🙌", "📞", "💯"];
 const TRIP_PARTY_FILTERS: ConversationPartyType[] = ["client", "driver", "supplier"];
-const TRIP_STATUS_FILTERS: TripStatusFilter[] = ["active", "terminal"];
 
 function getInitials(name: string) {
   return name
@@ -170,15 +169,17 @@ function partyFilterSheetLabel(type: ConversationPartyType): string {
   return type === "client" ? "Client" : type === "supplier" ? "Supplier" : "Driver";
 }
 
-function statusFilterSheetLabel(type: TripStatusFilter): string {
-  return type === "active" ? "Active trips" : "Closed trips";
-}
-
 function getConversationTripLabel(conversation: Pick<TripConversation, "trip_number" | "display_trip_id">): string {
   return getTripDisplayNumber({
     trip_number: conversation.trip_number,
     display_trip_id: conversation.display_trip_id ?? null,
   } as TripRow);
+}
+
+function formatTripStatusLabel(status: string | null | undefined): string {
+  const raw = String(status ?? "").trim();
+  if (!raw) return "ACTIVE";
+  return raw.replace(/_/g, " ").toUpperCase();
 }
 
 type ComposePartyRow =
@@ -284,15 +285,11 @@ export function ChatScreen() {
   const [initiating, setInitiating] = useState(false);
   const [showNetCompose, setShowNetCompose] = useState(false);
   const [netComposeSearch, setNetComposeSearch] = useState("");
-  const [showTripSearch, setShowTripSearch] = useState(false);
+  const [tripChatScope, setTripChatScope] = useState<"active" | "history">("active");
   const [tripSidebarSearch, setTripSidebarSearch] = useState("");
   const [showTripFilterModal, setShowTripFilterModal] = useState(false);
-  const [tripUnreadFirst, setTripUnreadFirst] = useState(true);
   const [tripPartyFilters, setTripPartyFilters] = useState<ConversationPartyType[]>([
     ...TRIP_PARTY_FILTERS,
-  ]);
-  const [tripStatusFilters, setTripStatusFilters] = useState<TripStatusFilter[]>([
-    ...TRIP_STATUS_FILTERS,
   ]);
   const deepLinkAppliedRef = useRef<string | null>(null);
   /** Avoid repeating hydrate when RLS returns null for the same URL. */
@@ -323,21 +320,6 @@ export function ChatScreen() {
 
   const selectedConv = conversations.find((c) => c.id === selectedConvId) ?? null;
   const selectedNet = netChats.find((c) => c.id === selectedNetId) ?? null;
-  const selectedTripPartyConversations = useMemo(() => {
-    if (!selectedConv) return [] as TripConversation[];
-    const order: Record<ConversationPartyType, number> = {
-      client: 0,
-      supplier: 1,
-      driver: 2,
-    };
-    return conversations
-      .filter((c) => c.trip_id === selectedConv.trip_id)
-      .sort((a, b) => {
-        const partyOrderDiff = order[a.party_type] - order[b.party_type];
-        if (partyOrderDiff !== 0) return partyOrderDiff;
-        return a.party_name.localeCompare(b.party_name);
-      });
-  }, [conversations, selectedConv]);
 
   const tripUnread = getTotalUnreadCount();
   const netUnread = netTotal();
@@ -347,19 +329,10 @@ export function ChatScreen() {
     const normalizedFilters = tripPartyFilters.length
       ? tripPartyFilters
       : TRIP_PARTY_FILTERS;
-    const normalizedStatusFilters = tripStatusFilters.length
-      ? tripStatusFilters
-      : TRIP_STATUS_FILTERS;
     const filterSet = new Set<ConversationPartyType>(normalizedFilters);
-    const statusFilterSet = new Set<TripStatusFilter>(normalizedStatusFilters);
 
     return conversations
       .filter((conv) => filterSet.has(conv.party_type))
-      .filter((conv) =>
-        isTerminalTripStatus(conv.trip_status)
-          ? statusFilterSet.has("terminal")
-          : statusFilterSet.has("active"),
-      )
       .filter((conv) => {
         if (!hasSearch) return true;
         const displayId = getConversationTripLabel(conv);
@@ -367,11 +340,6 @@ export function ChatScreen() {
         return haystack.includes(trimmedSearch);
       })
       .sort((a, b) => {
-        if (tripUnreadFirst) {
-          const unreadDiff = (b.unread_dispatcher_count ?? 0) - (a.unread_dispatcher_count ?? 0);
-          if (unreadDiff !== 0) return unreadDiff;
-        }
-
         const aActive = isTerminalTripStatus(a.trip_status) ? 0 : 1;
         const bActive = isTerminalTripStatus(b.trip_status) ? 0 : 1;
         if (bActive !== aActive) return bActive - aActive;
@@ -387,7 +355,7 @@ export function ChatScreen() {
           new Date(a.last_message_at ?? 0).getTime()
         );
       });
-  }, [conversations, tripPartyFilters, tripSidebarSearch, tripStatusFilters, tripUnreadFirst]);
+  }, [conversations, tripPartyFilters, tripSidebarSearch]);
   const sortedNetChats = useMemo(() => {
     return [...netChats].sort((a, b) => {
       const unreadDiff = (b.unreadCount ?? 0) - (a.unreadCount ?? 0);
@@ -397,6 +365,65 @@ export function ChatScreen() {
       return new Date(bLast || 0).getTime() - new Date(aLast || 0).getTime();
     });
   }, [netChats]);
+  const groupedTripRows = useMemo(() => {
+    const q = tripSidebarSearch.trim().toLowerCase();
+    const byTrip = new Map<
+      string,
+      {
+        tripId: string;
+        tripLabel: string;
+        pickup: string;
+        drop: string;
+        rows: TripConversation[];
+        totalUnread: number;
+        lastAt: number;
+      }
+    >();
+    for (const conv of filteredAndSortedConversations) {
+      const tripKey = conv.trip_id;
+      const tripLabel = getConversationTripLabel(conv);
+      if (!byTrip.has(tripKey)) {
+        byTrip.set(tripKey, {
+          tripId: tripKey,
+          tripLabel,
+          pickup: conv.pickup_area,
+          drop: conv.drop_location,
+          rows: [],
+          totalUnread: 0,
+          lastAt: 0,
+        });
+      }
+      const row = byTrip.get(tripKey)!;
+      row.rows.push(conv);
+      row.totalUnread += conv.unread_dispatcher_count ?? 0;
+      row.lastAt = Math.max(row.lastAt, new Date(conv.last_message_at ?? 0).getTime());
+    }
+
+    let list = [...byTrip.values()];
+    if (q) {
+      list = list.filter((trip) => {
+        const hay = `${trip.tripLabel} ${trip.pickup} ${trip.drop} ${trip.rows
+          .map((r) => `${r.party_name} ${r.party_type}`)
+          .join(" ")}`.toLowerCase();
+        return hay.includes(q);
+      });
+    }
+
+    list = list.filter((trip) => {
+      const st = trip.rows[0]?.trip_status;
+      const terminal = isTerminalTripStatus(st);
+      return tripChatScope === "history" ? terminal : !terminal;
+    });
+
+    return list.sort((a, b) => b.lastAt - a.lastAt);
+  }, [filteredAndSortedConversations, tripSidebarSearch, tripChatScope]);
+
+  const tripChatFilteredConversations = useMemo(() => {
+    return filteredAndSortedConversations.filter((conv) => {
+      const terminal = isTerminalTripStatus(conv.trip_status);
+      return tripChatScope === "history" ? terminal : !terminal;
+    });
+  }, [filteredAndSortedConversations, tripChatScope]);
 
   useEffect(() => {
     const tabParamRaw = Array.isArray(params.tab) ? params.tab[0] : params.tab;
@@ -647,10 +674,6 @@ export function ChatScreen() {
         p.name.toLowerCase().includes(netComposeSearch.toLowerCase())
       )
     : netPartners;
-  const hasTripFilter =
-    tripUnreadFirst ||
-    tripPartyFilters.length < TRIP_PARTY_FILTERS.length ||
-    tripStatusFilters.length < TRIP_STATUS_FILTERS.length;
 
   const toggleTripPartyFilter = (partyType: ConversationPartyType) => {
     setTripPartyFilters((prev) =>
@@ -659,38 +682,6 @@ export function ChatScreen() {
         : [...prev, partyType],
     );
   };
-
-  const toggleTripStatusFilter = (status: TripStatusFilter) => {
-    setTripStatusFilters((prev) =>
-      prev.includes(status) ? prev.filter((type) => type !== status) : [...prev, status],
-    );
-  };
-  const setTripPartyHeaderTab = (tab: "all" | ConversationPartyType) => {
-    if (tab === "all") {
-      setTripPartyFilters([...TRIP_PARTY_FILTERS]);
-      return;
-    }
-    setTripPartyFilters([tab]);
-  };
-  const tripPartyHeaderTab: "all" | ConversationPartyType =
-    tripPartyFilters.length === TRIP_PARTY_FILTERS.length
-      ? "all"
-      : tripPartyFilters.length === 1
-        ? tripPartyFilters[0]
-        : "all";
-  const setTripStatusHeaderTab = (tab: "all" | TripStatusFilter) => {
-    if (tab === "all") {
-      setTripStatusFilters([...TRIP_STATUS_FILTERS]);
-      return;
-    }
-    setTripStatusFilters([tab]);
-  };
-  const tripStatusHeaderTab: "all" | TripStatusFilter =
-    tripStatusFilters.length === TRIP_STATUS_FILTERS.length
-      ? "all"
-      : tripStatusFilters.length === 1
-        ? tripStatusFilters[0]
-        : "all";
 
   // Partners that don't yet have a conversation
   const existingPartnerOrgIds = new Set(netChats.map((c) => c.partnerId));
@@ -816,47 +807,7 @@ export function ChatScreen() {
             </TouchableOpacity>
             <Text style={s.brandTitle}>Command Hub</Text>
           </View>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-            {activeTab === "trips" && (
-              <>
-                <TouchableOpacity hitSlop={10} onPress={() => setShowTripSearch((prev) => !prev)}>
-                  <Search size={16} color="rgba(255,255,255,0.72)" />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  hitSlop={10}
-                  onPress={() => {
-                    setShowCompose(false);
-                    setShowTripFilterModal((prev) => !prev);
-                  }}
-                  style={s.filterBtn}
-                >
-                  <Filter size={16} color="rgba(255,255,255,0.72)" />
-                  {hasTripFilter ? <View style={s.filterActiveDot} /> : null}
-                </TouchableOpacity>
-              </>
-            )}
-            {activeTab === "trips" && (
-              <TouchableOpacity
-                hitSlop={10}
-                onPress={() => {
-                  setShowTripFilterModal(false);
-                  if (isWebDesktopUI && showCompose) {
-                    setShowCompose(false);
-                    return;
-                  }
-                  void openCompose();
-                }}
-                style={s.composeBtn}
-              >
-                <Edit3 size={14} color="#fff" />
-              </TouchableOpacity>
-            )}
-            {activeTab === "network" && netPartners.length > 0 && (
-              <TouchableOpacity hitSlop={10} onPress={() => { setShowNetCompose(true); setNetComposeSearch(""); }} style={s.composeBtn}>
-                <Edit3 size={14} color="#fff" />
-              </TouchableOpacity>
-            )}
-          </View>
+          <View />
         </View>
 
         <View style={s.tabRow}>
@@ -883,16 +834,16 @@ export function ChatScreen() {
           })}
         </View>
 
-        {activeTab === "trips" && showTripSearch && (
+        {activeTab === "trips" && (
           <View style={s.sidebarSearchRow}>
             <Search size={15} color="#94a3b8" style={{ marginRight: 8 }} />
             <TextInput
               style={s.sidebarSearchInput}
               value={tripSidebarSearch}
               onChangeText={setTripSidebarSearch}
-              placeholder="Search trip id…"
+              placeholder="Search trip, route, party…"
               placeholderTextColor="#94a3b8"
-              autoCapitalize="characters"
+              autoCapitalize="none"
             />
             {tripSidebarSearch.length > 0 && (
               <TouchableOpacity onPress={() => setTripSidebarSearch("")} hitSlop={8}>
@@ -901,112 +852,26 @@ export function ChatScreen() {
             )}
           </View>
         )}
-
         {activeTab === "trips" && (
-          <View style={s.tripFiltersHeaderWrap}>
-            <View style={s.tripPartyTabsRow}>
-              <TouchableOpacity
-                style={[s.tripPartyTab, tripPartyHeaderTab === "all" && s.tripPartyTabActive]}
-                onPress={() => setTripPartyHeaderTab("all")}
-                activeOpacity={0.75}
-              >
-                <Text
-                  style={[
-                    s.tripPartyTabText,
-                    tripPartyHeaderTab === "all" && s.tripPartyTabTextActive,
-                  ]}
-                >
-                  All
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[s.tripPartyTab, tripPartyHeaderTab === "client" && s.tripPartyTabActive]}
-                onPress={() => setTripPartyHeaderTab("client")}
-                activeOpacity={0.75}
-              >
-                <Text
-                  style={[
-                    s.tripPartyTabText,
-                    tripPartyHeaderTab === "client" && s.tripPartyTabTextActive,
-                  ]}
-                >
-                  Client
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[s.tripPartyTab, tripPartyHeaderTab === "supplier" && s.tripPartyTabActive]}
-                onPress={() => setTripPartyHeaderTab("supplier")}
-                activeOpacity={0.75}
-              >
-                <Text
-                  style={[
-                    s.tripPartyTabText,
-                    tripPartyHeaderTab === "supplier" && s.tripPartyTabTextActive,
-                  ]}
-                >
-                  Supplier
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[s.tripPartyTab, tripPartyHeaderTab === "driver" && s.tripPartyTabActive]}
-                onPress={() => setTripPartyHeaderTab("driver")}
-                activeOpacity={0.75}
-              >
-                <Text
-                  style={[
-                    s.tripPartyTabText,
-                    tripPartyHeaderTab === "driver" && s.tripPartyTabTextActive,
-                  ]}
-                >
-                  Driver
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={s.tripStatusTabsRow}>
-              <TouchableOpacity
-                style={[s.tripStatusTab, tripStatusHeaderTab === "all" && s.tripStatusTabActive]}
-                onPress={() => setTripStatusHeaderTab("all")}
-                activeOpacity={0.75}
-              >
-                <Text
-                  style={[
-                    s.tripStatusTabText,
-                    tripStatusHeaderTab === "all" && s.tripStatusTabTextActive,
-                  ]}
-                >
-                  All Status
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[s.tripStatusTab, tripStatusHeaderTab === "active" && s.tripStatusTabActive]}
-                onPress={() => setTripStatusHeaderTab("active")}
-                activeOpacity={0.75}
-              >
-                <Text
-                  style={[
-                    s.tripStatusTabText,
-                    tripStatusHeaderTab === "active" && s.tripStatusTabTextActive,
-                  ]}
-                >
-                  Active
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[s.tripStatusTab, tripStatusHeaderTab === "terminal" && s.tripStatusTabActive]}
-                onPress={() => setTripStatusHeaderTab("terminal")}
-                activeOpacity={0.75}
-              >
-                <Text
-                  style={[
-                    s.tripStatusTabText,
-                    tripStatusHeaderTab === "terminal" && s.tripStatusTabTextActive,
-                  ]}
-                >
-                  Closed
-                </Text>
-              </TouchableOpacity>
-            </View>
+          <View style={s.tripChatScopeRow}>
+            <TouchableOpacity
+              style={[s.tripChatScopePill, tripChatScope === "active" && s.tripChatScopePillOn]}
+              onPress={() => setTripChatScope("active")}
+              activeOpacity={0.82}
+            >
+              <Text style={[s.tripChatScopePillText, tripChatScope === "active" && s.tripChatScopePillTextOn]}>
+                Active
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.tripChatScopePill, tripChatScope === "history" && s.tripChatScopePillOn]}
+              onPress={() => setTripChatScope("history")}
+              activeOpacity={0.82}
+            >
+              <Text style={[s.tripChatScopePillText, tripChatScope === "history" && s.tripChatScopePillTextOn]}>
+                History
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -1039,37 +904,6 @@ export function ChatScreen() {
               </View>
               <Text style={s.tripFilterPopoverSub}>Filter by conversation party</Text>
               <View style={s.filterChipWrap}>
-                <TouchableOpacity
-                  style={[s.filterChip, tripUnreadFirst && s.filterChipActive]}
-                  onPress={() => setTripUnreadFirst((prev) => !prev)}
-                  activeOpacity={0.75}
-                >
-                  <Text style={[s.filterChipText, tripUnreadFirst && s.filterChipTextActive]}>
-                    Unread first
-                  </Text>
-                </TouchableOpacity>
-              </View>
-              <Text style={s.tripFilterPopoverSub}>Filter by trip status</Text>
-              <View style={s.filterChipWrap}>
-                {TRIP_STATUS_FILTERS.map((status, index) => {
-                  const selected = tripStatusFilters.includes(status);
-                  const isLast = index === TRIP_STATUS_FILTERS.length - 1;
-                  return (
-                    <TouchableOpacity
-                      key={status}
-                      style={[s.filterChip, isLast && s.filterChipLast, selected && s.filterChipActive]}
-                      onPress={() => toggleTripStatusFilter(status)}
-                      activeOpacity={0.75}
-                    >
-                      <Text style={[s.filterChipText, selected && s.filterChipTextActive]}>
-                        {statusFilterSheetLabel(status)}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-              <Text style={s.tripFilterPopoverSub}>Filter by conversation party</Text>
-              <View style={s.filterChipWrap}>
                 {TRIP_PARTY_FILTERS.map((partyType, index) => {
                   const selected = tripPartyFilters.includes(partyType);
                   const isLast = index === TRIP_PARTY_FILTERS.length - 1;
@@ -1089,14 +923,10 @@ export function ChatScreen() {
               </View>
               <TouchableOpacity
                 style={s.filterResetBtn}
-                onPress={() => {
-                  setTripUnreadFirst(true);
-                  setTripStatusFilters([...TRIP_STATUS_FILTERS]);
-                  setTripPartyFilters([...TRIP_PARTY_FILTERS]);
-                }}
+                onPress={() => setTripPartyFilters([...TRIP_PARTY_FILTERS])}
                 activeOpacity={0.8}
               >
-                <Text style={s.filterResetText}>Reset all filters</Text>
+                <Text style={s.filterResetText}>Reset to all parties</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1107,16 +937,121 @@ export function ChatScreen() {
             <View style={{ paddingTop: 40, alignItems: "center" }}>
               <ActivityIndicator color={Theme.primary} />
             </View>
+          ) : isDesktop ? (
+            <ScrollView contentContainerStyle={s.tripHubScrollContent} showsVerticalScrollIndicator={false}>
+              {groupedTripRows.length === 0 ? (
+                <EmptyList
+                  label={
+                    tripChatScope === "history"
+                      ? "No trips in history"
+                      : "No active trip conversations"
+                  }
+                  actionLabel={tripChatScope === "active" ? "Start a conversation" : undefined}
+                  onAction={tripChatScope === "active" ? openCompose : undefined}
+                />
+              ) : (
+                groupedTripRows.map((trip) => {
+                  const tripActive = selectedConv?.trip_id === trip.tripId;
+                  const statusLabel = formatTripStatusLabel(trip.rows[0]?.trip_status);
+                  const openFallback = () => {
+                    const fallback = trip.rows[0];
+                    if (!fallback) return;
+                    setSelectedConvId(fallback.id);
+                    markAsRead(fallback.id);
+                    openDetail();
+                  };
+                  return (
+                    <View key={trip.tripId} style={[s.tripHubCard, tripActive && s.tripHubCardOn]}>
+                      {trip.totalUnread > 0 ? (
+                        <View style={[s.tripHubAlertBar, tripActive && s.tripHubAlertBarOn]}>
+                          <Bell size={13} color={tripActive ? "#fecdd3" : "#e11d48"} />
+                          <Text style={[s.tripHubAlertBarText, tripActive && s.tripHubAlertBarTextOn]}>
+                            Trip alerts · {trip.totalUnread > 99 ? "99+" : trip.totalUnread}
+                          </Text>
+                        </View>
+                      ) : null}
+                      <TouchableOpacity
+                        onPress={openFallback}
+                        activeOpacity={0.88}
+                        style={s.tripHubHeroRow}
+                      >
+                        <View style={[s.tripHubTruckPill, tripActive && s.tripHubTruckPillOn]}>
+                          <Truck size={16} color="#ffffff" />
+                        </View>
+                        <Text
+                          style={[s.tripHubTripTitle, s.tripHubTripTitleInRow, tripActive && s.tripHubTripTitleOn]}
+                          numberOfLines={1}
+                        >
+                          {trip.tripLabel}
+                        </Text>
+                        <View style={s.tripHubHeroTrail}>
+                          <Text
+                            style={[s.tripHubStatusPill, tripActive && s.tripHubStatusPillOn]}
+                            numberOfLines={1}
+                          >
+                            {statusLabel}
+                          </Text>
+                          {trip.totalUnread > 0 ? (
+                            <View style={s.tripHubTotalUnread}>
+                              <Text style={s.tripHubTotalUnreadText}>
+                                {trip.totalUnread > 9 ? "9+" : String(trip.totalUnread)}
+                              </Text>
+                            </View>
+                          ) : null}
+                        </View>
+                      </TouchableOpacity>
+                      <Text style={[s.tripHubRouteLarge, tripActive && s.tripHubRouteLargeOn]} numberOfLines={2}>
+                        {trip.pickup} {"→"} {trip.drop}
+                      </Text>
+                      <View style={s.tripHubPartyIconRow}>
+                        {(["client", "supplier", "driver"] as ConversationPartyType[]).map((partyType) => {
+                          const row = trip.rows.find((r) => r.party_type === partyType);
+                          const on = Boolean(row && selectedConvId === row.id);
+                          const isMissing = !row;
+                          return (
+                            <TouchableOpacity
+                              key={`${trip.tripId}-${partyType}`}
+                              style={[
+                                s.tripHubPartyIconBtn,
+                                on && s.tripHubPartyIconBtnOn,
+                                isMissing && s.tripHubPartyIconBtnOff,
+                              ]}
+                              disabled={isMissing}
+                              onPress={() => {
+                                if (!row) return;
+                                setSelectedConvId(row.id);
+                                markAsRead(row.id);
+                                openDetail();
+                              }}
+                              activeOpacity={0.82}
+                            >
+                              <PartyIcon partyType={partyType} active={on} size={14} />
+                              {(row?.unread_dispatcher_count ?? 0) > 0 ? (
+                                <View style={s.tripHubPartyUnreadDot} />
+                              ) : null}
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  );
+                })
+              )}
+            </ScrollView>
           ) : (
             <FlatList
-              data={filteredAndSortedConversations}
+              data={tripChatFilteredConversations}
               keyExtractor={(i) => i.id}
               renderItem={renderConvItem}
               ListEmptyComponent={
                 <EmptyList
-                  label="No trip conversations"
-                  actionLabel="Start a conversation"
-                  onAction={openCompose}
+                  label={
+                    tripChatScope === "history"
+                      ? "No trips in history"
+                      : "No active trip conversations"
+                  }
+                  actionLabel={tripChatScope === "active" ? "Start a conversation" : undefined}
+                  onAction={tripChatScope === "active" ? openCompose : undefined}
                 />
               }
               contentContainerStyle={{ padding: 10, paddingBottom: 24, gap: 4 }}
@@ -1282,42 +1217,11 @@ export function ChatScreen() {
             <View style={cm.header}>
               <View>
                 <Text style={cm.title}>Trip Filters</Text>
-                <Text style={cm.subtitle}>Filter by unread, status, and conversation party.</Text>
+                <Text style={cm.subtitle}>Filter trip chats by conversation party.</Text>
               </View>
               <TouchableOpacity onPress={() => setShowTripFilterModal(false)} hitSlop={8} style={cm.closeBtn}>
                 <X size={20} color="#94a3b8" />
               </TouchableOpacity>
-            </View>
-
-            <View style={s.filterChipWrap}>
-              <TouchableOpacity
-                style={[s.filterChip, tripUnreadFirst && s.filterChipActive]}
-                onPress={() => setTripUnreadFirst((prev) => !prev)}
-                activeOpacity={0.75}
-              >
-                <Text style={[s.filterChipText, tripUnreadFirst && s.filterChipTextActive]}>
-                  Unread first
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={s.filterChipWrap}>
-              {TRIP_STATUS_FILTERS.map((status, index) => {
-                const selected = tripStatusFilters.includes(status);
-                const isLast = index === TRIP_STATUS_FILTERS.length - 1;
-                return (
-                  <TouchableOpacity
-                    key={status}
-                    style={[s.filterChip, isLast && s.filterChipLast, selected && s.filterChipActive]}
-                    onPress={() => toggleTripStatusFilter(status)}
-                    activeOpacity={0.75}
-                  >
-                    <Text style={[s.filterChipText, selected && s.filterChipTextActive]}>
-                      {statusFilterSheetLabel(status)}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
             </View>
 
             <View style={s.filterChipWrap}>
@@ -1341,14 +1245,10 @@ export function ChatScreen() {
 
             <TouchableOpacity
               style={s.filterResetBtn}
-              onPress={() => {
-                setTripUnreadFirst(true);
-                setTripStatusFilters([...TRIP_STATUS_FILTERS]);
-                setTripPartyFilters([...TRIP_PARTY_FILTERS]);
-              }}
+              onPress={() => setTripPartyFilters([...TRIP_PARTY_FILTERS])}
               activeOpacity={0.8}
             >
-              <Text style={s.filterResetText}>Reset all filters</Text>
+              <Text style={s.filterResetText}>Reset to all parties</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1433,6 +1333,7 @@ export function ChatScreen() {
               const tripLabel = trip.display_trip_id ?? trip.trip_number;
 
               const partyRows = getComposePartyRows(trip);
+              const selectablePartyCount = partyRows.filter((row) => row.kind === "selectable").length;
 
               return (
                 <View key={trip.id} style={cm.tripCard}>
@@ -1442,7 +1343,14 @@ export function ChatScreen() {
                     activeOpacity={0.7}
                   >
                     <View style={cm.tripInfo}>
-                      <Text style={cm.tripNumber}>{tripLabel}</Text>
+                      <View style={cm.tripMetaRow}>
+                        <Text style={cm.tripNumber}>{tripLabel}</Text>
+                        <View style={cm.tripMetaPill}>
+                          <Text style={cm.tripMetaPillText}>
+                            {selectablePartyCount} party{selectablePartyCount > 1 ? "s" : ""}
+                          </Text>
+                        </View>
+                      </View>
                       <Text style={cm.tripRoute} numberOfLines={1}>
                         {trip.pickup_area} → {trip.drop_location}
                       </Text>
@@ -1537,6 +1445,7 @@ export function ChatScreen() {
     activeTab === "trips" ? (
       <TripConversationDetailPanel
         selectedConv={selectedConv}
+        conversations={conversations}
         messagesRef={messagesRef}
         messageInput={messageInput}
         setMessageInput={setMessageInput}
@@ -1552,14 +1461,8 @@ export function ChatScreen() {
         onAddToBook={handleAddToBook}
         onDispute={handleDispute}
         addingToBookId={addingToBook}
-        tripPartyConversations={selectedTripPartyConversations}
-        onSelectTripParty={(conversationId) => {
-          setSelectedConvId(conversationId);
-          markAsRead(conversationId);
-          setMessageInput("");
-          setShowEmoji(false);
-          setShowScripts(false);
-        }}
+        onSelectConversation={setSelectedConvId}
+        onOpenCompose={openCompose}
       />
     ) : (
       <NetworkDetailPanel
@@ -1701,23 +1604,14 @@ function EmptyDetail() {
 
 const s = StyleSheet.create({
   root: { flex: 1 },
-  desktop: { flex: 1, flexDirection: "row", gap: 10, padding: 10 },
+  desktop: { flex: 1, flexDirection: "row" },
   desktopList: {
-    width: 360,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    borderRadius: 20,
-    overflow: "hidden",
-    backgroundColor: "rgba(255,255,255,0.9)",
+    width: 420,
+    borderRightWidth: 1,
+    borderRightColor: "#dbeafe",
+    backgroundColor: "rgba(255,255,255,0.82)",
   },
-  desktopDetail: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    borderRadius: 20,
-    overflow: "hidden",
-    backgroundColor: "rgba(255,255,255,0.88)",
-  },
+  desktopDetail: { flex: 1, backgroundColor: "transparent" },
 
   listPanel: { flex: 1, backgroundColor: "transparent" },
   listHeader: {
@@ -1753,17 +1647,268 @@ const s = StyleSheet.create({
   },
 
   tabRow: { flexDirection: "row", gap: 6, paddingHorizontal: 14, paddingBottom: 10, marginTop: 10 },
+  tripHubScrollContent: {
+    paddingHorizontal: 10,
+    paddingBottom: 22,
+    gap: 8,
+  },
+  tripHubCard: {
+    borderRadius: 28,
+    backgroundColor: "#ffffff",
+    borderWidth: 2,
+    borderColor: "#f1f5f9",
+    padding: 12,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 2,
+  },
+  tripHubCardOn: {
+    backgroundColor: "#020617",
+    borderColor: "#020617",
+    shadowOpacity: 0.22,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 5,
+  },
+  tripHubAlertBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    backgroundColor: "#fff1f2",
+    borderWidth: 1,
+    borderColor: "#fecdd3",
+    borderLeftWidth: 3,
+    borderLeftColor: "#f43f5e",
+  },
+  tripHubAlertBarOn: {
+    backgroundColor: "rgba(244,63,94,0.12)",
+    borderColor: "rgba(244,63,94,0.35)",
+    borderLeftColor: "#fb7185",
+  },
+  tripHubAlertBarText: {
+    flex: 1,
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#be123c",
+    textTransform: "uppercase",
+    letterSpacing: 0.55,
+  },
+  tripHubAlertBarTextOn: {
+    color: "#fecdd3",
+  },
+  tripHubHeroRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 6,
+  },
+  tripHubHeroTrail: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexShrink: 0,
+  },
+  tripHubTruckPill: {
+    width: 38,
+    height: 38,
+    borderRadius: 11,
+    backgroundColor: "#0f172a",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
+  tripHubTruckPillOn: {
+    backgroundColor: "rgba(255,255,255,0.12)",
+  },
+  tripHubStatusPill: {
+    flexShrink: 0,
+    maxWidth: 120,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 10,
+    backgroundColor: "#ecfdf5",
+    borderWidth: 1,
+    borderColor: "#d1fae5",
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#059669",
+    textTransform: "uppercase",
+    letterSpacing: 0.45,
+    overflow: "hidden",
+  },
+  tripHubStatusPillOn: {
+    backgroundColor: "rgba(16,185,129,0.15)",
+    borderColor: "rgba(16,185,129,0.45)",
+    color: "#6ee7b7",
+  },
+  tripHubTripTitle: {
+    fontSize: 17,
+    fontWeight: "900",
+    color: "#0f172a",
+    textTransform: "uppercase",
+    fontStyle: "italic",
+    letterSpacing: -0.45,
+    lineHeight: 20,
+  },
+  tripHubTripTitleInRow: {
+    flex: 1,
+    minWidth: 0,
+    paddingTop: 1,
+  },
+  tripHubTripTitleOn: {
+    color: "#ffffff",
+  },
+  tripHubRouteLarge: {
+    marginTop: 0,
+    marginBottom: 10,
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 0.35,
+    lineHeight: 14,
+  },
+  tripHubRouteLargeOn: {
+    color: "rgba(255,255,255,0.55)",
+  },
+  tripHubTotalUnread: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: Theme.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 5,
+  },
+  tripHubTotalUnreadText: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 9,
+  },
+  tripHubPartyIconRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 2,
+  },
+  tripHubPartyIconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.07,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  tripHubPartyIconBtnOn: {
+    backgroundColor: Theme.primary,
+    borderColor: Theme.primary,
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+  },
+  tripHubPartyIconBtnOff: {
+    opacity: 0.34,
+  },
+  tripHubPartyUnreadDot: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
+    backgroundColor: "#f43f5e",
+    borderWidth: 1.5,
+    borderColor: "#fff",
+    shadowColor: "#f43f5e",
+    shadowOpacity: 0.45,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 1 },
+  },
+  commandMetricCard: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#dbeafe",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "#ffffff",
+  },
+  commandMetricCardPrimary: {
+    backgroundColor: "#0f172a",
+    borderColor: "#0f172a",
+  },
+  commandMetricLabel: {
+    fontSize: 8,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    color: "#94a3b8",
+  },
+  commandMetricValue: {
+    marginTop: 5,
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#0f172a",
+    letterSpacing: -0.4,
+    fontStyle: "italic",
+  },
   sidebarSearchRow: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#f1f5f9",
-    borderRadius: 14,
+    borderRadius: 22,
     marginHorizontal: 14,
-    marginBottom: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
+    marginBottom: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
   },
   sidebarSearchInput: { flex: 1, fontSize: 13, color: "#1e293b", fontWeight: "600" },
+  tripChatScopeRow: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 14,
+    marginBottom: 12,
+  },
+  tripChatScopePill: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tripChatScopePillOn: {
+    backgroundColor: "#0f172a",
+    borderColor: "#0f172a",
+  },
+  tripChatScopePillText: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#64748b",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  tripChatScopePillTextOn: {
+    color: "#ffffff",
+  },
   tabPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -1802,6 +1947,186 @@ const s = StyleSheet.create({
     backgroundColor: "#f8fafc",
     borderWidth: 1,
     borderColor: "#eef2f7",
+  },
+  registryWrap: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingTop: 14,
+    paddingBottom: 12,
+  },
+  registryHeadBlock: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#dbeafe",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: "#ffffff",
+  },
+  registryTitle: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#0f172a",
+    textTransform: "uppercase",
+    fontStyle: "italic",
+    letterSpacing: -0.2,
+  },
+  registrySub: {
+    marginTop: 4,
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#64748b",
+    lineHeight: 14,
+  },
+  registrySwitchRow: {
+    flexDirection: "row",
+    marginTop: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#dbeafe",
+    padding: 4,
+    gap: 4,
+    backgroundColor: "#f8fafc",
+  },
+  registrySwitchBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  registrySwitchBtnOn: {
+    backgroundColor: "#0f172a",
+  },
+  registrySwitchBtnOff: {
+    opacity: 0.6,
+  },
+  registrySwitchText: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#475569",
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+  },
+  registrySwitchTextOn: {
+    color: "#fff",
+  },
+  registrySwitchTextOff: {
+    color: "#94a3b8",
+  },
+  registryList: {
+    flex: 1,
+    marginTop: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#dbeafe",
+    backgroundColor: "#ffffff",
+    padding: 10,
+  },
+  registryListTitle: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginBottom: 8,
+  },
+  registryTripBlock: {
+    marginBottom: 8,
+  },
+  registryTripBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f8fafc",
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  registryTripBtnOn: {
+    backgroundColor: "#0f172a",
+    borderColor: "#0f172a",
+  },
+  registryTripId: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#0f172a",
+    textTransform: "uppercase",
+    fontStyle: "italic",
+  },
+  registryTripIdOn: {
+    color: "#fff",
+  },
+  registryTripRoute: {
+    marginTop: 2,
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+  registryTripRouteOn: {
+    color: "rgba(255,255,255,0.68)",
+  },
+  registryPartyList: {
+    marginTop: 6,
+    paddingLeft: 8,
+    gap: 6,
+  },
+  registryPartyRow: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#fff",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  registryPartyRowOn: {
+    borderColor: Theme.primary,
+    backgroundColor: "#eef2ff",
+  },
+  registryPartyType: {
+    fontSize: 8,
+    fontWeight: "900",
+    color: Theme.primary,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  registryPartyTypeOn: {
+    color: Theme.primary,
+  },
+  registryPartyName: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#0f172a",
+  },
+  registryPartyNameOn: {
+    color: "#1e293b",
+  },
+  registryUnreadPill: {
+    marginTop: 4,
+    alignSelf: "flex-start",
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 5,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.primary,
+  },
+  registryUnreadPillText: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#fff",
+  },
+  registryPartyActiveDot: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: "#22c55e",
   },
   chatItemActive: { backgroundColor: "#0f172a", borderColor: "#0f172a" },
   chatIcon: {
@@ -1864,46 +2189,108 @@ const s = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
-  detailPartySwitchRow: {
+  detailMissionBar: {
     flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
     paddingHorizontal: 14,
-    paddingVertical: 10,
-    gap: 8,
-    alignItems: "flex-start",
+    paddingVertical: 9,
+    backgroundColor: "#ffffff",
     borderBottomWidth: 1,
-    borderBottomColor: "#1e293b",
-    backgroundColor: "#0f172a",
+    borderBottomColor: "#e2e8f0",
   },
-  detailPartySwitchChip: {
-    minWidth: 112,
-    maxWidth: 170,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(148,163,184,0.35)",
-    backgroundColor: "rgba(15,23,42,0.9)",
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    alignSelf: "flex-start",
+  detailMissionRoute: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flex: 1,
+    minWidth: 0,
   },
-  detailPartySwitchChipActive: {
-    borderColor: Theme.primary,
-    backgroundColor: Theme.primary,
-  },
-  detailPartySwitchText: {
+  detailMissionRouteText: {
     fontSize: 10,
     fontWeight: "800",
-    color: "#93c5fd",
-    letterSpacing: 0.7,
+    color: "#334155",
     textTransform: "uppercase",
+    letterSpacing: 0.4,
   },
-  detailPartySwitchTextActive: { color: "#fff" },
-  detailPartySwitchSubText: {
-    marginTop: 2,
-    fontSize: 11,
-    fontWeight: "700",
-    color: "rgba(255,255,255,0.72)",
+  detailMissionUnread: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "#eef2ff",
+    borderWidth: 1,
+    borderColor: "#dbeafe",
   },
-  detailPartySwitchSubTextActive: { color: "#fff" },
+  detailMissionUnreadText: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: Theme.primary,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  detailSwitchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+  },
+  detailTripSelectorBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 10,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  detailTripSelectorText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#1e293b",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  detailPartyTabs: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  detailPartyTab: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    backgroundColor: "#f8fafc",
+  },
+  detailPartyTabOn: {
+    borderColor: "#0f172a",
+    backgroundColor: "#0f172a",
+  },
+  detailPartyTabOff: {
+    borderStyle: "dashed",
+  },
+  detailPartyTabText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#475569",
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+  },
+  detailPartyTabTextOn: {
+    color: "#ffffff",
+  },
+  detailPartyTabTextOff: {
+    color: "#94a3b8",
+  },
 
   detailPanel: { flex: 1, backgroundColor: "transparent" },
   msgs: { flex: 1, backgroundColor: "transparent" },
@@ -2113,47 +2500,6 @@ const s = StyleSheet.create({
     justifyContent: "center",
   },
   filterResetText: { color: "#334155", fontSize: 14, fontWeight: "700" },
-  tripFiltersHeaderWrap: {
-    paddingHorizontal: 14,
-    paddingBottom: 10,
-    gap: 8,
-  },
-  tripPartyTabsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  tripPartyTab: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#dbe4ee",
-    backgroundColor: "#f8fafc",
-    paddingVertical: 8,
-  },
-  tripPartyTabActive: { borderColor: Theme.primary, backgroundColor: Theme.primary },
-  tripPartyTabText: { fontSize: 11, fontWeight: "800", color: "#475569" },
-  tripPartyTabTextActive: { color: "#fff" },
-  tripStatusTabsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  tripStatusTab: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#dbe4ee",
-    backgroundColor: "#f8fafc",
-    paddingVertical: 7,
-  },
-  tripStatusTabActive: { borderColor: Theme.primary, backgroundColor: Theme.primary },
-  tripStatusTabText: { fontSize: 10, fontWeight: "800", color: "#64748b" },
-  tripStatusTabTextActive: { color: "#fff" },
   tripFilterPopoverLayer: {
     position: "absolute",
     top: 0,
@@ -2269,20 +2615,48 @@ const cm = StyleSheet.create({
 
   tripCard: {
     borderRadius: 16,
-    backgroundColor: "#f8fafc",
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
     marginBottom: 8,
     overflow: "hidden",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
   tripRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 12,
     gap: 12,
   },
   tripInfo: { flex: 1, minWidth: 0 },
+  tripMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
   tripNumber: { fontSize: 13, fontWeight: "800", color: "#0f172a" },
-  tripRoute: { fontSize: 12, color: "#94a3b8", marginTop: 2 },
+  tripMetaPill: {
+    backgroundColor: "#eef2ff",
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: "#dbeafe",
+  },
+  tripMetaPillText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.primary,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  tripRoute: { fontSize: 11, color: "#94a3b8", marginTop: 3, lineHeight: 15 },
 
   partyList: {
     borderTopWidth: 1,
@@ -2569,6 +2943,7 @@ function ChatInputBar({
 
 function TripConversationDetailPanel({
   selectedConv,
+  conversations,
   messagesRef,
   messageInput,
   setMessageInput,
@@ -2584,10 +2959,11 @@ function TripConversationDetailPanel({
   onAddToBook,
   onDispute,
   addingToBookId,
-  tripPartyConversations,
-  onSelectTripParty,
+  onSelectConversation,
+  onOpenCompose,
 }: {
   selectedConv: TripConversation | null;
+  conversations: TripConversation[];
   messagesRef: React.RefObject<ScrollView | null>;
   messageInput: string;
   setMessageInput: React.Dispatch<React.SetStateAction<string>>;
@@ -2603,46 +2979,90 @@ function TripConversationDetailPanel({
   onAddToBook: (message: TripMessageRow) => void;
   onDispute: (message: TripMessageRow) => void;
   addingToBookId: string | null;
-  tripPartyConversations: TripConversation[];
-  onSelectTripParty: (conversationId: string) => void;
+  onSelectConversation: (id: string) => void;
+  onOpenCompose: () => void | Promise<void>;
 }) {
   if (!selectedConv) return <EmptyDetail />;
   const quickMsgs = QUICK_MESSAGES[selectedConv.party_type];
+  const PARTY_ORDER: ConversationPartyType[] = ["client", "supplier", "driver"];
+  const sameTripConversations = conversations.filter((conv) => conv.trip_id === selectedConv.trip_id);
+  const partyConversationMap = PARTY_ORDER.reduce((acc, partyType) => {
+    acc[partyType] = sameTripConversations.find((conv) => conv.party_type === partyType) ?? null;
+    return acc;
+  }, {} as Record<ConversationPartyType, TripConversation | null>);
+  const switchConversation = (partyType: ConversationPartyType) => {
+    const target = partyConversationMap[partyType];
+    if (target) {
+      onSelectConversation(target.id);
+      return;
+    }
+    void onOpenCompose();
+  };
+  const tripUnreadTotal = sameTripConversations.reduce(
+    (sum, conv) => sum + (conv.unread_dispatcher_count ?? 0),
+    0,
+  );
 
   return (
     <View style={s.detailPanel}>
       <ChatDetailHeader
-        title={`${getConversationTripLabel(selectedConv)} · ${partyLabel(selectedConv.party_type)}`}
+        title={`${selectedConv.trip_number} · ${partyLabel(selectedConv.party_type)}`}
         subtitle={selectedConv.party_name.toUpperCase()}
         partyType={selectedConv.party_type}
         isDesktop={isDesktop}
         onCloseDetail={onCloseDetail}
       />
-      {tripPartyConversations.length > 1 && (
-        <View style={s.detailPartySwitchRow}>
-          {tripPartyConversations.map((conv) => {
-            const active = conv.id === selectedConv.id;
+      <View style={s.detailMissionBar}>
+        <View style={s.detailMissionRoute}>
+          <MapPin size={13} color={Theme.primary} />
+          <Text style={s.detailMissionRouteText} numberOfLines={1}>
+            {selectedConv.pickup_area} {"→"} {selectedConv.drop_location}
+          </Text>
+        </View>
+        <View style={s.detailMissionUnread}>
+          <Text style={s.detailMissionUnreadText}>
+            TRIP ALERTS {tripUnreadTotal > 0 ? `· ${tripUnreadTotal}` : "· CLEAR"}
+          </Text>
+        </View>
+      </View>
+      <View style={s.detailSwitchBar}>
+        <TouchableOpacity
+          style={s.detailTripSelectorBtn}
+          onPress={() => void onOpenCompose()}
+          activeOpacity={0.8}
+        >
+          <Search size={14} color="#1e293b" />
+          <Text style={s.detailTripSelectorText}>Trip selector</Text>
+        </TouchableOpacity>
+        <View style={s.detailPartyTabs}>
+          {PARTY_ORDER.map((partyType) => {
+            const on = selectedConv.party_type === partyType;
+            const hasConversation = Boolean(partyConversationMap[partyType]);
             return (
               <TouchableOpacity
-                key={conv.id}
-                style={[s.detailPartySwitchChip, active && s.detailPartySwitchChipActive]}
-                onPress={() => onSelectTripParty(conv.id)}
-                activeOpacity={0.75}
+                key={partyType}
+                style={[
+                  s.detailPartyTab,
+                  on && s.detailPartyTabOn,
+                  !hasConversation && s.detailPartyTabOff,
+                ]}
+                onPress={() => switchConversation(partyType)}
+                activeOpacity={0.82}
               >
-                <Text style={[s.detailPartySwitchText, active && s.detailPartySwitchTextActive]}>
-                  {partyLabel(conv.party_type)}
-                </Text>
                 <Text
-                  style={[s.detailPartySwitchSubText, active && s.detailPartySwitchSubTextActive]}
-                  numberOfLines={1}
+                  style={[
+                    s.detailPartyTabText,
+                    on && s.detailPartyTabTextOn,
+                    !hasConversation && s.detailPartyTabTextOff,
+                  ]}
                 >
-                  {conv.party_name}
+                  {partyLabel(partyType)}
                 </Text>
               </TouchableOpacity>
             );
           })}
         </View>
-      )}
+      </View>
       <ScrollView
         ref={messagesRef}
         style={s.msgs}
