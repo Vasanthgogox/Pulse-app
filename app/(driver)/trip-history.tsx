@@ -599,19 +599,34 @@ export default function DriverTripsScreen() {
     }
     if (!isRefreshingRef.current && !initialLoadDoneRef.current) setLoading(true);
     driversService.getLinkedDriversForCurrentUser(profile.uid).then((res) => {
+      if (res.error && __DEV__) {
+        console.warn("[trip-history] getLinkedDriversForCurrentUser:", res.error.message);
+      }
       const drivers = (res.drivers ?? []).filter((d) => !d.left_at);
       if (drivers.length > 0) {
         setDriver(drivers[0]);
         tripsService
           .getTripsByDriverIds(drivers.map((d) => d.id))
           .then((tRes) => {
-            setTrips(tRes.trips ?? []);
+            if (tRes.error && __DEV__) {
+              console.warn("[trip-history] getTripsByDriverIds:", tRes.error.message);
+            }
+            setTrips(tRes.error ? [] : (tRes.trips ?? []));
+            setLoading(false);
+            initialLoadDoneRef.current = true;
+            isRefreshingRef.current = false;
+            setRefreshing(false);
+          })
+          .catch((e) => {
+            if (__DEV__) console.warn("[trip-history] getTripsByDriverIds failed:", e);
+            setTrips([]);
             setLoading(false);
             initialLoadDoneRef.current = true;
             isRefreshingRef.current = false;
             setRefreshing(false);
           });
       } else {
+        setTrips([]);
         setLoading(false);
         initialLoadDoneRef.current = true;
         isRefreshingRef.current = false;
@@ -1281,7 +1296,9 @@ export default function DriverTripsScreen() {
                 <Text style={[styles.emptyText, { color: colors.textMuted }]}>
                   {trips.length === 0
                     ? "No trips completed yet"
-                    : "No trips found"}
+                    : tripView === "history" && activeTripsCount > 0 && historyTripsCount === 0
+                      ? "History lists delivered & completed trips only. Open Active for trips in progress."
+                      : "No trips found"}
                 </Text>
               </View>
             )

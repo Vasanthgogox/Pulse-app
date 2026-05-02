@@ -21,6 +21,7 @@ import {
   getRatingsForSuppliers,
 } from "@/features/ratings";
 import { useClientsQuery, useDriversQuery, useSuppliersQuery, useTripsQuery } from '@/lib/queries';
+import { uniqueRealtimeChannelTopic } from '@/lib/realtimeTopic';
 import { getInitials } from '@/lib/stringUtils';
 import { supabase } from '@/lib/supabase';
 import {
@@ -404,7 +405,7 @@ export function ConnectionsView({
   useEffect(() => {
     if (!orgId) return;
     const channel = supabase()
-      .channel(`network-ratings-${orgId}`)
+      .channel(uniqueRealtimeChannelTopic(`network-ratings-${orgId}`))
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'ratings' },

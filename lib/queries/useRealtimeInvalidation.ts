@@ -7,10 +7,7 @@ import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { queryKeys } from '@/lib/queryKeys';
-
-function uniqueTopic(base: string) {
-  return `${base}:${Math.random().toString(36).slice(2, 10)}`;
-}
+import { uniqueRealtimeChannelTopic } from '@/lib/realtimeTopic';
 
 /** Subscribe to trips for org; invalidate trips query on any change. */
 export function useRealtimeTripsInvalidation(organizationId: string | null) {
@@ -19,7 +16,7 @@ export function useRealtimeTripsInvalidation(organizationId: string | null) {
   useEffect(() => {
     if (!organizationId) return;
     const channel = supabase()
-      .channel(uniqueTopic(`trips:org:${organizationId}`))
+      .channel(uniqueRealtimeChannelTopic(`trips:org:${organizationId}`))
       .on(
         'postgres_changes',
         {
@@ -47,7 +44,7 @@ export function useRealtimeTransactionsInvalidation(organizationId: string | nul
   useEffect(() => {
     if (!organizationId) return;
     const channel = supabase()
-      .channel(uniqueTopic(`transactions:${organizationId}`))
+      .channel(uniqueRealtimeChannelTopic(`transactions:${organizationId}`))
       .on(
         'postgres_changes',
         {
@@ -84,7 +81,7 @@ export function useRealtimeNetworkInvalidation(organizationId: string | null) {
     };
 
     const channel = supabase()
-      .channel(uniqueTopic(`network:${organizationId}`))
+      .channel(uniqueRealtimeChannelTopic(`network:${organizationId}`))
       .on(
         'postgres_changes',
         {

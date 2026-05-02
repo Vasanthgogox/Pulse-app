@@ -8,6 +8,7 @@ import React, {
 } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { uniqueRealtimeChannelTopic } from "@/lib/realtimeTopic";
 import { supabase } from "@/lib/supabase";
 import * as chatService from "../services/chat.service";
 import type { NetworkConversation, NetworkMessageRow, NetworkPartner } from "../types/chat.types";
@@ -137,7 +138,7 @@ export function IntegratedChatProvider({ children }: { children: ReactNode }) {
     if (!orgId) return;
 
     const channel = supabase()
-      .channel(`network_messages:org:${orgId}`)
+      .channel(uniqueRealtimeChannelTopic(`network_messages:org:${orgId}`))
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "network_messages" },

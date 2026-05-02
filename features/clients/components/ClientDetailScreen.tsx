@@ -25,6 +25,7 @@ import { ledgerDayMatchesPeriod } from "@/features/finance/lib/filterLedgerByPer
 import type { FinancePeriodFilter } from "@/features/finance/types";
 import { allocateAmountsToLargestDueTrips } from "@/features/finance/utils/allocateToLargestDue";
 import { averageScore, getRatingsForClient } from "@/features/ratings";
+import { uniqueRealtimeChannelTopic } from "@/lib/realtimeTopic";
 import { supabase } from "@/lib/supabase";
 import {
     getSuppliersByOrganization,
@@ -331,7 +332,7 @@ export default function ClientDetailScreen({
   useEffect(() => {
     if (!clientId) return;
     const channel = supabase()
-      .channel(`client-ratings-${clientId}`)
+      .channel(uniqueRealtimeChannelTopic(`client-ratings-${clientId}`))
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "ratings", filter: `rated_id=eq.${clientId}` },
