@@ -13,6 +13,17 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * @param email - Raw input (trimmed internally).
  * @returns Error message if invalid, or null if valid.
  */
+/**
+ * Email required (sign-in, account recovery). Empty / whitespace-only fails.
+ */
+export function validateEmailRequired(email: string): string | null {
+  const trimmed = (email ?? '').trim();
+  if (trimmed.length === 0) {
+    return 'Enter your email address.';
+  }
+  return validateEmail(trimmed);
+}
+
 export function validateEmail(email: string): string | null {
   const trimmed = (email ?? '').trim();
   if (trimmed.length === 0) return null;

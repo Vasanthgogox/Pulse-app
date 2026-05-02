@@ -14,9 +14,11 @@ import {
 import { supabase } from "@/lib/supabase";
 import {
     VALIDATION,
+    containsNullByte,
     maxLength,
     validateFullName,
     validatePassword,
+    validatePasswordForSignIn,
 } from "@/lib/validation";
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
@@ -256,6 +258,49 @@ function isNetworkError(e: unknown): boolean {
   return false;
 }
 
+/** Safe user-facing copy; never forward raw DB/server messages from GoTrue. */
+function mapSignInErrorMessage(raw: string): string {
+  const m = (raw ?? "").toLowerCase();
+  if (
+    m.includes("invalid login") ||
+    m.includes("invalid email or password") ||
+    m.includes("invalid credentials") ||
+    m.includes("wrong password") ||
+    m.includes("email not found")
+  ) {
+    return "Incorrect email or password.";
+  }
+  if (m.includes("email not confirmed") || m.includes("not confirmed")) {
+    return "Confirm your email before signing in. Check your inbox.";
+  }
+  if (
+    m.includes("too many") ||
+    m.includes("rate limit") ||
+    m.includes("over_email") ||
+    m.includes("over_request") ||
+    m.includes("too_many_requests")
+  ) {
+    return "Too many attempts. Wait a few minutes and try again.";
+  }
+  if (m.includes("user_banned") || m.includes("banned")) {
+    return "This account cannot sign in. Contact support.";
+  }
+  if (m.includes("network") || m.includes("fetch failed") || m.includes("econnrefused")) {
+    return "Cannot reach server. Check your internet connection.";
+  }
+  if (
+    m.includes("database") ||
+    m.includes("sql") ||
+    m.includes("internal server") ||
+    m.includes("syntax error") ||
+    m.includes("relation ") ||
+    m.includes("column ")
+  ) {
+    return "Sign in failed. Try again or contact support.";
+  }
+  return "Sign in failed. Please try again.";
+}
+
 /** DB RPC: link roster drivers.user_id by profile email/phone (migration 20260510123000). */
 async function trySyncMyDriverRowsUserId(): Promise<void> {
   try {
@@ -272,17 +317,24 @@ export async function signInWithPassword(
   email: string,
   password: string,
 ): Promise<SignInResult> {
-  const emailErr = validateEmail(email ?? "");
+  const trimmedEmail = (email ?? "").trim();
+  if (trimmedEmail.length === 0) {
+    return { error: new Error("Enter your email address.") };
+  }
+  if (containsNullByte(trimmedEmail) || containsNullByte(password)) {
+    return { error: new Error("Input contains invalid characters.") };
+  }
+  const emailErr = validateEmail(trimmedEmail);
   if (emailErr) return { error: new Error(emailErr) };
-  const pwdErr = validatePassword(password);
+  const pwdErr = validatePasswordForSignIn(password);
   if (pwdErr) return { error: new Error(pwdErr) };
   try {
     const { data, error } = await supabase().auth.signInWithPassword({
-      email: (email ?? "").trim(),
-      password,
+      email: trimmedEmail,
+      password: password ?? "",
     });
     if (error) {
-      return { error: new Error(error.message || "Sign in failed") };
+      return { error: new Error(mapSignInErrorMessage(error.message)) };
     }
     if (!data.user) return { error: new Error("No user returned") };
     void trySyncMyDriverRowsUserId();

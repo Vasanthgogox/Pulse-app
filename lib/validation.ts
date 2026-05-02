@@ -139,6 +139,29 @@ export function validatePassword(value: string | null | undefined): string | nul
   return null;
 }
 
+/** Disallow NUL bytes in auth fields (defense in depth; never valid in email/password). */
+export function containsNullByte(value: string | null | undefined): boolean {
+  return (value ?? '').includes('\0');
+}
+
+/**
+ * Sign-in only: do not trim password for length rules (spaces may be part of the secret).
+ * Rejects empty / whitespace-only, over max length, and NUL.
+ */
+export function validatePasswordForSignIn(value: string | null | undefined): string | null {
+  const raw = value ?? '';
+  if (containsNullByte(raw)) {
+    return 'Password contains invalid characters.';
+  }
+  if (raw.length > VALIDATION.PASSWORD_MAX_LENGTH) {
+    return `Password must be at most ${VALIDATION.PASSWORD_MAX_LENGTH} characters.`;
+  }
+  if (raw.trim().length === 0) {
+    return 'Enter your password.';
+  }
+  return null;
+}
+
 /** Full name: 2–100 chars when non-empty. */
 export function validateFullName(required: boolean): Validator<string> {
   return (v) => {

@@ -2,8 +2,10 @@ import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useIsOnline } from '@/contexts/NetworkContext';
+import { validateEmailRequired } from '@/lib/emailValidation';
 import { getKeepSignedIn, setKeepSignedIn } from '@/lib/keepSignedInPreference';
 import { ROUTES } from '@/lib/routes';
+import { containsNullByte, validatePasswordForSignIn } from '@/lib/validation';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -30,9 +32,11 @@ function getEmailFromParams(params: { email?: string | string[] }): string {
 
 function getOAuthErrorFromParams(params: { oauth_error?: string | string[] }): string {
   const e = params.oauth_error;
-  if (typeof e === 'string') return e;
-  if (Array.isArray(e) && e[0]) return e[0];
-  return '';
+  const raw = typeof e === 'string' ? e : Array.isArray(e) && e[0] ? e[0] : '';
+  if (!raw) return '';
+  // OAuth error_description can be long or odd-shaped; keep UI safe and bounded.
+  const cleaned = raw.replace(/\0/g, '').trim().slice(0, 400);
+  return cleaned;
 }
 
 export default function SignIn() {
@@ -117,13 +121,19 @@ export default function SignIn() {
       setSignInError('Connect to the internet to sign in.');
       return;
     }
-    const trimmedEmail = email.trim();
-    if (!trimmedEmail || !password) {
-      setSignInError('Enter email and password.');
+    const emailErr = validateEmailRequired(email);
+    if (emailErr) {
+      setSignInError(emailErr);
       return;
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      setSignInError('Enter a valid email.');
+    const trimmedEmail = email.trim();
+    if (containsNullByte(trimmedEmail) || containsNullByte(password)) {
+      setSignInError('Input contains invalid characters.');
+      return;
+    }
+    const pwdErr = validatePasswordForSignIn(password);
+    if (pwdErr) {
+      setSignInError(pwdErr);
       return;
     }
 
@@ -131,13 +141,12 @@ export default function SignIn() {
       setLoading(true);
       const { error } = await signIn(trimmedEmail, password, keepSignedIn);
       if (error) {
-        const isInvalid = error.message.toLowerCase().includes('invalid');
-        setSignInError(isInvalid ? 'Incorrect email or password.' : error.message);
+        setSignInError(error.message);
         return;
       }
       setWaitingForAuthState(true);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Sign in failed.';
+    } catch {
+      const msg = 'Sign in failed. Please try again.';
       setSignInError(msg);
       Alert.alert('Sign in failed', msg);
     } finally {
@@ -195,21 +204,36 @@ export default function SignIn() {
 
         <TextInput
           value={email}
-          onChangeText={setEmail}
+          onChangeText={(t) => {
+            setSignInError(null);
+            setEmail(t);
+          }}
           placeholder="Email Address"
           placeholderTextColor={isDesktop ? 'rgba(148,163,184,0.5)' : Theme.textMuted}
           style={[styles.input, isDesktop && styles.inputDesktop]}
           autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="email-address"
+          textContentType="username"
+          autoComplete="email"
+          maxLength={255}
         />
         <View style={styles.passwordWrap}>
           <TextInput
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(t) => {
+              setSignInError(null);
+              setPassword(t);
+            }}
             placeholder="Your Password"
             placeholderTextColor={isDesktop ? 'rgba(148,163,184,0.5)' : Theme.textMuted}
             style={[styles.input, isDesktop && styles.inputDesktop]}
             secureTextEntry={!showPass}
             autoCapitalize="none"
+            autoCorrect={false}
+            textContentType="password"
+            autoComplete="password"
+            maxLength={128}
           />
           <Pressable onPress={() => setShowPass((v) => !v)} style={styles.eyeBtn}>
             <FontAwesome name={showPass ? 'eye-slash' : 'eye'} size={18} color={Theme.textMuted} />
