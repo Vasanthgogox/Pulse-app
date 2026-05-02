@@ -52,9 +52,15 @@ export type AggregateTripKindPillContext = {
  * Whether the UI should show the **AGGREGATE** (vs ASSET) trip-kind pill for the current viewer.
  * When the awarded supplier’s org is viewing and the trip is a Load Hub roster assignment
  * (`direct_quote` + driver + vehicle), shows **ASSET** while marketplace semantics stay unchanged elsewhere.
+ *
+ * **Fallback:** `trip.supplier_id` usually points at the shipper’s supplier row, which is often missing from
+ * the awarded supplier’s local `suppliers` list — so `supplierLinkedOrganizationId` is empty in hub meta.
+ * In that case, if the viewer org is not the trip owner org and the trip has an assigned driver + vehicle
+ * (and not an OTP-only driver), we still show **ASSET** for the supplier executing the load.
  */
 export function shouldShowAggregateTripKindPill(
-  trip: TripWithSupplier & TripRosterShape,
+  trip: TripWithSupplier &
+    TripRosterShape & { organization_id?: string | null },
   ctx?: AggregateTripKindPillContext | null,
 ): boolean {
   if (!isAggregateTrip(trip)) return false;
@@ -62,9 +68,22 @@ export function shouldShowAggregateTripKindPill(
 
   const viewer = (ctx?.viewerOrganizationId ?? "").trim();
   const supplierOrg = (ctx?.supplierLinkedOrganizationId ?? "").trim();
+  const tripOrg = (trip.organization_id ?? "").trim();
+
+  const hasFleetAssignment =
+    !!(trip.driver_id && String(trip.driver_id).trim()) &&
+    !!(trip.vehicle_id && String(trip.vehicle_id).trim());
+
+  // Integrated supplier row present in hub meta (same linked org as viewer).
   if (viewer && supplierOrg && viewer === supplierOrg && isRosterTrip(trip)) {
     return false;
   }
+
+  // Awarded supplier: trip owned by shipper org; supplier UUID often missing from viewer hub meta — infer Asset.
+  if (viewer && tripOrg && viewer !== tripOrg && hasFleetAssignment) {
+    return false;
+  }
+
   return true;
 }
 
