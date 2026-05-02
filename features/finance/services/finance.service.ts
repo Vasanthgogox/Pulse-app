@@ -226,7 +226,35 @@ async function resolveTripContextForLedgerWrite(params: {
   }
 
   if (!tripById) {
-    throw new Error("Selected trip was not found.");
+    // Cross-org / restricted RLS trip refs may not be readable here.
+    // Try local mapping by trip number; otherwise keep incoming refs (best-effort).
+    if (requestedTripNumber) {
+      const { data: localByTripNo, error: localByTripNoError } = await supabase()
+        .from("trips")
+        .select("id, trip_number")
+        .eq("organization_id", orgId)
+        .eq("trip_number", requestedTripNumber)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (localByTripNoError) {
+        throw new Error(`Failed to map trip context: ${localByTripNoError.message}`);
+      }
+      if (localByTripNo) {
+        return {
+          tripId: String((localByTripNo as { id: string }).id),
+          tripNumber:
+            String(
+              (localByTripNo as { trip_number?: string | null }).trip_number ??
+                requestedTripNumber,
+            ) || requestedTripNumber,
+        };
+      }
+    }
+    return {
+      tripId: requestedTripId,
+      tripNumber: requestedTripNumber || null,
+    };
   }
 
   const row = tripById as {
@@ -244,9 +272,10 @@ async function resolveTripContextForLedgerWrite(params: {
   const candidateTripNumber =
     requestedTripNumber || String(row.trip_number ?? "").trim();
   if (!candidateTripNumber) {
-    throw new Error(
-      "Invalid trip context: trip belongs to another organization.",
-    );
+    return {
+      tripId: requestedTripId,
+      tripNumber: null,
+    };
   }
 
   const { data: localTrip, error: localTripError } = await supabase()
@@ -263,9 +292,10 @@ async function resolveTripContextForLedgerWrite(params: {
   }
 
   if (!localTrip) {
-    throw new Error(
-      "Invalid trip context: selected trip does not belong to current organization.",
-    );
+    return {
+      tripId: requestedTripId,
+      tripNumber: candidateTripNumber,
+    };
   }
 
   return {

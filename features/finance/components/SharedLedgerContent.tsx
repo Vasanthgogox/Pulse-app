@@ -610,10 +610,12 @@ export function SharedLedgerContent({
 
   const txs = transactions ?? [];
 
-  // Shared Ledger (integrated) should only reconcile load-based/shared trips.
-  // Exclude manual/offline trips from this view while keeping them in other tabs.
+  // Shared Ledger (integrated) should only include shared/load trips.
   const sharedScopeTrips = useMemo(
-    () => (integrated ? trips.filter((t) => t.indent_id != null) : trips),
+    () =>
+      integrated
+        ? trips.filter((t) => t.indent_id != null)
+        : trips,
     [integrated, trips],
   );
   const sharedScopeTripIdSet = useMemo(
@@ -794,7 +796,10 @@ export function SharedLedgerContent({
           }))
           .filter(
             (r) =>
-              !integrated || sharedScopeTripIdSet.has(normTripKey(r.tripId)),
+              !integrated ||
+              sharedScopeTripIdSet.has(
+                resolveTripRefToCanonicalId(r.tripId),
+              ),
           );
         // When trip summary has partner_paid = 0 (e.g. counterparty missing), merge in paid from entries
         // so partner's paid is shown for both CLIENT and SUPPLIER view (fixes "Update My Book" / Credits (Paid) staying 0).
@@ -814,7 +819,7 @@ export function SharedLedgerContent({
               (e) =>
                 !integrated ||
                 sharedScopeTripIdSet.has(
-                  normTripKey(String(e.reference_id ?? "")),
+                  resolveTripRefToCanonicalId(String(e.reference_id ?? "")),
                 ),
             );
             setPartnerEntries(scopedEntries);
@@ -852,7 +857,9 @@ export function SharedLedgerContent({
           const scopedEntries = entries.filter(
             (e) =>
               !integrated ||
-              sharedScopeTripIdSet.has(normTripKey(String(e.reference_id ?? ""))),
+              sharedScopeTripIdSet.has(
+                resolveTripRefToCanonicalId(String(e.reference_id ?? "")),
+              ),
           );
           setPartnerEntries(scopedEntries);
         }

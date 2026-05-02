@@ -611,6 +611,29 @@ export default function LedgerSyncScreen() {
         }
       }
 
+      // For integrated/cross-org supplier payouts, ensure contact_id is mapped to
+      // the local supplier id in this org, even when a foreign supplier id is present.
+      if (data.type === "out" && resolvedContactType === "supplier") {
+        const isCrossOrgTripForOut =
+          !!linkedTrip?.organization_id &&
+          !!orgId &&
+          linkedTrip.organization_id !== orgId;
+        const mappedLocalSupplierIdFromTripOrg =
+          isCrossOrgTripForOut && linkedTrip?.organization_id
+            ? uniqueLinkedSupplierIdByOrgId.get(linkedTrip.organization_id) ?? null
+            : null;
+        const currentResolvedSupplierExistsLocally =
+          !!resolvedContactId &&
+          suppliers.some((s) => s.id === resolvedContactId);
+        if (
+          mappedLocalSupplierIdFromTripOrg &&
+          !currentResolvedSupplierExistsLocally
+        ) {
+          resolvedContactId = mappedLocalSupplierIdFromTripOrg;
+          resolvedContactType = "supplier";
+        }
+      }
+
       if (
         data.type === "out" &&
         data.contactType === "driver" &&
