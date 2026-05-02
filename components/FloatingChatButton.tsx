@@ -2,18 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "expo-router";
 import { Hash, MessageSquare, Plus, Users, X } from "lucide-react-native";
 import { Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from "react-native";
-import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withSequence,
-  withTiming,
-} from "react-native-reanimated";
+import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import { useDemoTabBarVisibilityProgressOptional } from "@/contexts/DemoTabBarScrollContext";
+import { useGlobalFabAnimation } from "@/hooks/useGlobalFabAnimation";
 import { useIntegratedChat } from "@/features/chat/contexts/IntegratedChatContext";
 import { useTripChat } from "@/features/chat/contexts/TripChatContext";
 import { useMobileNetworkDockExpanded } from "@/lib/mobileDockState";
@@ -55,10 +48,7 @@ export function FloatingChatButton() {
   const show = useShouldShow();
   const unread = useTotalUnread();
   const networkDockExpanded = useMobileNetworkDockExpanded();
-  const fallbackVisibilityProgress = useSharedValue(1);
-  const visibilityProgress =
-    useDemoTabBarVisibilityProgressOptional() ?? fallbackVisibilityProgress;
-  const idlePulse = useSharedValue(0);
+  const { shellStyle: visibilityStyle, ringStyle } = useGlobalFabAnimation();
   const [showPreview, setShowPreview] = useState(false);
   const [chatTab, setChatTab] = useState<ChatTab>("trips");
   const { chats } = useIntegratedChat();
@@ -106,32 +96,6 @@ export function FloatingChatButton() {
     // Always collapse preview on route change for predictable mobile UX.
     setShowPreview(false);
   }, [normalizedPath]);
-
-  useEffect(() => {
-    idlePulse.value = withRepeat(
-      withSequence(
-        withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.quad) }),
-        withTiming(0, { duration: 1500, easing: Easing.inOut(Easing.quad) }),
-      ),
-      -1,
-      false,
-    );
-  }, [idlePulse]);
-
-  const visibilityStyle = useAnimatedStyle(() => ({
-    opacity: visibilityProgress.value,
-    transform: [
-      {
-        scale:
-          (0.92 + visibilityProgress.value * 0.08) *
-          (0.985 + idlePulse.value * 0.015),
-      },
-    ],
-  }));
-
-  const ringStyle = useAnimatedStyle(() => ({
-    opacity: 0.14 + idlePulse.value * 0.14,
-  }));
 
   if (!show) return null;
 

@@ -20,6 +20,3 @@ USING (
     WHERE t.id::text = (storage.foldername(name))[1]
   )
 );
-
-COMMENT ON POLICY "Org members can read trip documents by folder" ON storage.objects IS
-  'Lets dispatchers/org users create signed URLs and download driver POD files under {trip_id}/.';

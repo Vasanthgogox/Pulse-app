@@ -52,6 +52,7 @@ import {
   getRatingsForDriver,
   getRatingsForSupplier,
   averageScore,
+  resolveRatedClientIdForTrip,
   type RatingRow,
 } from '../services/ratings.service';
 import type { RaterType, RatedType } from '../types';
@@ -225,6 +226,48 @@ function isSupplierRatingForTrip(r: RatingRow, trip: TripRow): boolean {
   return r.rated_id === trip.supplier_id;
 }
 
+/** Who submits “rate the client” for this trip: fleet org on own trips; supplier when viewing as partner. */
+function resolveClientRatingRater(
+  trip: TripRow,
+  effectiveOrganizationId: string,
+  isClientViewer: boolean,
+): { rater_type: RaterType; rater_id: string } {
+  const orgId = trip.organization_id?.trim();
+  if (isClientViewer) {
+    return {
+      rater_type: 'organization',
+      rater_id: orgId ?? effectiveOrganizationId,
+    };
+  }
+  const supId = trip.supplier_id?.trim();
+  if (supId) {
+    return { rater_type: 'supplier', rater_id: supId };
+  }
+  return { rater_type: 'organization', rater_id: effectiveOrganizationId };
+}
+
+/** Trip-level client score row for the current viewer (org vs supplier can both exist on one trip). */
+function resolveClientTripRating(
+  ratings: RatingRow[],
+  trip: TripRow,
+  isClientViewer: boolean,
+  effectiveOrganizationId: string,
+): RatingRow | undefined {
+  const cid = trip.client_id?.trim();
+  const rows = ratings.filter((r) => {
+    if (r.rated_type !== 'client') return false;
+    if (cid) return r.rated_id === cid;
+    return true;
+  });
+  if (rows.length === 0) return undefined;
+  if (rows.length === 1) return rows[0];
+  const expected = resolveClientRatingRater(trip, effectiveOrganizationId, isClientViewer);
+  return (
+    rows.find((r) => r.rater_type === expected.rater_type && r.rater_id === expected.rater_id) ??
+    rows[0]
+  );
+}
+
 type RatedPartyKind = 'client' | 'supplier' | 'driver';
 
 function RatedPartyBadge({ kind }: { kind: RatedPartyKind }) {
@@ -361,13 +404,14 @@ export function TripRatingsBlock({
       r.rated_type === 'driver' &&
       (r.rater_type === 'client' || r.rater_type === 'supplier' || r.rater_type === 'organization')
   );
-  const hasRatedClient = ratings.some(
-    (r) =>
-      r.rated_type === 'client' &&
-      !!trip.client_id &&
-      r.rated_id === trip.client_id,
-  );
-  void hasRatedClient;
+  const hasRatedClient =
+    !!effectiveOrganizationId &&
+    ratings.some((r) => {
+      if (r.rated_type !== 'client') return false;
+      if (trip.client_id && r.rated_id !== trip.client_id) return false;
+      const exp = resolveClientRatingRater(trip, effectiveOrganizationId, isClientViewer);
+      return r.rater_type === exp.rater_type && r.rater_id === exp.rater_id;
+    });
 
   const hasSupplier = !!trip.supplier_id;
   const hasClient = !!trip.client_id;
@@ -885,9 +929,10 @@ export function TripRatingsBlock({
   const driverTripRating = ratings.find(
     (r) => r.rated_type === 'driver' && (!trip.driver_id || r.rated_id === trip.driver_id),
   );
-  const clientTripRating = ratings.find(
-    (r) => r.rated_type === 'client' && (!trip.client_id || r.rated_id === trip.client_id),
-  );
+  const clientTripRating =
+    effectiveOrganizationId != null
+      ? resolveClientTripRating(ratings, trip, isClientViewer, effectiveOrganizationId)
+      : undefined;
   const supplierTripAvg = supplierTripRating?.score ?? null;
   const driverTripAvg = driverTripRating?.score ?? null;
   const clientTripAvg = clientTripRating?.score ?? clientFeedback?.score ?? null;
@@ -897,10 +942,18 @@ export function TripRatingsBlock({
     if (hasAutoOpenedClientRef.current) return;
     if (!canRateClient) return;
     // Only auto-open if no rating has been given yet (DB or local)
-    if (clientTripRating || clientFeedback) return;
+    if (clientTripRating || clientFeedback || hasRatedClient) return;
     hasAutoOpenedClientRef.current = true;
     setShowClientFeedbackModal(true);
-  }, [loading, isCompleted, canRateClient, clientFeedbackLoaded, clientTripRating, clientFeedback]);
+  }, [
+    loading,
+    isCompleted,
+    canRateClient,
+    clientFeedbackLoaded,
+    clientTripRating,
+    clientFeedback,
+    hasRatedClient,
+  ]);
 
   const displaySupplierAvg = histSupplierAvg;
   const displayDriverAvg = histDriverAvg;
@@ -918,6 +971,11 @@ export function TripRatingsBlock({
     trip.driver_display_name ||
     'Driver'
   ).trim();
+  const clientFeedbackSourceLabel = isClientViewer
+    ? 'Fleet'
+    : trip.supplier_id?.trim()
+      ? 'Supplier'
+      : 'Fleet';
   const isWorkspace = layoutVariant === 'workspace';
   const isRegistry = layoutVariant === 'registry';
   const isWidePanel = isWorkspace || isRegistry;
@@ -1077,7 +1135,9 @@ export function TripRatingsBlock({
             <PartyAvatar uri={clientAvatarUri} name={clientDisplayName} size={44} />
             <View style={styles.wsAuditLeft}>
               <RatedPartyBadge kind="client" />
-              <Text style={styles.wsAuditFromTo}>Supplier → {clientDisplayName}</Text>
+              <Text style={styles.wsAuditFromTo}>
+                {clientFeedbackSourceLabel} → {clientDisplayName}
+              </Text>
               <View style={styles.wsScoreRow}>
                 <Text style={styles.wsAuditScore}>{clientFeedback.score}</Text>
                 <FontAwesome name="star" size={16} color={Theme.feedbackModalStarActive} />
@@ -1089,7 +1149,9 @@ export function TripRatingsBlock({
           <View style={styles.rowTopWithAvatar}>
             <PartyAvatar uri={clientAvatarUri} name={clientDisplayName} size={36} />
             <View style={styles.rowTopTextCol}>
-              <Text style={styles.rowLabel}>Supplier → {clientDisplayName}</Text>
+              <Text style={styles.rowLabel}>
+                {clientFeedbackSourceLabel} → {clientDisplayName}
+              </Text>
                   <Text style={styles.rowScore}>{clientFeedback.score} ★</Text>
             </View>
           </View>
@@ -1839,13 +1901,27 @@ export function TripRatingsBlock({
                     clientComment.trim().slice(0, VALIDATION.NOTES_MAX_LENGTH),
                   );
                   let error: { message: string } | null = null;
-                  if (trip.client_id) {
-                    const submitRes = await createRating(effectiveOrganizationId, {
+                  let usedSchemaFallback = false;
+
+                  const ratingOrgId =
+                    trip.organization_id?.trim() ?? effectiveOrganizationId ?? '';
+                  let ratedClientId = trip.client_id?.trim() ?? null;
+                  if (!ratedClientId && ratingOrgId) {
+                    ratedClientId = await resolveRatedClientIdForTrip(trip, ratingOrgId);
+                  }
+
+                  if (ratingOrgId && ratedClientId) {
+                    const { rater_type, rater_id } = resolveClientRatingRater(
+                      trip,
+                      effectiveOrganizationId,
+                      isClientViewer,
+                    );
+                    const submitRes = await createRating(ratingOrgId, {
                       trip_id: trip.id,
-                      rater_type: trip.supplier_id ? 'supplier' : 'organization',
-                      rater_id: trip.supplier_id ?? effectiveOrganizationId,
+                      rater_type,
+                      rater_id,
                       rated_type: 'client',
-                      rated_id: trip.client_id,
+                      rated_id: ratedClientId,
                       score: clientScore,
                       comment: commentPayload,
                     });
@@ -1855,18 +1931,32 @@ export function TripRatingsBlock({
                       (error.message.toLowerCase().includes('ratings_rated_type_check') ||
                         error.message.toLowerCase().includes('check constraint') ||
                         error.message.toLowerCase().includes('rated_type'));
+                    if (allowLocalClientFallback) usedSchemaFallback = true;
                     if (error && !allowLocalClientFallback) {
                       setClientSubmitting(false);
                       Alert.alert('Rating failed', error.message);
                       return;
                     }
+                  } else if (!ratedClientId && (trip.client_name?.trim() || trip.client_id)) {
+                    setClientSubmitting(false);
+                    Alert.alert(
+                      'Cannot save customer rating',
+                      'Match this trip to a customer in Customers (same name as on the trip), or set the trip’s customer so ratings sync to the database.',
+                    );
+                    return;
                   }
                   await AsyncStorage.setItem(clientFeedbackStorageKey, JSON.stringify(payload));
                   setClientFeedback(payload);
                   await loadRatings();
-                  if (trip.client_id) {
-                    const { ratings: clientRatings } = await getRatingsForClient(trip.client_id);
+                  if (ratedClientId) {
+                    const { ratings: clientRatings } = await getRatingsForClient(ratedClientId);
                     setHistClientAvg(averageScore(clientRatings));
+                  }
+                  if (usedSchemaFallback) {
+                    Alert.alert(
+                      'Saved on this device only',
+                      'The database rejected client ratings (missing rated_type “client”). Apply migration ratings_add_client_rated_type on Supabase, then submit again to sync.',
+                    );
                   }
                   setClientSubmitting(false);
                   setShowClientFeedbackModal(false);

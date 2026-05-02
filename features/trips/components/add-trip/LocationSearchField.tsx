@@ -59,7 +59,9 @@ export function LocationSearchField({
   onDropdownOpenChange,
 }: LocationSearchFieldProps) {
   const { width: winW } = useWindowDimensions();
-  const cardMaxW = Math.min(winW - 48, 520);
+  const horizontalPad = Layout.screenPaddingHorizontal * 2;
+  /** Explicit width avoids RN Web % layout quirks so the sheet stays visually centered on mobile. */
+  const sheetWidth = Math.min(winW - horizontalPad, 520);
   const webCursor =
     Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null;
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -288,7 +290,12 @@ export function LocationSearchField({
               <View style={styles.backdropDim} />
             </Pressable>
             <View style={styles.centerWrap} pointerEvents="box-none">
-              <View style={[styles.sheet, { maxWidth: cardMaxW }]}>
+              <View
+                style={[
+                  styles.sheet,
+                  { width: sheetWidth, maxWidth: sheetWidth, alignSelf: "center" },
+                ]}
+              >
                 <View style={styles.sheetHead}>
                   <View style={styles.sheetTitles}>
                     <Text style={styles.sheetTitle}>Pick a place in India</Text>
@@ -396,6 +403,14 @@ const styles = StyleSheet.create({
   },
   modalRoot: {
     flex: 1,
+    ...Platform.select({
+      web: {
+        width: "100%",
+        minHeight: "100%",
+        alignSelf: "center",
+      } as ViewStyle,
+      default: {},
+    }),
   },
   backdropPress: {
     ...StyleSheet.absoluteFillObject,
@@ -409,9 +424,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: Layout.screenPaddingHorizontal,
+    ...Platform.select({
+      web: {
+        width: "100%",
+        left: 0,
+        right: 0,
+      } as ViewStyle,
+      default: {},
+    }),
   },
   sheet: {
-    width: "100%",
     maxHeight: "82%",
     backgroundColor: Theme.cardWhite,
     borderRadius: 20,

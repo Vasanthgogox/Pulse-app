@@ -3,10 +3,7 @@
  */
 import { useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-
-function uniqueTopic(base: string) {
-  return `${base}:${Math.random().toString(36).slice(2, 10)}`;
-}
+import { uniqueRealtimeChannelTopic } from '@/lib/realtimeTopic';
 
 /** Subscribe to trips for an organization; call onInvalidate when any change. */
 export function useRealtimeTrips(organizationId: string | null, onInvalidate: () => void) {
@@ -16,7 +13,7 @@ export function useRealtimeTrips(organizationId: string | null, onInvalidate: ()
   useEffect(() => {
     if (!organizationId) return;
     const channel = supabase()
-      .channel(uniqueTopic(`trips:org:${organizationId}`))
+      .channel(uniqueRealtimeChannelTopic(`trips:org:${organizationId}`))
       .on(
         'postgres_changes',
         {
@@ -44,7 +41,7 @@ export function useRealtimeTrip(tripId: string | null, onInvalidate: () => void)
   useEffect(() => {
     if (!tripId) return;
     const channel = supabase()
-      .channel(uniqueTopic(`trip:${tripId}`))
+      .channel(uniqueRealtimeChannelTopic(`trip:${tripId}`))
       .on(
         'postgres_changes',
         {

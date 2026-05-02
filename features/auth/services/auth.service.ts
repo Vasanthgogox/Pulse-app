@@ -256,6 +256,18 @@ function isNetworkError(e: unknown): boolean {
   return false;
 }
 
+/** DB RPC: link roster drivers.user_id by profile email/phone (migration 20260510123000). */
+async function trySyncMyDriverRowsUserId(): Promise<void> {
+  try {
+    const { error } = await supabase().rpc("sync_my_driver_rows_user_id");
+    if (error && __DEV__) {
+      console.warn("[auth] sync_my_driver_rows_user_id:", error.message);
+    }
+  } catch (e) {
+    if (__DEV__) console.warn("[auth] sync_my_driver_rows_user_id failed", e);
+  }
+}
+
 export async function signInWithPassword(
   email: string,
   password: string,
@@ -273,6 +285,7 @@ export async function signInWithPassword(
       return { error: new Error(error.message || "Sign in failed") };
     }
     if (!data.user) return { error: new Error("No user returned") };
+    void trySyncMyDriverRowsUserId();
     return { error: null };
   } catch (e) {
     if (isNetworkError(e)) {
@@ -384,7 +397,10 @@ export async function applyPendingOAuthMetadata(): Promise<void> {
   } catch {
     raw = null;
   }
-  if (!raw) return;
+  if (!raw) {
+    void trySyncMyDriverRowsUserId();
+    return;
+  }
 
   let pending: PendingOAuthOnboardingMetadata | null = null;
   try {
@@ -394,7 +410,10 @@ export async function applyPendingOAuthMetadata(): Promise<void> {
   } finally {
     await AsyncStorage.removeItem(PENDING_OAUTH_METADATA_KEY).catch(() => {});
   }
-  if (!pending) return;
+  if (!pending) {
+    void trySyncMyDriverRowsUserId();
+    return;
+  }
 
   const authData: Record<string, unknown> = {};
   const role = pending.role === "driver" ? "driver" : "user";
@@ -421,7 +440,10 @@ export async function applyPendingOAuthMetadata(): Promise<void> {
 
   const { data: userData } = await supabase().auth.getUser();
   const userId = userData.user?.id;
-  if (!userId) return;
+  if (!userId) {
+    void trySyncMyDriverRowsUserId();
+    return;
+  }
 
   const profileUpdates: Record<string, unknown> = {};
   if (pending.fullName?.trim()) profileUpdates.full_name = pending.fullName.trim();
@@ -448,6 +470,8 @@ export async function applyPendingOAuthMetadata(): Promise<void> {
       await supabase().from("organizations").update(orgUpdates).eq("owner_id", userId);
     }
   }
+
+  void trySyncMyDriverRowsUserId();
 }
 
 export async function signOut(): Promise<void> {

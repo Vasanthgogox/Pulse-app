@@ -2,9 +2,16 @@
  * Ratings service — Client→Supplier, Supplier→Driver.
  * Uses public.ratings table (create via docs/RATINGS_MIGRATION.sql in Q-unified-base).
  */
+import { getClientsByOrganization } from '@/features/clients/services/clients.service';
 import { supabase } from '@/lib/supabase';
 import type { CreateRatingData, RatingRow } from '../types';
 export type { RatingRow };
+
+/** Minimal trip fields for resolving CRM client id when only `client_name` is set on trip. */
+export type TripLikeForClientResolution = {
+  client_id?: string | null;
+  client_name?: string | null;
+};
 
 export async function createRating(
   organizationId: string,
@@ -212,4 +219,68 @@ export function averageRatingForRatedParty(
 /** Dedupe then average — use when merging buckets that may contain the same row twice. */
 export function averageScoreDeduped(rows: RatingRow[]): number | null {
   return averageScore(dedupeRatingRowsById(rows));
+}
+
+/**
+ * Resolve `clients.id` for storing rated_type=client. Trips often have display name only;
+ * without this, UI allows submit but DB insert is skipped.
+ */
+export async function resolveRatedClientIdForTrip(
+  trip: TripLikeForClientResolution,
+  tripOwnerOrganizationId: string,
+): Promise<string | null> {
+  const direct = trip.client_id?.trim();
+  if (direct) return direct;
+
+  const rawName = trip.client_name?.trim();
+  if (!rawName) return null;
+
+  const { error, clients } = await getClientsByOrganization(tripOwnerOrganizationId);
+  if (error || clients.length === 0) return null;
+
+  const needle = rawName.toLowerCase();
+
+  const byExactName = clients.find((c) => (c.name ?? '').trim().toLowerCase() === needle);
+  if (byExactName) return byExactName.id;
+
+  const byContact = clients.find(
+    (c) => (c.contact_person ?? '').trim().toLowerCase() === needle,
+  );
+  if (byContact) return byContact.id;
+
+  const byLoose = clients.find((c) => {
+    const n = (c.name ?? '').trim().toLowerCase();
+    const cp = (c.contact_person ?? '').trim().toLowerCase();
+    if (n && (needle.includes(n) || n.includes(needle))) return true;
+    if (cp && (needle.includes(cp) || cp.includes(needle))) return true;
+    return false;
+  });
+  return byLoose?.id ?? null;
+}
+
+/**
+ * Ratings where partner orgs scored a CRM client row linked to the viewer's organization.
+ * Depends on RLS (see supabase migration ratings_select_linked_rated_client).
+ */
+export async function getRatingsReceivedAsLinkedOrganization(
+  viewerOrganizationId: string,
+): Promise<{ error: Error | null; ratings: RatingRow[] }> {
+  const { data: linkedRows, error: e1 } = await supabase()
+    .from('clients')
+    .select('id')
+    .eq('linked_organization_id', viewerOrganizationId);
+
+  if (e1) return { error: new Error(e1.message), ratings: [] };
+  const ids = (linkedRows ?? []).map((r: { id: string }) => r.id).filter(Boolean);
+  if (ids.length === 0) return { error: null, ratings: [] };
+
+  const { data, error } = await supabase()
+    .from('ratings')
+    .select('*')
+    .eq('rated_type', 'client')
+    .in('rated_id', ids)
+    .order('created_at', { ascending: false });
+
+  if (error) return { error: new Error(error.message), ratings: [] };
+  return { error: null, ratings: (data ?? []) as RatingRow[] };
 }

@@ -1,10 +1,12 @@
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { SemanticAddIcon } from '@/components/SemanticAddIcon';
+import { useGlobalFabAnimation } from '@/hooks/useGlobalFabAnimation';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Plus, type LucideIcon } from 'lucide-react-native';
 import type { ComponentProps } from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface FABProps {
@@ -26,6 +28,7 @@ export function FAB({
   showPlusSuffix = true,
 }: FABProps) {
   const insets = useSafeAreaInsets();
+  const { shellStyle, ringStyle } = useGlobalFabAnimation();
   const IconComponent = LucideIconComponent ?? Plus;
   const shouldRenderLucideIcon = LucideIconComponent != null;
   const shouldShowPlus = shouldRenderLucideIcon && showPlusSuffix && IconComponent !== Plus;
@@ -33,13 +36,22 @@ export function FAB({
   const plusBadgeColor = "#0f172a";
 
   return (
-    <TouchableOpacity
-      style={[styles.fab, { bottom: Layout.fabBottomOffset + insets.bottom }]}
-      onPress={onPress}
-      activeOpacity={0.9}
-      accessibilityLabel={label}
+    <Animated.View
+      style={[
+        styles.fab,
+        { bottom: Layout.fabBottomOffset + insets.bottom },
+        shellStyle,
+      ]}
+      pointerEvents="box-none"
     >
-      <View style={styles.content}>
+      <TouchableOpacity
+        style={StyleSheet.absoluteFillObject}
+        onPress={onPress}
+        activeOpacity={0.9}
+        accessibilityLabel={label}
+      >
+        <Animated.View style={[styles.innerRing, ringStyle]} pointerEvents="none" />
+        <View style={styles.content}>
         {shouldRenderLucideIcon ? (
           shouldShowPlus ? (
             <SemanticAddIcon
@@ -59,8 +71,9 @@ export function FAB({
         ) : (
           <FontAwesome name={FontAwesomeIconName} size={18} color={primaryIconColor} />
         )}
-      </View>
-    </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
   );
 }
 
@@ -85,5 +98,14 @@ const styles = StyleSheet.create({
   content: {
     justifyContent: 'center',
     alignItems: 'center',
+    flex: 1,
+  },
+  innerRing: {
+    position: 'absolute',
+    width: Layout.fabSize - 10,
+    height: Layout.fabSize - 10,
+    borderRadius: (Layout.fabSize - 10) / 2,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.8)',
   },
 });

@@ -5,6 +5,7 @@
  */
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import { useGlobalFabAnimation } from "@/hooks/useGlobalFabAnimation";
 import {
   Building2,
   CirclePlus,
@@ -20,14 +21,14 @@ import {
 } from "lucide-react-native";
 import React from "react";
 import {
-  Animated,
-  Easing,
+  Animated as RNAnimated,
   StyleSheet,
   TouchableOpacity,
   View,
   type ViewStyle,
   type StyleProp,
 } from "react-native";
+import Reanimated from "react-native-reanimated";
 
 export type FABIconName =
   | "plus"
@@ -99,36 +100,15 @@ export function FinanceFAB({
   style,
   size = Layout.fabSize,
 }: FinanceFABProps) {
-  const pressScale = React.useRef(new Animated.Value(1)).current;
-  const idlePulse = React.useRef(new Animated.Value(0)).current;
-
-  React.useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(idlePulse, {
-          toValue: 1,
-          duration: 1500,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
-        Animated.timing(idlePulse, {
-          toValue: 0,
-          duration: 1500,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [idlePulse]);
+  const { shellStyle, ringStyle } = useGlobalFabAnimation();
+  const pressScale = React.useRef(new RNAnimated.Value(1)).current;
 
   const handlePress = () => {
     triggerHapticMedium();
     onPress();
   };
   const handlePressIn = () => {
-    Animated.spring(pressScale, {
+    RNAnimated.spring(pressScale, {
       toValue: 0.94,
       friction: 7,
       tension: 160,
@@ -136,7 +116,7 @@ export function FinanceFAB({
     }).start();
   };
   const handlePressOut = () => {
-    Animated.spring(pressScale, {
+    RNAnimated.spring(pressScale, {
       toValue: 1,
       friction: 6,
       tension: 140,
@@ -150,17 +130,12 @@ export function FinanceFAB({
   const shouldShowPlus = showPlusSuffix && icon !== "plus";
 
   const MainIcon = icon === "receipt-text" || icon === "credit-card" ? Receipt : IconComponent;
-  const idleScale = idlePulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.985, 1],
-  });
-  const ringOpacity = idlePulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.14, 0.28],
-  });
 
   return (
-    <View style={[styles.container, { width: size, height: size }, style, { pointerEvents: 'box-none' }]}>
+    <Reanimated.View
+      style={[styles.container, { width: size, height: size }, style, shellStyle]}
+      pointerEvents="box-none"
+    >
       <TouchableOpacity
         testID={testID}
         onPress={handlePress}
@@ -169,7 +144,7 @@ export function FinanceFAB({
         activeOpacity={0.9}
         accessibilityLabel={accessibilityLabel}
       >
-        <Animated.View
+        <RNAnimated.View
           style={[
             styles.fab,
             {
@@ -177,11 +152,11 @@ export function FinanceFAB({
               height: size,
               borderRadius: size / 2,
               backgroundColor: fabBgColor,
-              transform: [{ scale: Animated.multiply(pressScale, idleScale) }],
+              transform: [{ scale: pressScale }],
             },
           ]}
         >
-          <Animated.View
+          <Reanimated.View
             pointerEvents="none"
             style={[
               styles.innerRing,
@@ -189,8 +164,8 @@ export function FinanceFAB({
                 width: size - 10,
                 height: size - 10,
                 borderRadius: (size - 10) / 2,
-                opacity: ringOpacity,
               },
+              ringStyle,
             ]}
           />
           <MainIcon size={Math.max(18, iconSize)} color={fabIconColor} strokeWidth={2.4} />
@@ -199,9 +174,9 @@ export function FinanceFAB({
               <CirclePlus size={14} color={fabIconColor} strokeWidth={2.5} />
             </View>
           ) : null}
-        </Animated.View>
+        </RNAnimated.View>
       </TouchableOpacity>
-    </View>
+    </Reanimated.View>
   );
 }
 

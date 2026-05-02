@@ -1,26 +1,54 @@
-# Supabase Remote Query Default
+---
+description: Run Supabase SQL via CLI (`supabase db query --linked`) whenever the user asks to query data
+alwaysApply: true
+---
 
-## Default Database Query Behavior
+# Supabase: CLI queries (default)
 
-When the user asks to query data (for example: "query anything", "fetch table", "show rows", "count rows", "list records"), always use Supabase CLI against the linked remote database first:
+## When this applies
 
-`supabase db query "<SQL>" --linked -o table`
+Whenever the user asks to **query** data — including short prompts like **"query"**, **"run a query"**, **"query the DB"**, **"fetch rows"**, **"count"**, **"list records"**, **"show me users"**, or **SQL against Supabase** — **run the SQL yourself** using the Supabase CLI against the **linked remote** project. Do not only paste SQL for the user unless the CLI fails after a real attempt.
 
-Use other output formats when appropriate:
-- `-o json` for structured outputs or counts
-- `-o csv` for exports
+## Command (remote, linked project)
 
-### Examples
+From the repo root (`q-web`), with the project already linked (`supabase link`):
+
+```bash
+supabase db query "<SQL>" --linked -o table
+```
+
+### Output flags
+
+- `-o table` — default human-readable tables
+- `-o json` — counts, aggregates, machine-readable
+- `-o csv` — exports; combine with `-f path/to/file.sql` for long SQL
+
+### Examples (this codebase)
 
 ```bash
 supabase db query "select now();" --linked -o table
-supabase db query "select * from public.listings order by created_at desc limit 20;" --linked -o table
-supabase db query "select count(*) from public.listings;" --linked -o json
-supabase db query --linked -f query.sql -o csv
+supabase db query "select id, email, role from public.profiles limit 20;" --linked -o table
+supabase db query "select count(*) from public.trips;" --linked -o json
+supabase db query --linked -f scripts/sql/some_audit.sql -o csv
 ```
 
-## Operational Notes
+### Shell / SQL quoting
 
-- Prefer `--linked` remote DB for query requests unless the user explicitly asks for local DB.
-- If shell env loading fails, still run `supabase db query ... --linked` directly when project linking is already configured.
-- Before responding with table/listing answers, run the query and return results based on actual command output.
+- Prefer **double quotes** around the whole SQL string; escape **double quotes inside SQL** as `\"` or use **single quotes** for SQL string literals.
+- For complex SQL, use `-f file.sql` instead of inline strings.
+
+### `auth` schema
+
+`auth.users` is queryable from the linked DB when the CLI session has permission. If a query fails with permission denied, report the error and fall back to **Supabase Dashboard → SQL** for that statement only.
+
+## Operational rules
+
+1. **Prefer `--linked`** (remote) unless the user explicitly wants **local** (`supabase start` + DB without `--linked`).
+2. **Run before answering** — base answers on **actual command output**, not guessed rows.
+3. If CLI errors (not linked, network, auth): show the error, then optionally give the same SQL for **SQL Editor** manual run.
+4. Do not put `service_role` or DB passwords in rules or chat; linking uses local Supabase CLI config.
+
+## One-time setup (human / machine)
+
+- Install Supabase CLI; in this repo: `npx supabase link` (project ref + DB password as prompted).
+- Queries run in CI/agents only if that environment is linked; otherwise agent attempts once and explains.
