@@ -881,6 +881,16 @@ export async function createTrip(
   const creatorUserId =
     normalizeNullableUuid(data.created_by_user_id) ??
     normalizeNullableUuid(userId);
+  const normalizedSupplierId = normalizeNullableUuid(data.supplier_id);
+  const normalizedDriverId = normalizeNullableUuid(data.driver_id);
+  const normalizedVehicleId = normalizeNullableUuid(data.vehicle_id);
+  const inferredTripPayoutMode =
+    data.trip_payout_mode ??
+    (normalizedDriverId || normalizedVehicleId
+      ? "asset"
+      : normalizedSupplierId
+        ? "market"
+        : "asset");
 
   // Sequential trip trigger writes user_counters(user_id) with FK -> public.users(id).
   // Ensure referenced users exist to avoid 400/409 on environments with stricter FK checks.
@@ -937,13 +947,11 @@ export async function createTrip(
     pickup_date: data.pickup_date ?? null,
     load_tons: loadTons,
     advance_paid: advancePaid,
-    supplier_id: normalizeNullableUuid(data.supplier_id),
+    supplier_id: normalizedSupplierId,
     // Not all DBs have trips.supplier_name; resolve name via supplier_id + suppliers / views.
-    trip_payout_mode:
-      data.trip_payout_mode ??
-      (normalizeNullableUuid(data.supplier_id) ? "market" : "asset"),
-    driver_id: normalizeNullableUuid(data.driver_id),
-    vehicle_id: normalizeNullableUuid(data.vehicle_id),
+    trip_payout_mode: inferredTripPayoutMode,
+    driver_id: normalizedDriverId,
+    vehicle_id: normalizedVehicleId,
     vehicle_display_number: (data.vehicle_display_number ?? "").trim() || null,
   };
   let { data: row, error } = await supabase()

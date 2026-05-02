@@ -139,6 +139,8 @@ export function computeTripEntryFinancialSnapshot(
   const trip_type = resolveTripLedgerTripType({
     supplier_id: trip.supplier_id ?? null,
     trip_payout_mode: trip.trip_payout_mode ?? null,
+    driver_id: trip.driver_id ?? null,
+    vehicle_id: null,
   });
 
   const supplier_payable =
