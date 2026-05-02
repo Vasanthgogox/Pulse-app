@@ -415,7 +415,7 @@ export function FinanceSummarySection({
                         >
                           <FontAwesome
                             name="calendar"
-                            size={11}
+                            size={10}
                             color={Theme.textOnDarkMuted}
                           />
                           <Text style={styles.financeRangePillText}>
@@ -446,7 +446,7 @@ export function FinanceSummarySection({
                       </Animated.View>
                       <View>
                         <Text style={styles.financeBalanceStatLabel}>
-                          Incoming
+                          {labelIn}
                         </Text>
                         <Text style={styles.financeBalanceStatValue}>
                           {formatAmount(auditedIn)}
@@ -468,7 +468,7 @@ export function FinanceSummarySection({
                       </Animated.View>
                       <View>
                         <Text style={styles.financeBalanceStatLabel}>
-                          Outgoing
+                          {labelOut}
                         </Text>
                         <Text style={styles.financeBalanceStatValue}>
                           {formatAmount(auditedOut)}
