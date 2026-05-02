@@ -1,3 +1,4 @@
+import { AppAlertHost } from '@/components/AppAlertHost';
 import { FloatingChatButton } from '@/components/FloatingChatButton';
 import { DemoTabBar, type DemoTabId } from '@/components/demo';
 import Theme from '@/constants/Theme';
@@ -267,11 +268,14 @@ function ConfigErrorScreen() {
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
+  const { width } = useWindowDimensions();
+  const isDesktopWeb = Platform.OS === 'web' && width >= 1024;
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <DemoTabBarScrollProvider>
         <View style={{ flex: 1 }}>
+          <AppAlertHost />
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="index" />
             <Stack.Screen name="sign-in" options={{ animation: 'fade' }} />
@@ -288,7 +292,7 @@ function RootLayoutNav() {
             <Stack.Screen name="(modals)" options={{ presentation: 'modal' }} />
           </Stack>
           <RootOverlayTabBar />
-          <FloatingChatButton />
+          {isDesktopWeb ? <FloatingChatButton /> : null}
         </View>
       </DemoTabBarScrollProvider>
     </ThemeProvider>

@@ -36,6 +36,8 @@ import {
 } from "@/lib/format";
 import { validatePhone } from "@/lib/phoneValidation";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { Check, ChevronRight, Circle, Plus, Star } from "lucide-react-native";
+import { useRouter } from "expo-router";
 import {
     useCallback,
     useEffect,
@@ -46,7 +48,6 @@ import {
 } from "react";
 import {
     Alert,
-    Image,
     Modal,
     Platform,
     ScrollView,
@@ -96,6 +97,8 @@ export interface TripAssignmentBlockProps {
   autoOpenPickerNonce?: number;
   /** Optional extra content rendered inside this assignment card. */
   inlineSection?: ReactNode;
+  /** Close parent overlays (e.g. trip “Current assignment” sheet on web) before opening add-driver / add-vehicle. */
+  onBeforeRegisterNavigate?: () => void;
 }
 
 export function TripAssignmentBlock({
@@ -117,6 +120,7 @@ export function TripAssignmentBlock({
   autoOpenPickerMode = null,
   autoOpenPickerNonce = 0,
   inlineSection,
+  onBeforeRegisterNavigate,
 }: TripAssignmentBlockProps) {
   /** No assign/reassign when trip is completed or when view-only (e.g. load creator monitoring). */
   const effectiveCanAssign = canAssign && !isTripCompleted(trip) && !viewOnly;
@@ -125,7 +129,17 @@ export function TripAssignmentBlock({
   const [assignMode, setAssignMode] = useState<"driver" | "vehicle" | null>(
     null,
   );
+  /** Selection preview before confirming assignment. */
+  const [previewDriverId, setPreviewDriverId] = useState<string | null>(null);
+  const [previewVehicleId, setPreviewVehicleId] = useState<string | null>(null);
   const [assignSearch, setAssignSearch] = useState("");
+  const router = useRouter();
+
+  const closeAssignModal = useCallback(() => {
+    setAssignMode(null);
+    setPreviewDriverId(null);
+    setPreviewVehicleId(null);
+  }, []);
   const [showPhoneModal, setShowPhoneModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [phoneSaving, setPhoneSaving] = useState(false);
@@ -698,7 +712,7 @@ export function TripAssignmentBlock({
           Alert.alert("Save failed", error.message, [{ text: "OK" }]);
           return;
         }
-        setAssignMode(null);
+        closeAssignModal();
         onUpdated();
       } finally {
         setSaving(false);
@@ -712,6 +726,7 @@ export function TripAssignmentBlock({
       onUpdated,
       activeDriverIds,
       activeDriverTripLabelById,
+      closeAssignModal,
     ],
   );
 
@@ -747,7 +762,7 @@ export function TripAssignmentBlock({
           Alert.alert("Save failed", error.message, [{ text: "OK" }]);
           return;
         }
-        setAssignMode(null);
+        closeAssignModal();
         if (showAssignByPhone && vehicleDisplayNumber) {
           setCardVehicleInput(vehicleDisplayNumber);
           onVehicleDisplayChange?.(vehicleDisplayNumber);
@@ -767,6 +782,7 @@ export function TripAssignmentBlock({
       onUpdated,
       activeVehicleIds,
       activeVehicleTripLabelById,
+      closeAssignModal,
     ],
   );
 
@@ -853,12 +869,273 @@ export function TripAssignmentBlock({
     };
   }, []);
 
+  useEffect(() => {
+    if (assignMode !== "driver") return;
+    const list = filteredDrivers;
+    if (!list.length) {
+      setPreviewDriverId(null);
+      return;
+    }
+    const driverBusyFn = (did: string) =>
+      activeDriverIds.has(did) && did !== trip.driver_id;
+    const firstFree = list.find((d) => {
+      const onTrip = driverBusyFn(d.id);
+      const available = !d.left_at && !onTrip;
+      return available;
+    });
+    setPreviewDriverId((prev) => {
+      if (prev && list.some((d) => d.id === prev)) {
+        const d = list.find((x) => x.id === prev)!;
+        const onTrip = driverBusyFn(d.id);
+        const ok = !d.left_at && !onTrip;
+        if (ok) return prev;
+      }
+      return firstFree?.id ?? list[0]?.id ?? null;
+    });
+  }, [assignMode, filteredDrivers, activeDriverIds, trip.driver_id]);
+
+  useEffect(() => {
+    if (assignMode !== "vehicle") return;
+    const list = filteredVehicles;
+    if (!list.length) {
+      setPreviewVehicleId(null);
+      return;
+    }
+    const vehicleBusyFn = (vid: string) =>
+      activeVehicleIds.has(vid) && vid !== trip.vehicle_id;
+    const firstFree = list.find((v) => !vehicleBusyFn(v.id));
+    setPreviewVehicleId((prev) => {
+      if (prev && list.some((v) => v.id === prev)) {
+        if (!vehicleBusyFn(prev)) return prev;
+      }
+      return firstFree?.id ?? list[0]?.id ?? null;
+    });
+  }, [assignMode, filteredVehicles, activeVehicleIds, trip.vehicle_id]);
+
+  const executePreviewAssignment = useCallback(async () => {
+    if (assignMode === "driver") {
+      if (!previewDriverId) return;
+      await saveDriverOnly(previewDriverId);
+      return;
+    }
+    if (assignMode === "vehicle") {
+      if (!previewVehicleId) return;
+      await saveVehicleOnly(previewVehicleId);
+    }
+  }, [
+    assignMode,
+    previewDriverId,
+    previewVehicleId,
+    saveDriverOnly,
+    saveVehicleOnly,
+  ]);
+
+  const pilotCodeFromName = (name: string) => {
+    const p = name.trim().split(/\s+/).filter(Boolean);
+    const a = (p[0]?.[0] ?? "?").toUpperCase();
+    const b = (p[1]?.[0] ?? "").toUpperCase();
+    return (a + b).slice(0, 2);
+  };
+
+  const vehicleTileCode = (v: VehicleRow) => {
+    const plate = formatIndianVehicleNumber(v.vehicle_number).replace(/\s/g, "");
+    return plate.slice(-3).toUpperCase() || "V";
+  };
+
+  const previewDriverRow =
+    assignMode === "driver" && previewDriverId
+      ? filteredDrivers.find((d) => d.id === previewDriverId)
+      : null;
+  const previewVehicleRow =
+    assignMode === "vehicle" && previewVehicleId
+      ? filteredVehicles.find((v) => v.id === previewVehicleId)
+      : null;
+
+  const previewDriverBusy =
+    !!previewDriverRow &&
+    activeDriverIds.has(previewDriverRow.id) &&
+    previewDriverRow.id !== trip.driver_id;
+  const previewVehicleBusy =
+    !!previewVehicleRow &&
+    activeVehicleIds.has(previewVehicleRow.id) &&
+    previewVehicleRow.id !== trip.vehicle_id;
+
+  const pilotEfficiencyPct = (d: DriverRow | null | undefined) => {
+    const meta = d ? getDriverRatingMeta(d) : null;
+    const r = meta ? Number(meta.ratingLabel) : NaN;
+    if (Number.isFinite(r)) return Math.min(100, Math.round(r * 20));
+    return 88;
+  };
+
+  const vehicleHealthPct = (v: VehicleRow | null | undefined) => {
+    if (!v) return 95;
+    const st = String(v.status ?? "").toLowerCase();
+    if (st.includes("maint")) return 72;
+    if (st.includes("avail") || st.includes("ready")) return 96;
+    return 90;
+  };
+
+  const renderAllocationSidebar = () => {
+    if (assignMode === "driver") {
+      const d = previewDriverRow;
+      if (!d) {
+        return (
+          <View style={styles.allocSidebarEmpty}>
+            <Text style={styles.allocSidebarEmptyText}>Choose a driver</Text>
+          </View>
+        );
+      }
+      const meta = getDriverRatingMeta(d);
+      const busy = previewDriverBusy;
+      const eff = pilotEfficiencyPct(d);
+      const eth = Math.min(
+        100,
+        Math.round((meta ? Number(meta.ratingLabel) : 4.5) * 20),
+      );
+      return (
+        <View style={styles.allocSidebarInner}>
+          <View style={styles.allocSidebarHero}>
+            <View style={styles.allocSidebarAvatar}>
+              <Text style={styles.allocSidebarAvatarText}>
+                {pilotCodeFromName(d.name ?? "?")}
+              </Text>
+            </View>
+          </View>
+          <Text style={styles.allocSidebarName} numberOfLines={2}>
+            {d.name ?? "—"}
+          </Text>
+          <View style={styles.allocSidebarChip}>
+            <Text style={styles.allocSidebarChipText}>Your fleet</Text>
+          </View>
+          <View style={styles.allocMetricBlock}>
+            <View style={styles.allocMetricHead}>
+              <Text style={styles.allocMetricLabel}>Performance</Text>
+              <Text style={styles.allocMetricPct}>{eff}%</Text>
+            </View>
+            <View style={styles.allocMetricTrack}>
+              <View style={[styles.allocMetricFillDark, { width: `${eff}%` }]} />
+            </View>
+          </View>
+          <View style={styles.allocMetricBlock}>
+            <View style={styles.allocMetricHead}>
+              <Text style={styles.allocMetricLabel}>Reliability</Text>
+              <Text style={styles.allocMetricPct}>{eth}%</Text>
+            </View>
+            <View style={styles.allocMetricTrack}>
+              <View style={[styles.allocMetricFillBlue, { width: `${eth}%` }]} />
+            </View>
+          </View>
+          <View style={styles.allocMiniGrid}>
+            <View style={styles.allocMiniCell}>
+              <Text style={styles.allocMiniVal}>—</Text>
+              <Text style={styles.allocMiniLbl}>Trips</Text>
+            </View>
+            <View style={styles.allocMiniCell}>
+              <Text style={styles.allocMiniVal}>
+                {meta ? `${meta.ratingLabel}★` : "—"}
+              </Text>
+              <Text style={styles.allocMiniLbl}>Rating</Text>
+            </View>
+          </View>
+          {busy ? (
+            <Text style={styles.allocSidebarWarn}>
+              This driver is already on another trip. Choose someone else.
+            </Text>
+          ) : null}
+          <TouchableOpacity
+            style={[
+              styles.allocExecuteBtn,
+              (busy || saving || !previewDriverId) && styles.allocExecuteBtnDis,
+            ]}
+            disabled={saving || busy || !previewDriverId}
+            onPress={() => void executePreviewAssignment()}
+            activeOpacity={0.9}
+          >
+            <Text style={styles.allocExecuteBtnText}>Save assignment</Text>
+          </TouchableOpacity>
+          <Text style={styles.allocVerifyHint}>Check details before saving.</Text>
+        </View>
+      );
+    }
+    const v = previewVehicleRow;
+    if (!v) {
+      return (
+        <View style={styles.allocSidebarEmpty}>
+          <Text style={styles.allocSidebarEmptyText}>Choose a vehicle</Text>
+        </View>
+      );
+    }
+    const plate = formatIndianVehicleNumber(v.vehicle_number);
+    const hp = vehicleHealthPct(v);
+    const busy = previewVehicleBusy;
+    return (
+      <View style={styles.allocSidebarInner}>
+        <View style={styles.allocSidebarHero}>
+          <View style={styles.allocSidebarAvatar}>
+            <Text style={styles.allocSidebarAvatarText}>{vehicleTileCode(v)}</Text>
+          </View>
+        </View>
+        <Text style={styles.allocSidebarName} numberOfLines={2}>
+          {plate}
+        </Text>
+        <View style={styles.allocSidebarChip}>
+          <Text style={styles.allocSidebarChipText}>Fleet vehicle</Text>
+        </View>
+        <View style={styles.allocMetricBlock}>
+          <View style={styles.allocMetricHead}>
+            <Text style={styles.allocMetricLabel}>Condition</Text>
+            <Text style={styles.allocMetricPct}>{hp}%</Text>
+          </View>
+          <View style={styles.allocMetricTrack}>
+            <View style={[styles.allocMetricFillDark, { width: `${hp}%` }]} />
+          </View>
+        </View>
+        <View style={styles.allocMetricBlock}>
+          <View style={styles.allocMetricHead}>
+            <Text style={styles.allocMetricLabel}>Status</Text>
+            <Text style={styles.allocMetricPct}>Good</Text>
+          </View>
+          <View style={styles.allocMetricTrack}>
+            <View style={[styles.allocMetricFillBlue, { width: "96%" }]} />
+          </View>
+        </View>
+        <View style={styles.allocMiniGrid}>
+          <View style={styles.allocMiniCell}>
+            <Text style={styles.allocMiniVal}>{v.capacity ?? "—"}</Text>
+            <Text style={styles.allocMiniLbl}>Capacity</Text>
+          </View>
+          <View style={styles.allocMiniCell}>
+            <Text style={styles.allocMiniVal}>{hp}%</Text>
+            <Text style={styles.allocMiniLbl}>Health</Text>
+          </View>
+        </View>
+        {busy ? (
+          <Text style={styles.allocSidebarWarn}>
+            Vehicle is busy on another trip.
+          </Text>
+        ) : null}
+        <TouchableOpacity
+          style={[
+            styles.allocExecuteBtn,
+            (busy || saving || !previewVehicleId) && styles.allocExecuteBtnDis,
+          ]}
+          disabled={saving || busy || !previewVehicleId}
+          onPress={() => void executePreviewAssignment()}
+          activeOpacity={0.9}
+        >
+          <Text style={styles.allocExecuteBtnText}>Save assignment</Text>
+        </TouchableOpacity>
+        <Text style={styles.allocVerifyHint}>Check details before saving.</Text>
+      </View>
+    );
+  };
+
   return (
     <View style={[styles.wrapper, styles.wrapperStretch]}>
-      <View style={styles.card}>
-        <View style={styles.currentHeader}>
-          <Text style={styles.currentHeaderTitle}>Current Assignment</Text>
-          {showSourceBadge && (
+      <View style={styles.manifestCard}>
+        <View style={styles.manifestCardHeader}>
+          <Text style={styles.manifestEyebrow}>Driver & vehicle</Text>
+          {showSourceBadge ? (
             <View style={[styles.sourceBadge, sourceBadgeStyle]}>
               <Text
                 style={[
@@ -871,146 +1148,91 @@ export function TripAssignmentBlock({
                 {sourceLabel}
               </Text>
             </View>
-          )}
+          ) : null}
         </View>
 
-        {/* Driver and Vehicle rows — stacked so Vehicle appears below Driver */}
-        <View>
-          {/* Driver row — reference: Driver Node, + Assign / Change */}
-          <View style={styles.assignRow}>
-            <View style={styles.assignRowLeft}>
-              <View
-                style={[
-                  styles.assignIcon,
-                  hasDriver
-                    ? styles.assignIconDriverActive
-                    : styles.assignIconInactive,
-                ]}
-              >
-                <FontAwesome name="user" size={16} color={Theme.textMuted} />
-              </View>
-              <View style={styles.assignRowText}>
-                <Text style={styles.assignRowLabel}>Driver</Text>
+        <View style={styles.manifestStack}>
+          <TouchableOpacity
+            style={styles.manifestNodeShell}
+            disabled={!effectiveCanAssign}
+            activeOpacity={effectiveCanAssign ? 0.88 : 1}
+            onPress={() =>
+              !!effectiveCanAssign &&
+              (showAssignByPhone
+                ? openPhoneModal(
+                    hasDriver || !!(previousDriverName ?? "").trim(),
+                    propsVehicleLabel ?? trip.vehicle_display_number ?? "",
+                  )
+                : openDriverPicker())
+            }
+          >
+            <View style={styles.manifestNodeInner}>
+              <View style={styles.manifestNodeCopy}>
+                <Text style={styles.manifestNodeKicker}>Driver</Text>
                 <Text
                   style={[
-                    styles.assignRowValue,
-                    !hasDriver && styles.assignRowValueEmpty,
+                    styles.manifestNodeTitle,
+                    !hasDriver && styles.manifestNodeTitleMuted,
                   ]}
                   numberOfLines={1}
                 >
-                  {hasDriver ? pilotText : "No assigned node"}
+                  {hasDriver ? pilotText : "Not assigned"}
                 </Text>
+                {hasDriver ? (
+                  <View style={styles.manifestNodeMetaRow}>
+                    <Star size={12} color="#f59e0b" fill="#f59e0b" />
+                    <Text style={styles.manifestNodeMetaText}>
+                      Rated · Verified in your fleet
+                    </Text>
+                  </View>
+                ) : (
+                  <Text style={styles.manifestActionCue}>Tap to assign a driver</Text>
+                )}
+              </View>
+              <View style={styles.manifestNodeFab}>
+                <ChevronRight size={18} color="#ffffff" strokeWidth={3} />
               </View>
             </View>
-            {effectiveCanAssign ? (
-              showAssignByPhone ? (
-                <TouchableOpacity
-                  style={[
-                    styles.actionBtn,
-                    hasDriver
-                      ? styles.actionBtnSecondary
-                      : styles.actionBtnPrimary,
-                  ]}
-                  onPress={() =>
-                    openPhoneModal(
-                      hasDriver || !!(previousDriverName ?? "").trim(),
-                      propsVehicleLabel ?? trip.vehicle_display_number ?? "",
-                    )
-                  }
-                  activeOpacity={0.8}
-                >
-                  <Text
-                    style={[
-                      styles.actionBtnText,
-                      hasDriver
-                        ? styles.actionBtnTextSecondary
-                        : styles.actionBtnTextPrimary,
-                    ]}
-                  >
-                    {hasDriver ? "Change" : "+ Assign"}
-                  </Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity
-                  style={[
-                    styles.actionBtn,
-                    hasDriver
-                      ? styles.actionBtnSecondary
-                      : styles.actionBtnPrimary,
-                  ]}
-                  onPress={openDriverPicker}
-                  activeOpacity={0.8}
-                >
-                  <Text
-                    style={[
-                      styles.actionBtnText,
-                      hasDriver
-                        ? styles.actionBtnTextSecondary
-                        : styles.actionBtnTextPrimary,
-                    ]}
-                  >
-                    {hasDriver ? "Change" : "+ Assign"}
-                  </Text>
-                </TouchableOpacity>
-              )
-            ) : null}
-          </View>
+          </TouchableOpacity>
 
-          {/* Vehicle row — reference: Vehicle Registry, Change */}
-          <View style={styles.assignRow}>
-            <View style={styles.assignRowLeft}>
+          <TouchableOpacity
+            style={styles.manifestNodeShell}
+            disabled={!effectiveCanAssign}
+            activeOpacity={effectiveCanAssign ? 0.88 : 1}
+            onPress={() => !!effectiveCanAssign && openVehiclePicker()}
+          >
+            <View style={styles.manifestNodeInner}>
+              <View style={styles.manifestNodeCopy}>
+                <Text style={styles.manifestNodeKicker}>Vehicle</Text>
+                <Text
+                  style={[
+                    styles.manifestNodeTitle,
+                    !hasVehicle && styles.manifestNodeTitleMuted,
+                  ]}
+                  numberOfLines={2}
+                >
+                  {hasVehicle ? vehicleText : "Not assigned"}
+                </Text>
+                {!hasVehicle ? (
+                  <Text style={styles.manifestVehicleCue}>
+                    Assign a vehicle for this trip
+                  </Text>
+                ) : null}
+              </View>
               <View
                 style={[
-                  styles.assignIcon,
-                  hasVehicle
-                    ? styles.assignIconVehicleActive
-                    : styles.assignIconVehicleInactive,
+                  styles.manifestNodeFab,
+                  !hasVehicle && styles.manifestNodeFabPulse,
                 ]}
               >
-                <FontAwesome name="truck" size={14} color={Theme.textMuted} />
-              </View>
-              <View style={styles.assignRowText}>
-                <Text style={styles.assignRowLabel}>Vehicle</Text>
-                <Text
-                  style={[
-                    styles.assignRowValue,
-                    !hasVehicle && styles.assignRowValueEmpty,
-                  ]}
-                  numberOfLines={1}
-                >
-                  {hasVehicle
-                    ? vehicleText
-                        .split(" • ")
-                        .map((part, i) => (i === 0 ? part : part.toUpperCase()))
-                        .join(" • ")
-                    : "No assigned node"}
-                </Text>
+                {hasVehicle ? (
+                  <ChevronRight size={18} color="#ffffff" strokeWidth={3} />
+                ) : (
+                  <Plus size={18} color="#ffffff" strokeWidth={3} />
+                )}
               </View>
             </View>
-            {effectiveCanAssign ? (
-              <TouchableOpacity
-                style={[
-                  styles.actionBtn,
-                  hasVehicle
-                    ? styles.actionBtnSecondary
-                    : styles.actionBtnPrimary,
-                ]}
-                onPress={openVehiclePicker}
-                activeOpacity={0.8}
-              >
-                <Text
-                  style={[
-                    styles.actionBtnText,
-                    hasVehicle
-                      ? styles.actionBtnTextSecondary
-                      : styles.actionBtnTextPrimary,
-                  ]}
-                >
-                  {hasVehicle ? "Change" : "+ Assign"}
-                </Text>
-              </TouchableOpacity>
-            ) : null}
-          </View>
+          </TouchableOpacity>
         </View>
 
         {showAssignByPhone && (partnerName ?? "").trim() ? (
@@ -1024,7 +1246,7 @@ export function TripAssignmentBlock({
 
         {previousDriverName ? (
           <View style={styles.previousDriverRow}>
-            <Text style={styles.label}>PREVIOUS DRIVER</Text>
+            <Text style={styles.label}>Previous driver</Text>
             <Text style={styles.value} numberOfLines={1}>
               {previousDriverName}
             </Text>
@@ -1032,7 +1254,7 @@ export function TripAssignmentBlock({
         ) : null}
         {latestReassignmentSummary ? (
           <View style={styles.assignmentLogRow}>
-            <Text style={styles.label}>LAST CHANGE</Text>
+            <Text style={styles.label}>Last change</Text>
             <Text style={styles.assignmentLogText}>
               {latestReassignmentSummary}
             </Text>
@@ -1043,7 +1265,7 @@ export function TripAssignmentBlock({
         ) : null}
       </View>
 
-      {/* Assignment selection overlay — driver or vehicle only, tap to assign */}
+      {/* Driver / vehicle picker + summary */}
       <Modal
         visible={assignMode !== null}
         animationType={Platform.OS === "web" ? "fade" : "slide"}
@@ -1051,24 +1273,32 @@ export function TripAssignmentBlock({
           Platform.OS === "web" ? "overFullScreen" : "pageSheet"
         }
         transparent={Platform.OS === "web"}
-        onRequestClose={() => setAssignMode(null)}
+        onRequestClose={closeAssignModal}
       >
         <View style={styles.webModalBackdrop}>
-          <View style={[styles.assignModalWrap, { paddingTop: insets.top }]}>
-            <View style={styles.assignModalHeader}>
-              <View style={styles.assignModalHeaderText}>
-                <Text style={styles.assignModalTitle}>
-                  {assignMode === "driver" ? "Assign Driver" : "Select Vehicle"}
-                </Text>
-                <Text style={styles.assignModalSubtitle}>
+          <View
+            style={[
+              styles.assignModalWrap,
+              styles.assignModalWrapWide,
+              { paddingTop: insets.top },
+            ]}
+          >
+            <View style={styles.allocModalHero}>
+              <View style={styles.allocModalHeroText}>
+                <Text style={styles.allocModalTitle}>
                   {assignMode === "driver"
-                    ? "Choose a driver"
-                    : "Choose a vehicle"}
+                    ? "Choose driver"
+                    : "Choose vehicle"}
+                </Text>
+                <Text style={styles.allocModalSubtitle}>
+                  {isDesktop
+                    ? "Select in the list, then confirm in the side panel."
+                    : "Select in the list, then tap Save assignment below."}
                 </Text>
               </View>
               <TouchableOpacity
-                onPress={() => setAssignMode(null)}
-                style={styles.assignModalCloseBtn}
+                onPress={closeAssignModal}
+                style={styles.allocModalCloseBtn}
                 hitSlop={8}
                 accessibilityLabel="Close"
               >
@@ -1076,271 +1306,405 @@ export function TripAssignmentBlock({
               </TouchableOpacity>
             </View>
 
-            <View style={styles.assignSearchWrap}>
-              <FontAwesome
-                name="search"
-                size={14}
-                color={Theme.textMuted}
-                style={styles.assignSearchIcon}
-              />
-              <TextInput
-                style={styles.assignSearchInput}
-                value={assignSearch}
-                onChangeText={setAssignSearch}
-                placeholder={
-                  assignMode === "driver"
-                    ? "Search driver..."
-                    : "Search vehicle..."
-                }
-                placeholderTextColor={Theme.textMuted}
-              />
+            <View style={styles.allocToolbar}>
+              <View style={[styles.allocSearchBar, styles.allocSearchFlex]}>
+                <FontAwesome
+                  name="search"
+                  size={15}
+                  color={Theme.textMuted}
+                  style={styles.allocSearchIconInline}
+                />
+                <TextInput
+                  style={styles.allocSearchInput}
+                  value={assignSearch}
+                  onChangeText={setAssignSearch}
+                  placeholder={
+                    assignMode === "driver"
+                      ? "Search drivers…"
+                      : "Search vehicles…"
+                  }
+                  placeholderTextColor={Theme.textMuted}
+                />
+              </View>
             </View>
 
-            <ScrollView
-              style={styles.assignModalScroll}
-              contentContainerStyle={[
-                styles.assignModalScrollContent,
-                { paddingBottom: 24 + insets.bottom },
-              ]}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
+            <TouchableOpacity
+              style={styles.allocRegisterRow}
+              activeOpacity={0.85}
+              onPress={() => {
+                closeAssignModal();
+                onBeforeRegisterNavigate?.();
+                if (assignMode === "driver") {
+                  router.push("/(modals)/add-driver");
+                } else {
+                  router.push("/(modals)/add-vehicle");
+                }
+              }}
             >
-              {assignMode === "driver" ? (
-                filteredDrivers.length === 0 ? (
-                  <Text style={styles.assignEmptyHint}>
-                    No drivers. Add from Resources.
+              <View style={styles.allocRegisterLeft}>
+                <View style={styles.allocRegisterPlus}>
+                  <Plus size={28} color={Theme.textMuted} strokeWidth={3} />
+                </View>
+                <View>
+                  <Text style={styles.allocRegisterTitle}>
+                    {assignMode === "driver"
+                      ? "Add new driver"
+                      : "Add new vehicle"}
                   </Text>
-                ) : (
-                  filteredDrivers.map((d) => {
-                    // A driver is "on trip" if they're in an active trip that isn't this one.
-                    const isOnTrip =
-                      activeDriverIds.has(d.id) && d.id !== trip.driver_id;
-                    const isAvailable = !d.left_at && !isOnTrip;
-                    const initial = (d.name ?? "D")
-                      .trim()
-                      .charAt(0)
-                      .toUpperCase();
-                    const ratingMeta = getDriverRatingMeta(d);
-                    const hasAvatar = !!(d.avatar_url && d.avatar_url.trim());
-                    const statusText = isOnTrip
-                      ? `Already in ${activeDriverTripLabelById[d.id] ?? "another trip"}`
-                      : isAvailable
-                        ? "Available"
-                        : "On leave";
-                    return (
-                      <TouchableOpacity
-                        key={d.id}
-                        style={[
-                          styles.assignRegistryCard,
-                          isOnTrip && styles.assignRegistryCardBusy,
-                        ]}
-                        onPress={() => !isOnTrip && saveDriverOnly(d.id)}
-                        disabled={saving || isOnTrip}
-                        activeOpacity={isOnTrip ? 1 : 0.98}
-                      >
-                        <View style={styles.assignRegistryCardLeft}>
-                          {hasAvatar ? (
-                            <Image
-                              source={{ uri: d.avatar_url!.trim() }}
-                              style={[
-                                styles.assignDriverAvatarImage,
-                                isOnTrip && styles.assignDriverAvatarBusy,
-                              ]}
-                            />
-                          ) : (
-                            <View
-                              style={[
-                                styles.assignDriverAvatarRegistry,
-                                isOnTrip && styles.assignDriverAvatarBusy,
-                              ]}
-                            >
-                              <Text
-                                style={[
-                                  styles.assignDriverInitialRegistry,
-                                  isOnTrip && styles.assignDriverInitialBusy,
-                                ]}
-                              >
-                                {initial}
-                              </Text>
-                            </View>
-                          )}
-                          <View style={styles.assignCardBody}>
-                            <Text
-                              style={[
-                                styles.assignCardTitle,
-                                isOnTrip && styles.assignCardTitleMuted,
-                              ]}
-                              numberOfLines={1}
-                            >
-                              {d.name ?? "—"}
-                            </Text>
-                            <Text
-                              style={[
-                                styles.assignRegistrySubtext,
-                                isOnTrip && styles.assignRegistrySubtextBusy,
-                              ]}
-                            >
-                              {statusText}
-                            </Text>
-                            {ratingMeta ? (
-                              <View style={styles.assignRatingRow}>
-                                <FontAwesome
-                                  name="star"
-                                  size={10}
-                                  color={Theme.driverGold}
-                                />
-                                <Text style={styles.assignRatingText}>
-                                  Rating {ratingMeta.ratingLabel}
-                                  {ratingMeta.countLabel
-                                    ? ` ${ratingMeta.countLabel}`
-                                    : ""}
-                                </Text>
-                              </View>
-                            ) : null}
-                          </View>
-                        </View>
-                        {isOnTrip ? (
-                          <View style={styles.assignBusyBadge}>
-                            <Text style={styles.assignBusyBadgeText}>
-                              Already in trip
-                            </Text>
-                          </View>
-                        ) : (
-                          <View style={styles.assignSyncBadge}>
-                            <Text style={styles.assignSyncBadgeText}>
-                              Assign
-                            </Text>
-                          </View>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })
-                )
-              ) : (
-                <>
-                  {showAssignByPhone ? (
-                    <View style={styles.assignAdhocVehicleWrap}>
-                      <Text style={styles.assignAdhocVehicleLabel}>
-                        Vehicle registration (ad-hoc)
-                      </Text>
-                      <Text style={styles.assignAdhocVehicleHint}>
-                        Partner vehicle not in your fleet — enter number to save
-                        on trip.
-                      </Text>
-                      <TextInput
-                        style={styles.assignAdhocVehicleInput}
-                        value={pickerVehicleInput}
-                        onChangeText={setPickerVehicleInput}
-                        placeholder="e.g. TN 23 AB 1234"
-                        placeholderTextColor={Theme.textMuted}
-                      />
-                      <TouchableOpacity
-                        style={[
-                          styles.assignAdhocVehicleBtn,
-                          !pickerVehicleInput.trim() &&
-                            styles.assignAdhocVehicleBtnDisabled,
-                        ]}
-                        onPress={() =>
-                          saveVehicleOnly(
-                            null,
-                            pickerVehicleInput.trim() || null,
-                          )
-                        }
-                        disabled={saving || !pickerVehicleInput.trim()}
-                        activeOpacity={0.9}
-                      >
-                        <Text style={styles.assignAdhocVehicleBtnText}>
-                          {saving ? "Saving…" : "Save registration"}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  ) : null}
-                  {filteredVehicles.length === 0 ? (
-                    showAssignByPhone ? null : (
-                      <Text style={styles.assignEmptyHint}>
-                        No vehicles. Add from Resources.
-                      </Text>
-                    )
-                  ) : (
-                    filteredVehicles.map((v) => {
-                      const plate = formatIndianVehicleNumber(v.vehicle_number);
-                      const vehicleBusy =
-                        activeVehicleIds.has(v.id) && v.id !== trip.vehicle_id;
-                      const typeLabel = v.vehicle_type ?? "Vehicle";
-                      return (
-                        <TouchableOpacity
-                          key={v.id}
-                          style={[
-                            styles.assignRegistryCard,
-                            vehicleBusy && styles.assignRegistryCardBusy,
-                          ]}
-                          onPress={() => !vehicleBusy && saveVehicleOnly(v.id)}
-                          disabled={saving || vehicleBusy}
-                          activeOpacity={vehicleBusy ? 1 : 0.98}
-                        >
-                          <View style={styles.assignRegistryCardLeft}>
-                            <View style={styles.assignVehicleIconWrapRegistry}>
-                              <FontAwesome
-                                name="truck"
-                                size={16}
-                                color={Theme.textPrimaryDark}
-                              />
-                            </View>
-                            <View style={styles.assignCardBody}>
-                              <Text
-                                style={[
-                                  styles.assignCardTitle,
-                                  vehicleBusy && styles.assignCardTitleMuted,
-                                ]}
-                                numberOfLines={1}
-                              >
-                                {plate}
-                              </Text>
-                              <Text
-                                style={[
-                                  styles.assignRegistrySubtext,
-                                  vehicleBusy && styles.assignRegistrySubtextBusy,
-                                ]}
-                              >
-                                {vehicleBusy
-                                  ? `Already in ${activeVehicleTripLabelById[v.id] ?? "another trip"}`
-                                  : typeLabel}
-                              </Text>
-                            </View>
-                          </View>
-                          {vehicleBusy ? (
-                            <View style={styles.assignBusyBadge}>
-                              <Text style={styles.assignBusyBadgeText}>Already in trip</Text>
-                            </View>
-                          ) : (
-                            <View style={styles.assignUpdateLinkBadge}>
-                              <Text style={styles.assignUpdateLinkBadgeText}>
-                                Select
-                              </Text>
-                            </View>
-                          )}
-                        </TouchableOpacity>
-                      );
-                    })
-                  )}
-                </>
-              )}
-            </ScrollView>
+                  <Text style={styles.allocRegisterHint}>
+                    Opens a short form; they appear in your fleet for next time.
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.allocRegisterProto}>
+                <Text style={styles.allocRegisterProtoText}>Add</Text>
+              </View>
+            </TouchableOpacity>
 
             <View
               style={[
-                styles.assignModalFooter,
-                { paddingBottom: Math.max(24, insets.bottom) },
+                styles.allocBodyRow,
+                isDesktop ? styles.allocBodyRowDesktop : null,
               ]}
             >
-              <TouchableOpacity
-                style={styles.assignCancelBtn}
-                onPress={() => setAssignMode(null)}
-                activeOpacity={0.9}
+              <ScrollView
+                style={[
+                  styles.assignModalScroll,
+                  isDesktop ? styles.allocMainScrollDesktop : null,
+                ]}
+                contentContainerStyle={[
+                  styles.assignModalScrollContent,
+                  styles.allocScrollPad,
+                  {
+                    paddingBottom:
+                      (isDesktop ? 16 : 120) + Math.max(24, insets.bottom),
+                  },
+                ]}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
               >
-                <Text style={styles.assignCancelBtnText}>Close</Text>
-              </TouchableOpacity>
+                {assignMode === "driver" ? (
+                  filteredDrivers.length === 0 ? (
+                    <Text style={styles.assignEmptyHint}>
+                      No drivers in your list yet. Use “Add new driver” above.
+                    </Text>
+                  ) : (
+                    <View style={styles.allocGrid}>
+                      {filteredDrivers.map((d) => {
+                        const isOnTrip =
+                          activeDriverIds.has(d.id) && d.id !== trip.driver_id;
+                        const isAvailable = !d.left_at && !isOnTrip;
+                        const ratingMeta = getDriverRatingMeta(d);
+                        const statusText = isOnTrip
+                          ? `Already in ${activeDriverTripLabelById[d.id] ?? "another trip"}`
+                          : isAvailable
+                            ? "Ready"
+                            : "On leave";
+                        const sel = previewDriverId === d.id;
+                        return (
+                          <TouchableOpacity
+                            key={d.id}
+                            style={[
+                              styles.assignFlowCard,
+                              sel && styles.assignFlowCardSelected,
+                              isOnTrip && styles.assignFlowCardBusy,
+                            ]}
+                            onPress={() =>
+                              !isOnTrip && setPreviewDriverId(d.id)
+                            }
+                            disabled={isOnTrip}
+                            activeOpacity={isOnTrip ? 1 : 0.92}
+                          >
+                            <View style={styles.assignFlowCardLeft}>
+                              <View
+                                style={[
+                                  styles.assignFlowTile,
+                                  sel && styles.assignFlowTileSelected,
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.assignFlowTileText,
+                                    sel && styles.assignFlowTileTextSel,
+                                  ]}
+                                >
+                                  {pilotCodeFromName(d.name ?? "?")}
+                                </Text>
+                              </View>
+                              <View style={styles.assignCardBody}>
+                                <Text
+                                  style={[
+                                    styles.assignFlowCardTitle,
+                                    sel && styles.assignFlowCardTitleSel,
+                                    isOnTrip && styles.assignCardTitleMuted,
+                                  ]}
+                                  numberOfLines={1}
+                                >
+                                  {d.name ?? "—"}
+                                </Text>
+                                <View style={styles.assignFlowMetaRow}>
+                                  <View
+                                    style={[
+                                      styles.assignFlowStatusPill,
+                                      isOnTrip && styles.assignFlowStatusPillBusy,
+                                      sel && styles.assignFlowStatusPillSel,
+                                    ]}
+                                  >
+                                    <Circle
+                                      size={8}
+                                      color={
+                                        sel ? Theme.buttonPrimary : Theme.textMuted
+                                      }
+                                      fill={
+                                        sel ? Theme.buttonPrimary : "transparent"
+                                      }
+                                    />
+                                    <Text
+                                      style={[
+                                        styles.assignFlowStatusText,
+                                        isOnTrip && styles.assignFlowStatusTextBusy,
+                                        sel && styles.assignFlowStatusTextSel,
+                                      ]}
+                                    >
+                                      {statusText}
+                                    </Text>
+                                  </View>
+                                  {ratingMeta ? (
+                                    <View style={styles.assignFlowStarRow}>
+                                      <Star
+                                        size={12}
+                                        color={Theme.driverGold}
+                                        fill={Theme.driverGold}
+                                      />
+                                      <Text
+                                        style={[
+                                          styles.assignFlowStarText,
+                                          sel && styles.assignFlowStarTextSel,
+                                        ]}
+                                      >
+                                        {ratingMeta.ratingLabel}
+                                      </Text>
+                                    </View>
+                                  ) : null}
+                                </View>
+                              </View>
+                            </View>
+                            {sel ? (
+                              <View style={styles.assignFlowCheck}>
+                                <Check
+                                  size={26}
+                                  color="#fff"
+                                  strokeWidth={4}
+                                />
+                              </View>
+                            ) : null}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  )
+                ) : (
+                  <>
+                    {showAssignByPhone ? (
+                      <View style={styles.assignAdhocVehicleWrap}>
+                        <Text style={styles.assignAdhocVehicleLabel}>
+                          Vehicle registration (ad-hoc)
+                        </Text>
+                        <Text style={styles.assignAdhocVehicleHint}>
+                          Partner vehicle not in your fleet — enter number to
+                          save on trip.
+                        </Text>
+                        <TextInput
+                          style={styles.assignAdhocVehicleInput}
+                          value={pickerVehicleInput}
+                          onChangeText={setPickerVehicleInput}
+                          placeholder="e.g. TN 23 AB 1234"
+                          placeholderTextColor={Theme.textMuted}
+                        />
+                        <TouchableOpacity
+                          style={[
+                            styles.assignAdhocVehicleBtn,
+                            !pickerVehicleInput.trim() &&
+                              styles.assignAdhocVehicleBtnDisabled,
+                          ]}
+                          onPress={() =>
+                            saveVehicleOnly(
+                              null,
+                              pickerVehicleInput.trim() || null,
+                            )
+                          }
+                          disabled={saving || !pickerVehicleInput.trim()}
+                          activeOpacity={0.9}
+                        >
+                          <Text style={styles.assignAdhocVehicleBtnText}>
+                            {saving ? "Saving…" : "Save registration"}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : null}
+                    {filteredVehicles.length === 0 ? (
+                      showAssignByPhone ? null : (
+                        <Text style={styles.assignEmptyHint}>
+                          No vehicles in your list. Use “Add new vehicle” or enter
+                          a one-off registration above.
+                        </Text>
+                      )
+                    ) : (
+                      <View style={styles.allocGrid}>
+                        {filteredVehicles.map((v) => {
+                          const plate = formatIndianVehicleNumber(
+                            v.vehicle_number,
+                          );
+                          const vehicleBusy =
+                            activeVehicleIds.has(v.id) &&
+                            v.id !== trip.vehicle_id;
+                          const typeLabel = v.vehicle_type ?? "Vehicle";
+                          const sel = previewVehicleId === v.id;
+                          return (
+                            <TouchableOpacity
+                              key={v.id}
+                              style={[
+                                styles.assignFlowCard,
+                                sel && styles.assignFlowCardSelected,
+                                vehicleBusy && styles.assignFlowCardBusy,
+                              ]}
+                              onPress={() =>
+                                !vehicleBusy && setPreviewVehicleId(v.id)
+                              }
+                              disabled={vehicleBusy}
+                              activeOpacity={vehicleBusy ? 1 : 0.92}
+                            >
+                              <View style={styles.assignFlowCardLeft}>
+                                <View
+                                  style={[
+                                    styles.assignFlowTile,
+                                    sel && styles.assignFlowTileSelected,
+                                  ]}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.assignFlowTileText,
+                                      sel && styles.assignFlowTileTextSel,
+                                    ]}
+                                  >
+                                    {vehicleTileCode(v)}
+                                  </Text>
+                                </View>
+                                <View style={styles.assignCardBody}>
+                                  <Text
+                                    style={[
+                                      styles.assignFlowCardTitle,
+                                      sel && styles.assignFlowCardTitleSel,
+                                      vehicleBusy && styles.assignCardTitleMuted,
+                                    ]}
+                                    numberOfLines={1}
+                                  >
+                                    {plate}
+                                  </Text>
+                                  <View style={styles.assignFlowMetaRow}>
+                                    <View
+                                      style={[
+                                        styles.assignFlowStatusPill,
+                                        vehicleBusy && styles.assignFlowStatusPillBusy,
+                                        sel && styles.assignFlowStatusPillSel,
+                                      ]}
+                                    >
+                                      <Circle
+                                        size={8}
+                                        color={
+                                          sel
+                                            ? Theme.buttonPrimary
+                                            : Theme.textMuted
+                                        }
+                                        fill={
+                                          sel
+                                            ? Theme.buttonPrimary
+                                            : "transparent"
+                                        }
+                                      />
+                                      <Text
+                                        style={[
+                                          styles.assignFlowStatusText,
+                                          vehicleBusy &&
+                                            styles.assignFlowStatusTextBusy,
+                                          sel &&
+                                            styles.assignFlowStatusTextSel,
+                                        ]}
+                                      >
+                                        {vehicleBusy ? "Busy" : typeLabel}
+                                      </Text>
+                                    </View>
+                                  </View>
+                                </View>
+                              </View>
+                              {sel ? (
+                                <View style={styles.assignFlowCheck}>
+                                  <Check
+                                    size={26}
+                                    color="#fff"
+                                    strokeWidth={4}
+                                  />
+                                </View>
+                              ) : null}
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    )}
+                  </>
+                )}
+
+                {!isDesktop ? (
+                  <View style={styles.allocSidebarMobile}>{renderAllocationSidebar()}</View>
+                ) : null}
+              </ScrollView>
+
+              {isDesktop ? (
+                <ScrollView
+                  style={styles.allocSidebarDesktopScroll}
+                  contentContainerStyle={
+                    styles.allocSidebarDesktopScrollContent
+                  }
+                  showsVerticalScrollIndicator
+                  keyboardShouldPersistTaps="handled"
+                  nestedScrollEnabled
+                >
+                  {renderAllocationSidebar()}
+                </ScrollView>
+              ) : null}
             </View>
+
+            {!isDesktop ? (
+              <View
+                style={[
+                  styles.allocMobileFooter,
+                  { paddingBottom: Math.max(24, insets.bottom) },
+                ]}
+              >
+                <TouchableOpacity
+                  style={styles.allocMobileFooterClose}
+                  onPress={closeAssignModal}
+                  activeOpacity={0.9}
+                >
+                  <Text style={styles.allocMobileFooterCloseText}>Close</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View
+                style={[
+                  styles.allocDesktopFooterBar,
+                  { paddingBottom: Math.max(16, insets.bottom) },
+                ]}
+              >
+                <TouchableOpacity
+                  style={styles.allocDesktopFooterClose}
+                  onPress={closeAssignModal}
+                  activeOpacity={0.9}
+                >
+                  <Text style={styles.allocDesktopFooterCloseText}>Close</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         </View>
       </Modal>
@@ -1449,12 +1813,10 @@ export function TripAssignmentBlock({
                   <FontAwesome name="mobile" size={18} color="#4f46e5" />
                 </View>
                 <View style={styles.phoneProtocolBody}>
-                  <Text style={styles.phoneProtocolTitle}>
-                    Assignment Security Protocol
-                  </Text>
+                  <Text style={styles.phoneProtocolTitle}>Secure assignment</Text>
                   <Text style={styles.phoneProtocolText}>
-                    Assigning an external driver triggers OTP verification.
-                    Share the OTP with the driver after assignment.
+                    Assigning by phone uses OTP verification. Share the code with
+                    the driver after you assign them.
                   </Text>
                 </View>
               </View>
@@ -1847,11 +2209,10 @@ const styles = StyleSheet.create({
   },
   col: { flex: 1, minWidth: 0 },
   label: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: Theme.textSection,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    letterSpacing: 0.2,
   },
   value: {
     fontSize: 13,
@@ -1945,6 +2306,7 @@ const styles = StyleSheet.create({
   // Premium assignment picker modal
   assignModalWrap: {
     flex: Platform.OS === "web" ? 0 : 1,
+    flexDirection: "column",
     backgroundColor: "#f8fafc",
     borderRadius: Platform.OS === "web" ? 14 : 0,
     overflow: "hidden",
@@ -1959,6 +2321,16 @@ const styles = StyleSheet.create({
       } as any,
     }),
   },
+  assignModalWrapWide: Platform.select({
+    web: {
+      maxWidth: 1120,
+      width: "100%",
+      height: "85vh",
+      maxHeight: "85vh",
+      minHeight: 520,
+    } as any,
+    default: {},
+  }),
   webModalBackdrop: {
     flex: 1,
     backgroundColor:
@@ -2496,5 +2868,579 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Theme.negative,
     marginBottom: 8,
+  },
+
+  // Driver & vehicle summary card
+  manifestCard: {
+    borderRadius: 28,
+    borderWidth: 2,
+    borderColor: "#0f172a",
+    backgroundColor: "#ffffff",
+    padding: 20,
+    gap: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.06,
+    shadowRadius: 24,
+    elevation: 4,
+  },
+  manifestCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  manifestEyebrow: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: Theme.textSecondary,
+    letterSpacing: 0.2,
+  },
+  manifestStack: { gap: 14 },
+  manifestNodeShell: {
+    borderRadius: 28,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    overflow: "hidden",
+  },
+  manifestNodeInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 18,
+    paddingHorizontal: 18,
+    gap: 12,
+  },
+  manifestNodeCopy: { flex: 1, minWidth: 0 },
+  manifestNodeKicker: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    marginBottom: 6,
+  },
+  manifestNodeTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#0f172a",
+    letterSpacing: -0.2,
+  },
+  manifestNodeTitleMuted: {
+    color: "#94a3b8",
+  },
+  manifestNodeMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 8,
+  },
+  manifestNodeMetaText: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: Theme.textMuted,
+    marginTop: 1,
+  },
+  manifestActionCue: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: Theme.textMuted,
+    marginTop: 8,
+  },
+  manifestVehicleCue: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.buttonPrimary,
+    marginTop: 8,
+  },
+  manifestNodeFab: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    backgroundColor: "#0f172a",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  manifestNodeFabPulse: {
+    backgroundColor: Theme.buttonPrimary,
+  },
+
+  // Driver / vehicle picker modal
+  allocModalHero: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: "#ffffff",
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
+    gap: 12,
+  },
+  allocModalHeroText: { flex: 1, minWidth: 0 },
+  allocModalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#0f172a",
+    letterSpacing: -0.2,
+  },
+  allocModalSubtitle: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: Theme.textMuted,
+    marginTop: 6,
+    lineHeight: 16,
+  },
+  allocModalCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Theme.surfaceGray,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 12,
+  },
+  allocToolbar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+    paddingTop: 4,
+    backgroundColor: "#ffffff",
+  },
+  allocSearchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 48,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: "#f1f5f9",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    gap: 10,
+  },
+  allocSearchIconInline: {
+    marginTop: 1,
+  },
+  allocSearchInput: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "500",
+    color: Theme.textPrimaryDark,
+    paddingVertical: 4,
+    minWidth: 0,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
+  },
+  allocSearchFlex: {
+    flex: 1,
+    marginHorizontal: 0,
+    marginVertical: 0,
+  },
+  allocRegisterRow: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 32,
+    borderWidth: 2,
+    borderStyle: "dashed",
+    borderColor: "#cbd5e1",
+    backgroundColor: "rgba(248,250,252,0.9)",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  allocRegisterLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    flex: 1,
+    minWidth: 0,
+  },
+  allocRegisterPlus: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: "#e2e8f0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  allocRegisterTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#334155",
+  },
+  allocRegisterHint: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: "#94a3b8",
+    marginTop: 4,
+    lineHeight: 15,
+  },
+  allocRegisterProto: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: "#f1f5f9",
+  },
+  allocRegisterProtoText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+  allocBodyRow: {
+    flex: 1,
+    minHeight: 0,
+    flexDirection: "column",
+  },
+  allocBodyRowDesktop: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 0,
+    paddingHorizontal: 0,
+    flex: 1,
+    minHeight: 0,
+    overflow: "hidden",
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderLight,
+  },
+  allocMainScrollDesktop: {
+    ...Platform.select({
+      web: {
+        flex: 1,
+        minWidth: 0,
+        minHeight: 0,
+      } as any,
+      default: {},
+    }),
+  },
+  allocSidebarDesktopScroll: {
+    width: 300,
+    flexShrink: 0,
+    flexGrow: 0,
+    backgroundColor: "#ffffff",
+    borderLeftWidth: 1,
+    borderLeftColor: "#e2e8f0",
+    ...Platform.select({
+      web: {
+        minHeight: 0,
+        maxHeight: "100%",
+      } as any,
+      default: {},
+    }),
+  },
+  allocSidebarDesktopScrollContent: {
+    paddingBottom: 20,
+    flexGrow: 1,
+  },
+  allocScrollPad: {
+    paddingTop: 8,
+    paddingHorizontal: 16,
+  },
+  allocGrid: {
+    gap: 10,
+  },
+  assignFlowCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 18,
+    paddingHorizontal: 18,
+    borderRadius: 32,
+    borderWidth: 2,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+    marginBottom: 4,
+  },
+  assignFlowCardSelected: {
+    backgroundColor: "#0f172a",
+    borderColor: "#0f172a",
+  },
+  assignFlowCardBusy: {
+    opacity: 0.55,
+  },
+  assignFlowCardLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    flex: 1,
+    minWidth: 0,
+  },
+  assignFlowTile: {
+    width: 72,
+    height: 60,
+    borderRadius: 20,
+    backgroundColor: "#f1f5f9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  assignFlowTileSelected: {
+    backgroundColor: Theme.buttonPrimary,
+  },
+  assignFlowTileText: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#0f172a",
+  },
+  assignFlowTileTextSel: {
+    color: "#ffffff",
+  },
+  assignFlowCardTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0f172a",
+    letterSpacing: -0.2,
+  },
+  assignFlowCardTitleSel: {
+    color: "#ffffff",
+  },
+  assignFlowMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 6,
+    flexWrap: "wrap",
+  },
+  assignFlowStatusPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f8fafc",
+  },
+  assignFlowStatusPillSel: {
+    borderColor: "rgba(255,255,255,0.2)",
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  assignFlowStatusPillBusy: {
+    backgroundColor: "#fef3c7",
+    borderColor: "#fcd34d",
+  },
+  assignFlowStatusText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textMuted,
+  },
+  assignFlowStatusTextSel: {
+    color: "#93c5fd",
+  },
+  assignFlowStatusTextBusy: {
+    color: "#92400e",
+    fontWeight: "700",
+  },
+  assignFlowStarRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  assignFlowStarText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#0f172a",
+  },
+  assignFlowStarTextSel: {
+    color: "#fde68a",
+  },
+  assignFlowCheck: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: Theme.buttonPrimary,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 8,
+    shadowColor: Theme.buttonPrimary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.45,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  allocSidebarMobile: {
+    marginTop: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderLight,
+  },
+  allocSidebarInner: {
+    padding: 20,
+    gap: 12,
+  },
+  allocSidebarEmpty: {
+    padding: 24,
+    alignItems: "center",
+  },
+  allocSidebarEmptyText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    textAlign: "center",
+  },
+  allocSidebarHero: {
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  allocSidebarAvatar: {
+    width: 120,
+    height: 100,
+    borderRadius: 32,
+    backgroundColor: "#0f172a",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  allocSidebarAvatarText: {
+    fontSize: 36,
+    fontWeight: "900",
+    color: "#ffffff",
+  },
+  allocSidebarName: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#0f172a",
+    textAlign: "center",
+    letterSpacing: -0.2,
+  },
+  allocSidebarChip: {
+    alignSelf: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: "#f1f5f9",
+  },
+  allocSidebarChipText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textMuted,
+  },
+  allocMetricBlock: { marginTop: 4 },
+  allocMetricHead: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 6,
+  },
+  allocMetricLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textMuted,
+  },
+  allocMetricPct: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: Theme.buttonPrimary,
+  },
+  allocMetricTrack: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#f1f5f9",
+    overflow: "hidden",
+  },
+  allocMetricFillDark: {
+    height: 6,
+    backgroundColor: "#0f172a",
+    borderRadius: 3,
+  },
+  allocMetricFillBlue: {
+    height: 6,
+    backgroundColor: Theme.buttonPrimary,
+    borderRadius: 3,
+  },
+  allocMiniGrid: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 8,
+  },
+  allocMiniCell: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
+    backgroundColor: "#f8fafc",
+    alignItems: "center",
+  },
+  allocMiniVal: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#0f172a",
+  },
+  allocMiniLbl: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    marginTop: 4,
+  },
+  allocSidebarWarn: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.negative,
+    textAlign: "center",
+    marginTop: 4,
+  },
+  allocExecuteBtn: {
+    marginTop: 12,
+    paddingVertical: 18,
+    borderRadius: 22,
+    backgroundColor: "#0f172a",
+    alignItems: "center",
+  },
+  allocExecuteBtnDis: {
+    opacity: 0.45,
+  },
+  allocExecuteBtnText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#ffffff",
+    letterSpacing: 0.2,
+  },
+  allocVerifyHint: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: "#94a3b8",
+    textAlign: "center",
+    marginTop: 8,
+  },
+  allocMobileFooter: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    backgroundColor: "#ffffff",
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderLight,
+  },
+  allocMobileFooterClose: {
+    alignItems: "center",
+    paddingVertical: 12,
+  },
+  allocMobileFooterCloseText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: Theme.textMuted,
+  },
+  allocDesktopFooterBar: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    backgroundColor: "#ffffff",
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderLight,
+    alignItems: "flex-end",
+  },
+  allocDesktopFooterClose: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  allocDesktopFooterCloseText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textMuted,
   },
 });

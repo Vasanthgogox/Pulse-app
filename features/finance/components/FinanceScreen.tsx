@@ -81,11 +81,25 @@ import { EntityListCategoryModal } from "./EntityListCategoryModal";
 import { FinanceModals } from "./FinanceModals";
 import { styles } from "./FinanceScreen.styles";
 import { FinanceSummarySection } from "./FinanceSummarySection";
+import {
+  PartyRegistrationPortal,
+  type PartyRegistrationKind,
+} from "./PartyRegistrationPortal";
 import { FinanceTabBody } from "./FinanceTabBody";
 import type { FinancialRowData } from "./FinancialRow";
 import type { EntityListFilter } from "./TreasurySummaryCard";
 
 const CHAT_FAB_STACK_OFFSET = 60;
+
+function financeSubTabToPartyKind(
+  tab: FinanceSubTab,
+): PartyRegistrationKind | null {
+  if (tab === "customers") return "client";
+  if (tab === "suppliers") return "supplier";
+  if (tab === "garage") return "vehicle";
+  if (tab === "drivers") return "driver";
+  return null;
+}
 
 function createReportRow({
   id,
@@ -134,7 +148,11 @@ export function FinanceScreen() {
   const screenTopPad =
     Platform.OS === "web" ? 0 : insets.top + Layout.headerPaddingBelowInset;
   const { width: screenWidth } = useWindowDimensions();
-  const isMobileViewport = screenWidth < 560;
+  /** Web (any width): same in-tab portal as modal routes — avoids legacy sheet on mobile browser. */
+  const usePartyPortalOnWeb = Platform.OS === "web";
+  const [partyPortalOpen, setPartyPortalOpen] = useState(false);
+  const [partyPortalKind, setPartyPortalKind] =
+    useState<PartyRegistrationKind>("client");
   const router = useRouter();
   const { t } = useLanguage();
   const { profile } = useAuth();
@@ -1567,7 +1585,8 @@ export function FinanceScreen() {
       </View>
 
       {(() => {
-        const onAdd =
+        const partyKind = financeSubTabToPartyKind(financeSubTab);
+        const routeAdd =
           financeSubTab === "cash"
             ? undefined
             : financeSubTab === "customers"
@@ -1583,6 +1602,13 @@ export function FinanceScreen() {
                   : financeSubTab === "drivers"
                     ? () => router.push("/(modals)/add-driver" as const)
                     : undefined;
+        const onAdd =
+          routeAdd && partyKind && usePartyPortalOnWeb
+            ? () => {
+                setPartyPortalKind(partyKind);
+                setPartyPortalOpen(true);
+              }
+            : routeAdd;
         if (!onAdd) return null;
         return (
           <View
@@ -1635,6 +1661,19 @@ export function FinanceScreen() {
           setFinanceCustomRange(from, to);
           setFinanceDateModalVisible(false);
         }}
+      />
+
+      <PartyRegistrationPortal
+        visible={partyPortalOpen}
+        initialKind={partyPortalKind}
+        onClose={() => setPartyPortalOpen(false)}
+        organizationId={currentOrganization?.id ?? null}
+        noOrganizationMessage={currentOrganization ? null : NO_ORG_MESSAGE}
+        onRefreshOrganization={refreshOrganization}
+        onAddClient={handleAddClientComplete}
+        onAddSupplier={handleAddSupplierComplete}
+        onAddDriver={handleAddDriverDirect}
+        onAddVehicle={handleAddVehicleComplete}
       />
 
       <FinanceModals

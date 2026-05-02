@@ -235,7 +235,7 @@ export function FinanceTabBody({
         onRefresh={onRefresh}
         bottomInset={bottomInset}
         tripFinanceAdjustmentsByTripId={tripFinanceAdjustmentsByTripId}
-        hideSummaryRow={isWebLargeScreen}
+        hideSummaryRow
       />
     );
   }
@@ -259,7 +259,7 @@ export function FinanceTabBody({
         onRefresh={onRefresh}
         bottomInset={bottomInset}
         tripFinanceAdjustmentsByTripId={tripFinanceAdjustmentsByTripId}
-        hideSummaryRow={isWebLargeScreen}
+        hideSummaryRow
       />
     );
   }
@@ -286,7 +286,7 @@ export function FinanceTabBody({
         refreshing={refreshing}
         onRefresh={onRefresh}
         bottomInset={bottomInset}
-        hideSummaryRow={isWebLargeScreen}
+        hideSummaryRow
       />
     );
   }
@@ -311,7 +311,7 @@ export function FinanceTabBody({
       refreshing={refreshing}
       onRefresh={onRefresh}
       bottomInset={bottomInset}
-      hideSummaryRow={isWebLargeScreen}
+      hideSummaryRow
     />
   );
 }

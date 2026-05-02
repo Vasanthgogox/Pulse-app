@@ -38,8 +38,10 @@ import {
 import { updateSalaryRequestStatus } from "@/services/salaryRequestsService";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { formatLedgerDate } from "@/lib/format";
+import { queryKeys } from "@/lib/queryKeys";
 import { useSafeBack } from "@/lib/useSafeBack";
 import { ROUTES } from "@/lib/routes";
+import { useQueryClient } from "@tanstack/react-query";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -194,6 +196,7 @@ export default function LedgerSyncScreen() {
   }
 
   const orgId = currentOrganization?.id ?? null;
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (!orgId) {
@@ -647,6 +650,27 @@ export default function LedgerSyncScreen() {
         return;
       }
 
+      void queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all(orgId) });
+      const refreshTripId = payload.trip_id ?? params.tripId ?? null;
+      if (refreshTripId) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.trips.detail(refreshTripId) });
+      }
+      if (resolvedContactId && orgId) {
+        if (resolvedContactType === "client") {
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.clients.detail(orgId, resolvedContactId),
+          });
+        } else if (resolvedContactType === "supplier") {
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.suppliers.detail(orgId, resolvedContactId),
+          });
+        } else if (resolvedContactType === "driver") {
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.drivers.detail(orgId, resolvedContactId),
+          });
+        }
+      }
+
       if (
         !options?.entryId &&
         data.contactType === "driver" &&
@@ -735,7 +759,28 @@ export default function LedgerSyncScreen() {
         router.replace(ROUTES.TABS.FINANCE as '/');
       }
     },
-    [orgId, editingEntry?.transaction_date, profile?.uid, router, params.tripId, params.entityType, params.entityId, params.returnTo, params.partyName]
+    [
+      orgId,
+      queryClient,
+      editingEntry?.transaction_date,
+      profile?.uid,
+      router,
+      params.tripId,
+      params.entityType,
+      params.entityId,
+      params.returnTo,
+      params.partyName,
+      trips,
+      clients,
+      suppliers,
+      drivers,
+      uniqueLinkedClientIdByOrgId,
+      uniqueLinkedSupplierIdByOrgId,
+      params.partyContext,
+      params.partyId,
+      params.salaryRequestId,
+      t,
+    ]
   );
 
   const handleClose = useCallback(() => {

@@ -23,6 +23,8 @@ export type LeafletMapProps = {
   };
   /** Prefer compact tiles and lower motion for low-end devices. */
   lowPower?: boolean;
+  /** When true, disable drag/zoom so the viewport stays locked while driver-tracking. */
+  interactionLocked?: boolean;
 };
 
 export type LeafletMapRef = {

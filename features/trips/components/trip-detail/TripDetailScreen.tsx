@@ -82,7 +82,7 @@ import type {
 import {
     addTripAdjustment,
     getTripAdjustments,
-    removeTripAdjustment,
+    voidTripAdjustment,
 } from "../../services/tripAdjustments";
 import { getTripOtpForDisplay } from "../../services/tripOtp.service";
 import {
@@ -2703,11 +2703,13 @@ export default function TripDetailScreen({
     },
     [trip, currentOrganization?.id, loadAdjustments, queryClient],
   );
-  const handleRemoveAdjustment = useCallback(
-    async (adjustmentId: string) => {
+  const handleVoidAdjustment = useCallback(
+    async (adjustmentId: string, voidReason: string) => {
       if (!trip?.id) return;
       const tripId = trip.id;
-      await removeTripAdjustment(tripId, adjustmentId);
+      const r = String(voidReason ?? "").trim();
+      if (!r) return;
+      await voidTripAdjustment(tripId, adjustmentId, r);
       loadAdjustments();
       void queryClient.invalidateQueries({
         queryKey: [...queryKeys.tripFinanceAdjustmentsRoot],
@@ -3312,7 +3314,7 @@ export default function TripDetailScreen({
                 : vehicleLabel
             }
             onSaveAdjustment={handleSaveAdjustment}
-            onRemoveAdjustment={handleRemoveAdjustment}
+            onRemoveAdjustment={handleVoidAdjustment}
             currentUserId={currentUserId}
             isDriverOffline={isDriverOffline}
             onOpenTracking={() => setShowTrackingModal(true)}

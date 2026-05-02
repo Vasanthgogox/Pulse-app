@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -266,6 +266,25 @@ export function ChatScreen() {
 
   const tripUnread = getTotalUnreadCount();
   const netUnread = netTotal();
+  const sortedConversations = useMemo(() => {
+    return [...conversations].sort((a, b) => {
+      const unreadDiff = (b.unread_dispatcher_count ?? 0) - (a.unread_dispatcher_count ?? 0);
+      if (unreadDiff !== 0) return unreadDiff;
+      return (
+        new Date(b.last_message_at ?? 0).getTime() -
+        new Date(a.last_message_at ?? 0).getTime()
+      );
+    });
+  }, [conversations]);
+  const sortedNetChats = useMemo(() => {
+    return [...netChats].sort((a, b) => {
+      const unreadDiff = (b.unreadCount ?? 0) - (a.unreadCount ?? 0);
+      if (unreadDiff !== 0) return unreadDiff;
+      const aLast = a.messages[a.messages.length - 1]?.timestamp ?? "";
+      const bLast = b.messages[b.messages.length - 1]?.timestamp ?? "";
+      return new Date(bLast || 0).getTime() - new Date(aLast || 0).getTime();
+    });
+  }, [netChats]);
 
   useEffect(() => {
     const tabParamRaw = Array.isArray(params.tab) ? params.tab[0] : params.tab;
@@ -354,15 +373,20 @@ export function ChatScreen() {
   }) => {
     if (!selectedConv || !organizationId) return;
     setShowDocShare(false);
+    const senderProfile = profile as {
+      full_name?: string | null;
+      displayName?: string | null;
+      uid?: string | null;
+    } | null;
     const senderName =
-      (profile as any)?.full_name || (profile as any)?.displayName || "Dispatcher";
+      senderProfile?.full_name || senderProfile?.displayName || "Dispatcher";
     try {
       await sendDocumentShareMessage({
         conversationId: selectedConv.id,
         organizationId,
         senderRole: "dispatcher",
         senderName,
-        senderUserId: (profile as any)?.uid ?? null,
+        senderUserId: senderProfile?.uid ?? null,
         metadata: {
           document_type: doc.label,
           storage_path: doc.storage_path,
@@ -643,7 +667,7 @@ export function ChatScreen() {
             </View>
           ) : (
             <FlatList
-              data={conversations}
+              data={sortedConversations}
               keyExtractor={(i) => i.id}
               renderItem={renderConvItem}
               ListEmptyComponent={
@@ -664,7 +688,7 @@ export function ChatScreen() {
             </View>
           ) : (
             <FlatList
-              data={netChats}
+              data={sortedNetChats}
               keyExtractor={(i) => i.id}
               renderItem={renderNetItem}
               ListEmptyComponent={

@@ -13,7 +13,11 @@ import { ClientRiskBadge } from "@/features/ai";
 import type { ClientRow } from "@/features/clients/services/clients.service";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntries";
-import { getRatingsForDriver, type RatingRow } from "@/features/ratings/services/ratings.service";
+import {
+  averageScore,
+  getRatingsForDriver,
+  type RatingRow,
+} from "@/features/ratings/services/ratings.service";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
 import { getTripDisplayNumber, type TripRow } from "@/features/trips";
 import {
@@ -712,6 +716,9 @@ export function EntityDetailOverlay({
     "table" | "transaction"
   >("table");
   const [driverRatings, setDriverRatings] = useState<RatingRow[]>([]);
+  /** Width of ratings grid content (excludes section horizontal padding); fixes column math in narrow overlays. */
+  const [driverRatingsBandInnerWidth, setDriverRatingsBandInnerWidth] =
+    useState(0);
   const [showVehiclePicker, setShowVehiclePicker] = useState(false);
   const [showDriverPicker, setShowDriverPicker] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -761,6 +768,35 @@ export function EntityDetailOverlay({
       setDriverRatings(res.error ? [] : (res.ratings ?? []));
     });
   }, [isDriver, entity.id]);
+
+  const tripRouteLabelByTripId = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const t of trips) {
+      const pickup = (t.pickup_area ?? "").trim();
+      const drop = (t.drop_location ?? "").trim();
+      m.set(
+        String(t.id),
+        pickup || drop ? `${pickup || "—"} → ${drop || "—"}` : "—",
+      );
+    }
+    return m;
+  }, [trips]);
+
+  const driverTripsOperatedInAppCount = useMemo(() => {
+    if (!isDriver || !entity.id) return 0;
+    const id = String(entity.id).trim().toLowerCase();
+    return trips.filter(
+      (trip) =>
+        String(trip.driver_id ?? "").trim().toLowerCase() === id,
+    ).length;
+  }, [isDriver, entity.id, trips]);
+
+  const driverProfileGlobalAvgRating = useMemo(() => {
+    if (!isDriver) return null;
+    const hub = entity.rating;
+    if (hub != null && Number(hub) > 0) return Number(hub);
+    return averageScore(driverRatings);
+  }, [isDriver, entity.rating, driverRatings]);
   const isVehicle = entityType === "VEHICLE";
   /** When entityType is VEHICLE, driver currently assigned to this vehicle (drivers.assigned_vehicle_id === entity.id). */
   const assignedDriverForVehicle =
@@ -1370,6 +1406,29 @@ export function EntityDetailOverlay({
 
   const { width: screenWidth } = useWindowDimensions();
   const isWebDesktop = Platform.OS === "web" && screenWidth >= 1024;
+  const driverRatingGridGap = 8;
+  const driverRatingsLayoutWidth = useMemo(() => {
+    const pad = Layout.screenPaddingHorizontal * 2;
+    const fallback = Math.max(280, screenWidth - pad);
+    return driverRatingsBandInnerWidth > 0
+      ? driverRatingsBandInnerWidth
+      : fallback;
+  }, [driverRatingsBandInnerWidth, screenWidth]);
+  /** 3-up from ~480px band width; 2-up from ~360px. Uses measured section width when available. */
+  const driverRatingGridCols =
+    driverRatingsLayoutWidth >= 480
+      ? 3
+      : driverRatingsLayoutWidth >= 360
+        ? 2
+        : 1;
+  const driverRatingCardWidth = Math.max(
+    88,
+    Math.floor(
+      (driverRatingsLayoutWidth -
+        driverRatingGridGap * (driverRatingGridCols - 1)) /
+        driverRatingGridCols,
+    ),
+  );
   const detailTabsContent = isCustomerOrSupplier ? (
     <ScrollView
       horizontal
@@ -1980,36 +2039,57 @@ export function EntityDetailOverlay({
                 </View>
               </View>
               <View style={styles.driverContactCard}>
-                <View style={styles.driverContactRow}>
-                  <View style={styles.driverContactIconWrap}>
-                    <FontAwesome name="phone" size={14} color={Theme.primary} />
-                  </View>
-                  <View style={styles.driverContactTextWrap}>
-                    <Text style={styles.driverContactLabel}>PHONE NUMBER</Text>
-                    <Text style={styles.driverContactValue}>
-                      {driverProfile.phone ?? "—"}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.driverContactDivider} />
-                <View style={styles.driverContactRow}>
+                <View style={styles.driverContactTwoCol}>
                   <View
                     style={[
-                      styles.driverContactIconWrap,
-                      styles.driverContactIconWrapPurple,
+                      styles.driverContactRow,
+                      styles.driverContactRowHalf,
                     ]}
                   >
-                    <FontAwesome
-                      name="envelope"
-                      size={14}
-                      color={Theme.primary}
-                    />
+                    <View style={styles.driverContactIconWrap}>
+                      <FontAwesome
+                        name="phone"
+                        size={14}
+                        color={Theme.primary}
+                      />
+                    </View>
+                    <View style={styles.driverContactTextWrap}>
+                      <Text style={styles.driverContactLabel}>PHONE NUMBER</Text>
+                      <Text
+                        style={styles.driverContactValue}
+                        numberOfLines={2}
+                      >
+                        {driverProfile.phone ?? "—"}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={styles.driverContactTextWrap}>
-                    <Text style={styles.driverContactLabel}>EMAIL ADDRESS</Text>
-                    <Text style={styles.driverContactValue}>
-                      {driverProfile.email ?? "—"}
-                    </Text>
+                  <View
+                    style={[
+                      styles.driverContactRow,
+                      styles.driverContactRowHalf,
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.driverContactIconWrap,
+                        styles.driverContactIconWrapPurple,
+                      ]}
+                    >
+                      <FontAwesome
+                        name="envelope"
+                        size={14}
+                        color={Theme.primary}
+                      />
+                    </View>
+                    <View style={styles.driverContactTextWrap}>
+                      <Text style={styles.driverContactLabel}>EMAIL ADDRESS</Text>
+                      <Text
+                        style={styles.driverContactValue}
+                        numberOfLines={2}
+                      >
+                        {driverProfile.email ?? "—"}
+                      </Text>
+                    </View>
                   </View>
                 </View>
               </View>
@@ -2065,35 +2145,44 @@ export function EntityDetailOverlay({
                   </Text>
                 </View>
                 <View style={styles.driverCompensationBody}>
-                  <View style={styles.driverCompensationRow}>
-                    <Text style={styles.driverCompensationLabel}>
+                  <View style={styles.driverCompensationCell}>
+                    <Text style={styles.driverCompensationCellLabel}>
                       Base Salary (Payable)
                     </Text>
-                    <Text style={styles.driverCompensationValue}>
+                    <Text
+                      style={styles.driverCompensationCellValue}
+                      numberOfLines={2}
+                    >
                       {driverOffer?.payableAmount != null &&
                       Number(driverOffer.payableAmount) > 0
                         ? `${formatINR(Number(driverOffer.payableAmount))} / mo`
                         : "—"}
                     </Text>
                   </View>
-                  <View style={styles.driverCompensationDivider} />
-                  <View style={styles.driverCompensationRow}>
-                    <Text style={styles.driverCompensationLabel}>
+                  <View style={styles.driverCompensationColumnDivider} />
+                  <View style={styles.driverCompensationCell}>
+                    <Text style={styles.driverCompensationCellLabel}>
                       Trip Commission
                     </Text>
-                    <Text style={styles.driverCompensationValue}>
+                    <Text
+                      style={styles.driverCompensationCellValue}
+                      numberOfLines={2}
+                    >
                       {driverOffer?.commissionPercent != null &&
                       Number(driverOffer.commissionPercent) > 0
                         ? `${driverOffer.commissionPercent}%`
                         : "—"}
                     </Text>
                   </View>
-                  <View style={styles.driverCompensationDivider} />
-                  <View style={styles.driverCompensationRow}>
-                    <Text style={styles.driverCompensationLabel}>
+                  <View style={styles.driverCompensationColumnDivider} />
+                  <View style={styles.driverCompensationCell}>
+                    <Text style={styles.driverCompensationCellLabel}>
                       Per-KM Rate
                     </Text>
-                    <Text style={styles.driverCompensationValue}>
+                    <Text
+                      style={styles.driverCompensationCellValue}
+                      numberOfLines={2}
+                    >
                       {driverOffer?.commissionPerKm != null &&
                       Number(driverOffer.commissionPerKm) > 0
                         ? `₹${driverOffer.commissionPerKm} / km`
@@ -2102,31 +2191,95 @@ export function EntityDetailOverlay({
                   </View>
                 </View>
               </View>
+              <View
+                style={styles.driverProfileInsightsCard}
+                onLayout={(e) => {
+                  const w = e.nativeEvent.layout.width;
+                  if (w > 0) setDriverRatingsBandInnerWidth(w);
+                }}
+              >
+                <View style={styles.driverProfileInsightsHalf}>
+                  <Text style={styles.driverProfileInsightsLabel}>
+                    GLOBAL AVG RATING
+                  </Text>
+                  <Text style={styles.driverProfileInsightsValue}>
+                    {driverProfileGlobalAvgRating != null
+                      ? `${driverProfileGlobalAvgRating.toFixed(1)} ★`
+                      : "—"}
+                  </Text>
+                  {entity.ratingCount != null && entity.ratingCount > 0 ? (
+                    <Text style={styles.driverProfileInsightsHint}>
+                      {entity.ratingCount} reviews
+                    </Text>
+                  ) : null}
+                </View>
+                <View style={styles.driverProfileInsightsDivider} />
+                <View style={styles.driverProfileInsightsHalf}>
+                  <Text style={styles.driverProfileInsightsLabel}>
+                    TRIPS OPERATED IN APP
+                  </Text>
+                  <Text style={styles.driverProfileInsightsValue}>
+                    {driverTripsOperatedInAppCount}
+                  </Text>
+                </View>
+              </View>
               {driverRatings.length > 0 && (
                 <View style={styles.driverRatingsSection}>
                   <Text style={styles.driverRatingsSectionTitle}>
                     RECENT RATINGS
                   </Text>
-                  {driverRatings.slice(0, 5).map((r) => (
-                    <View key={r.id} style={styles.driverRatingRow}>
-                      <View style={styles.driverRatingIconWrap}>
-                        <FontAwesome
-                          name="star"
-                          size={14}
-                          color={Theme.driverGold}
-                        />
-                      </View>
-                      <View style={styles.driverRatingBody}>
-                        <Text style={styles.driverRatingScore}>
-                          {r.score.toFixed(1)}{" "}
-                          <Text style={styles.driverRatingScoreMax}>/ 5.0</Text>
-                        </Text>
-                        <Text style={styles.driverRatingDate}>
-                          {r.created_at ? formatRelative(r.created_at) : ""}
-                        </Text>
-                      </View>
-                    </View>
-                  ))}
+                  <View
+                    style={[
+                      styles.driverRatingsGrid,
+                      { gap: driverRatingGridGap },
+                    ]}
+                  >
+                    {driverRatings.map((r) => {
+                      const routeLabel =
+                        tripRouteLabelByTripId.get(String(r.trip_id)) ??
+                        "Route unavailable";
+                      return (
+                        <View
+                          key={r.id}
+                          style={[
+                            styles.driverRatingCard,
+                            { width: driverRatingCardWidth },
+                          ]}
+                        >
+                          <View style={styles.driverRatingCardHeader}>
+                            <View style={styles.driverRatingIconWrap}>
+                              <FontAwesome
+                                name="star"
+                                size={13}
+                                color={Theme.driverGold}
+                              />
+                            </View>
+                            <View style={styles.driverRatingScoreCol}>
+                              <Text style={styles.driverRatingScore}>
+                                {r.score.toFixed(1)}
+                                <Text style={styles.driverRatingScoreMax}>
+                                  {" "}
+                                  / 5.0
+                                </Text>
+                              </Text>
+                              <Text
+                                style={styles.driverRatingDate}
+                                numberOfLines={1}
+                              >
+                                {r.created_at ? formatRelative(r.created_at) : ""}
+                              </Text>
+                            </View>
+                          </View>
+                          <Text
+                            style={styles.driverRatingRoute}
+                            numberOfLines={2}
+                          >
+                            {routeLabel}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
                 </View>
               )}
             </>
@@ -5954,10 +6107,19 @@ const styles = StyleSheet.create({
     marginHorizontal: Layout.screenPaddingHorizontal,
     marginBottom: 16,
   },
+  driverContactTwoCol: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
   driverContactRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 12,
+  },
+  driverContactRowHalf: {
+    flex: 1,
+    minWidth: 0,
   },
   driverContactIconWrap: {
     width: 36,
@@ -5983,12 +6145,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: Theme.textPrimaryDark,
   },
-  driverContactDivider: {
-    height: 1,
-    backgroundColor: Theme.borderLight,
-    marginVertical: 12,
-    marginLeft: 48,
-  },
   driverCompensationCard: {
     backgroundColor: Theme.screenBackground,
     borderRadius: 16,
@@ -6013,27 +6169,37 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     letterSpacing: 1,
   },
-  driverCompensationBody: { padding: 16 },
-  driverCompensationRow: {
+  driverCompensationBody: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 4,
+    alignItems: "stretch",
+    paddingVertical: 14,
+    paddingHorizontal: 10,
   },
-  driverCompensationLabel: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: Theme.textSecondary,
+  driverCompensationCell: {
+    flex: 1,
+    minWidth: 0,
+    paddingHorizontal: 6,
+    justifyContent: "center",
   },
-  driverCompensationValue: {
+  driverCompensationCellLabel: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    marginBottom: 8,
+    lineHeight: 12,
+  },
+  driverCompensationCellValue: {
     fontSize: 12,
     fontWeight: "800",
     color: Theme.textPrimaryDark,
+    lineHeight: 16,
   },
-  driverCompensationDivider: {
-    height: 1,
-    backgroundColor: Theme.surfaceLight,
-    marginVertical: 8,
+  driverCompensationColumnDivider: {
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: Theme.borderLight,
+    alignSelf: "stretch",
   },
   driverAssignVehicleBtn: {
     paddingVertical: 8,
@@ -6090,6 +6256,45 @@ const styles = StyleSheet.create({
     color: Theme.teslaRed,
     marginTop: 2,
   },
+  driverProfileInsightsCard: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginHorizontal: Layout.screenPaddingHorizontal,
+    marginBottom: 16,
+  },
+  driverProfileInsightsHalf: {
+    flex: 1,
+    minWidth: 0,
+  },
+  driverProfileInsightsDivider: {
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: Theme.borderLight,
+    marginHorizontal: 12,
+  },
+  driverProfileInsightsLabel: {
+    fontSize: 8,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    letterSpacing: 1,
+    marginBottom: 6,
+  },
+  driverProfileInsightsValue: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  driverProfileInsightsHint: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    marginTop: 4,
+  },
   driverRatingsSection: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingBottom: 24,
@@ -6101,27 +6306,43 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     marginBottom: 12,
   },
-  driverRatingRow: {
+  driverRatingsGrid: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    flexWrap: "wrap",
+    alignItems: "stretch",
+    justifyContent: "flex-start",
+    width: "100%",
+  },
+  driverRatingCard: {
+    flexDirection: "column",
+    paddingVertical: 10,
+    paddingHorizontal: 10,
     backgroundColor: Theme.screenBackground,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Theme.borderLight,
+    marginBottom: 0,
+    flexGrow: 0,
+  },
+  driverRatingCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
     marginBottom: 8,
+    minHeight: 32,
   },
   driverRatingIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: Theme.surfaceLight,
     alignItems: "center",
     justifyContent: "center",
   },
-  driverRatingBody: { flex: 1, minWidth: 0 },
+  driverRatingScoreCol: {
+    flex: 1,
+    minWidth: 0,
+  },
   driverRatingScore: {
     fontSize: 12,
     fontWeight: "800",
@@ -6137,6 +6358,14 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Theme.textMuted,
     marginTop: 2,
+  },
+  driverRatingRoute: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textSecondary,
+    lineHeight: 14,
+    letterSpacing: -0.2,
+    minHeight: 28,
   },
   successOverlay: {
     ...StyleSheet.absoluteFillObject,

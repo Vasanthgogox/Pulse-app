@@ -2,11 +2,21 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "expo-router";
 import { Hash, MessageSquare, Plus, Users, X } from "lucide-react-native";
 import { Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from "react-native";
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import { useDemoTabBarVisibilityProgressOptional } from "@/contexts/DemoTabBarScrollContext";
 import { useIntegratedChat } from "@/features/chat/contexts/IntegratedChatContext";
 import { useTripChat } from "@/features/chat/contexts/TripChatContext";
+import { useMobileNetworkDockExpanded } from "@/lib/mobileDockState";
 import { ROUTES } from "@/lib/routes";
 
 const FAB_SIZE = 56;
@@ -45,6 +55,11 @@ export function FloatingChatButton() {
   const { width } = useWindowDimensions();
   const show = useShouldShow();
   const unread = useTotalUnread();
+  const networkDockExpanded = useMobileNetworkDockExpanded();
+  const fallbackVisibilityProgress = useSharedValue(1);
+  const visibilityProgress =
+    useDemoTabBarVisibilityProgressOptional() ?? fallbackVisibilityProgress;
+  const idlePulse = useSharedValue(0);
   const [showPreview, setShowPreview] = useState(false);
   const [chatTab, setChatTab] = useState<ChatTab>("trips");
   const { chats } = useIntegratedChat();
@@ -93,17 +108,52 @@ export function FloatingChatButton() {
     setShowPreview(false);
   }, [normalizedPath]);
 
+  useEffect(() => {
+    idlePulse.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.quad) }),
+        withTiming(0, { duration: 1500, easing: Easing.inOut(Easing.quad) }),
+      ),
+      -1,
+      false,
+    );
+  }, [idlePulse]);
+
+  const visibilityStyle = useAnimatedStyle(() => ({
+    opacity: visibilityProgress.value,
+    transform: [
+      {
+        scale:
+          (0.92 + visibilityProgress.value * 0.08) *
+          (0.985 + idlePulse.value * 0.015),
+      },
+    ],
+  }));
+
+  const ringStyle = useAnimatedStyle(() => ({
+    opacity: 0.14 + idlePulse.value * 0.14,
+  }));
+
   if (!show) return null;
 
   const bottom =
     Layout.demoTabBarScrollBottomInset +
     insets.bottom +
-    Layout.tabBarBottomPaddingMin;
+    Layout.tabBarBottomPaddingMin +
+    (networkDockExpanded ? 78 : 0);
 
   const previewWidth = Math.max(290, Math.min(380, width - 28));
 
   return (
-    <View style={[styles.wrap, { bottom }]} pointerEvents="box-none">
+    <Animated.View
+      style={[
+        styles.wrap,
+        { bottom },
+        networkDockExpanded && styles.wrapDockExpanded,
+        visibilityStyle,
+      ]}
+      pointerEvents="box-none"
+    >
       {showPreview && (
         <View style={[styles.previewCard, { width: previewWidth }]}>
           <View style={styles.previewHead}>
@@ -226,6 +276,7 @@ export function FloatingChatButton() {
         hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
       >
         <View style={styles.circle}>
+          <Animated.View style={[styles.innerRing, ringStyle]} pointerEvents="none" />
           {showPreview ? (
             <X size={21} color="#fff" strokeWidth={2.4} />
           ) : (
@@ -238,7 +289,7 @@ export function FloatingChatButton() {
           )}
         </View>
       </TouchableOpacity>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -250,6 +301,9 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     paddingHorizontal: Layout.screenPaddingHorizontal,
     zIndex: 998,
+  },
+  wrapDockExpanded: {
+    paddingRight: Layout.screenPaddingHorizontal + 6,
   },
   touchable: {
     width: FAB_SIZE,
@@ -271,6 +325,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.32,
     shadowRadius: 16,
     elevation: 10,
+  },
+  innerRing: {
+    position: "absolute",
+    width: FAB_SIZE - 10,
+    height: FAB_SIZE - 10,
+    borderRadius: (FAB_SIZE - 10) / 2,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.8)",
   },
   badge: {
     position: "absolute",

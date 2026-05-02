@@ -139,27 +139,12 @@ const SLG_MIRROR_BRIDGE_TRACK =
 /** Watermark icon size (trip truck / payment link); scales slightly in animation. */
 const SLG_WATERMARK_ICON_SIZE = 118;
 
-/** Soft pulse on hub icons (shared ledger trip cards). */
+/**
+ * Previously animated opacity on status/Zap icons — rapid repeat made lightning icons
+ * read as flickering. Icons stay visually steady; severity is already encoded in color.
+ */
 function SlgIconPulse({ children }: { children: ReactNode }) {
-  const opacity = useSharedValue(1);
-  useEffect(() => {
-    opacity.value = withRepeat(
-      withSequence(
-        withTiming(0.72, {
-          duration: 1050,
-          easing: Easing.inOut(Easing.ease),
-        }),
-        withTiming(1, {
-          duration: 1050,
-          easing: Easing.inOut(Easing.ease),
-        }),
-      ),
-      -1,
-      true,
-    );
-  }, []);
-  const pulseStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
-  return <Animated.View style={pulseStyle}>{children}</Animated.View>;
+  return <>{children}</>;
 }
 
 /** Large background truck / link icon with gentle breathe + drift (trip vs payment cards). */
