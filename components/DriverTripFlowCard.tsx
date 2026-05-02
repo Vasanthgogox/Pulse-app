@@ -18,6 +18,7 @@ import * as ImagePicker from 'expo-image-picker';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Linking,
   Modal,
@@ -38,6 +39,22 @@ const holdCompleteWebStyle = {
   touchAction: 'none' as 'none' | 'auto' | 'manipulation',
   userSelect: 'none' as 'none' | 'auto' | 'text' | 'contain' | 'all',
 };
+
+/** RN Alert.alert is unreliable on web; use window.confirm so POD delete always prompts. */
+function confirmRemovePod(): Promise<boolean> {
+  const message =
+    'Delete this file? You can upload again before completing delivery.';
+  if (Platform.OS === 'web') {
+    const w = typeof globalThis !== 'undefined' ? (globalThis as { confirm?: (msg: string) => boolean }).confirm : undefined;
+    return Promise.resolve(typeof w === 'function' && w(`Remove POD\n\n${message}`));
+  }
+  return new Promise((resolve) => {
+    Alert.alert('Remove POD', message, [
+      { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+      { text: 'Delete', style: 'destructive', onPress: () => resolve(true) },
+    ], { cancelable: true, onDismiss: () => resolve(false) });
+  });
+}
 
 function progressForStep(step: StepId): number {
   if (step === 'completed') return 100;
@@ -110,6 +127,75 @@ function fmtKm(km: number): string {
   return `${km.toFixed(1)} km`;
 }
 
+function PodDocumentRow({
+  doc,
+  index,
+  colors,
+  podDeletingId,
+  canDelete = true,
+  onView,
+  onDelete,
+}: {
+  doc: tripDocumentsService.TripDocumentRow;
+  index: number;
+  colors: { emerald: string; emeraldMuted?: string };
+  podDeletingId: string | null;
+  /** After delivery is completed, list stays view-only. */
+  canDelete?: boolean;
+  onView: (d: tripDocumentsService.TripDocumentRow) => void;
+  onDelete: (d: tripDocumentsService.TripDocumentRow) => void | Promise<void>;
+}) {
+  return (
+    <View
+      style={[
+        styles.podListItem,
+        { borderColor: Theme.border },
+        index === 0 && styles.podListItemFirst,
+      ]}
+    >
+      <Text style={[styles.podListFileName, { color: Theme.textPrimaryDark }]} numberOfLines={1}>
+        {doc.file_name || doc.storage_path.split('/').pop() || 'POD'}
+      </Text>
+      <View style={styles.podListActions}>
+        <TouchableOpacity
+          style={[
+            styles.podViewIconBtn,
+            {
+              backgroundColor: colors.emeraldMuted ?? Theme.surfaceLight,
+              borderColor: colors.emerald,
+            },
+          ]}
+          onPress={() => onView(doc)}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={`View ${doc.file_name || 'POD'}`}
+        >
+          <FontAwesome name="eye" size={14} color={colors.emerald} />
+        </TouchableOpacity>
+        {canDelete ? (
+          <TouchableOpacity
+            style={[
+              styles.podDeleteIconBtn,
+              { backgroundColor: Theme.negativeMuted, borderColor: Theme.negative },
+            ]}
+            onPress={() => void onDelete(doc)}
+            disabled={podDeletingId === doc.id}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={`Delete ${doc.file_name || 'POD'}`}
+          >
+            {podDeletingId === doc.id ? (
+              <ActivityIndicator size="small" color={Theme.negative} />
+            ) : (
+              <FontAwesome name="trash-o" size={14} color={Theme.negative} />
+            )}
+          </TouchableOpacity>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
 export function DriverTripFlowCard({
   trip,
   commissionAmount,
@@ -145,6 +231,8 @@ export function DriverTripFlowCard({
   const [viewingPodUrl, setViewingPodUrl] = useState<string | null>(null);
   const [viewingPodLoading, setViewingPodLoading] = useState(false);
   const [viewingPodError, setViewingPodError] = useState(false);
+  const [podDeletingId, setPodDeletingId] = useState<string | null>(null);
+  const podUploadCancelledRef = useRef(false);
 
   const [holdProgress, setHoldProgress] = useState(0);
   const [isHolding, setIsHolding] = useState(false);
@@ -214,6 +302,52 @@ export function DriverTripFlowCard({
       }
     },
     [ensureDriverTripConversation, localTrip.driver_id, localTrip.id, localTrip.organization_id, profile, refreshConversations],
+  );
+
+  const openPodPreview = useCallback(
+    async (doc: tripDocumentsService.TripDocumentRow) => {
+      setViewingPodError(false);
+      const cached = podViewUrls[doc.id];
+      if (cached) {
+        setViewingPodUrl(cached);
+        return;
+      }
+      setViewingPodLoading(true);
+      const url = await tripDocumentsService.getDocumentViewUrl(doc.storage_path);
+      setPodViewUrls((prev) => ({ ...prev, [doc.id]: url }));
+      setViewingPodLoading(false);
+      setViewingPodUrl(url);
+    },
+    [podViewUrls],
+  );
+
+  const cancelPodUpload = useCallback(() => {
+    podUploadCancelledRef.current = true;
+    setPodUploading(false);
+  }, []);
+
+  const confirmDeletePod = useCallback(
+    async (doc: tripDocumentsService.TripDocumentRow) => {
+      const ok = await confirmRemovePod();
+      if (!ok) return;
+      setPodDeletingId(doc.id);
+      setStepError(null);
+      const { error } = await tripDocumentsService.deleteTripDocument(doc);
+      setPodDeletingId(null);
+      if (error) {
+        setStepError(error.message);
+        return;
+      }
+      setPodDocuments((prev) => prev.filter((d) => d.id !== doc.id));
+      setPodViewUrls((prev) => {
+        const next = { ...prev };
+        delete next[doc.id];
+        return next;
+      });
+      podViewUrlsRequestedRef.current.delete(doc.id);
+      onRefresh?.();
+    },
+    [onRefresh],
   );
 
   const earnings = useMemo(() => {
@@ -412,6 +546,7 @@ export function DriverTripFlowCard({
     });
     if (result.canceled || !result.assets?.[0]) return;
     setStepError(null);
+    podUploadCancelledRef.current = false;
     setPodUploading(true);
     const uri = result.assets[0].uri;
     const fileName = result.assets[0].fileName ?? `pod-${Date.now()}.jpg`;
@@ -423,35 +558,48 @@ export function DriverTripFlowCard({
         arrayBuffer = await response.arrayBuffer();
       } else {
         const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' as const });
-        arrayBuffer = Uint8Array.from(atob(base64), c => c.charCodeAt(0)).buffer;
+        arrayBuffer = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)).buffer;
       }
-      
-      if (!arrayBuffer || arrayBuffer.byteLength === 0) {
-        setStepError('Could not read image file');
-        setPodUploading(false);
+
+      if (podUploadCancelledRef.current) {
         return;
       }
+
+      if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+        setStepError('Could not read image file');
+        return;
+      }
+
+      if (podUploadCancelledRef.current) {
+        return;
+      }
+
       const { doc, error } = await tripDocumentsService.uploadTripDocument(id, profile.uid, {
         arrayBuffer,
         fileName,
         mimeType,
       });
-      setPodUploading(false);
       if (error) {
         setStepError(error.message);
         return;
       }
+      if (doc && podUploadCancelledRef.current) {
+        await tripDocumentsService.deleteTripDocument(doc);
+        return;
+      }
       if (doc) {
         setPodDocuments((prev) => [doc, ...prev]);
-        tripDocumentsService.getDocumentViewUrl(doc.storage_path).then((url) => {
-          setPodViewUrls((prev) => ({ ...prev, [doc.id]: url }));
+        tripDocumentsService.getDocumentViewUrl(doc.storage_path).then((u) => {
+          setPodViewUrls((prev) => ({ ...prev, [doc.id]: u }));
         });
         await shareTripDocumentInChat(doc, 'Proof of delivery');
       }
       onRefresh?.();
     } catch (e) {
-      setPodUploading(false);
       setStepError(e instanceof Error ? e.message : 'Upload failed');
+    } finally {
+      podUploadCancelledRef.current = false;
+      setPodUploading(false);
     }
   };
 
@@ -711,50 +859,26 @@ export function DriverTripFlowCard({
               <FontAwesome name="cloud-upload" size={18} color={Theme.textOnPrimary} />
               <Text style={styles.podUploadText}>{podUploading ? 'Uploading…' : 'Upload POD'}</Text>
             </TouchableOpacity>
+            {podUploading ? (
+              <TouchableOpacity onPress={cancelPodUpload} activeOpacity={0.8} style={styles.podCancelLink}>
+                <Text style={[styles.podCancelLinkText, { color: Theme.textMuted }]}>Cancel upload</Text>
+              </TouchableOpacity>
+            ) : null}
             <TouchableOpacity onPress={() => setPodSkipped(true)} activeOpacity={0.8} style={styles.skipLink}>
               <Text style={[styles.skipLinkText, { color: colors.emerald }]}>Skip POD</Text>
             </TouchableOpacity>
             {podDocuments.length >= 1 ? (
               <View style={[styles.podListWrap, { borderColor: Theme.border }]}>
                 {podDocuments.map((doc, index) => (
-                  <View
+                  <PodDocumentRow
                     key={doc.id}
-                    style={[
-                      styles.podListItem,
-                      { borderColor: Theme.border },
-                      index === 0 && styles.podListItemFirst,
-                    ]}
-                  >
-                    <Text style={[styles.podListFileName, { color: Theme.textPrimaryDark }]} numberOfLines={1}>
-                      {doc.file_name || doc.storage_path.split('/').pop() || 'POD'}
-                    </Text>
-                    <TouchableOpacity
-                      style={[
-                        styles.podViewIconBtn,
-                        { backgroundColor: colors.emeraldMuted ?? Theme.surfaceLight, borderColor: colors.emerald },
-                      ]}
-                      onPress={async () => {
-                        setViewingPodError(false);
-                        const cached = podViewUrls[doc.id];
-                        if (cached) {
-                          setViewingPodUrl(cached);
-                          return;
-                        }
-                        setViewingPodLoading(true);
-                        const url = await tripDocumentsService.getDocumentViewUrl(doc.storage_path);
-                        if (!cached) {
-                          setPodViewUrls((prev) => ({ ...prev, [doc.id]: url }));
-                        }
-                        setViewingPodLoading(false);
-                        setViewingPodUrl(url);
-                      }}
-                      activeOpacity={0.8}
-                      accessibilityRole="button"
-                      accessibilityLabel={`View ${doc.file_name || 'POD'}`}
-                    >
-                      <FontAwesome name="eye" size={14} color={colors.emerald} />
-                    </TouchableOpacity>
-                  </View>
+                    doc={doc}
+                    index={index}
+                    colors={colors}
+                    podDeletingId={podDeletingId}
+                    onView={openPodPreview}
+                    onDelete={confirmDeletePod}
+                  />
                 ))}
               </View>
             ) : null}
@@ -829,42 +953,16 @@ export function DriverTripFlowCard({
             {podDocuments.length >= 1 ? (
               <View style={[styles.podListWrap, { borderColor: Theme.border }]}>
                 {podDocuments.map((doc, index) => (
-                  <View
+                  <PodDocumentRow
                     key={doc.id}
-                    style={[
-                      styles.podListItem,
-                      { borderColor: Theme.border },
-                      index === 0 && styles.podListItemFirst,
-                    ]}
-                  >
-                    <Text style={[styles.podListFileName, { color: Theme.textPrimaryDark }]} numberOfLines={1}>
-                      {doc.file_name || doc.storage_path.split('/').pop() || 'POD'}
-                    </Text>
-                    <TouchableOpacity
-                      style={[
-                        styles.podViewIconBtn,
-                        { backgroundColor: colors.emeraldMuted ?? Theme.surfaceLight, borderColor: colors.emerald },
-                      ]}
-                      onPress={async () => {
-                        setViewingPodError(false);
-                        const cached = podViewUrls[doc.id];
-                        if (cached) {
-                          setViewingPodUrl(cached);
-                          return;
-                        }
-                        setViewingPodLoading(true);
-                        const url = await tripDocumentsService.getDocumentViewUrl(doc.storage_path);
-                        setPodViewUrls((prev) => ({ ...prev, [doc.id]: url }));
-                        setViewingPodLoading(false);
-                        setViewingPodUrl(url);
-                      }}
-                      activeOpacity={0.8}
-                      accessibilityRole="button"
-                      accessibilityLabel={`View ${doc.file_name || 'POD'}`}
-                    >
-                      <FontAwesome name="eye" size={14} color={colors.emerald} />
-                    </TouchableOpacity>
-                  </View>
+                    doc={doc}
+                    index={index}
+                    colors={colors}
+                    podDeletingId={podDeletingId}
+                    canDelete={false}
+                    onView={openPodPreview}
+                    onDelete={confirmDeletePod}
+                  />
                 ))}
               </View>
             ) : !podLoading ? (
@@ -1106,6 +1204,8 @@ const styles = StyleSheet.create({
   podUploadText: { fontSize: 16, fontWeight: '900', color: Theme.textOnPrimary },
   skipLink: { alignSelf: 'center', paddingVertical: 8, paddingHorizontal: 16 },
   skipLinkText: { fontSize: 14, fontWeight: '800' },
+  podCancelLink: { alignSelf: 'center', paddingTop: 6, paddingBottom: 2 },
+  podCancelLinkText: { fontSize: 13, fontWeight: '800' },
   podListWrap: { borderWidth: 1, borderRadius: 16, overflow: 'hidden' },
   podListItem: {
     minHeight: 46,
@@ -1114,11 +1214,20 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
   },
   podListItemFirst: { borderTopWidth: 0 },
-  podListFileName: { flex: 1, fontSize: 13, fontWeight: '700' },
+  podListFileName: { flex: 1, fontSize: 13, fontWeight: '700', minWidth: 0 },
+  podListActions: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0 },
   podViewIconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  podDeleteIconBtn: {
     width: 34,
     height: 34,
     borderRadius: 17,
