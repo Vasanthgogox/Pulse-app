@@ -392,6 +392,35 @@ export default function TripDetailScreen({
       });
   }, [detail.trip?.notes]);
 
+  /** ETA for tracking HUD: prefer DB interval / duration string, else manifest minutes. */
+  const trackingEtaLabel = useMemo(() => {
+    const tr = detail.trip;
+    if (!tr) return "—";
+    const te = tr as TripRow & TripWebExtra;
+    const dm = te.duration_minutes;
+    const durationLabel = dm
+      ? `${Math.floor(dm / 60)}h ${dm % 60}m`
+      : "—";
+
+    const raw = tr.estimated_duration;
+    if (raw != null && String(raw).trim()) {
+      const s = String(raw).trim();
+      const m = s.match(/^(\d{1,3}):(\d{2}):(\d{2})/);
+      if (m) {
+        const h = parseInt(m[1], 10);
+        const min = parseInt(m[2], 10);
+        if (!Number.isNaN(h) || !Number.isNaN(min)) {
+          if (h > 0 && min > 0) return `${h}h ${min}m`;
+          if (h > 0) return `${h}h`;
+          if (min > 0) return `${min}m`;
+        }
+      }
+      if (/^\d+h\s*\d+m$/i.test(s) || /^\d+[hm]/i.test(s)) return s;
+      return s.length > 14 ? s.slice(0, 14) + "…" : s;
+    }
+    return durationLabel !== "—" ? durationLabel : "—";
+  }, [detail.trip]);
+
   if (detail.loading && !detail.trip) {
     return <CenteredLoadingView message="Loading trip…" />;
   }
@@ -803,26 +832,6 @@ export default function TripDetailScreen({
     ? `${Math.floor(tripExtra.duration_minutes / 60)}h ${tripExtra.duration_minutes % 60}m`
     : "—";
 
-  /** ETA for tracking HUD: prefer DB interval / duration string, else manifest minutes. */
-  const trackingEtaLabel = useMemo(() => {
-    const raw = trip.estimated_duration;
-    if (raw != null && String(raw).trim()) {
-      const s = String(raw).trim();
-      const m = s.match(/^(\d{1,3}):(\d{2}):(\d{2})/);
-      if (m) {
-        const h = parseInt(m[1], 10);
-        const min = parseInt(m[2], 10);
-        if (!Number.isNaN(h) || !Number.isNaN(min)) {
-          if (h > 0 && min > 0) return `${h}h ${min}m`;
-          if (h > 0) return `${h}h`;
-          if (min > 0) return `${min}m`;
-        }
-      }
-      if (/^\d+h\s*\d+m$/i.test(s) || /^\d+[hm]/i.test(s)) return s;
-      return s.length > 14 ? s.slice(0, 14) + "…" : s;
-    }
-    return durationLabel !== "—" ? durationLabel : "—";
-  }, [trip.estimated_duration, durationLabel]);
   const driverRatingLabel =
     detail.driverRatingAvg != null && Number.isFinite(Number(detail.driverRatingAvg))
       ? Number(detail.driverRatingAvg).toFixed(1)

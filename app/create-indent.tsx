@@ -300,6 +300,8 @@ export default function CreateIndentScreen() {
 
   const isWide = windowWidth >= 720;
   const isCompactPhone = windowWidth < 420;
+  /** Narrow phones/tablets: stack route fields and keep quick-date chips on one row */
+  const isRouteStacked = !isWide;
   const isDesktopPreview = windowWidth >= 1180;
   const showFloatingPreview = windowWidth >= 480 && !isDesktopPreview;
   const floatingPreviewWidth = Math.min(336, Math.max(280, windowWidth - 24));
@@ -981,12 +983,23 @@ export default function CreateIndentScreen() {
                   </View>
                 </View>
 
-                <View style={[styles.gridRow, isWide && styles.gridRowWide]}>
-                  <View style={styles.gridCol}>
+                <View
+                  style={[
+                    styles.gridRow,
+                    isWide && styles.gridRowWide,
+                    isRouteStacked && styles.gridRowRouteStacked,
+                  ]}
+                >
+                  <View style={[styles.gridCol, isRouteStacked && styles.gridColFullWidth]}>
                     <Text style={[styles.fieldLabel, labelStyle]}>
                       Trip start date
                     </Text>
-                    <View style={styles.quickDateRow}>
+                    <View
+                      style={[
+                        styles.quickDateRow,
+                        isRouteStacked && styles.quickDateRowSingleLine,
+                      ]}
+                    >
                       {[
                         { label: "Today", get: getToday },
                         { label: "Tomorrow", get: getTomorrow },
@@ -999,6 +1012,7 @@ export default function CreateIndentScreen() {
                             key={label}
                             style={[
                               styles.quickDateChip,
+                              isRouteStacked && styles.quickDateChipEqual,
                               isActive && styles.quickDateChipActive,
                             ]}
                             onPress={() => update({ pickup_date: iso })}
@@ -1123,7 +1137,13 @@ export default function CreateIndentScreen() {
                       <Text style={styles.errorText}>{errors.pickup_date}</Text>
                     ) : null}
                   </View>
-                  <View style={styles.gridCol}>
+                  <View
+                    style={[
+                      styles.gridCol,
+                      isRouteStacked && styles.gridColFullWidth,
+                      isRouteStacked && styles.gridColAfterDateBlock,
+                    ]}
+                  >
                     <Text style={[styles.fieldLabel, labelStyle]}>Tons</Text>
                     <TextInput
                       style={[
@@ -2508,6 +2528,12 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     flexWrap: "wrap",
   },
+  /** Three chips stay on one row with equal width (mobile / stacked route). */
+  quickDateRowSingleLine: {
+    flexWrap: "nowrap",
+    gap: 6,
+    marginBottom: 8,
+  },
   quickDateChip: {
     flex: 1,
     minHeight: 44,
@@ -2520,6 +2546,13 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.screenBackground,
     alignItems: "center",
     justifyContent: "center",
+  },
+  quickDateChipEqual: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 40,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
   },
   quickDateChipActive: {
     borderColor: Theme.textPrimaryDark,
@@ -2956,7 +2989,19 @@ const styles = StyleSheet.create({
   },
   gridRow: { gap: 14 },
   gridRowWide: { flexDirection: "row", alignItems: "flex-start", gap: 20 },
+  /** Trip date + tons: vertical rhythm when stacked so labels never collide */
+  gridRowRouteStacked: {
+    gap: 18,
+  },
   gridCol: { flex: 1, minWidth: 0 },
+  gridColFullWidth: {
+    width: "100%",
+    flexBasis: "auto",
+  },
+  gridColAfterDateBlock: {
+    marginTop: 10,
+    paddingTop: 4,
+  },
   routePreviewPanel: {
     marginTop: 6,
     marginBottom: 14,
