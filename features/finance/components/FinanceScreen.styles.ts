@@ -177,7 +177,7 @@ export const styles = StyleSheet.create({
   financeRangeDesktopPillRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
   },
   financeRangeLabel: {
     fontSize: 8,
@@ -187,34 +187,34 @@ export const styles = StyleSheet.create({
     letterSpacing: 1.1,
   },
   financeRangePill: {
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: Theme.financeHeroRangeBorder,
     backgroundColor: Theme.financeHeroRangeBg,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    minHeight: 34,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    minHeight: 30,
     justifyContent: "center",
     alignItems: "center",
   },
   financeRangePillDesktop: {
-    minHeight: 32,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    minHeight: 28,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
   financeRangePillCustom: {
     flexDirection: "row",
-    gap: 6,
+    gap: 5,
   },
   financeRangePillActive: {
     backgroundColor: Theme.screenBackground,
     borderColor: Theme.screenBackground,
   },
   financeRangePillText: {
-    fontSize: 8,
+    fontSize: 7,
     fontWeight: "900",
     textTransform: "uppercase",
-    letterSpacing: 1.2,
+    letterSpacing: 1,
     color: Theme.textOnDarkMuted,
   },
   financeRangePillTextActive: {
