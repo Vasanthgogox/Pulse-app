@@ -378,13 +378,21 @@ export function ChatScreen() {
       displayName?: string | null;
       uid?: string | null;
     } | null;
+    const senderRole =
+      selectedConv.organization_id &&
+      selectedConv.organization_id !== organizationId
+        ? "supplier"
+        : "dispatcher";
     const senderName =
-      senderProfile?.full_name || senderProfile?.displayName || "Dispatcher";
+      senderProfile?.full_name ||
+      senderProfile?.displayName ||
+      (senderRole === "supplier" ? "Supplier" : "Dispatcher");
+    const docMessageOrgId = selectedConv.organization_id ?? organizationId;
     try {
       await sendDocumentShareMessage({
         conversationId: selectedConv.id,
-        organizationId,
-        senderRole: "dispatcher",
+        organizationId: docMessageOrgId,
+        senderRole,
         senderName,
         senderUserId: senderProfile?.uid ?? null,
         metadata: {

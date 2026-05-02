@@ -1,3 +1,7 @@
+import {
+  getTripsWhereOrgIsSupplier,
+  type TripRow,
+} from "@/features/trips/services/trips.service";
 import { supabase } from "@/lib/supabase";
 import type {
   ConversationPartyType,
@@ -80,19 +84,49 @@ export async function getTripsForCompose(organizationId: string): Promise<TripFo
 export async function getConversationsByOrganization(
   organizationId: string
 ): Promise<TripConversation[]> {
-  const { data, error } = await supabase()
-    .from("trip_conversations")
-    .select(`
+  const selectConv = `
       *,
       trips!inner ( trip_number, pickup_area, drop_location ),
       trip_messages ( * )
-    `)
-    .eq("organization_id", organizationId)
-    .order("last_message_at", { ascending: false, nullsFirst: false });
+    `;
 
-  if (error) throw error;
+  const [{ data: ownOrgRows, error: ownErr }, supplierTripsRes] = await Promise.all([
+    supabase()
+      .from("trip_conversations")
+      .select(selectConv)
+      .eq("organization_id", organizationId)
+      .order("last_message_at", { ascending: false, nullsFirst: false }),
+    getTripsWhereOrgIsSupplier(organizationId),
+  ]);
 
-  const conversations = (data ?? []).map((row: any) => ({
+  if (ownErr) throw ownErr;
+
+  const supplierTripIds = (supplierTripsRes.trips ?? [])
+    .map((t: TripRow) => t.id)
+    .filter((id): id is string => !!id);
+
+  let supplierRows: unknown[] = [];
+  if (supplierTripIds.length > 0) {
+    const { data: supRows, error: supErr } = await supabase()
+      .from("trip_conversations")
+      .select(selectConv)
+      .in("trip_id", supplierTripIds)
+      .order("last_message_at", { ascending: false, nullsFirst: false });
+    if (supErr) throw supErr;
+    supplierRows = supRows ?? [];
+  }
+
+  const byId = new Map<string, unknown>();
+  for (const row of ownOrgRows ?? []) byId.set((row as { id: string }).id, row);
+  for (const row of supplierRows) byId.set((row as { id: string }).id, row);
+
+  const merged = Array.from(byId.values()).sort((a: any, b: any) => {
+    const ta = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+    const tb = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+    return tb - ta;
+  });
+
+  const conversations = merged.map((row: any) => ({
     ...row,
     trip_number: row.trips?.trip_number ?? "",
     pickup_area: row.trips?.pickup_area ?? "",
@@ -237,11 +271,20 @@ export async function sendChatMessage(params: {
 
   if (!isMissingRpc && !isDriverRpcDenied && rpcError) throw rpcError;
 
+  const { data: convMeta, error: convMetaErr } = await supabase()
+    .from("trip_conversations")
+    .select("organization_id")
+    .eq("id", conversationId)
+    .maybeSingle();
+
+  if (convMetaErr) throw convMetaErr;
+  const messageOrgId = (convMeta?.organization_id as string | undefined) ?? organizationId;
+
   const { data, error } = await supabase()
     .from("trip_messages")
     .insert({
       conversation_id: conversationId,
-      organization_id: organizationId,
+      organization_id: messageOrgId,
       sender_user_id: senderUserId,
       sender_role: senderRole,
       sender_name: senderName,

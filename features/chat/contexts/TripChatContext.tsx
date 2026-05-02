@@ -3,6 +3,7 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -94,6 +95,8 @@ export function TripChatProvider({ children }: { children: ReactNode }) {
   const organizationId = orgCtx?.currentOrganization?.id ?? null;
 
   const [conversations, setConversations] = useState<TripConversation[]>([]);
+  const conversationsRef = useRef(conversations);
+  conversationsRef.current = conversations;
   const [isLoading, setIsLoading] = useState(false);
 
   const loadConversations = useCallback(async () => {
@@ -141,7 +144,6 @@ export function TripChatProvider({ children }: { children: ReactNode }) {
           event: "INSERT",
           schema: "public",
           table: "trip_messages",
-          filter: `organization_id=eq.${organizationId}`,
         },
         (payload) => {
           const newMsg = payload.new as TripMessageRow;
@@ -183,18 +185,23 @@ export function TripChatProvider({ children }: { children: ReactNode }) {
     async (conversationId: string, content: string, messageType: MessageType = "text") => {
       if (!organizationId || !profile) return;
 
+      const conv = conversationsRef.current.find((c) => c.id === conversationId);
+      const messageOrgId = conv?.organization_id ?? organizationId;
+      const senderRole: TripMessageRow["sender_role"] =
+        conv && conv.organization_id !== organizationId ? "supplier" : "dispatcher";
+
       const senderName =
         (profile as any).full_name ||
         (profile as any).displayName ||
-        "Dispatcher";
+        (senderRole === "supplier" ? "Supplier" : "Dispatcher");
 
       // Optimistic insert
       const optimisticMsg: TripMessageRow = {
         id: `optimistic-${Date.now()}`,
         conversation_id: conversationId,
-        organization_id: organizationId,
+        organization_id: messageOrgId,
         sender_user_id: (profile as any).uid ?? null,
-        sender_role: "dispatcher",
+        sender_role: senderRole,
         sender_name: senderName,
         content,
         message_type: messageType,
@@ -221,7 +228,7 @@ export function TripChatProvider({ children }: { children: ReactNode }) {
           conversationId,
           organizationId,
           content,
-          senderRole: "dispatcher",
+          senderRole,
           senderName,
           senderUserId: (profile as any).uid ?? null,
           messageType,
