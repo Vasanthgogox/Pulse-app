@@ -1137,7 +1137,7 @@ export default function TripDetailScreen({
       .toLowerCase();
     return text.includes(q);
   });
-  const vaultDocs = detail.computedTripDocs.slice(0, 3);
+  const vaultDocs = detail.computedTripDocs;
   const canUploadTripDocs =
     !!currentOrganization?.id &&
     !!trip.organization_id &&

@@ -936,8 +936,27 @@ export default function TripDetailScreen({
   }, [vehicleDocs]);
 
   const computedTripDocs = useMemo<TripDocItem[]>(() => {
-    const podDoc = tripDocuments[0];
     const hasVehicleDoc = vehiclePreviewDocs.some((doc) => !!doc.storagePath);
+    const podDocs: TripDocItem[] =
+      tripDocuments.length > 0
+        ? tripDocuments.map((podDoc, index) => ({
+            id: `pod-${podDoc.id}`,
+            label: tripDocuments.length > 1 ? `Driver POD ${index + 1}` : "Driver POD",
+            type: (podDoc.mime_type ?? "image/jpeg").includes("pdf") ? "PDF" : "JPG",
+            status: "Uploaded" as const,
+            storagePath: podDoc.storage_path,
+            documentId: podDoc.id,
+            category: "driver" as const,
+          }))
+        : [
+            {
+              id: "pod",
+              label: "Driver POD",
+              type: "JPG",
+              status: "Pending" as const,
+              category: "driver" as const,
+            },
+          ];
 
     return [
       {
@@ -955,23 +974,7 @@ export default function TripDetailScreen({
         docSource: "vehicle" as const,
         category: "vehicle" as const,
       },
-      podDoc
-        ? {
-            id: "pod",
-            label: "Driver POD",
-            type: (podDoc.mime_type ?? "image/jpeg").includes("pdf") ? "PDF" : "JPG",
-            status: "Uploaded" as const,
-            storagePath: podDoc.storage_path,
-            documentId: podDoc.id,
-            category: "driver" as const,
-          }
-        : {
-            id: "pod",
-            label: "Driver POD",
-            type: "JPG",
-            status: "Pending" as const,
-            category: "driver" as const,
-          },
+      ...podDocs,
     ];
   }, [tripDocuments, vehiclePreviewDocs]);
 
@@ -1084,7 +1087,9 @@ export default function TripDetailScreen({
   /** Resolve preview URLs for the selected trip doc or the vehicle-doc gallery. */
   const docPreviewStoragePath =
     selectedDoc?.storagePath ??
-    (selectedDoc?.id === "pod" && tripDocuments[0] ? tripDocuments[0].storage_path : undefined);
+    (selectedDoc?.id?.startsWith("pod") && tripDocuments[0]
+      ? tripDocuments[0].storage_path
+      : undefined);
   const isVehicleGalleryDoc = selectedDoc?.id === "vehicle-documents";
   const activeVehiclePreviewDoc = vehiclePreviewDocs[vehiclePreviewIndex] ?? null;
 
@@ -1168,7 +1173,7 @@ export default function TripDetailScreen({
       podModalRefetchDoneRef.current = false;
       return;
     }
-    if (selectedDoc.id !== "pod" || docPreviewStoragePath || !tripId) return;
+    if (!selectedDoc.id.startsWith("pod") || docPreviewStoragePath || !tripId) return;
     if (podModalRefetchDoneRef.current) return;
     podModalRefetchDoneRef.current = true;
     loadTripDocuments();
