@@ -190,6 +190,11 @@ export function TripAssignmentBlock({
   const [cardVehicleInput, setCardVehicleInput] = useState("");
   const [cardVehicleSaving, setCardVehicleSaving] = useState(false);
   const [phoneModalIsReassign, setPhoneModalIsReassign] = useState(false);
+  /** After aggregate assign-by-phone, show OTP before dismissing (same flow as inline OTP card). */
+  const [phoneAssignOtpReveal, setPhoneAssignOtpReveal] = useState<{
+    code: string;
+    expires_at: string | null;
+  } | null>(null);
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const isDesktop = Platform.OS === "web" && windowWidth >= 768;
@@ -478,25 +483,60 @@ export function TripAssignmentBlock({
       !!trip.vehicle_id ||
       !!String(trip.vehicle_display_number ?? "").trim();
 
+    const isAggregateTripFlow = !!(
+      trip.supplier_id && String(trip.supplier_id).trim()
+    );
+
+    let regenOtp: {
+      error: Error | null;
+      code: string | null;
+      expires_at: string | null;
+    } = { error: null, code: null, expires_at: null };
+
     // OTP is allowed only after both driver and vehicle are assigned.
     if (willHaveVehicleAssigned && !otpLockedByTripProgress) {
-      const {
-        error: otpErr,
-        code: newCode,
-        expires_at: newExpires,
-      } = await regenerateTripOtp(trip.id);
-      if (!otpErr && newCode != null) {
-        setOtpCode(newCode);
-        setOtpExpiresAt(newExpires ?? null);
+      regenOtp = await regenerateTripOtp(trip.id);
+      if (!regenOtp.error && regenOtp.code != null) {
+        setOtpCode(regenOtp.code);
+        setOtpExpiresAt(regenOtp.expires_at ?? null);
       }
     }
+
     setPhoneSaving(false);
+
+    if (
+      isAggregateTripFlow &&
+      willHaveVehicleAssigned &&
+      !otpLockedByTripProgress &&
+      regenOtp.code &&
+      !regenOtp.error
+    ) {
+      setPhoneAssignOtpReveal({
+        code: regenOtp.code,
+        expires_at: regenOtp.expires_at ?? null,
+      });
+      onUpdated();
+      return;
+    }
+
+    if (
+      isAggregateTripFlow &&
+      willHaveVehicleAssigned &&
+      !otpLockedByTripProgress &&
+      regenOtp.error
+    ) {
+      setPhoneError(humanizeTripIdInRpcError(regenOtp.error.message, trip));
+      onUpdated();
+      return;
+    }
+
     setShowPhoneModal(false);
     setPhoneInput("");
     setPhoneName(null);
     setPhoneError(null);
     setPhoneVehicleInput("");
     setPhoneModalIsReassign(false);
+    setPhoneAssignOtpReveal(null);
     onUpdated();
   }, [
     trip.id,
@@ -551,6 +591,7 @@ export function TripAssignmentBlock({
   const openPhoneModal = useCallback(
     (isReassign?: boolean, initialVehicle?: string) => {
       setPhoneModalIsReassign(isReassign ?? false);
+      setPhoneAssignOtpReveal(null);
       setPhoneInput("");
       setPhoneError(null);
       setPhoneName(null);
@@ -1753,25 +1794,35 @@ export function TripAssignmentBlock({
           Platform.OS === "web" ? "overFullScreen" : "pageSheet"
         }
         transparent={Platform.OS === "web"}
-        onRequestClose={() => setShowPhoneModal(false)}
+        onRequestClose={() => {
+          setShowPhoneModal(false);
+          setPhoneAssignOtpReveal(null);
+        }}
       >
         <View style={styles.webModalBackdrop}>
           <View style={styles.assignModalWrap}>
             <View style={styles.assignModalHeader}>
               <View style={styles.assignModalHeaderText}>
                 <Text style={styles.assignModalTitle}>
-                  {phoneModalIsReassign
-                    ? "Reassign driver by phone"
-                    : "Assign driver by phone"}
+                  {phoneAssignOtpReveal
+                    ? "OTP ready"
+                    : phoneModalIsReassign
+                      ? "Reassign driver by phone"
+                      : "Assign driver by phone"}
                 </Text>
                 <Text style={styles.assignModalSubtitle}>
-                  {phoneModalIsReassign
-                    ? "New driver for " + getTripDisplayNumber(trip)
-                    : "Enter driver phone for " + getTripDisplayNumber(trip)}
+                  {phoneAssignOtpReveal
+                    ? "Share with driver for " + getTripDisplayNumber(trip)
+                    : phoneModalIsReassign
+                      ? "New driver for " + getTripDisplayNumber(trip)
+                      : "Enter driver phone for " + getTripDisplayNumber(trip)}
                 </Text>
               </View>
               <TouchableOpacity
-                onPress={() => setShowPhoneModal(false)}
+                onPress={() => {
+                  setShowPhoneModal(false);
+                  setPhoneAssignOtpReveal(null);
+                }}
                 style={styles.assignModalCloseBtn}
                 hitSlop={8}
                 accessibilityLabel="Close"
@@ -1780,115 +1831,171 @@ export function TripAssignmentBlock({
               </TouchableOpacity>
             </View>
 
-            <ScrollView
-              style={styles.assignModalScroll}
-              contentContainerStyle={styles.assignModalScrollContent}
-              showsVerticalScrollIndicator={false}
-            >
-              <Text style={styles.assignStepLabel}>Driver phone</Text>
-              <TextInput
-                style={styles.phoneModalInput}
-                placeholder="e.g. +91 98765 43210"
-                placeholderTextColor={Theme.textMuted}
-                value={phoneInput}
-                onChangeText={(v) => {
-                  setPhoneInput(formatMobileNumber(v));
-                  setPhoneError(null);
-                  setPhoneDriverBusy(false);
-                  setPhoneBusyTripLabel(null);
-                }}
-                keyboardType="phone-pad"
-                autoCorrect={false}
-                autoComplete="tel"
-              />
-              {phoneName ? (
-                <View style={styles.phoneModalFoundWrap}>
-                  <Text style={styles.phoneModalFound}>Found: {phoneName}</Text>
-                  <Text style={styles.phoneModalHint}>
-                    {phoneModalIsReassign
-                      ? "Tap Reassign below, then share the new OTP with the driver."
-                      : "Tap Assign below to confirm."}
-                  </Text>
+            {phoneAssignOtpReveal ? (
+              <>
+                <ScrollView
+                  style={styles.assignModalScroll}
+                  contentContainerStyle={styles.assignModalScrollContent}
+                  showsVerticalScrollIndicator={false}
+                >
+                  <View style={styles.phoneOtpRevealCard}>
+                    <View style={styles.phoneOtpRevealIconWrap}>
+                      <FontAwesome name="key" size={22} color="#4f46e5" />
+                    </View>
+                    <Text style={styles.phoneOtpRevealTitle}>Verification code</Text>
+                    <Text style={styles.phoneOtpRevealCode}>
+                      {phoneAssignOtpReveal.code}
+                    </Text>
+                    {phoneAssignOtpReveal.expires_at ? (
+                      <Text style={styles.phoneOtpRevealExpiry}>
+                        Expires{" "}
+                        {new Date(
+                          phoneAssignOtpReveal.expires_at,
+                        ).toLocaleString("en-IN")}
+                      </Text>
+                    ) : null}
+                    <Text style={styles.phoneOtpRevealHint}>
+                      Ask the driver to enter this code in the driver app to claim
+                      the trip. You can resend from trip details if needed.
+                    </Text>
+                  </View>
+                </ScrollView>
+                <View
+                  style={[
+                    styles.assignModalFooter,
+                    { paddingBottom: Math.max(24, insets.bottom) },
+                  ]}
+                >
+                  <TouchableOpacity
+                    style={styles.assignConfirmBtn}
+                    onPress={() => {
+                      setShowPhoneModal(false);
+                      setPhoneAssignOtpReveal(null);
+                      setPhoneInput("");
+                      setPhoneName(null);
+                      setPhoneVehicleInput("");
+                      setPhoneModalIsReassign(false);
+                    }}
+                    activeOpacity={0.9}
+                  >
+                    <FontAwesome name="check" size={20} color="#111827" />
+                    <Text style={styles.assignConfirmBtnText}>Done</Text>
+                  </TouchableOpacity>
                 </View>
-              ) : null}
-              {phoneDriverBusy ? (
-                <View style={styles.phoneModalBusyWrap}>
-                  <Text style={styles.phoneModalInTrip}>
-                    Driver currently on{" "}
-                    {phoneBusyTripLabel ?? "another ongoing trip"}
-                  </Text>
-                  <Text style={styles.phoneModalBusyHint}>
-                    Reach out to {phoneName ?? "this driver"} on{" "}
-                    {phoneInput.trim() || "their phone"} to confirm
-                    availability. If they are offline/unreachable, plan with
-                    another driver and assign this trip there.
-                  </Text>
-                </View>
-              ) : null}
-              {phoneError ? (
-                <Text style={styles.phoneModalError}>{phoneError}</Text>
-              ) : null}
+              </>
+            ) : (
+              <>
+                <ScrollView
+                  style={styles.assignModalScroll}
+                  contentContainerStyle={styles.assignModalScrollContent}
+                  showsVerticalScrollIndicator={false}
+                >
+                  <Text style={styles.assignStepLabel}>Driver phone</Text>
+                  <TextInput
+                    style={styles.phoneModalInput}
+                    placeholder="e.g. +91 98765 43210"
+                    placeholderTextColor={Theme.textMuted}
+                    value={phoneInput}
+                    onChangeText={(v) => {
+                      setPhoneInput(formatMobileNumber(v));
+                      setPhoneError(null);
+                      setPhoneDriverBusy(false);
+                      setPhoneBusyTripLabel(null);
+                    }}
+                    keyboardType="phone-pad"
+                    autoCorrect={false}
+                    autoComplete="tel"
+                  />
+                  {phoneName ? (
+                    <View style={styles.phoneModalFoundWrap}>
+                      <Text style={styles.phoneModalFound}>Found: {phoneName}</Text>
+                      <Text style={styles.phoneModalHint}>
+                        {phoneModalIsReassign
+                          ? "Tap Reassign below, then share the new OTP with the driver."
+                          : "Tap Assign below to confirm."}
+                      </Text>
+                    </View>
+                  ) : null}
+                  {phoneDriverBusy ? (
+                    <View style={styles.phoneModalBusyWrap}>
+                      <Text style={styles.phoneModalInTrip}>
+                        Driver currently on{" "}
+                        {phoneBusyTripLabel ?? "another ongoing trip"}
+                      </Text>
+                      <Text style={styles.phoneModalBusyHint}>
+                        Reach out to {phoneName ?? "this driver"} on{" "}
+                        {phoneInput.trim() || "their phone"} to confirm
+                        availability. If they are offline/unreachable, plan with
+                        another driver and assign this trip there.
+                      </Text>
+                    </View>
+                  ) : null}
+                  {phoneError ? (
+                    <Text style={styles.phoneModalError}>{phoneError}</Text>
+                  ) : null}
 
-              <Text
-                style={[styles.assignStepLabel, styles.assignStepLabelSecond]}
-              >
-                Vehicle (optional)
-              </Text>
-              <TextInput
-                style={styles.phoneModalInput}
-                placeholder="e.g. TN 01 AB 1234"
-                placeholderTextColor={Theme.textMuted}
-                value={phoneVehicleInput}
-                onChangeText={(text) =>
-                  setPhoneVehicleInput(formatIndianVehicleNumberInput(text))
-                }
-                autoCorrect={false}
-                autoCapitalize="characters"
-              />
-              <View style={styles.phoneProtocolCard}>
-                <View style={styles.phoneProtocolIconWrap}>
-                  <FontAwesome name="mobile" size={18} color="#4f46e5" />
-                </View>
-                <View style={styles.phoneProtocolBody}>
-                  <Text style={styles.phoneProtocolTitle}>Secure assignment</Text>
-                  <Text style={styles.phoneProtocolText}>
-                    Assigning by phone uses OTP verification. Share the code with
-                    the driver after you assign them.
+                  <Text
+                    style={[styles.assignStepLabel, styles.assignStepLabelSecond]}
+                  >
+                    Vehicle (optional)
                   </Text>
-                </View>
-              </View>
-            </ScrollView>
+                  <TextInput
+                    style={styles.phoneModalInput}
+                    placeholder="e.g. TN 01 AB 1234"
+                    placeholderTextColor={Theme.textMuted}
+                    value={phoneVehicleInput}
+                    onChangeText={(text) =>
+                      setPhoneVehicleInput(formatIndianVehicleNumberInput(text))
+                    }
+                    autoCorrect={false}
+                    autoCapitalize="characters"
+                  />
+                  <View style={styles.phoneProtocolCard}>
+                    <View style={styles.phoneProtocolIconWrap}>
+                      <FontAwesome name="mobile" size={18} color="#4f46e5" />
+                    </View>
+                    <View style={styles.phoneProtocolBody}>
+                      <Text style={styles.phoneProtocolTitle}>Secure assignment</Text>
+                      <Text style={styles.phoneProtocolText}>
+                        Assigning by phone uses OTP verification. Share the code with
+                        the driver after you assign them.
+                      </Text>
+                    </View>
+                  </View>
+                </ScrollView>
 
-            <View
-              style={[
-                styles.assignModalFooter,
-                { paddingBottom: Math.max(24, insets.bottom) },
-              ]}
-            >
-              <TouchableOpacity
-                style={[
-                  styles.assignConfirmBtn,
-                  (phoneSaving || phoneDriverBusy) &&
-                    styles.assignConfirmBtnDisabled,
-                ]}
-                onPress={assignByPhone}
-                disabled={phoneSaving || phoneDriverBusy}
-                activeOpacity={0.9}
-              >
-                <FontAwesome name="user-plus" size={20} color="#111827" />
-                <Text style={styles.assignConfirmBtnText}>
-                  {phoneSaving
-                    ? phoneModalIsReassign
-                      ? "Reassigning…"
-                      : "Assigning…"
-                    : phoneDriverBusy
-                      ? "Driver Busy"
-                      : phoneModalIsReassign
-                        ? "Reassign"
-                        : "Assign"}
-                </Text>
-              </TouchableOpacity>
-            </View>
+                <View
+                  style={[
+                    styles.assignModalFooter,
+                    { paddingBottom: Math.max(24, insets.bottom) },
+                  ]}
+                >
+                  <TouchableOpacity
+                    style={[
+                      styles.assignConfirmBtn,
+                      (phoneSaving || phoneDriverBusy) &&
+                        styles.assignConfirmBtnDisabled,
+                    ]}
+                    onPress={assignByPhone}
+                    disabled={phoneSaving || phoneDriverBusy}
+                    activeOpacity={0.9}
+                  >
+                    <FontAwesome name="user-plus" size={20} color="#111827" />
+                    <Text style={styles.assignConfirmBtnText}>
+                      {phoneSaving
+                        ? phoneModalIsReassign
+                          ? "Reassigning…"
+                          : "Assigning…"
+                        : phoneDriverBusy
+                          ? "Driver Busy"
+                          : phoneModalIsReassign
+                            ? "Reassign"
+                            : "Assign"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
           </View>
         </View>
       </Modal>
@@ -2858,6 +2965,55 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     fontWeight: "600",
     color: "#64748b",
+  },
+  phoneOtpRevealCard: {
+    alignItems: "center",
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    backgroundColor: "rgba(79, 70, 229, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(79, 70, 229, 0.25)",
+  },
+  phoneOtpRevealIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.9)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "rgba(148, 163, 184, 0.35)",
+  },
+  phoneOtpRevealTitle: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  phoneOtpRevealCode: {
+    fontSize: 36,
+    fontWeight: "900",
+    color: "#0f172a",
+    letterSpacing: 8,
+    marginBottom: 8,
+  },
+  phoneOtpRevealExpiry: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#475569",
+    marginBottom: 14,
+    textAlign: "center",
+  },
+  phoneOtpRevealHint: {
+    fontSize: 11,
+    lineHeight: 17,
+    fontWeight: "600",
+    color: "#64748b",
+    textAlign: "center",
   },
   phoneModalError: {
     fontSize: 12,

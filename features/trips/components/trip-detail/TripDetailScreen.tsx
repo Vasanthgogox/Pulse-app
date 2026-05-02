@@ -84,7 +84,7 @@ import {
     getTripAdjustments,
     voidTripAdjustment,
 } from "../../services/tripAdjustments";
-import { getTripOtpForDisplay } from "../../services/tripOtp.service";
+import { getTripOtpForDisplay, regenerateTripOtp } from "../../services/tripOtp.service";
 import {
     getTripById,
     getTripDisplayNumber,
@@ -93,6 +93,7 @@ import {
     manualAdvanceTrip,
     type TripRow,
 } from "../../services/trips.service";
+import { AggregateTripOtpPanel, type AggregateOtpUiState } from "../AggregateTripOtpPanel";
 import { TripAssignmentBlock, type AssignmentSource } from "../TripAssignmentBlock";
 import { TrackingMapBlock, VehicleTrackingCard } from "./TrackingMapBlock";
 import type { TripDetailScreenProps } from "./TripDetailScreen.types";
@@ -305,6 +306,7 @@ export default function TripDetailScreen({
     code: string | null;
     expires_at: string | null;
   } | null>(null);
+  const [otpResending, setOtpResending] = useState(false);
   const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
   const [adjustmentModalPreset, setAdjustmentModalPreset] = useState<{
     type: TripAdjustmentType;
@@ -649,6 +651,25 @@ export default function TripDetailScreen({
       else setTripOtp({ code: code ?? null, expires_at: expires_at ?? null });
     });
   }, [trip?.id, trip?.supplier_id]);
+
+  const handleResendAggregateOtp = useCallback(async () => {
+    if (!trip?.id || otpResending) return;
+    if (!isAggregateTrip(trip)) return;
+    const hasVehicle =
+      !!trip.vehicle_id || !!String(trip.vehicle_display_number ?? "").trim();
+    if (!trip.driver_id || !hasVehicle) return;
+    if (["in_progress", "in_transit"].includes(String(trip.status ?? "").toLowerCase())) return;
+    setOtpResending(true);
+    try {
+      const { error } = await regenerateTripOtp(trip.id);
+      if (!error) {
+        loadTripOtp();
+        load();
+      }
+    } finally {
+      setOtpResending(false);
+    }
+  }, [trip, otpResending, loadTripOtp, load]);
 
   const loadTripDocuments = useCallback(() => {
     if (!tripId) return;
@@ -1554,6 +1575,22 @@ export default function TripDetailScreen({
     trip?.driver_id != null &&
     trip?.vehicle_id != null;
   const showAssignByPhone = isAggregate && !isRosterFromLoadHub;
+  const hasDriverAssignedAgg = !!trip?.driver_id;
+  const hasVehicleAssignedAgg =
+    !!trip?.vehicle_id || !!String(trip?.vehicle_display_number ?? "").trim();
+  const canGenerateAggregateOtpAgg =
+    isAggregate && hasDriverAssignedAgg && hasVehicleAssignedAgg;
+  const otpLockedByTripProgressAgg = ["in_progress", "in_transit"].includes(
+    String(trip?.status ?? "").toLowerCase(),
+  );
+  const aggregateOtpStateAgg: AggregateOtpUiState = (() => {
+    if (!isAggregate) return null;
+    if (!canGenerateAggregateOtpAgg) return "not_required";
+    const status = String(trip?.status ?? "").toLowerCase();
+    if (status === "assigned") return "otp_pending";
+    if (status === "in_progress" || status === "in_transit") return "verified";
+    return "not_required";
+  })();
   /** Client-side indent trip is read-only for assignment/reassignment controls. */
   const isClientIndentView = useMemo(() => {
     if (!trip?.indent_id) return false;
@@ -3365,7 +3402,7 @@ export default function TripDetailScreen({
                 previousDriverName={previousDriverName}
                 latestReassignmentSummary={latestReassignmentSummary}
                 driverAssignOrgId={
-                  showAssignByPhone && currentOrganization?.id
+                  isAggregate && currentOrganization?.id
                     ? currentOrganization.id
                     : null
                 }
@@ -3376,6 +3413,20 @@ export default function TripDetailScreen({
                     setVehicleLabel(normalized);
                   }
                 }}
+                inlineSection={
+                  isAggregate ? (
+                    <AggregateTripOtpPanel
+                      variant="inline"
+                      tripNumber={getTripDisplayNumber(trip)}
+                      aggregateOtpState={aggregateOtpStateAgg}
+                      canGenerateAggregateOtp={canGenerateAggregateOtpAgg}
+                      otpLockedByTripProgress={otpLockedByTripProgressAgg}
+                      tripOtp={tripOtp}
+                      onResendOtp={handleResendAggregateOtp}
+                      otpResending={otpResending}
+                    />
+                  ) : null
+                }
               />
             ) : null
           }

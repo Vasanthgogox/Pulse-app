@@ -2964,6 +2964,11 @@ const styles = StyleSheet.create({
   /** Native: one horizontal track for main (underline) + sub (pills) — no double underline. */
   tripsMobileTabsScroll: {
     maxHeight: 50,
+    minWidth: 0,
+    alignSelf: "stretch",
+    ...Platform.select({
+      web: { width: "100%" as const, maxWidth: "100%" as const },
+    }),
   },
   tripsMobileTabsScrollContent: {
     flexDirection: "row",
@@ -3013,6 +3018,11 @@ const styles = StyleSheet.create({
   /** Native: search + sort + date chips in one side-scrollable row. */
   tripsToolbarScroll: {
     maxHeight: 58,
+    minWidth: 0,
+    alignSelf: "stretch",
+    ...Platform.select({
+      web: { width: "100%" as const, maxWidth: "100%" as const },
+    }),
   },
   tripsToolbarScrollContent: {
     flexDirection: "row",
@@ -3508,6 +3518,10 @@ const styles = StyleSheet.create({
     paddingTop: 4,
     flexGrow: 1,
     backgroundColor: TRIPS_PAGE_BG,
+    /** Web: allow column children (e.g. horizontal ScrollViews) to shrink to viewport, not min-content width. */
+    ...Platform.select({
+      web: { minWidth: 0, maxWidth: "100%" as const },
+    }),
   },
   /** Status + date filters (moved from header) — full-bleed strip above list/table */
   tripsBodyFiltersBleed: {
@@ -3519,6 +3533,9 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.screenBackground,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
+    ...Platform.select({
+      web: { minWidth: 0 },
+    }),
   },
   /** Narrow web / mobile: one continuous dark strip (tabs + date chips + metric rail). */
   tripsBodyFiltersBleedMobileDark: {
@@ -3807,6 +3824,11 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.darkBackground,
     borderWidth: 1,
     borderColor: Theme.separatorDark,
+    minWidth: 0,
+    alignSelf: "stretch",
+    ...Platform.select({
+      web: { width: "100%" as const, maxWidth: "100%" as const },
+    }),
   },
   metricTagRailMobile: {
     flexDirection: "row",
