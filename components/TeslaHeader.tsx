@@ -33,6 +33,8 @@ export interface TeslaHeaderProps {
   hideRightIcons?: boolean;
   /** When set, shows a plus button in the header (e.g. Add transaction). Renders at right end (after bell, profile). */
   onAddClick?: () => void;
+  /** Trip / command chat — e.g. open org trip thread from trip details. Renders before the notification bell. */
+  onChatClick?: () => void;
   /** Hide the small square icon badge before the brand/title block. */
   hideLogoBadge?: boolean;
   /** Hide bell + unread dot (e.g. when already on the notifications screen). */
@@ -60,6 +62,7 @@ export function TeslaHeader({
   skipSafeAreaTop = false,
   hideRightIcons = false,
   onAddClick,
+  onChatClick,
   hideLogoBadge = false,
   hideNotificationBell = false,
   titleTextStyle,
@@ -160,6 +163,17 @@ export function TeslaHeader({
       </View>
       {!hideRightIcons && (
       <View style={styles.icons}>
+        {onChatClick != null && (
+          <TouchableOpacity
+            onPress={onChatClick}
+            style={styles.iconWrap}
+            hitSlop={8}
+            accessibilityLabel="Open trip chat"
+            accessibilityRole="button"
+          >
+            <FontAwesome name="comments" size={16} color={iconColor(isDark)} />
+          </TouchableOpacity>
+        )}
         {!hideNotificationBell && (
           <View style={styles.iconWithDot}>
             <TouchableOpacity
