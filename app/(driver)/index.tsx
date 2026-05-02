@@ -599,6 +599,7 @@ export default function DriverRadarScreen() {
   /** Default off = map-first (ref 1); tap route icon to show FROM/distance/TO overlay (ref 2). */
   const [showRouteSummary, setShowRouteSummary] = useState(false);
   const locationWatchRef = useRef<any>(null);
+  const gpsFallbackWarnedKeyRef = useRef<string | null>(null);
   const initialLoadDoneRef = useRef(false);
   const isRefreshingRef = useRef(false);
 
@@ -1823,6 +1824,20 @@ export default function DriverRadarScreen() {
     activeGuidanceTrip && activeGuidanceStep
       ? getDriverGuidanceConfig(activeGuidanceStep, activeGuidanceTrip)
       : null;
+  const routeContextTrip = useMemo(
+    () =>
+      (activeGuidanceTrip ??
+        resolvedAcceptedIncomingTrip ??
+        activeMission ??
+        effectiveFirstIncoming ??
+        null) as tripsService.TripRow | null,
+    [
+      activeGuidanceTrip,
+      resolvedAcceptedIncomingTrip,
+      activeMission,
+      effectiveFirstIncoming,
+    ],
+  );
   const guidanceTargetCoordinate =
     activeGuidanceTrip && activeGuidance?.target
       ? getTripStopCoordinate(activeGuidanceTrip, activeGuidance.target)
@@ -2117,8 +2132,7 @@ export default function DriverRadarScreen() {
   // not a straight-line fallback, throughout assignment -> completion.
   const routeFetchKey = useMemo(() => {
     if (!shouldShowMap) return null;
-    const tripForRoute = (activeMission ||
-      effectiveFirstIncoming) as tripsService.TripRow | null;
+    const tripForRoute = routeContextTrip;
     const pickup = tripForRoute
       ? getTripStopCoordinate(tripForRoute, "pickup")
       : null;
@@ -2126,17 +2140,23 @@ export default function DriverRadarScreen() {
       ? getTripStopCoordinate(tripForRoute, "drop")
       : null;
 
+    // Use only real pinned coordinates for route start (never default map center).
+    const routeStart = truckPosition ?? driverMapPosition;
     const start =
-      activeMission && driverMapPosition ? driverMapPosition : pickup;
-    const end = activeMission ? guidanceTargetCoordinate : drop;
+      activeGuidanceTrip ? routeStart : pickup;
+    const end = activeGuidanceTrip ? guidanceTargetCoordinate : drop;
+
+    if (activeGuidanceTrip && !routeStart) return null;
 
     if (!start || !end || !tripForRoute) return null;
     return buildRouteFetchKey(tripForRoute.id, start, end);
   }, [
     shouldShowMap,
-    activeMission,
-    effectiveFirstIncoming,
+    routeContextTrip,
+    activeGuidanceTrip,
+    activeGuidanceStep,
     driverMapPosition,
+    truckPosition,
     guidanceTargetCoordinate,
   ]);
 
@@ -2145,7 +2165,9 @@ export default function DriverRadarScreen() {
       setOptimalRoute(null);
       setOptimalRouteLoading(false);
       optimalRouteKeyRef.current = null;
-      setShowRouteFallback(false);
+      setShowRouteFallback(
+        activeGuidanceStep === "accepted" && !!routeContextTrip,
+      );
       return;
     }
 
@@ -2159,20 +2181,43 @@ export default function DriverRadarScreen() {
       const parsed = parseRouteFetchKey(routeFetchKey);
       if (!parsed) {
         if (!cancelled) {
+          console.warn("[driver-map][route] invalid-route-key", { routeFetchKey });
           setOptimalRoute(null);
           setOptimalRouteLoading(false);
           setShowRouteFallback(true);
         }
         return;
       }
-
       const res = await getOptimalRoute(parsed.from, parsed.to);
 
       if (cancelled) return;
 
-      setOptimalRoute(res ?? null);
+      const hasDistinctEndpoints =
+        !!res &&
+        Array.isArray(res.coordinates) &&
+        res.coordinates.length >= 2 &&
+        distanceMeters(
+          res.coordinates[0].latitude,
+          res.coordinates[0].longitude,
+          res.coordinates[res.coordinates.length - 1].latitude,
+          res.coordinates[res.coordinates.length - 1].longitude,
+        ) > 25;
+      const hasUsableRoute =
+        !!res &&
+        Array.isArray(res.coordinates) &&
+        res.coordinates.length >= 2 &&
+        hasDistinctEndpoints;
+      if (!hasUsableRoute) {
+        console.warn("[driver-map][route] unusable-route-response", {
+          tripId: parsed.tripId,
+          points: Array.isArray(res?.coordinates) ? res.coordinates.length : 0,
+          distance: res?.distance ?? null,
+          duration: res?.duration ?? null,
+        });
+      }
+      setOptimalRoute(hasUsableRoute ? res : null);
       setOptimalRouteLoading(false);
-      setShowRouteFallback(!res);
+      setShowRouteFallback(!hasUsableRoute);
     };
 
     void performFetch();
@@ -2180,7 +2225,7 @@ export default function DriverRadarScreen() {
     return () => {
       cancelled = true;
     };
-  }, [routeFetchKey]);
+  }, [routeFetchKey, activeGuidanceStep, routeContextTrip]);
 
   // When map is shown (online or active trip), get current position for map center and "You" marker.
   useEffect(() => {
@@ -2191,9 +2236,36 @@ export default function DriverRadarScreen() {
     let cancelled = false;
     (async () => {
       try {
+        if (Platform.OS === "web") {
+          if (typeof navigator === "undefined" || !navigator.geolocation) return;
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              if (cancelled) return;
+              setDriverMapPosition({
+                latitude: pos.coords.latitude,
+                longitude: pos.coords.longitude,
+              });
+            },
+            () => {
+              // Keep null so fallback/route guards handle no-position state cleanly.
+              if (!cancelled) setDriverMapPosition(null);
+            },
+            {
+              enableHighAccuracy: true,
+              maximumAge: 0,
+              timeout: 15000,
+            },
+          );
+          return;
+        }
+
         const expoLocation = await getExpoLocation();
         if (!expoLocation) return;
-        const { status } = await expoLocation.getForegroundPermissionsAsync();
+        let { status } = await expoLocation.getForegroundPermissionsAsync();
+        if (status !== "granted") {
+          const req = await expoLocation.requestForegroundPermissionsAsync();
+          status = req.status;
+        }
         if (status !== "granted" || cancelled) return;
         const pos = await expoLocation.getCurrentPositionAsync({});
         if (cancelled) return;
@@ -2210,6 +2282,43 @@ export default function DriverRadarScreen() {
     };
   }, [shouldShowMap]);
 
+  // Web/permission fallback: recover last known driver position from DB so routing can still render.
+  useEffect(() => {
+    if (!shouldShowMap) return;
+    if (driverMapPosition) return;
+    if (!activeGuidanceTrip?.id) return;
+    if (!driver?.id) return;
+    let cancelled = false;
+    (async () => {
+      const { error, location } =
+        await driverLocationService.getLatestDriverLocationForTripOrDriver(
+          activeGuidanceTrip.id,
+          driver.id,
+        );
+      if (cancelled) return;
+      if (error || !location) {
+        const warnKey = `${activeGuidanceTrip.id}:${driver.id}`;
+        if (gpsFallbackWarnedKeyRef.current !== warnKey) {
+          gpsFallbackWarnedKeyRef.current = warnKey;
+          console.warn("[driver-map][gps-fallback] unavailable", {
+            tripId: activeGuidanceTrip.id,
+            driverId: driver.id,
+            reason: error ? "query_error" : "no_location_rows",
+            error: error?.message ?? null,
+          });
+        }
+        return;
+      }
+      setDriverMapPosition({
+        latitude: location.latitude,
+        longitude: location.longitude,
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [shouldShowMap, driverMapPosition, activeGuidanceTrip?.id, driver?.id]);
+
   // If we switch to a different trip, reset the truck marker so it starts from current GPS.
   useEffect(() => {
     const tripId = activeGuidanceTrip?.id ?? null;
@@ -2222,10 +2331,10 @@ export default function DriverRadarScreen() {
   // Road distance from driver's current position to the active guidance target (pickup or drop).
   const distanceToTargetKmGlobal = useMemo(
     () =>
-      activeMission && driverMapPosition && optimalRoute
+      activeGuidanceTrip && driverMapPosition && optimalRoute
         ? optimalRoute.distance / 1000
         : null,
-    [activeMission, driverMapPosition, optimalRoute],
+    [activeGuidanceTrip, driverMapPosition, optimalRoute],
   );
 
   // Stop any in-flight animation when the map closes.
@@ -2549,8 +2658,7 @@ export default function DriverRadarScreen() {
     }
   }, [activeGuidance, activeGuidanceStep, activeGuidanceTrip]);
 
-  const defaultBoundsTrip = (activeMission ||
-    effectiveFirstIncoming) as tripsService.TripRow | null;
+  const defaultBoundsTrip = routeContextTrip;
   const defaultBoundsPickup = defaultBoundsTrip
     ? getTripStopCoordinate(defaultBoundsTrip, "pickup")
     : null;
@@ -2590,10 +2698,16 @@ export default function DriverRadarScreen() {
           : Math.max(110, Math.round(inlineMapHeight * 0.45));
 
       const routeCoords = optimalRoute?.coordinates;
+      const guidanceLegCoords =
+        activeGuidanceTrip && driverMapPosition && guidanceTargetCoordinate
+          ? [driverMapPosition, guidanceTargetCoordinate]
+          : null;
       const coordsForFit =
         routeCoords && routeCoords.length >= 2
           ? subsampleRouteCoordinates(routeCoords, 220)
-          : [pickup, drop];
+          : guidanceLegCoords && guidanceLegCoords.length >= 2
+            ? guidanceLegCoords
+            : [pickup, drop];
 
       const baseFitKey = `${tripForBounds.id}:${pickup.latitude}:${pickup.longitude}:${drop.latitude}:${drop.longitude}`;
       const fitKey = `${baseFitKey}:route:${routeCoords?.length ?? 0}`;
@@ -2613,6 +2727,9 @@ export default function DriverRadarScreen() {
       defaultBoundsDrop,
       defaultBoundsPickup,
       defaultBoundsTrip,
+      activeGuidanceTrip,
+      driverMapPosition,
+      guidanceTargetCoordinate,
       optimalRoute,
       shouldShowMap,
       olaMapBottomPaddingPx,
@@ -2814,7 +2931,11 @@ export default function DriverRadarScreen() {
         try {
           const expoLocation = await getExpoLocation();
           if (!expoLocation || cancelled) return;
-          const { status } = await expoLocation.getForegroundPermissionsAsync();
+          let { status } = await expoLocation.getForegroundPermissionsAsync();
+          if (status !== "granted") {
+            const req = await expoLocation.requestForegroundPermissionsAsync();
+            status = req.status;
+          }
           if (status !== "granted" || cancelled) return;
           if (typeof navigator === "undefined" || !navigator.geolocation) return;
 
@@ -2829,8 +2950,9 @@ export default function DriverRadarScreen() {
             },
             () => {},
             {
-              enableHighAccuracy: false,
-              maximumAge: 5000,
+              enableHighAccuracy: true,
+              maximumAge: 0,
+              timeout: 15000,
             },
           );
           locationWatchRef.current = {
@@ -2923,34 +3045,34 @@ export default function DriverRadarScreen() {
     const mapViewportLocked =
       mapInteractionsLocked || isFollowingLocation;
 
-    const mapCenter = driverMapPosition ?? DEFAULT_MAP_REGION;
-
     const showLeaflet =
       Platform.OS === "web" || useLeafletFallback || leafLetForced;
 
     const pickup =
-      shouldShowMap && (effectiveFirstIncoming || activeMission)
+      shouldShowMap && routeContextTrip
         ? getTripStopCoordinate(
-            (activeMission || effectiveFirstIncoming) as tripsService.TripRow,
+            routeContextTrip,
             "pickup",
           )
         : null;
     const drop =
-      shouldShowMap && (effectiveFirstIncoming || activeMission)
+      shouldShowMap && routeContextTrip
         ? getTripStopCoordinate(
-            (activeMission || effectiveFirstIncoming) as tripsService.TripRow,
+            routeContextTrip,
             "drop",
           )
         : null;
+    const mapCenter = driverMapPosition ?? pickup ?? drop ?? DEFAULT_MAP_REGION;
 
-    const leafletMarkers: LeafletMarker[] = [
-      {
+    const leafletMarkers: LeafletMarker[] = [];
+    if (driverMapPosition) {
+      leafletMarkers.push({
         id: "you",
-        coordinate: mapCenter,
+        coordinate: driverMapPosition,
         label: "You",
         color: Theme.primary,
-      },
-    ];
+      });
+    }
     if (pickup) {
       leafletMarkers.push({
         id: "pickup",
@@ -2969,7 +3091,7 @@ export default function DriverRadarScreen() {
     }
 
     const fallbackCoordinates =
-      activeMission && driverMapPosition && guidanceTargetCoordinate
+      activeGuidanceTrip && driverMapPosition && guidanceTargetCoordinate
         ? [driverMapPosition, guidanceTargetCoordinate]
         : pickup && drop
           ? [pickup, drop]
@@ -2984,8 +3106,9 @@ export default function DriverRadarScreen() {
           : [];
 
     // Road distance from driver to current guidance target (pickup or drop)
+    const pinnedPosition = truckPosition ?? driverMapPosition ?? DEFAULT_MAP_REGION;
     const distanceToTargetKm =
-      activeMission && driverMapPosition && optimalRoute
+      activeGuidanceTrip && pinnedPosition && optimalRoute
         ? optimalRoute.distance / 1000
         : null;
 
@@ -2993,7 +3116,7 @@ export default function DriverRadarScreen() {
     const handleFitBoundsLeaflet = () => {
       const leafRef = isFullScreen ? fullLeafletRef : leafletRef;
       if (!leafRef.current) return;
-      const pts = [driverMapPosition, pickup, drop].filter(
+      const pts = [pinnedPosition, pickup, drop].filter(
         (p): p is { latitude: number; longitude: number } => !!p,
       );
       if (pts.length < 2) return;
@@ -3008,21 +3131,21 @@ export default function DriverRadarScreen() {
 
     // Zoom native map to driver's current location
     const handleZoomToDriver = () => {
-      if (!driverMapPosition) return;
+      if (!pinnedPosition) return;
       if (showLeaflet) {
         const leafRef = isFullScreen ? fullLeafletRef : leafletRef;
-        leafRef.current?.focusCurrentLocation(driverMapPosition, 16);
+        leafRef.current?.focusCurrentLocation(pinnedPosition, 16);
       } else {
         const mapAny = targetRef.current as any;
         try {
           if (mapAny?.animateCamera) {
             mapAny.animateCamera(
-              { center: driverMapPosition, zoom: 16, pitch: 0 },
+              { center: pinnedPosition, zoom: 16, pitch: 0 },
               { duration: 450 },
             );
           } else if (mapAny?.animateToRegion) {
             mapAny.animateToRegion(
-              { ...driverMapPosition, latitudeDelta: 0.005, longitudeDelta: 0.005 },
+              { ...pinnedPosition, latitudeDelta: 0.005, longitudeDelta: 0.005 },
               450,
             );
           }
@@ -3101,10 +3224,10 @@ export default function DriverRadarScreen() {
           >
             {/* Always render the "You" marker so the current-location indication is visible
               immediately, then it updates as driverMapPosition becomes available. */}
-            {OlaAnimatedMarker ? (
+            {OlaAnimatedMarker && driverMapPosition ? (
               <OlaAnimatedMarker
                 animatedProps={youMarkerAnimatedProps}
-                coordinate={driverMapPosition ?? DEFAULT_MAP_REGION}
+                coordinate={driverMapPosition}
                 anchor={{ x: 0.5, y: 1 }}
               >
                 <Reanimated.View
@@ -3155,18 +3278,16 @@ export default function DriverRadarScreen() {
               </OlaAnimatedMarker>
             ) : null}
 
-            {shouldShowMap && (effectiveFirstIncoming || activeMission) && (
+            {shouldShowMap && routeContextTrip && (
               <>
                 {getTripStopCoordinate(
-                  (activeMission ||
-                    effectiveFirstIncoming) as tripsService.TripRow,
+                  routeContextTrip,
                   "pickup",
                 ) && (
                   <Marker
                     coordinate={
                       getTripStopCoordinate(
-                        (activeMission ||
-                          effectiveFirstIncoming) as tripsService.TripRow,
+                        routeContextTrip,
                         "pickup",
                       )!
                     }
@@ -3188,15 +3309,13 @@ export default function DriverRadarScreen() {
                   </Marker>
                 )}
                 {getTripStopCoordinate(
-                  (activeMission ||
-                    effectiveFirstIncoming) as tripsService.TripRow,
+                  routeContextTrip,
                   "drop",
                 ) && (
                   <Marker
                     coordinate={
                       getTripStopCoordinate(
-                        (activeMission ||
-                          effectiveFirstIncoming) as tripsService.TripRow,
+                        routeContextTrip,
                         "drop",
                       )!
                     }
@@ -3217,7 +3336,7 @@ export default function DriverRadarScreen() {
                     </View>
                   </Marker>
                 )}
-                {optimalRoute ? (
+                {optimalRoute && optimalRoute.coordinates.length >= 2 ? (
                   <>
                     <Polyline
                       coordinates={optimalRoute.coordinates}
@@ -3238,20 +3357,18 @@ export default function DriverRadarScreen() {
                   showRouteFallback &&
                   (() => {
                     const fallbackPickup = getTripStopCoordinate(
-                      (activeMission ||
-                        effectiveFirstIncoming) as tripsService.TripRow,
+                      routeContextTrip,
                       "pickup",
                     );
                     const fallbackDrop = getTripStopCoordinate(
-                      (activeMission ||
-                        effectiveFirstIncoming) as tripsService.TripRow,
+                      routeContextTrip,
                       "drop",
                     );
                     const fallbackCoordinates =
-                      activeMission &&
-                      driverMapPosition &&
+      activeGuidanceTrip &&
+                      pinnedPosition &&
                       guidanceTargetCoordinate
-                        ? [driverMapPosition, guidanceTargetCoordinate]
+                        ? [pinnedPosition, guidanceTargetCoordinate]
                         : fallbackPickup && fallbackDrop
                           ? [fallbackPickup, fallbackDrop]
                           : [];
@@ -3282,6 +3399,7 @@ export default function DriverRadarScreen() {
 
         {/* Primary trip HUD: one surface — hide when route overview or Live route card is open */}
         {activeGuidance &&
+        activeGuidanceStep !== "accepted" &&
         !showRouteSummary &&
         !showTrackingInfoCard &&
         otpClaimTripId == null ? (

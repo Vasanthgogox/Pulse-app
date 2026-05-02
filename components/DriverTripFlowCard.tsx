@@ -10,25 +10,25 @@ import { formatINR } from '@/lib/format';
 import * as tripDocumentsService from '@/services/tripDocumentsService';
 import * as tripsService from '@/services/tripsService';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Pressable as HoldPressable } from 'react-native-gesture-handler';
 import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
+import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Linking,
-  Modal,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    Linking,
+    Modal,
+    Platform,
+    Pressable,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
+import { Pressable as HoldPressable } from 'react-native-gesture-handler';
 
 const HOLD_DURATION_MS = 1500;
 /** So finger drift / parent scroll do not end the hold (sheet / ScrollView). */
