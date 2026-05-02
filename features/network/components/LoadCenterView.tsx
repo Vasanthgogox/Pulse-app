@@ -2666,27 +2666,39 @@ export function LoadCenterView({
                   {(loadAction.load.drop_location || "—").toUpperCase()}
                 </Text>
                 <View style={styles.reviewHubHeroMeta}>
-                  <View>
+                  <View style={styles.reviewHubHeroMetaCol}>
                     <Text style={styles.reviewHubHeroStatLabel}>Offers</Text>
-                    <Text style={styles.reviewHubHeroStatValue}>
+                    <Text style={styles.reviewHubHeroStatValue} numberOfLines={1}>
                       {awardModalQuotesLoading
                         ? "—"
                         : String(awardModalQuotes.length)}
                     </Text>
                   </View>
                   {lowestPendingAmount != null && pendingOfferCount > 0 ? (
-                    <View style={{ alignItems: "flex-end" }}>
+                    <View style={styles.reviewHubHeroMetaColEnd}>
                       <Text style={styles.reviewHubHeroStatLabel}>
                         Lowest bid
                       </Text>
-                      <Text style={styles.reviewHubHeroStatValue}>
+                      <Text
+                        style={[
+                          styles.reviewHubHeroStatValue,
+                          styles.reviewHubHeroStatValueEnd,
+                        ]}
+                        numberOfLines={1}
+                      >
                         {formatINR(lowestPendingAmount)}
                       </Text>
                     </View>
                   ) : (
-                    <View style={{ alignItems: "flex-end" }}>
+                    <View style={styles.reviewHubHeroMetaColEnd}>
                       <Text style={styles.reviewHubHeroStatLabel}>Pending</Text>
-                      <Text style={styles.reviewHubHeroStatValue}>
+                      <Text
+                        style={[
+                          styles.reviewHubHeroStatValue,
+                          styles.reviewHubHeroStatValueEnd,
+                        ]}
+                        numberOfLines={1}
+                      >
                         {String(pendingOfferCount)}
                       </Text>
                     </View>
@@ -2884,19 +2896,28 @@ export function LoadCenterView({
                       ) : null}
                     </View>
                     <View style={[styles.reviewHubHeroMeta, { marginTop: 14 }]}>
-                      <View>
+                      <View style={styles.reviewHubHeroMetaCol}>
                         <Text style={styles.reviewHubHeroStatLabel}>
                           Indent
                         </Text>
-                        <Text style={styles.reviewHubHeroStatValue}>
+                        <Text
+                          style={styles.reviewHubHeroStatValue}
+                          numberOfLines={1}
+                        >
                           {getIndentDisplayNumber(loadAction.load)}
                         </Text>
                       </View>
-                      <View style={{ alignItems: "flex-end" }}>
+                      <View style={styles.reviewHubHeroMetaColEnd}>
                         <Text style={styles.reviewHubHeroStatLabel}>
                           Target
                         </Text>
-                        <Text style={styles.reviewHubHeroStatValue}>
+                        <Text
+                          style={[
+                            styles.reviewHubHeroStatValue,
+                            styles.reviewHubHeroStatValueEnd,
+                          ]}
+                          numberOfLines={1}
+                        >
                           {formatINR(
                             Number(
                               loadAction.load.supplier_target ??
@@ -4325,6 +4346,23 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderOnDark,
     justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 8,
+    minWidth: 0,
+  },
+  reviewHubHeroMetaCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  reviewHubHeroMetaColEnd: {
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: "58%",
+    alignItems: "flex-end",
+  },
+  reviewHubHeroStatValueEnd: {
+    textAlign: "right" as const,
+    alignSelf: "stretch",
   },
   reviewHubHeroStatLabel: {
     fontSize: 8,
@@ -4376,6 +4414,11 @@ const styles = StyleSheet.create({
     padding: 18,
     marginBottom: 16,
     overflow: "hidden",
+    minWidth: 0,
+    alignSelf: "stretch",
+    ...Platform.select({
+      web: { maxWidth: "100%" as const },
+    }),
   },
   bidHubHeroGlow: {
     position: "absolute",
@@ -5093,6 +5136,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Theme.screenBackground,
     justifyContent: "flex-end",
+    minWidth: 0,
+    ...Platform.select({
+      web: { maxWidth: "100%" as const },
+    }),
   },
   modalSheet: {
     backgroundColor: Theme.screenBackground,
@@ -5100,11 +5147,18 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 32,
     paddingHorizontal: 24,
     paddingTop: 12,
+    minWidth: 0,
+    ...Platform.select({
+      web: { maxWidth: "100%" as const },
+    }),
   },
   bidModalSheetFull: {
     flex: 1,
     borderTopLeftRadius: 0,
     borderTopRightRadius: 0,
+    ...Platform.select({
+      web: { minWidth: 0, maxWidth: "100%" as const },
+    }),
   },
   modalSheetCenter: { alignItems: "center" },
   modalHandle: {
@@ -5163,6 +5217,11 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
     backgroundColor: Theme.darkBackground,
     borderRadius: 12,
+    alignSelf: "stretch",
+    minWidth: 0,
+    ...Platform.select({
+      web: { width: "100%" as const, maxWidth: "100%" as const },
+    }),
   },
   modalSubmitText: {
     fontSize: 12,
@@ -5955,10 +6014,17 @@ const styles = StyleSheet.create({
   bidModalScroll: {
     flex: 1,
     alignSelf: "stretch",
+    minWidth: 0,
+    ...Platform.select({
+      web: { width: "100%" as const, maxWidth: "100%" as const },
+    }),
   },
   bidModalScrollContent: {
     flexGrow: 1,
     paddingBottom: 8,
+    ...Platform.select({
+      web: { minWidth: 0, maxWidth: "100%" as const },
+    }),
   },
   bidIndentDetailSection: {
     marginTop: 8,
@@ -6157,6 +6223,10 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         outlineStyle: "none",
+        /** iOS Safari: font-size < 16px on focused inputs triggers page zoom. */
+        fontSize: 16,
+        lineHeight: 22,
+        maxWidth: "100%",
       } as any,
     }),
   },
