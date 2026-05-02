@@ -75,9 +75,11 @@ import {
 } from "@/features/chat/utils/tripConversationSort";
 
 type TabId = "trips" | "network";
+type TripStatusFilter = "active" | "terminal";
 
 const QUICK_EMOJIS = ["👍", "🤝", "🚛", "📍", "✅", "📦", "⚠️", "🕒", "😊", "🙌", "📞", "💯"];
 const TRIP_PARTY_FILTERS: ConversationPartyType[] = ["client", "driver", "supplier"];
+const TRIP_STATUS_FILTERS: TripStatusFilter[] = ["active", "terminal"];
 
 function getInitials(name: string) {
   return name
@@ -166,6 +168,10 @@ function partyLabel(type: ConversationPartyType) {
 
 function partyFilterSheetLabel(type: ConversationPartyType): string {
   return type === "client" ? "Client" : type === "supplier" ? "Supplier" : "Driver";
+}
+
+function statusFilterSheetLabel(type: TripStatusFilter): string {
+  return type === "active" ? "Active trips" : "Closed trips";
 }
 
 function getConversationTripLabel(conversation: Pick<TripConversation, "trip_number" | "display_trip_id">): string {
@@ -281,8 +287,12 @@ export function ChatScreen() {
   const [showTripSearch, setShowTripSearch] = useState(false);
   const [tripSidebarSearch, setTripSidebarSearch] = useState("");
   const [showTripFilterModal, setShowTripFilterModal] = useState(false);
+  const [tripUnreadFirst, setTripUnreadFirst] = useState(true);
   const [tripPartyFilters, setTripPartyFilters] = useState<ConversationPartyType[]>([
     ...TRIP_PARTY_FILTERS,
+  ]);
+  const [tripStatusFilters, setTripStatusFilters] = useState<TripStatusFilter[]>([
+    ...TRIP_STATUS_FILTERS,
   ]);
   const deepLinkAppliedRef = useRef<string | null>(null);
   /** Avoid repeating hydrate when RLS returns null for the same URL. */
@@ -313,6 +323,21 @@ export function ChatScreen() {
 
   const selectedConv = conversations.find((c) => c.id === selectedConvId) ?? null;
   const selectedNet = netChats.find((c) => c.id === selectedNetId) ?? null;
+  const selectedTripPartyConversations = useMemo(() => {
+    if (!selectedConv) return [] as TripConversation[];
+    const order: Record<ConversationPartyType, number> = {
+      client: 0,
+      supplier: 1,
+      driver: 2,
+    };
+    return conversations
+      .filter((c) => c.trip_id === selectedConv.trip_id)
+      .sort((a, b) => {
+        const partyOrderDiff = order[a.party_type] - order[b.party_type];
+        if (partyOrderDiff !== 0) return partyOrderDiff;
+        return a.party_name.localeCompare(b.party_name);
+      });
+  }, [conversations, selectedConv]);
 
   const tripUnread = getTotalUnreadCount();
   const netUnread = netTotal();
@@ -322,10 +347,19 @@ export function ChatScreen() {
     const normalizedFilters = tripPartyFilters.length
       ? tripPartyFilters
       : TRIP_PARTY_FILTERS;
+    const normalizedStatusFilters = tripStatusFilters.length
+      ? tripStatusFilters
+      : TRIP_STATUS_FILTERS;
     const filterSet = new Set<ConversationPartyType>(normalizedFilters);
+    const statusFilterSet = new Set<TripStatusFilter>(normalizedStatusFilters);
 
     return conversations
       .filter((conv) => filterSet.has(conv.party_type))
+      .filter((conv) =>
+        isTerminalTripStatus(conv.trip_status)
+          ? statusFilterSet.has("terminal")
+          : statusFilterSet.has("active"),
+      )
       .filter((conv) => {
         if (!hasSearch) return true;
         const displayId = getConversationTripLabel(conv);
@@ -333,6 +367,11 @@ export function ChatScreen() {
         return haystack.includes(trimmedSearch);
       })
       .sort((a, b) => {
+        if (tripUnreadFirst) {
+          const unreadDiff = (b.unread_dispatcher_count ?? 0) - (a.unread_dispatcher_count ?? 0);
+          if (unreadDiff !== 0) return unreadDiff;
+        }
+
         const aActive = isTerminalTripStatus(a.trip_status) ? 0 : 1;
         const bActive = isTerminalTripStatus(b.trip_status) ? 0 : 1;
         if (bActive !== aActive) return bActive - aActive;
@@ -348,7 +387,7 @@ export function ChatScreen() {
           new Date(a.last_message_at ?? 0).getTime()
         );
       });
-  }, [conversations, tripPartyFilters, tripSidebarSearch]);
+  }, [conversations, tripPartyFilters, tripSidebarSearch, tripStatusFilters, tripUnreadFirst]);
   const sortedNetChats = useMemo(() => {
     return [...netChats].sort((a, b) => {
       const unreadDiff = (b.unreadCount ?? 0) - (a.unreadCount ?? 0);
@@ -608,7 +647,10 @@ export function ChatScreen() {
         p.name.toLowerCase().includes(netComposeSearch.toLowerCase())
       )
     : netPartners;
-  const hasTripPartyFilter = tripPartyFilters.length < TRIP_PARTY_FILTERS.length;
+  const hasTripFilter =
+    tripUnreadFirst ||
+    tripPartyFilters.length < TRIP_PARTY_FILTERS.length ||
+    tripStatusFilters.length < TRIP_STATUS_FILTERS.length;
 
   const toggleTripPartyFilter = (partyType: ConversationPartyType) => {
     setTripPartyFilters((prev) =>
@@ -617,6 +659,38 @@ export function ChatScreen() {
         : [...prev, partyType],
     );
   };
+
+  const toggleTripStatusFilter = (status: TripStatusFilter) => {
+    setTripStatusFilters((prev) =>
+      prev.includes(status) ? prev.filter((type) => type !== status) : [...prev, status],
+    );
+  };
+  const setTripPartyHeaderTab = (tab: "all" | ConversationPartyType) => {
+    if (tab === "all") {
+      setTripPartyFilters([...TRIP_PARTY_FILTERS]);
+      return;
+    }
+    setTripPartyFilters([tab]);
+  };
+  const tripPartyHeaderTab: "all" | ConversationPartyType =
+    tripPartyFilters.length === TRIP_PARTY_FILTERS.length
+      ? "all"
+      : tripPartyFilters.length === 1
+        ? tripPartyFilters[0]
+        : "all";
+  const setTripStatusHeaderTab = (tab: "all" | TripStatusFilter) => {
+    if (tab === "all") {
+      setTripStatusFilters([...TRIP_STATUS_FILTERS]);
+      return;
+    }
+    setTripStatusFilters([tab]);
+  };
+  const tripStatusHeaderTab: "all" | TripStatusFilter =
+    tripStatusFilters.length === TRIP_STATUS_FILTERS.length
+      ? "all"
+      : tripStatusFilters.length === 1
+        ? tripStatusFilters[0]
+        : "all";
 
   // Partners that don't yet have a conversation
   const existingPartnerOrgIds = new Set(netChats.map((c) => c.partnerId));
@@ -757,7 +831,7 @@ export function ChatScreen() {
                   style={s.filterBtn}
                 >
                   <Filter size={16} color="rgba(255,255,255,0.72)" />
-                  {hasTripPartyFilter ? <View style={s.filterActiveDot} /> : null}
+                  {hasTripFilter ? <View style={s.filterActiveDot} /> : null}
                 </TouchableOpacity>
               </>
             )}
@@ -828,6 +902,114 @@ export function ChatScreen() {
           </View>
         )}
 
+        {activeTab === "trips" && (
+          <View style={s.tripFiltersHeaderWrap}>
+            <View style={s.tripPartyTabsRow}>
+              <TouchableOpacity
+                style={[s.tripPartyTab, tripPartyHeaderTab === "all" && s.tripPartyTabActive]}
+                onPress={() => setTripPartyHeaderTab("all")}
+                activeOpacity={0.75}
+              >
+                <Text
+                  style={[
+                    s.tripPartyTabText,
+                    tripPartyHeaderTab === "all" && s.tripPartyTabTextActive,
+                  ]}
+                >
+                  All
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.tripPartyTab, tripPartyHeaderTab === "client" && s.tripPartyTabActive]}
+                onPress={() => setTripPartyHeaderTab("client")}
+                activeOpacity={0.75}
+              >
+                <Text
+                  style={[
+                    s.tripPartyTabText,
+                    tripPartyHeaderTab === "client" && s.tripPartyTabTextActive,
+                  ]}
+                >
+                  Client
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.tripPartyTab, tripPartyHeaderTab === "supplier" && s.tripPartyTabActive]}
+                onPress={() => setTripPartyHeaderTab("supplier")}
+                activeOpacity={0.75}
+              >
+                <Text
+                  style={[
+                    s.tripPartyTabText,
+                    tripPartyHeaderTab === "supplier" && s.tripPartyTabTextActive,
+                  ]}
+                >
+                  Supplier
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.tripPartyTab, tripPartyHeaderTab === "driver" && s.tripPartyTabActive]}
+                onPress={() => setTripPartyHeaderTab("driver")}
+                activeOpacity={0.75}
+              >
+                <Text
+                  style={[
+                    s.tripPartyTabText,
+                    tripPartyHeaderTab === "driver" && s.tripPartyTabTextActive,
+                  ]}
+                >
+                  Driver
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={s.tripStatusTabsRow}>
+              <TouchableOpacity
+                style={[s.tripStatusTab, tripStatusHeaderTab === "all" && s.tripStatusTabActive]}
+                onPress={() => setTripStatusHeaderTab("all")}
+                activeOpacity={0.75}
+              >
+                <Text
+                  style={[
+                    s.tripStatusTabText,
+                    tripStatusHeaderTab === "all" && s.tripStatusTabTextActive,
+                  ]}
+                >
+                  All Status
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.tripStatusTab, tripStatusHeaderTab === "active" && s.tripStatusTabActive]}
+                onPress={() => setTripStatusHeaderTab("active")}
+                activeOpacity={0.75}
+              >
+                <Text
+                  style={[
+                    s.tripStatusTabText,
+                    tripStatusHeaderTab === "active" && s.tripStatusTabTextActive,
+                  ]}
+                >
+                  Active
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.tripStatusTab, tripStatusHeaderTab === "terminal" && s.tripStatusTabActive]}
+                onPress={() => setTripStatusHeaderTab("terminal")}
+                activeOpacity={0.75}
+              >
+                <Text
+                  style={[
+                    s.tripStatusTabText,
+                    tripStatusHeaderTab === "terminal" && s.tripStatusTabTextActive,
+                  ]}
+                >
+                  Closed
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {activeTab === "trips" && isWebDesktopUI && showCompose && (
           <View style={s.composePopoverLayer} pointerEvents="box-none">
             <TouchableOpacity
@@ -857,6 +1039,37 @@ export function ChatScreen() {
               </View>
               <Text style={s.tripFilterPopoverSub}>Filter by conversation party</Text>
               <View style={s.filterChipWrap}>
+                <TouchableOpacity
+                  style={[s.filterChip, tripUnreadFirst && s.filterChipActive]}
+                  onPress={() => setTripUnreadFirst((prev) => !prev)}
+                  activeOpacity={0.75}
+                >
+                  <Text style={[s.filterChipText, tripUnreadFirst && s.filterChipTextActive]}>
+                    Unread first
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={s.tripFilterPopoverSub}>Filter by trip status</Text>
+              <View style={s.filterChipWrap}>
+                {TRIP_STATUS_FILTERS.map((status, index) => {
+                  const selected = tripStatusFilters.includes(status);
+                  const isLast = index === TRIP_STATUS_FILTERS.length - 1;
+                  return (
+                    <TouchableOpacity
+                      key={status}
+                      style={[s.filterChip, isLast && s.filterChipLast, selected && s.filterChipActive]}
+                      onPress={() => toggleTripStatusFilter(status)}
+                      activeOpacity={0.75}
+                    >
+                      <Text style={[s.filterChipText, selected && s.filterChipTextActive]}>
+                        {statusFilterSheetLabel(status)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <Text style={s.tripFilterPopoverSub}>Filter by conversation party</Text>
+              <View style={s.filterChipWrap}>
                 {TRIP_PARTY_FILTERS.map((partyType, index) => {
                   const selected = tripPartyFilters.includes(partyType);
                   const isLast = index === TRIP_PARTY_FILTERS.length - 1;
@@ -876,10 +1089,14 @@ export function ChatScreen() {
               </View>
               <TouchableOpacity
                 style={s.filterResetBtn}
-                onPress={() => setTripPartyFilters([...TRIP_PARTY_FILTERS])}
+                onPress={() => {
+                  setTripUnreadFirst(true);
+                  setTripStatusFilters([...TRIP_STATUS_FILTERS]);
+                  setTripPartyFilters([...TRIP_PARTY_FILTERS]);
+                }}
                 activeOpacity={0.8}
               >
-                <Text style={s.filterResetText}>Reset to all parties</Text>
+                <Text style={s.filterResetText}>Reset all filters</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1065,11 +1282,42 @@ export function ChatScreen() {
             <View style={cm.header}>
               <View>
                 <Text style={cm.title}>Trip Filters</Text>
-                <Text style={cm.subtitle}>Filter trip chats by conversation party.</Text>
+                <Text style={cm.subtitle}>Filter by unread, status, and conversation party.</Text>
               </View>
               <TouchableOpacity onPress={() => setShowTripFilterModal(false)} hitSlop={8} style={cm.closeBtn}>
                 <X size={20} color="#94a3b8" />
               </TouchableOpacity>
+            </View>
+
+            <View style={s.filterChipWrap}>
+              <TouchableOpacity
+                style={[s.filterChip, tripUnreadFirst && s.filterChipActive]}
+                onPress={() => setTripUnreadFirst((prev) => !prev)}
+                activeOpacity={0.75}
+              >
+                <Text style={[s.filterChipText, tripUnreadFirst && s.filterChipTextActive]}>
+                  Unread first
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={s.filterChipWrap}>
+              {TRIP_STATUS_FILTERS.map((status, index) => {
+                const selected = tripStatusFilters.includes(status);
+                const isLast = index === TRIP_STATUS_FILTERS.length - 1;
+                return (
+                  <TouchableOpacity
+                    key={status}
+                    style={[s.filterChip, isLast && s.filterChipLast, selected && s.filterChipActive]}
+                    onPress={() => toggleTripStatusFilter(status)}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={[s.filterChipText, selected && s.filterChipTextActive]}>
+                      {statusFilterSheetLabel(status)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
 
             <View style={s.filterChipWrap}>
@@ -1093,10 +1341,14 @@ export function ChatScreen() {
 
             <TouchableOpacity
               style={s.filterResetBtn}
-              onPress={() => setTripPartyFilters([...TRIP_PARTY_FILTERS])}
+              onPress={() => {
+                setTripUnreadFirst(true);
+                setTripStatusFilters([...TRIP_STATUS_FILTERS]);
+                setTripPartyFilters([...TRIP_PARTY_FILTERS]);
+              }}
               activeOpacity={0.8}
             >
-              <Text style={s.filterResetText}>Reset to all parties</Text>
+              <Text style={s.filterResetText}>Reset all filters</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1300,6 +1552,14 @@ export function ChatScreen() {
         onAddToBook={handleAddToBook}
         onDispute={handleDispute}
         addingToBookId={addingToBook}
+        tripPartyConversations={selectedTripPartyConversations}
+        onSelectTripParty={(conversationId) => {
+          setSelectedConvId(conversationId);
+          markAsRead(conversationId);
+          setMessageInput("");
+          setShowEmoji(false);
+          setShowScripts(false);
+        }}
       />
     ) : (
       <NetworkDetailPanel
@@ -1441,9 +1701,23 @@ function EmptyDetail() {
 
 const s = StyleSheet.create({
   root: { flex: 1 },
-  desktop: { flex: 1, flexDirection: "row" },
-  desktopList: { width: 340, borderRightWidth: 1, borderRightColor: "#e2e8f0", backgroundColor: "rgba(255,255,255,0.72)" },
-  desktopDetail: { flex: 1, backgroundColor: "transparent" },
+  desktop: { flex: 1, flexDirection: "row", gap: 10, padding: 10 },
+  desktopList: {
+    width: 360,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 20,
+    overflow: "hidden",
+    backgroundColor: "rgba(255,255,255,0.9)",
+  },
+  desktopDetail: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 20,
+    overflow: "hidden",
+    backgroundColor: "rgba(255,255,255,0.88)",
+  },
 
   listPanel: { flex: 1, backgroundColor: "transparent" },
   listHeader: {
@@ -1590,6 +1864,46 @@ const s = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
+  detailPartySwitchRow: {
+    flexDirection: "row",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 8,
+    alignItems: "flex-start",
+    borderBottomWidth: 1,
+    borderBottomColor: "#1e293b",
+    backgroundColor: "#0f172a",
+  },
+  detailPartySwitchChip: {
+    minWidth: 112,
+    maxWidth: 170,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.35)",
+    backgroundColor: "rgba(15,23,42,0.9)",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    alignSelf: "flex-start",
+  },
+  detailPartySwitchChipActive: {
+    borderColor: Theme.primary,
+    backgroundColor: Theme.primary,
+  },
+  detailPartySwitchText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#93c5fd",
+    letterSpacing: 0.7,
+    textTransform: "uppercase",
+  },
+  detailPartySwitchTextActive: { color: "#fff" },
+  detailPartySwitchSubText: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.72)",
+  },
+  detailPartySwitchSubTextActive: { color: "#fff" },
 
   detailPanel: { flex: 1, backgroundColor: "transparent" },
   msgs: { flex: 1, backgroundColor: "transparent" },
@@ -1799,6 +2113,47 @@ const s = StyleSheet.create({
     justifyContent: "center",
   },
   filterResetText: { color: "#334155", fontSize: 14, fontWeight: "700" },
+  tripFiltersHeaderWrap: {
+    paddingHorizontal: 14,
+    paddingBottom: 10,
+    gap: 8,
+  },
+  tripPartyTabsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  tripPartyTab: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#dbe4ee",
+    backgroundColor: "#f8fafc",
+    paddingVertical: 8,
+  },
+  tripPartyTabActive: { borderColor: Theme.primary, backgroundColor: Theme.primary },
+  tripPartyTabText: { fontSize: 11, fontWeight: "800", color: "#475569" },
+  tripPartyTabTextActive: { color: "#fff" },
+  tripStatusTabsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  tripStatusTab: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#dbe4ee",
+    backgroundColor: "#f8fafc",
+    paddingVertical: 7,
+  },
+  tripStatusTabActive: { borderColor: Theme.primary, backgroundColor: Theme.primary },
+  tripStatusTabText: { fontSize: 10, fontWeight: "800", color: "#64748b" },
+  tripStatusTabTextActive: { color: "#fff" },
   tripFilterPopoverLayer: {
     position: "absolute",
     top: 0,
@@ -2229,6 +2584,8 @@ function TripConversationDetailPanel({
   onAddToBook,
   onDispute,
   addingToBookId,
+  tripPartyConversations,
+  onSelectTripParty,
 }: {
   selectedConv: TripConversation | null;
   messagesRef: React.RefObject<ScrollView | null>;
@@ -2246,6 +2603,8 @@ function TripConversationDetailPanel({
   onAddToBook: (message: TripMessageRow) => void;
   onDispute: (message: TripMessageRow) => void;
   addingToBookId: string | null;
+  tripPartyConversations: TripConversation[];
+  onSelectTripParty: (conversationId: string) => void;
 }) {
   if (!selectedConv) return <EmptyDetail />;
   const quickMsgs = QUICK_MESSAGES[selectedConv.party_type];
@@ -2253,12 +2612,37 @@ function TripConversationDetailPanel({
   return (
     <View style={s.detailPanel}>
       <ChatDetailHeader
-        title={`${selectedConv.trip_number} · ${partyLabel(selectedConv.party_type)}`}
+        title={`${getConversationTripLabel(selectedConv)} · ${partyLabel(selectedConv.party_type)}`}
         subtitle={selectedConv.party_name.toUpperCase()}
         partyType={selectedConv.party_type}
         isDesktop={isDesktop}
         onCloseDetail={onCloseDetail}
       />
+      {tripPartyConversations.length > 1 && (
+        <View style={s.detailPartySwitchRow}>
+          {tripPartyConversations.map((conv) => {
+            const active = conv.id === selectedConv.id;
+            return (
+              <TouchableOpacity
+                key={conv.id}
+                style={[s.detailPartySwitchChip, active && s.detailPartySwitchChipActive]}
+                onPress={() => onSelectTripParty(conv.id)}
+                activeOpacity={0.75}
+              >
+                <Text style={[s.detailPartySwitchText, active && s.detailPartySwitchTextActive]}>
+                  {partyLabel(conv.party_type)}
+                </Text>
+                <Text
+                  style={[s.detailPartySwitchSubText, active && s.detailPartySwitchSubTextActive]}
+                  numberOfLines={1}
+                >
+                  {conv.party_name}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
       <ScrollView
         ref={messagesRef}
         style={s.msgs}
