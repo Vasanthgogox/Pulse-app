@@ -1102,6 +1102,46 @@ export function AddTransactionModal({
     [viewerOrgId, linkedSupplierIdByOrgId, safeSuppliers],
   );
 
+  /** Single-trip selection: placeholder reflects that trip's dues, not party-wide totals from props. */
+  const ledgerAmountPlaceholder = useMemo(() => {
+    const base = amountPlaceholder;
+    if (!tripId || !tripFinancialSnapshot || !selectedTrip) return base;
+    const f = tripFinancialSnapshot.financials;
+    let tripAmt: number | null = null;
+    if (type === "in") {
+      if (f.client_receivable > 0) tripAmt = f.client_receivable;
+    } else {
+      const localSupplier = resolveLocalSupplierPartyIdFromTrip(selectedTrip);
+      const driverId = (selectedTrip.driver_id ?? "").trim() || null;
+      if (effectivePartyId && localSupplier && effectivePartyId === localSupplier) {
+        if (f.supplier_payable > 0) tripAmt = f.supplier_payable;
+      } else if (effectivePartyId && driverId && effectivePartyId === driverId) {
+        if (f.driver_payable > 0) tripAmt = f.driver_payable;
+      } else {
+        const mode =
+          selectedTripPayoutMode ?? resolveTripLedgerTripType(selectedTrip);
+        if (mode === "asset") {
+          if (f.driver_payable > 0) tripAmt = f.driver_payable;
+        } else if (f.supplier_payable > 0) {
+          tripAmt = f.supplier_payable;
+        }
+      }
+    }
+    if (tripAmt != null && tripAmt > 0) {
+      return formatAmountDuePlaceholder(tripAmt);
+    }
+    return base;
+  }, [
+    amountPlaceholder,
+    tripId,
+    tripFinancialSnapshot,
+    selectedTrip,
+    type,
+    effectivePartyId,
+    selectedTripPayoutMode,
+    resolveLocalSupplierPartyIdFromTrip,
+  ]);
+
   const applyTripSmartTag = useCallback(
     (trip: TripOption, tag: TripLedgerSmartTag) => {
       if (trip.client_price == null && trip.supplier_rate == null) return;
@@ -2389,7 +2429,7 @@ export function AddTransactionModal({
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
         })
-      : amountPlaceholder;
+      : ledgerAmountPlaceholder;
   const previewDirectionLabel = type === "in" ? "Cash In" : "Cash Out";
 
   const renderLedgerSyncV2 = () => {
@@ -2718,7 +2758,7 @@ export function AddTransactionModal({
                 styles.syncAmountInputSide,
                 stackTripFinancialBand && styles.syncAmountInputMobileLeft,
               ]}
-              placeholder={amountPlaceholder}
+              placeholder={ledgerAmountPlaceholder}
               placeholderTextColor={Theme.textMutedDemo}
               value={amountStr}
               onChangeText={setAmountStr}
@@ -3604,7 +3644,7 @@ export function AddTransactionModal({
                   </Text>
                   <TextInput
                     style={styles.amountInput}
-                    placeholder={amountPlaceholder}
+                    placeholder={ledgerAmountPlaceholder}
                     placeholderTextColor={Theme.textMutedDemo}
                     value={amountStr}
                     onChangeText={setAmountStr}
