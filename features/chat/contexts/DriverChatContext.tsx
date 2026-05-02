@@ -7,6 +7,7 @@ import React, {
   type ReactNode,
 } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { uniqueRealtimeChannelTopic } from "@/lib/realtimeTopic";
 import { supabase } from "@/lib/supabase";
 import { getLinkedDriversForCurrentUser } from "@/features/drivers/services/drivers.service";
 import * as tripsService from "@/services/tripsService";
@@ -120,7 +121,7 @@ export function DriverChatProvider({ children }: { children: ReactNode }) {
     if (!convIds.length) return;
 
     const channel = supabase()
-      .channel(`driver_trip_messages:${uid}`)
+      .channel(uniqueRealtimeChannelTopic(`driver_trip_messages:${uid}`))
       .on(
         "postgres_changes",
         {

@@ -8,6 +8,7 @@ import React, {
 } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOptionalOrganization } from "@/contexts/OrganizationContext";
+import { uniqueRealtimeChannelTopic } from "@/lib/realtimeTopic";
 import { supabase } from "@/lib/supabase";
 import { subscribeTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
 import * as chatService from "../services/chat.service";
@@ -133,7 +134,7 @@ export function TripChatProvider({ children }: { children: ReactNode }) {
     if (!organizationId) return;
 
     const channel = supabase()
-      .channel(`trip_messages:org:${organizationId}`)
+      .channel(uniqueRealtimeChannelTopic(`trip_messages:org:${organizationId}`))
       .on(
         "postgres_changes",
         {

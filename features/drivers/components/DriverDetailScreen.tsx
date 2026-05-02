@@ -41,6 +41,7 @@ import {
     canAccessFinance,
     getCapabilitiesFromProfile,
 } from "@/lib/capabilities";
+import { uniqueRealtimeChannelTopic } from "@/lib/realtimeTopic";
 import { supabase } from "@/lib/supabase";
 import {
     formatIndianVehicleNumber,
@@ -550,7 +551,7 @@ export default function DriverDetailScreen({
   useEffect(() => {
     if (!driverId) return;
     const channel = supabase()
-      .channel(`driver-ratings-${driverId}`)
+      .channel(uniqueRealtimeChannelTopic(`driver-ratings-${driverId}`))
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "ratings", filter: `rated_id=eq.${driverId}` },
