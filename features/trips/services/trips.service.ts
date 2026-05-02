@@ -325,6 +325,8 @@ export interface CreateTripData {
   /** Optional advance paid to supplier (stored in trips.advance_paid). */
   advance_paid?: number | null;
   supplier_id?: string | null;
+  /** Denormalized label for UI (trips.supplier_name); optional but improves lists/detail. */
+  supplier_name?: string | null;
   /** When omitted, set from supplier_id (aggregate → market, asset → asset). */
   trip_payout_mode?: "market" | "asset" | null;
   driver_id?: string | null;
@@ -375,7 +377,10 @@ async function ensurePublicUserRecord(userId?: string | null): Promise<void> {
     ) {
       return;
     }
-    throw new Error(error.message);
+    // Never block trip creation: insert uses FK fallbacks; upsert can fail on transient/network quirks.
+    if (__DEV__) {
+      console.warn("[ensurePublicUserRecord] users upsert skipped:", error.message);
+    }
   }
 }
 
@@ -816,6 +821,7 @@ export async function createTrip(
     load_tons: loadTons,
     advance_paid: advancePaid,
     supplier_id: normalizeNullableUuid(data.supplier_id),
+    supplier_name: (data.supplier_name ?? "").trim() || null,
     trip_payout_mode:
       data.trip_payout_mode ??
       (normalizeNullableUuid(data.supplier_id) ? "market" : "asset"),

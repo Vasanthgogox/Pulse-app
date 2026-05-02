@@ -21,6 +21,9 @@ export interface TripAdjustment {
   /** Owning org — used to split You vs They in Shared Ledger */
   organization_id?: string;
   mission_key?: string | null;
+  /** When set, line is excluded from adjusted sale/cost but kept for audit (soft void). */
+  voided_at?: string | null;
+  void_reason?: string | null;
 }
 
 export interface TripAdjustmentPersistContext {
@@ -65,7 +68,14 @@ type TripFinanceAdjustmentRowDb = {
   reason: string;
   mission_key?: string | null;
   created_at?: string;
+  voided_at?: string | null;
+  void_reason?: string | null;
 };
+
+export function isAdjustmentVoided(a: TripAdjustment): boolean {
+  const t = String(a.voided_at ?? "").trim();
+  return t.length > 0;
+}
 
 function rowFromRemote(row: TripFinanceAdjustmentRowDb): TripAdjustment {
   return {
@@ -78,6 +88,8 @@ function rowFromRemote(row: TripFinanceAdjustmentRowDb): TripAdjustment {
     reason: row.reason ?? "",
     created_at: row.created_at,
     mission_key: row.mission_key ?? null,
+    voided_at: row.voided_at ?? null,
+    void_reason: row.void_reason ?? null,
   };
 }
 
@@ -86,7 +98,7 @@ async function loadRemoteForTrip(tripId: string): Promise<TripAdjustment[]> {
     const { data, error } = await supabase()
       .from("trip_finance_adjustments")
       .select(
-        "id, trip_id, organization_id, type, impact, amount, reason, mission_key, created_at",
+        "id, trip_id, organization_id, type, impact, amount, reason, mission_key, created_at, voided_at, void_reason",
       )
       .eq("trip_id", tripId)
       .order("created_at", { ascending: true });
@@ -146,7 +158,7 @@ export async function addTripAdjustment(
           mission_key,
         })
         .select(
-          "id, trip_id, organization_id, type, impact, amount, reason, mission_key, created_at",
+          "id, trip_id, organization_id, type, impact, amount, reason, mission_key, created_at, voided_at, void_reason",
         )
         .single();
       if (!error && data) {
@@ -174,27 +186,95 @@ export async function addTripAdjustment(
   return newRow;
 }
 
-export async function removeTripAdjustment(tripId: string, adjustmentId: string): Promise<void> {
+/**
+ * Soft-void: row stays in registry with audit reason; excluded from {@link adjustedRevenue} / {@link adjustedCost}.
+ */
+export async function voidTripAdjustment(
+  tripId: string,
+  adjustmentId: string,
+  voidReason: string,
+): Promise<void> {
+  const reason = String(voidReason ?? "").trim();
+  if (!reason) return;
+  const voided_at = new Date().toISOString();
   try {
-    await supabase().from("trip_finance_adjustments").delete().eq("id", adjustmentId);
+    await supabase()
+      .from("trip_finance_adjustments")
+      .update({ voided_at, void_reason: reason })
+      .eq("id", adjustmentId)
+      .eq("trip_id", tripId);
+  } catch {
+    /* offline / RLS */
+  }
+  try {
+    const raw = await AsyncStorage.getItem(storageKey(tripId));
+    const parsed = raw ? (JSON.parse(raw) as TripAdjustment[]) : [];
+    let local = Array.isArray(parsed) ? parsed : [];
+    const remoteList = await loadRemoteForTrip(tripId);
+    const idx = local.findIndex((a) => a.id === adjustmentId);
+    const remoteRow = remoteList.find((a) => a.id === adjustmentId);
+    const base = idx >= 0 ? local[idx] : remoteRow;
+    if (!base) return;
+    const updated: TripAdjustment = {
+      ...base,
+      voided_at,
+      void_reason: reason,
+    };
+    const without = local.filter((a) => a.id !== adjustmentId);
+    without.push(updated);
+    local = without;
+    await setTripAdjustments(tripId, local);
   } catch {
     /* ignore */
+  }
+}
+
+export async function updateTripAdjustment(
+  tripId: string,
+  adjustmentId: string,
+  patch: {
+    type: TripAdjustmentType;
+    impact: TripAdjustmentImpact;
+    amount: number;
+    reason: string;
+  },
+): Promise<void> {
+  try {
+    await supabase()
+      .from("trip_finance_adjustments")
+      .update({
+        type: patch.type,
+        impact: patch.impact,
+        amount: patch.amount,
+        reason: patch.reason,
+      })
+      .eq("id", adjustmentId)
+      .eq("trip_id", tripId);
+  } catch {
+    /* offline / RLS */
   }
   try {
     const raw = await AsyncStorage.getItem(storageKey(tripId));
     const parsed = raw ? (JSON.parse(raw) as TripAdjustment[]) : [];
     const local = Array.isArray(parsed) ? parsed : [];
-    await AsyncStorage.setItem(
-      storageKey(tripId),
-      JSON.stringify(local.filter((a) => a.id !== adjustmentId)),
-    );
+    const idx = local.findIndex((a) => a.id === adjustmentId);
+    if (idx >= 0) {
+      local[idx] = {
+        ...local[idx],
+        type: patch.type,
+        impact: patch.impact,
+        amount: patch.amount,
+        reason: patch.reason,
+      };
+      await setTripAdjustments(tripId, local);
+    }
   } catch {
     /* ignore */
   }
 }
 
 export function adjustedRevenue(baseSales: number, adjustments: TripAdjustment[]): number {
-  const revenueAdj = adjustments.filter((a) => a.type === "revenue");
+  const revenueAdj = adjustments.filter((a) => a.type === "revenue" && !isAdjustmentVoided(a));
   const delta = revenueAdj.reduce(
     (sum, a) => sum + (a.impact === "plus" ? a.amount : -a.amount),
     0,
@@ -203,7 +283,7 @@ export function adjustedRevenue(baseSales: number, adjustments: TripAdjustment[]
 }
 
 export function adjustedCost(baseCost: number, adjustments: TripAdjustment[]): number {
-  const costAdj = adjustments.filter((a) => a.type === "cost");
+  const costAdj = adjustments.filter((a) => a.type === "cost" && !isAdjustmentVoided(a));
   const delta = costAdj.reduce(
     (sum, a) => sum + (a.impact === "plus" ? a.amount : -a.amount),
     0,
@@ -235,7 +315,7 @@ export async function fetchTripFinanceAdjustmentsByTripIds(
       const { data, error } = await supabase()
         .from("trip_finance_adjustments")
         .select(
-          "id, trip_id, organization_id, type, impact, amount, reason, mission_key, created_at",
+          "id, trip_id, organization_id, type, impact, amount, reason, mission_key, created_at, voided_at, void_reason",
         )
         .in("trip_id", chunk)
         .order("created_at", { ascending: true });

@@ -4,6 +4,7 @@ import { DatePresetPillBar } from "@/components/DatePresetPillBar";
 import { DetailPageLayout, DetailSection } from "@/components/DetailPageLayout";
 import { entityCompanionCardStyles as ecc } from "@/components/entityCompanionCard.styles";
 import { entityHeroScorecardStyles as ehs } from "@/components/entityHeroScorecard.styles";
+import { DriverPartnerProfileDashboard } from "@/components/DriverPartnerProfileDashboard";
 import { FinanceFAB } from "@/components/FinanceFAB";
 import { getAvatarUriForSeed } from "@/constants/DriverLevels";
 import Layout from "@/constants/Layout";
@@ -40,6 +41,7 @@ import {
     canAccessFinance,
     getCapabilitiesFromProfile,
 } from "@/lib/capabilities";
+import { supabase } from "@/lib/supabase";
 import {
     formatIndianVehicleNumber,
     formatINR,
@@ -545,6 +547,23 @@ export default function DriverDetailScreen({
     };
   }, [driver?.id, driver?.avatar_url, driver?.avatar_seed]);
 
+  useEffect(() => {
+    if (!driverId) return;
+    const channel = supabase()
+      .channel(`driver-ratings-${driverId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "ratings", filter: `rated_id=eq.${driverId}` },
+        () => {
+          getRatingsForDriver(driverId).then(({ ratings: rows }) => {
+            setDriverRatings(rows ?? []);
+          });
+        },
+      )
+      .subscribe();
+    return () => { void supabase().removeChannel(channel); };
+  }, [driverId]);
+
   const tripOptions = useMemo(
     () =>
       trips.map((t) => ({
@@ -563,10 +582,49 @@ export default function DriverDetailScreen({
     [trips],
   );
 
+  const tripRouteLabelByTripId = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const t of trips) {
+      const pickup = (t.pickup_area ?? "").trim();
+      const drop = (t.drop_location ?? "").trim();
+      m.set(
+        String(t.id),
+        pickup || drop ? `${pickup || "—"} → ${drop || "—"}` : "—",
+      );
+    }
+    return m;
+  }, [trips]);
+
+  const assignedVehicleLabelForProfile = useMemo(() => {
+    if (!trips.length) return null;
+    const withVehicle = trips.filter(
+      (t) =>
+        t.vehicle_id != null ||
+        ((t.vehicle_display_number ?? "").trim() !== ""),
+    );
+    if (withVehicle.length === 0) return null;
+    const sorted = [...withVehicle].sort((a, b) => {
+      const dateA = (a.pickup_date ?? a.created_at ?? "").toString();
+      const dateB = (b.pickup_date ?? b.created_at ?? "").toString();
+      return dateB.localeCompare(dateA);
+    });
+    const latest = sorted[0];
+    const num = (latest?.vehicle_display_number ?? "").trim();
+    return num ? formatIndianVehicleNumber(num) : null;
+  }, [trips]);
+
   const driverRatingAvg = useMemo(
     () => averageScore(driverRatings),
     [driverRatings],
   );
+
+  const driverTripsOperatedInAppCount = useMemo(() => {
+    if (!driverId) return 0;
+    const id = String(driverId).trim().toLowerCase();
+    return trips.filter(
+      (t) => String(t.driver_id ?? "").trim().toLowerCase() === id,
+    ).length;
+  }, [driverId, trips]);
 
   const entityPaid = useMemo(
     () =>
@@ -843,15 +901,6 @@ export default function DriverDetailScreen({
         })()
       : null;
 
-  const statusLabel =
-    leftAtFormatted != null
-      ? `Disconnected · Left on ${leftAtFormatted}`
-      : driver.status === "on_trip"
-        ? t("onTrip")
-        : driver.status === "online"
-          ? t("online")
-          : t("offline");
-
   const canLink =
     !driver.user_id &&
     (driver.phone?.trim() || driver.email?.trim()) &&
@@ -1013,15 +1062,6 @@ export default function DriverDetailScreen({
     load();
   };
 
-  function formatRatingDate(s: string) {
-    if (!s) return "—";
-    const d = s.slice(0, 10);
-    const [y, m, day] = d.split("-");
-    const months = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" ");
-    return `${day} ${months[Number(m) - 1]} ${y}`;
-  }
-
-  const hasPendingSalaryRequests = driverRequests.length > 0;
   const tripsHandled = filteredLedgerRows.length;
   const isIntegrated = Boolean(driver.user_id);
   const isInAppNotIntegrated =
@@ -1446,268 +1486,87 @@ export default function DriverDetailScreen({
         presentationStyle="pageSheet"
         onRequestClose={() => setShowProfileModal(false)}
       >
-        <View
-          style={[
-            styles.profileModalWrap,
-            { paddingTop: insets.top, paddingBottom: insets.bottom },
-          ]}
+        <DriverPartnerProfileDashboard
+          onClose={() => setShowProfileModal(false)}
+          driver={driver}
+          profileAvatarUri={profileAvatarUri}
+          businessVolumeLabel={formatINR(totalDriverEarnings)}
+          driverRatingAvg={driverRatingAvg}
+          tripsOperatedCount={driverTripsOperatedInAppCount}
+          settlementHealthPct={settlementHealth}
+          driverRatings={driverRatings}
+          tripRouteLabelByTripId={tripRouteLabelByTripId}
+          assignedVehicleLabel={assignedVehicleLabelForProfile}
+          driverOffer={driverOffer}
+          showCompensationBlock={Boolean(driverOffer || driver.tracking_only)}
+          leftAtFormatted={leftAtFormatted}
         >
-          <View style={styles.profileModalHeader}>
-            <Text style={styles.profileModalTitle}>Driver Profile</Text>
-            <TouchableOpacity
-              onPress={() => setShowProfileModal(false)}
-              style={styles.profileModalCloseBtn}
-              hitSlop={12}
-              accessibilityLabel={t("close") ?? "Close"}
-            >
+          {driverRequests.length > 0 ? (
+            <View style={styles.profileInfoCallout}>
               <FontAwesome
-                name="times"
-                size={18}
-                color={Theme.textPrimaryDark}
+                name="bell"
+                size={14}
+                color={Theme.textSecondary}
+                style={styles.profileInfoCalloutIcon}
               />
-            </TouchableOpacity>
-          </View>
-          <ScrollView
-            style={styles.profileModalScroll}
-            contentContainerStyle={[
-              styles.profileModalContent,
-              { paddingBottom: 24 + insets.bottom },
-            ]}
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.profileCard}>
-              <View style={styles.profileCardTop}>
-                <View style={styles.profileAvatarWrap}>
-                  {profileAvatarUri ? (
-                    <Image
-                      source={{ uri: profileAvatarUri }}
-                      style={styles.profileAvatarImage}
-                    />
-                  ) : (
-                    <FontAwesome name="user" size={30} color={Theme.primary} />
-                  )}
-                </View>
-                <View style={styles.profileCardTopText}>
-                  <Text style={styles.profileEntityName} numberOfLines={2}>
-                    {driver.name ?? "—"}
-                  </Text>
-                  {driver.phone?.trim() ? (
-                    <Text style={styles.profileEntitySub} numberOfLines={1}>
-                      {driver.phone}
-                    </Text>
-                  ) : driver.email?.trim() ? (
-                    <Text style={styles.profileEntitySub} numberOfLines={1}>
-                      {driver.email}
-                    </Text>
-                  ) : null}
-                  <View style={styles.profileBadges}>
-                    {driver.user_id ? (
-                      <View style={styles.profileBadge}>
-                        <Text style={styles.profileBadgeText}>Verified</Text>
-                      </View>
-                    ) : (
-                      <View style={styles.profileBadge}>
-                        <Text style={styles.profileBadgeText} numberOfLines={1}>
-                          {statusLabel}
-                        </Text>
-                      </View>
-                    )}
-                    <View
-                      style={[styles.profileBadge, styles.profileBadgeCore]}
-                    >
-                      <Text style={styles.profileBadgeCoreText}>Core Node</Text>
-                    </View>
-                  </View>
-                </View>
-              </View>
-              <View style={styles.profileGrid}>
-                <View style={styles.profileGridItem}>
-                  <Text style={styles.profileGridLabel}>Payments</Text>
-                  <Text style={styles.profileGridValue} numberOfLines={1}>
-                    {formatINR(totalDriverEarnings)}
-                  </Text>
-                </View>
-                <View style={styles.profileGridItem}>
-                  <Text style={styles.profileGridLabel}>Paid</Text>
-                  <Text style={styles.profileGridValue} numberOfLines={1}>
-                    {formatINR(entityPaid)}
-                  </Text>
-                </View>
-                <View style={styles.profileGridItem}>
-                  <Text style={styles.profileGridLabel}>To pay</Text>
-                  <Text style={styles.profileGridValue} numberOfLines={1}>
-                    {formatINR(entityPending)}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.profileHealthRow}>
-                <Text style={styles.profileHealthLabel}>Node health</Text>
-                <View style={styles.profileHealthPill}>
-                  <Text style={styles.profileHealthValue}>
-                    {settlementHealth}%
-                  </Text>
-                </View>
-              </View>
-              <Text style={styles.profileSectionTitle}>Contact protocol</Text>
-              <View style={styles.profileContactRow}>
-                <View style={styles.profileContactIcon}>
-                  <FontAwesome name="phone" size={14} color={Theme.textMuted} />
-                </View>
-                <View style={styles.profileContactText}>
-                  <Text style={styles.profileContactLabel}>Phone Registry</Text>
-                  <Text style={styles.profileContactValue}>
-                    {driver.phone ?? "—"}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.profileContactRow}>
-                <View style={styles.profileContactIcon}>
-                  <FontAwesome
-                    name="envelope"
-                    size={14}
-                    color={Theme.textMuted}
-                  />
-                </View>
-                <View style={styles.profileContactText}>
-                  <Text style={styles.profileContactLabel}>Email link</Text>
-                  <Text style={styles.profileContactValue}>
-                    {driver.email ?? "—"}
-                  </Text>
-                </View>
-              </View>
-              {/* Show compensation section for all drivers (including tracking-only) */}
-              {driverOffer || driver.tracking_only ? (
-                <>
-                  <Text style={styles.profileSectionTitle}>
-                    Compensation terms
-                  </Text>
-                  <View style={styles.profileFiscalRow}>
-                    <Text style={styles.profileFiscalLabel}>
-                      Base Salary (Payable)
-                    </Text>
-                    <Text style={styles.profileFiscalValue}>
-                      {driverOffer?.payableAmount != null &&
-                      Number(driverOffer.payableAmount) > 0
-                        ? `₹${Number(driverOffer.payableAmount).toLocaleString("en-IN")} / mo`
-                        : "—"}
-                    </Text>
-                  </View>
-                  <View style={styles.profileFiscalRow}>
-                    <Text style={styles.profileFiscalLabel}>
-                      Trip Commission
-                    </Text>
-                    <Text style={styles.profileFiscalValue}>
-                      {driverOffer?.commissionPercent != null &&
-                      Number(driverOffer.commissionPercent) > 0
-                        ? `${driverOffer.commissionPercent}%`
-                        : "—"}
-                    </Text>
-                  </View>
-                  <View style={styles.profileFiscalRow}>
-                    <Text style={styles.profileFiscalLabel}>Per-KM Rate</Text>
-                    <Text style={styles.profileFiscalValue}>
-                      {driverOffer?.commissionPerKm != null &&
-                      Number(driverOffer.commissionPerKm) > 0
-                        ? `₹${driverOffer.commissionPerKm} / km`
-                        : "—"}
-                    </Text>
-                  </View>
-                </>
-              ) : null}
+              <Text style={styles.profileInfoCalloutText}>
+                Pending salary requests are now handled in Notifications.
+              </Text>
             </View>
-            {driverRequests.length > 0 ? (
-              <View style={styles.profileInfoCallout}>
-                <FontAwesome
-                  name="bell"
-                  size={14}
-                  color={Theme.textSecondary}
-                  style={styles.profileInfoCalloutIcon}
-                />
-                <Text style={styles.profileInfoCalloutText}>
-                  Pending salary requests are now handled in Notifications.
-                </Text>
-              </View>
-            ) : null}
+          ) : null}
 
-            {canLink && (
-              <DetailSection title={t("account")}>
+          {canLink ? (
+            <DetailSection title={t("account")}>
+              <TouchableOpacity
+                style={[styles.linkBtn, linking && styles.linkBtnDisabled]}
+                onPress={
+                  canSendMatchedInvite
+                    ? handleSendMatchedInvite
+                    : handleLinkToAccount
+                }
+                disabled={
+                  linking ||
+                  inviting ||
+                  dismissingMatch ||
+                  Boolean(inviteAlreadySentForMatch)
+                }
+              >
+                <Text style={styles.linkBtnText}>
+                  {inviteAlreadySentForMatch
+                    ? t("invitationSentLabel")
+                    : canSendMatchedInvite
+                      ? inviting
+                        ? t("sending")
+                        : t("sendInvitation")
+                      : linking
+                        ? t("linking")
+                        : t("linkToAppAccount")}
+                </Text>
+              </TouchableOpacity>
+              <Text style={styles.linkHint}>
+                {inviteAlreadySentForMatch
+                  ? t("invitationAlreadySentHint")
+                  : canSendMatchedInvite
+                    ? t("driverSignupReadyHint")
+                    : t("linkHint")}
+              </Text>
+              {inviteAlreadySentForMatch ? (
                 <TouchableOpacity
-                  style={[styles.linkBtn, linking && styles.linkBtnDisabled]}
-                  onPress={
-                    canSendMatchedInvite
-                      ? handleSendMatchedInvite
-                      : handleLinkToAccount
-                  }
-                  disabled={
-                    linking ||
-                    inviting ||
-                    dismissingMatch ||
-                    Boolean(inviteAlreadySentForMatch)
-                  }
+                  onPress={handleResetInvitation}
+                  disabled={dismissingMatch || inviting}
+                  style={styles.dismissMatchBtn}
+                  hitSlop={12}
+                  accessibilityRole="button"
+                  accessibilityLabel={resetInvitationText}
                 >
-                  <Text style={styles.linkBtnText}>
-                    {inviteAlreadySentForMatch
-                      ? t("invitationSentLabel")
-                      : canSendMatchedInvite
-                        ? inviting
-                          ? t("sending")
-                          : t("sendInvitation")
-                        : linking
-                          ? t("linking")
-                          : t("linkToAppAccount")}
+                  <Text style={styles.dismissMatchBtnText}>
+                    {resetInvitationText}
                   </Text>
                 </TouchableOpacity>
-                <Text style={styles.linkHint}>
-                  {inviteAlreadySentForMatch
-                    ? t("invitationAlreadySentHint")
-                    : canSendMatchedInvite
-                      ? t("driverSignupReadyHint")
-                      : t("linkHint")}
-                </Text>
-                {inviteAlreadySentForMatch ? (
-                  <TouchableOpacity
-                    onPress={handleResetInvitation}
-                    disabled={dismissingMatch || inviting}
-                    style={styles.dismissMatchBtn}
-                    hitSlop={12}
-                    accessibilityRole="button"
-                    accessibilityLabel={resetInvitationText}
-                  >
-                    <Text style={styles.dismissMatchBtnText}>
-                      {resetInvitationText}
-                    </Text>
-                  </TouchableOpacity>
-                ) : null}
-              </DetailSection>
-            )}
-
-            {driverRatings.length > 0 && (
-              <View style={styles.driverRatingsSection}>
-                <Text style={styles.profileSectionTitle}>RECENT RATINGS</Text>
-                {driverRatings.map((r) => (
-                  <View key={r.id} style={styles.driverRatingRow}>
-                    <View style={styles.driverRatingIconWrap}>
-                      <FontAwesome
-                        name="star"
-                        size={14}
-                        color={Theme.driverGold}
-                      />
-                    </View>
-                    <View style={styles.driverRatingBody}>
-                      <Text style={styles.driverRatingScore}>
-                        {r.score.toFixed(1)}{" "}
-                        <Text style={styles.driverRatingScoreMax}>/ 5.0</Text>
-                      </Text>
-                      <Text style={styles.driverRatingDate}>
-                        {r.created_at ? formatRatingDate(r.created_at) : ""}
-                      </Text>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            )}
-          </ScrollView>
-        </View>
+              ) : null}
+            </DetailSection>
+          ) : null}
+        </DriverPartnerProfileDashboard>
       </Modal>
 
       {driverDetailTab === "trips" && (
@@ -2268,184 +2127,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  profileModalWrap: {
-    flex: 1,
-    backgroundColor: Theme.screenBackground,
-  },
-  profileModalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
-  },
-  profileModalTitle: {
-    fontSize: 14,
-    fontWeight: "800",
-    fontStyle: "italic",
-    color: Theme.textPrimaryDark,
-    textTransform: "uppercase",
-  },
-  profileModalCloseBtn: {
-    width: 40,
-    height: 40,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  profileModalScroll: { flex: 1 },
-  profileModalContent: {
-    padding: Layout.screenPaddingHorizontal,
-    paddingBottom: 32,
-  },
-  profileCard: {
-    backgroundColor: Theme.surface,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: Theme.surfaceBorder,
-    padding: 18,
-    marginBottom: 16,
-  },
-  profileCardTop: {
-    flexDirection: "column",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 14,
-  },
-  profileAvatarWrap: {
-    width: 74,
-    height: 74,
-    borderRadius: 37,
-    backgroundColor: Theme.avatarIndigo,
-    borderWidth: 2,
-    borderColor: Theme.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  profileAvatarImage: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 37,
-  },
-  profileCardTopText: { flex: 0, minWidth: 0, alignItems: "center" },
-  profileEntityName: {
-    fontSize: 18,
-    fontWeight: "800",
-    fontStyle: "italic",
-    color: Theme.textPrimaryDark,
-    marginBottom: 8,
-    textAlign: "center",
-  },
-  profileEntitySub: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: Theme.textMuted,
-    marginBottom: 6,
-    textAlign: "center",
-  },
-  profileBadges: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    justifyContent: "center",
-  },
-  profileBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    backgroundColor: Theme.positiveMuted,
-    borderWidth: 1,
-    borderColor: Theme.darkGreen,
-  },
-  profileBadgeText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: Theme.darkGreen,
-    textTransform: "uppercase",
-  },
-  profileBadgeCore: {
-    backgroundColor: Theme.fiscalTabActiveBg ?? "#e8eaf6",
-    borderColor: Theme.primary,
-  },
-  profileBadgeCoreText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: Theme.primary,
-    textTransform: "uppercase",
-  },
-  profileGrid: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 8,
-    marginBottom: 14,
-  },
-  profileGridItem: {
-    flex: 1,
-    backgroundColor: Theme.surfaceGray,
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    alignItems: "center",
-  },
-  profileGridLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: Theme.primary,
-    textTransform: "uppercase",
-    marginBottom: 4,
-    textAlign: "center",
-  },
-  profileGridValue: {
-    fontSize: 14,
-    fontWeight: "800",
-    fontStyle: "italic",
-    color: Theme.textPrimaryDark,
-    textAlign: "center",
-  },
-  profileHealthRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 12,
-    paddingHorizontal: 6,
-  },
-  profileHealthLabel: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: Theme.textMuted,
-    letterSpacing: 1,
-    textTransform: "uppercase",
-  },
-  profileHealthPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.screenBackground,
-  },
-  profileHealthValue: {
-    fontSize: 16,
-    fontWeight: "900",
-    fontStyle: "italic",
-    color: Theme.primary,
-  },
-  profileSectionTitle: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: Theme.textMuted,
-    letterSpacing: 1,
-    textTransform: "uppercase",
-    marginBottom: 12,
-    paddingBottom: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
-  },
   profileInfoCallout: {
     flexDirection: "row",
     alignItems: "center",
@@ -2467,53 +2148,6 @@ const styles = StyleSheet.create({
     color: Theme.textSecondary,
     fontSize: 12,
     fontWeight: "600",
-  },
-  profileContactRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-    marginBottom: 12,
-  },
-  profileContactIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: Theme.surfaceGray,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  profileContactText: { flex: 1, minWidth: 0 },
-  profileContactLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    marginBottom: 2,
-  },
-  profileContactValue: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: Theme.textPrimaryDark,
-  },
-  profileFiscalRow: {
-    marginBottom: 12,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.surfaceGray,
-  },
-  profileFiscalLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    marginBottom: 4,
-  },
-  profileFiscalValue: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: Theme.textPrimaryDark,
   },
   scorecard: ehs.scorecard,
   scorecardWebDesktop: ehs.scorecardWebDesktop,
@@ -3864,99 +3498,5 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.borderLight,
     marginVertical: 12,
     marginLeft: 48,
-  },
-  driverCompensationCard: {
-    backgroundColor: Theme.screenBackground,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    marginHorizontal: Layout.screenPaddingHorizontal,
-    marginBottom: 16,
-    overflow: "hidden",
-  },
-  driverCompensationHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: Theme.surfaceLight,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
-  },
-  driverCompensationHeaderText: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: Theme.textPrimary,
-    letterSpacing: 1,
-  },
-  driverCompensationBody: { padding: 16 },
-  driverCompensationRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 4,
-  },
-  driverCompensationLabel: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: Theme.textSecondary,
-  },
-  driverCompensationValue: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: Theme.textPrimary,
-  },
-  driverCompensationDivider: {
-    height: 1,
-    backgroundColor: Theme.surfaceLight,
-    marginVertical: 8,
-  },
-  driverRatingsSection: {
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingBottom: 24,
-  },
-  driverRatingsSectionTitle: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: Theme.textMuted,
-    letterSpacing: 1.5,
-    marginBottom: 12,
-  },
-  driverRatingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    backgroundColor: Theme.screenBackground,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    marginBottom: 8,
-  },
-  driverRatingIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: Theme.surfaceLight,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  driverRatingBody: { flex: 1, minWidth: 0 },
-  driverRatingScore: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: Theme.textPrimary,
-  },
-  driverRatingScoreMax: {
-    fontSize: 10,
-    fontWeight: "500",
-    color: Theme.textMuted,
-  },
-  driverRatingDate: {
-    fontSize: 8,
-    fontWeight: "600",
-    color: Theme.textMuted,
-    marginTop: 2,
   },
 });

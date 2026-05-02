@@ -8,7 +8,10 @@ import { FinanceFAB } from "@/components/FinanceFAB";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
-import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
+import {
+  useDemoTabBarVisibilityProgressOptional,
+  useTabBarAwareScrollProps,
+} from "@/contexts/DemoTabBarScrollContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { LedgerReportModal } from "@/features/finance";
@@ -56,6 +59,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import {
     Modal,
     NativeScrollEvent,
@@ -160,6 +164,13 @@ export default function TripsScreen() {
     Layout.tabBarBottomPaddingMin;
   const tripsFabBottom = webChatFabBaseBottom + Layout.fabStackOffset;
   const tabBarScrollProps = useTabBarAwareScrollProps();
+  const fallbackFabVisibilityProgress = useSharedValue(1);
+  const fabVisibilityProgress =
+    useDemoTabBarVisibilityProgressOptional() ?? fallbackFabVisibilityProgress;
+  const fabVisibilityStyle = useAnimatedStyle(() => ({
+    opacity: fabVisibilityProgress.value,
+    transform: [{ scale: 0.92 + fabVisibilityProgress.value * 0.08 }],
+  }));
   const screenTopPad =
     Platform.OS === "web" ? 0 : insets.top + Layout.headerPaddingBelowInset;
   const tripsScrollBottomPad =
@@ -1535,8 +1546,18 @@ export default function TripsScreen() {
             />
           }
         >
-          <View style={styles.tripsBodyFiltersBleed}>
-            <View style={styles.tripsInlineFilterPanel}>
+          <View
+            style={[
+              styles.tripsBodyFiltersBleed,
+              isMobileViewport && styles.tripsBodyFiltersBleedMobileDark,
+            ]}
+          >
+            <View
+              style={[
+                styles.tripsInlineFilterPanel,
+                isMobileViewport && styles.tripsInlineFilterPanelMobileDark,
+              ]}
+            >
               {isMobileViewport ? (
                 <>
                   <ScrollView
@@ -1553,7 +1574,10 @@ export default function TripsScreen() {
                         style={[
                           styles.tab,
                           styles.tripsMobileTab,
-                          tab.isActive && styles.tabActive,
+                          tab.isActive &&
+                            (isMobileViewport
+                              ? styles.tabActiveMobileDark
+                              : styles.tabActive),
                         ]}
                         onPress={tab.onPress}
                         activeOpacity={0.7}
@@ -1563,7 +1587,13 @@ export default function TripsScreen() {
                         <Text
                           style={[
                             styles.tabText,
-                            tab.isActive && styles.tabTextActive,
+                            isMobileViewport
+                              ? tab.isActive
+                                ? styles.tabTextActiveMobileDark
+                                : styles.tabTextMobileDark
+                              : tab.isActive
+                                ? styles.tabTextActive
+                                : null,
                           ]}
                         >
                           {tab.label}
@@ -1632,6 +1662,10 @@ export default function TripsScreen() {
                           styles.tripsMobileDateChip,
                           dateRangeFilter === id &&
                             styles.tripsBodyDateChipActive,
+                          isMobileViewport && styles.tripsBodyDateChipMobileDark,
+                          dateRangeFilter === id &&
+                            isMobileViewport &&
+                            styles.tripsBodyDateChipActiveMobileDark,
                         ]}
                         onPress={() => {
                           setDateRangeFilter(id);
@@ -1645,6 +1679,11 @@ export default function TripsScreen() {
                             styles.tripsBodyDateChipText,
                             dateRangeFilter === id &&
                               styles.tripsBodyDateChipTextActive,
+                            isMobileViewport &&
+                              styles.tripsBodyDateChipTextMobileDark,
+                            dateRangeFilter === id &&
+                              isMobileViewport &&
+                              styles.tripsBodyDateChipTextActiveMobileDark,
                           ]}
                           numberOfLines={1}
                         >
@@ -1657,6 +1696,8 @@ export default function TripsScreen() {
                         styles.tripsBodyDateRangeIconBtn,
                         dateRangeFilter === "custom" &&
                           styles.tripsDateRangeIconBtnActive,
+                        isMobileViewport &&
+                          styles.tripsBodyDateRangeIconBtnMobileDark,
                       ]}
                       onPress={() => setShowDateRangePicker(true)}
                       activeOpacity={0.8}
@@ -1669,7 +1710,9 @@ export default function TripsScreen() {
                         color={
                           dateRangeFilter === "custom"
                             ? Theme.textOnDark
-                            : Theme.textPrimaryDark
+                            : isMobileViewport
+                              ? Theme.textOnDarkMuted
+                              : Theme.textPrimaryDark
                         }
                       />
                     </TouchableOpacity>
@@ -2692,7 +2735,7 @@ export default function TripsScreen() {
         </ScrollView>
       )}
       {canAccess && (
-        <View
+        <Animated.View
           style={[
             styles.fabWrap,
             {
@@ -2700,6 +2743,7 @@ export default function TripsScreen() {
               right: Layout.screenPaddingHorizontal,
               bottom: tripsFabBottom,
             },
+            fabVisibilityStyle,
           ]}
         >
           <FinanceFAB
@@ -2707,7 +2751,7 @@ export default function TripsScreen() {
             accessibilityLabel={tr("addTrip")}
             icon="road"
           />
-        </View>
+        </Animated.View>
       )}
       <LedgerReportModal
         visible={tripLedgerExportOpen}
@@ -2824,6 +2868,15 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
   },
   tabTextActive: { color: Theme.textPrimaryDark },
+  tabActiveMobileDark: {
+    backgroundColor: "transparent",
+  },
+  tabTextMobileDark: {
+    color: Theme.textOnDarkMuted,
+  },
+  tabTextActiveMobileDark: {
+    color: Theme.textOnDark,
+  },
   tabUnderline: {
     position: "absolute",
     bottom: 2,
@@ -3392,6 +3445,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
   },
+  /** Narrow web / mobile: one continuous dark strip (tabs + date chips + metric rail). */
+  tripsBodyFiltersBleedMobileDark: {
+    backgroundColor: Theme.darkBackground,
+    borderBottomColor: Theme.separatorDark,
+  },
   tripsInlineFilterPanel: {
     marginBottom: 12,
     backgroundColor: Theme.screenBackground,
@@ -3400,6 +3458,15 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
     borderRadius: 20,
     overflow: "hidden",
+  },
+  tripsInlineFilterPanelMobileDark: {
+    marginBottom: 6,
+    backgroundColor: "transparent",
+    borderTopWidth: 0,
+    borderBottomWidth: 0,
+    borderColor: "transparent",
+    borderRadius: 0,
+    overflow: "visible",
   },
   tripsInlineFilterRowWeb: {
     flexDirection: "row",
@@ -3663,6 +3730,8 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     borderRadius: 22,
     backgroundColor: Theme.darkBackground,
+    borderWidth: 1,
+    borderColor: Theme.separatorDark,
   },
   metricTagRailMobile: {
     flexDirection: "row",
@@ -4166,6 +4235,24 @@ const styles = StyleSheet.create({
   },
   tripsBodyDateChipTextActive: {
     color: Theme.textPrimaryDark,
+  },
+  tripsBodyDateChipMobileDark: {
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderColor: "rgba(255,255,255,0.10)",
+  },
+  tripsBodyDateChipActiveMobileDark: {
+    backgroundColor: "rgba(255,255,255,0.14)",
+    borderColor: "rgba(255,255,255,0.22)",
+  },
+  tripsBodyDateChipTextMobileDark: {
+    color: "rgba(255,255,255,0.62)",
+  },
+  tripsBodyDateChipTextActiveMobileDark: {
+    color: Theme.textOnDark,
+  },
+  tripsBodyDateRangeIconBtnMobileDark: {
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(255,255,255,0.12)",
   },
   tripsBodyDateRangeIconBtn: {
     width: 32,

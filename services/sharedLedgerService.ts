@@ -220,6 +220,8 @@ export async function getSharedTripFinanceAdjustments(
     reason: string;
     mission_key?: string | null;
     created_at?: string;
+    voided_at?: string | null;
+    void_reason?: string | null;
   }>;
   const adjustments: TripAdjustment[] = raw.map((r) => ({
     id: r.id,
@@ -231,6 +233,8 @@ export async function getSharedTripFinanceAdjustments(
     reason: String(r.reason ?? ''),
     created_at: r.created_at,
     mission_key: r.mission_key ?? null,
+    voided_at: r.voided_at ?? null,
+    void_reason: r.void_reason ?? null,
   }));
   return { error: null, adjustments };
 }

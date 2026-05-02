@@ -1,11 +1,26 @@
 import { Alert, Platform } from 'react-native';
 
+export type AppAlertImplementation = (title: string, message?: string) => void;
+
+let registeredImplementation: AppAlertImplementation | null = null;
+
 /**
- * User-visible alert that works on native and web. On web, `Alert.alert` from
- * react-native-web is not reliably shown in all browsers/builds; use the native
- * dialog so validation and errors are always visible.
+ * Registers the in-app themed alert UI (see `AppAlertHost`). When unset, falls
+ * back to `window.alert` on web and `Alert.alert` on native.
+ */
+export function registerAppAlertImplementation(impl: AppAlertImplementation | null): void {
+  registeredImplementation = impl;
+}
+
+/**
+ * User-visible alert that works on native and web. When `AppAlertHost` is
+ * mounted, uses the themed modal (replacing unstyled browser dialogs on web).
  */
 export function showAppAlert(title: string, message?: string): void {
+  if (registeredImplementation) {
+    registeredImplementation(title, message);
+    return;
+  }
   if (Platform.OS === 'web') {
     const body = message && message.trim().length > 0 ? `${title}\n\n${message}` : title;
     window.alert(body);

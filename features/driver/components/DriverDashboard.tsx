@@ -17,12 +17,18 @@ import * as driverLocationService from '@/services/driverLocationService';
 import * as driversService from '@/services/driversService';
 import { getOptimalRoute, RouteResult } from '@/services/routingService';
 import * as tripsService from '@/services/tripsService';
+import {
+  formatGeocodedCityState,
+  formatGeocodedPlaceLine,
+  reverseGeocodeCityStateLabel,
+} from '@/lib/reverseGeocodePlace.util';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ComponentProps,
@@ -284,6 +290,13 @@ function distanceMeters(
   return R * c;
 }
 
+/** Compact label for straight-line gap (driver ↔ action pin). */
+function formatStraightLineGapLabel(meters: number): string {
+  if (!Number.isFinite(meters)) return '—';
+  if (meters < 1000) return `${Math.round(meters)} m`;
+  return `${(meters / 1000).toFixed(1)} km`;
+}
+
 /** Approx initial bearing (degrees 0-360) from one lat/lon to another. */
 function bearingDegrees(
   from: { latitude: number; longitude: number },
@@ -543,12 +556,12 @@ export default function DriverDashboard() {
         const results = await Location.reverseGeocodeAsync({ latitude, longitude });
         if (results && results.length > 0) {
           const place = results[0];
-          const parts = [
-            place.name || place.street || null,
-            place.city || place.subregion || null,
-          ].filter(Boolean) as string[];
-          if (parts.length > 0) {
-            setLocationLabel(parts.join(', '));
+          const cityState = formatGeocodedCityState(place).trim();
+          if (cityState) {
+            setLocationLabel(cityState);
+          } else {
+            const fallback = formatGeocodedPlaceLine(place).trim();
+            if (fallback) setLocationLabel(fallback);
           }
         }
       } catch {
@@ -563,6 +576,26 @@ export default function DriverDashboard() {
   useEffect(() => {
     fetchLocation();
   }, [fetchLocation]);
+
+  const liveDriverGeocodeCoord = useMemo(
+    () => truckPosition ?? driverMapPosition,
+    [truckPosition, driverMapPosition],
+  );
+
+  useEffect(() => {
+    const c = liveDriverGeocodeCoord;
+    if (!c || !Number.isFinite(c.latitude) || !Number.isFinite(c.longitude)) return;
+    let cancelled = false;
+    const t = setTimeout(() => {
+      void reverseGeocodeCityStateLabel(c.latitude, c.longitude).then((label) => {
+        if (!cancelled && label) setLocationLabel(label);
+      });
+    }, 750);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [liveDriverGeocodeCoord?.latitude, liveDriverGeocodeCoord?.longitude]);
 
   // Refetch on focus and re-read accepted trip id (e.g. after OTP claim) so Dashboard shows "View trip" not "Accept & Enter OTP".
   useFocusEffect(
@@ -1037,6 +1070,39 @@ export default function DriverDashboard() {
       ? getTripStopCoordinate(activeGuidanceTrip, activeGuidance.target)
       : null;
   const highlightedTarget = activeGuidance?.target ?? null;
+
+  /** Straight-line distance from driver to the current action pin (pickup or drop) — shown as a map badge at leg midpoint. */
+  const actionGapStraightLineM = useMemo(() => {
+    if (!driverMapPosition || !guidanceTargetCoordinate || !highlightedTarget) return null;
+    if (activeGuidanceStep === 'completed') return null;
+    return distanceMeters(
+      driverMapPosition.latitude,
+      driverMapPosition.longitude,
+      guidanceTargetCoordinate.latitude,
+      guidanceTargetCoordinate.longitude,
+    );
+  }, [
+    driverMapPosition?.latitude,
+    driverMapPosition?.longitude,
+    guidanceTargetCoordinate?.latitude,
+    guidanceTargetCoordinate?.longitude,
+    highlightedTarget,
+    activeGuidanceStep,
+  ]);
+
+  const actionGapMidpointCoord = useMemo((): { latitude: number; longitude: number } | null => {
+    if (!driverMapPosition || !guidanceTargetCoordinate || actionGapStraightLineM == null) return null;
+    return {
+      latitude: (driverMapPosition.latitude + guidanceTargetCoordinate.latitude) / 2,
+      longitude: (driverMapPosition.longitude + guidanceTargetCoordinate.longitude) / 2,
+    };
+  }, [
+    driverMapPosition?.latitude,
+    driverMapPosition?.longitude,
+    guidanceTargetCoordinate?.latitude,
+    guidanceTargetCoordinate?.longitude,
+    actionGapStraightLineM,
+  ]);
 
   // Ola-style: keep the important route/marker in the top ~50% of the screen.
   const olaMapBottomPaddingPx = Math.round(Dimensions.get('window').height * 0.5);
@@ -1737,6 +1803,54 @@ export default function DriverDashboard() {
                   ) : null;
                 })()
               )}
+              {actionGapMidpointCoord &&
+              actionGapStraightLineM != null &&
+              highlightedTarget &&
+              activeGuidanceStep !== 'completed' ? (
+                <Marker
+                  coordinate={actionGapMidpointCoord}
+                  anchor={{ x: 0.5, y: 0.5 }}
+                  tracksViewChanges={false}
+                  zIndex={400}
+                  accessibilityLabel={`Straight-line gap ${formatStraightLineGapLabel(actionGapStraightLineM)} ${
+                    highlightedTarget === 'pickup' ? 'to pickup' : 'to drop-off'
+                  }`}
+                >
+                  <View style={styles.gapFenceMarkerOuter}>
+                    <View
+                      style={[
+                        styles.gapFencePill,
+                        { backgroundColor: colors.surface, borderColor: colors.border },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.gapFenceIconWrap,
+                          highlightedTarget === 'pickup'
+                            ? { backgroundColor: colors.emeraldMuted }
+                            : { backgroundColor: `${Theme.teslaRed}22` },
+                        ]}
+                      >
+                        <FontAwesome
+                          name="arrows-h"
+                          size={11}
+                          color={highlightedTarget === 'pickup' ? colors.emerald : Theme.teslaRed}
+                        />
+                      </View>
+                      <View style={styles.gapFenceTextCol}>
+                        <Text style={[styles.gapFenceDistance, { color: colors.text }]} numberOfLines={1}>
+                          {formatStraightLineGapLabel(actionGapStraightLineM)}
+                        </Text>
+                        <Text style={[styles.gapFenceCaption, { color: colors.textMuted }]} numberOfLines={1}>
+                          {highlightedTarget === 'pickup'
+                            ? 'Straight-line to pickup'
+                            : 'Straight-line to drop'}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                </Marker>
+              ) : null}
             </>
           )}
         </MapView>
@@ -1922,8 +2036,8 @@ export default function DriverDashboard() {
             </TouchableWithoutFeedback>
 
             <BottomSheetComponent
-              snapPoints={['25%', '50%', '90%']}
-              index={1}
+              snapPoints={['20%', '45%', '88%']}
+              index={0}
               enablePanDownToClose={false}
               bottomInset={driverTabBarClearance}
               backgroundStyle={{
@@ -2038,6 +2152,9 @@ export default function DriverDashboard() {
                                 variant="page"
                               trip={activeMission}
                               commissionAmount={activeMissionCommission}
+                              driverLatitude={(truckPosition ?? driverMapPosition)?.latitude ?? null}
+                              driverLongitude={(truckPosition ?? driverMapPosition)?.longitude ?? null}
+                              driverLocationLabel={locationLabel}
                               onRefresh={fetch}
                               onTripCompleted={() => setJustCompletedTrip(true)}
                               onToggleCollapse={() => setIsAssignmentSheetExpanded((v) => !v)}
@@ -2058,6 +2175,9 @@ export default function DriverDashboard() {
                                     variant="page"
                                 trip={effectiveFirstIncoming}
                                 commissionAmount={newAssignmentCommission}
+                                driverLatitude={(truckPosition ?? driverMapPosition)?.latitude ?? null}
+                                driverLongitude={(truckPosition ?? driverMapPosition)?.longitude ?? null}
+                                driverLocationLabel={locationLabel}
                                 onRefresh={fetch}
                                 onTripCompleted={() => setJustCompletedTrip(true)}
                                 onToggleCollapse={() => setIsAssignmentSheetExpanded((v) => !v)}
@@ -2531,6 +2651,9 @@ export default function DriverDashboard() {
           <DriverTripFlowCard
             trip={activeMission}
             commissionAmount={activeMissionCommission}
+            driverLatitude={(truckPosition ?? driverMapPosition)?.latitude ?? null}
+            driverLongitude={(truckPosition ?? driverMapPosition)?.longitude ?? null}
+            driverLocationLabel={locationLabel}
             onRefresh={fetch}
             onTripCompleted={() => setJustCompletedTrip(true)}
             onBackToDashboard={async () => {
@@ -2582,6 +2705,9 @@ export default function DriverDashboard() {
           <DriverTripFlowCard
             trip={effectiveFirstIncoming}
             commissionAmount={newAssignmentCommission}
+            driverLatitude={(truckPosition ?? driverMapPosition)?.latitude ?? null}
+            driverLongitude={(truckPosition ?? driverMapPosition)?.longitude ?? null}
+            driverLocationLabel={locationLabel}
             onRefresh={fetch}
             onTripCompleted={() => setJustCompletedTrip(true)}
             onBackToDashboard={async () => {
@@ -4678,5 +4804,47 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
+  },
+  /** Mid-leg badge: straight-line gap from driver GPS to current action pin (pickup/drop). */
+  gapFenceMarkerOuter: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gapFencePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    maxWidth: 200,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  gapFenceIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gapFenceTextCol: {
+    flexShrink: 1,
+    gap: 2,
+  },
+  gapFenceDistance: {
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  gapFenceCaption: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+    textTransform: 'uppercase',
   },
 });

@@ -6,7 +6,6 @@ import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
 import { useAuth } from "@/contexts/AuthContext";
-import { useDriverAvatar } from "@/contexts/DriverAvatarContext";
 import {
     useDriverTheme,
     useDriverThemeColors,
@@ -143,6 +142,7 @@ function isAtDropStatus(status: string) {
 
 const UUID_V4_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+void UUID_V4_RE;
 
 function normalizeAssignerName(raw: unknown): string | null {
   return humanizeAssignerDisplayName(String(raw ?? ""));
@@ -382,6 +382,7 @@ function _getTripSettlementBreakdown(
 
   return { fareEarnings, partnerBonus, taxDeductions, netPayout, isSalary };
 }
+void _getTripSettlementBreakdown;
 
 /** Arrow with translate-x animation on press (reference: group-hover:translate-x-2) */
 function AnimatedCardArrow({
@@ -452,9 +453,8 @@ export default function DriverTripsScreen() {
   const isDark = theme === "dark";
   const router = useRouter();
   const { profile } = useAuth();
-  const { avatarSeed: _avatarSeed } = useDriverAvatar();
   const { avatarUri } = useDriverAvatarUri();
-  const [_driver, setDriver] = useState<driversService.DriverRow | null>(null);
+  const [, setDriver] = useState<driversService.DriverRow | null>(null);
   const [trips, setTrips] = useState<tripsService.TripRow[]>([]);
   const [assignmentActorByTripId, setAssignmentActorByTripId] = useState<
     Record<string, string>
@@ -466,7 +466,7 @@ export default function DriverTripsScreen() {
     Record<string, string>
   >({});
   const [loading, setLoading] = useState(true);
-  const [_refreshing, setRefreshing] = useState(false);
+  const [, setRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
   const initialLoadDoneRef = useRef(false);
   const [selectedTrip, setSelectedTrip] = useState<tripsService.TripRow | null>(
@@ -1440,38 +1440,43 @@ export default function DriverTripsScreen() {
                   />
                   <View style={styles.tdHeroInner}>
                     <Text style={styles.tdHeroKicker}>Route Logic History</Text>
-                    <Text style={styles.tdHeroCity}>
-                      {selectedTripPickupParts.primary.toUpperCase()}
-                    </Text>
-                    {selectedTripPickupParts.secondary ? (
-                      <Text style={styles.tdHeroState}>
-                        {selectedTripPickupParts.secondary.toUpperCase()}
-                      </Text>
-                    ) : null}
-
-                    <View style={styles.tdHeroToRow}>
-                      <View style={styles.tdHeroToRail}>
-                        <View style={[styles.tdHeroDot, { backgroundColor: Theme.driverEmerald }]} />
-                        <LinearGradient
-                          colors={[Theme.driverEmerald, "transparent"]}
-                          style={styles.tdHeroRailGrad}
-                        />
+                    <View style={styles.tdHeroRouteRow}>
+                      <View style={styles.tdHeroRouteSide}>
+                        <Text
+                          style={styles.tdHeroCity}
+                          numberOfLines={1}
+                          adjustsFontSizeToFit
+                          minimumFontScale={0.72}
+                        >
+                          {selectedTripPickupParts.primary.toUpperCase()}
+                        </Text>
+                        <Text style={styles.tdHeroState} numberOfLines={1}>
+                          {(selectedTripPickupParts.secondary ?? "Origin").toUpperCase()}
+                        </Text>
                       </View>
-                      <Text style={[styles.tdHeroToLabel, { color: Theme.driverPrimary }]}>
-                        TO
-                      </Text>
-                    </View>
 
-                    <Text style={styles.tdHeroCity}>
-                      {selectedTripDropParts.primary.toUpperCase()}
-                    </Text>
-                    {selectedTripDropParts.secondary ? (
-                      <Text style={[styles.tdHeroState, { marginBottom: 18 }]}>
-                        {selectedTripDropParts.secondary.toUpperCase()}
-                      </Text>
-                    ) : (
-                      <View style={{ height: 18 }} />
-                    )}
+                      <View style={styles.tdHeroRouteConnector}>
+                        <View style={[styles.tdHeroDot, { backgroundColor: Theme.driverEmerald }]} />
+                        <View style={styles.tdHeroConnectorLine} />
+                        <Text style={[styles.tdHeroToLabel, { color: Theme.driverPrimary }]}>TO</Text>
+                        <View style={styles.tdHeroConnectorLine} />
+                        <View style={[styles.tdHeroDot, { backgroundColor: Theme.driverPrimary }]} />
+                      </View>
+
+                      <View style={[styles.tdHeroRouteSide, styles.tdHeroRouteSideRight]}>
+                        <Text
+                          style={[styles.tdHeroCity, styles.tdHeroCityRight]}
+                          numberOfLines={1}
+                          adjustsFontSizeToFit
+                          minimumFontScale={0.72}
+                        >
+                          {selectedTripDropParts.primary.toUpperCase()}
+                        </Text>
+                        <Text style={[styles.tdHeroState, styles.tdHeroStateRight]} numberOfLines={1}>
+                          {(selectedTripDropParts.secondary ?? "Destination").toUpperCase()}
+                        </Text>
+                      </View>
+                    </View>
 
                     <View style={styles.tdHeroDivider} />
                     <View style={styles.tdHeroMetaRow}>
@@ -2659,29 +2664,51 @@ const styles = StyleSheet.create({
     letterSpacing: 4,
     color: "rgba(148,163,184,0.95)",
     textTransform: "uppercase",
+    marginBottom: 24,
+  },
+  tdHeroRouteRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
     marginBottom: 22,
   },
+  tdHeroRouteSide: {
+    flex: 1,
+    minWidth: 0,
+  },
+  tdHeroRouteSideRight: {
+    alignItems: "flex-end",
+  },
   tdHeroCity: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: "900",
     color: "#ffffff",
-    letterSpacing: -0.8,
+    letterSpacing: -1,
     textTransform: "uppercase",
+    lineHeight: 27,
+  },
+  tdHeroCityRight: {
+    textAlign: "right",
   },
   tdHeroState: {
     fontSize: 11,
     fontWeight: "700",
-    letterSpacing: 3,
+    letterSpacing: 2.8,
     color: "rgba(148,163,184,0.95)",
     textTransform: "uppercase",
-    marginTop: 4,
-    marginBottom: 10,
+    marginTop: 7,
+    maxWidth: "100%",
   },
-  tdHeroToRow: {
+  tdHeroStateRight: {
+    textAlign: "right",
+  },
+  tdHeroRouteConnector: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    marginVertical: 12,
+    justifyContent: "center",
+    gap: 5,
+    width: 48,
+    paddingTop: 12,
   },
   tdHeroToRail: {
     alignItems: "center",
@@ -2698,10 +2725,16 @@ const styles = StyleSheet.create({
     marginTop: 2,
     borderRadius: 1,
   },
+  tdHeroConnectorLine: {
+    flex: 1,
+    height: 1,
+    minWidth: 6,
+    backgroundColor: "rgba(148,163,184,0.3)",
+  },
   tdHeroToLabel: {
-    fontSize: 11,
+    fontSize: 7,
     fontWeight: "900",
-    letterSpacing: 4,
+    letterSpacing: 1.2,
   },
   tdHeroDivider: {
     height: StyleSheet.hairlineWidth,

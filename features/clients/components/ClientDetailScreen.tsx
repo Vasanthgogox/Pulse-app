@@ -25,10 +25,20 @@ import { ledgerDayMatchesPeriod } from "@/features/finance/lib/filterLedgerByPer
 import type { FinancePeriodFilter } from "@/features/finance/types";
 import { allocateAmountsToLargestDueTrips } from "@/features/finance/utils/allocateToLargestDue";
 import { averageScore, getRatingsForClient } from "@/features/ratings";
+import { supabase } from "@/lib/supabase";
 import {
     getSuppliersByOrganization,
     type SupplierRow,
 } from "@/features/suppliers/services/suppliers.service";
+import {
+    getWarehousesByClient,
+    type ClientWarehouse,
+} from "../services/clientWarehouses.service";
+import {
+    getContractsByClient,
+    type ClientContract,
+} from "../services/clientContracts.service";
+import { ClientProfileModal } from "./ClientProfileModal";
 import { adjustedRevenue } from "@/features/trips/services/tripAdjustments";
 import {
     getTripDisplayNumber,
@@ -307,12 +317,34 @@ export default function ClientDetailScreen({
   const [isInApp, setIsInApp] = useState(false);
   const [sendingInvitation, setSendingInvitation] = useState(false);
   const [clientRatingAvg, setClientRatingAvg] = useState<number | null>(null);
+  const [profileWarehouses, setProfileWarehouses] = useState<ClientWarehouse[]>([]);
+  const [profileContracts, setProfileContracts] = useState<ClientContract[]>([]);
   const initialLoadDoneRef = useRef(false);
   const heroDecorProgress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     setIsLinked(false);
     setClientRatingAvg(null);
+  }, [clientId]);
+
+  // Realtime: refresh client rating avg whenever any rating for this client changes
+  useEffect(() => {
+    if (!clientId) return;
+    const channel = supabase()
+      .channel(`client-ratings-${clientId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "ratings", filter: `rated_id=eq.${clientId}` },
+        () => {
+          getRatingsForClient(clientId).then(({ ratings: rows }) => {
+            setClientRatingAvg(averageScore(rows));
+          });
+        },
+      )
+      .subscribe();
+    return () => {
+      void supabase().removeChannel(channel);
+    };
   }, [clientId]);
 
   useEffect(() => {
@@ -391,6 +423,8 @@ export default function ClientDetailScreen({
       getSuppliersByOrganization(orgId),
       getDriversByOrganization(orgId),
       getRatingsForClient(clientId),
+      getWarehousesByClient(orgId, clientId),
+      getContractsByClient(orgId, clientId, { activeOnly: true }),
     ])
       .then(
         ([
@@ -402,6 +436,8 @@ export default function ClientDetailScreen({
           suppliersRes,
           driversRes,
           ratingsRes,
+          warehousesRes,
+          contractsRes,
         ]) => {
           if (clientRes.error) {
             setError(clientRes.error.message);
@@ -410,6 +446,8 @@ export default function ClientDetailScreen({
           } else {
             setClient(clientRes.client ?? null);
           }
+          setProfileWarehouses(warehousesRes.error ? [] : (warehousesRes.warehouses ?? []));
+          setProfileContracts(contractsRes.error ? [] : (contractsRes.contracts ?? []));
           const ownerTrips = tripsRes.error ? [] : (tripsRes.trips ?? []);
           const supplierTrips = supplierTripsRes.error
             ? []
@@ -1207,8 +1245,8 @@ export default function ClientDetailScreen({
   const isIntegrated = Boolean(client.is_integrated || client.linked_organization_id);
   const isInAppNotIntegrated = !isIntegrated && isInApp;
   const isNotInApp = !isIntegrated && !isInApp;
-  const clientRating = clientRatingAvg ?? 0;
-  const ratingFilledStars = Math.max(0, Math.min(5, Math.round(clientRating)));
+  const clientRating = clientRatingAvg ?? null;
+  const ratingFilledStars = clientRating != null ? Math.max(0, Math.min(5, Math.round(clientRating))) : 0;
   const statusTitle = isIntegrated
     ? "Integrated"
     : isInAppNotIntegrated
@@ -1223,65 +1261,6 @@ export default function ClientDetailScreen({
       : isLinked
         ? "Invitation sent"
         : "Integrated";
-  const profileWarehouses = (() => {
-    const byPickup = new Map<
-      string,
-      { id: string; name: string; address: string }
-    >();
-    for (const trip of trips) {
-      const pickup = (trip.pickup_area ?? "").trim();
-      if (!pickup) continue;
-      const key = pickup.toLowerCase();
-      if (byPickup.has(key)) continue;
-      byPickup.set(key, {
-        id: key,
-        name: pickup,
-        address: pickup,
-      });
-    }
-    return Array.from(byPickup.values()).slice(0, 8);
-  })();
-  const profileContracts = (() => {
-    const laneMap = new Map<
-      string,
-      {
-        id: string;
-        pickup: string;
-        destination: string;
-        price: number;
-        count: number;
-      }
-    >();
-    for (const trip of trips) {
-      const pickup = (trip.pickup_area ?? "").trim();
-      const destination = (trip.drop_location ?? "").trim();
-      if (!pickup || !destination) continue;
-      const laneKey = `${pickup.toLowerCase()}|${destination.toLowerCase()}`;
-      const existing = laneMap.get(laneKey);
-      if (existing) {
-        existing.price += Number(trip.client_price ?? 0);
-        existing.count += 1;
-      } else {
-        laneMap.set(laneKey, {
-          id: laneKey,
-          pickup,
-          destination,
-          price: Number(trip.client_price ?? 0),
-          count: 1,
-        });
-      }
-    }
-    return Array.from(laneMap.values())
-      .map((row) => ({
-        id: row.id,
-        pickup: row.pickup,
-        destination: row.destination,
-        price: row.count > 0 ? row.price / row.count : row.price,
-        pricingType: "per_trip" as const,
-      }))
-      .slice(0, 10);
-  })();
-
   const tabConfig = [
     { id: "trips" as const, label: "Trips" },
     { id: "cash" as const, label: "Cash Flow" },
@@ -1489,7 +1468,7 @@ export default function ClientDetailScreen({
                     </View>
                     <View style={styles.profilePreviewRatingBadge}>
                       <Text style={styles.profilePreviewRatingBadgeText} numberOfLines={1}>
-                        {clientRating.toFixed(1)}
+                        {clientRating != null ? clientRating.toFixed(1) : "—"}
                       </Text>
                     </View>
                   </View>

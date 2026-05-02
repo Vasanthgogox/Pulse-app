@@ -8,10 +8,23 @@ import {
   getUser2DAvatarUriForSeed,
 } from "@/constants/UserAvatars";
 import { useAuth } from "@/contexts/AuthContext";
+import {
+  useDemoTabBarScrollHideVersion,
+  useDemoTabBarVisibilityProgressOptional,
+} from "@/contexts/DemoTabBarScrollContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { useConnectionRequestsReceivedQuery, useConnectionRequestsSentQuery } from "@/lib/queries";
+import {
+  useConnectionRequestsReceivedQuery,
+  useConnectionRequestsSentQuery,
+  useIndentsQuery,
+  useMarketIndentsQuery,
+  useMyDirectQuotesQuery,
+} from "@/lib/queries";
+import { setMobileNetworkDockExpanded } from "@/lib/mobileDockState";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
+import { useIntegratedChat } from "@/features/chat/contexts/IntegratedChatContext";
+import { useTripChat } from "@/features/chat/contexts/TripChatContext";
 import {
   getSalaryRequestsByOrganization,
   updateSalaryRequestStatus,
@@ -38,6 +51,8 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  type StyleProp,
+  type ViewStyle,
   useWindowDimensions,
   View,
 } from "react-native";
@@ -97,7 +112,7 @@ function AnimatedPress({
   activeOpacity = 0.9,
 }: {
   children: React.ReactNode;
-  style?: any;
+  style?: StyleProp<ViewStyle>;
   onPress?: () => void;
   activeOpacity?: number;
 }) {
@@ -233,6 +248,7 @@ export function DemoTabBar({
   onProfilePress,
   onNotificationsPress,
 }: DemoTabBarProps) {
+  void onNotificationsPress;
   const router = useRouter();
   const { profile } = useAuth();
   const { currentOrganization } = useOrganization();
@@ -240,6 +256,7 @@ export function DemoTabBar({
   const [notificationCount, setNotificationCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showInvitations, setShowInvitations] = useState(false);
+  const [isNetworkExpanded, setIsNetworkExpanded] = useState(false);
   const [notifTab, setNotifTab] = useState<"active" | "history">("active");
   const [inviteTab, setInviteTab] = useState<"received" | "sent">("received");
   const [salaryRequests, setSalaryRequests] = useState<SalaryRequestWithDriverRow[]>([]);
@@ -248,19 +265,61 @@ export function DemoTabBar({
   >([]);
   const [notifActionId, setNotifActionId] = useState<string | null>(null);
   const [inviteActionId, setInviteActionId] = useState<string | null>(null);
-  const notificationsPopoverRootRef = useRef<any>(null);
-  const invitationsPopoverRootRef = useRef<any>(null);
+  const notificationsPopoverRootRef = useRef<View | null>(null);
+  const invitationsPopoverRootRef = useRef<View | null>(null);
+  const mobileNetworkAnchorRef = useRef<View | null>(null);
+  /** Worklet-readable: sub-dock must fully hide when false (don’t let bar visibility opacity show it on other tabs). */
+  const networkDockOpenSV = useSharedValue(false);
   const orgId = currentOrganization?.id ?? null;
   const receivedQ = useConnectionRequestsReceivedQuery(orgId);
   const sentQ = useConnectionRequestsSentQuery(orgId);
+  const dockIndentsQ = useIndentsQuery(orgId);
+  const dockMarketIndentsQ = useMarketIndentsQuery(orgId);
+  const dockMyQuotesQ = useMyDirectQuotesQuery(orgId);
+  const { getTotalUnreadCount: getTripUnreadCount } = useTripChat();
+  const { getTotalUnreadCount: getNetworkUnreadCount } = useIntegratedChat();
+  const messageUnreadCount = getTripUnreadCount() + getNetworkUnreadCount();
   const pendingInvites = (receivedQ.data ?? []).filter((r) => r.status === "pending").length;
+  const activeLoadCount = useMemo(() => {
+    const terminalStatuses = new Set(["completed", "cancelled"]);
+    const awardedToMeIds = new Set(
+      (dockMyQuotesQ.data ?? [])
+        .filter((q) => String(q.status ?? "").toLowerCase() === "accepted")
+        .map((q) => q.indent_id),
+    );
+    const activeIds = new Set<string>();
+
+    for (const indent of dockIndentsQ.data ?? []) {
+      const status = String(indent.status ?? "").toLowerCase();
+      if (terminalStatuses.has(status)) continue;
+      if (indent.organization_id === orgId) activeIds.add(indent.id);
+    }
+
+    for (const indent of dockMarketIndentsQ.data ?? []) {
+      const status = String(indent.status ?? "").toLowerCase();
+      if (terminalStatuses.has(status)) continue;
+      const target = String(indent.circulation_target ?? "").toLowerCase();
+      const isMarketVisible = target === "integrated_supplier" || target === "both";
+      if (!isMarketVisible) continue;
+      if (status === "awarded") {
+        if (awardedToMeIds.has(indent.id)) activeIds.add(indent.id);
+        continue;
+      }
+      activeIds.add(indent.id);
+    }
+
+    return activeIds.size;
+  }, [dockIndentsQ.data, dockMarketIndentsQ.data, dockMyQuotesQ.data, orgId]);
   const receivedInviteItems = useMemo(
     () =>
       (receivedQ.data ?? [])
         .filter((r) => r.status === "pending")
         .slice(0, 6)
         .map((r) => {
-          const row = r as any;
+          const row = r as typeof r & {
+            requester_name?: string | null;
+            from_party_name?: string | null;
+          };
           const reqClient = Boolean(row.request_shipper_client);
           const reqSupplier = Boolean(row.request_carrier_supplier);
           return {
@@ -281,7 +340,10 @@ export function DemoTabBar({
         .filter((r) => r.status === "pending")
         .slice(0, 6)
         .map((r) => {
-          const row = r as any;
+          const row = r as typeof r & {
+            receiver_name?: string | null;
+            to_party_name?: string | null;
+          };
           const reqClient = Boolean(row.request_shipper_client);
           const reqSupplier = Boolean(row.request_carrier_supplier);
           return {
@@ -447,6 +509,10 @@ export function DemoTabBar({
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const { t } = useLanguage();
+  const fallbackDockVisibilityProgress = useSharedValue(1);
+  const dockVisibilityProgress =
+    useDemoTabBarVisibilityProgressOptional() ?? fallbackDockVisibilityProgress;
+  const scrollHideVersion = useDemoTabBarScrollHideVersion();
 
   /** Pay now opens ledger-sync prefilled; salary row is marked paid only after successful submit (see ledger-sync). */
   const openLedgerForSalaryPayment = useCallback(
@@ -482,6 +548,7 @@ export function DemoTabBar({
   const isTrips = activeTab === "trips";
   const isNetwork = activeTab === "network";
   const isLoadCenter = activeTab === "loadCenter";
+  const networkDockOpen = !isDesktopWeb && isNetwork && isNetworkExpanded;
   const displayName = (
     profile?.full_name ??
     profile?.displayName ??
@@ -499,39 +566,113 @@ export function DemoTabBar({
   const verticalPad = Math.max(dockBottom / 4, 4);
   const bottomPad = verticalPad + 6;
   const mobileNavItems: Array<{
-    id: Exclude<DemoTabId, "resources">;
+    id: Extract<DemoTabId, "finance" | "trips">;
     label: string;
     icon: React.ComponentProps<typeof FontAwesome5>["name"];
     active: boolean;
   }> = [
     { id: "finance", label: "Finance", icon: "wallet", active: isFiscal },
     { id: "trips", label: "Trips", icon: "map-marked-alt", active: isTrips },
-    { id: "network", label: "Network", icon: "globe", active: isNetwork },
-    { id: "loadCenter", label: "Load", icon: "box", active: isLoadCenter },
   ];
+
+  const collapseNetworkDock = useCallback(() => {
+    setIsNetworkExpanded(false);
+    setMobileNetworkDockExpanded(false);
+  }, []);
+
+  const runNetworkDockAction = useCallback((action: () => void) => {
+    setIsNetworkExpanded(false);
+    setMobileNetworkDockExpanded(false);
+    setShowInvitations(false);
+    setShowNotifications(false);
+    action();
+  }, []);
+
+  useEffect(() => {
+    if (activeTab !== "network") collapseNetworkDock();
+  }, [activeTab, collapseNetworkDock]);
+
+  /** Scroll (any): close network flyout; do not reopen when scroll idle—only Network button toggles. */
+  useEffect(() => {
+    collapseNetworkDock();
+  }, [scrollHideVersion, collapseNetworkDock]);
+
+  useEffect(() => {
+    networkDockOpenSV.value = networkDockOpen;
+  }, [networkDockOpen, networkDockOpenSV]);
+
+  useEffect(() => {
+    setMobileNetworkDockExpanded(!isDesktopWeb && networkDockOpen);
+    return () => setMobileNetworkDockExpanded(false);
+  }, [isDesktopWeb, networkDockOpen]);
+
+  const openNetworkInvitations = () => {
+    runNetworkDockAction(() => {
+      router.push("/(tabs)/network?view=requests" as const);
+    });
+  };
+
+  const openNetworkLoads = () => {
+    runNetworkDockAction(() => {
+      onTabChange("loadCenter");
+    });
+  };
+  const openMessages = () => {
+    runNetworkDockAction(() => {
+      router.push("/(modals)/chat" as const);
+    });
+  };
+  const mobileNetworkSubDockVisibilityStyle = useAnimatedStyle(() => {
+    const p = dockVisibilityProgress.value;
+    if (!networkDockOpenSV.value) {
+      return {
+        opacity: 0,
+        transform: [{ scale: 0.72 }, { translateY: 18 }],
+      };
+    }
+    return {
+      opacity: p,
+      transform: [{ scale: 0.92 + p * 0.08 }],
+    };
+  });
 
   useEffect(() => {
     if (Platform.OS !== "web") return;
-    const onDocumentPointerDown = (event: MouseEvent) => {
+    const onDocumentPointerDown = (event: Event) => {
       const target = event.target as Node | null;
       if (!target) return;
+      const notificationsRoot =
+        notificationsPopoverRootRef.current as unknown as { contains?: (node: Node) => boolean } | null;
+      const invitationsRoot =
+        invitationsPopoverRootRef.current as unknown as { contains?: (node: Node) => boolean } | null;
+      const networkRoot =
+        mobileNetworkAnchorRef.current as unknown as { contains?: (node: Node) => boolean } | null;
       const inNotifications =
-        !!notificationsPopoverRootRef.current &&
-        typeof notificationsPopoverRootRef.current.contains === "function" &&
-        notificationsPopoverRootRef.current.contains(target);
+        !!notificationsRoot &&
+        typeof notificationsRoot.contains === "function" &&
+        notificationsRoot.contains(target);
       const inInvitations =
-        !!invitationsPopoverRootRef.current &&
-        typeof invitationsPopoverRootRef.current.contains === "function" &&
-        invitationsPopoverRootRef.current.contains(target);
-      if (inNotifications || inInvitations) return;
+        !!invitationsRoot &&
+        typeof invitationsRoot.contains === "function" &&
+        invitationsRoot.contains(target);
+      const inNetworkDock =
+        !!networkRoot &&
+        typeof networkRoot.contains === "function" &&
+        networkRoot.contains(target);
+      if (inNotifications || inInvitations || inNetworkDock) return;
       setShowNotifications(false);
       setShowInvitations(false);
+      collapseNetworkDock();
     };
+    document.addEventListener("pointerdown", onDocumentPointerDown);
+    document.addEventListener("touchstart", onDocumentPointerDown);
     document.addEventListener("mousedown", onDocumentPointerDown);
     return () => {
+      document.removeEventListener("pointerdown", onDocumentPointerDown);
+      document.removeEventListener("touchstart", onDocumentPointerDown);
       document.removeEventListener("mousedown", onDocumentPointerDown);
     };
-  }, []);
+  }, [collapseNetworkDock]);
 
   if (isDesktopWeb) {
     const navItems: Array<{
@@ -572,7 +713,7 @@ export function DemoTabBar({
     ];
 
     return (
-      <View style={[styles.webTopShell, Platform.OS === "web" && ({ backdropFilter: "blur(24px)" } as any)]}>
+      <View style={[styles.webTopShell, Platform.OS === "web" && ({ backdropFilter: "blur(24px)" } as unknown as ViewStyle)]}>
         <View style={styles.webHeaderRow}>
           <View style={styles.webBrandWrap}>
             <View>
@@ -929,7 +1070,10 @@ export function DemoTabBar({
     >
       <View style={[styles.mobileCommandRow, isCompactMobile && styles.mobileCommandRowCompact]}>
         <TouchableOpacity
-          onPress={onProfilePress}
+          onPress={() => {
+            collapseNetworkDock();
+            onProfilePress?.();
+          }}
           style={[styles.mobileProfilePortal, isCompactMobile && styles.mobileProfilePortalCompact]}
           activeOpacity={0.85}
           accessibilityLabel="Profile"
@@ -958,7 +1102,10 @@ export function DemoTabBar({
                 item.active && styles.commandNavButtonActive,
                 isCompactMobile && styles.commandNavButtonCompact,
               ]}
-              onPress={() => onTabChange(item.id)}
+              onPress={() => {
+                collapseNetworkDock();
+                onTabChange(item.id);
+              }}
                 activeOpacity={0.9}
                 hitSlop={{
                 top: 8,
@@ -991,7 +1138,118 @@ export function DemoTabBar({
           ))}
         </View>
 
-        <View style={[styles.mobileCommandSpacer, isCompactMobile && styles.mobileCommandSpacerCompact]} />
+        <View
+          ref={mobileNetworkAnchorRef}
+          style={[styles.mobileNetworkAnchor, isCompactMobile && styles.mobileNetworkAnchorCompact]}
+        >
+          <Animated.View
+            style={[styles.mobileNetworkSubDock, mobileNetworkSubDockVisibilityStyle]}
+            pointerEvents={networkDockOpen ? "auto" : "none"}
+          >
+            <TouchableOpacity
+              style={styles.mobileNetworkActionRow}
+              onPress={openNetworkInvitations}
+              activeOpacity={0.86}
+              accessibilityLabel="Open network invitations"
+              accessibilityRole="button"
+            >
+              <Text style={styles.mobileNetworkActionLabel}>Invites</Text>
+              <View style={styles.mobileNetworkActionBtn}>
+                <FontAwesome5 name="inbox" size={18} color="#0f172a" solid />
+                {pendingInvites > 0 ? (
+                  <View style={styles.mobileNetworkActionBadge}>
+                    <Text style={styles.mobileNetworkActionBadgeText}>
+                      {pendingInvites > 9 ? "9+" : pendingInvites}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.mobileNetworkActionRow}
+              onPress={openNetworkLoads}
+              activeOpacity={0.86}
+              accessibilityLabel="Open load center"
+              accessibilityRole="button"
+            >
+              <Text style={styles.mobileNetworkActionLabel}>Loads</Text>
+              <View style={styles.mobileNetworkActionBtn}>
+                <FontAwesome5 name="broadcast-tower" size={17} color="#0f172a" />
+                {activeLoadCount > 0 ? (
+                  <View style={styles.mobileNetworkActionBadge}>
+                    <Text style={styles.mobileNetworkActionBadgeText}>
+                      {activeLoadCount > 9 ? "9+" : activeLoadCount}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.mobileNetworkActionRow}
+              onPress={openMessages}
+              activeOpacity={0.86}
+              accessibilityLabel="Open messages"
+              accessibilityRole="button"
+            >
+              <Text style={styles.mobileNetworkActionLabel}>Messages</Text>
+              <View style={[styles.mobileNetworkActionBtn, styles.mobileNetworkMessageBtn]}>
+                <FontAwesome5 name="comment-alt" size={17} color="#ffffff" solid />
+                {messageUnreadCount > 0 ? (
+                  <View style={[styles.mobileNetworkActionBadge, styles.mobileNetworkMessageBadge]}>
+                    <Text style={styles.mobileNetworkActionBadgeText}>
+                      {messageUnreadCount > 9 ? "9+" : messageUnreadCount}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            </TouchableOpacity>
+          </Animated.View>
+
+          <TouchableOpacity
+            onPress={() => {
+              setShowNotifications(false);
+              setShowInvitations(false);
+              if (!isNetwork) {
+                onTabChange("network");
+                setIsNetworkExpanded(true);
+                setMobileNetworkDockExpanded(!isDesktopWeb);
+                return;
+              }
+              setIsNetworkExpanded((value) => {
+                const next = !value;
+                setMobileNetworkDockExpanded(!isDesktopWeb && next);
+                return next;
+              });
+            }}
+            style={[
+              styles.mobileNetworkSwitch,
+              isNetwork && styles.mobileNetworkSwitchActive,
+              isCompactMobile && styles.mobileNetworkSwitchCompact,
+            ]}
+            activeOpacity={0.86}
+            accessibilityLabel={networkDockOpen ? "Close network shortcuts" : "Open network shortcuts"}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: networkDockOpen, selected: isNetwork }}
+          >
+            <FontAwesome5
+              name={networkDockOpen ? "times" : "globe"}
+              size={isCompactMobile ? 18 : 21}
+              color={isNetwork ? "#ffffff" : "#94a3b8"}
+              solid={networkDockOpen}
+            />
+            <Text
+              style={[
+                styles.mobileNetworkSwitchLabel,
+                isNetwork && styles.mobileNetworkSwitchLabelActive,
+                isCompactMobile && styles.mobileNetworkSwitchLabelCompact,
+              ]}
+            >
+              Network
+            </Text>
+          </TouchableOpacity>
+        </View>
 
       </View>
     </View>
@@ -1162,6 +1420,133 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   commandNavLabelActive: {
+    color: "#ffffff",
+  },
+  mobileNetworkAnchor: {
+    width: 64,
+    minHeight: 64,
+    alignItems: "center",
+    justifyContent: "flex-end",
+    position: "relative",
+  },
+  mobileNetworkAnchorCompact: {
+    width: 56,
+    minHeight: 56,
+  },
+  mobileNetworkSubDock: {
+    position: "absolute",
+    bottom: 78,
+    right: 0,
+    gap: 10,
+    alignItems: "flex-end",
+    opacity: 1,
+    transform: [{ scale: 1 }, { translateY: 0 }],
+  },
+  mobileNetworkActionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  mobileNetworkActionLabel: {
+    minHeight: 26,
+    paddingHorizontal: 10,
+    borderRadius: 13,
+    overflow: "hidden",
+    backgroundColor: "#0f172a",
+    color: "#ffffff",
+    fontSize: 8,
+    fontWeight: "900",
+    fontStyle: "italic",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    lineHeight: 26,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  mobileNetworkActionBtn: {
+    width: 56,
+    height: 56,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: "#0f172a",
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.16,
+    shadowRadius: 24,
+    elevation: 12,
+  },
+  mobileNetworkMessageBtn: {
+    backgroundColor: Theme.primary,
+    borderColor: "#ffffff",
+    shadowColor: Theme.primary,
+    shadowOpacity: 0.32,
+  },
+  mobileNetworkActionBadge: {
+    position: "absolute",
+    top: -5,
+    right: -5,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    backgroundColor: Theme.primary,
+    borderWidth: 2,
+    borderColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mobileNetworkActionBadgeText: {
+    fontSize: 7,
+    fontWeight: "900",
+    color: "#ffffff",
+  },
+  mobileNetworkMessageBadge: {
+    backgroundColor: "#0f172a",
+  },
+  mobileNetworkSwitch: {
+    width: 64,
+    height: 64,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: "#0f172a",
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 18 },
+    shadowOpacity: 0.16,
+    shadowRadius: 28,
+    elevation: 14,
+  },
+  mobileNetworkSwitchActive: {
+    backgroundColor: "#0f172a",
+  },
+  mobileNetworkSwitchCompact: {
+    width: 56,
+    height: 56,
+    borderRadius: 21,
+  },
+  mobileNetworkSwitchLabel: {
+    marginTop: 4,
+    fontSize: 6.5,
+    fontWeight: "900",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    fontStyle: "italic",
+  },
+  mobileNetworkSwitchLabelCompact: {
+    fontSize: 5.8,
+    letterSpacing: 0.5,
+  },
+  mobileNetworkSwitchLabelActive: {
     color: "#ffffff",
   },
   mobileCommandSpacer: {

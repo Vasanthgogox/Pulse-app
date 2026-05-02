@@ -3,9 +3,23 @@ import Theme from '@/constants/Theme';
 import Typography from '@/constants/Typography';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Image, Platform, StyleProp, StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-native';
+import Animated, {
+  cancelAnimation,
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+const AVATAR_SIZE = Layout.driverHeaderAvatarSize;
+/** Ring sits outside the photo; blinks when the driver is online. */
+const ONLINE_RING_SIZE = AVATAR_SIZE + 6;
+const ONLINE_RING_WIDTH = 2.5;
 
 type DriverHeaderColors = {
   surface: string;
@@ -45,6 +59,29 @@ export function DriverHeader({
   const title =
     variant === 'assigned' ? driverName : `Welcome, ${driverName}`;
 
+  const ringPulse = useSharedValue(1);
+
+  useEffect(() => {
+    if (!isOnline) {
+      cancelAnimation(ringPulse);
+      ringPulse.value = 1;
+      return;
+    }
+    ringPulse.value = withRepeat(
+      withSequence(
+        withTiming(0.35, { duration: 800, easing: Easing.inOut(Easing.ease) }),
+        withTiming(1, { duration: 800, easing: Easing.inOut(Easing.ease) }),
+      ),
+      -1,
+      false,
+    );
+    return () => cancelAnimation(ringPulse);
+  }, [isOnline, ringPulse]);
+
+  const onlineRingAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: ringPulse.value,
+  }));
+
   return (
     <View
       style={[
@@ -66,19 +103,41 @@ export function DriverHeader({
           style={styles.avatarBtn}
           activeOpacity={0.8}
           accessibilityRole="button"
-          accessibilityLabel="Profile"
+          accessibilityLabel={isOnline ? 'Profile, online' : 'Profile'}
+          accessibilityHint="Opens your driver profile"
         >
-          <View
-            style={[
-              styles.avatarCircle,
-              { borderColor: colors.border, backgroundColor: colors.emeraldMuted },
-            ]}
-          >
-            {avatarUri ? (
-              <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
-            ) : (
-              <FontAwesome name="user" size={16} color={colors.text} />
-            )}
+          <View style={styles.avatarStack}>
+            {isOnline ? (
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  styles.onlinePresenceRing,
+                  {
+                    width: ONLINE_RING_SIZE,
+                    height: ONLINE_RING_SIZE,
+                    borderRadius: ONLINE_RING_SIZE / 2,
+                    borderWidth: ONLINE_RING_WIDTH,
+                    borderColor: colors.emerald,
+                  },
+                  onlineRingAnimatedStyle,
+                ]}
+              />
+            ) : null}
+            <View
+              style={[
+                styles.avatarCircle,
+                {
+                  borderColor: colors.border,
+                  backgroundColor: colors.emeraldMuted,
+                },
+              ]}
+            >
+              {avatarUri ? (
+                <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+              ) : (
+                <FontAwesome name="user" size={16} color={colors.text} />
+              )}
+            </View>
           </View>
         </TouchableOpacity>
 
@@ -87,17 +146,6 @@ export function DriverHeader({
           <Text style={[styles.welcomeTitle, { color: colors.text }]} numberOfLines={1}>
             {title}
           </Text>
-          {isOnline && (
-            <View
-              style={[
-                styles.statusPill,
-                { backgroundColor: colors.emeraldMuted, borderColor: colors.border },
-              ]}
-            >
-              <View style={[styles.onlineDot, { backgroundColor: colors.emerald }]} />
-              <Text style={[styles.statusPillText, { color: colors.text }]}>Online</Text>
-            </View>
-          )}
         </View>
       </View>
 
@@ -163,6 +211,16 @@ const styles = StyleSheet.create({
     padding: 2,
     alignSelf: 'flex-start',
   },
+  avatarStack: {
+    width: ONLINE_RING_SIZE,
+    height: ONLINE_RING_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  onlinePresenceRing: {
+    position: 'absolute',
+    backgroundColor: 'transparent',
+  },
   avatarCircle: {
     width: Layout.driverHeaderAvatarSize,
     height: Layout.driverHeaderAvatarSize,
@@ -190,28 +248,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: -0.2,
     lineHeight: 18,
-  },
-  statusPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 6,
-    paddingVertical: 2,
-    paddingHorizontal: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    marginTop: 4,
-    minHeight: 22,
-  },
-  statusPillText: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-  },
-  onlineDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
   },
   headerRight: {
     flexDirection: 'row',

@@ -1029,9 +1029,10 @@ export default function DriverWalletScreen() {
     );
   }, [cashCardSparklePulse, cashCardWatermarkDrift]);
 
+  /** Narrow band so the Sparkles glyph reads as steady (wide opacity looked like flashing). */
   const cashSparkleAnimStyle = useAnimatedStyle(() => ({
-    opacity: 0.5 + cashCardSparklePulse.value * 0.5,
-    transform: [{ scale: 0.92 + cashCardSparklePulse.value * 0.14 }],
+    opacity: 0.88 + cashCardSparklePulse.value * 0.12,
+    transform: [{ scale: 0.97 + cashCardSparklePulse.value * 0.03 }],
   }));
 
   const cashWatermarkAnimStyle = useAnimatedStyle(() => ({
@@ -1488,26 +1489,6 @@ export default function DriverWalletScreen() {
             <Text style={[styles.welcomeTitle, { color: colors.text }]} numberOfLines={1}>Cash</Text>
           </View>
         </View>
-        <TouchableOpacity
-          onPress={() => {
-            if (salaryRequestOrgOptions.length > 0) {
-              const fleet = salaryRequestOrgOptions[0];
-              router.push({
-                pathname: `/(driver)/passbook/${fleet.orgId}`,
-                params: { orgName: fleet.orgName, from: 'wallet' },
-              } as Parameters<typeof router.push>[0]);
-            } else {
-              router.push('/(driver)');
-            }
-          }}
-          style={[styles.passbookHeaderBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
-          activeOpacity={0.8}
-          accessibilityLabel="Passbook"
-          accessibilityHint="Opens passbook by fleet"
-        >
-          <FontAwesome name="book" size={18} color={colors.emerald} />
-          <Text style={[styles.passbookHeaderBtnText, { color: colors.emerald }]}>Passbook</Text>
-        </TouchableOpacity>
       </View>
 
       <View style={styles.creditsSection}>
@@ -2757,20 +2738,6 @@ const styles = StyleSheet.create({
   headerTextWrap: {
     flex: 1,
     minWidth: 0,
-  },
-  passbookHeaderBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  passbookHeaderBtnText: {
-    fontSize: 11,
-    fontWeight: '500',
-    letterSpacing: 0.2,
   },
   avatarBtn: { padding: 2 },
   avatarCircle: {
