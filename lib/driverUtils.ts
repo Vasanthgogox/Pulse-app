@@ -88,6 +88,18 @@ export function shouldShowAggregateTripKindPill(
 }
 
 /**
+ * Trips hub violet pill (Integrated vs Manual): **Integrated** only when the trip is aggregate and was
+ * created via Load Hub (`source === direct_quote`). Aggregate trips with `manual` (or any other) source
+ * show **Manual** — matches DB `trips.source`; does not change {@link isAggregateTrip} or ledger behavior.
+ */
+export function shouldShowIntegratedSubtypePillForHub(
+  trip: TripWithSupplier & TripRosterShape,
+): boolean {
+  if (!isAggregateTrip(trip)) return false;
+  return String(trip.source ?? "").trim() === "direct_quote";
+}
+
+/**
  * Trip earnings shown to driver. Returns 0 for aggregate trips (offline payment).
  * Otherwise: driver_commission, else 10% supplier_rate, else 10% client_price (matches finance aggregation).
  */
