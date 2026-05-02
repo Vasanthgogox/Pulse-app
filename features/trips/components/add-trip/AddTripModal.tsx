@@ -4,8 +4,9 @@
  * Waits for onComplete (e.g. createTrip) to finish before closing so lists refetch with new data.
  */
 import { normalizeIndianPhoneForMetadata } from "@/lib/phoneValidation";
-import { useState } from "react";
-import { Alert, View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
+import { Alert, Platform, View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { AddTripFormFields } from "./AddTripFormFields";
 import { AddTripModalLayout } from "./AddTripModalLayout";
@@ -34,19 +35,29 @@ export function AddTripModal({
     routeLabel: string;
   } | null>(null);
   const [regenerating, setRegenerating] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const {
     clients,
     loading: clientsLoading,
     refetch: refetchClients,
   } = useClientsForTrip(organizationId);
   const validationMessage = form.getValidationError();
-  const canCreateTrip = !validationMessage;
+  const canCreateTrip = form.canSubmit;
+
+  useFocusEffect(
+    useCallback(() => {
+      setSubmitAttempted(false);
+    }, []),
+  );
 
   const handleSubmit = async () => {
     if (submitting) return;
-    const errNow = form.getValidationError();
-    if (errNow) {
-      Alert.alert("Missing required details", errNow);
+    if (!form.canSubmit) {
+      setSubmitAttempted(true);
+      const errNow = form.getValidationError();
+      if (Platform.OS !== "web" && errNow) {
+        Alert.alert("Missing required details", errNow);
+      }
       return;
     }
     setSubmitting(true);
@@ -154,7 +165,8 @@ export function AddTripModal({
         title="Create Trip"
         submitLabel="Create Trip"
         canSubmit={canCreateTrip}
-        validationMessage={validationMessage}
+        lockPrimaryUntilValid={false}
+        validationMessage={submitAttempted ? validationMessage : null}
         submitting={submitting}
         primaryActionMode={showStickyFooter ? "footer" : "content"}
         onClose={onClose}
@@ -170,9 +182,10 @@ export function AddTripModal({
           onSubmit={handleSubmit}
           canSubmit={canCreateTrip}
           validationMessage={validationMessage}
-          validationIssues={form.validationIssues}
+          validationIssues={submitAttempted ? form.validationIssues : []}
           submitting={submitting}
           showInlineCta={!showStickyFooter}
+          enablePrimaryWhenInvalid
         />
       </AddTripModalLayout>
 
