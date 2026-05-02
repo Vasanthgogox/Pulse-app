@@ -15,7 +15,10 @@ import {
     getSuppliersByOrganization,
     type SupplierRow,
 } from "@/features/suppliers/services/suppliers.service";
-import { getTripsByOrganization } from "@/features/trips/services/trips.service";
+import {
+  getDriverAvailabilityByPhone,
+  getTripsByOrganization,
+} from "@/features/trips/services/trips.service";
 import {
     getVehiclesByOrganization,
     type VehicleRow,
@@ -342,6 +345,7 @@ export function AddTripFormFields({
       setters.setDriverPhoneName(null);
       lastDriverPhoneNameRef.current = null;
       setters.setDriverPhoneConfirmed(false);
+      setters.setDriverPhoneTripConflict(false, null);
       return;
     }
     if (driverPhoneLookupTimeoutRef.current)
@@ -352,21 +356,47 @@ export function AddTripFormFields({
       if (normalized.length < 10) {
         setters.setDriverPhoneName(null);
         setters.setDriverPhoneConfirmed(false);
+        setters.setDriverPhoneTripConflict(false, null);
         return;
       }
       searchExistingDriversByPhone(normalized).then(
-        ({ error: err, matches }) => {
+        async ({ error: err, matches }) => {
           if (err || !matches.length) {
             setters.setDriverPhoneName(null);
             setters.setDriverPhoneConfirmed(false);
+            setters.setDriverPhoneTripConflict(false, null);
             return;
           }
-          const nextName = matches[0].full_name ?? null;
+          const nextName = matches[0].full_name?.trim() || null;
           setters.setDriverPhoneName(nextName);
+          if (nextName) {
+            setters.setAggregateDriverName(nextName);
+          }
           if (nextName && nextName !== lastDriverPhoneNameRef.current) {
             setters.setDriverPhoneConfirmed(false);
           }
           lastDriverPhoneNameRef.current = nextName;
+
+          if (!organizationId) {
+            setters.setDriverPhoneTripConflict(false, null);
+            return;
+          }
+          const { error: avErr, result } = await getDriverAvailabilityByPhone(
+            organizationId,
+            normalized,
+            { anyOpenTripBlocks: true },
+          );
+          if (avErr) {
+            setters.setDriverPhoneTripConflict(false, null);
+            return;
+          }
+          setters.setDriverPhoneTripConflict(
+            result.isBusy,
+            result.ongoingTripLabel,
+          );
+          if (result.isBusy) {
+            setters.setDriverPhoneConfirmed(false);
+          }
         },
       );
     }, 400);
@@ -374,7 +404,13 @@ export function AddTripFormFields({
       if (driverPhoneLookupTimeoutRef.current)
         clearTimeout(driverPhoneLookupTimeoutRef.current);
     };
-  }, [state.supplySource, state.assignLater, state.driverPhone, setters]);
+  }, [
+    organizationId,
+    state.supplySource,
+    state.assignLater,
+    state.driverPhone,
+    setters,
+  ]);
 
   const handleSelectClient = (c: ClientRow) => {
     if (state.clientId === c.id) return;
@@ -503,7 +539,12 @@ export function AddTripFormFields({
         >
           {validationListEl}
           <View style={[styles.mainGrid, isDesktopPreview && styles.mainGridDesktop]}>
-            <View style={styles.formColumn}>
+            <View
+              style={[
+                styles.formColumn,
+                isDesktopPreview && styles.formColumnDesktop,
+              ]}
+            >
           {/* 01 Route */}
           <View style={[styles.card, isCompactMobile && styles.cardCompact]}>
             <View style={styles.cardHead}>
@@ -1396,6 +1437,7 @@ export function AddTripFormFields({
                   <View
                     style={[
                       styles.aggregateLeftPane,
+                      isWide && styles.aggregatePaneWide,
                       invalid("partner") && styles.fieldGroupRing,
                     ]}
                   >
@@ -1518,7 +1560,12 @@ export function AddTripFormFields({
                   </ScrollView>
                 )}
                   </View>
-                  <View style={styles.aggregateRightPane}>
+                  <View
+                    style={[
+                      styles.aggregateRightPane,
+                      isWide && styles.aggregatePaneWide,
+                    ]}
+                  >
 
                 <View style={[styles.gridRow, isWide && styles.gridRowWide]}>
                   <View style={styles.gridCol}>
@@ -1691,49 +1738,90 @@ export function AddTripFormFields({
                       </View>
                     </View>
                     {state.driverPhoneName ? (
-                      <TouchableOpacity
-                        onPress={() =>
-                          setters.setDriverPhoneConfirmed(
-                            !state.driverPhoneConfirmed,
-                          )
-                        }
-                        style={[
-                          styles.driverConfirmCard,
-                          state.driverPhoneConfirmed &&
-                            styles.driverConfirmCardConfirmed,
-                          invalid("driverConfirm") &&
+                      state.driverPhoneTripConflict ? (
+                        <View
+                          style={[
+                            styles.driverConfirmCard,
                             styles.driverConfirmCardError,
-                        ]}
-                      >
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <Text
-                            style={[
-                              styles.driverConfirmMain,
-                              state.driverPhoneConfirmed && {
-                                color: Theme.darkGreen,
-                              },
-                            ]}
-                            numberOfLines={1}
-                          >
-                            {state.driverPhoneConfirmed
-                              ? `Confirmed: ${state.driverPhoneName}`
-                              : `Found: ${state.driverPhoneName}`}
-                          </Text>
-                          <Text style={styles.driverConfirmSub}>
-                            {state.driverPhoneConfirmed
-                              ? "Tap again to change"
-                              : "Tap to confirm before creating the trip"}
-                          </Text>
+                          ]}
+                          accessibilityRole="alert"
+                        >
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text
+                              style={[
+                                styles.driverConfirmMain,
+                                { color: Theme.destructive },
+                              ]}
+                              numberOfLines={2}
+                            >
+                              {state.driverPhoneName?.trim()
+                                ? `${state.driverPhoneName.trim()} is already on a trip`
+                                : "This driver is already on a trip"}
+                            </Text>
+                            <Text style={styles.driverConfirmSub}>
+                              {state.driverPhoneTripConflictLabel
+                                ? `Open trip: ${state.driverPhoneTripConflictLabel}. Use another number or finish that trip first.`
+                                : "Assign a different phone number or complete their current trip first."}
+                            </Text>
+                          </View>
+                          <AlertCircle
+                            size={20}
+                            color={Theme.destructive}
+                          />
                         </View>
-                        <CheckCircle2
-                          size={18}
-                          color={
-                            state.driverPhoneConfirmed
-                              ? Theme.darkGreen
-                              : Theme.iconPrimary
-                          }
-                        />
-                      </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity
+                          onPress={() => {
+                            const nextConfirmed = !state.driverPhoneConfirmed;
+                            const resolved =
+                              state.driverPhoneName?.trim() ?? "";
+                            if (
+                              nextConfirmed &&
+                              resolved &&
+                              !state.aggregateDriverName.trim()
+                            ) {
+                              setters.setAggregateDriverName(resolved);
+                            }
+                            setters.setDriverPhoneConfirmed(nextConfirmed);
+                          }}
+                          style={[
+                            styles.driverConfirmCard,
+                            state.driverPhoneConfirmed &&
+                              styles.driverConfirmCardConfirmed,
+                            invalid("driverConfirm") &&
+                              styles.driverConfirmCardError,
+                          ]}
+                        >
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text
+                              style={[
+                                styles.driverConfirmMain,
+                                state.driverPhoneConfirmed && {
+                                  color: Theme.darkGreen,
+                                },
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {state.driverPhoneConfirmed
+                                ? `Confirmed: ${state.driverPhoneName}`
+                                : `Found: ${state.driverPhoneName}`}
+                            </Text>
+                            <Text style={styles.driverConfirmSub}>
+                              {state.driverPhoneConfirmed
+                                ? "Tap again to change"
+                                : "Tap to confirm before creating the trip"}
+                            </Text>
+                          </View>
+                          <CheckCircle2
+                            size={18}
+                            color={
+                              state.driverPhoneConfirmed
+                                ? Theme.darkGreen
+                                : Theme.iconPrimary
+                            }
+                          />
+                        </TouchableOpacity>
+                      )
                     ) : null}
                   </>
                 ) : (
@@ -2064,8 +2152,12 @@ const styles = StyleSheet.create({
     gap: 24,
   },
   formColumn: {
-    flex: 1,
+    width: "100%",
     minWidth: 0,
+  },
+  /** Side-by-side with preview column — only here use flex so the column doesn’t fight ScrollView height. */
+  formColumnDesktop: {
+    flex: 1,
   },
   previewColumn: {
     width: 360,
@@ -2159,12 +2251,14 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   aggregateLeftPane: {
-    flex: 1,
     minWidth: 0,
   },
   aggregateRightPane: {
-    flex: 1,
     minWidth: 0,
+  },
+  /** Only when partner + allocation sit in one row (wide); avoid flex:1 in a column or panes split viewport height. */
+  aggregatePaneWide: {
+    flex: 1,
   },
   sectionLabelRow: {
     flexDirection: "row",

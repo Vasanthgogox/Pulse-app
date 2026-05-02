@@ -789,6 +789,7 @@ function NetworkScreenInner() {
         },
       ]}
       showsVerticalScrollIndicator={false}
+      nestedScrollEnabled
       {...tabBarScrollProps}
       refreshControl={
         <RefreshControl
@@ -1315,6 +1316,7 @@ function NetworkScreenInner() {
               <DiscoverView
                 orgId={orgId}
                 embedded
+                embeddedScrollable
                 search={discoverSearch}
                 onSearchChange={setDiscoverSearch}
                 showSearchChrome={false}

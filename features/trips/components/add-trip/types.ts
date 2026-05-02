@@ -77,6 +77,10 @@ export interface AddTripFormState {
   driverPhoneName: string | null;
   /** When `driverPhoneName` is present, require explicit user confirmation. */
   driverPhoneConfirmed: boolean;
+  /** Aggregate: phone lookup matched a driver who is already on another active trip. */
+  driverPhoneTripConflict: boolean;
+  /** Trip label from availability check (e.g. display trip id) when `driverPhoneTripConflict`. */
+  driverPhoneTripConflictLabel: string | null;
   /** Aggregate only: optional vehicle as text (stored in trip notes). */
   aggregateVehicleText: string;
 }

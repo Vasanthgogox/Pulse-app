@@ -441,6 +441,37 @@ async function getDriverOngoingTrip(
   };
 }
 
+/**
+ * First non-terminal trip for this driver (includes `assigned`, `draft`, etc.).
+ * Used for create-trip preflight: dispatcher should not assign a number that already
+ * has an open trip, even if the driver has not started it yet.
+ */
+async function getDriverAnyOpenTrip(
+  driverId: string,
+  excludeTripId?: string,
+): Promise<{
+  error: Error | null;
+  trip: Pick<TripRow, "id" | "trip_number" | "status" | "started_at"> | null;
+}> {
+  let q = supabase()
+    .from("trips")
+    .select("id, trip_number, status, started_at")
+    .eq("driver_id", driverId)
+    .not("status", "in", `("${ONGOING_TRIP_TERMINAL_STATUSES.join('","')}")`)
+    .order("updated_at", { ascending: false })
+    .limit(20);
+  if (excludeTripId != null && excludeTripId.trim() !== "") {
+    q = q.neq("id", excludeTripId);
+  }
+  const { data, error } = await q;
+  if (error) return { error: new Error(error.message), trip: null };
+  const rows = (data ?? []) as Pick<
+    TripRow,
+    "id" | "trip_number" | "status" | "started_at"
+  >[];
+  return { error: null, trip: rows[0] ?? null };
+}
+
 /** Same terminal rule as {@link getDriverOngoingTrip}, for roster vehicle UUIDs. */
 async function getVehicleOngoingTrip(
   vehicleId: string,
@@ -481,11 +512,15 @@ export interface DriverAvailabilityByPhoneResult {
 /**
  * Check if a phone maps to a driver in this org who is already on an ongoing trip.
  * Used as preflight validation for OTP/aggregate assignment flows.
+ *
+ * @param opts.anyOpenTripBlocks When true, any non-terminal trip for this driver counts
+ *   (including `assigned` / not yet started). Default false — only trips the driver
+ *   has effectively started block reassignment/OTP flows.
  */
 export async function getDriverAvailabilityByPhone(
   orgId: string,
   phone: string,
-  opts?: { excludeTripId?: string | null },
+  opts?: { excludeTripId?: string | null; anyOpenTripBlocks?: boolean },
 ): Promise<{ error: Error | null; result: DriverAvailabilityByPhoneResult }> {
   const normalized = (phone ?? "").trim().replace(/\s+/g, "");
   if (!normalized) {
@@ -539,10 +574,9 @@ export async function getDriverAvailabilityByPhone(
     };
   }
 
-  const { error: ongoingError, trip } = await getDriverOngoingTrip(
-    match.id,
-    opts?.excludeTripId ?? undefined,
-  );
+  const { error: ongoingError, trip } = opts?.anyOpenTripBlocks
+    ? await getDriverAnyOpenTrip(match.id, opts?.excludeTripId ?? undefined)
+    : await getDriverOngoingTrip(match.id, opts?.excludeTripId ?? undefined);
   if (ongoingError) {
     return {
       error: ongoingError,
