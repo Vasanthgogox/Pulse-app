@@ -222,7 +222,7 @@ export async function getTripById(
     .eq("id", tripId)
     .maybeSingle();
   if (error) return { error: new Error(error.message), trip: null };
-  const raw = data as any;
+  const raw = data as (TripRow & { indents?: { indent_number: string | null } | null }) | null;
   const trip: TripRow | null = raw
     ? {
         ...raw,
@@ -244,7 +244,7 @@ export async function getTripByIndentId(
     .limit(1)
     .maybeSingle();
   if (error) return { error: new Error(error.message), trip: null };
-  const raw = data as any;
+  const raw = data as (TripRow & { indents?: { indent_number: string | null } | null }) | null;
   const trip: TripRow | null = raw
     ? {
         ...raw,

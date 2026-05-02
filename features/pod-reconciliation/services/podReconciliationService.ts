@@ -87,8 +87,11 @@ export async function mergeTripsForPodOrg(orgId: string): Promise<{
 
     const map = new Map<string, TripRow>();
     const push = (rows: unknown) => {
-      for (const row of (rows as TripRow[]) || []) {
-        if (row && row.id) map.set(str(row.id), row);
+      if (!Array.isArray(rows)) return;
+      for (const row of rows) {
+        if (row && typeof row === 'object' && 'id' in row) {
+          map.set(str((row as TripRow).id), row as TripRow);
+        }
       }
     };
     push(ownerRes.data);

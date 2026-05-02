@@ -32,7 +32,9 @@ export function useRealtimeTripsInvalidation(organizationId: string | null) {
       )
       .subscribe();
     return () => {
-      supabase().removeChannel(channel);
+      void supabase().removeChannel(channel).catch((err: unknown) => {
+        console.warn('[realtime] removeChannel failed:', err);
+      });
     };
   }, [organizationId, qc]);
 }
@@ -59,7 +61,9 @@ export function useRealtimeTransactionsInvalidation(organizationId: string | nul
       )
       .subscribe();
     return () => {
-      supabase().removeChannel(channel);
+      void supabase().removeChannel(channel).catch((err: unknown) => {
+        console.warn('[realtime] removeChannel failed:', err);
+      });
     };
   }, [organizationId, qc]);
 }
@@ -135,7 +139,9 @@ export function useRealtimeNetworkInvalidation(organizationId: string | null) {
       .subscribe();
 
     return () => {
-      supabase().removeChannel(channel);
+      void supabase().removeChannel(channel).catch((err: unknown) => {
+        console.warn('[realtime] removeChannel failed:', err);
+      });
     };
   }, [organizationId, qc]);
 }

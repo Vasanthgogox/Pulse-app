@@ -15,6 +15,7 @@ let SecureStore: typeof import('expo-secure-store') | null = null;
 try {
   SecureStore = require('expo-secure-store');
 } catch {
+  if (__DEV__) console.warn('[auth] SecureStore unavailable, falling back to AsyncStorage');
   SecureStore = null;
 }
 

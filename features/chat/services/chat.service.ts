@@ -461,9 +461,12 @@ export async function getMessagesByConversation(
 
 // ── Network conversations ─────────────────────────────────────────────────────
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function getNetworkConversationsByOrg(
   orgId: string,
 ): Promise<NetworkConversation[]> {
+  if (!UUID_RE.test(orgId)) return [];
   const { data, error } = await supabase()
     .from("network_conversations")
     .select(`*, network_messages(id, conversation_id, content, sender_org_id, sender_name, sender_user_id, created_at, is_read_by_other, read_at)`)
@@ -701,7 +704,7 @@ export async function getConversationsByDriverIds(
   for (const msg of (msgRes.data ?? []) as TripMessageRow[]) {
     const cid = String(msg.conversation_id ?? "");
     if (!messagesByConversationId.has(cid)) messagesByConversationId.set(cid, []);
-    messagesByConversationId.get(cid)!.push(msg);
+    messagesByConversationId.get(cid)?.push(msg);
   }
 
   return mapRows(normalizedConvRows, tripsById, messagesByConversationId);

@@ -267,18 +267,21 @@ export default function TripsScreen() {
       return;
     }
     setRefreshing(true);
-    await Promise.all([
-      refetchTrips(),
-      refetchTransactions(),
-      refetchAssignment(),
-      queryClient.invalidateQueries({
-        queryKey: ["q", "trips", "doc-trip-ids", orgId],
-      }),
-      queryClient.invalidateQueries({
-        queryKey: [...queryKeys.tripFinanceAdjustmentsRoot],
-      }),
-    ]);
-    setRefreshing(false);
+    try {
+      await Promise.all([
+        refetchTrips(),
+        refetchTransactions(),
+        refetchAssignment(),
+        queryClient.invalidateQueries({
+          queryKey: ["q", "trips", "doc-trip-ids", orgId],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: [...queryKeys.tripFinanceAdjustmentsRoot],
+        }),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
   }, [
     refetchTrips,
     refetchTransactions,

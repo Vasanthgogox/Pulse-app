@@ -179,6 +179,7 @@ export async function getOrganizationLocationsByNames(orgNames: string[]): Promi
   error: Error | null;
   locations: OrganizationLocation[];
 }> {
+  const escapeLike = (value: string) => value.replace(/[%_\\]/g, '\\$&');
   const uniqueNames = [...new Set(orgNames.map((name) => name.trim()).filter(Boolean))];
   if (uniqueNames.length === 0) return { error: null, locations: [] };
 
@@ -186,7 +187,7 @@ export async function getOrganizationLocationsByNames(orgNames: string[]): Promi
     supabase()
       .from("organizations")
       .select("id, name, city, state, address_line")
-      .ilike("name", name)
+      .ilike("name", escapeLike(name))
       .limit(1),
   );
 

@@ -3,8 +3,8 @@ import { SignInPage } from '../../pom/SignInPage';
 import { TripsDashboardPage } from '../../pom/TripsDashboardPage';
 import { PartyPortalPage } from '../../pom/PartyPortalPage';
 
-const TEST_EMAIL = 'nihas.n@gogox.com';
-const TEST_PASSWORD = 'nihas123';
+const TEST_EMAIL = process.env.E2E_TEST_EMAIL ?? '';
+const TEST_PASSWORD = process.env.E2E_TEST_PASSWORD ?? '';
 
 /** Unique suffix per test-run to avoid duplicate-record errors on repeated runs. */
 const RUN_ID = Date.now().toString().slice(-6);

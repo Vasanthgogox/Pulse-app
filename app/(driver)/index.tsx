@@ -3019,8 +3019,8 @@ export default function DriverRadarScreen() {
               }
             },
           };
-        } catch {
-          // ignore
+        } catch (e) {
+          if (__DEV__) console.warn('[location] web watchPosition setup failed', e instanceof Error ? e.message : e);
         }
       })();
 
@@ -3055,8 +3055,8 @@ export default function DriverRadarScreen() {
             applyFollowPosition(pos.coords.latitude, pos.coords.longitude);
           },
         );
-      } catch {
-        // ignore
+      } catch (e) {
+        if (__DEV__) console.warn('[location] native watchPosition setup failed', e instanceof Error ? e.message : e);
       }
     })();
 

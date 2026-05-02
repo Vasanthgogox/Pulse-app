@@ -26,16 +26,26 @@ export default function AuthCallback() {
       return undefined;
     };
 
-    const pickFromHash = (key: string): string | undefined => {
-      if (typeof window === "undefined") return undefined;
-      const hash = window.location.hash?.startsWith("#")
-        ? window.location.hash.slice(1)
-        : window.location.hash;
+    const pickFromHash = (key: string, hash: string): string | undefined => {
       if (!hash) return undefined;
-      const params = new URLSearchParams(hash);
-      const v = params.get(key);
+      const p = new URLSearchParams(hash);
+      const v = p.get(key);
       return v ?? undefined;
     };
+
+    // Read implicit-flow tokens from URL hash synchronously, then strip hash immediately
+    // so sensitive tokens are not retained in browser history if an error occurs below.
+    const rawHash =
+      typeof window !== "undefined"
+        ? (window.location.hash?.startsWith("#")
+            ? window.location.hash.slice(1)
+            : window.location.hash) ?? ""
+        : "";
+    const hashAccessToken = pickFromHash("access_token", rawHash);
+    const hashRefreshToken = pickFromHash("refresh_token", rawHash);
+    if ((hashAccessToken || hashRefreshToken) && typeof window !== "undefined" && window.history?.replaceState) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
 
     (async () => {
       try {
@@ -50,14 +60,13 @@ export default function AuthCallback() {
           if (error) throw new Error(error.message || "Google sign in failed");
         } else {
           // Some providers/configs return implicit tokens in URL hash instead of auth code.
-          const accessToken = pickFromHash("access_token");
-          const refreshToken = pickFromHash("refresh_token");
-          if (!accessToken || !refreshToken) {
+          // Hash was already stripped above to prevent exposure in browser history.
+          if (!hashAccessToken || !hashRefreshToken) {
             throw new Error("Missing auth code/token from Google");
           }
           const { error } = await supabase().auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
+            access_token: hashAccessToken,
+            refresh_token: hashRefreshToken,
           });
           if (error) throw new Error(error.message || "Google sign in failed");
         }
@@ -65,7 +74,7 @@ export default function AuthCallback() {
         // Ensure any pending metadata (role/operatingModel) is applied.
         await authService.applyPendingOAuthMetadata();
 
-        // Clean auth params from URL after successful callback.
+        // Strip code/error query params from URL after successful code-exchange callback.
         if (typeof window !== "undefined" && window.history?.replaceState) {
           window.history.replaceState({}, document.title, window.location.pathname);
         }
