@@ -1036,7 +1036,10 @@ export function TripsHubTableView({
 
   const classifyTripFilter = (trip: TripRow): "verified" | "pending" | "attention" => {
     const entries = transactionsByTripId.get(trip.id) ?? [];
-    const hasMismatch = entries.some((r) => r.reconciliation_status === "mismatch");
+    // Shared-ledger attention signals apply only to load-based trips.
+    const hasMismatch =
+      isLoadBasedTrip(trip) &&
+      entries.some((r) => r.reconciliation_status === "mismatch");
     if (hasMismatch) return "attention";
     const stageUpper = getStageLabel(trip).toUpperCase();
     if (
@@ -1240,9 +1243,9 @@ export function TripsHubTableView({
         const mySales = tripHubRevenue(t, currentOrganizationId, rowAdj);
         const cost = tripHubCost(t, currentOrganizationId, rowAdj);
         const ledgerRoll = summarizeTripLedgerForHub(entries);
-        const hasLedgerMismatch = entries.some(
-          (r) => r.reconciliation_status === "mismatch",
-        );
+        const hasLedgerMismatch =
+          isLoadBasedTrip(t) &&
+          entries.some((r) => r.reconciliation_status === "mismatch");
         const hasSalesConflict = hasLedgerMismatch;
         const meta = partyMetaByTripId?.get(t.id);
         const hasSupplierLink = isAggregateTrip(t);
