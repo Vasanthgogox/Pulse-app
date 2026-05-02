@@ -16,6 +16,10 @@ import { NetworkTabErrorBoundary } from "@/components/network/NetworkTabErrorBou
 import { StoryReel } from "@/features/network/components/StoryReel";
 import { isPostVisibleForOrg, type PostRow } from "@/features/network/services/posts.service";
 import {
+  cancelDriverInvite,
+  type DriverInviteSentRow,
+} from "@/features/drivers/services/drivers.service";
+import {
   approveConnectionRequest,
   cancelConnectionRequest,
   rejectConnectionRequest,
@@ -25,6 +29,7 @@ import {
   useClientsQuery,
   useConnectionRequestsReceivedQuery,
   useConnectionRequestsSentQuery,
+  useDriverInvitesSentQuery,
   useDriversQuery,
   useInvalidateNetwork,
   useNetworkFeedQuery,
@@ -171,6 +176,11 @@ type NetworkProfileNode = {
   phone?: string | null;
 };
 
+/** Org connection request vs driver app invite — both surface under mission protocol. */
+type MissionProtocolListItem =
+  | { kind: "connection"; row: ConnectionRequestRow }
+  | { kind: "driver_invite"; row: DriverInviteSentRow };
+
 function getNetworkNodeLocation(item: ConnectedOrg): string {
   const cityState = [item.city, item.state]
     .map((value) => value?.trim())
@@ -249,6 +259,7 @@ function NetworkScreenInner() {
   useRealtimeNetworkInvalidation(orgId);
   const receivedQ = useConnectionRequestsReceivedQuery(orgId);
   const sentQ = useConnectionRequestsSentQuery(orgId);
+  const driverInvitesSentQ = useDriverInvitesSentQuery(orgId);
   const clientsQ = useClientsQuery(orgId);
   const suppliersQ = useSuppliersQuery(orgId);
   const driversQ = useDriversQuery(orgId);
@@ -287,6 +298,29 @@ function NetworkScreenInner() {
       return true;
     });
   }, [receivedQ.data, sentQ.data]);
+
+  const pendingDriverInvitesSent = useMemo(() => {
+    const rows = (driverInvitesSentQ.data ?? []) as DriverInviteSentRow[];
+    return rows.filter((r) => String(r.status ?? "").toLowerCase() === "pending");
+  }, [driverInvitesSentQ.data]);
+
+  const sentProtocolItems = useMemo((): MissionProtocolListItem[] => {
+    const connectionItems: MissionProtocolListItem[] = sentRequests.map((row) => ({
+      kind: "connection",
+      row,
+    }));
+    const driverItems: MissionProtocolListItem[] = pendingDriverInvitesSent.map((row) => ({
+      kind: "driver_invite",
+      row,
+    }));
+    return [...connectionItems, ...driverItems].sort(
+      (a, b) =>
+        new Date(
+          a.kind === "connection" ? a.row.created_at : a.row.created_at,
+        ).getTime() -
+        new Date(b.kind === "connection" ? b.row.created_at : b.row.created_at).getTime(),
+    );
+  }, [sentRequests, pendingDriverInvitesSent]);
   const clientCount = useMemo(
     () => ((clientsQ.data ?? []) as unknown[]).length,
     [clientsQ.data],
@@ -435,6 +469,8 @@ function NetworkScreenInner() {
       await Promise.all([
         feedQ.refetch(),
         receivedQ.refetch(),
+        sentQ.refetch(),
+        driverInvitesSentQ.refetch(),
         clientsQ.refetch(),
         suppliersQ.refetch(),
         driversQ.refetch(),
@@ -443,7 +479,17 @@ function NetworkScreenInner() {
     } finally {
       setRefreshing(false);
     }
-  }, [orgId, feedQ, receivedQ, clientsQ, suppliersQ, driversQ, invalidateNetwork]);
+  }, [
+    orgId,
+    feedQ,
+    receivedQ,
+    sentQ,
+    driverInvitesSentQ,
+    clientsQ,
+    suppliersQ,
+    driversQ,
+    invalidateNetwork,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -521,7 +567,24 @@ function NetworkScreenInner() {
     );
   }
 
-  const openProfileFromRequest = (row: ConnectionRequestRow, mode: "received" | "sent" | "cancelled") => {
+  const openProfileFromProtocolItem = (
+    item: MissionProtocolListItem,
+    mode: "received" | "sent" | "cancelled",
+  ) => {
+    if (item.kind === "driver_invite") {
+      const inv = item.row;
+      setSelectedProfileNode({
+        id: inv.to_user_id?.trim() || `pending-driver-invite-${inv.id}`,
+        name: inv.driver_name?.trim() || "Driver",
+        type: "DRIVER",
+        location: "Not available",
+        status: "REQUEST SENT",
+        rating: null,
+        mutuals: 0,
+      });
+      return;
+    }
+    const row = item.row;
     const fromReceived = mode === "received";
     const name = fromReceived ? row.from_org_name : row.to_org_name;
     const normalized = String(row.status ?? "").toLowerCase();
@@ -566,10 +629,17 @@ function NetworkScreenInner() {
     }
   };
 
-  const handleRecallRequest = async (requestId: string) => {
-    setRequestActionId(requestId);
+  const handleRecallProtocolItem = async (item: MissionProtocolListItem) => {
+    setRequestActionId(item.row.id);
     try {
-      const res = await cancelConnectionRequest(requestId);
+      if (item.kind === "driver_invite") {
+        const res = await cancelDriverInvite(item.row.id);
+        if (res.error) return;
+        await Promise.all([driverInvitesSentQ.refetch(), driversQ.refetch()]);
+        invalidateNetwork();
+        return;
+      }
+      const res = await cancelConnectionRequest(item.row.id);
       if (res.error) return;
       await Promise.all([receivedQ.refetch(), sentQ.refetch()]);
       invalidateNetwork();
@@ -579,12 +649,12 @@ function NetworkScreenInner() {
   };
 
   if (viewMode === "requests") {
-    const list =
+    const missionProtocolList: MissionProtocolListItem[] =
       requestTab === "received"
-        ? receivedRequests
+        ? receivedRequests.map((row) => ({ kind: "connection", row }))
         : requestTab === "sent"
-          ? sentRequests
-          : cancelledRequests;
+          ? sentProtocolItems
+          : cancelledRequests.map((row) => ({ kind: "connection", row }));
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.requestsHero}>
@@ -600,7 +670,7 @@ function NetworkScreenInner() {
           <View style={styles.requestsTabRow}>
             {([
               { key: "received", label: "RECEIVED", count: receivedRequests.length },
-              { key: "sent", label: "SENT", count: sentRequests.length },
+              { key: "sent", label: "SENT", count: sentProtocolItems.length },
               { key: "cancelled", label: "CANCELLED", count: cancelledRequests.length },
             ] as const).map((tab) => {
               const on = requestTab === tab.key;
@@ -627,27 +697,37 @@ function NetworkScreenInner() {
           contentContainerStyle={styles.requestsListContent}
           showsVerticalScrollIndicator={false}
         >
-          {list.length === 0 ? (
+          {missionProtocolList.length === 0 ? (
             <View style={styles.requestsEmptyCard}>
               <Slash size={32} color={Theme.textSecondary} />
               <Text style={styles.requestsEmptyTitle}>No {requestTab} protocol</Text>
               <Text style={styles.requestsEmptySub}>Your queue is currently clear.</Text>
                 </View>
           ) : (
-            list.map((req) => {
-              const isBusy = requestActionId === req.id;
+            missionProtocolList.map((item) => {
+              const rowId = item.kind === "connection" ? item.row.id : item.row.id;
+              const isBusy = requestActionId === rowId;
+              const req = item.kind === "connection" ? item.row : null;
+              const inv = item.kind === "driver_invite" ? item.row : null;
               // For cancelled tab: show the other party (they sent → show from, we sent → show to)
-              const isSender = req.from_organization_id === orgId;
-              const title = requestTab === "cancelled"
-                ? (isSender ? req.to_org_name : req.from_org_name)
-                : requestTab === "received"
-                  ? req.from_org_name
-                  : req.to_org_name;
-              const roleLabel = req.request_shipper_client ? "CLIENT" : "SUPPLIER";
+              const isSender = req ? req.from_organization_id === orgId : false;
+              const title = inv
+                ? inv.driver_name
+                : req && requestTab === "cancelled"
+                  ? isSender
+                    ? req.to_org_name
+                    : req.from_org_name
+                  : req && requestTab === "received"
+                    ? req.from_org_name
+                    : req
+                      ? req.to_org_name
+                      : "";
+              const roleLabel = inv ? "DRIVER" : req?.request_shipper_client ? "CLIENT" : "SUPPLIER";
+              const createdAt = inv ? inv.created_at : req!.created_at;
 
               // Determine cancelled category label + colour
               const cancelledCategory = (() => {
-                if (requestTab !== "cancelled") return null;
+                if (requestTab !== "cancelled" || !req) return null;
                 if (isSender && req.status === "cancelled") return { label: "Withdrawn by us", color: "#d97706" };
                 if (isSender && req.status === "rejected")  return { label: "Declined by them", color: Theme.textSecondary };
                 if (!isSender && req.status === "rejected") return { label: "Declined by us",   color: Theme.textSecondary };
@@ -656,8 +736,8 @@ function NetworkScreenInner() {
 
               return (
                 <Pressable
-                  key={req.id}
-                  onPress={() => openProfileFromRequest(req, requestTab)}
+                  key={rowId}
+                  onPress={() => openProfileFromProtocolItem(item, requestTab)}
                   style={({ pressed }) => [styles.requestsCard, pressed && { opacity: 0.93 }]}
                 >
                   <View style={styles.requestsCardMain}>
@@ -671,13 +751,13 @@ function NetworkScreenInner() {
                       <View style={styles.requestsCardMeta}>
                         <Text style={styles.requestsCardRole}>{roleLabel}</Text>
                         <Text style={styles.requestsCardTime}>
-                          {new Date(req.created_at).toLocaleDateString("en-GB")}
+                          {new Date(createdAt).toLocaleDateString("en-GB")}
                         </Text>
                       </View>
                     </View>
                   </View>
                   <View style={styles.requestsActions}>
-                    {requestTab === "received" ? (
+                    {requestTab === "received" && req ? (
                       <>
                         <Pressable
                           onPress={() => void handleRejectRequest(req.id)}
@@ -702,7 +782,7 @@ function NetworkScreenInner() {
                       </>
                     ) : requestTab === "sent" ? (
                       <Pressable
-                        onPress={() => void handleRecallRequest(req.id)}
+                        onPress={() => void handleRecallProtocolItem(item)}
                         disabled={isBusy}
                         style={styles.requestsRecallBtn}
                       >
