@@ -1,17 +1,17 @@
 /**
  * TanStack Query hooks for Network tab: connection requests + driver invites.
  */
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { getDriverInvitesSent } from "@/features/drivers/services/drivers.service";
+import { queryKeys } from "@/lib/queryKeys";
 import {
-  getConnectionRequestsReceived,
-  getConnectionRequestsSent,
-} from '@/services/connectionRequestsService';
-import { getDriverInvitesSent } from '@/features/drivers/services/drivers.service';
-import { queryKeys } from '@/lib/queryKeys';
+    getConnectionRequestsReceived,
+    getConnectionRequestsSent,
+} from "@/services/connectionRequestsService";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 export function useConnectionRequestsReceivedQuery(orgId: string | null) {
   return useQuery({
-    queryKey: queryKeys.connectionRequests.received(orgId ?? ''),
+    queryKey: queryKeys.connectionRequests.received(orgId ?? ""),
     queryFn: async () => {
       const res = await getConnectionRequestsReceived(orgId!);
       if (res.error) throw res.error;
@@ -23,7 +23,7 @@ export function useConnectionRequestsReceivedQuery(orgId: string | null) {
 
 export function useConnectionRequestsSentQuery(orgId: string | null) {
   return useQuery({
-    queryKey: queryKeys.connectionRequests.sent(orgId ?? ''),
+    queryKey: queryKeys.connectionRequests.sent(orgId ?? ""),
     queryFn: async () => {
       const res = await getConnectionRequestsSent(orgId!);
       if (res.error) throw res.error;
@@ -35,7 +35,7 @@ export function useConnectionRequestsSentQuery(orgId: string | null) {
 
 export function useDriverInvitesSentQuery(orgId: string | null) {
   return useQuery({
-    queryKey: queryKeys.driverInvites.sent(orgId ?? ''),
+    queryKey: queryKeys.driverInvites.sent(orgId ?? ""),
     queryFn: async () => {
       const res = await getDriverInvitesSent(orgId!);
       if (res.error) throw res.error;
@@ -53,8 +53,12 @@ export function useInvalidateNetwork(orgId: string | null) {
     qc.invalidateQueries({ queryKey: queryKeys.clients.all(orgId) });
     qc.invalidateQueries({ queryKey: queryKeys.suppliers.all(orgId) });
     qc.invalidateQueries({ queryKey: queryKeys.drivers.all(orgId) });
-    qc.invalidateQueries({ queryKey: queryKeys.connectionRequests.received(orgId) });
-    qc.invalidateQueries({ queryKey: queryKeys.connectionRequests.sent(orgId) });
+    qc.invalidateQueries({
+      queryKey: queryKeys.connectionRequests.received(orgId),
+    });
+    qc.invalidateQueries({
+      queryKey: queryKeys.connectionRequests.sent(orgId),
+    });
     qc.invalidateQueries({ queryKey: queryKeys.driverInvites.sent(orgId) });
   };
 }
