@@ -493,6 +493,7 @@
   "networkRequestAddAsSupplier": "Want to add them as your supplier?",
   "networkRequestAddAsClient": "Want to add them as your client?",
   "networkRequestAddAsClientAndSupplier": "Want to add them as your client and supplier?",
+  "networkDiscoverLocationNotSet": "Location not set",
   "dismiss": "Dismiss",
   "totalBalanceDue": "TOTAL BALANCE DUE",
   "totalVol": "TOTAL VOL",

@@ -7,6 +7,17 @@ import type { AddClientFormData } from "@/features/clients/components/AddClientM
 import type { DriverFormData } from "@/features/drivers/components/AddDriverModal";
 import type { SupplierFormData } from "@/features/suppliers/components/AddSupplierModal";
 import type { AddVehicleCompletePayload } from "@/features/vehicles/components/AddVehicleModal";
+import {
+  getAxleRecommendations,
+  getCapacityRecommendations,
+} from "@/features/vehicles/utils/indianTruckData.util";
+import {
+  BODY_LENGTH_SELECT_OPTIONS,
+  OTHER_LABEL,
+  VEHICLE_CATEGORY_LABELS,
+  getModelSelectOptions,
+  normalizeBodyLengthKey,
+} from "@/features/vehicles/utils/vehicleFormOptions.util";
 import { formatIndianVehicleNumberInput } from "@/lib/format";
 import {
   normalizeIndianPhoneForMetadata,
@@ -35,6 +46,8 @@ import { isContactPickerAvailable, pickContactForNameAndPhone } from "@/lib/cont
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -42,9 +55,11 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
   useWindowDimensions,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { ComponentType, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -96,21 +111,24 @@ type SummaryIcon = ComponentType<{
 
 function vehiclePayloadFromInputs(
   reg: string,
-  modelLine: string,
+  vehicleCategory: string,
+  model: string,
   capacity: string,
   bodyLength: string,
   axle: string,
 ): AddVehicleCompletePayload {
   const vehicleNumber = formatIndianVehicleNumberInput(reg).trim();
   const typeSummary =
-    [modelLine.trim(), capacity.trim()].filter(Boolean).join(" · ") || "Other";
+    [vehicleCategory, model].filter((s) => s?.trim()).join(" • ").trim() ||
+    [model.trim(), capacity.trim()].filter(Boolean).join(" · ") ||
+    "Other";
   return {
     vehicleSource: "organization",
     vehicleNumber,
     vehicleType: typeSummary,
     capacity: capacity.trim(),
-    vehicleBrand: modelLine.trim() || null,
-    vehicleModel: modelLine.trim() || null,
+    vehicleBrand: vehicleCategory.trim() || null,
+    vehicleModel: model.trim() || null,
     vehicleBodyType: null,
     vehicleSize: bodyLength.trim() || null,
     vehicleAxle: axle.trim() || null,
@@ -169,11 +187,16 @@ function PartyRegistrationPortalInner(
   const [driverPhone, setDriverPhone] = useState("");
   const [driverDl, setDriverDl] = useState("");
 
-  // Vehicle
+  // Vehicle — aligned with AddVehicleModal (category chips + preset pickers + specs)
   const [vehicleReg, setVehicleReg] = useState("");
-  const [vehicleModelLine, setVehicleModelLine] = useState("");
+  const [vehicleCategory, setVehicleCategory] = useState("");
+  const [vehicleModel, setVehicleModel] = useState("");
+  const [modelIsOther, setModelIsOther] = useState(false);
+  const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [vehicleCapacity, setVehicleCapacity] = useState("");
   const [vehicleBodyFt, setVehicleBodyFt] = useState("");
+  const [bodyLengthIsOther, setBodyLengthIsOther] = useState(false);
+  const [bodyLengthPickerOpen, setBodyLengthPickerOpen] = useState(false);
   const [vehicleAxle, setVehicleAxle] = useState("");
 
   useEffect(() => {
@@ -191,11 +214,41 @@ function PartyRegistrationPortalInner(
     setDriverPhone("");
     setDriverDl("");
     setVehicleReg("");
-    setVehicleModelLine("");
+    setVehicleCategory("");
+    setVehicleModel("");
+    setModelIsOther(false);
+    setModelPickerOpen(false);
     setVehicleCapacity("");
     setVehicleBodyFt("");
+    setBodyLengthIsOther(false);
+    setBodyLengthPickerOpen(false);
     setVehicleAxle("");
   }, [visible, initialKind]);
+
+  const insets = useSafeAreaInsets();
+  const axleRecommendations = useMemo(
+    () => getAxleRecommendations(vehicleAxle).slice(0, 8),
+    [vehicleAxle],
+  );
+  const capacityRecommendations = useMemo(
+    () => getCapacityRecommendations(vehicleCapacity).slice(0, 6),
+    [vehicleCapacity],
+  );
+
+  const renderPortalSpecHint = (items: string[], currentValue: string) => {
+    const display = items
+      .filter(
+        (item) =>
+          item.trim().toLowerCase() !== currentValue.trim().toLowerCase(),
+      )
+      .slice(0, 5);
+    if (display.length === 0) return null;
+    return (
+      <Text style={styles.specHintText}>
+        Suggested: {display.join(", ")}
+      </Text>
+    );
+  };
 
   const headline = useMemo(
     () =>
@@ -277,12 +330,13 @@ function PartyRegistrationPortalInner(
       return false;
     }
     if (
-      !vehicleModelLine.trim() ||
+      !vehicleCategory.trim() ||
+      !vehicleModel.trim() ||
       !vehicleCapacity.trim() ||
       !vehicleBodyFt.trim()
     ) {
       setFormError(
-        "Enter vehicle type/model line, capacity (tons), and body length (ft).",
+        "Select vehicle category, type & model, load capacity, and body length (use the lists or type manually).",
       );
       return false;
     }
@@ -297,7 +351,8 @@ function PartyRegistrationPortalInner(
     driverPhone,
     driverDl,
     vehicleReg,
-    vehicleModelLine,
+    vehicleCategory,
+    vehicleModel,
     vehicleCapacity,
     vehicleBodyFt,
   ]);
@@ -376,7 +431,8 @@ function PartyRegistrationPortalInner(
         await onAddVehicle(
           vehiclePayloadFromInputs(
             vehicleReg,
-            vehicleModelLine,
+            vehicleCategory,
+            vehicleModel,
             vehicleCapacity,
             vehicleBodyFt,
             vehicleAxle,
@@ -459,11 +515,17 @@ function PartyRegistrationPortalInner(
         Icon: Verified,
         emphasis: true,
       },
-      { label: "Type & model", value: vehicleModelLine.trim(), Icon: Truck },
+      {
+        label: "Category & model",
+        value: [vehicleCategory.trim(), vehicleModel.trim()]
+          .filter(Boolean)
+          .join(" · "),
+        Icon: Truck,
+      },
       { label: "Load capacity", value: vehicleCapacity.trim(), Icon: Layers },
       {
         label: "Body length",
-        value: `${vehicleBodyFt.trim()} ft`,
+        value: vehicleBodyFt.trim() || "—",
         Icon: ArrowLeftRight,
       },
       {
@@ -482,7 +544,8 @@ function PartyRegistrationPortalInner(
     driverPhonePretty,
     driverDl,
     vehicleReg,
-    vehicleModelLine,
+    vehicleCategory,
+    vehicleModel,
     vehicleCapacity,
     vehicleBodyFt,
     vehicleAxle,
@@ -501,6 +564,7 @@ function PartyRegistrationPortalInner(
     : Math.min(560, Math.max(280, viewportW - 16));
 
   return (
+    <>
     <Modal
       visible
       transparent
@@ -772,21 +836,90 @@ function PartyRegistrationPortalInner(
                         />
                       </View>
                     </Field>
-                    <Field label="Type & model">
-                      <View style={styles.inputIconRow}>
-                        <Truck
-                          size={18}
-                          color={Theme.textMuted}
-                          style={styles.inputLeadingIcon}
-                        />
-                        <TextInput
-                          style={[styles.input, styles.inputPadded]}
-                          placeholder="Example: BharatBenz 3523R"
-                          placeholderTextColor={Theme.textMuted}
-                          value={vehicleModelLine}
-                          onChangeText={setVehicleModelLine}
-                        />
+                    <Field label="Vehicle category">
+                      <View style={styles.vehicleChipRow}>
+                        {VEHICLE_CATEGORY_LABELS.map((cat) => (
+                          <Pressable
+                            key={cat}
+                            style={[
+                              styles.vehicleChip,
+                              vehicleCategory === cat && styles.vehicleChipActive,
+                            ]}
+                            onPress={() => setVehicleCategory(cat)}
+                          >
+                            <Text
+                              style={[
+                                styles.vehicleChipText,
+                                vehicleCategory === cat &&
+                                  styles.vehicleChipTextActive,
+                              ]}
+                              numberOfLines={2}
+                            >
+                              {cat}
+                            </Text>
+                          </Pressable>
+                        ))}
                       </View>
+                    </Field>
+                    <Field label="Type & model">
+                      {modelIsOther ? (
+                        <View style={styles.inputIconRow}>
+                          <Truck
+                            size={18}
+                            color={Theme.textMuted}
+                            style={styles.inputLeadingIcon}
+                          />
+                          <TextInput
+                            style={[styles.input, styles.inputPadded]}
+                            placeholder="e.g. BharatBenz 3523R"
+                            placeholderTextColor={Theme.textMuted}
+                            value={vehicleModel}
+                            onChangeText={setVehicleModel}
+                          />
+                        </View>
+                      ) : (
+                        <View style={styles.inputIconRow}>
+                          <Truck
+                            size={18}
+                            color={Theme.textMuted}
+                            style={styles.inputLeadingIcon}
+                          />
+                          <Pressable
+                            style={[
+                              styles.input,
+                              styles.inputPadded,
+                              styles.presetFieldPress,
+                            ]}
+                            onPress={() => setModelPickerOpen(true)}
+                          >
+                            <Text
+                              style={
+                                vehicleModel.trim()
+                                  ? styles.presetFieldValue
+                                  : styles.presetFieldPlaceholder
+                              }
+                              numberOfLines={2}
+                            >
+                              {vehicleModel.trim()
+                                ? vehicleModel
+                                : "Tap to select model"}
+                            </Text>
+                          </Pressable>
+                        </View>
+                      )}
+                      {modelIsOther ? (
+                        <Pressable
+                          onPress={() => {
+                            setModelIsOther(false);
+                            setModelPickerOpen(true);
+                          }}
+                          style={styles.presetLinkWrap}
+                        >
+                          <Text style={styles.presetLinkText}>
+                            Choose from list instead
+                          </Text>
+                        </Pressable>
+                      ) : null}
                     </Field>
                     <View style={[styles.row2, layoutWide && styles.row2Web]}>
                       <View style={layoutWide ? styles.row2Grow : undefined}>
@@ -799,24 +932,61 @@ function PartyRegistrationPortalInner(
                             />
                             <TextInput
                               style={[styles.input, styles.inputPadded]}
-                              placeholder="e.g. 20 tons"
+                              placeholder="e.g. 7.5 or 20 tons"
                               placeholderTextColor={Theme.textMuted}
+                              keyboardType="decimal-pad"
                               value={vehicleCapacity}
                               onChangeText={setVehicleCapacity}
                             />
                           </View>
+                          {renderPortalSpecHint(
+                            capacityRecommendations,
+                            vehicleCapacity,
+                          )}
                         </Field>
                       </View>
                       <View style={layoutWide ? styles.row2Grow : undefined}>
                         <Field label="Body length (ft)">
-                          <TextInput
-                            style={styles.input}
-                            placeholder="32"
-                            placeholderTextColor={Theme.textMuted}
-                            keyboardType="number-pad"
-                            value={vehicleBodyFt}
-                            onChangeText={setVehicleBodyFt}
-                          />
+                          {bodyLengthIsOther ? (
+                            <TextInput
+                              style={styles.input}
+                              placeholder="e.g. 28 or 32 ft"
+                              placeholderTextColor={Theme.textMuted}
+                              value={vehicleBodyFt}
+                              onChangeText={setVehicleBodyFt}
+                            />
+                          ) : (
+                            <Pressable
+                              style={[styles.input, styles.presetFieldPress]}
+                              onPress={() => setBodyLengthPickerOpen(true)}
+                            >
+                              <Text
+                                style={
+                                  vehicleBodyFt.trim()
+                                    ? styles.presetFieldValue
+                                    : styles.presetFieldPlaceholder
+                                }
+                                numberOfLines={2}
+                              >
+                                {vehicleBodyFt.trim()
+                                  ? vehicleBodyFt
+                                  : "Tap to choose body length"}
+                              </Text>
+                            </Pressable>
+                          )}
+                          {bodyLengthIsOther ? (
+                            <Pressable
+                              onPress={() => {
+                                setBodyLengthIsOther(false);
+                                setBodyLengthPickerOpen(true);
+                              }}
+                              style={styles.presetLinkWrap}
+                            >
+                              <Text style={styles.presetLinkText}>
+                                Choose from list instead
+                              </Text>
+                            </Pressable>
+                          ) : null}
                         </Field>
                       </View>
                     </View>
@@ -835,6 +1005,10 @@ function PartyRegistrationPortalInner(
                           onChangeText={setVehicleAxle}
                         />
                       </View>
+                      {renderPortalSpecHint(
+                        axleRecommendations,
+                        vehicleAxle,
+                      )}
                     </Field>
                   </>
                 )}
@@ -918,6 +1092,193 @@ function PartyRegistrationPortalInner(
         </View>
       </View>
     </Modal>
+
+      <Modal
+        visible={modelPickerOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setModelPickerOpen(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.vehiclePickBackdrop}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setModelPickerOpen(false)}
+          />
+          <View
+            style={[
+              styles.vehiclePickSheet,
+              {
+                paddingBottom: insets.bottom + 16,
+                maxHeight: Dimensions.get("window").height * 0.72,
+              },
+            ]}
+          >
+            <Text style={styles.vehiclePickTitle}>Model</Text>
+            <Text style={styles.vehiclePickHint}>
+              Presets for the selected category, or Other to type manually.
+            </Text>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator
+              style={styles.vehiclePickScroll}
+            >
+              {getModelSelectOptions(vehicleCategory).map((opt) => (
+                <TouchableOpacity
+                  key={`model-${normalizeBodyLengthKey(opt)}`}
+                  style={[
+                    styles.vehiclePickRow,
+                    normalizeBodyLengthKey(vehicleModel) ===
+                      normalizeBodyLengthKey(opt) &&
+                      !modelIsOther &&
+                      styles.vehiclePickRowActive,
+                  ]}
+                  onPress={() => {
+                    setModelIsOther(false);
+                    setVehicleModel(opt);
+                    setModelPickerOpen(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.vehiclePickRowText,
+                      normalizeBodyLengthKey(vehicleModel) ===
+                        normalizeBodyLengthKey(opt) &&
+                        !modelIsOther &&
+                        styles.vehiclePickRowTextActive,
+                    ]}
+                  >
+                    {opt}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                style={[
+                  styles.vehiclePickRow,
+                  modelIsOther && styles.vehiclePickRowActive,
+                ]}
+                onPress={() => {
+                  setModelIsOther(true);
+                  setVehicleModel("");
+                  setModelPickerOpen(false);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.vehiclePickRowText,
+                    modelIsOther && styles.vehiclePickRowTextActive,
+                  ]}
+                >
+                  {OTHER_LABEL} — type manually
+                </Text>
+              </TouchableOpacity>
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.vehiclePickDone}
+              onPress={() => setModelPickerOpen(false)}
+            >
+              <Text style={styles.vehiclePickDoneText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal
+        visible={bodyLengthPickerOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setBodyLengthPickerOpen(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.vehiclePickBackdrop}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setBodyLengthPickerOpen(false)}
+          />
+          <View
+            style={[
+              styles.vehiclePickSheet,
+              {
+                paddingBottom: insets.bottom + 16,
+                maxHeight: Dimensions.get("window").height * 0.72,
+              },
+            ]}
+          >
+            <Text style={styles.vehiclePickTitle}>Body length</Text>
+            <Text style={styles.vehiclePickHint}>
+              Choose a preset or Other for a custom value.
+            </Text>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator
+              style={styles.vehiclePickScroll}
+            >
+              {BODY_LENGTH_SELECT_OPTIONS.map((opt) => (
+                <TouchableOpacity
+                  key={normalizeBodyLengthKey(opt)}
+                  style={[
+                    styles.vehiclePickRow,
+                    normalizeBodyLengthKey(vehicleBodyFt) ===
+                      normalizeBodyLengthKey(opt) &&
+                      !bodyLengthIsOther &&
+                      styles.vehiclePickRowActive,
+                  ]}
+                  onPress={() => {
+                    setBodyLengthIsOther(false);
+                    setVehicleBodyFt(opt);
+                    setBodyLengthPickerOpen(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.vehiclePickRowText,
+                      normalizeBodyLengthKey(vehicleBodyFt) ===
+                        normalizeBodyLengthKey(opt) &&
+                        !bodyLengthIsOther &&
+                        styles.vehiclePickRowTextActive,
+                    ]}
+                  >
+                    {opt}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                style={[
+                  styles.vehiclePickRow,
+                  bodyLengthIsOther && styles.vehiclePickRowActive,
+                ]}
+                onPress={() => {
+                  setBodyLengthIsOther(true);
+                  setVehicleBodyFt("");
+                  setBodyLengthPickerOpen(false);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.vehiclePickRowText,
+                    bodyLengthIsOther && styles.vehiclePickRowTextActive,
+                  ]}
+                >
+                  {OTHER_LABEL} — type manually
+                </Text>
+              </TouchableOpacity>
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.vehiclePickDone}
+              onPress={() => setBodyLengthPickerOpen(false)}
+            >
+              <Text style={styles.vehiclePickDoneText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+    </>
   );
 }
 
@@ -1220,6 +1581,135 @@ const styles = StyleSheet.create({
   row2Grow: {
     flex: 1,
     minWidth: 0,
+  },
+  vehicleChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  vehicleChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    maxWidth: "100%",
+  },
+  vehicleChipActive: {
+    backgroundColor: "#0f172a",
+    borderColor: "#0f172a",
+  },
+  vehicleChipText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#334155",
+    maxWidth: 200,
+  },
+  vehicleChipTextActive: {
+    color: "#fff",
+  },
+  presetFieldPress: {
+    justifyContent: "center",
+    minHeight: 50,
+  },
+  presetFieldValue: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#0f172a",
+  },
+  presetFieldPlaceholder: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#94a3b8",
+  },
+  presetLinkWrap: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+  },
+  presetLinkText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.buttonPrimary,
+  },
+  specHintText: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: "#64748b",
+    marginTop: 6,
+    lineHeight: 15,
+  },
+  vehiclePickBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(15,23,42,0.5)",
+    justifyContent: "flex-end",
+  },
+  vehiclePickSheet: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    width: "100%",
+    alignSelf: "stretch",
+    ...(Platform.OS === "web"
+      ? ({ boxShadow: "0 -8px 40px rgba(0,0,0,0.15)" } as object)
+      : {
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: 0.12,
+          shadowRadius: 16,
+          elevation: 12,
+        }),
+  },
+  vehiclePickTitle: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#0f172a",
+    marginBottom: 4,
+  },
+  vehiclePickHint: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#64748b",
+    marginBottom: 12,
+  },
+  vehiclePickScroll: {
+    flexGrow: 0,
+    maxHeight: 340,
+  },
+  vehiclePickRow: {
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginBottom: 6,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  vehiclePickRowActive: {
+    backgroundColor: "#eff6ff",
+    borderColor: "#2563eb",
+  },
+  vehiclePickRowText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#0f172a",
+  },
+  vehiclePickRowTextActive: {
+    color: "#1d4ed8",
+  },
+  vehiclePickDone: {
+    marginTop: 8,
+    paddingVertical: 14,
+    alignItems: "center",
+    borderRadius: 14,
+    backgroundColor: "#0f172a",
+  },
+  vehiclePickDoneText: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#fff",
   },
   fieldLabelRow: {
     flexDirection: "row",

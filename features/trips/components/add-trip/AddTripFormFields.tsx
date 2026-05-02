@@ -130,6 +130,8 @@ export interface AddTripFormFieldsProps {
   validationIssues?: AddTripValidationIssue[];
   submitting?: boolean;
   showInlineCta?: boolean;
+  /** Keep Create Trip tappable while invalid; parent passes empty validationIssues until submit attempt. */
+  enablePrimaryWhenInvalid?: boolean;
 }
 
 export function AddTripFormFields({
@@ -145,6 +147,7 @@ export function AddTripFormFields({
   validationIssues = [],
   submitting = false,
   showInlineCta = true,
+  enablePrimaryWhenInvalid = false,
 }: AddTripFormFieldsProps) {
   void refetchClients;
   const invalidSet = useMemo(
@@ -163,17 +166,24 @@ export function AddTripFormFields({
 
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { width: winW } = useWindowDimensions();
+  const { width: winW, height: winH } = useWindowDimensions();
   const isCompactMobile = winW < 480;
-  const validationListEl =
-    validationIssues.length === 0 ? null : (
+  const isDesktopPreview = winW >= 1180;
+  const renderValidationChecklist = (
+    placement: "pageTop" | "belowPreview" | "belowFloating",
+  ) => {
+    if (validationIssues.length === 0) return null;
+    return (
       <View
         style={[
           styles.validationChecklist,
-          !showInlineCta && {
-            marginHorizontal: isCompactMobile ? 16 : 0,
-            marginBottom: 12,
-          },
+          placement === "belowPreview" && styles.validationChecklistBelowPreview,
+          placement === "belowFloating" && styles.validationChecklistBelowFloating,
+          placement === "pageTop" &&
+            !showInlineCta && {
+              marginHorizontal: isCompactMobile ? 16 : 0,
+              marginBottom: 12,
+            },
         ]}
       >
         <View style={styles.validationChecklistHead}>
@@ -192,11 +202,19 @@ export function AddTripFormFields({
         ))}
       </View>
     );
+  };
+  const primaryCtaDisabled = enablePrimaryWhenInvalid
+    ? submitting
+    : !canSubmit || submitting;
   const isWide = winW >= 720;
   /** Driver + vehicle side-by-side only on wide screens; 720px caused cramped overlap on tablets. */
   const allocationWideLayout = winW >= 920;
-  const isDesktopPreview = winW >= 1180;
   const showFloatingPreview = winW >= 480 && !isDesktopPreview;
+  /** Cap height so the fixed bottom-right panel + validation can scroll instead of clipping off-screen. */
+  const floatingPreviewMaxHeight = Math.max(
+    220,
+    winH - insets.top - insets.bottom - 48,
+  );
   const floatingPreviewWidth = Math.min(336, Math.max(280, winW - 24));
   const collapsePreviewByDefault = winW < 560;
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
@@ -537,7 +555,9 @@ export function AddTripFormFields({
             },
           ]}
         >
-          {validationListEl}
+          {!isDesktopPreview &&
+            !(showFloatingPreview && mobilePreviewExpanded) &&
+            renderValidationChecklist("pageTop")}
           <View style={[styles.mainGrid, isDesktopPreview && styles.mainGridDesktop]}>
             <View
               style={[
@@ -1876,13 +1896,13 @@ export function AddTripFormFields({
               <TouchableOpacity
                 style={[
                   styles.primaryCta,
-                  (!canSubmit || submitting) && styles.primaryCtaDis,
+                  primaryCtaDisabled && styles.primaryCtaDis,
                   Platform.OS === "web"
                     ? ({ cursor: "pointer" } as ViewStyle)
                     : null,
                 ]}
                 onPress={onSubmit}
-                disabled={!canSubmit || submitting}
+                disabled={primaryCtaDisabled}
                 activeOpacity={0.9}
               >
                 {submitting ? (
@@ -1894,7 +1914,10 @@ export function AddTripFormFields({
                   </>
                 )}
               </TouchableOpacity>
-              {!canSubmit && !submitting && validationIssues.length === 0 ? (
+              {!enablePrimaryWhenInvalid &&
+              !canSubmit &&
+              !submitting &&
+              validationIssues.length === 0 ? (
                 <Text style={styles.ctaHint}>
                   {validationMessage ??
                     "Please fill all mandatory fields to continue"}
@@ -1906,7 +1929,8 @@ export function AddTripFormFields({
 
             {isDesktopPreview ? (
               <View style={styles.previewColumn}>
-                <View style={[styles.previewCard, styles.previewCardDesktop]} pointerEvents="none">
+                <View style={styles.previewStickyWrap}>
+                  <View style={[styles.previewCard, styles.previewCardDesktop]} pointerEvents="none">
                   <View style={styles.previewHead}>
                     <Text style={styles.previewHeadTitle}>Trip Preview</Text>
                     <View style={styles.livePill}>
@@ -1991,6 +2015,8 @@ export function AddTripFormFields({
                     </View>
                   </View>
                 </View>
+                {renderValidationChecklist("belowPreview")}
+                </View>
               </View>
             ) : null}
           </View>
@@ -2011,6 +2037,13 @@ export function AddTripFormFields({
             ]}
             pointerEvents="box-none"
           >
+            <ScrollView
+              style={{ maxHeight: floatingPreviewMaxHeight }}
+              contentContainerStyle={styles.previewFloatingScrollContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator
+              nestedScrollEnabled
+            >
             <View style={styles.previewHead}>
               <Text style={styles.previewHeadTitle}>Trip Preview</Text>
               <View style={styles.previewHeadRight}>
@@ -2103,6 +2136,8 @@ export function AddTripFormFields({
               </Text>
             </View>
             </View>
+            {renderValidationChecklist("belowFloating")}
+            </ScrollView>
           </View>
         ) : (
           <TouchableOpacity
@@ -2163,6 +2198,18 @@ const styles = StyleSheet.create({
     width: 360,
     paddingTop: 4,
     alignSelf: "stretch",
+  },
+  /** Web: sticky wrapper so Trip Preview + validation scroll together (not only the card). */
+  previewStickyWrap: {
+    width: "100%",
+    ...Platform.select<ViewStyle>({
+      web: {
+        position: "sticky" as const,
+        top: 20,
+        alignSelf: "flex-start",
+      },
+      default: {},
+    }),
   },
   card: {
     backgroundColor: Theme.cardWhite,
@@ -2944,6 +2991,27 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(232, 33, 39, 0.35)",
   },
+  /** Desktop: sits under Trip Preview card in the right column (360px). */
+  validationChecklistBelowPreview: {
+    maxWidth: "100%",
+    alignSelf: "stretch",
+    marginTop: 12,
+    marginBottom: 0,
+  },
+  /** Tablet: inside floating Trip Preview card, below preview body. */
+  validationChecklistBelowFloating: {
+    maxWidth: "100%",
+    alignSelf: "stretch",
+    marginTop: 10,
+    marginHorizontal: 0,
+    marginBottom: 0,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  previewFloatingScrollContent: {
+    flexGrow: 0,
+    paddingBottom: 8,
+  },
   validationChecklistHead: {
     flexDirection: "row",
     alignItems: "center",
@@ -3039,13 +3107,6 @@ const styles = StyleSheet.create({
     right: undefined,
     bottom: undefined,
     marginTop: 4,
-    ...Platform.select<ViewStyle>({
-      web: {
-        position: "sticky" as const,
-        top: 20,
-      },
-      default: {},
-    }),
   },
   previewHead: {
     flexDirection: "row",

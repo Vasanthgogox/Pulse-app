@@ -1258,6 +1258,9 @@ function NetworkScreenInner() {
                     style={[
                       styles.discoverHeaderActions,
                       isMobileLayout && styles.discoverHeaderActionsDiscoverMobile,
+                      isMobileLayout &&
+                        !discoverSearchOpen &&
+                        styles.discoverHeaderActionsStackMobile,
                     ]}
                   >
                     {discoverInviteCount > 0 && (
@@ -3043,6 +3046,12 @@ const styles = StyleSheet.create({
   discoverHeaderActionsDiscoverMobile: {
     flexShrink: 0,
     alignSelf: "center",
+  },
+  /** Invite pill above search so wide counts never overlap the search control on narrow widths. */
+  discoverHeaderActionsStackMobile: {
+    flexDirection: "column",
+    alignItems: "flex-end",
+    gap: 6,
   },
   inviteCountPill: {
     paddingHorizontal: 8,

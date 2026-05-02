@@ -13,6 +13,8 @@ import {
 
 export type PartyAvatarProps = {
   name: string;
+  /** When set, initials fallback background is hashed from this (e.g. org id) so renames do not change color. */
+  initialsColorSeed?: string | null;
   /** Linked org / org branding photo (storage path or http). */
   organizationImageUrl?: string | null;
   organizationAvatarSeed?: string | null;
@@ -29,6 +31,7 @@ export type PartyAvatarProps = {
  */
 export function PartyAvatar({
   name,
+  initialsColorSeed,
   organizationImageUrl,
   organizationAvatarSeed,
   avatarUrl,
@@ -83,7 +86,7 @@ export function PartyAvatar({
     return null;
   }
   const initials = partyInitialsFromName(name);
-  const bg = partyAvatarBackgroundColor(name);
+  const bg = partyAvatarBackgroundColor((initialsColorSeed ?? "").trim() || name);
   const initialsColor = partyAvatarInitialsTextColor(bg);
 
   if (uri) {

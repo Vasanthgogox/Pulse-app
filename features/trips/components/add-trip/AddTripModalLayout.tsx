@@ -24,6 +24,11 @@ export interface AddTripModalLayoutProps {
   subtitle?: string;
   submitLabel: string;
   canSubmit: boolean;
+  /**
+   * When true (default), primary action stays disabled until the form is valid.
+   * When false, only `submitting` disables the button — caller should validate on press and show errors (e.g. Create Trip).
+   */
+  lockPrimaryUntilValid?: boolean;
   validationMessage?: string | null;
   submitting?: boolean;
   /** When false, the page puts the primary action inside the form (e.g. centered CTA). */
@@ -48,6 +53,7 @@ export function AddTripModalLayout({
   subtitle = "Route · Client & Price · Allocation",
   submitLabel,
   canSubmit,
+  lockPrimaryUntilValid = true,
   validationMessage = null,
   submitting = false,
   showFooter = true,
@@ -60,7 +66,8 @@ export function AddTripModalLayout({
   const insets = useSafeAreaInsets();
   const { width: winW } = useWindowDimensions();
   const isCompactMobile = winW < 480;
-  const submitDisabled = !canSubmit || submitting;
+  const submitDisabled =
+    submitting || (lockPrimaryUntilValid ? !canSubmit : false);
   const shouldShowFooter =
     primaryActionMode === "footer"
       ? true

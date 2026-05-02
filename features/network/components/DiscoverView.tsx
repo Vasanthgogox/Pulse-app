@@ -21,6 +21,7 @@ import {
 } from "@/services/connectionRequestsService";
 import { useConnectionRequestsSentQuery, useIndentsQuery, useInvalidateNetwork, useNetworkFeedQuery } from '@/lib/queries';
 import { queryKeys } from '@/lib/queryKeys';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Check,
@@ -183,14 +184,17 @@ function scoreOrgs(
 
 // --- Org card ---
 
-function OrgCard({ org, locationFallback, onConnect, onCancel, loading, onOpenProfile }: {
+function OrgCard({ org, locationFallback, onConnect, onCancel, loading, onOpenProfile, stretchCellHeight }: {
   org: ScoredOrg;
   locationFallback?: { city?: string | null; state?: string | null; address_line?: string | null } | null;
   onConnect: () => void;
   onCancel: () => void;
   loading: boolean;
   onOpenProfile?: () => void;
+  /** When true (embedded hub grid), card fills the row cell height so tiles align. */
+  stretchCellHeight?: boolean;
 }) {
+  const { t } = useLanguage();
   const scale = useRef(new Animated.Value(1)).current;
   const status = org.connection_status;
   const isConnected = status === 'approved';
@@ -210,6 +214,7 @@ function OrgCard({ org, locationFallback, onConnect, onCancel, loading, onOpenPr
   return (
     <Animated.View style={[
       styles.card,
+      stretchCellHeight && styles.cardStretchEmbedded,
       isConnected && styles.cardConnected,
       isRecommended && !isConnected && !isPending && styles.cardRecommended,
       { transform: [{ scale }] },
@@ -233,11 +238,12 @@ function OrgCard({ org, locationFallback, onConnect, onCancel, loading, onOpenPr
         </View>
       </View>
 
-      <View style={styles.discoveryHero}>
+      <View style={[styles.discoveryHero, stretchCellHeight && styles.discoveryHeroFlex]}>
         <Pressable onPress={onOpenProfile} style={styles.discoveryHeroPress}>
         <View style={styles.avatar}>
           <PartyAvatar
             name={org.name}
+            initialsColorSeed={org.id}
             avatarSeed={org.avatar_seed}
             entityType="client"
             size={62}
@@ -246,10 +252,20 @@ function OrgCard({ org, locationFallback, onConnect, onCancel, loading, onOpenPr
         </View>
         <Text style={styles.orgName} numberOfLines={1}>{org.name.toUpperCase()}</Text>
         <View style={styles.locationRow}>
-          <MapPin size={10} color={Theme.textMutedDemo} strokeWidth={2.4} />
-          <Text style={styles.locationText} numberOfLines={1}>
-            {businessLocation ?? "Not available"}
-          </Text>
+          <MapPin
+            size={10}
+            color={businessLocation ? Theme.textMutedDemo : Theme.textSecondary}
+            strokeWidth={2.4}
+          />
+          {businessLocation ? (
+            <Text style={styles.locationText} numberOfLines={1}>
+              {businessLocation}
+            </Text>
+          ) : (
+            <Text style={styles.locationTextEmpty} numberOfLines={1}>
+              {t('networkDiscoverLocationNotSet')}
+            </Text>
+          )}
         </View>
         </Pressable>
       </View>
@@ -455,6 +471,8 @@ export function DiscoverView({
    * Do not use embedded list width here: a narrow discover pane on a desktop would wrongly flip to 2-up.
    */
   const isDiscoverDesktopGrid = windowWidth >= DISCOVER_GRID_BREAKPOINT;
+  /** Narrow embedded hub: equal-width columns so the row never exceeds the card (avoids right-edge clipping under `overflow: hidden`). */
+  const useEmbeddedFlexColumns = Boolean(embedded && !isDiscoverDesktopGrid);
   const discoverColumnCount = isDiscoverDesktopGrid
     ? DISCOVER_COLS_DESKTOP
     : DISCOVER_COLS_MOBILE;
@@ -682,23 +700,26 @@ export function DiscoverView({
               style={[
                 styles.discoverGridCell,
                 embedded &&
-                  embeddedDiscoverCellWidth != null && {
-                    width: embeddedDiscoverCellWidth,
-                    minWidth: embeddedDiscoverCellWidth,
-                    maxWidth: embeddedDiscoverCellWidth,
-                    flexGrow: 0,
-                    flexShrink: 0,
-                    alignSelf: "flex-start",
-                  },
+                  (useEmbeddedFlexColumns
+                    ? styles.discoverGridCellEmbeddedFlex
+                    : embeddedDiscoverCellWidth != null && {
+                        width: embeddedDiscoverCellWidth,
+                        minWidth: embeddedDiscoverCellWidth,
+                        maxWidth: embeddedDiscoverCellWidth,
+                        flexGrow: 0,
+                        flexShrink: 0,
+                        alignSelf: "flex-start",
+                      }),
               ]}
             >
-              <View style={styles.discoverGridCardWrap}>
+              <View style={[styles.discoverGridCardWrap, embedded && styles.discoverGridCardWrapStretch]}>
                 <OrgCard
                   org={item.org}
                   locationFallback={organizationLocationById[item.org.id]}
                   onConnect={() => tryBeginConnectionRequest(item.org)}
                   onCancel={() => void handleCancelRequest(item.org)}
                   loading={connecting === item.org.id}
+                  stretchCellHeight={embedded}
                   onOpenProfile={() =>
                     onOpenProfile?.({
                       ...item.org,
@@ -992,12 +1013,22 @@ const styles = StyleSheet.create({
     flexBasis: "auto",
     minWidth: 0,
   },
+  discoverGridCellEmbeddedFlex: {
+    flex: 1,
+    minWidth: 0,
+    alignSelf: "stretch",
+  },
   discoverGridCardWrap: {
     width: "100%",
     minWidth: 0,
   },
+  discoverGridCardWrapStretch: {
+    flex: 1,
+    alignSelf: "stretch",
+  },
   card: {
     width: "100%",
+    minHeight: 186,
     backgroundColor: Theme.screenBackground,
     borderRadius: 32,
     borderWidth: 1,
@@ -1007,6 +1038,9 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 7 },
     overflow: 'hidden',
+  },
+  cardStretchEmbedded: {
+    flex: 1,
   },
   cardConnected: { borderColor: Theme.borderLight },
   cardRecommended: { borderColor: Theme.aggregatePillBorder, borderWidth: 1 },
@@ -1117,6 +1151,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingBottom: 8,
   },
+  discoveryHeroFlex: {
+    flexGrow: 1,
+    justifyContent: "flex-start",
+  },
   discoveryHeroPress: {
     alignItems: "center",
     width: "100%",
@@ -1168,13 +1206,24 @@ const styles = StyleSheet.create({
     lineHeight: 12,
     textAlign: "center",
   },
+  locationTextEmpty: {
+    fontSize: 9,
+    fontWeight: "600",
+    fontStyle: "italic",
+    color: Theme.textSecondary,
+    lineHeight: 12,
+    textAlign: "center",
+    opacity: 0.85,
+  },
   discoveryMetaStack: {
     width: "100%",
+    minHeight: 52,
     paddingHorizontal: 8,
     gap: 6,
     marginTop: 2,
     marginBottom: 8,
     alignItems: "center",
+    justifyContent: "center",
   },
   discoveryMetaChip: {
     minHeight: 22,
