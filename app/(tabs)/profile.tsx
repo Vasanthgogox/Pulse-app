@@ -23,6 +23,7 @@ import { queryKeys } from "@/lib/queryKeys";
 import { ROUTES } from "@/lib/routes";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useFocusEffect } from "@react-navigation/native";
 import Constants from "expo-constants";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -318,6 +319,8 @@ export default function ProfileScreen() {
       };
     },
     enabled: !!orgId && driverIds.length > 0,
+    staleTime: 0,
+    refetchOnMount: true,
   });
 
   /** Supplier/org ratings of your CRM customer records (rated_type client) — not driver scores. */
@@ -336,6 +339,8 @@ export default function ProfileScreen() {
       };
     },
     enabled: !!orgId && clientIds.length > 0,
+    staleTime: 0,
+    refetchOnMount: true,
   });
 
   /** Partner orgs rated your linked customer identity (integrated client row → your org). */
@@ -353,6 +358,8 @@ export default function ProfileScreen() {
       };
     },
     enabled: !!orgId,
+    staleTime: 0,
+    refetchOnMount: true,
   });
 
   const completedTrips = useMemo(
@@ -432,6 +439,18 @@ export default function ProfileScreen() {
       setRefreshing(false);
     }
   }, [orgId, queryClient, refreshSession]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!orgId) return;
+      void queryClient.invalidateQueries({
+        predicate: (q) =>
+          Array.isArray(q.queryKey) &&
+          q.queryKey[0] === "q" &&
+          q.queryKey[1] === "profile",
+      });
+    }, [orgId, queryClient]),
+  );
 
   const handleEditProfile = () => {
     setShowEditProfileModal(true);
@@ -518,6 +537,21 @@ export default function ProfileScreen() {
     receivedCustomerAvg != null &&
     receivedCustomerAvg > 0 &&
     receivedCustomerCount > 0;
+
+  /** Integrated suppliers care about partner scores first; fleet avg is separate. */
+  const statMiddleAvg = useMemo(() => {
+    if (showReceivedCustomerStars) return receivedCustomerAvg;
+    if (showFleetStars) return fleetAvg;
+    return null;
+  }, [showReceivedCustomerStars, showFleetStars, receivedCustomerAvg, fleetAvg]);
+
+  const statMiddleLabel = showReceivedCustomerStars ? "PARTNER AVG" : "FLEET AVG";
+  const statMiddleLoading = showReceivedCustomerStars
+    ? receivedCustomerRatingsLoading
+    : showFleetStars && driverIds.length > 0
+      ? ratingsLoading
+      : false;
+  const showStatMiddleStars = statMiddleAvg != null && statMiddleAvg > 0;
 
   useEffect(() => {
     let mounted = true;
@@ -639,12 +673,25 @@ export default function ProfileScreen() {
                 </Text>
 
                 <View style={styles.ratingPillsStack}>
+                  {showReceivedCustomerStars ? (
+                    <View style={[styles.ratingPill, styles.ratingPillPartner]}>
+                      <FleetStars value={receivedCustomerAvg!} />
+                      <Text style={styles.ratingNum}>
+                        {receivedCustomerAvg!.toFixed(1)} · {receivedCustomerCount} review
+                        {receivedCustomerCount === 1 ? "" : "s"} (partners · you as customer)
+                      </Text>
+                    </View>
+                  ) : receivedCustomerRatingsLoading ? (
+                    <View style={[styles.ratingPillMuted, styles.ratingPillPartner]}>
+                      <ActivityIndicator size="small" color="rgba(255,255,255,0.6)" />
+                    </View>
+                  ) : null}
                   {showFleetStars ? (
                     <View style={styles.ratingPill}>
                       <FleetStars value={fleetAvg!} />
                       <Text style={styles.ratingNum}>
                         {fleetAvg!.toFixed(1)} · {fleetCount} review{fleetCount === 1 ? "" : "s"}{" "}
-                        (fleet)
+                        (fleet · your drivers)
                       </Text>
                     </View>
                   ) : (
@@ -670,19 +717,6 @@ export default function ProfileScreen() {
                     </View>
                   ) : partnerRatingsLoading && clientIds.length > 0 ? (
                     <View style={styles.ratingPillMuted}>
-                      <ActivityIndicator size="small" color="rgba(255,255,255,0.6)" />
-                    </View>
-                  ) : null}
-                  {showReceivedCustomerStars ? (
-                    <View style={[styles.ratingPill, styles.ratingPillPartner]}>
-                      <FleetStars value={receivedCustomerAvg!} />
-                      <Text style={styles.ratingNum}>
-                        {receivedCustomerAvg!.toFixed(1)} · {receivedCustomerCount} review
-                        {receivedCustomerCount === 1 ? "" : "s"} (partners · you as customer)
-                      </Text>
-                    </View>
-                  ) : receivedCustomerRatingsLoading ? (
-                    <View style={[styles.ratingPillMuted, styles.ratingPillPartner]}>
                       <ActivityIndicator size="small" color="rgba(255,255,255,0.6)" />
                     </View>
                   ) : null}
@@ -733,16 +767,16 @@ export default function ProfileScreen() {
                   <Star
                     size={20}
                     color={AMBER_500}
-                    fill={showFleetStars ? AMBER_500 : "transparent"}
+                    fill={showStatMiddleStars ? AMBER_500 : "transparent"}
                   />
                   <Text style={styles.statTileNum}>
-                    {ratingsLoading && driverIds.length > 0
+                    {statMiddleLoading
                       ? "…"
-                      : showFleetStars
-                        ? fleetAvg!.toFixed(1)
+                      : showStatMiddleStars
+                        ? statMiddleAvg!.toFixed(1)
                         : "—"}
                   </Text>
-                  <Text style={styles.statTileLbl}>FLEET AVG</Text>
+                  <Text style={styles.statTileLbl}>{statMiddleLabel}</Text>
                 </View>
                 <View style={styles.statTile}>
                   <Users size={20} color="#8b5cf6" />
