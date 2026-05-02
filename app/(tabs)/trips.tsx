@@ -17,7 +17,6 @@ import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
 import {
   buildTripHubPartyMetaByTripId,
   summarizeTripLedgerForHub,
-  TripsHubTableView,
   TripsHubTripCard,
   tripFinanceAdjForHubLookup,
   tripHubCost,
@@ -25,6 +24,7 @@ import {
   tripHubRevenue,
   type TripRow,
 } from "@/features/trips";
+import { TripsHubTableView } from "@/features/trips/components/TripsHubViews";
 import {
   classifyTripMetric,
   countTripsByMetric,
@@ -93,6 +93,7 @@ type DateFilter =
   | "this_week"
   | "this_month"
   | "custom";
+type ToolbarDateFilter = Exclude<DateFilter, "tomorrow">;
 
 type TripsListLayout = "cards" | "table";
 type HistoryTripMetricId =
@@ -208,6 +209,8 @@ export default function TripsScreen() {
   const [showDateRangePicker, setShowDateRangePicker] = useState(false);
   const [showSortModal, setShowSortModal] = useState(false);
   const [sortAnchorY, setSortAnchorY] = useState(0);
+  const toolbarDateRangeFilter: ToolbarDateFilter =
+    dateRangeFilter === "tomorrow" ? "all" : dateRangeFilter;
   /** Compact/mobile view defaults to cards; wide desktop web defaults to table. */
   const [listLayout, setListLayout] = useState<TripsListLayout>(() =>
     Platform.OS === "web" && !isCompactWeb ? "table" : "cards",
@@ -2290,141 +2293,6 @@ export default function TripsScreen() {
                 </View>
               </ScrollView>
             )}
-            {isLargeScreen ? (
-              <View style={styles.tripsDateInlineRowWeb}>
-                {(
-                  [
-                    { id: "all" as const, label: tr("all") },
-                    { id: "today" as const, label: tr("todayTrips") },
-                    { id: "yesterday" as const, label: tr("yesterdayTrips") },
-                    { id: "this_week" as const, label: tr("thisWeekTrips") },
-                    { id: "this_month" as const, label: tr("thisMonthTrips") },
-                  ] as const
-                ).map(({ id, label }) => (
-                  <TouchableOpacity
-                    key={id}
-                    style={[
-                      styles.tripsBodyDateChip,
-                      dateRangeFilter === id && styles.tripsBodyDateChipActive,
-                      styles.tripsSupplyChipWeb,
-                    ]}
-                    onPress={() => {
-                      setDateRangeFilter(id);
-                      setCustomDateFrom(null);
-                      setCustomDateTo(null);
-                    }}
-                    activeOpacity={0.85}
-                  >
-                    <Text
-                      style={[
-                        styles.tripsBodyDateChipText,
-                        dateRangeFilter === id &&
-                          styles.tripsBodyDateChipTextActive,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-                {dateRangeFilter === "custom" &&
-                customDateFrom &&
-                customDateTo ? (
-                  <View
-                    style={[
-                      styles.tripsBodyDateChip,
-                      styles.tripsDateChipCustom,
-                    ]}
-                  >
-                    <FontAwesome
-                      name="calendar"
-                      size={9}
-                      color={Theme.textOnDark}
-                      style={styles.tripsDateChipCustomIcon}
-                    />
-                    <Text
-                      style={[
-                        styles.tripsDateChipText,
-                        styles.tripsDateChipTextActive,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {formatLedgerDate(customDateFrom).toUpperCase()} →{" "}
-                      {formatLedgerDate(customDateTo).toUpperCase()}
-                    </Text>
-                    <TouchableOpacity
-                      onPress={() => {
-                        setDateRangeFilter("all");
-                        setCustomDateFrom(null);
-                        setCustomDateTo(null);
-                      }}
-                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                      style={styles.tripsDateChipCustomClose}
-                    >
-                      <FontAwesome
-                        name="times"
-                        size={9}
-                        color={Theme.textOnDark}
-                      />
-                    </TouchableOpacity>
-                  </View>
-                ) : null}
-              <TouchableOpacity
-                style={[
-                  styles.tripsBodyDateRangeIconBtn,
-                  styles.tripsSupplyChipWeb,
-                ]}
-                onPress={(e) => {
-                  const target = e.currentTarget;
-                  if (
-                    target &&
-                    typeof target.measureInWindow === "function"
-                  ) {
-                    target.measureInWindow(
-                      (_x: number, y: number, _w: number, h: number) => {
-                        setSortAnchorY(y + h + 6);
-                        setShowSortModal(true);
-                      },
-                    );
-                  } else {
-                    setSortAnchorY(100);
-                    setShowSortModal(true);
-                  }
-                }}
-                activeOpacity={0.8}
-                accessibilityLabel="Sort filters"
-                accessibilityRole="button"
-              >
-                <FontAwesome
-                  name="sort"
-                  size={12}
-                  color={Theme.textPrimaryDark}
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.tripsBodyDateRangeIconBtn,
-                  dateRangeFilter === "custom" &&
-                    styles.tripsDateRangeIconBtnActive,
-                    styles.tripsSupplyChipWeb,
-                ]}
-                onPress={() => setShowDateRangePicker(true)}
-                activeOpacity={0.8}
-                accessibilityLabel={tr("dateRangeLabel")}
-                accessibilityRole="button"
-              >
-                <FontAwesome
-                  name="calendar"
-                  size={12}
-                  color={
-                    dateRangeFilter === "custom"
-                      ? Theme.textOnDark
-                      : Theme.textPrimaryDark
-                  }
-                />
-              </TouchableOpacity>
-            </View>
-            ) : null}
           </View>
 
           {filtered.length === 0 ? (
@@ -2524,6 +2392,15 @@ export default function TripsScreen() {
                     router.push(`/trip/${trip.id}` as const)
                   }
                   tr={tr}
+                  dateRangeFilter={toolbarDateRangeFilter}
+                  onDateRangeFilterChange={(next: DateFilter) => {
+                    setDateRangeFilter(next);
+                    if (next !== "custom") {
+                      setCustomDateFrom(null);
+                      setCustomDateTo(null);
+                    }
+                  }}
+                  onOpenDateRangePicker={() => setShowDateRangePicker(true)}
                     onExportLedger={() => setTripLedgerExportOpen(true)}
                   clientNameByTripId={shipperNameByTripId}
                   linkedOrgByOrganizationId={linkedOrgByOrganizationId}
@@ -2670,6 +2547,15 @@ export default function TripsScreen() {
                   router.push(`/trip/${trip.id}` as const)
                 }
                 tr={tr}
+                dateRangeFilter={toolbarDateRangeFilter}
+                onDateRangeFilterChange={(next: DateFilter) => {
+                  setDateRangeFilter(next);
+                  if (next !== "custom") {
+                    setCustomDateFrom(null);
+                    setCustomDateTo(null);
+                  }
+                }}
+                onOpenDateRangePicker={() => setShowDateRangePicker(true)}
                 onExportLedger={() => setTripLedgerExportOpen(true)}
                 clientNameByTripId={shipperNameByTripId}
                 linkedOrgByOrganizationId={linkedOrgByOrganizationId}
