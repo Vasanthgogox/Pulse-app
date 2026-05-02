@@ -12,14 +12,17 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import { TripRatingsBlock } from "@/features/ratings/components/TripRatingsBlock";
 import { isAggregateTrip } from "@/lib/driverUtils";
+import { useTripChat } from "@/features/chat/contexts/TripChatContext";
 import { notifyTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
 import { formatINR, formatIndianVehicleNumber } from "@/lib/format";
 import Feather from "@expo/vector-icons/Feather";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { MessageSquare } from "lucide-react-native";
 import { useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
+    Alert,
     Image,
     Linking,
     Modal,
@@ -293,6 +296,38 @@ export default function TripDetailScreen({
     clientNameFromContext,
     onBack,
   });
+
+  const { initiateDriverConversationForTrip } = useTripChat();
+
+  const handleOpenTripChat = useCallback(async () => {
+    const tr = detail.trip;
+    if (!tr?.id || !tr.organization_id) return;
+    if (!tr.driver_id) {
+      Alert.alert(t("tripChatNeedsDriverTitle"), t("tripChatNeedsDriverBody"));
+      return;
+    }
+    const id = await initiateDriverConversationForTrip({
+      tripId: tr.id,
+      fleetOrganizationId: tr.organization_id,
+      driverId: tr.driver_id,
+      driverDisplayName: detail.driverName?.trim() || "Driver",
+      tripNumber: getTripDisplayNumber(tr),
+      pickupArea: tr.pickup_area ?? "",
+      dropLocation: tr.drop_location ?? "",
+    });
+    if (!id) {
+      Alert.alert(t("tripChatOpenFailedTitle"), t("tripChatOpenFailedBody"));
+      return;
+    }
+    router.push({
+      pathname: "/(modals)/chat",
+      params: {
+        tab: "trips",
+        conversationId: id,
+        ts: String(Date.now()),
+      },
+    });
+  }, [detail.trip, detail.driverName, initiateDriverConversationForTrip, router, t]);
 
   const [mapRouteDistanceKm, setMapRouteDistanceKm] = useState<string | null>(null);
   const [simConfirmStep, setSimConfirmStep] = useState<{
@@ -1250,6 +1285,15 @@ export default function TripDetailScreen({
                 <Feather name="clock" size={16} color="#94a3b8" />
                 <Text style={neoStyles.auditBtnText}>Audit Log</Text>
               </TouchableOpacity>
+              <TouchableOpacity
+                style={neoStyles.manifestChatBtn}
+                activeOpacity={0.85}
+                onPress={() => void handleOpenTripChat()}
+                accessibilityRole="button"
+                accessibilityLabel={t("tripChatNeedsDriverTitle")}
+              >
+                <MessageSquare size={18} color={Theme.driverEmerald} strokeWidth={2.2} />
+              </TouchableOpacity>
               <TouchableOpacity style={neoStyles.manifestShareBtn} activeOpacity={0.85}>
                 <Feather name="share-2" size={18} color="#94a3b8" />
               </TouchableOpacity>
@@ -1270,9 +1314,20 @@ export default function TripDetailScreen({
                 </View>
               </View>
             </View>
-            <TouchableOpacity style={styles.navCircleBtn} activeOpacity={0.85}>
-              <FontAwesome name="share-alt" size={16} color="#0f172a" />
-            </TouchableOpacity>
+            <View style={styles.navMobileRightActions}>
+              <TouchableOpacity
+                style={[styles.navCircleBtn, styles.navChatCircle]}
+                activeOpacity={0.85}
+                onPress={() => void handleOpenTripChat()}
+                accessibilityRole="button"
+                accessibilityLabel={t("tripChatNeedsDriverTitle")}
+              >
+                <MessageSquare size={17} color={Theme.driverEmerald} strokeWidth={2.2} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.navCircleBtn} activeOpacity={0.85}>
+                <FontAwesome name="share-alt" size={16} color="#0f172a" />
+              </TouchableOpacity>
+            </View>
           </>
         )}
       </View>
@@ -4425,6 +4480,20 @@ const neoStyles = StyleSheet.create({
     fontWeight: "900",
     textTransform: "uppercase",
     letterSpacing: 1.4,
+  },
+  manifestChatBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(4,120,87,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(4,120,87,0.22)",
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.04,
+    shadowRadius: 14,
   },
   manifestShareBtn: {
     width: 44,
@@ -8301,6 +8370,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e2e8f0",
     backgroundColor: "#ffffff",
+  },
+  navChatCircle: {
+    borderColor: "rgba(4,120,87,0.25)",
+    backgroundColor: "rgba(4,120,87,0.06)",
+  },
+  navMobileRightActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   navMobileCenter: {
     flex: 1,

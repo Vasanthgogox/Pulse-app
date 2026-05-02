@@ -245,9 +245,19 @@ export function ChatScreen() {
   const [showNetCompose, setShowNetCompose] = useState(false);
   const [netComposeSearch, setNetComposeSearch] = useState("");
   const deepLinkAppliedRef = useRef<string | null>(null);
+  /** Avoid repeating hydrate when RLS returns null for the same URL. */
+  const deeplinkHydrateFailedForKeyRef = useRef<string | null>(null);
 
-  const { organizationId, conversations, isLoading, sendMessage, markAsRead, getTotalUnreadCount, initiateConversation } =
-    useTripChat();
+  const {
+    organizationId,
+    conversations,
+    isLoading,
+    sendMessage,
+    markAsRead,
+    getTotalUnreadCount,
+    initiateConversation,
+    hydrateConversationById,
+  } = useTripChat();
   const {
     chats: netChats,
     partners: netPartners,
@@ -296,22 +306,40 @@ export function ChatScreen() {
       : params.openDetail;
     const tsParam = Array.isArray(params.ts) ? params.ts[0] : params.ts;
 
-    if (!tabParamRaw || !convIdParam) return;
-    const deepLinkKey = `${tabParamRaw}:${convIdParam}:${tsParam ?? "no-ts"}`;
-    if (deepLinkAppliedRef.current === deepLinkKey) return;
+    if (!convIdParam) return;
 
     const tabParam = tabParamRaw === "network" ? "network" : "trips";
+    const deepLinkKey = `${tabParam}:${convIdParam}:${tsParam ?? "no-ts"}`;
+    if (deepLinkAppliedRef.current === deepLinkKey) return;
+
     const shouldOpenDetail = openDetailParam === "1";
+    const hydrateAttemptKey = `${convIdParam}:${tsParam ?? ""}`;
 
     if (tabParam === "trips") {
       const hit = conversations.find((c) => c.id === convIdParam);
-      if (!hit) return;
-      setActiveTab("trips");
-      setSelectedConvId(convIdParam);
-      setSelectedNetId(null);
-      markAsRead(convIdParam);
-      if (shouldOpenDetail && !isDesktop) setIsMobileDetail(true);
-      deepLinkAppliedRef.current = deepLinkKey;
+      if (hit) {
+        setActiveTab("trips");
+        setSelectedConvId(convIdParam);
+        setSelectedNetId(null);
+        markAsRead(convIdParam);
+        if (shouldOpenDetail && !isDesktop) setIsMobileDetail(true);
+        deepLinkAppliedRef.current = deepLinkKey;
+        return;
+      }
+      if (isLoading) return;
+      if (deeplinkHydrateFailedForKeyRef.current === hydrateAttemptKey) return;
+      void hydrateConversationById(convIdParam).then((c) => {
+        if (c) {
+          setActiveTab("trips");
+          setSelectedConvId(convIdParam);
+          setSelectedNetId(null);
+          markAsRead(convIdParam);
+          if (shouldOpenDetail && !isDesktop) setIsMobileDetail(true);
+          deepLinkAppliedRef.current = deepLinkKey;
+        } else {
+          deeplinkHydrateFailedForKeyRef.current = hydrateAttemptKey;
+        }
+      });
       return;
     }
 
@@ -325,7 +353,9 @@ export function ChatScreen() {
     deepLinkAppliedRef.current = deepLinkKey;
   }, [
     conversations,
+    hydrateConversationById,
     isDesktop,
+    isLoading,
     markAsRead,
     markNetRead,
     netChats,

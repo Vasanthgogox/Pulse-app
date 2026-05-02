@@ -85,63 +85,9 @@ export async function getTripsForCompose(
   }));
 }
 
-export async function getConversationsByOrganization(
-  organizationId: string,
+async function resolveGenericPartyNamesForTrips(
+  conversations: TripConversation[],
 ): Promise<TripConversation[]> {
-  const selectConv = `
-      *,
-      trips!inner ( trip_number, pickup_area, drop_location ),
-      trip_messages ( * )
-    `;
-
-  const [{ data: ownOrgRows, error: ownErr }, supplierTripsRes] = await Promise.all([
-    supabase()
-      .from("trip_conversations")
-      .select(selectConv)
-      .eq("organization_id", organizationId)
-      .order("last_message_at", { ascending: false, nullsFirst: false }),
-    getTripsWhereOrgIsSupplier(organizationId),
-  ]);
-
-  if (ownErr) throw ownErr;
-
-  const supplierTripIds = (supplierTripsRes.trips ?? [])
-    .map((t: TripRow) => t.id)
-    .filter((id): id is string => !!id);
-
-  let supplierRows: unknown[] = [];
-  if (supplierTripIds.length > 0) {
-    const { data: supRows, error: supErr } = await supabase()
-      .from("trip_conversations")
-      .select(selectConv)
-      .in("trip_id", supplierTripIds)
-      .order("last_message_at", { ascending: false, nullsFirst: false });
-    if (supErr) throw supErr;
-    supplierRows = supRows ?? [];
-  }
-
-  const byId = new Map<string, unknown>();
-  for (const row of ownOrgRows ?? []) byId.set((row as { id: string }).id, row);
-  for (const row of supplierRows) byId.set((row as { id: string }).id, row);
-
-  const merged = Array.from(byId.values()).sort((a: any, b: any) => {
-    const ta = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
-    const tb = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
-    return tb - ta;
-  });
-
-  const conversations = merged.map((row: any) => ({
-    ...row,
-    trip_number: row.trips?.trip_number ?? "",
-    pickup_area: row.trips?.pickup_area ?? "",
-    drop_location: row.trips?.drop_location ?? "",
-    messages: ((row.trip_messages ?? []) as TripMessageRow[]).sort(
-      (a, b) =>
-        new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-    ),
-  }));
-
-  // If party_name is generic (e.g. "Supplier"), resolve from linked entity tables.
   const unresolvedClientIds = Array.from(
     new Set(
       conversations
@@ -216,6 +162,102 @@ export async function getConversationsByOrganization(
   });
 }
 
+export async function getConversationsByOrganization(
+  organizationId: string,
+): Promise<TripConversation[]> {
+  const selectConv = `
+      *,
+      trips!inner ( trip_number, pickup_area, drop_location ),
+      trip_messages ( * )
+    `;
+
+  const [{ data: ownOrgRows, error: ownErr }, supplierTripsRes] = await Promise.all([
+    supabase()
+      .from("trip_conversations")
+      .select(selectConv)
+      .eq("organization_id", organizationId)
+      .order("last_message_at", { ascending: false, nullsFirst: false }),
+    getTripsWhereOrgIsSupplier(organizationId),
+  ]);
+
+  if (ownErr) throw ownErr;
+
+  const supplierTripIds = (supplierTripsRes.trips ?? [])
+    .map((t: TripRow) => t.id)
+    .filter((id): id is string => !!id);
+
+  let supplierRows: unknown[] = [];
+  if (supplierTripIds.length > 0) {
+    const { data: supRows, error: supErr } = await supabase()
+      .from("trip_conversations")
+      .select(selectConv)
+      .in("trip_id", supplierTripIds)
+      .order("last_message_at", { ascending: false, nullsFirst: false });
+    if (supErr) throw supErr;
+    supplierRows = supRows ?? [];
+  }
+
+  const byId = new Map<string, unknown>();
+  for (const row of ownOrgRows ?? []) byId.set((row as { id: string }).id, row);
+  for (const row of supplierRows) byId.set((row as { id: string }).id, row);
+
+  const merged = Array.from(byId.values()).sort((a: any, b: any) => {
+    const ta = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+    const tb = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+    return tb - ta;
+  });
+
+  const conversations: TripConversation[] = merged.map((row: any) => ({
+    ...row,
+    trip_number: row.trips?.trip_number ?? "",
+    pickup_area: row.trips?.pickup_area ?? "",
+    drop_location: row.trips?.drop_location ?? "",
+    messages: ((row.trip_messages ?? []) as TripMessageRow[]).sort(
+      (a, b) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+    ),
+  }));
+
+  return resolveGenericPartyNamesForTrips(conversations);
+}
+
+/** Fetches one trip thread by id (for deep links when the list has not loaded it yet). RLS must allow read. */
+export async function getTripConversationById(
+  conversationId: string,
+): Promise<TripConversation | null> {
+  const selectConv = `
+      *,
+      trips!inner ( trip_number, pickup_area, drop_location ),
+      trip_messages ( * )
+    `;
+  const { data, error } = await supabase()
+    .from("trip_conversations")
+    .select(selectConv)
+    .eq("id", conversationId)
+    .maybeSingle();
+
+  if (error || !data) return null;
+
+  const row = data as {
+    trips?: { trip_number?: string; pickup_area?: string; drop_location?: string };
+    trip_messages?: TripMessageRow[];
+  } & Record<string, unknown>;
+
+  const base: TripConversation = {
+    ...row,
+    trip_number: String(row.trips?.trip_number ?? ""),
+    pickup_area: String(row.trips?.pickup_area ?? ""),
+    drop_location: String(row.trips?.drop_location ?? ""),
+    messages: ((row.trip_messages ?? []) as TripMessageRow[]).sort(
+      (a, b) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+    ),
+  } as TripConversation;
+
+  const [resolved] = await resolveGenericPartyNamesForTrips([base]);
+  return resolved ?? null;
+}
+
 export async function getOrCreateConversation(params: {
   tripId: string;
   partyType: ConversationPartyType;
@@ -231,6 +273,23 @@ export async function getOrCreateConversation(params: {
       : partyType === "supplier"
         ? "supplier_id"
         : "driver_id";
+
+  if (partyType === "driver") {
+    const { data, error } = await supabase().rpc("ensure_driver_trip_conversation", {
+      p_trip_id: tripId,
+      p_driver_id: partyId,
+      p_party_name: partyName,
+    });
+    if (!error && data) return data as TripConversationRow;
+    const missingRpc =
+      error != null &&
+      (error.code === "42883" ||
+        String(error.message ?? "")
+          .toLowerCase()
+          .includes("ensure_driver_trip_conversation"));
+    if (!missingRpc && error) throw error;
+    /* Fallback until migration is applied */
+  }
 
   const payload = {
     organization_id: organizationId,
