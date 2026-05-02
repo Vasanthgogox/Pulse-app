@@ -101,6 +101,11 @@ export interface PartyRegistrationPortalProps {
   ) => Promise<ConnectionInviteeMatch | null>;
   /** Called from review step when a non-driver platform match exists (instead of offline create). */
   onSendInvitation?: (toOrgId: string) => Promise<void>;
+  /**
+   * Same as client invite, for supplier: `createConnectionRequest` with carrier flag.
+   * When set with `searchInviteeByPhone`, enables debounced lookup + invite on the supplier form.
+   */
+  onSendSupplierInvitation?: (toOrgId: string) => Promise<void>;
 }
 
 const DL_CLEAN = /[\s-]/g;
@@ -183,6 +188,7 @@ function PartyRegistrationPortalInner(
     onAddVehicle,
     searchInviteeByPhone,
     onSendInvitation,
+    onSendSupplierInvitation,
     layoutWide,
   } = props;
 
@@ -204,6 +210,10 @@ function PartyRegistrationPortalInner(
   const hasClientInviteSearch =
     kind === "client" &&
     Boolean(searchInviteeByPhone && onSendInvitation);
+  const hasSupplierInviteSearch =
+    kind === "supplier" &&
+    Boolean(searchInviteeByPhone && onSendSupplierInvitation);
+  const showPhoneInviteeUi = hasClientInviteSearch || hasSupplierInviteSearch;
   const inviteeIsDriver = inviteeProfileIsDriver(inviteeMatch?.profile_role);
 
   const stackedSheetVisuals =
@@ -263,14 +273,14 @@ function PartyRegistrationPortalInner(
     setDriverRegisteredAtPhone(false);
   }, [visible, initialKind]);
 
-  // Add Client — debounced phone lookup (parity with AddClientModal): auto-fill contact + org from platform.
+  // Add Client / Supplier — debounced phone lookup (AddClientModal / AddSupplierModal parity).
   useEffect(() => {
-    if (
-      !visible ||
-      kind !== "client" ||
-      !searchInviteeByPhone ||
-      !onSendInvitation
-    ) {
+    if (!visible) return;
+    if (kind === "client") {
+      if (!searchInviteeByPhone || !onSendInvitation) return;
+    } else if (kind === "supplier") {
+      if (!searchInviteeByPhone || !onSendSupplierInvitation) return;
+    } else {
       return;
     }
     const normalized = phoneDigits.trim().replace(/\s+/g, "");
@@ -302,7 +312,14 @@ function PartyRegistrationPortalInner(
       });
     }, PHONE_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [visible, kind, phoneDigits, searchInviteeByPhone, onSendInvitation]);
+  }, [
+    visible,
+    kind,
+    phoneDigits,
+    searchInviteeByPhone,
+    onSendInvitation,
+    onSendSupplierInvitation,
+  ]);
 
   const insets = useSafeAreaInsets();
   const axleRecommendations = useMemo(
@@ -374,6 +391,10 @@ function PartyRegistrationPortalInner(
         setFormError(t("errorDriverCannotAddAsClient"));
         return false;
       }
+      if (kind === "supplier" && driverRegisteredAtPhone) {
+        setFormError(t("errorDriverCannotAddAsSupplier"));
+        return false;
+      }
       const nameOk = contactName.trim().length >= 2;
       const phoneErr = validatePhone(phoneDigits);
       if (!nameOk) {
@@ -442,7 +463,7 @@ function PartyRegistrationPortalInner(
     t,
   ]);
 
-  const handleClientPhoneChange = (text: string) => {
+  const handlePhoneLookupChange = (text: string) => {
     const hadInviteeMatch = inviteeMatch != null;
     setPhoneDigits(formatMobileNumber(text));
     setInviteeMatch(null);
@@ -478,7 +499,7 @@ function PartyRegistrationPortalInner(
         } else {
           setContactName(result.contact.name);
           setPhoneDigits(result.contact.phone.replace(/^\+91/, "").replace(/^\+/, ""));
-          if (kind === "client") {
+          if (kind === "client" || kind === "supplier") {
             setInviteeMatch(null);
             setSearchedNoResult(false);
             setDriverRegisteredAtPhone(false);
@@ -532,6 +553,12 @@ function PartyRegistrationPortalInner(
       } else if (kind === "supplier") {
         const pNorm =
           normalizeIndianPhoneForMetadata(phoneDigits) ?? phoneDigits.trim();
+        const inviteeIsDrv = inviteeProfileIsDriver(inviteeMatch?.profile_role);
+        if (inviteeMatch && onSendSupplierInvitation && !inviteeIsDrv) {
+          await onSendSupplierInvitation(inviteeMatch.organization_id);
+          onClose();
+          return;
+        }
         await onAddSupplier({
           name: contactName.trim(),
           companyName: orgOrCompanyName.trim(),
@@ -670,10 +697,10 @@ function PartyRegistrationPortalInner(
   const formTitle = `New ${headline}`;
 
   const reviewSaveLabel =
-    kind === "client" &&
     inviteeMatch &&
     !inviteeIsDriver &&
-    onSendInvitation
+    ((kind === "client" && onSendInvitation) ||
+      (kind === "supplier" && onSendSupplierInvitation))
       ? t("sendInvitation")
       : "Save";
 
@@ -859,11 +886,15 @@ function PartyRegistrationPortalInner(
                               placeholder="10-digit mobile"
                               placeholderTextColor={Theme.textMuted}
                               keyboardType="phone-pad"
-                              maxLength={kind === "client" ? 10 : 14}
+                              maxLength={
+                                kind === "client" || kind === "supplier"
+                                  ? 10
+                                  : 14
+                              }
                               value={phoneDigits}
                               onChangeText={
-                                kind === "client"
-                                  ? handleClientPhoneChange
+                                kind === "client" || kind === "supplier"
+                                  ? handlePhoneLookupChange
                                   : (x) =>
                                       setPhoneDigits(x.replace(/[^\d+]/g, ""))
                               }
@@ -877,7 +908,7 @@ function PartyRegistrationPortalInner(
                         </Field>
                       </View>
                     </View>
-                    {kind === "client" && hasClientInviteSearch ? (
+                    {showPhoneInviteeUi ? (
                       <>
                         <Text style={styles.clientPhoneLookupHint}>
                           Search by number to find someone on the platform and invite
@@ -904,8 +935,12 @@ function PartyRegistrationPortalInner(
                             </Text>
                             <Text style={styles.clientInviteeHint}>
                               {inviteeIsDriver
-                                ? t("addClientInviteeHintDriver")
-                                : t("addClientInviteeHintDefault")}
+                                ? kind === "supplier"
+                                  ? t("addSupplierInviteeHintDriver")
+                                  : t("addClientInviteeHintDriver")
+                                : kind === "supplier"
+                                  ? t("addSupplierInviteeHintDefault")
+                                  : t("addClientInviteeHintDefault")}
                             </Text>
                             {!inviteeIsDriver ? (
                               <Pressable
@@ -1225,13 +1260,15 @@ function PartyRegistrationPortalInner(
                 style={[
                   styles.primaryBtn,
                   (!organizationId ||
-                    (kind === "client" && driverRegisteredAtPhone)) &&
+                    ((kind === "client" || kind === "supplier") &&
+                      driverRegisteredAtPhone)) &&
                     styles.primaryBtnDisabled,
                 ]}
                 onPress={goReview}
                 disabled={
                   !organizationId ||
-                  (kind === "client" && driverRegisteredAtPhone)
+                  ((kind === "client" || kind === "supplier") &&
+                    driverRegisteredAtPhone)
                 }
               >
                 <Text style={styles.primaryBtnText}>Continue</Text>

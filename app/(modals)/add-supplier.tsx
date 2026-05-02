@@ -66,7 +66,7 @@ export default function AddSupplierScreen() {
     };
   };
 
-  const handleSendInvitation = async (toOrgId: string) => {
+  const handleSendSupplierInvitation = async (toOrgId: string) => {
     if (!currentOrganization?.id) return;
     const { error, alreadyInvited } = await createConnectionRequest(
       currentOrganization.id,
@@ -77,7 +77,7 @@ export default function AddSupplierScreen() {
     if (alreadyInvited) {
       // Still close; they can see in Network > Requests
     }
-    closeModal();
+    /** Caller closes (`AddSupplierModal.onClose` / `PartyRegistrationPortal.onClose`). */
   };
 
   if (Platform.OS === 'web') {
@@ -95,6 +95,8 @@ export default function AddSupplierScreen() {
         onAddSupplier={partyPortal.handleAddSupplierComplete}
         onAddDriver={partyPortal.handleAddDriverDirect}
         onAddVehicle={partyPortal.handleAddVehicleComplete}
+        searchInviteeByPhone={searchInviteeByPhone}
+        onSendSupplierInvitation={handleSendSupplierInvitation}
       />
     );
   }
@@ -104,7 +106,7 @@ export default function AddSupplierScreen() {
       onClose={closeModal}
       onComplete={handleComplete}
       searchInviteeByPhone={searchInviteeByPhone}
-      onSendInvitation={handleSendInvitation}
+      onSendInvitation={handleSendSupplierInvitation}
     />
   );
 }
