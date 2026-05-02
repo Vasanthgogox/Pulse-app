@@ -139,6 +139,7 @@ export function TripMap({
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const unmountedRef = useRef(false);
+  const initRunIdRef = useRef(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [geocodingProgress, setGeocodingProgress] = useState({ current: 0, total: 0 });
@@ -146,12 +147,15 @@ export function TripMap({
   const initializeMap = async () => {
     try {
       unmountedRef.current = false;
+      const runId = ++initRunIdRef.current;
+      const isRunActive = () => !unmountedRef.current && runId === initRunIdRef.current;
       setIsLoading(true);
       setError(null);
 
       // Dynamic imports to avoid SSR issues (same pattern as existing LeafletMap.web.tsx)
       const L = (await import('leaflet')).default;
       await ensureLeafletStylesheet();
+      if (!isRunActive()) return;
       // ── Resolve source coordinates ───────────────────────────────────────
       const locationsToGeocode = [source, destination, ...intermediateStops].filter(Boolean);
       setGeocodingProgress({ current: 0, total: locationsToGeocode.length });
@@ -162,6 +166,7 @@ export function TripMap({
       } else if (source) {
         setGeocodingProgress((p) => ({ ...p, current: 1 }));
         srcCoords = await getCoordinates(source);
+        if (!isRunActive()) return;
       } else {
         throw new Error('Source location required');
       }
@@ -173,6 +178,7 @@ export function TripMap({
       } else if (destination) {
         setGeocodingProgress((p) => ({ ...p, current: 2 }));
         dstCoords = await getCoordinates(destination);
+        if (!isRunActive()) return;
       } else {
         throw new Error('Destination location required');
       }
@@ -184,6 +190,7 @@ export function TripMap({
         if (stop?.trim()) {
           setGeocodingProgress((p) => ({ ...p, current: 3 + i }));
           const coords = await getCoordinates(stop);
+          if (!isRunActive()) return;
           stopCoords.push({ location: stop, coords });
         }
       }
@@ -195,10 +202,16 @@ export function TripMap({
 
       // ── Clean up old instance ────────────────────────────────────────────
       if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
+        try {
+          if (typeof mapInstanceRef.current.off === 'function') mapInstanceRef.current.off();
+          if (typeof mapInstanceRef.current.stop === 'function') mapInstanceRef.current.stop();
+          mapInstanceRef.current.remove();
+        } catch {
+          /* ignore */
+        }
         mapInstanceRef.current = null;
       }
-      if (!mapRef.current) return;
+      if (!mapRef.current || !isRunActive()) return;
 
       // ── Create map ───────────────────────────────────────────────────────
       const map = L.map(mapRef.current).setView([avgLat, avgLng], 7);
@@ -351,6 +364,7 @@ export function TripMap({
               getOptimalRoute(from, routePoints[i + 1]).catch(() => null),
             ),
           );
+          if (!isRunActive()) return;
           if (!isMapReadyForDrawing()) return;
 
           const validSegments = segments.filter((s): s is RouteResult => !!s);
@@ -389,8 +403,10 @@ export function TripMap({
       map.fitBounds(boundsCoords as any, { padding: [50, 50], maxZoom: 15, animate: false });
 
       map.whenReady(() => {
+        if (!isRunActive()) return;
         const kickLayout = () => {
           if (unmountedRef.current) return;
+          if (runId !== initRunIdRef.current) return;
           if (mapInstanceRef.current !== map) return;
           try {
             map.invalidateSize(true);
@@ -403,7 +419,11 @@ export function TripMap({
         const t1 = window.setTimeout(kickLayout, 100);
         const t2 = window.setTimeout(kickLayout, 400);
         const t3 = window.setTimeout(() => {
-          if (!unmountedRef.current && mapInstanceRef.current === map) {
+          if (
+            !unmountedRef.current &&
+            runId === initRunIdRef.current &&
+            mapInstanceRef.current === map
+          ) {
             setIsLoading(false);
           }
         }, 800);
@@ -417,8 +437,10 @@ export function TripMap({
       });
     } catch (err) {
       console.error('TripMap initialize failed', err);
-      setError('Failed to load map. Please check your internet connection and try again.');
-      setIsLoading(false);
+      if (!unmountedRef.current) {
+        setError('Failed to load map. Please check your internet connection and try again.');
+        setIsLoading(false);
+      }
     }
   };
 
@@ -433,6 +455,7 @@ export function TripMap({
     initializeMap();
     return () => {
       unmountedRef.current = true;
+      initRunIdRef.current += 1;
       const m = mapInstanceRef.current;
       if (m) {
         const timeoutIds = (m as any)._tripMapTimeoutIds as number[] | undefined;
@@ -452,6 +475,7 @@ export function TripMap({
           }
         }
         try {
+          if (typeof m.off === 'function') m.off();
           if (typeof m.stop === 'function') m.stop();
           m.remove();
         } catch {
