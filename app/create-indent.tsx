@@ -50,6 +50,7 @@ import {
 import { getOptimalRoute } from "@/services/routingService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import {
@@ -223,6 +224,8 @@ export default function CreateIndentScreen() {
   const [clientsLoading, setClientsLoading] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showAddClientModal, setShowAddClientModal] = useState(false);
+  /** Match Create Trip: full client list vs compact selected card. */
+  const [clientListExpanded, setClientListExpanded] = useState(true);
   const [pickupLat, setPickupLat] = useState<number | null>(null);
   const [pickupLon, setPickupLon] = useState<number | null>(null);
   const [dropLat, setDropLat] = useState<number | null>(null);
@@ -461,6 +464,11 @@ export default function CreateIndentScreen() {
           setDraftIndentId(indent.id);
           setForm(nextForm);
           setLastSavedForm(nextForm);
+          if (nextForm.client_id?.trim()) {
+            setClientListExpanded(false);
+          } else {
+            setClientListExpanded(true);
+          }
         }
       } catch {
         // Ignore draft load errors.
@@ -588,6 +596,11 @@ export default function CreateIndentScreen() {
     };
   }, [pickupLat, pickupLon, dropLat, dropLon]);
 
+  const selectedClientRow = useMemo(
+    () => clients.find((c) => c.id === form.client_id) ?? null,
+    [clients, form.client_id],
+  );
+
   const handleSelectClient = useCallback(
     (client: ClientRow) => {
       if (form.client_id === client.id) return;
@@ -603,6 +616,7 @@ export default function CreateIndentScreen() {
         client_id: client.id,
         client_name: clientName,
       });
+      setClientListExpanded(false);
       focusField(clientPriceInputRef);
     },
     [focusField, form.client_id, showDialog, update],
@@ -1223,16 +1237,123 @@ export default function CreateIndentScreen() {
                   </Text>
                 </View>
                 <View style={[styles.gridRow, isWide && styles.gridRowWide]}>
-                  <View style={styles.gridCol}>
-                    <Text style={[styles.fieldLabel, labelStyle]}>
-                      Select client
-                    </Text>
+                  <View
+                    style={[
+                      styles.gridCol,
+                      errors.client_name ? styles.fieldGroupRing : null,
+                    ]}
+                  >
+                    <View style={styles.sectionLabelRow}>
+                      <Text
+                        style={[
+                          styles.fieldLabel,
+                          labelStyle,
+                          styles.sectionLabelTight,
+                        ]}
+                      >
+                        Select client
+                      </Text>
+                      <View style={styles.sectionLabelActions}>
+                        {form.client_id ? (
+                          <TouchableOpacity
+                            style={styles.changeSelectionBtn}
+                            onPress={() =>
+                              setClientListExpanded((p) => !p)
+                            }
+                            activeOpacity={0.85}
+                          >
+                            <Text style={styles.changeSelectionBtnText}>
+                              {clientListExpanded ? "Collapse" : "Change"}
+                            </Text>
+                            <FontAwesome
+                              name={
+                                clientListExpanded ? "chevron-up" : "chevron-down"
+                              }
+                              size={11}
+                              color={Theme.iconPrimary}
+                            />
+                          </TouchableOpacity>
+                        ) : null}
+                        <TouchableOpacity
+                          style={[
+                            styles.addClientBtn,
+                            Platform.OS === "web"
+                              ? ({ cursor: "pointer" } as ViewStyle)
+                              : null,
+                            webPointer,
+                          ]}
+                          onPress={() => setShowAddClientModal(true)}
+                          activeOpacity={0.85}
+                        >
+                          <PlusCircle size={14} color={Theme.iconPrimary} />
+                          <Text style={styles.addClientBtnText}>
+                            Add client
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
                     {clientsLoading ? (
                       <ActivityIndicator color={Theme.iconPrimary} />
                     ) : clients.length === 0 ? (
                       <Text style={styles.mutedSmall}>
-                        No clients yet. Add one below.
+                        No clients yet. Add clients from the Clients page first.
                       </Text>
+                    ) : form.client_id &&
+                      !clientListExpanded &&
+                      selectedClientRow ? (
+                      <TouchableOpacity
+                        style={[styles.clientCard, styles.clientCardOn]}
+                        onPress={() => setClientListExpanded(true)}
+                        activeOpacity={0.85}
+                      >
+                        <View style={styles.clientMain}>
+                          <PartyAvatar
+                            name={
+                              selectedClientRow.name ??
+                              selectedClientRow.contact_person ??
+                              "Client"
+                            }
+                            avatarUrl={
+                              (
+                                selectedClientRow as {
+                                  avatar_url?: string | null;
+                                }
+                              ).avatar_url ?? null
+                            }
+                            avatarSeed={
+                              (
+                                selectedClientRow as {
+                                  avatar_seed?: string | null;
+                                }
+                              ).avatar_seed ?? null
+                            }
+                            entityType="client"
+                            size={38}
+                            borderStyle={styles.clientAvatarOn}
+                          />
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text
+                              style={[styles.clientName, styles.clientNameOn]}
+                              numberOfLines={1}
+                            >
+                              {selectedClientRow.name}
+                            </Text>
+                            {selectedClientRow.address ? (
+                              <Text
+                                style={styles.clientSub}
+                                numberOfLines={1}
+                              >
+                                {selectedClientRow.address}
+                              </Text>
+                            ) : null}
+                          </View>
+                        </View>
+                        <View style={styles.changeSelectionPill}>
+                          <Text style={styles.changeSelectionPillText}>
+                            Change
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
                     ) : (
                       <ScrollView
                         style={styles.clientList}
@@ -1278,27 +1399,30 @@ export default function CreateIndentScreen() {
                                   }
                                 />
                                 <View style={{ flex: 1, minWidth: 0 }}>
-                                <Text
-                                  style={[
-                                    styles.clientName,
-                                    selected && styles.clientNameOn,
-                                  ]}
-                                  numberOfLines={1}
-                                >
-                                  {client.name}
-                                </Text>
-                                {client.address ? (
-                                  <View style={styles.clientMetaRow}>
-                                    <Clock size={11} color={Theme.textMuted} />
-                                    <Text
-                                      style={styles.clientSub}
-                                      numberOfLines={1}
-                                    >
-                                      {client.address}
-                                    </Text>
-                                  </View>
-                                ) : null}
-                              </View>
+                                  <Text
+                                    style={[
+                                      styles.clientName,
+                                      selected && styles.clientNameOn,
+                                    ]}
+                                    numberOfLines={1}
+                                  >
+                                    {client.name}
+                                  </Text>
+                                  {client.address ? (
+                                    <View style={styles.clientMetaRow}>
+                                      <Clock
+                                        size={11}
+                                        color={Theme.textMuted}
+                                      />
+                                      <Text
+                                        style={styles.clientSub}
+                                        numberOfLines={1}
+                                      >
+                                        {client.address}
+                                      </Text>
+                                    </View>
+                                  ) : null}
+                                </View>
                               </View>
                               <View
                                 style={[
@@ -1318,16 +1442,6 @@ export default function CreateIndentScreen() {
                         })}
                       </ScrollView>
                     )}
-                    <TouchableOpacity
-                      style={[styles.addClientBtn, webPointer]}
-                      onPress={() => setShowAddClientModal(true)}
-                      activeOpacity={0.8}
-                    >
-                      <PlusCircle size={14} color={Theme.iconPrimary} />
-                      <Text style={styles.addClientBtnText}>
-                        Add client
-                      </Text>
-                    </TouchableOpacity>
                     {errors.client_name ? (
                       <Text style={styles.errorText}>{errors.client_name}</Text>
                     ) : null}
@@ -1451,6 +1565,7 @@ export default function CreateIndentScreen() {
                             client_name: clientName,
                           });
                           setClients((prev) => [...prev, client]);
+                          setClientListExpanded(false);
                           focusField(clientPriceInputRef);
                         }
                       }}
@@ -2438,19 +2553,74 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.9,
   },
+  sectionLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: 12,
+    marginBottom: 8,
+  },
+  sectionLabelActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    justifyContent: "flex-start",
+    gap: 8,
+  },
+  sectionLabelTight: {
+    marginBottom: 0,
+  },
+  changeSelectionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: Theme.surfaceLight,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  changeSelectionBtnText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.iconPrimary,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  changeSelectionPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceLight,
+  },
+  changeSelectionPillText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.iconPrimary,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  fieldGroupRing: {
+    borderWidth: 1.5,
+    borderColor: Theme.destructive,
+    borderRadius: 14,
+    padding: 8,
+  },
   addClientBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    minHeight: Layout.minTouchTargetSize,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.surface,
-    marginTop: 6,
   },
   addClientBtnText: {
     fontSize: 10,
