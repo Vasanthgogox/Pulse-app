@@ -7,7 +7,7 @@ function toTime(value: string | null | undefined): number {
 }
 
 export function formatDriverTripSequence(n: number): string {
-  return `DRV${String(Math.max(1, n)).padStart(3, "0")}`;
+  return `TRP${String(Math.max(1, n)).padStart(3, "0")}`;
 }
 
 /**

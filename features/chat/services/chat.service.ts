@@ -575,12 +575,13 @@ export async function getConversationsByDriverIds(
 
   return (data ?? []).map((row: any) => {
     const tr = row.trips;
-    const drv = tr?.driver_display_trip_id != null && String(tr.driver_display_trip_id).trim() !== ""
-      ? String(tr.driver_display_trip_id).trim()
-      : "";
+    const perDriver =
+      tr?.driver_display_trip_id != null && String(tr.driver_display_trip_id).trim() !== ""
+        ? String(tr.driver_display_trip_id).trim()
+        : "";
     return {
       ...row,
-      trip_number: drv || tr?.trip_number || "",
+      trip_number: perDriver || tr?.trip_number || "",
       pickup_area: tr?.pickup_area ?? "",
       drop_location: tr?.drop_location ?? "",
       messages: ((row.trip_messages ?? []) as TripMessageRow[]).sort(

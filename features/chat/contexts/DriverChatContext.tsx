@@ -25,10 +25,10 @@ function buildMinimalDriverTripConversation(
   trip: TripRow,
   row: TripConversationRow,
 ): TripConversation {
-  const drv = trip.driver_display_trip_id?.trim();
+  const perDriver = trip.driver_display_trip_id?.trim();
   return {
     ...row,
-    trip_number: drv || trip.trip_number || "",
+    trip_number: perDriver || trip.trip_number || "",
     pickup_area: trip.pickup_area ?? "",
     drop_location: trip.drop_location ?? "",
     messages: [],
