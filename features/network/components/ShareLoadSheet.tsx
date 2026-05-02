@@ -256,6 +256,7 @@ export function ShareLoadSheet({
       rateOffer: indent.client_price ?? undefined,
       material: indent.load_type ?? undefined,
       expiresAt,
+      sourceIndentId: indent.id,
     });
 
     setLoading(false);

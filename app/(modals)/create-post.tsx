@@ -200,6 +200,7 @@ export default function CreatePostScreen() {
         rateOffer: indent.client_price ?? undefined,
         material: indent.load_type ?? undefined,
         expiresAt,
+        sourceIndentId: selectedIndentId,
       });
       error = res.error;
     } else if (type === "LOAD" && loadEntryMode === "manual") {

@@ -31,6 +31,7 @@ export {
   useMyDirectQuotesQuery,
   useIndentDirectQuotesQuery,
   useDirectQuoteCountsQuery,
+  useIndentOfferCountsQuery,
   useInvalidateIndents,
 } from './useIndentsQuery';
 export {

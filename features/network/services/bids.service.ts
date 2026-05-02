@@ -177,3 +177,46 @@ export async function getMyBidForPost(
     },
   };
 }
+
+/**
+ * Pending Pulse bids on LOAD posts the owner org published from those indents.
+ * Merged with direct_quotes in Load Center "bids received" (posts.source_indent_id).
+ */
+export async function getStoryBidCountsForOwnerIndents(
+  ownerOrgId: string,
+  indentIds: string[],
+): Promise<{ error: Error | null; counts: Record<string, number> }> {
+  if (indentIds.length === 0) return { error: null, counts: {} };
+
+  const { data: posts, error: pErr } = await supabase()
+    .from('posts')
+    .select('id, source_indent_id')
+    .eq('organization_id', ownerOrgId)
+    .in('source_indent_id', indentIds)
+    .eq('is_active', true);
+
+  if (pErr) return { error: new Error(pErr.message), counts: {} };
+
+  const rows = (posts ?? []) as { id: string; source_indent_id: string | null }[];
+  const postIds = rows.map((r) => r.id);
+  const indentByPost = new Map(rows.map((r) => [r.id, r.source_indent_id ?? '']));
+
+  if (postIds.length === 0) return { error: null, counts: {} };
+
+  const { data: bids, error: bErr } = await supabase()
+    .from('bids')
+    .select('post_id')
+    .in('post_id', postIds)
+    .eq('status', 'pending');
+
+  if (bErr) return { error: new Error(bErr.message), counts: {} };
+
+  const counts: Record<string, number> = {};
+  for (const row of bids ?? []) {
+    const pid = (row as { post_id: string }).post_id;
+    const iid = indentByPost.get(pid);
+    if (!iid) continue;
+    counts[iid] = (counts[iid] ?? 0) + 1;
+  }
+  return { error: null, counts };
+}
