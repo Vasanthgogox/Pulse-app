@@ -35,6 +35,22 @@ const ProgressCtx = createContext<{ progress: SharedValue<number> } | null>(
   null,
 );
 
+let scrollHideVersion = 0;
+const scrollHideListeners = new Set<() => void>();
+let scrollInProgress = false;
+const scrollProgressListeners = new Set<() => void>();
+
+function emitScrollHideStart() {
+  scrollHideVersion += 1;
+  scrollHideListeners.forEach((listener) => listener());
+}
+
+function setScrollInProgress(next: boolean) {
+  if (scrollInProgress === next) return;
+  scrollInProgress = next;
+  scrollProgressListeners.forEach((listener) => listener());
+}
+
 export function DemoTabBarScrollProvider({
   children,
 }: {
@@ -54,12 +70,15 @@ export function DemoTabBarScrollProvider({
 
   const onScrollBeginDrag = useCallback(() => {
     clearSchedule();
+    setScrollInProgress(true);
+    emitScrollHideStart();
     progress.value = withTiming(0, { duration: HIDE_MS });
   }, [clearSchedule, progress]);
 
   const scheduleShow = useCallback(() => {
     clearSchedule();
     scrollEndTimeoutRef.current = setTimeout(() => {
+      setScrollInProgress(false);
       progress.value = withTiming(1, { duration: SHOW_MS });
       scrollEndTimeoutRef.current = null;
     }, SHOW_DELAY_MS);
@@ -75,8 +94,29 @@ export function DemoTabBarScrollProvider({
 
   const resetBarVisible = useCallback(() => {
     clearSchedule();
+    setScrollInProgress(false);
     progress.value = withTiming(1, { duration: SHOW_MS });
   }, [clearSchedule, progress]);
+
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof window === "undefined") return;
+    let webIdleTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const onWindowScroll = () => {
+      onScrollBeginDrag();
+      if (webIdleTimer) clearTimeout(webIdleTimer);
+      webIdleTimer = setTimeout(() => {
+        onScrollEnd();
+        webIdleTimer = null;
+      }, WEB_IDLE_MS);
+    };
+
+    window.addEventListener("scroll", onWindowScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onWindowScroll);
+      if (webIdleTimer) clearTimeout(webIdleTimer);
+    };
+  }, [onScrollBeginDrag, onScrollEnd]);
 
   useEffect(() => () => clearSchedule(), [clearSchedule]);
 
@@ -112,6 +152,32 @@ export function useDemoTabBarScroll(): ScrollControls {
 
 export function useDemoTabBarScrollOptional(): ScrollControls | null {
   return useContext(ScrollCtx);
+}
+
+export function useDemoTabBarVisibilityProgressOptional(): SharedValue<number> | null {
+  return useContext(ProgressCtx)?.progress ?? null;
+}
+
+export function useDemoTabBarScrollHideVersion(): number {
+  return React.useSyncExternalStore(
+    (listener) => {
+      scrollHideListeners.add(listener);
+      return () => scrollHideListeners.delete(listener);
+    },
+    () => scrollHideVersion,
+    () => 0,
+  );
+}
+
+export function useDemoTabBarScrollInProgress(): boolean {
+  return React.useSyncExternalStore(
+    (listener) => {
+      scrollProgressListeners.add(listener);
+      return () => scrollProgressListeners.delete(listener);
+    },
+    () => scrollInProgress,
+    () => false,
+  );
 }
 
 const OFF_TRANSLATE = 120;

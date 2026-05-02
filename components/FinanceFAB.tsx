@@ -21,6 +21,7 @@ import {
 import React from "react";
 import {
   Animated,
+  Easing,
   StyleSheet,
   TouchableOpacity,
   View,
@@ -99,6 +100,28 @@ export function FinanceFAB({
   size = Layout.fabSize,
 }: FinanceFABProps) {
   const pressScale = React.useRef(new Animated.Value(1)).current;
+  const idlePulse = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(idlePulse, {
+          toValue: 1,
+          duration: 1500,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(idlePulse, {
+          toValue: 0,
+          duration: 1500,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [idlePulse]);
 
   const handlePress = () => {
     triggerHapticMedium();
@@ -127,6 +150,14 @@ export function FinanceFAB({
   const shouldShowPlus = showPlusSuffix && icon !== "plus";
 
   const MainIcon = icon === "receipt-text" || icon === "credit-card" ? Receipt : IconComponent;
+  const idleScale = idlePulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.985, 1],
+  });
+  const ringOpacity = idlePulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.14, 0.28],
+  });
 
   return (
     <View style={[styles.container, { width: size, height: size }, style, { pointerEvents: 'box-none' }]}>
@@ -146,10 +177,22 @@ export function FinanceFAB({
               height: size,
               borderRadius: size / 2,
               backgroundColor: fabBgColor,
-              transform: [{ scale: pressScale }],
+              transform: [{ scale: Animated.multiply(pressScale, idleScale) }],
             },
           ]}
         >
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.innerRing,
+              {
+                width: size - 10,
+                height: size - 10,
+                borderRadius: (size - 10) / 2,
+                opacity: ringOpacity,
+              },
+            ]}
+          />
           <MainIcon size={Math.max(18, iconSize)} color={fabIconColor} strokeWidth={2.4} />
           {shouldShowPlus ? (
             <View style={styles.addBadge}>
@@ -181,6 +224,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.32,
     shadowRadius: 16,
     elevation: 10,
+  },
+  innerRing: {
+    position: "absolute",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.8)",
   },
   addBadge: {
     position: "absolute",

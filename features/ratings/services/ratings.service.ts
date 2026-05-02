@@ -183,3 +183,33 @@ export function averageScore(ratings: { score: number }[]): number | null {
   const sum = ratings.reduce((s, r) => s + r.score, 0);
   return Math.round((sum / ratings.length) * 100) / 100;
 }
+
+function dedupeRatingRowsById(rows: RatingRow[]): RatingRow[] {
+  const seen = new Set<string>();
+  const out: RatingRow[] = [];
+  for (const r of rows) {
+    if (seen.has(r.id)) continue;
+    seen.add(r.id);
+    out.push(r);
+  }
+  return out;
+}
+
+/**
+ * Average rating for a party whose rows may be stored under either the finance row id
+ * (e.g. clients.id / suppliers.id) or the linked platform organization id.
+ */
+export function averageRatingForRatedParty(
+  byRatedId: Record<string, RatingRow[]>,
+  primaryId: string,
+  alternateId?: string | null,
+): number | null {
+  const fromPrimary = byRatedId[primaryId] ?? [];
+  const fromAlt = alternateId ? (byRatedId[alternateId] ?? []) : [];
+  return averageScore(dedupeRatingRowsById([...fromPrimary, ...fromAlt]));
+}
+
+/** Dedupe then average — use when merging buckets that may contain the same row twice. */
+export function averageScoreDeduped(rows: RatingRow[]): number | null {
+  return averageScore(dedupeRatingRowsById(rows));
+}

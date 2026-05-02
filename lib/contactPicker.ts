@@ -1,10 +1,10 @@
 /**
  * Contact picker — shared logic for "Import from contacts" in Add Client, Add Supplier, Add Driver.
- * Uses native contact picker (single selection). Permission requested on Android; iOS picker works without full access.
- * Name and phone extraction + normalization in O(n) over the single contact's string lengths.
- * expo-contacts is loaded only when the user taps "Import from contacts" (via contactPickerNative.ts)
- * so the app can start when the native module is not installed.
+ * On web: uses the browser Contact Picker API (navigator.contacts) via contactPickerWeb.ts.
+ * On native: uses expo-contacts (single selection) via contactPickerNative.ts.
+ * Both are lazy-loaded so the app can start when expo-contacts native module is not installed.
  */
+import { Platform } from "react-native";
 
 export type PickedContact = { name: string; phone: string };
 
@@ -39,10 +39,12 @@ export function normalizePhoneNumber(raw: string, prependCountryCode = true): st
 }
 
 /**
- * Request contacts permission. Required on Android before using the picker.
- * Returns true if granted or already granted; false if denied or if expo-contacts is unavailable.
+ * Request contacts permission. Required on Android before using the native picker.
+ * On web the browser handles permission via the Contact Picker API dialog — no pre-request needed.
+ * Returns true if granted or already granted; false if denied or unavailable.
  */
 export async function requestContactsPermission(): Promise<boolean> {
+  if (Platform.OS === "web") return true;
   try {
     const native = await import("./contactPickerNative");
     return native.requestContactsPermissionNative();
@@ -52,10 +54,31 @@ export async function requestContactsPermission(): Promise<boolean> {
 }
 
 /**
- * Present native contact picker and return name + phone for the selected contact.
- * If expo-contacts native module is not available, returns reason 'unavailable' so the app still runs.
+ * Returns true when the contact picker is likely to work in the current environment.
+ * On web this reflects browser support for navigator.contacts; on native always true.
+ */
+export function isContactPickerAvailable(): boolean {
+  if (Platform.OS === "web") {
+    if (typeof window === "undefined" || typeof navigator === "undefined") return false;
+    return "contacts" in navigator;
+  }
+  return true;
+}
+
+/**
+ * Present the contact picker and return name + phone for the selected contact.
+ * On web: uses the browser Contact Picker API.
+ * On native: uses expo-contacts via contactPickerNative.ts (lazy import).
  */
 export async function pickContactForNameAndPhone(): Promise<PickContactResult> {
+  if (Platform.OS === "web") {
+    try {
+      const web = await import("./contactPickerWeb");
+      return web.pickContactForNameAndPhoneWeb();
+    } catch {
+      return { ok: false, reason: "unavailable", message: "Contacts are not available. Add the contact manually." };
+    }
+  }
   try {
     const native = await import("./contactPickerNative");
     return native.pickContactForNameAndPhoneNative();

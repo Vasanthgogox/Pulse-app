@@ -39,12 +39,11 @@ import {
     ListChecks,
     MapPin,
     Navigation,
-    Phone,
     PlusCircle,
     Truck,
     User,
 } from "lucide-react-native";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFocusEffect, useRouter } from "expo-router";
 import type { ViewStyle } from "react-native";
 import {
@@ -65,6 +64,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { ROUTES } from "@/lib/routes";
 import { LocationSearchField } from "./LocationSearchField";
 import type { AddTripFormState } from "./types";
+import type { AddTripIssueField, AddTripValidationIssue } from "./useAddTripForm";
 import type { useAddTripForm } from "./useAddTripForm";
 
 function routePreviewLine(s: string): string {
@@ -124,6 +124,7 @@ export interface AddTripFormFieldsProps {
   onSubmit: () => void;
   canSubmit: boolean;
   validationMessage?: string | null;
+  validationIssues?: AddTripValidationIssue[];
   submitting?: boolean;
   showInlineCta?: boolean;
 }
@@ -138,15 +139,59 @@ export function AddTripFormFields({
   onSubmit,
   canSubmit,
   validationMessage = null,
+  validationIssues = [],
   submitting = false,
   showInlineCta = true,
 }: AddTripFormFieldsProps) {
   void refetchClients;
+  const invalidSet = useMemo(
+    () => new Set(validationIssues.map((i) => i.field)),
+    [validationIssues],
+  );
+  const invalid = useCallback(
+    (field: AddTripIssueField) => invalidSet.has(field),
+    [invalidSet],
+  );
+  const outlineErr = useCallback(
+    (field: AddTripIssueField) =>
+      invalid(field) ? styles.inputErrorOutline : undefined,
+    [invalid],
+  );
+
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width: winW } = useWindowDimensions();
   const isCompactMobile = winW < 480;
+  const validationListEl =
+    validationIssues.length === 0 ? null : (
+      <View
+        style={[
+          styles.validationChecklist,
+          !showInlineCta && {
+            marginHorizontal: isCompactMobile ? 16 : 0,
+            marginBottom: 12,
+          },
+        ]}
+      >
+        <View style={styles.validationChecklistHead}>
+          <AlertCircle size={18} color={Theme.destructive} />
+          <Text style={styles.validationChecklistTitle}>
+            Fix these before creating the trip
+          </Text>
+        </View>
+        {validationIssues.map((issue, idx) => (
+          <Text
+            key={`${issue.field}-${idx}`}
+            style={styles.validationChecklistItem}
+          >
+            • {issue.message}
+          </Text>
+        ))}
+      </View>
+    );
   const isWide = winW >= 720;
+  /** Driver + vehicle side-by-side only on wide screens; 720px caused cramped overlap on tablets. */
+  const allocationWideLayout = winW >= 920;
   const isDesktopPreview = winW >= 1180;
   const showFloatingPreview = winW >= 480 && !isDesktopPreview;
   const floatingPreviewWidth = Math.min(336, Math.max(280, winW - 24));
@@ -173,6 +218,7 @@ export function AddTripFormFields({
   const clientPriceInputRef = useRef<TextInput>(null);
   const supplierRateInputRef = useRef<TextInput>(null);
   const advancePaidInputRef = useRef<TextInput>(null);
+  const aggregateDriverNameInputRef = useRef<TextInput>(null);
   const driverPhoneInputRef = useRef<TextInput>(null);
   const aggregateVehicleInputRef = useRef<TextInput>(null);
   const notesInputRef = useRef<TextInput>(null);
@@ -392,7 +438,10 @@ export function AddTripFormFields({
           vehicles.find((v) => v.id === state.vehicleId)?.vehicle_number ?? "",
         ) || ""
       : "";
-  const aggregateDriverDisplay = state.driverPhoneName?.trim() || state.driverPhone.trim();
+  const aggregateDriverDisplay =
+    state.aggregateDriverName?.trim() ||
+    state.driverPhoneName?.trim() ||
+    state.driverPhone.trim();
   const previewFooterValue = supplyIsAsset
     ? state.assignLater
       ? "Assign later"
@@ -425,8 +474,6 @@ export function AddTripFormFields({
   const assignLaterSwitchDisabled =
     supplyIsAsset ? assetDriverVehicleBothSet : aggregateDriverVehicleBothSet;
 
-  const baseInputArr = [styles.input, inputStyle];
-
   return (
     <View style={styles.pageWrap}>
       <ScrollView
@@ -454,6 +501,7 @@ export function AddTripFormFields({
             },
           ]}
         >
+          {validationListEl}
           <View style={[styles.mainGrid, isDesktopPreview && styles.mainGridDesktop]}>
             <View style={styles.formColumn}>
           {/* 01 Route */}
@@ -476,7 +524,7 @@ export function AddTripFormFields({
                     setters.setPickupCoords(coords.lat, coords.lon)
                   }
                   leadingIcon={<MapPin size={18} color={Theme.iconMuted} />}
-                  inputStyle={baseInputArr}
+                  inputStyle={[styles.input, inputStyle, outlineErr("pickup")]}
                   labelStyle={[styles.label, labelStyle]}
                   onDropdownOpenChange={setPickupDropdownOpen}
                 />
@@ -491,7 +539,7 @@ export function AddTripFormFields({
                     setters.setDropCoords(coords.lat, coords.lon)
                   }
                   leadingIcon={<Navigation size={18} color={Theme.iconMuted} />}
-                  inputStyle={baseInputArr}
+                  inputStyle={[styles.input, inputStyle, outlineErr("drop")]}
                   labelStyle={[styles.label, labelStyle]}
                   onDropdownOpenChange={setDropDropdownOpen}
                 />
@@ -533,7 +581,7 @@ export function AddTripFormFields({
                 </View>
                 {Platform.OS === "web" ? (
                   <TextInput
-                    style={[styles.input, inputStyle]}
+                    style={[styles.input, inputStyle, outlineErr("tripDate")]}
                     placeholder="YYYY-MM-DD"
                     placeholderTextColor={Theme.placeholder}
                     value={state.tripStartDate}
@@ -543,7 +591,12 @@ export function AddTripFormFields({
                 ) : (
                   <>
                     <TouchableOpacity
-                      style={[styles.input, inputStyle, styles.dateTouchable]}
+                      style={[
+                        styles.input,
+                        inputStyle,
+                        styles.dateTouchable,
+                        outlineErr("tripDate"),
+                      ]}
                       onPress={() => setShowStartDatePicker(true)}
                       activeOpacity={0.85}
                     >
@@ -629,7 +682,7 @@ export function AddTripFormFields({
               <View style={styles.gridCol}>
                 <Text style={[styles.label, labelStyle]}>Tons</Text>
                 <TextInput
-                  style={[styles.input, inputStyle]}
+                  style={[styles.input, inputStyle, outlineErr("tons")]}
                   placeholder="Enter load weight in tons"
                   placeholderTextColor={Theme.placeholder}
                   value={state.tons}
@@ -694,7 +747,12 @@ export function AddTripFormFields({
             </View>
 
             <View style={[styles.gridRow, isWide && styles.gridRowWide]}>
-              <View style={styles.gridCol}>
+              <View
+                style={[
+                  styles.gridCol,
+                  invalid("client") && styles.fieldGroupRing,
+                ]}
+              >
                 <View style={styles.sectionLabelRow}>
                   <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
                     Select client
@@ -857,7 +915,10 @@ export function AddTripFormFields({
                     style={styles.rupeeIcon}
                   />
                   <TextInput
-                    style={styles.priceInput}
+                    style={[
+                      styles.priceInput,
+                      invalid("clientPrice") && styles.priceInputError,
+                    ]}
                     placeholder="0"
                     placeholderTextColor={Theme.placeholder}
                     value={state.clientPrice}
@@ -1020,12 +1081,24 @@ export function AddTripFormFields({
                 ) : null}
 
                 {!state.assignLater ? (
-                  <View style={[styles.gridRow, isWide && styles.gridRowWide]}>
-                    <View style={styles.gridCol}>
+                  <View
+                    style={[
+                      styles.gridRow,
+                      styles.gridRowFleet,
+                      allocationWideLayout && styles.gridRowWide,
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.gridCol,
+                        !allocationWideLayout && styles.gridColFleetStack,
+                        invalid("assetDriver") && styles.fieldGroupRing,
+                      ]}
+                    >
                       <View
                         style={[
                           styles.sectionLabelRow,
-                          !isWide && styles.sectionLabelRowStack,
+                          !allocationWideLayout && styles.sectionLabelRowFleetStack,
                         ]}
                       >
                         <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
@@ -1034,7 +1107,7 @@ export function AddTripFormFields({
                         <TouchableOpacity
                           style={[
                             styles.addClientBtn,
-                            !isWide && styles.addClientBtnCompact,
+                            !allocationWideLayout && styles.addClientBtnFleetFullWidth,
                             Platform.OS === "web"
                               ? ({ cursor: "pointer" } as ViewStyle)
                               : null,
@@ -1111,7 +1184,8 @@ export function AddTripFormFields({
                         <ScrollView
                           style={[
                             styles.clientList,
-                            isCompactMobile && styles.clientListCompact,
+                            (!allocationWideLayout || isCompactMobile) &&
+                              styles.clientListCompact,
                           ]}
                           nestedScrollEnabled={!isCompactMobile}
                           scrollEnabled={!isCompactMobile}
@@ -1167,11 +1241,18 @@ export function AddTripFormFields({
                         </ScrollView>
                       )}
                     </View>
-                    <View style={styles.gridCol}>
+                    <View
+                      style={[
+                        styles.gridCol,
+                        !allocationWideLayout && styles.gridColFleetStack,
+                        !allocationWideLayout && styles.gridColFleetVehicle,
+                        invalid("assetVehicle") && styles.fieldGroupRing,
+                      ]}
+                    >
                       <View
                         style={[
                           styles.sectionLabelRow,
-                          !isWide && styles.sectionLabelRowStack,
+                          !allocationWideLayout && styles.sectionLabelRowFleetStack,
                         ]}
                       >
                         <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
@@ -1180,7 +1261,7 @@ export function AddTripFormFields({
                         <TouchableOpacity
                           style={[
                             styles.addClientBtn,
-                            !isWide && styles.addClientBtnCompact,
+                            !allocationWideLayout && styles.addClientBtnFleetFullWidth,
                             Platform.OS === "web"
                               ? ({ cursor: "pointer" } as ViewStyle)
                               : null,
@@ -1253,7 +1334,8 @@ export function AddTripFormFields({
                         <ScrollView
                           style={[
                             styles.clientList,
-                            isCompactMobile && styles.clientListCompact,
+                            (!allocationWideLayout || isCompactMobile) &&
+                              styles.clientListCompact,
                           ]}
                           nestedScrollEnabled={!isCompactMobile}
                           scrollEnabled={!isCompactMobile}
@@ -1311,7 +1393,12 @@ export function AddTripFormFields({
             ) : (
               <>
                 <View style={[styles.aggregateSplit, isWide && styles.aggregateSplitWide]}>
-                  <View style={styles.aggregateLeftPane}>
+                  <View
+                    style={[
+                      styles.aggregateLeftPane,
+                      invalid("partner") && styles.fieldGroupRing,
+                    ]}
+                  >
                 <View style={styles.sectionLabelRow}>
                   <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
                     Transport partner *
@@ -1395,8 +1482,12 @@ export function AddTripFormFields({
                           key={s.id}
                           style={[styles.clientCard, selected && styles.clientCardOn, Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null]}
                           onPress={() => {
-                            setters.setSupplierId(selected ? null : s.id);
-                            if (!selected) setPartnerListExpanded(false);
+                            if (selected) {
+                              setters.setSupplierSelection(null);
+                            } else {
+                              setters.setSupplierSelection(s.id, primary);
+                              setPartnerListExpanded(false);
+                            }
                           }}
                           activeOpacity={0.85}
                         >
@@ -1435,7 +1526,11 @@ export function AddTripFormFields({
                       Partner rate (₹) *
                     </Text>
                     <TextInput
-                      style={[styles.input, inputStyle]}
+                      style={[
+                        styles.input,
+                        inputStyle,
+                        outlineErr("partnerRate"),
+                      ]}
                       placeholder="0"
                       placeholderTextColor={Theme.placeholder}
                       value={state.supplierRate}
@@ -1451,7 +1546,11 @@ export function AddTripFormFields({
                       Advance paid (₹)
                     </Text>
                     <TextInput
-                      style={[styles.input, inputStyle]}
+                      style={[
+                        styles.input,
+                        inputStyle,
+                        outlineErr("advancePaid"),
+                      ]}
                       placeholder="Optional"
                       placeholderTextColor={Theme.placeholder}
                       value={state.advancePaid}
@@ -1463,7 +1562,7 @@ export function AddTripFormFields({
                         if (state.assignLater) {
                           focusField(notesInputRef);
                         } else {
-                          focusField(driverPhoneInputRef);
+                          focusField(aggregateDriverNameInputRef);
                         }
                       }}
                     />
@@ -1472,32 +1571,69 @@ export function AddTripFormFields({
 
                 {!state.assignLater ? (
                   <>
+                    <View style={{ width: "100%", marginTop: 8 }}>
+                      <Text style={[styles.label, labelStyle]}>
+                        Driver name (tracking) *
+                      </Text>
+                      <View style={styles.iconField}>
+                        <User
+                          size={18}
+                          color={Theme.iconMuted}
+                          style={styles.iconInField}
+                        />
+                        <TextInput
+                          style={[
+                            styles.iconInput,
+                            inputStyle,
+                            outlineErr("driverName"),
+                          ]}
+                          placeholder="e.g. Suresh Kumar"
+                          placeholderTextColor={Theme.placeholder}
+                          value={state.aggregateDriverName}
+                          onChangeText={setters.setAggregateDriverName}
+                          ref={aggregateDriverNameInputRef}
+                          autoCapitalize="words"
+                          returnKeyType="next"
+                          onSubmitEditing={() =>
+                            focusField(driverPhoneInputRef)
+                          }
+                        />
+                      </View>
+                    </View>
+
                     <View
                       style={[
                         styles.gridRow,
                         isWide && styles.gridRowWide,
-                        { marginTop: 8 },
                       ]}
                     >
                       <View style={styles.gridCol}>
                         <Text style={[styles.label, labelStyle]}>
                           Driver phone (tracking) *
                         </Text>
-                        <View style={styles.iconField}>
-                          <Phone
-                            size={18}
-                            color={Theme.iconMuted}
-                            style={styles.iconInField}
-                          />
+                        <View
+                          style={[
+                            styles.inPhoneOuter,
+                            invalid("driverPhone") && styles.inputErrorOutline,
+                          ]}
+                        >
+                          <Text
+                            style={styles.inPhoneFlag}
+                            accessibilityLabel="India"
+                          >
+                            🇮🇳
+                          </Text>
+                          <Text style={styles.inPhoneCc}>+91</Text>
                           <TextInput
-                            style={[styles.iconInput, inputStyle]}
-                            placeholder="e.g. +91 98765 43210"
+                            style={styles.inPhoneInput}
+                            placeholder="98765 43210"
                             placeholderTextColor={Theme.placeholder}
                             value={state.driverPhone}
                             onChangeText={(v) =>
                               setters.setDriverPhone(formatMobileNumber(v))
                             }
-                            keyboardType="phone-pad"
+                            keyboardType="number-pad"
+                            maxLength={10}
                             ref={driverPhoneInputRef}
                             returnKeyType="next"
                             onSubmitEditing={() =>
@@ -1505,6 +1641,18 @@ export function AddTripFormFields({
                             }
                           />
                         </View>
+                        {state.driverPhone.length > 0 &&
+                        state.driverPhone.length < 10 ? (
+                          <Text style={styles.phoneDigitHint}>
+                            {state.driverPhone.length}/10 digits
+                          </Text>
+                        ) : null}
+                        {state.driverPhone.trim() &&
+                        validatePhone(state.driverPhone.trim()) ? (
+                          <Text style={[styles.warningText, { marginTop: 4 }]}>
+                            {validatePhone(state.driverPhone.trim())}
+                          </Text>
+                        ) : null}
                       </View>
                       <View style={styles.gridCol}>
                         <Text style={[styles.label, labelStyle]}>
@@ -1520,6 +1668,7 @@ export function AddTripFormFields({
                             style={[
                               styles.iconInput,
                               inputStyle,
+                              outlineErr("vehicleNumber"),
                               {
                                 fontFamily:
                                   Platform.OS === "ios" ? "Menlo" : "monospace",
@@ -1552,6 +1701,8 @@ export function AddTripFormFields({
                           styles.driverConfirmCard,
                           state.driverPhoneConfirmed &&
                             styles.driverConfirmCardConfirmed,
+                          invalid("driverConfirm") &&
+                            styles.driverConfirmCardError,
                         ]}
                       >
                         <View style={{ flex: 1, minWidth: 0 }}>
@@ -1583,12 +1734,6 @@ export function AddTripFormFields({
                           }
                         />
                       </TouchableOpacity>
-                    ) : null}
-                    {state.driverPhone.trim() &&
-                    validatePhone(state.driverPhone.trim()) ? (
-                      <Text style={[styles.warningText, { marginTop: 4 }]}>
-                        {validatePhone(state.driverPhone.trim())}
-                      </Text>
                     ) : null}
                   </>
                 ) : (
@@ -1622,7 +1767,12 @@ export function AddTripFormFields({
                 style={styles.iconInField}
               />
               <TextInput
-                style={[styles.notesInput, inputStyle, { paddingLeft: 44 }]}
+                style={[
+                  styles.notesInput,
+                  inputStyle,
+                  { paddingLeft: 44 },
+                  outlineErr("notes"),
+                ]}
                 placeholder="Any specific delivery instructions or cargo details…"
                 placeholderTextColor={Theme.placeholder}
                 value={state.notes}
@@ -1656,9 +1806,10 @@ export function AddTripFormFields({
                   </>
                 )}
               </TouchableOpacity>
-              {!canSubmit && !submitting ? (
+              {!canSubmit && !submitting && validationIssues.length === 0 ? (
                 <Text style={styles.ctaHint}>
-                  {validationMessage ?? "Please fill all mandatory fields to continue"}
+                  {validationMessage ??
+                    "Please fill all mandatory fields to continue"}
                 </Text>
               ) : null}
             </View>
@@ -1981,8 +2132,24 @@ const styles = StyleSheet.create({
     letterSpacing: -0.25,
   },
   gridRow: { gap: 14 },
+  /** Extra gap when driver + vehicle stack vertically so sections don’t feel glued. */
+  gridRowFleet: {
+    gap: 18,
+  },
   gridRowWide: { flexDirection: "row", alignItems: "stretch", gap: 20 },
   gridCol: { flex: 1, minWidth: 0 },
+  gridColFleetStack: {
+    flexBasis: "auto",
+    width: "100%",
+    maxWidth: "100%",
+    minWidth: 0,
+  },
+  gridColFleetVehicle: {
+    marginTop: 4,
+    paddingTop: 18,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
+  },
   aggregateSplit: {
     gap: 14,
   },
@@ -2010,6 +2177,15 @@ const styles = StyleSheet.create({
   sectionLabelRowStack: {
     alignItems: "flex-start",
     justifyContent: "flex-start",
+  },
+  /** Mobile / narrow: label on its own row, full-width add action — avoids overlap with cards. */
+  sectionLabelRowFleetStack: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    justifyContent: "flex-start",
+    gap: 10,
+    marginBottom: 12,
+    width: "100%",
   },
   sectionLabelActions: {
     flexDirection: "row",
@@ -2053,6 +2229,13 @@ const styles = StyleSheet.create({
   addClientBtnCompact: {
     marginTop: 2,
     alignSelf: "flex-start",
+  },
+  addClientBtnFleetFullWidth: {
+    alignSelf: "stretch",
+    width: "100%",
+    justifyContent: "center",
+    paddingVertical: 12,
+    marginTop: 0,
   },
   addClientBtnText: {
     fontSize: 10,
@@ -2116,6 +2299,45 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surfaceForm,
     color: Theme.textPrimary,
     ...Platform.select({ web: { outlineStyle: "none" } as any }),
+  },
+  inPhoneOuter: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 2,
+    borderRadius: 12,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceForm,
+    minHeight: 52,
+    paddingLeft: 10,
+    paddingRight: 12,
+    gap: 6,
+    marginBottom: 12,
+  },
+  inPhoneFlag: {
+    fontSize: 20,
+    lineHeight: 24,
+  },
+  inPhoneCc: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+  },
+  inPhoneInput: {
+    flex: 1,
+    minWidth: 0,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    fontSize: 14,
+    fontWeight: "500",
+    color: Theme.textPrimary,
+    ...Platform.select({ web: { outlineStyle: "none" } as any }),
+  },
+  phoneDigitHint: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    marginTop: 4,
+    marginBottom: 4,
   },
   fakeInput: {
     flexDirection: "row",
@@ -2302,7 +2524,8 @@ const styles = StyleSheet.create({
   clientListCompact: { maxHeight: undefined },
   mobileListWrap: {
     gap: 10,
-    marginBottom: 2,
+    marginBottom: 4,
+    width: "100%",
   },
   emptyListCard: {
     borderRadius: 12,
@@ -2331,6 +2554,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.surfaceLight,
+    flexShrink: 0,
   },
   busyPillText: {
     fontSize: 9,
@@ -2350,6 +2574,7 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
     marginBottom: 10,
     backgroundColor: Theme.cardWhite,
+    overflow: "hidden",
   },
   clientMain: {
     flex: 1,
@@ -2407,6 +2632,7 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
   radioOuterOn: {
     borderColor: Theme.darkBackground,
@@ -2597,6 +2823,56 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     fontSize: 14,
     fontWeight: "500",
+  },
+  inputErrorOutline: {
+    borderWidth: 2,
+    borderColor: Theme.destructive,
+  },
+  priceInputError: {
+    borderColor: Theme.destructive,
+    borderWidth: 2,
+  },
+  fieldGroupRing: {
+    borderWidth: 1.5,
+    borderColor: Theme.destructive,
+    borderRadius: 14,
+    padding: 8,
+  },
+  validationChecklist: {
+    width: "100%",
+    maxWidth: 420,
+    alignSelf: "center",
+    marginBottom: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: "rgba(232, 33, 39, 0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(232, 33, 39, 0.35)",
+  },
+  validationChecklistHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
+  validationChecklistTitle: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  validationChecklistItem: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.destructive,
+    lineHeight: 18,
+    marginBottom: 4,
+  },
+  driverConfirmCardError: {
+    borderColor: Theme.destructive,
+    borderWidth: 2,
+    backgroundColor: "rgba(232, 33, 39, 0.06)",
   },
   ctaBlock: {
     alignItems: "center",

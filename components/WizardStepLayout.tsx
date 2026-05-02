@@ -23,11 +23,11 @@ interface WizardStepLayoutProps {
 
 export function WizardStepLayout({
   title,
-  stepLabel: _stepLabel,
+  stepLabel,
   stepIndex,
   stepCount,
   onBack,
-  onClose: _onClose,
+  onClose,
   footerLeftLabel,
   footerRightLabel,
   onFooterLeft,
@@ -37,6 +37,8 @@ export function WizardStepLayout({
   children,
 }: WizardStepLayoutProps) {
   const insets = useSafeAreaInsets();
+  void stepLabel;
+  void onClose;
 
   return (
     <View style={styles.container}>

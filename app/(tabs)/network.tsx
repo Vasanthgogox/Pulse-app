@@ -12,7 +12,7 @@ import {
   type ConnectionFilterTab,
 } from "@/features/network/components/ConnectionsView";
 import { DiscoverView } from "@/features/network/components/DiscoverView";
-import { InvitationsView } from "@/features/network/components/InvitationsView";
+import { NetworkTabErrorBoundary } from "@/components/network/NetworkTabErrorBoundary";
 import { StoryReel } from "@/features/network/components/StoryReel";
 import { isPostVisibleForOrg, type PostRow } from "@/features/network/services/posts.service";
 import {
@@ -41,6 +41,7 @@ import {
   Compass,
   Cpu,
   Globe,
+  History,
   Inbox,
   Mail,
   MapPin,
@@ -49,10 +50,8 @@ import {
   Signal,
   Truck,
   UserPlus,
-  UserPlus2,
   Users,
   Verified,
-  ShieldCheck,
   X,
 } from "lucide-react-native";
 import { useOrganization } from "@/contexts/OrganizationContext";
@@ -60,6 +59,9 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocalSearchParams } from "expo-router";
 import {
   ActivityIndicator,
+  Alert,
+  Linking,
+  Modal,
   Platform,
   Pressable,
   RefreshControl,
@@ -67,13 +69,60 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
+  type TextStyle,
   useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { supabase } from "@/lib/supabase";
 
 function isStoryPost(p: PostRow): boolean {
   return p.type === "LOAD" || p.type === "VEHICLE_AVAILABILITY";
+}
+
+/** Pills sit on a dark navy card — use light text + brighter accents for contrast. */
+function activityRoleVisuals(role: ConnectedOrg["role"]) {
+  switch (role) {
+    case "CLIENT":
+      return {
+        accent: "#38bdf8",
+        pillBg: "rgba(56,189,248,0.22)",
+        pillText: "#f0f9ff",
+        pillBorder: "rgba(125,211,252,0.5)",
+      };
+    case "DRIVER":
+      return {
+        accent: "#fb923c",
+        pillBg: "rgba(251,146,60,0.22)",
+        pillText: "#fff7ed",
+        pillBorder: "rgba(253,186,116,0.5)",
+      };
+    default:
+      return {
+        accent: "#4ade80",
+        pillBg: "rgba(74,222,128,0.2)",
+        pillText: "#f0fdf4",
+        pillBorder: "rgba(134,239,172,0.45)",
+      };
+  }
+}
+
+function roleShortLabel(role: ConnectedOrg["role"]) {
+  if (role === "CLIENT") return "Client";
+  if (role === "SUPPLIER") return "Supplier";
+  return "Driver";
+}
+
+/** Relative time for the 24h activity window — tuned for scan speed. */
+function formatRelativeActivityTime(createdMs: number): string {
+  const diff = Math.max(0, Date.now() - createdMs);
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return "Today";
 }
 
 function NetworkStoryStrip({
@@ -122,7 +171,48 @@ type NetworkProfileNode = {
   phone?: string | null;
 };
 
-export default function NetworkScreen() {
+function getNetworkNodeLocation(item: ConnectedOrg): string {
+  const cityState = [item.city, item.state]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value))
+    .join(", ");
+  const direct = item.business_location ?? item.location ?? item.headquarters ?? null;
+  return cityState || direct?.trim() || "Not available";
+}
+
+function useAnimatedCount(target: number, durationMs = 720): number {
+  const [displayValue, setDisplayValue] = useState(target);
+  const previousValueRef = React.useRef(target);
+
+  useEffect(() => {
+    const startValue = previousValueRef.current;
+    const endValue = Number.isFinite(target) ? target : 0;
+
+    if (startValue === endValue) {
+      setDisplayValue(endValue);
+      return;
+    }
+
+    const startedAt = Date.now();
+    const timer = setInterval(() => {
+      const progress = Math.min((Date.now() - startedAt) / durationMs, 1);
+      const easedProgress = 1 - Math.pow(1 - progress, 3);
+      const nextValue = Math.round(startValue + (endValue - startValue) * easedProgress);
+      setDisplayValue(nextValue);
+
+      if (progress >= 1) {
+        previousValueRef.current = endValue;
+        clearInterval(timer);
+      }
+    }, 16);
+
+    return () => clearInterval(timer);
+  }, [durationMs, target]);
+
+  return displayValue;
+}
+
+function NetworkScreenInner() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const searchParams = useLocalSearchParams<{ view?: string }>();
@@ -132,22 +222,29 @@ export default function NetworkScreen() {
   const isCompactPhone = width < 420;
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
-  const { currentOrganization: organization } = useOrganization();
+  const {
+    currentOrganization: organization,
+    isLoading: orgLoading,
+    error: organizationError,
+    refreshOrganization,
+  } = useOrganization();
   const orgId = organization?.id ?? null;
   const [refreshing, setRefreshing] = useState(false);
   const [connSearch, setConnSearch] = useState("");
   const [connFilter, setConnFilter] = useState<ConnectionFilterTab>("ALL");
   const [connSearchOpen, setConnSearchOpen] = useState(false);
-  const [invSubTab, setInvSubTab] = useState<"received" | "sent">("received");
-  const [invSearch, setInvSearch] = useState("");
-  const [invSearchOpen, setInvSearchOpen] = useState(false);
   const [discoverSearchOpen, setDiscoverSearchOpen] = useState(false);
   const [discoverSearch, setDiscoverSearch] = useState("");
-  const [viewMode, setViewMode] = useState<"dashboard" | "profile" | "requests">("dashboard");
+  const [viewMode, setViewMode] = useState<"dashboard" | "requests">("dashboard");
   const [requestTab, setRequestTab] = useState<"received" | "sent" | "cancelled">("received");
   const [selectedProfileNode, setSelectedProfileNode] = useState<NetworkProfileNode | null>(null);
+  const [selectedProfileStats, setSelectedProfileStats] = useState<{ totalTrips: number | null }>({
+    totalTrips: null,
+  });
+  const [profileStatsLoading, setProfileStatsLoading] = useState(false);
   const [requestActionId, setRequestActionId] = useState<string | null>(null);
-  const [connectionsSnapshot, setConnectionsSnapshot] = useState<ConnectedOrg[]>([]);
+  const [discoverInviteCount, setDiscoverInviteCount] = useState(0);
+  const [discoverInviteLimit, setDiscoverInviteLimit] = useState(5);
 
   useRealtimeNetworkInvalidation(orgId);
   const receivedQ = useConnectionRequestsReceivedQuery(orgId);
@@ -206,7 +303,12 @@ export default function NetworkScreen() {
     () => clientCount + supplierCount + driverCount,
     [clientCount, supplierCount, driverCount],
   );
-  const recentAddedConnections = useMemo((): ConnectedOrg[] => {
+  const animatedTotalConnections = useAnimatedCount(totalConnections);
+  const animatedClientCount = useAnimatedCount(clientCount);
+  const animatedSupplierCount = useAnimatedCount(supplierCount);
+  const animatedDriverCount = useAnimatedCount(driverCount);
+  const totalConnectionsDisplay = String(animatedTotalConnections).padStart(2, "0");
+  const recentAddedConnections = useMemo((): Array<ConnectedOrg & { createdAt: number }> => {
     const now = Date.now();
     const windowMs = 24 * 60 * 60 * 1000;
     type R = ConnectedOrg & { createdAt: number };
@@ -309,13 +411,9 @@ export default function NetworkScreen() {
     }
 
     return acc
-      .sort((a, b) => a.createdAt - b.createdAt)
+      .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, 5)
-      .map((row) => {
-        const { createdAt, ...rest } = row;
-        void createdAt;
-        return rest;
-      });
+      .map(({ createdAt, ...rest }) => ({ ...rest, createdAt }));
   }, [clientsQ.data, suppliersQ.data, driversQ.data]);
 
   const onCreatePost = () => router.push("/(modals)/create-post");
@@ -347,10 +445,78 @@ export default function NetworkScreen() {
     }
   }, [orgId, feedQ, receivedQ, clientsQ, suppliersQ, driversQ, invalidateNetwork]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const nodeOrgId = selectedProfileNode?.id ?? null;
+    const isUuid =
+      typeof nodeOrgId === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(nodeOrgId);
+
+    if (!nodeOrgId || !isUuid) {
+      setSelectedProfileStats({ totalTrips: null });
+      setProfileStatsLoading(false);
+      return;
+    }
+
+    setProfileStatsLoading(true);
+    void (async () => {
+      try {
+        const { count } = await supabase()
+          .from("trips")
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", nodeOrgId);
+        if (cancelled) return;
+        setSelectedProfileStats({ totalTrips: count ?? 0 });
+      } finally {
+        if (!cancelled) setProfileStatsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedProfileNode?.id]);
+
   if (!orgId) {
+    if (orgLoading) {
+      return (
+        <View style={[styles.container, { paddingTop: insets.top }]}>
+          <ActivityIndicator color={Theme.teslaRed} style={{ marginTop: 60 }} />
+        </View>
+      );
+    }
+    if (organizationError) {
+      return (
+        <View style={[styles.container, styles.orgGateWrap, { paddingTop: insets.top + 24 }]}>
+          <Text style={styles.orgGateTitle}>Connection issue</Text>
+          <Text style={styles.orgGateMessage}>
+            Couldn&apos;t load your workspace. Check your connection and try again.
+          </Text>
+          <TouchableOpacity
+            style={styles.orgGateBtn}
+            onPress={() => void refreshOrganization()}
+            accessibilityRole="button"
+            accessibilityLabel="Try again"
+          >
+            <Text style={styles.orgGateBtnText}>Try again</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <ActivityIndicator color={Theme.teslaRed} style={{ marginTop: 60 }} />
+      <View style={[styles.container, styles.orgGateWrap, { paddingTop: insets.top + 24 }]}>
+        <Text style={styles.orgGateTitle}>No organization linked</Text>
+        <Text style={styles.orgGateMessage}>
+          You&apos;re signed in, but we couldn&apos;t find an organization for this account yet.
+        </Text>
+        <TouchableOpacity
+          style={styles.orgGateBtn}
+          onPress={() => void refreshOrganization()}
+          accessibilityRole="button"
+          accessibilityLabel="Refresh"
+        >
+          <Text style={styles.orgGateBtnText}>Refresh</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -374,7 +540,6 @@ export default function NetworkScreen() {
       rating: null,
       mutuals: 0,
     });
-    setViewMode("profile");
   };
 
   const handleAcceptRequest = async (requestId: string) => {
@@ -450,7 +615,7 @@ export default function NetworkScreen() {
                     <Text style={[styles.requestsTabBadgeText, on && styles.requestsTabBadgeTextOn]}>
                       {tab.count}
                     </Text>
-                  </View>
+        </View>
                 </Pressable>
               );
             })}
@@ -467,12 +632,28 @@ export default function NetworkScreen() {
               <Slash size={32} color={Theme.textSecondary} />
               <Text style={styles.requestsEmptyTitle}>No {requestTab} protocol</Text>
               <Text style={styles.requestsEmptySub}>Your queue is currently clear.</Text>
-            </View>
+                </View>
           ) : (
             list.map((req) => {
               const isBusy = requestActionId === req.id;
-              const title = requestTab === "received" ? req.from_org_name : req.to_org_name;
+              // For cancelled tab: show the other party (they sent → show from, we sent → show to)
+              const isSender = req.from_organization_id === orgId;
+              const title = requestTab === "cancelled"
+                ? (isSender ? req.to_org_name : req.from_org_name)
+                : requestTab === "received"
+                  ? req.from_org_name
+                  : req.to_org_name;
               const roleLabel = req.request_shipper_client ? "CLIENT" : "SUPPLIER";
+
+              // Determine cancelled category label + colour
+              const cancelledCategory = (() => {
+                if (requestTab !== "cancelled") return null;
+                if (isSender && req.status === "cancelled") return { label: "Withdrawn by us", color: "#d97706" };
+                if (isSender && req.status === "rejected")  return { label: "Declined by them", color: Theme.textSecondary };
+                if (!isSender && req.status === "rejected") return { label: "Declined by us",   color: Theme.textSecondary };
+                return { label: (req.status ?? "cancelled").toUpperCase(), color: Theme.textSecondary };
+              })();
+
               return (
                 <Pressable
                   key={req.id}
@@ -532,14 +713,14 @@ export default function NetworkScreen() {
                         )}
                         <Text style={styles.requestsRecallText}>Recall</Text>
                       </Pressable>
-                    ) : (
+                    ) : cancelledCategory ? (
                       <View style={styles.requestsCancelledPill}>
-                        <Slash size={12} color={Theme.textSecondary} />
-                        <Text style={styles.requestsCancelledText}>
-                          {(req.status ?? "cancelled").toUpperCase()}
+                        <Slash size={12} color={cancelledCategory.color} />
+                        <Text style={[styles.requestsCancelledText, { color: cancelledCategory.color }]}>
+                          {cancelledCategory.label}
                         </Text>
                       </View>
-                    )}
+                    ) : null}
                   </View>
                 </Pressable>
               );
@@ -550,180 +731,48 @@ export default function NetworkScreen() {
     );
   }
 
-  if (viewMode === "profile" && selectedProfileNode) {
-    return (
-      <View style={[styles.profileShell, { paddingTop: insets.top }]}>
-        <View style={styles.profileCover}>
-          <View style={styles.profileCoverGrain} />
-          <Pressable
-            onPress={() => setViewMode("dashboard")}
-            style={({ pressed }) => [styles.profileBackBtn, pressed && { opacity: 0.82 }]}
-          >
-            <ArrowLeft size={16} color={Theme.textOnPrimary} />
-            <Text style={styles.profileBackBtnText}>Back to matrix</Text>
-          </Pressable>
-        </View>
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={[
-            styles.profileContent,
-            {
-              paddingBottom:
-                24 +
-                insets.bottom +
-                Layout.demoTabBarScrollBottomInset +
-                Layout.tabBarBottomPaddingMin,
-            },
-          ]}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={[styles.profileGrid, isMobileLayout && styles.profileGridStack]}>
-            <View style={[styles.profileLeftCol, isMobileLayout && styles.profileLeftColStack]}>
-              <View style={styles.profileIdentityCardModern}>
-                <View style={styles.profileAvatarLgModern}>
-                  <Text style={styles.profileAvatarLgText}>
-                    {selectedProfileNode.name
-                      .split(" ")
-                      .map((p) => p[0])
-                      .join("")
-                      .slice(0, 2)
-                      .toUpperCase()}
-                  </Text>
-                </View>
-                <View style={styles.profileNameRow}>
-                  <Text style={styles.profileName}>{selectedProfileNode.name}</Text>
-                  <Verified size={18} color={Theme.primary} />
-                </View>
-                <View style={styles.profileLocationRow}>
-                  <MapPin size={13} color={Theme.textSecondary} />
-                  <Text style={styles.profileLocation}>{selectedProfileNode.location}</Text>
-                </View>
-
-                <View style={styles.profileStatRow}>
-                  <View style={styles.profileStatCell}>
-                    <Text style={styles.profileStatN}>
-                      {selectedProfileNode.rating != null
-                        ? selectedProfileNode.rating.toFixed(1)
-                        : "N/A"}
-                    </Text>
-                    <Text style={styles.profileStatL}>Rating</Text>
-                  </View>
-                  <View style={styles.profileStatCell}>
-                    <Text style={styles.profileStatN}>{selectedProfileNode.mutuals}</Text>
-                    <Text style={styles.profileStatL}>Mutuals</Text>
-                  </View>
-                </View>
-
-                <View style={styles.profileCtaStack}>
-                  <Pressable style={styles.profilePrimaryBtn}>
-                    <UserPlus size={14} color={Theme.textOnPrimary} />
-                    <Text style={styles.profilePrimaryBtnText}>Send protocol</Text>
-                  </Pressable>
-                  <Pressable style={styles.profileSecondaryBtn}>
-                    <Mail size={14} color={Theme.textOnPrimary} />
-                    <Text style={styles.profileSecondaryBtnText}>Direct message</Text>
-                  </Pressable>
-                </View>
-              </View>
-
-              <View style={styles.profileOpsCard}>
-                <Text style={styles.profileOpsKicker}>Operations status</Text>
-                <View style={styles.profileOpsRow}>
-                  <Text style={styles.profileOpsLabel}>KYC Verified</Text>
-                  <ShieldCheck size={15} color={Theme.primary} />
-                </View>
-                <View style={styles.profileOpsRow}>
-                  <Text style={styles.profileOpsLabel}>Active Fleet</Text>
-                  <Text style={styles.profileOpsValue}>
-                    {Math.max(1, connectionsSnapshot.length * 2)} Units
-                  </Text>
-                </View>
-                <View style={styles.profileOpsRow}>
-                  <Text style={styles.profileOpsLabel}>Response Rate</Text>
-                  <Text style={styles.profileOpsValue}>98%</Text>
-                </View>
-              </View>
-            </View>
-
-            <View style={[styles.profileRightCol, isMobileLayout && styles.profileRightColStack]}>
-              <View style={styles.profileOverviewCardModern}>
-                <Text style={styles.profileOverviewTitle}>Ally dossier</Text>
-                <Text style={styles.profileOverviewBody}>
-                  Authorized {selectedProfileNode.type.toLowerCase()} partner with
-                  verified network performance in {selectedProfileNode.location}.
-                  High-reliability execution and synchronized operations on Pulse.
-                </Text>
-                <View style={styles.profileMetricGrid}>
-                  <View style={styles.profileMetricCardModern}>
-                    <View style={styles.profileMetricHead}>
-                      <ArrowUpRight size={16} color={Theme.primary} />
-                      <Text style={styles.profileMetricHeadText}>SLA compliance</Text>
-                    </View>
-                    <Text style={styles.profileMetricValue}>98.2%</Text>
-                  </View>
-                  <View style={styles.profileMetricCardModern}>
-                    <View style={styles.profileMetricHead}>
-                      <Signal size={16} color={Theme.primary} />
-                      <Text style={styles.profileMetricHeadText}>Network presence</Text>
-                    </View>
-                    <Text style={styles.profileMetricValue}>
-                      {selectedProfileNode.status === "CONNECTED" ? "LIVE" : selectedProfileNode.status}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            </View>
-          </View>
-        </ScrollView>
-      </View>
-    );
-  }
-
   const trendPct = totalConnections > 0 ? Math.round((pendingCount / totalConnections) * 100) : 0;
-  const totalConnectionsDisplay = String(totalConnections).padStart(2, "0");
 
   const handleOpenProfileFromConnection = (item: ConnectedOrg) => {
     setSelectedProfileNode({
-      id: item.id,
+      id: item.linked_organization_id ?? item.id,
       name: item.name,
       type: item.role,
-      location: "Not available",
+      location: getNetworkNodeLocation(item),
       status: item.is_integrated ? "CONNECTED" : "LIVE",
       rating: item.rating ?? null,
       mutuals: item.mutual_count ?? 0,
       phone: item.phone ?? null,
     });
-    setViewMode("profile");
   };
 
   const handleOpenProfileFromDiscover = (
-    org: {
-      id: string;
-      name: string;
-      connection_status?: string | null;
-      mutual_count?: number | null;
-      mutual_connections_count?: number | null;
-      rating_value?: number | null;
-      location_value?: string | null;
-    },
-  ) => {
-    const normalized = String(org.connection_status ?? "").toLowerCase();
-    const status: NetworkProfileNode["status"] =
-      normalized === "approved"
-        ? "CONNECTED"
-        : normalized === "pending"
-          ? "REQUEST SENT"
-          : "LIVE";
-    setSelectedProfileNode({
-      id: org.id,
-      name: org.name,
-      type: "SUPPLIER",
-      location: org.location_value?.trim() || "Not available",
-      status,
-      rating: org.rating_value ?? null,
-      mutuals: org.mutual_count ?? org.mutual_connections_count ?? 0,
-    });
-    setViewMode("profile");
+      org: {
+        id: string;
+        name: string;
+        connection_status?: string | null;
+        mutual_count?: number | null;
+        mutual_connections_count?: number | null;
+        rating_value?: number | null;
+        location_value?: string | null;
+      },
+    ) => {
+      const normalized = String(org.connection_status ?? "").toLowerCase();
+      const status: NetworkProfileNode["status"] =
+        normalized === "approved"
+          ? "CONNECTED"
+          : normalized === "pending"
+            ? "REQUEST SENT"
+            : "LIVE";
+      setSelectedProfileNode({
+        id: org.id,
+        name: org.name,
+        type: "SUPPLIER",
+        location: org.location_value?.trim() || "Not available",
+        status,
+        rating: org.rating_value ?? null,
+        mutuals: org.mutual_count ?? org.mutual_connections_count ?? 0,
+      });
   };
 
   const scrollContent = (
@@ -754,27 +803,27 @@ export default function NetworkScreen() {
           <View style={styles.topTickerTrack}>
             <Text style={styles.topTickerText}>
               BUILD YOUR NETWORK BY ADDING CONTACTS AND CONNECTING WITH VERIFIED APP USERS TO GROW YOUR BUSINESS.
-            </Text>
+              </Text>
           </View>
-        </View>
+          </View>
         <View style={[styles.topCluster, isDesktopMatrix && styles.topClusterDesktop, isCompactPhone && styles.topClusterCompact]}>
           <View style={[styles.topClusterMain, isDesktopMatrix && styles.topClusterMainDesktop]}>
-            <View style={styles.commandStatsWrap}>
-              <View style={styles.commandMainCard}>
-                <View style={styles.commandMainBgOrb} />
+        <View style={styles.commandStatsWrap}>
+          <View style={styles.commandMainCard}>
+            <View style={styles.commandMainBgOrb} />
                 <View style={[styles.commandMainContent, isMobileLayout && styles.commandMainContentCompact]}>
                   <View style={[styles.commandMainHead, isMobileLayout && styles.commandMainHeadMobile]}>
                     <View style={[styles.commandMainKickerRow, isMobileLayout && styles.commandMainKickerRowMobile]}>
-                      <Cpu size={12} color={Theme.primary} />
+                  <Cpu size={12} color={Theme.primary} />
                       <Text style={styles.commandMainKicker} numberOfLines={1}>
                         CORE NODE INTEL
                       </Text>
-                    </View>
-                    <View style={styles.commandGrowthPill}>
-                      <ArrowUpRight size={11} color={Theme.primary} />
-                      <Text style={styles.commandGrowthText}>+{trendPct || 12}%</Text>
-                    </View>
-                  </View>
+                </View>
+                <View style={styles.commandGrowthPill}>
+                  <ArrowUpRight size={11} color={Theme.primary} />
+                  <Text style={styles.commandGrowthText}>+{trendPct || 12}%</Text>
+                </View>
+              </View>
                   <View style={[styles.commandMainStatsRow, isMobileLayout && styles.commandMainStatsRowCompact]}>
                     <View style={[styles.commandTotalWrap, isMobileLayout && styles.commandTotalWrapCompact]}>
                       <Text
@@ -784,43 +833,43 @@ export default function NetworkScreen() {
                         minimumFontScale={0.8}
                       >
                         {totalConnectionsDisplay}
-                      </Text>
+                  </Text>
                       <Text style={[styles.commandTotalSub, isMobileLayout && styles.commandTotalSubCompact]} numberOfLines={2}>
                         Network Growth
                       </Text>
-                    </View>
+                </View>
                     <View style={[styles.commandMetricGrid, isMobileLayout && styles.commandMetricGridCompact]}>
                       <View style={[styles.commandMetricCell, isMobileLayout && styles.commandMetricCellCompact]}>
-                        <Users size={13} color={Theme.primary} />
+                    <Users size={13} color={Theme.primary} />
                         <Text style={[styles.commandMetricN, isMobileLayout && styles.commandMetricNCompact]}>
-                          {String(clientCount).padStart(2, "0")}
+                          {String(animatedClientCount).padStart(2, "0")}
                         </Text>
                         <Text style={[styles.commandMetricL, isMobileLayout && styles.commandMetricLCompact]}>
                           CLIENTS
                         </Text>
-                      </View>
+                  </View>
                       <View style={[styles.commandMetricCell, isMobileLayout && styles.commandMetricCellCompact]}>
-                        <Globe size={13} color={Theme.primary} />
+                    <Globe size={13} color={Theme.primary} />
                         <Text style={[styles.commandMetricN, isMobileLayout && styles.commandMetricNCompact]}>
-                          {String(supplierCount).padStart(2, "0")}
+                          {String(animatedSupplierCount).padStart(2, "0")}
                         </Text>
                         <Text style={[styles.commandMetricL, isMobileLayout && styles.commandMetricLCompact]}>
                           SUPPLIERS
                         </Text>
-                      </View>
+                  </View>
                       <View style={[styles.commandMetricCell, isMobileLayout && styles.commandMetricCellCompact]}>
-                        <Truck size={13} color={Theme.primary} />
+                    <Truck size={13} color={Theme.primary} />
                         <Text style={[styles.commandMetricN, isMobileLayout && styles.commandMetricNCompact]}>
-                          {String(driverCount).padStart(2, "0")}
+                          {String(animatedDriverCount).padStart(2, "0")}
                         </Text>
                         <Text style={[styles.commandMetricL, isMobileLayout && styles.commandMetricLCompact]}>
                           FLEET
                         </Text>
-                      </View>
-                    </View>
                   </View>
                 </View>
               </View>
+            </View>
+          </View>
             </View>
             <View style={[styles.storyRowShell, isCompactPhone && styles.storyRowShellCompact]}>
               <NetworkStoryStrip
@@ -830,56 +879,180 @@ export default function NetworkScreen() {
                 feedLoading={feedQ.isLoading}
                 onCreatePost={onCreatePost}
               />
-            </View>
-          </View>
+                </View>
+              </View>
 
           <View style={[styles.topClusterLogCol, isDesktopMatrix && styles.topClusterLogColDesktop]}>
-            <View
-              style={[
+        <View
+          style={[
                 styles.commandSideCard,
                 isDesktopMatrix && styles.commandSideCardDesktop,
                 isCompactPhone && styles.commandSideCardCompact,
               ]}
             >
-              <View style={styles.commandSideHead}>
-                <Text style={styles.commandSideKicker}>Activity log</Text>
-                <Signal size={14} color={Theme.primary} />
+              <View
+                style={[
+                  styles.commandSideHead,
+                  isDesktopMatrix && styles.commandSideHeadDesktop,
+                ]}
+              >
+                <View style={styles.commandSideHeadText}>
+                  <Text
+                    style={[
+                      styles.commandSideKicker,
+                      isDesktopMatrix && styles.commandSideKickerDesktop,
+                    ]}
+                  >
+                    Activity log
+                  </Text>
+                  <Text
+                    style={[
+                      styles.commandSideSub,
+                      isDesktopMatrix && styles.commandSideSubLabelDesktop,
+                    ]}
+                  >
+                    Last 24 hours · newest first
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.commandSideHeadIcon,
+                    isDesktopMatrix && styles.commandSideHeadIconDesktop,
+                  ]}
+                >
+                  <History
+                    size={isDesktopMatrix ? 12 : 13}
+                    color={Theme.textOnDarkMuted}
+                    strokeWidth={2}
+                  />
+                </View>
               </View>
               <ScrollView
-                style={styles.commandLogScroll}
-                contentContainerStyle={styles.commandLogScrollContent}
+                style={[
+                  styles.commandLogScroll,
+                  isDesktopMatrix && styles.commandLogScrollDesktop,
+                ]}
+                contentContainerStyle={[
+                  styles.commandLogScrollContent,
+                  isDesktopMatrix && styles.commandLogScrollContentDesktop,
+                ]}
                 showsVerticalScrollIndicator={false}
                 nestedScrollEnabled
               >
                 {recentAddedConnections.length === 0 ? (
                   <View style={styles.commandLogEmpty}>
-                    <Text style={styles.commandLogEmptyText}>No recent additions yet</Text>
-                  </View>
+                    <Text style={styles.commandLogEmptyText}>
+                      No contacts added in the last 24 hours
+                    </Text>
+                    <Text style={styles.commandLogEmptyHint}>
+                      New clients, suppliers, and drivers appear here.
+                    </Text>
+                </View>
                 ) : (
-                  recentAddedConnections.map((item) => (
-                    <View key={`recent-log-${item.id}`} style={styles.commandLogRow}>
-                      <View style={styles.commandLogLine} />
-                      <View style={styles.commandLogTextWrap}>
-                        <Text style={styles.commandLogTitle} numberOfLines={1}>
-                          {`${item.name.toUpperCase()} added as ${item.role}`}
-                        </Text>
-                        <Text style={styles.commandLogMeta}>
-                          {item.is_integrated ? "Operational access live" : "Pending app join"}
-                        </Text>
+                  recentAddedConnections.map((item) => {
+                    const v = activityRoleVisuals(item.role);
+                    return (
+                      <View
+                        key={`recent-log-${item.id}`}
+                        style={[
+                          styles.commandLogEntry,
+                          isDesktopMatrix && styles.commandLogEntryDesktop,
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.commandLogAccent,
+                            isDesktopMatrix && styles.commandLogAccentDesktop,
+                            { backgroundColor: v.accent },
+                          ]}
+                        />
+                        <View
+                          style={[
+                            styles.commandLogEntryMain,
+                            isDesktopMatrix && styles.commandLogEntryMainDesktop,
+                          ]}
+                        >
+                          <View
+                            style={[
+                              styles.commandLogEntryTop,
+                              isDesktopMatrix && styles.commandLogEntryTopDesktop,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.commandLogName,
+                                isDesktopMatrix && styles.commandLogNameDesktop,
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {item.name.trim().toUpperCase()}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.commandLogWhen,
+                                isDesktopMatrix && styles.commandLogWhenDesktop,
+                              ]}
+                            >
+                              {formatRelativeActivityTime(item.createdAt)}
+                            </Text>
+                          </View>
+                          <View
+                            style={[
+                              styles.commandLogEntryBottom,
+                              isDesktopMatrix && styles.commandLogEntryBottomDesktop,
+                            ]}
+                          >
+                            <View
+                              style={[
+                                styles.commandLogRolePill,
+                                isDesktopMatrix && styles.commandLogRolePillDesktop,
+                                {
+                                  backgroundColor: v.pillBg,
+                                  borderColor: v.pillBorder,
+                                },
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.commandLogRolePillText,
+                                  isDesktopMatrix && styles.commandLogRolePillTextDesktop,
+                                  { color: v.pillText },
+                                ]}
+                              >
+                                {roleShortLabel(item.role)}
+                              </Text>
+                            </View>
+                            <Text
+                              style={[
+                                styles.commandLogStatus,
+                                item.is_integrated
+                                  ? styles.commandLogStatusLive
+                                  : styles.commandLogStatusPending,
+                                isDesktopMatrix && styles.commandLogStatusDesktop,
+                                isDesktopMatrix && styles.commandLogStatusFontDesktop,
+                              ]}
+                              numberOfLines={isDesktopMatrix ? 2 : 1}
+                            >
+                              {item.is_integrated
+                                ? "Connected on Pulse"
+                                : "Awaiting app signup"}
+                            </Text>
+                          </View>
+                        </View>
                       </View>
-                    </View>
-                  ))
+                    );
+                  })
                 )}
               </ScrollView>
+                </View>
+              </View>
             </View>
-          </View>
-        </View>
         <View style={[styles.registryHead, isCompactPhone && styles.registryHeadCompact]}>
           <View style={styles.registryHeadTopRow}>
             <View style={styles.registryHeadLeft}>
               <View style={styles.registryLine} />
               <Text style={styles.registryKicker}>Registry core</Text>
-            </View>
+          </View>
             <Pressable
               onPress={() => setViewMode("requests")}
               style={({ pressed }) => [styles.registryInviteBtn, pressed && { opacity: 0.75 }]}
@@ -891,8 +1064,8 @@ export default function NetworkScreen() {
                   <Text style={styles.registryInviteBadgeText}>
                     {pendingCount > 9 ? "9+" : String(pendingCount)}
                   </Text>
-                </View>
-              ) : null}
+            </View>
+          ) : null}
             </Pressable>
           </View>
           <Text style={[styles.registryHeading, isCompactPhone && styles.registryHeadingCompact]}>Grow network</Text>
@@ -989,7 +1162,6 @@ export default function NetworkScreen() {
                 hubSearch={connSearch}
                 hubFilter={connFilter}
                 onOpenProfile={handleOpenProfileFromConnection}
-                onConnectionsComputed={setConnectionsSnapshot}
               />
             </View>
           </View>
@@ -1015,6 +1187,19 @@ export default function NetworkScreen() {
                   </View>
                 </View>
                 <View style={styles.discoverHeaderActions}>
+                  {discoverInviteCount > 0 && (
+                    <View style={[
+                      styles.inviteCountPill,
+                      discoverInviteCount >= discoverInviteLimit && styles.inviteCountPillOver,
+                    ]}>
+                      <Text style={[
+                        styles.inviteCountPillText,
+                        discoverInviteCount >= discoverInviteLimit && styles.inviteCountPillTextOver,
+                      ]}>
+                        {discoverInviteCount}/{discoverInviteLimit} invites
+                      </Text>
+                    </View>
+                  )}
                   {discoverSearchOpen ? (
                     <View style={styles.discoverSearchInline}>
                       <Search size={13} color={Theme.textSecondary} />
@@ -1056,6 +1241,11 @@ export default function NetworkScreen() {
                 onSearchChange={setDiscoverSearch}
                 showSearchChrome={false}
                 onOpenProfile={handleOpenProfileFromDiscover}
+                inviteDailyCapReached={discoverInviteCount >= discoverInviteLimit}
+                onInviteCountChange={(count, limit) => {
+                  setDiscoverInviteCount(count);
+                  setDiscoverInviteLimit(limit);
+                }}
               />
             </View>
           </View>
@@ -1067,7 +1257,166 @@ export default function NetworkScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {scrollContent}
+      <Modal
+        visible={Boolean(selectedProfileNode)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedProfileNode(null)}
+      >
+        <View style={styles.profileModalBackdrop}>
+          <Pressable style={styles.profileModalBackdropTouch} onPress={() => setSelectedProfileNode(null)} />
+          {selectedProfileNode ? (
+            <View style={[styles.profileModalCard, isMobileLayout && styles.profileModalCardMobile]}>
+              <View style={styles.profileModalHead}>
+                <Text style={styles.profileModalKicker}>Network profile</Text>
+                <Pressable
+                  onPress={() => setSelectedProfileNode(null)}
+                  style={({ pressed }) => [styles.profileModalClose, pressed && { opacity: 0.72 }]}
+                  hitSlop={8}
+                >
+                  <X size={14} color={Theme.textPrimaryDark} strokeWidth={2.6} />
+                </Pressable>
+              </View>
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.profileModalScroll}
+              >
+                <View style={[styles.profileIdentityCardModern, styles.profileIdentityCardModal]}>
+                  <View style={styles.profileAvatarLgModern}>
+                    <Text style={styles.profileAvatarLgText}>
+                      {selectedProfileNode.name
+                        .split(" ")
+                        .map((p) => p[0])
+                        .join("")
+                        .slice(0, 2)
+                        .toUpperCase()}
+                    </Text>
+                  </View>
+                  <View style={styles.profileNameRow}>
+                    <Text style={styles.profileName} numberOfLines={2}>
+                      {selectedProfileNode.name.toUpperCase()}
+                    </Text>
+                    <Verified size={18} color={Theme.primary} />
+                  </View>
+                  <View style={styles.profileLocationRow}>
+                    <MapPin size={13} color={Theme.textSecondary} />
+                    <Text style={styles.profileLocation} numberOfLines={2}>
+                      {selectedProfileNode.location}
+                    </Text>
+                  </View>
+
+                  <View style={styles.profileInfoTable}>
+                    <View style={styles.profileInfoRow}>
+                      <Text style={styles.profileInfoLabel}>Role</Text>
+                      <Text style={styles.profileInfoValue}>{selectedProfileNode.type}</Text>
+                    </View>
+                    <View style={styles.profileInfoRow}>
+                      <Text style={styles.profileInfoLabel}>Connection</Text>
+                      <Text style={styles.profileInfoValue}>{selectedProfileNode.status.replace(/_/g, " ")}</Text>
+                    </View>
+                    {selectedProfileNode.phone ? (
+                      <View style={styles.profileInfoRow}>
+                        <Text style={styles.profileInfoLabel}>Phone</Text>
+                        <Text style={styles.profileInfoValue} numberOfLines={1}>
+                          {selectedProfileNode.phone}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+
+                  <View style={styles.profileStatRow}>
+                    <View style={styles.profileStatCell}>
+                      <Text style={styles.profileStatN}>
+                        {selectedProfileNode.rating != null ? selectedProfileNode.rating.toFixed(1) : "New"}
+                      </Text>
+                      <Text style={styles.profileStatL}>Global avg rating</Text>
+                    </View>
+                    <View style={styles.profileStatCell}>
+                      <Text style={styles.profileStatN}>
+                        {profileStatsLoading ? "…" : selectedProfileStats.totalTrips ?? 0}
+                      </Text>
+                      <Text style={styles.profileStatL}>Trips operated</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.profileCtaStack}>
+                    <Pressable
+                      style={({ pressed }) => [styles.profilePrimaryBtn, pressed && { opacity: 0.88 }]}
+                      onPress={() =>
+                        Alert.alert(
+                          "Network protocol",
+                          selectedProfileNode.status === "CONNECTED"
+                            ? "You are already connected with this organization."
+                            : selectedProfileNode.status === "REQUEST SENT"
+                              ? "A connection request is pending."
+                              : "Use Discover or invite flows from the Network tab to send a connection request.",
+                        )
+                      }
+                    >
+                      <UserPlus size={14} color={Theme.textOnPrimary} />
+                      <Text style={styles.profilePrimaryBtnText}>
+                        {selectedProfileNode.status === "REQUEST SENT" ? "Request sent" : "Send protocol"}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      style={({ pressed }) => [styles.profileSecondaryBtn, pressed && { opacity: 0.88 }]}
+                      onPress={() => {
+                        const raw = selectedProfileNode.phone?.trim();
+                        if (!raw) {
+                          Alert.alert("Direct message", "No phone number on file for this ally.");
+                          return;
+                        }
+                        const tel = raw.replace(/[^\d+]/g, "");
+                        void Linking.openURL(`tel:${tel}`);
+                      }}
+                    >
+                      <Mail size={14} color={Theme.textOnPrimary} />
+                      <Text style={styles.profileSecondaryBtnText}>Direct message</Text>
+                    </Pressable>
+                  </View>
+                </View>
+
+                <View style={[styles.profileOverviewCardModern, styles.profileOverviewCardModal]}>
+                  <Text style={styles.profileOverviewTitle}>Ally dossier</Text>
+                  <Text style={styles.profileOverviewBody}>
+                    Authorized {selectedProfileNode.type.toLowerCase()} partner — network activity in{" "}
+                    {selectedProfileNode.location}. Ratings reflect trip reviews where available; otherwise the
+                    profile shows the global average.
+                  </Text>
+                  <View style={styles.profileMetricGrid}>
+                    <View style={styles.profileMetricCardModern}>
+                      <View style={styles.profileMetricHead}>
+                        <Signal size={16} color={Theme.primary} />
+                        <Text style={styles.profileMetricHeadText}>Network presence</Text>
+                      </View>
+                      <Text style={styles.profileMetricValue}>
+                        {selectedProfileNode.status === "CONNECTED" ? "LIVE" : selectedProfileNode.status}
+                      </Text>
+                    </View>
+                    <View style={styles.profileMetricCardModern}>
+                      <View style={styles.profileMetricHead}>
+                        <Users size={16} color={Theme.primary} />
+                        <Text style={styles.profileMetricHeadText}>Mutuals</Text>
+                      </View>
+                      <Text style={styles.profileMetricValue}>{selectedProfileNode.mutuals}</Text>
+                    </View>
+                  </View>
+                </View>
+              </ScrollView>
+            </View>
+          ) : null}
+        </View>
+      </Modal>
     </View>
+  );
+}
+
+export default function NetworkScreen() {
+  return (
+    <NetworkTabErrorBoundary>
+      <NetworkScreenInner />
+    </NetworkTabErrorBoundary>
   );
 }
 
@@ -1076,6 +1425,39 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Theme.screenBackground,
     minHeight: 0,
+  },
+  orgGateWrap: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 24,
+  },
+  orgGateTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: Theme.textPrimary,
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  orgGateMessage: {
+    fontSize: 15,
+    color: Theme.textSecondary,
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+  orgGateBtn: {
+    backgroundColor: Theme.buttonPrimary,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 12,
+    minWidth: 160,
+    alignItems: "center",
+  },
+  orgGateBtnText: {
+    color: Theme.buttonPrimaryText,
+    fontSize: 16,
+    fontWeight: "600",
   },
   scroll: { flex: 1 },
   scrollContent: {
@@ -1140,9 +1522,14 @@ const styles = StyleSheet.create({
   storyRowShell: {
     borderRadius: 28,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.screenBackground,
+    borderColor: "rgba(148,163,184,0.18)",
+    backgroundColor: Theme.surface,
     overflow: "hidden",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.05,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 2,
   },
   storyRowShellCompact: {
     borderRadius: 20,
@@ -1155,6 +1542,7 @@ const styles = StyleSheet.create({
     minWidth: 220,
     flex: 2,
     flexBasis: 0,
+    minHeight: 0,
     alignSelf: "stretch",
   },
   commandMainCard: {
@@ -1345,87 +1733,339 @@ const styles = StyleSheet.create({
     width: "100%",
     minWidth: 0,
     minHeight: 196,
-    borderRadius: 28,
+    borderRadius: 24,
     borderWidth: 1,
     borderColor: Theme.borderOnDark,
-    backgroundColor: Theme.textPrimaryDark,
+    backgroundColor: Theme.darkBackground,
     paddingHorizontal: 14,
-    paddingVertical: 16,
-    gap: 12,
+    paddingVertical: 14,
+    gap: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.35,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 2,
   },
   commandSideCardDesktop: {
     flex: 1,
     minHeight: 0,
+    flexDirection: "column",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
   },
   commandSideCardCompact: {
-    borderRadius: 22,
+    borderRadius: 20,
     minHeight: 168,
     paddingHorizontal: 12,
     paddingVertical: 12,
   },
   commandSideHead: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  commandSideKicker: {
-    fontSize: 11,
-    fontWeight: "900",
-    color: Theme.onPrimaryMuted,
-    letterSpacing: 1.3,
-    textTransform: "uppercase",
-  },
-  commandLogScroll: {
-    maxHeight: 200,
-  },
-  commandLogScrollContent: {
-    gap: 8,
-    paddingBottom: 2,
-  },
-  commandLogRow: {
-    flexDirection: "row",
     alignItems: "flex-start",
-    gap: 8,
+    justifyContent: "space-between",
+    gap: 10,
   },
-  commandLogLine: {
-    width: 2,
-    height: 18,
-    borderRadius: 2,
-    backgroundColor: Theme.primary,
-    marginTop: 2,
+  commandSideHeadDesktop: {
+    alignItems: "center",
+    paddingBottom: 0,
   },
-  commandLogTextWrap: {
+  commandSideHeadText: {
     flex: 1,
     minWidth: 0,
   },
-  commandLogTitle: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: Theme.textOnPrimary,
-  },
-  commandLogMeta: {
-    marginTop: 2,
-    fontSize: 10,
-    fontWeight: "700",
-    color: Theme.onPrimaryMuted,
-    textTransform: "uppercase",
-  },
-  commandLogEmpty: {
-    minHeight: 64,
-    borderRadius: 12,
+  commandSideHeadIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.06)",
     borderWidth: 1,
-    borderColor: Theme.borderOnDark,
-    backgroundColor: Theme.driverWhiteMutedStrong,
+    borderColor: "rgba(255,255,255,0.1)",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 10,
+  },
+  commandSideHeadIconDesktop: {
+    width: 28,
+    height: 28,
+    borderRadius: 9,
+  },
+  commandSideKicker: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textOnDark,
+    letterSpacing: 1.15,
+    textTransform: "uppercase",
+  },
+  commandSideKickerDesktop: {
+    fontSize: 8,
+    letterSpacing: 0.95,
+  },
+  commandSideSub: {
+    marginTop: 3,
+    fontSize: 10,
+    fontWeight: "500",
+    color: Theme.textOnDarkMuted,
+    letterSpacing: 0.15,
+  },
+  commandSideSubLabelDesktop: {
+    marginTop: 2,
+    fontSize: 8,
+    fontWeight: "500",
+    color: Theme.textOnDarkMuted,
+    letterSpacing: 0.12,
+  },
+  /** No maxHeight on mobile: fixed 220px clipped the last log row while the gray shell still had room below. */
+  commandLogScroll: {
+    width: "100%",
+    alignSelf: "stretch",
+  },
+  /** Fills remaining card height so sidebar matches left column (no fixed tall max). */
+  commandLogScrollDesktop: {
+    flex: 1,
+    minHeight: 0,
+  },
+  commandLogScrollContent: {
+    gap: 8,
+    paddingBottom: 14,
+  },
+  commandLogScrollContentDesktop: {
+    gap: 6,
+    paddingBottom: 12,
+    flexGrow: 1,
+  },
+  commandLogEntry: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 0,
+    borderRadius: 14,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.07)",
+    backgroundColor: "#151d2a",
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
+  commandLogEntryDesktop: {
+    borderRadius: 12,
+    backgroundColor: "#151d2a",
+  },
+  commandLogAccent: {
+    width: 3,
+    minHeight: 52,
+  },
+  commandLogAccentDesktop: {
+    width: 2,
+    minHeight: 40,
+  },
+  commandLogEntryMain: {
+    flex: 1,
+    minWidth: 0,
+    paddingVertical: 10,
+    paddingRight: 12,
+    paddingLeft: 10,
+    gap: 7,
+    justifyContent: "center",
+  },
+  commandLogEntryMainDesktop: {
+    paddingVertical: 5,
+    paddingLeft: 8,
+    paddingRight: 9,
+    gap: 4,
+  },
+  commandLogEntryTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  commandLogEntryTopDesktop: {
+    gap: 8,
+  },
+  commandLogName: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#f1f5f9",
+    letterSpacing: 0.45,
+    textTransform: "uppercase",
+  },
+  commandLogNameDesktop: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.35,
+    textTransform: "uppercase",
+  },
+  commandLogWhen: {
+    fontSize: 9,
+    fontWeight: "600",
+    color: "rgba(203,213,225,0.65)",
+    flexShrink: 0,
+    paddingTop: 0,
+  },
+  commandLogWhenDesktop: {
+    fontSize: 8,
+    fontWeight: "600",
+    color: "rgba(203,213,225,0.68)",
+    paddingTop: 0,
+  },
+  commandLogEntryBottom: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-start",
+    flexWrap: "wrap",
+    gap: 8,
+    width: "100%",
+  },
+  commandLogEntryBottomDesktop: {
+    flexWrap: "nowrap",
+    justifyContent: "space-between",
+    gap: 6,
+    alignItems: "center",
+  },
+  commandLogRolePill: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexShrink: 0,
+    alignSelf: "center",
+  },
+  commandLogRolePillDesktop: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  commandLogRolePillText: {
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  commandLogRolePillTextDesktop: {
+    fontSize: 7,
+    letterSpacing: 0.4,
+  },
+  commandLogStatus: {
+    fontSize: 9,
+    fontWeight: "600",
+    flex: 1,
+    minWidth: 0,
+    textAlign: "left",
+    lineHeight: 13,
+  },
+  commandLogStatusDesktop: {
+    flexBasis: 0,
+    flexGrow: 1,
+    textAlign: "right",
+    lineHeight: 12,
+    paddingLeft: 4,
+  },
+  commandLogStatusFontDesktop: {
+    fontSize: 8,
+  },
+  commandLogStatusLive: {
+    color: "#a7f3d0",
+  },
+  commandLogStatusPending: {
+    color: "#fde68a",
+  },
+  commandLogEmpty: {
+    minHeight: 84,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    borderStyle: "dashed",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 5,
   },
   commandLogEmptyText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: Theme.onPrimaryMuted,
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textOnDark,
+    textAlign: "center",
+    letterSpacing: 0.15,
+  },
+  commandLogEmptyHint: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: Theme.textOnDarkMuted,
+    textAlign: "center",
+    lineHeight: 15,
+  },
+  profileModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(15,23,42,0.58)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 24,
+  },
+  profileModalBackdropTouch: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  profileModalCard: {
+    width: "100%",
+    maxWidth: 720,
+    maxHeight: "88%",
+    borderRadius: 34,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.networkPageBackground,
+    overflow: "hidden",
+    shadowColor: Theme.shadow,
+    shadowOpacity: 0.18,
+    shadowRadius: 28,
+    shadowOffset: { width: 0, height: 16 },
+    elevation: 8,
+  },
+  profileModalCardMobile: {
+    maxHeight: "92%",
+    borderRadius: 28,
+  },
+  profileModalHead: {
+    minHeight: 56,
+    paddingHorizontal: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: Theme.textPrimaryDark,
+  },
+  profileModalKicker: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: Theme.textOnPrimary,
+    letterSpacing: 1.5,
     textTransform: "uppercase",
-    letterSpacing: 0.5,
+  },
+  profileModalClose: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.screenBackground,
+  },
+  profileModalScroll: {
+    padding: 14,
+    paddingBottom: 22,
+    gap: 12,
+    alignItems: "stretch",
+  },
+  profileIdentityCardModal: {
+    borderRadius: 28,
+    shadowOpacity: 0.04,
+  },
+  profileOverviewCardModal: {
+    borderRadius: 28,
+    shadowOpacity: 0.04,
   },
   profileShell: {
     flex: 1,
@@ -1539,22 +2179,63 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   profileName: {
-    fontSize: 18,
+    flex: 1,
+    fontSize: 17,
     fontWeight: "900",
     color: Theme.textPrimaryDark,
-    fontStyle: "italic",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
   },
   profileLocationRow: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
+    alignItems: "flex-start",
+    gap: 6,
+    width: "100%",
+    paddingHorizontal: 4,
   },
   profileLocation: {
-    fontSize: 10,
-    fontWeight: "700",
+    flex: 1,
+    fontSize: 11,
+    fontWeight: "600",
     color: Theme.textSecondary,
+    letterSpacing: 0.2,
+    lineHeight: 15,
+  },
+  profileInfoTable: {
+    width: "100%",
+    marginTop: 4,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    gap: 0,
+  },
+  profileInfoRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingVertical: 7,
+  },
+  profileInfoLabel: {
+    width: 96,
+    fontSize: 9,
+    fontWeight: "900",
+    color: Theme.textMutedDemo,
+    letterSpacing: 0.9,
     textTransform: "uppercase",
-    letterSpacing: 0.6,
+    paddingTop: 2,
+  },
+  profileInfoValue: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    textAlign: "right",
+    lineHeight: 16,
   },
   profileStatRow: {
     flexDirection: "row",
@@ -2076,7 +2757,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         outlineStyle: "none",
-      } as any,
+      } as unknown as TextStyle,
     }),
   },
   inlineSearchClose: {
@@ -2224,6 +2905,28 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
     flexShrink: 1,
     minWidth: 44,
+    gap: 8,
+  },
+  inviteCountPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 20,
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  inviteCountPillOver: {
+    backgroundColor: "#fef2f2",
+    borderColor: "#fca5a5",
+  },
+  inviteCountPillText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+    letterSpacing: 0.2,
+  },
+  inviteCountPillTextOver: {
+    color: "#dc2626",
   },
   discoverSearchIconBtn: {
     width: 34,
@@ -2257,7 +2960,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         outlineStyle: "none",
-      } as any,
+      } as unknown as TextStyle,
     }),
   },
   discoverSearchClose: {
@@ -2387,7 +3090,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         outlineStyle: "none",
-      } as any,
+      } as unknown as TextStyle,
     }),
   },
   filterPillScroll: { flexDirection: "row", gap: 8, paddingRight: 8 },

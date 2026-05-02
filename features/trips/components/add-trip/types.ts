@@ -27,6 +27,8 @@ export interface AddTripFormData {
   client_price: number;
   supplier_rate: number;
   supplier_id?: string | null;
+  /** Denormalized partner label for lists/detail when supplier_id is set. */
+  supplier_name?: string | null;
   /** Advance paid to partner (aggregate only). Optional; can be recorded as ledger after create. */
   advance_paid?: number;
   notes?: string | null;
@@ -60,6 +62,8 @@ export interface AddTripFormState {
   supplierRate: string;
   supplySource: SupplySource;
   supplierId: string | null;
+  /** Display name for chosen supplier (persisted as trips.supplier_name). */
+  supplierDisplayName: string;
   advancePaid: string;
   assignLater: boolean;
   notes: string;
@@ -67,6 +71,8 @@ export interface AddTripFormState {
   vehicleId: string | null;
   /** Aggregate only: assign driver for tracking by phone (used after createTrip). */
   driverPhone: string;
+  /** Aggregate only: dispatcher-entered driver name for tracking (stored in trip notes). */
+  aggregateDriverName: string;
   /** Display name from phone lookup (aggregate). */
   driverPhoneName: string | null;
   /** When `driverPhoneName` is present, require explicit user confirmation. */

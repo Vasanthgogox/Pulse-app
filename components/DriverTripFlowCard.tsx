@@ -1,12 +1,16 @@
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
+import { useDriverChat } from '@/features/chat/contexts/DriverChatContext';
+import { sendDocumentShareMessage } from '@/features/chat/services/chat.service';
+import type { DriverFlowStepId as StepId } from '@/lib/driverTripStatusNotes.util';
+import { deriveDriverFlowStepFromTrip } from '@/lib/driverTripStatusNotes.util';
 import { isAggregateTrip } from '@/lib/driverUtils';
 import { formatINR } from '@/lib/format';
-import { supabase } from '@/lib/supabase';
 import * as tripDocumentsService from '@/services/tripDocumentsService';
 import * as tripsService from '@/services/tripsService';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Pressable as HoldPressable } from 'react-native-gesture-handler';
 import * as FileSystem from 'expo-file-system';
@@ -25,8 +29,6 @@ import {
   View,
 } from 'react-native';
 
-type StepId = 'accepted' | 'pickup' | 'transit' | 'reached' | 'completed';
-
 const HOLD_DURATION_MS = 1500;
 /** So finger drift / parent scroll do not end the hold (sheet / ScrollView). */
 const HOLD_PRESS_RETENTION = 100;
@@ -36,62 +38,6 @@ const holdCompleteWebStyle = {
   touchAction: 'none' as 'none' | 'auto' | 'manipulation',
   userSelect: 'none' as 'none' | 'auto' | 'text' | 'contain' | 'all',
 };
-
-const PREDEFINED_UPDATES: Record<StepId, string[]> = {
-  accepted: [
-    'On my way to pickup',
-    'Arrived at pickup location',
-    'Loading in progress',
-    'Slight delay — will arrive soon',
-    'Waiting at gate',
-  ],
-  pickup: [
-    'Loading complete',
-    'Documents collected',
-    'Package secured',
-    'Ready to depart',
-    'Waiting for documents',
-  ],
-  transit: [
-    'En route to destination',
-    'Traffic ahead — slight delay',
-    'Taking alternate route',
-    'Approaching destination',
-    'Stopped for mandatory break',
-  ],
-  reached: [
-    'Arrived at destination',
-    'Unloading in progress',
-    'Delivery confirmed by recipient',
-    'Recipient not available',
-    'Documents handed over',
-  ],
-  completed: [],
-};
-
-// Parse [UPDATE|step|timestamp|message] entries from trip.notes
-function parseDriverUpdates(notes: string | null): { step: string; timestamp: string; message: string }[] {
-  if (!notes) return [];
-  return notes
-    .split('\n')
-    .filter((l) => l.startsWith('[UPDATE|'))
-    .map((l) => {
-      const inner = l.slice(8, -1);
-      const [step, timestamp, ...msgParts] = inner.split('|');
-      return { step, timestamp, message: msgParts.join('|') };
-    })
-    .reverse(); // newest first
-}
-
-function deriveStepFromTrip(t: tripsService.TripRow): StepId {
-  const s = String(t.status ?? '').toLowerCase();
-  const hasStarted = !!t.started_at;
-  if (s === 'completed' || s === 'delivered' || s === 'done') return 'completed';
-  if (s === 'at_drop') return 'reached';
-  if (s === 'in_transit' || s === 'transit' || (s === 'in_progress' && hasStarted)) return 'transit';
-  if (s === 'picked_up' || s === 'pickup' || s === 'in_progress') return 'pickup';
-  return 'accepted';
-}
 
 function progressForStep(step: StepId): number {
   if (step === 'completed') return 100;
@@ -133,6 +79,11 @@ export interface DriverTripFlowCardProps {
   commissionAmount?: number;
   /** Road distance in km from driver's current position to the active target (pickup or drop). */
   distanceToTargetKm?: number | null;
+  /** Live driver GPS (e.g. map / truck position) — pairs with driverLocationLabel. */
+  driverLatitude?: number | null;
+  driverLongitude?: number | null;
+  /** Reverse-geocoded place for current GPS (no raw lat/long in UI). */
+  driverLocationLabel?: string | null;
   /** Called after any server write succeeds (so dashboard can refetch). */
   onRefresh?: () => void;
   /** Optional: collapse/expand toggle (UI only). */
@@ -163,6 +114,9 @@ export function DriverTripFlowCard({
   trip,
   commissionAmount,
   distanceToTargetKm,
+  driverLatitude = null,
+  driverLongitude = null,
+  driverLocationLabel = null,
   onRefresh,
   onToggleCollapse,
   collapsed = false,
@@ -173,9 +127,11 @@ export function DriverTripFlowCard({
 }: DriverTripFlowCardProps) {
   const colors = useDriverThemeColors();
   const { profile } = useAuth();
+  const router = useRouter();
+  const { conversations, ensureDriverTripConversation, refreshConversations } = useDriverChat();
 
   const [localTrip, setLocalTrip] = useState<tripsService.TripRow>(trip);
-  const [step, setStep] = useState<StepId>(() => deriveStepFromTrip(trip));
+  const [step, setStep] = useState<StepId>(() => deriveDriverFlowStepFromTrip(trip));
   const [stepLoading, setStepLoading] = useState(false);
   const [stepError, setStepError] = useState<string | null>(null);
 
@@ -196,20 +152,70 @@ export function DriverTripFlowCard({
   const holdStartRef = useRef(0);
 
   // Quick update panel state
-  const [showUpdatePanel, setShowUpdatePanel] = useState(false);
-  const [updateSending, setUpdateSending] = useState(false);
   const [stagePhotoUploading, setStagePhotoUploading] = useState(false);
-  // Optimistic local updates list (merged with parsed trip.notes entries)
-  const [localUpdates, setLocalUpdates] = useState<{ step: string; timestamp: string; message: string }[]>([]);
 
   useEffect(() => {
     setLocalTrip(trip);
-    setStep(deriveStepFromTrip(trip));
-    // Sync notes-based updates when trip refreshes
-    setLocalUpdates(parseDriverUpdates(trip.notes));
+    setStep(deriveDriverFlowStepFromTrip(trip));
   }, [trip]);
 
   const tripIsAggregate = useMemo(() => isAggregateTrip(localTrip), [localTrip]);
+
+  const tripChatUnread = useMemo(() => {
+    const id = String(localTrip?.id ?? '');
+    if (!id) return 0;
+    const conv = conversations.find((c) => String(c.trip_id) === id);
+    return Math.max(0, conv?.unread_dispatcher_count ?? 0);
+  }, [conversations, localTrip?.id]);
+
+  const driverLivePlaceText = useMemo(() => {
+    const hasCoords =
+      driverLatitude != null &&
+      driverLongitude != null &&
+      Number.isFinite(driverLatitude) &&
+      Number.isFinite(driverLongitude);
+    const label = driverLocationLabel?.trim();
+    if (!hasCoords && !label) return null;
+    return label || (hasCoords ? 'Getting address…' : null);
+  }, [driverLatitude, driverLongitude, driverLocationLabel]);
+
+  const shareTripDocumentInChat = useCallback(
+    async (doc: tripDocumentsService.TripDocumentRow, documentTypeLabel: string) => {
+      const tripId = localTrip.id;
+      const orgId = localTrip.organization_id;
+      const driverId = localTrip.driver_id;
+      const uid = profile?.uid;
+      if (!tripId || !orgId || !driverId || !uid) return;
+      const convId = await ensureDriverTripConversation(tripId);
+      if (!convId) return;
+      const senderName =
+        (profile as { full_name?: string; displayName?: string })?.full_name ||
+        (profile as { displayName?: string })?.displayName ||
+        'Driver';
+      try {
+        await sendDocumentShareMessage({
+          conversationId: convId,
+          organizationId: orgId,
+          senderRole: 'driver',
+          senderName,
+          senderUserId: uid,
+          metadata: {
+            document_type: documentTypeLabel,
+            storage_path: doc.storage_path,
+            document_name: doc.file_name,
+            mime_type: doc.mime_type ?? null,
+            entity_type: 'driver',
+            entity_id: driverId,
+          },
+        });
+        void refreshConversations();
+      } catch {
+        // Upload already succeeded; chat share is best-effort.
+      }
+    },
+    [ensureDriverTripConversation, localTrip.driver_id, localTrip.id, localTrip.organization_id, profile, refreshConversations],
+  );
+
   const earnings = useMemo(() => {
     const n = Math.max(0, Number(commissionAmount ?? 0) || 0);
     if (n > 0) return formatINR(n);
@@ -333,27 +339,6 @@ export function DriverTripFlowCard({
     onRefresh?.();
   };
 
-  const sendPredefinedUpdate = async (message: string) => {
-    const id = localTrip?.id;
-    if (!id || updateSending) return;
-    setUpdateSending(true);
-    const now = new Date().toISOString();
-    const entry = `[UPDATE|${step}|${now}|${message}]`;
-    try {
-      const existing = localTrip.notes?.trim() || '';
-      await supabase()
-        .from('trips')
-        .update({ notes: existing ? `${existing}\n${entry}` : entry })
-        .eq('id', id);
-      // Optimistic update
-      setLocalUpdates((prev) => [{ step, timestamp: now, message }, ...prev]);
-      setLocalTrip((prev) => ({ ...prev, notes: existing ? `${existing}\n${entry}` : entry }));
-    } finally {
-      setUpdateSending(false);
-      setShowUpdatePanel(false);
-    }
-  };
-
   const uploadStagePhoto = async () => {
     const id = localTrip?.id;
     if (!id || !profile?.uid || stagePhotoUploading) return;
@@ -387,15 +372,22 @@ export function DriverTripFlowCard({
         setStagePhotoUploading(false);
         return;
       }
-      const { error } = await tripDocumentsService.uploadTripDocument(id, profile.uid, {
+      const { doc, error } = await tripDocumentsService.uploadTripDocument(id, profile.uid, {
         arrayBuffer,
         fileName,
         mimeType,
       });
       if (error) setStepError(error.message);
-      else {
-        // Post a quick update noting the photo was sent
-        await sendPredefinedUpdate(`📷 Photo sent — ${step === 'accepted' ? 'at pickup area' : step === 'transit' ? 'en route' : step === 'reached' ? 'at drop-off' : 'stage photo'}`);
+      else if (doc) {
+        const stageLabel =
+          step === 'accepted'
+            ? 'Trip photo (pickup)'
+            : step === 'transit'
+              ? 'Trip photo (en route)'
+              : step === 'reached'
+                ? 'Trip photo (drop-off)'
+                : 'Trip photo';
+        await shareTripDocumentInChat(doc, stageLabel);
         onRefresh?.();
       }
     } catch (e) {
@@ -454,6 +446,7 @@ export function DriverTripFlowCard({
         tripDocumentsService.getDocumentViewUrl(doc.storage_path).then((url) => {
           setPodViewUrls((prev) => ({ ...prev, [doc.id]: url }));
         });
+        await shareTripDocumentInChat(doc, 'Proof of delivery');
       }
       onRefresh?.();
     } catch (e) {
@@ -562,39 +555,41 @@ export function DriverTripFlowCard({
         ) : null}
       </View>
 
-      {/* Route summary: FROM → total distance + ETA → TO */}
+      {/* Route: one tight row + thin strip with truck icon + live GPS when available */}
       {step !== 'completed' && (localTrip.pickup_area || localTrip.drop_location) ? (
-        <View style={[styles.routeSummary, { borderColor: Theme.border }]}>
-          <View style={styles.routeSummaryRow}>
-            <View style={[styles.routeSummaryDot, { backgroundColor: colors.emerald }]} />
-            <View style={styles.routeSummaryTexts}>
-              <Text style={[styles.routeSummaryLabel, { color: Theme.textMuted }]}>FROM</Text>
-              <Text style={[styles.routeSummaryPlace, { color: Theme.textPrimaryDark }]} numberOfLines={1}>
-                {localTrip.pickup_area?.trim() || '—'}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.routeSummaryConnector}>
-            <View style={[styles.routeSummaryLine, { backgroundColor: Theme.border }]} />
-            {(localTrip.distance != null || localTrip.estimated_duration) ? (
-              <View style={[styles.routeSummaryMeta, { backgroundColor: Theme.screenBackground, borderColor: Theme.border }]}>
-                <Text style={[styles.routeSummaryMetaText, { color: Theme.textMuted }]}>
-                  {localTrip.distance != null && Number(localTrip.distance) > 0
-                    ? `${fmtKm(Number(localTrip.distance))}`
-                    : null}
-                  {localTrip.distance != null && Number(localTrip.distance) > 0 && localTrip.estimated_duration ? '  ·  ' : null}
-                  {localTrip.estimated_duration ? String(localTrip.estimated_duration) : null}
+        <View
+          style={[styles.routeCompactOuter, { borderColor: Theme.border, backgroundColor: Theme.surfaceLight }]}
+        >
+          <View style={styles.routeOneRow}>
+            <View style={[styles.routeCompactDot, { backgroundColor: colors.emerald }]} />
+            <Text style={[styles.routePlaceText, { color: Theme.textPrimaryDark }]} numberOfLines={1}>
+              {localTrip.pickup_area?.trim() || '—'}
+            </Text>
+            <Text style={[styles.routeCompactSep, { color: Theme.textMuted }]}>→</Text>
+            <View style={[styles.routeCompactDot, { backgroundColor: '#f59e0b' }]} />
+            <Text style={[styles.routePlaceText, { color: Theme.textPrimaryDark }]} numberOfLines={1}>
+              {(localTrip.drop_location || (localTrip as any).drop_area)?.trim() || '—'}
+            </Text>
+            <View style={styles.routeTrail}>
+              {(localTrip.distance != null && Number(localTrip.distance) > 0) || localTrip.estimated_duration ? (
+                <Text style={[styles.routeTripMeta, { color: Theme.textMuted }]} numberOfLines={1}>
+                  {localTrip.distance != null && Number(localTrip.distance) > 0 ? fmtKm(Number(localTrip.distance)) : ''}
+                  {localTrip.distance != null && Number(localTrip.distance) > 0 && localTrip.estimated_duration ? ' · ' : ''}
+                  {localTrip.estimated_duration ? String(localTrip.estimated_duration) : ''}
                 </Text>
-              </View>
-            ) : null}
-          </View>
-          <View style={styles.routeSummaryRow}>
-            <View style={[styles.routeSummaryDot, { backgroundColor: '#f59e0b' }]} />
-            <View style={styles.routeSummaryTexts}>
-              <Text style={[styles.routeSummaryLabel, { color: Theme.textMuted }]}>TO</Text>
-              <Text style={[styles.routeSummaryPlace, { color: Theme.textPrimaryDark }]} numberOfLines={1}>
-                {(localTrip.drop_location || (localTrip as any).drop_area)?.trim() || '—'}
-              </Text>
+              ) : null}
+              {driverLivePlaceText ? (
+                <View style={styles.routeGpsPill}>
+                  <FontAwesome name="truck" size={10} color={colors.emerald} />
+                  <Text
+                    style={[styles.routeDriverCoords, { color: Theme.textMuted }]}
+                    selectable={!!driverLocationLabel?.trim()}
+                    numberOfLines={2}
+                  >
+                    {driverLivePlaceText}
+                  </Text>
+                </View>
+              ) : null}
             </View>
           </View>
         </View>
@@ -623,83 +618,38 @@ export function DriverTripFlowCard({
               <FontAwesome name="phone" size={20} color={Theme.textPrimaryDark} />
             </TouchableOpacity>
 
-            {/* Quick update panel trigger */}
-            <TouchableOpacity
-              style={[
-                styles.actionIconBtn,
-                { backgroundColor: showUpdatePanel ? colors.emeraldMuted : Theme.surfaceLight, borderColor: showUpdatePanel ? colors.emerald : Theme.border },
-              ]}
-              activeOpacity={0.8}
-              onPress={() => setShowUpdatePanel((v) => !v)}
-              accessibilityLabel="Send quick update"
-            >
-              {updateSending ? (
-                <ActivityIndicator size="small" color={colors.emerald} />
-              ) : (
-                <FontAwesome name="comment-o" size={20} color={showUpdatePanel ? colors.emerald : Theme.textPrimaryDark} />
-              )}
-            </TouchableOpacity>
+            {/* Trip messages — full-screen driver chat (same UI as Messages tab) */}
+            <View style={styles.actionIconBtnWrap}>
+              <TouchableOpacity
+                style={[styles.actionIconBtn, { backgroundColor: Theme.surfaceLight, borderColor: Theme.border }]}
+                activeOpacity={0.8}
+                onPress={() => router.push(`/(driver)/chat?tripId=${encodeURIComponent(localTrip.id)}`)}
+                accessibilityLabel="Open trip messages"
+              >
+                <FontAwesome name="comment-o" size={20} color={Theme.textPrimaryDark} />
+              </TouchableOpacity>
+              {tripChatUnread > 0 ? (
+                <View style={[styles.messageBadge, { backgroundColor: colors.emerald }]}>
+                  <Text style={styles.messageBadgeText}>{tripChatUnread > 99 ? '99+' : String(tripChatUnread)}</Text>
+                </View>
+              ) : null}
+            </View>
 
-            {/* Stage photo */}
+            {/* POD / stage photo — uploads also post to the trip message thread */}
             <TouchableOpacity
               style={[styles.actionIconBtn, { backgroundColor: Theme.surfaceLight, borderColor: Theme.border }]}
               activeOpacity={0.8}
-              onPress={uploadStagePhoto}
-              disabled={stagePhotoUploading}
-              accessibilityLabel="Send photo update"
+              onPress={step === 'reached' ? uploadPod : uploadStagePhoto}
+              disabled={stagePhotoUploading || podUploading}
+              accessibilityLabel={step === 'reached' ? 'Upload proof of delivery' : 'Send photo to trip chat'}
             >
-              {stagePhotoUploading ? (
+              {stagePhotoUploading || podUploading ? (
                 <ActivityIndicator size="small" color={Theme.textPrimaryDark} />
               ) : (
                 <FontAwesome name="camera" size={20} color={Theme.textPrimaryDark} />
               )}
             </TouchableOpacity>
           </View>
-
-          {/* Quick update panel */}
-          {showUpdatePanel ? (
-            <View style={[styles.updatePanel, { backgroundColor: Theme.screenBackground, borderColor: Theme.border }]}>
-              <Text style={[styles.updatePanelHeader, { color: Theme.textMuted }]}>QUICK UPDATE</Text>
-              {(PREDEFINED_UPDATES[step] ?? []).map((msg) => (
-                <TouchableOpacity
-                  key={msg}
-                  style={[styles.updateOption, { borderColor: Theme.border }]}
-                  onPress={() => sendPredefinedUpdate(msg)}
-                  activeOpacity={0.75}
-                  disabled={updateSending}
-                >
-                  <View style={[styles.updateOptionDot, { backgroundColor: colors.emerald }]} />
-                  <Text style={[styles.updateOptionText, { color: Theme.textPrimaryDark }]}>{msg}</Text>
-                  <FontAwesome name="send-o" size={13} color={colors.emerald} style={{ opacity: 0.7 }} />
-                </TouchableOpacity>
-              ))}
-              <TouchableOpacity
-                style={[styles.updatePhotoRow, { borderColor: Theme.border }]}
-                onPress={() => { setShowUpdatePanel(false); uploadStagePhoto(); }}
-                activeOpacity={0.75}
-              >
-                <FontAwesome name="camera" size={14} color={colors.emerald} />
-                <Text style={[styles.updatePhotoText, { color: colors.emerald }]}>Add photo update</Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
-
-          {/* Recent updates feed (show up to 3) */}
-          {localUpdates.length > 0 ? (
-            <View style={styles.recentUpdates}>
-              {localUpdates.slice(0, 3).map((u, i) => (
-                <View key={i} style={[styles.recentUpdateRow, { borderColor: Theme.border }]}>
-                  <View style={[styles.recentUpdateDot, { backgroundColor: colors.emerald }]} />
-                  <View style={styles.recentUpdateBody}>
-                    <Text style={[styles.recentUpdateMsg, { color: Theme.textPrimaryDark }]} numberOfLines={2}>{u.message}</Text>
-                    <Text style={[styles.recentUpdateTime, { color: Theme.textMuted }]}>
-                      {new Date(u.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                    </Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-          ) : null}
         </>
       ) : null}
 
@@ -1024,9 +974,9 @@ const styles = StyleSheet.create({
     overflow: 'visible',
     backgroundColor: 'transparent',
     borderWidth: 0,
-    paddingHorizontal: 0,
+    paddingHorizontal: 16,
     paddingBottom: 0,
-    paddingTop: 12,
+    paddingTop: 8,
   },
   shadow: {
     shadowColor: '#000',
@@ -1037,9 +987,9 @@ const styles = StyleSheet.create({
   },
   handleWrap: { alignItems: 'center', paddingBottom: 8 },
   handleBar: { width: 36, height: 4, borderRadius: 999, opacity: 0.5 },
-  progressSegments: { flexDirection: 'row', gap: 8, width: '100%', marginBottom: 12 },
+  progressSegments: { flexDirection: 'row', gap: 8, width: '100%', marginBottom: 8 },
   progressSegment: { height: 6, flex: 1, borderRadius: 999 },
-  titleBlock: { alignItems: 'center', paddingBottom: 8 },
+  titleBlock: { alignItems: 'center', paddingBottom: 6 },
   title: { fontSize: 22, fontWeight: '900', letterSpacing: -0.5, textAlign: 'center' },
   subtitle: { marginTop: 4, fontSize: 14, fontWeight: '600', textAlign: 'center', opacity: 0.8 },
   distanceChip: {
@@ -1052,78 +1002,81 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   distanceChipText: { fontSize: 12, fontWeight: '800' },
-  routeSummary: {
+  routeCompactOuter: {
     width: '100%',
-    borderWidth: 1,
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 8,
-    marginTop: 4,
-  },
-  routeSummaryRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  routeSummaryDot: { width: 10, height: 10, borderRadius: 5, flexShrink: 0 },
-  routeSummaryTexts: { flex: 1, minWidth: 0 },
-  routeSummaryLabel: { fontSize: 9, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1 },
-  routeSummaryPlace: { fontSize: 13, fontWeight: '700', marginTop: 1 },
-  routeSummaryConnector: { flexDirection: 'row', alignItems: 'center', marginLeft: 4, marginVertical: 6, gap: 8 },
-  routeSummaryLine: { width: 2, height: 20 },
-  routeSummaryMeta: {
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    marginBottom: 4,
+    marginTop: 2,
+    overflow: 'hidden',
   },
-  routeSummaryMetaText: { fontSize: 11, fontWeight: '700' },
-  actionIconsRow: { flexDirection: 'row', gap: 12, paddingTop: 4, paddingBottom: 8 },
-  updatePanel: {
-    borderWidth: 1,
-    borderRadius: 18,
-    padding: 14,
-    marginBottom: 10,
-    gap: 2,
+  routeOneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    width: '100%',
+    flexWrap: 'nowrap',
   },
-  updatePanelHeader: {
+  routeCompactDot: { width: 6, height: 6, borderRadius: 3, flexShrink: 0 },
+  routePlaceText: {
+    fontSize: 10,
+    fontWeight: '700',
+    flexGrow: 1,
+    flexBasis: 0,
+    minWidth: 40,
+  },
+  routeCompactSep: { fontSize: 10, fontWeight: '800', flexShrink: 0, opacity: 0.85 },
+  routeTrail: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    flexWrap: 'wrap',
+    flexShrink: 1,
+    minWidth: 0,
+    marginLeft: 4,
+    gap: 5,
+    maxWidth: '46%',
+    rowGap: 2,
+  },
+  routeTripMeta: {
     fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    marginBottom: 8,
+    fontWeight: '700',
+    textAlign: 'right',
+    flexShrink: 0,
+    maxWidth: '100%',
   },
-  updateOption: {
+  routeGpsPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingVertical: 11,
-    paddingHorizontal: 4,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 4,
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: '100%',
   },
-  updateOptionDot: { width: 7, height: 7, borderRadius: 4, flexShrink: 0 },
-  updateOptionText: { flex: 1, fontSize: 14, fontWeight: '600', lineHeight: 18 },
-  updatePhotoRow: {
-    flexDirection: 'row',
+  routeDriverCoords: {
+    fontSize: 9,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+    flexShrink: 1,
+    minWidth: 0,
+    textAlign: 'right',
+  },
+  actionIconsRow: { flexDirection: 'row', gap: 12, paddingTop: 2, paddingBottom: 4 },
+  actionIconBtnWrap: { flex: 1, position: 'relative' },
+  messageBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 5,
     alignItems: 'center',
-    gap: 10,
-    paddingTop: 12,
-    paddingHorizontal: 4,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    marginTop: 4,
+    justifyContent: 'center',
   },
-  updatePhotoText: { fontSize: 13, fontWeight: '700' },
-  recentUpdates: { gap: 6, marginBottom: 8 },
-  recentUpdateRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  recentUpdateDot: { width: 7, height: 7, borderRadius: 4, flexShrink: 0, marginTop: 4 },
-  recentUpdateBody: { flex: 1, minWidth: 0 },
-  recentUpdateMsg: { fontSize: 13, fontWeight: '600', lineHeight: 18 },
-  recentUpdateTime: { fontSize: 11, fontWeight: '500', marginTop: 2 },
+  messageBadgeText: { fontSize: 10, fontWeight: '900', color: '#fff' },
   actionIconBtn: {
     flex: 1,
     height: 48,

@@ -5,7 +5,7 @@ import Theme from "@/constants/Theme";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import { getInitials } from "@/lib/stringUtils";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
-import { Send, ShieldCheck, Star, Users, Zap } from "lucide-react-native";
+import { Check, Send, ShieldCheck, Star, Users, Zap } from "lucide-react-native";
 import React from "react";
 import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -25,6 +25,7 @@ export type HubConnectionItem = {
   actionLabel?: string;
   actionLoading?: boolean;
   actionDisabled?: boolean;
+  totalTrips?: number | null;
 };
 
 const ROLE_STYLES: Record<
@@ -105,30 +106,45 @@ export function HubConnectionListCard({
           <View style={[styles.coverRoleChip, { backgroundColor: rs.bg }]}>
             <Text style={[styles.coverRoleText, { color: rs.color }]}>{rs.label}</Text>
           </View>
-          <View style={[styles.coverRatingNode, !rating && styles.coverRatingNodeEmpty]}>
-            {rating ? (
-              <Star size={10} color={Theme.driverGold} fill={Theme.driverGold} strokeWidth={2.2} />
-            ) : null}
-            <Text style={[styles.coverRatingText, !rating && styles.coverRatingTextEmpty]}>
-              {rating ?? "No rating"}
-            </Text>
-          </View>
         </View>
 
         <View style={styles.profileBlock}>
-          <View style={styles.heroAvatar}>
-            <PartyAvatar
-              name={item.name}
-              avatarUrl={item.avatarUrl}
-              avatarSeed={item.avatarSeed}
-              entityType={item.entityType ?? (isDriver ? "driver" : item.role === "SUPPLIER" ? "supplier" : "client")}
-              size={isCarousel ? 48 : 62}
-              borderStyle={styles.heroAvatarImage}
-            />
+          <View style={[styles.profileHeroRow, isCarousel && styles.profileHeroRowCarousel]}>
+            <View style={[styles.profileHeroCol, styles.profileHeroColLeft]}>
+              {typeof item.totalTrips === "number" && item.totalTrips >= 0 ? (
+                <View style={styles.hubMetricPill}>
+                  <Text style={styles.hubTripsText} numberOfLines={1}>
+                    {item.totalTrips} trip{item.totalTrips === 1 ? "" : "s"}
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.profileHeroColGap} />
+              )}
+            </View>
+            <View style={[styles.heroAvatar, isCarousel && styles.heroAvatarCarousel]}>
+              <PartyAvatar
+                name={item.name}
+                avatarUrl={item.avatarUrl}
+                avatarSeed={item.avatarSeed}
+                entityType={item.entityType ?? (isDriver ? "driver" : item.role === "SUPPLIER" ? "supplier" : "client")}
+                size={isCarousel ? 48 : 62}
+                borderStyle={styles.heroAvatarImage}
+              />
+            </View>
+            <View style={[styles.profileHeroCol, styles.profileHeroColRight]}>
+              <View style={[styles.hubMetricPill, styles.hubMetricPillRating, !rating && styles.hubMetricPillRatingEmpty]}>
+                {rating ? (
+                  <Star size={10} color={Theme.driverGold} fill={Theme.driverGold} strokeWidth={2.2} />
+                ) : null}
+                <Text style={[styles.hubRatingText, !rating && styles.hubRatingTextEmpty]}>
+                  {rating ?? "No rating"}
+                </Text>
+              </View>
+            </View>
           </View>
 
           <Text style={styles.entityName} numberOfLines={1}>
-            {item.name}
+            {item.name.toUpperCase()}
           </Text>
           <Text style={styles.entitySubtitle} numberOfLines={2}>
             {item.role === "CLIENT"
@@ -137,10 +153,6 @@ export function HubConnectionListCard({
                 ? "Capacity supply partner"
                 : "Fleet operations member"}
           </Text>
-          <View style={styles.liveNowRow}>
-            <View style={styles.liveNowDot} />
-            <Text style={styles.liveNowText}>ACTIVE NOW</Text>
-          </View>
 
           <View style={styles.cardMetaStack}>
             <View style={[styles.metaChip, mutuals > 0 && styles.metaChipStrong]}>
@@ -163,9 +175,9 @@ export function HubConnectionListCard({
 
         <View style={styles.cardFooter}>
           {item.is_integrated ? (
-            <View style={styles.joinedBtn}>
-              <Zap size={11} color={Theme.textPrimaryDark} fill={Theme.textPrimaryDark} strokeWidth={2.2} />
-              <Text style={styles.joinedBtnText}>Connected</Text>
+            <View style={styles.connectedStateTag}>
+              <Check size={13} color={Theme.textPrimaryDark} strokeWidth={2.5} />
+              <Text style={styles.connectedStateTagText}>Connected</Text>
             </View>
           ) : (
             <Pressable
@@ -296,6 +308,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 8,
     right: 8,
+    zIndex: 2,
     minHeight: 18,
     flexDirection: "row",
     alignItems: "center",
@@ -316,6 +329,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 8,
     top: 8,
+    zIndex: 2,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 10,
@@ -329,33 +343,67 @@ const styles = StyleSheet.create({
     letterSpacing: 0.45,
     color: Theme.textPrimaryDark,
   },
-  coverRatingNode: {
-    position: "absolute",
-    right: 8,
-    bottom: 8,
-    minHeight: 18,
+  /** Trips + avatar + rating share one row; pills align to avatar mid-line. */
+  profileHeroRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    width: "100%",
+    marginTop: -31,
+    paddingHorizontal: 2,
+    zIndex: 5,
+    gap: 4,
+  },
+  profileHeroRowCarousel: {
+    marginTop: -24,
+  },
+  profileHeroCol: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "center",
+  },
+  profileHeroColLeft: {
+    alignItems: "flex-start",
+  },
+  profileHeroColRight: {
+    alignItems: "flex-end",
+  },
+  profileHeroColGap: {
+    minHeight: 22,
+  },
+  hubMetricPill: {
+    minHeight: 22,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
-    paddingHorizontal: 6,
-    borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,0.86)",
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 11,
+    backgroundColor: Theme.screenBackground,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
+    maxWidth: "100%",
   },
-  coverRatingNodeEmpty: {
-    minHeight: 17,
-    paddingHorizontal: 4,
-    borderRadius: 9,
-    backgroundColor: "rgba(255,255,255,0.72)",
+  hubMetricPillRating: {
+    gap: 4,
   },
-  coverRatingText: {
+  hubMetricPillRatingEmpty: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    minHeight: 20,
+  },
+  hubTripsText: {
+    fontSize: 8,
+    fontWeight: "600",
+    fontStyle: "italic",
+    color: Theme.textSecondary,
+  },
+  hubRatingText: {
     fontSize: 9,
     fontWeight: "600",
     color: Theme.textPrimaryDark,
   },
-  coverRatingTextEmpty: {
+  hubRatingTextEmpty: {
     fontSize: 7,
     fontWeight: "500",
     color: Theme.textMutedDemo,
@@ -417,61 +465,48 @@ const styles = StyleSheet.create({
     borderColor: Theme.screenBackground,
   },
   profileBlock: {
+    position: "relative",
     alignItems: "center",
-    paddingHorizontal: 9,
-    paddingBottom: 2,
+    paddingHorizontal: 10,
+    paddingBottom: 8,
   },
   entityName: {
-    fontSize: 13,
-    fontWeight: "600",
+    fontSize: 12,
+    fontWeight: "500",
     color: "#475569",
-    letterSpacing: 0,
-    lineHeight: 16,
+    letterSpacing: -0.2,
+    lineHeight: 15,
     textAlign: "center",
-    marginTop: 5,
+    marginTop: 8,
   },
   entitySubtitle: {
     fontSize: 9,
     fontWeight: "500",
     color: Theme.textMutedDemo,
-    lineHeight: 11,
+    lineHeight: 12,
     textAlign: "center",
-    marginTop: 2,
-    minHeight: 20,
-  },
-  liveNowRow: {
     marginTop: 3,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-  liveNowDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Theme.primary,
-  },
-  liveNowText: {
-    fontSize: 8,
-    fontWeight: "600",
-    letterSpacing: 0.35,
-    color: Theme.textSecondary,
+    minHeight: 22,
   },
   heroAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 62,
+    height: 62,
+    borderRadius: 31,
     overflow: "hidden",
     backgroundColor: Theme.screenBackground,
     alignItems: "center",
     justifyContent: "center",
-    alignSelf: "center",
-    marginTop: -24,
+    flexShrink: 0,
     shadowColor: Theme.shadow,
     shadowOpacity: 0.12,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 8 },
-    elevation: 2,
+    elevation: 3,
+  },
+  heroAvatarCarousel: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
   },
   heroAvatarImage: {
     borderWidth: 2,
@@ -479,10 +514,10 @@ const styles = StyleSheet.create({
   },
   cardMetaStack: {
     width: "100%",
-    gap: 4,
-    paddingHorizontal: 4,
-    marginTop: 1,
-    marginBottom: 3,
+    gap: 6,
+    paddingHorizontal: 8,
+    marginTop: 2,
+    marginBottom: 8,
     alignItems: "center",
   },
   metaChip: {
@@ -573,24 +608,24 @@ const styles = StyleSheet.create({
     color: Theme.textOnPrimary,
   },
   cardFooter: {
-    minHeight: 36,
-    paddingHorizontal: 8,
+    minHeight: 50,
+    paddingHorizontal: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.screenBackground,
   },
-  joinedBtn: {
-    minHeight: 28,
+  connectedStateTag: {
+    minHeight: 34,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     borderWidth: 1,
     borderColor: Theme.borderMedium,
     borderRadius: 17,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
     backgroundColor: Theme.screenBackground,
     shadowColor: Theme.shadow,
     shadowOpacity: 0.03,
@@ -598,12 +633,11 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     elevation: 1,
   },
-  joinedBtnText: {
-    fontSize: 9,
+  connectedStateTagText: {
+    fontSize: 10,
     fontWeight: "700",
     fontStyle: "italic",
     color: Theme.textPrimaryDark,
-    letterSpacing: 0.2,
   },
   inviteBtn: {
     minHeight: 30,

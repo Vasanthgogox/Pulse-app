@@ -122,7 +122,8 @@ export interface TripMapProps {
   truckLocation?: { latitude: number; longitude: number } | null;
   truckStatus?: { truckNo?: string; speed?: number; ignitionStatus?: boolean; location?: string; lastUpdated?: string } | null;
   intermediateStops?: string[];
-  height?: number;
+  /** Pixel height or a CSS height string (e.g. `"100%"`) to fill the parent. */
+  height?: number | string;
   onDistanceCalculated?: (distanceKm: string) => void;
 }
 
@@ -131,9 +132,10 @@ export function TripMap({
   source, destination, sourceCoords, destCoords,
   truckLocation, truckStatus,
   intermediateStops = [],
-  height = 520,
+  height,
   onDistanceCalculated,
 }: TripMapProps) {
+  const resolvedHeight = height ?? 520;
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const unmountedRef = useRef(false);
@@ -238,8 +240,8 @@ export function TripMap({
       });
 
       const truckIcon = L.divIcon({
-        html: `<div style="background:#000;color:#fff;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,0.2);">🚛</div>`,
-        className: '', iconSize: [24, 24], iconAnchor: [12, 12],
+        html: `<div style="background:linear-gradient(145deg,#059669,#047857);color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 2px 10px rgba(5,150,105,0.45);font-size:14px;">🚚</div>`,
+        className: '', iconSize: [28, 28], iconAnchor: [14, 14],
       });
 
       L.marker(srcCoords, { icon: sourceIcon })
@@ -262,9 +264,13 @@ export function TripMap({
           zIndexOffset: 1000,
         });
         if (truckStatus) {
+          const updated =
+            truckStatus.lastUpdated != null
+              ? `<div style="font-size:10px;color:#64748b;margin-top:6px;">Updated ${new Date(truckStatus.lastUpdated).toLocaleString()}</div>`
+              : '';
           const popupContent = `
             <div style="font-family:system-ui,sans-serif;padding:4px;min-width:200px;">
-              <div style="font-weight:600;margin-bottom:4px;font-size:14px;">${truckStatus.truckNo ?? 'Truck'}</div>
+              <div style="font-weight:600;margin-bottom:4px;font-size:14px;">${truckStatus.truckNo ?? 'Driver'}</div>
               <div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;color:${(truckStatus.speed ?? 0) > 0 ? '#16a34a' : '#666'};">
                 <span style="width:6px;height:6px;border-radius:50%;background:${(truckStatus.speed ?? 0) > 0 ? '#16a34a' : '#666'};"></span>
                 <span style="font-size:12px;">${truckStatus.speed ?? 0} km/h</span>
@@ -274,10 +280,16 @@ export function TripMap({
                 <span style="font-size:12px;">Engine ${truckStatus.ignitionStatus ? 'On' : 'Off'}</span>
               </div>
               ${truckStatus.location ? `<div style="font-size:11px;color:#666;margin-top:4px;">📍 ${truckStatus.location}</div>` : ''}
+              ${updated}
             </div>
           `;
           truckMarker.bindPopup(popupContent, { closeButton: false, maxWidth: 300, minWidth: 200 });
           truckMarker.openPopup();
+        } else {
+          truckMarker.bindPopup(
+            '<div style="font-family:system-ui,sans-serif;font-size:12px;padding:6px;"><strong>Live driver</strong><br/><span style="color:#64748b;">GPS position</span></div>',
+            { closeButton: true },
+          );
         }
         truckMarker.addTo(map);
       }
@@ -456,8 +468,33 @@ export function TripMap({
     truckLocation?.latitude, truckLocation?.longitude,
   ]);
 
+  const containerHeightStyle =
+    typeof resolvedHeight === 'string'
+      ? { height: resolvedHeight, minHeight: resolvedHeight === '100%' ? 320 : undefined }
+      : { height: resolvedHeight };
+
+  const zoomMap = (delta: number) => {
+    const m = mapInstanceRef.current;
+    if (!m || typeof m.setZoom !== 'function') return;
+    try {
+      const z = typeof m.getZoom === 'function' ? m.getZoom() : 8;
+      m.setZoom(z + delta);
+    } catch {
+      /* ignore */
+    }
+  };
+
   return (
-    <div style={{ position: 'relative', height, width: '100%', borderRadius: 12, overflow: 'hidden', border: '1px solid #e2e8f0' }}>
+    <div
+      style={{
+        position: 'relative',
+        width: '100%',
+        borderRadius: 12,
+        overflow: 'hidden',
+        border: '1px solid #e2e8f0',
+        ...containerHeightStyle,
+      }}
+    >
       {isLoading && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.92)', zIndex: 10, backdropFilter: 'blur(4px)' }}>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
@@ -494,7 +531,60 @@ export function TripMap({
           </div>
         </div>
       )}
-      <div ref={mapRef} style={{ height: '100%', width: '100%' }} />
+      <div ref={mapRef} style={{ height: '100%', width: '100%', minHeight: typeof resolvedHeight === 'number' ? resolvedHeight : 320 }} />
+      {!isLoading && !error ? (
+        <div
+          style={{
+            position: 'absolute',
+            left: 10,
+            top: 72,
+            zIndex: 7,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 4,
+            pointerEvents: 'auto',
+          }}
+        >
+          <button
+            type="button"
+            aria-label="Zoom in"
+            onClick={() => zoomMap(1)}
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: 10,
+              border: '1px solid rgba(15,23,42,0.12)',
+              background: 'rgba(255,255,255,0.95)',
+              cursor: 'pointer',
+              fontSize: 18,
+              fontWeight: 700,
+              lineHeight: 1,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+            }}
+          >
+            +
+          </button>
+          <button
+            type="button"
+            aria-label="Zoom out"
+            onClick={() => zoomMap(-1)}
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: 10,
+              border: '1px solid rgba(15,23,42,0.12)',
+              background: 'rgba(255,255,255,0.95)',
+              cursor: 'pointer',
+              fontSize: 18,
+              fontWeight: 700,
+              lineHeight: 1,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+            }}
+          >
+            −
+          </button>
+        </div>
+      ) : null}
       <div style={{ position: 'absolute', bottom: 8, right: 8, background: 'rgba(255,255,255,0.85)', padding: '2px 8px', borderRadius: 4, fontSize: 11, color: '#6b7280', zIndex: 5 }}>
         <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>
           © OpenStreetMap
