@@ -2981,9 +2981,7 @@ export default function TripDetailScreen({
                     previousDriverName={detail.previousDriverName}
                     latestReassignmentSummary={detail.latestReassignmentSummary}
                     driverAssignOrgId={
-                      isAggregate && currentOrganization?.id
-                        ? currentOrganization.id
-                        : null
+                      isAggregate ? (currentOrganization?.id ?? null) : null
                     }
                     onVehicleDisplayChange={(value) => {
                       const normalized = formatIndianVehicleNumber(value ?? "");
@@ -3145,9 +3143,7 @@ export default function TripDetailScreen({
                   previousDriverName={detail.previousDriverName}
                   latestReassignmentSummary={detail.latestReassignmentSummary}
                   driverAssignOrgId={
-                    isAggregate && currentOrganization?.id
-                      ? currentOrganization.id
-                      : null
+                    isAggregate ? (currentOrganization?.id ?? null) : null
                   }
                   onVehicleDisplayChange={(value) => {
                     const normalized = formatIndianVehicleNumber(value ?? "");
@@ -3599,9 +3595,7 @@ export default function TripDetailScreen({
                   previousDriverName={detail.previousDriverName}
                   latestReassignmentSummary={detail.latestReassignmentSummary}
                   driverAssignOrgId={
-                    isAggregate && currentOrganization?.id
-                      ? currentOrganization.id
-                      : null
+                    isAggregate ? (currentOrganization?.id ?? null) : null
                   }
                   onVehicleDisplayChange={(value) => {
                     const normalized = formatIndianVehicleNumber(value ?? "");

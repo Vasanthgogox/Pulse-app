@@ -47,6 +47,10 @@ export default function ModalsLayout() {
         options={{ presentation: 'fullScreenModal', headerShown: false }}
       />
       <Stack.Screen
+        name="chat"
+        options={{ presentation: 'fullScreenModal', headerShown: false }}
+      />
+      <Stack.Screen
         name="team"
         options={{ presentation: 'fullScreenModal', title: 'Team Members' }}
       />

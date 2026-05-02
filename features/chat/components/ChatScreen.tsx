@@ -21,7 +21,6 @@ import {
   Briefcase,
   ChevronDown,
   ChevronRight,
-  Filter,
   Hash,
   MapPin,
   MessageSquare,
@@ -254,8 +253,12 @@ export function ChatScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
-  /** Web dispatcher layout: use anchored popovers instead of mobile-style bottom sheets. */
-  const isWebDesktopUI = Platform.OS === "web" && isDesktop;
+  /** Trip hub cards (alerts + party row): desktop always; all web viewports so mobile browser matches. */
+  const useGroupedTripHub = isDesktop || Platform.OS === "web";
+  /** Narrow conversation chrome: stack trip selector + scroll party tabs. */
+  const compactConversationToolbar = width < 560;
+  /** Web: anchored compose/search UX from tablet width up (avoids sheet on iPad / large phones in browser). */
+  const isWebAnchoredPanels = Platform.OS === "web" && (isDesktop || width >= 900);
   const { profile } = useAuth();
   const { currentOrganization } = useOrganization();
   const currentOrgId = currentOrganization?.id ?? "";
@@ -493,6 +496,12 @@ export function ChatScreen() {
     params.ts,
     params.tab,
   ]);
+
+  useEffect(() => {
+    if (isDesktop) setIsMobileDetail(false);
+  }, [isDesktop]);
+
+  const inputOverlayMaxWidth = Math.max(220, Math.min(320, width - 24));
 
   const openDetail = () => {
     if (!isDesktop) setIsMobileDetail(true);
@@ -875,7 +884,7 @@ export function ChatScreen() {
           </View>
         )}
 
-        {activeTab === "trips" && isWebDesktopUI && showCompose && (
+        {activeTab === "trips" && isWebAnchoredPanels && showCompose && (
           <View style={s.composePopoverLayer} pointerEvents="box-none">
             <TouchableOpacity
               style={s.tripFilterPopoverBackdrop}
@@ -937,8 +946,12 @@ export function ChatScreen() {
             <View style={{ paddingTop: 40, alignItems: "center" }}>
               <ActivityIndicator color={Theme.primary} />
             </View>
-          ) : isDesktop ? (
-            <ScrollView contentContainerStyle={s.tripHubScrollContent} showsVerticalScrollIndicator={false}>
+          ) : useGroupedTripHub ? (
+            <ScrollView
+              style={{ flex: 1, minHeight: 0 }}
+              contentContainerStyle={s.tripHubScrollContent}
+              showsVerticalScrollIndicator={false}
+            >
               {groupedTripRows.length === 0 ? (
                 <EmptyList
                   label={
@@ -1284,7 +1297,7 @@ export function ChatScreen() {
             onChangeText={setComposeSearch}
             placeholder="Search trips, clients, routes…"
             placeholderTextColor="#94a3b8"
-            autoFocus={!isWebDesktopUI}
+            autoFocus={!isWebAnchoredPanels}
           />
           {composeSearch.length > 0 && (
             <TouchableOpacity onPress={() => setComposeSearch("")} hitSlop={8}>
@@ -1424,7 +1437,7 @@ export function ChatScreen() {
   }
 
   function ComposeModal() {
-    if (isWebDesktopUI) return null;
+    if (isWebAnchoredPanels) return null;
     return (
       <Modal
         visible={showCompose}
@@ -1456,6 +1469,8 @@ export function ChatScreen() {
         onSend={handleSend}
         onOpenDocShare={() => setShowDocShare(true)}
         isDesktop={isDesktop}
+        compactConversationToolbar={compactConversationToolbar}
+        inputOverlayMaxWidth={inputOverlayMaxWidth}
         onCloseDetail={closeDetail}
         currentOrgId={currentOrgId}
         onAddToBook={handleAddToBook}
@@ -1476,6 +1491,7 @@ export function ChatScreen() {
         setShowScripts={setShowScripts}
         onSend={handleSend}
         isDesktop={isDesktop}
+        inputOverlayMaxWidth={inputOverlayMaxWidth}
         onCloseDetail={closeDetail}
       />
     );
@@ -1519,7 +1535,9 @@ export function ChatScreen() {
       end={{ x: 1, y: 1 }}
       style={[s.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}
     >
-      {!isMobileDetail ? ChatList() : detailPanel}
+      <View style={s.mobileRootFill}>
+        {!isMobileDetail ? ChatList() : detailPanel}
+      </View>
       <ComposeModal />
       <NetworkComposeModal />
       <TripFilterModal />
@@ -1604,6 +1622,8 @@ function EmptyDetail() {
 
 const s = StyleSheet.create({
   root: { flex: 1 },
+  /** Web flex + RN web: keep list/detail from growing past viewport. */
+  mobileRootFill: { flex: 1, minHeight: 0, width: "100%" },
   desktop: { flex: 1, flexDirection: "row" },
   desktopList: {
     width: 420,
@@ -2240,6 +2260,10 @@ const s = StyleSheet.create({
     borderBottomColor: "#e2e8f0",
     backgroundColor: "#ffffff",
   },
+  detailSwitchBarCompact: {
+    flexDirection: "column",
+    alignItems: "stretch",
+  },
   detailTripSelectorBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -2292,7 +2316,7 @@ const s = StyleSheet.create({
     color: "#94a3b8",
   },
 
-  detailPanel: { flex: 1, backgroundColor: "transparent" },
+  detailPanel: { flex: 1, minHeight: 0, backgroundColor: "transparent" },
   msgs: { flex: 1, backgroundColor: "transparent" },
   msgsContent: { padding: 20, gap: 12, paddingBottom: 24 },
 
@@ -2333,7 +2357,12 @@ const s = StyleSheet.create({
   bubbleTextOther: { color: "#1e293b" },
   bubbleMeta: { fontSize: 10, color: "#94a3b8", marginTop: 4, letterSpacing: 0.2 },
 
-  inputWrap: { backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: "#e2e8f0" },
+  inputWrap: {
+    position: "relative",
+    backgroundColor: "#fff",
+    borderTopWidth: 1,
+    borderTopColor: "#e2e8f0",
+  },
   inputRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -2398,7 +2427,7 @@ const s = StyleSheet.create({
     shadowRadius: 16,
     shadowOffset: { width: 0, height: -4 },
     elevation: 8,
-    width: 240,
+    maxWidth: "100%",
     zIndex: 50,
   },
   emojiBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderRadius: 10 },
@@ -2417,7 +2446,7 @@ const s = StyleSheet.create({
     shadowRadius: 20,
     shadowOffset: { width: 0, height: -4 },
     elevation: 8,
-    width: 300,
+    maxWidth: "100%",
     zIndex: 50,
   },
   scriptPopupHeader: {
@@ -2815,6 +2844,7 @@ function ChatInputBar({
   setShowScripts,
   onSend,
   onOpenDocShare,
+  inputOverlayMaxWidth,
 }: {
   quickMsgs: string[];
   messageInput: string;
@@ -2825,11 +2855,14 @@ function ChatInputBar({
   setShowScripts: React.Dispatch<React.SetStateAction<boolean>>;
   onSend: () => void;
   onOpenDocShare?: () => void;
+  /** Caps emoji / quick-message popovers on narrow viewports (mobile web). */
+  inputOverlayMaxWidth?: number;
 }) {
+  const overlayW = inputOverlayMaxWidth ?? 300;
   return (
     <View style={s.inputWrap}>
       {showEmoji ? (
-        <View style={s.emojiPopup}>
+        <View style={[s.emojiPopup, { width: Math.min(240, overlayW) }]}>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 2 }}>
             {QUICK_EMOJIS.map((e) => (
               <TouchableOpacity
@@ -2848,7 +2881,7 @@ function ChatInputBar({
         </View>
       ) : null}
       {showScripts ? (
-        <View style={s.scriptPopup}>
+        <View style={[s.scriptPopup, { width: Math.min(300, overlayW) }]}>
           <View style={s.scriptPopupHeader}>
             <Text style={s.scriptPopupTitle}>QUICK MESSAGES</Text>
             <TouchableOpacity onPress={() => setShowScripts(false)} hitSlop={8}>
@@ -2954,6 +2987,8 @@ function TripConversationDetailPanel({
   onSend,
   onOpenDocShare,
   isDesktop,
+  compactConversationToolbar,
+  inputOverlayMaxWidth,
   onCloseDetail,
   currentOrgId,
   onAddToBook,
@@ -2974,6 +3009,8 @@ function TripConversationDetailPanel({
   onSend: () => void;
   onOpenDocShare: () => void;
   isDesktop: boolean;
+  compactConversationToolbar: boolean;
+  inputOverlayMaxWidth: number;
   onCloseDetail: () => void;
   currentOrgId: string;
   onAddToBook: (message: TripMessageRow) => void;
@@ -3025,43 +3062,87 @@ function TripConversationDetailPanel({
           </Text>
         </View>
       </View>
-      <View style={s.detailSwitchBar}>
+      <View
+        style={[s.detailSwitchBar, compactConversationToolbar && s.detailSwitchBarCompact]}
+      >
         <TouchableOpacity
-          style={s.detailTripSelectorBtn}
+          style={[s.detailTripSelectorBtn, compactConversationToolbar && { alignSelf: "stretch" }]}
           onPress={() => void onOpenCompose()}
           activeOpacity={0.8}
         >
           <Search size={14} color="#1e293b" />
           <Text style={s.detailTripSelectorText}>Trip selector</Text>
         </TouchableOpacity>
-        <View style={s.detailPartyTabs}>
-          {PARTY_ORDER.map((partyType) => {
-            const on = selectedConv.party_type === partyType;
-            const hasConversation = Boolean(partyConversationMap[partyType]);
-            return (
-              <TouchableOpacity
-                key={partyType}
-                style={[
-                  s.detailPartyTab,
-                  on && s.detailPartyTabOn,
-                  !hasConversation && s.detailPartyTabOff,
-                ]}
-                onPress={() => switchConversation(partyType)}
-                activeOpacity={0.82}
-              >
-                <Text
+        {compactConversationToolbar ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={{ marginHorizontal: -4 }}
+            contentContainerStyle={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 6,
+              paddingVertical: 2,
+              paddingHorizontal: 4,
+            }}
+          >
+            {PARTY_ORDER.map((partyType) => {
+              const on = selectedConv.party_type === partyType;
+              const hasConversation = Boolean(partyConversationMap[partyType]);
+              return (
+                <TouchableOpacity
+                  key={partyType}
                   style={[
-                    s.detailPartyTabText,
-                    on && s.detailPartyTabTextOn,
-                    !hasConversation && s.detailPartyTabTextOff,
+                    s.detailPartyTab,
+                    on && s.detailPartyTabOn,
+                    !hasConversation && s.detailPartyTabOff,
                   ]}
+                  onPress={() => switchConversation(partyType)}
+                  activeOpacity={0.82}
                 >
-                  {partyLabel(partyType)}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+                  <Text
+                    style={[
+                      s.detailPartyTabText,
+                      on && s.detailPartyTabTextOn,
+                      !hasConversation && s.detailPartyTabTextOff,
+                    ]}
+                  >
+                    {partyLabel(partyType)}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        ) : (
+          <View style={s.detailPartyTabs}>
+            {PARTY_ORDER.map((partyType) => {
+              const on = selectedConv.party_type === partyType;
+              const hasConversation = Boolean(partyConversationMap[partyType]);
+              return (
+                <TouchableOpacity
+                  key={partyType}
+                  style={[
+                    s.detailPartyTab,
+                    on && s.detailPartyTabOn,
+                    !hasConversation && s.detailPartyTabOff,
+                  ]}
+                  onPress={() => switchConversation(partyType)}
+                  activeOpacity={0.82}
+                >
+                  <Text
+                    style={[
+                      s.detailPartyTabText,
+                      on && s.detailPartyTabTextOn,
+                      !hasConversation && s.detailPartyTabTextOff,
+                    ]}
+                  >
+                    {partyLabel(partyType)}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
       </View>
       <ScrollView
         ref={messagesRef}
@@ -3126,6 +3207,7 @@ function TripConversationDetailPanel({
         setShowScripts={setShowScripts}
         onSend={onSend}
         onOpenDocShare={onOpenDocShare}
+        inputOverlayMaxWidth={inputOverlayMaxWidth}
       />
     </View>
   );
@@ -3142,6 +3224,7 @@ function NetworkDetailPanel({
   setShowScripts,
   onSend,
   isDesktop,
+  inputOverlayMaxWidth,
   onCloseDetail,
 }: {
   selectedNet: IntegratedChat | null;
@@ -3154,6 +3237,7 @@ function NetworkDetailPanel({
   setShowScripts: React.Dispatch<React.SetStateAction<boolean>>;
   onSend: () => void;
   isDesktop: boolean;
+  inputOverlayMaxWidth: number;
   onCloseDetail: () => void;
 }) {
   if (!selectedNet) return <EmptyDetail />;
@@ -3191,6 +3275,7 @@ function NetworkDetailPanel({
         showScripts={showScripts}
         setShowScripts={setShowScripts}
         onSend={onSend}
+        inputOverlayMaxWidth={inputOverlayMaxWidth}
       />
     </View>
   );
