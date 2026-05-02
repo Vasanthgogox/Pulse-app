@@ -1,5 +1,9 @@
 import { supabase } from '@/lib/supabase';
 
+function escapeLike(value: string): string {
+  return value.replace(/[%_\\]/g, '\\$&');
+}
+
 export interface ClientContract {
   id: string;
   organization_id: string;
@@ -91,8 +95,8 @@ export async function getActiveContractsForLane(
     .select('*')
     .eq('organization_id', orgId)
     .eq('client_id', clientId)
-    .ilike('pickup_area', `%${pickupArea.trim()}%`)
-    .ilike('drop_location', `%${dropLocation.trim()}%`)
+    .ilike('pickup_area', `%${escapeLike(pickupArea.trim())}%`)
+    .ilike('drop_location', `%${escapeLike(dropLocation.trim())}%`)
     .or(`valid_to.is.null,valid_to.gte.${today}`)
     .order('rate', { ascending: true });
   if (error) return { error: new Error(error.message), contracts: [] };

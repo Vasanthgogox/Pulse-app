@@ -153,8 +153,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signOutRequestedRef.current = true;
     try {
       await authService.signOut();
-    } catch {
-      // best-effort cleanup; state is still cleared locally below
+    } catch (e) {
+      console.warn("[auth] forceSignOut: signOut call failed", e instanceof Error ? e.message : e);
     }
     clearAuthState(true);
     logAuthRouteDecision("forced_sign_out_auth_failure", { reason });
@@ -173,6 +173,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Always attempt to restore session from storage so "Keep me signed in" works on reload.
     // On first launch after install, clear any lingering Keychain auth data, then proceed.
     let mounted = true;
+
+    // Single subscription handler shared by both the success and error paths of session restore.
+    // getVerifiedDbProfile already provisions missing profiles internally.
+    // Do NOT call refreshSession() here — it fires TOKEN_REFRESHED which
+    // re-triggers this handler, causing an infinite cascade that freezes the app.
+    const setupAuthSubscription = () => {
+      try {
+        unsubscribeRef.current = authService.onAuthStateChange(async (auth) => {
+          const stateChangeAttemptId = beginAuthAttempt();
+          if (!mounted || !isCurrentAuthAttempt(stateChangeAttemptId)) return;
+          if (auth) {
+            const dbProfile = await getVerifiedDbProfile(auth.user.uid);
+            if (!mounted || !isCurrentAuthAttempt(stateChangeAttemptId)) return;
+            if (!dbProfile) {
+              await forceSignOutOnAuthFailure("auth_state_profile_verification_failed");
+              return;
+            }
+            const merged = mergeAuthProfiles(auth.profile, dbProfile);
+            setUser(auth.user);
+            setProfile(authProfileToUserProfile(merged));
+            setRoleVerified(true);
+            setSessionExpired(false);
+            logAuthRouteDecision("auth_state_signed_in", {
+              uid: auth.user.uid,
+              role: merged.role,
+              roleVerified: true,
+            });
+          } else {
+            const wasRequested = signOutRequestedRef.current;
+            signOutRequestedRef.current = false;
+            clearAuthState(!wasRequested);
+            logAuthRouteDecision("auth_state_signed_out", {});
+          }
+        });
+      } catch {
+        // Subscription setup failed; app can still use sign-in
+      }
+    };
 
     (async () => {
       const initAttemptId = beginAuthAttempt();
@@ -222,6 +260,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 nextUser = refreshed.user;
                 nextProfile = refreshed.profile;
                 verifiedDbProfile = await getVerifiedDbProfile(refreshed.user.uid);
+                if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
                 if (verifiedDbProfile) {
                   nextProfile = mergeAuthProfiles(refreshed.profile, verifiedDbProfile);
                   setRoleVerified(true);
@@ -230,6 +269,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 }
               } else if (mounted && isCurrentAuthAttempt(initAttemptId)) {
                 verifiedDbProfile = await getVerifiedDbProfile(session.user.uid);
+                if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
                 if (verifiedDbProfile) {
                   nextProfile = mergeAuthProfiles(session.profile, verifiedDbProfile);
                   setRoleVerified(true);
@@ -239,7 +279,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               }
             } catch {
               // Treat restore/profile verification failures as auth failures.
-              setRoleVerified(false);
+              if (mounted && isCurrentAuthAttempt(initAttemptId)) setRoleVerified(false);
             }
             if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
             if (!verifiedDbProfile) {
@@ -262,40 +302,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         if (!isCurrentAuthAttempt(initAttemptId)) return;
         setLoading(false);
-        try {
-          unsubscribeRef.current = authService.onAuthStateChange(async (auth) => {
-            const stateChangeAttemptId = beginAuthAttempt();
-            if (!mounted || !isCurrentAuthAttempt(stateChangeAttemptId)) return;
-            if (auth) {
-              // getVerifiedDbProfile already provisions missing profiles internally.
-              // Do NOT call refreshSession() here — it fires TOKEN_REFRESHED which
-              // re-triggers this handler, causing an infinite cascade that freezes the app.
-              const dbProfile = await getVerifiedDbProfile(auth.user.uid);
-              if (!mounted || !isCurrentAuthAttempt(stateChangeAttemptId)) return;
-              if (!dbProfile) {
-                await forceSignOutOnAuthFailure("auth_state_profile_verification_failed");
-                return;
-              }
-              const merged = mergeAuthProfiles(auth.profile, dbProfile);
-              setUser(auth.user);
-              setProfile(authProfileToUserProfile(merged));
-              setRoleVerified(true);
-              setSessionExpired(false);
-              logAuthRouteDecision("auth_state_signed_in", {
-                uid: auth.user.uid,
-                role: merged.role,
-                roleVerified: true,
-              });
-            } else {
-              const wasRequested = signOutRequestedRef.current;
-              signOutRequestedRef.current = false;
-              clearAuthState(!wasRequested);
-              logAuthRouteDecision("auth_state_signed_out", {});
-            }
-          });
-        } catch {
-          // Subscription setup failed; app can still use sign-in
-        }
+        setupAuthSubscription();
       })
       .catch(() => {
         // Defensive: if getSession ever rejects (e.g. unhandled throw), show sign-in
@@ -304,37 +311,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setLoading(false);
           logAuthRouteDecision("restore_error", {});
         }
-        try {
-          unsubscribeRef.current = authService.onAuthStateChange(async (auth) => {
-            const stateChangeAttemptId = beginAuthAttempt();
-            if (!mounted || !isCurrentAuthAttempt(stateChangeAttemptId)) return;
-            if (auth) {
-              const dbProfile = await getVerifiedDbProfile(auth.user.uid);
-              if (!mounted || !isCurrentAuthAttempt(stateChangeAttemptId)) return;
-              if (!dbProfile) {
-                await forceSignOutOnAuthFailure("auth_state_after_restore_error_profile_verification_failed");
-                return;
-              }
-              const merged = mergeAuthProfiles(auth.profile, dbProfile);
-              setUser(auth.user);
-              setProfile(authProfileToUserProfile(merged));
-              setRoleVerified(true);
-              setSessionExpired(false);
-              logAuthRouteDecision("auth_state_signed_in_after_restore_error", {
-                uid: auth.user.uid,
-                role: merged.role,
-                roleVerified: true,
-              });
-            } else {
-              const wasRequested = signOutRequestedRef.current;
-              signOutRequestedRef.current = false;
-              clearAuthState(!wasRequested);
-              logAuthRouteDecision("auth_state_signed_out_after_restore_error", {});
-            }
-          });
-        } catch {
-          // Subscription setup failed
-        }
+        setupAuthSubscription();
       });
     })();
 
