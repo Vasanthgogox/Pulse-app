@@ -10,25 +10,25 @@ import { formatINR } from '@/lib/format';
 import * as tripDocumentsService from '@/services/tripDocumentsService';
 import * as tripsService from '@/services/tripsService';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Pressable as HoldPressable } from 'react-native-gesture-handler';
 import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
+import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Linking,
-  Modal,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    Linking,
+    Modal,
+    Platform,
+    Pressable,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
+import { Pressable as HoldPressable } from 'react-native-gesture-handler';
 
 const HOLD_DURATION_MS = 1500;
 /** So finger drift / parent scroll do not end the hold (sheet / ScrollView). */
@@ -268,7 +268,10 @@ export function DriverTripFlowCard({
   }, [driverLatitude, driverLongitude, driverLocationLabel]);
 
   const shareTripDocumentInChat = useCallback(
-    async (doc: tripDocumentsService.TripDocumentRow, documentTypeLabel: string) => {
+    async (
+      doc: { storage_path: string; file_name: string; mime_type: string | null },
+      documentTypeLabel: string,
+    ) => {
       const tripId = localTrip.id;
       const orgId = localTrip.organization_id;
       const driverId = localTrip.driver_id;
@@ -506,22 +509,31 @@ export function DriverTripFlowCard({
         setStagePhotoUploading(false);
         return;
       }
-      const { doc, error } = await tripDocumentsService.uploadTripDocument(id, profile.uid, {
-        arrayBuffer,
-        fileName,
-        mimeType,
-      });
-      if (error) setStepError(error.message);
-      else if (doc) {
-        const stageLabel =
-          step === 'accepted'
-            ? 'Trip photo (pickup)'
-            : step === 'transit'
-              ? 'Trip photo (en route)'
-              : step === 'reached'
-                ? 'Trip photo (drop-off)'
-                : 'Trip photo';
-        await shareTripDocumentInChat(doc, stageLabel);
+      const stageLabel =
+        step === 'accepted'
+          ? 'Trip photo (pickup)'
+          : step === 'transit'
+            ? 'Trip photo (en route)'
+            : step === 'reached'
+              ? 'Trip photo (drop-off)'
+              : 'Trip photo';
+      const { result: chatUpload, error: chatUploadError } =
+        await tripDocumentsService.uploadTripChatImage(id, {
+          arrayBuffer,
+          fileName,
+          mimeType,
+        });
+      if (chatUploadError) {
+        setStepError(chatUploadError.message);
+      } else if (chatUpload) {
+        await shareTripDocumentInChat(
+          {
+            storage_path: chatUpload.storagePath,
+            file_name: chatUpload.fileName,
+            mime_type: chatUpload.mimeType,
+          },
+          stageLabel,
+        );
         onRefresh?.();
       }
     } catch (e) {

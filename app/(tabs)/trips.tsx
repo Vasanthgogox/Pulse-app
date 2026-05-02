@@ -96,6 +96,7 @@ type DateFilter =
 type ToolbarDateFilter = Exclude<DateFilter, "tomorrow">;
 
 type TripsListLayout = "cards" | "table";
+type ActiveMetricTabId = TripMetricId | "all";
 type HistoryTripMetricId =
   | "due_to_get"
   | "no_due_to_get"
@@ -195,7 +196,7 @@ export default function TripsScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const queryClient = useQueryClient();
   const [activeMetricTab, setActiveMetricTab] =
-    useState<TripMetricId>("assigned");
+    useState<ActiveMetricTabId>("assigned");
   const [supplyFilter, setSupplyFilter] = useState<SupplyFilter>("all");
   const [sortBy, setSortBy] = useState<SortBy>("date_desc");
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>("all");
@@ -446,7 +447,10 @@ export default function TripsScreen() {
   const baseFilteredTrips = useMemo(() => {
     let list = tripsByStatus;
     if (!showCompletedList) {
-      if (activeMetricTab === "delivered_docs_pending") {
+      if (activeMetricTab === "all") {
+        // Keep all active trips visible across Intake + In motion.
+        list = tripsByStatus;
+      } else if (activeMetricTab === "delivered_docs_pending") {
         const deliveredDocsPendingTrips = tripsByStatus.filter(
           (t) => classifyTripMetric(t, tripIdsWithDocuments) === activeMetricTab,
         );
@@ -1055,6 +1059,10 @@ export default function TripsScreen() {
   const tripMetricCopy = useMemo(
     () =>
       ({
+        all: {
+          title: tr("all"),
+          hint: tr("active"),
+        },
         unassigned: {
           title: tr("tripMetricUnassigned"),
           hint: tr("tripMetricHintUnassigned"),
@@ -1079,12 +1087,18 @@ export default function TripsScreen() {
           title: tr("tripMetricDeliveredDocsPending"),
           hint: tr("tripMetricHintDeliveredDocsPending"),
         },
-      }) satisfies Record<TripMetricId, { title: string; hint: string }>,
+      }) satisfies Record<ActiveMetricTabId, { title: string; hint: string }>,
     [tr],
   );
   const tripMetricVisual = useMemo(
     () =>
       ({
+        all: {
+          icon: "th-large",
+          gradient: [Theme.darkBackground, "#111827"] as [string, string],
+          accent: Theme.primary,
+          micro: tr("active"),
+        },
         unassigned: {
           icon: "user-times",
           gradient: [Theme.darkBackground, "#0f172a"] as [string, string],
@@ -1122,7 +1136,7 @@ export default function TripsScreen() {
           micro: tr("tripMetricHintDeliveredDocsPending"),
         },
       }) satisfies Record<
-        TripMetricId,
+        ActiveMetricTabId,
         {
           icon: React.ComponentProps<typeof FontAwesome>["name"];
           gradient: [string, string];
@@ -1136,6 +1150,14 @@ export default function TripsScreen() {
   const activeInMotionIds = useMemo(
     () => TRIP_METRIC_ORDER.filter((id) => id !== "unassigned"),
     [],
+  );
+  const activeMetricIdsForRail = useMemo(
+    () => ["all" as const, ...TRIP_METRIC_ORDER],
+    [],
+  );
+  const activeAllCount = useMemo(
+    () => tripsForHubMetricCounts.length,
+    [tripsForHubMetricCounts],
   );
 
   const historyReceivableIds: HistoryTripMetricId[] = useMemo(
@@ -1941,10 +1963,13 @@ export default function TripsScreen() {
                   contentContainerStyle={styles.metricTagRailMobile}
                   style={styles.metricTagRailScrollMobile}
                 >
-                  {TRIP_METRIC_ORDER.map((metricId) => {
+                  {activeMetricIdsForRail.map((metricId) => {
                     const active = activeMetricTab === metricId;
                     const copy = tripMetricCopy[metricId];
-                    const count = metricCounts[metricId];
+                    const count =
+                      metricId === "all"
+                        ? activeAllCount
+                        : metricCounts[metricId];
                     return (
                       <TouchableOpacity
                         key={metricId}
@@ -1995,6 +2020,105 @@ export default function TripsScreen() {
                 ]}
                 style={styles.tripMetricsScroll}
               >
+                <View
+                  style={[
+                    styles.tripMetricsGroupColumn,
+                    isLargeScreen && styles.tripMetricsGroupColumnIntakeWeb,
+                  ]}
+                >
+                  <Text
+                    style={styles.metricGroupLabel}
+                    accessibilityRole="header"
+                  >
+                    {tr("all")}
+                  </Text>
+                  <View
+                    style={[
+                      styles.tripMetricsBundleRail,
+                      isLargeScreen && styles.tripMetricsBundleRailWeb,
+                    ]}
+                  >
+                    {(["all"] as const).map((metricId) => {
+                      const count = activeAllCount;
+                      const active = activeMetricTab === metricId;
+                      const copy = tripMetricCopy[metricId];
+                      const visual = tripMetricVisual[metricId];
+                      return (
+                        <TouchableOpacity
+                          key={metricId}
+                          style={[
+                            styles.tripMetricTile,
+                            styles.tripMetricBento,
+                            styles.tripMetricTileShrinkNone,
+                            isLargeScreen && styles.tripMetricTileWeb,
+                            active && styles.tripMetricBentoActive,
+                          ]}
+                          onPress={() => setActiveMetricTab(metricId)}
+                          activeOpacity={0.85}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: active }}
+                          accessibilityLabel={`${copy.title}, ${count} trips`}
+                        >
+                          <LinearGradient
+                            colors={visual.gradient}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={StyleSheet.absoluteFill}
+                          />
+                          <View
+                            style={styles.historyMetricWatermarkOrbs}
+                            pointerEvents="none"
+                          >
+                            <View style={styles.historyWmHeroBlobA} />
+                            <View style={styles.historyWmHeroBlobB} />
+                          </View>
+                          <View style={styles.historyMetricInner}>
+                            <View style={styles.metricBentoHeadRow}>
+                              <Text
+                                style={[
+                                  styles.metricBentoValue,
+                                  active
+                                    ? styles.tripMetricCountActive
+                                    : styles.metricBentoValueOnDark,
+                                ]}
+                              >
+                                {count}
+                              </Text>
+                              <View style={styles.metricBentoIconWrap}>
+                                <FontAwesome
+                                  name={visual.icon}
+                                  size={11}
+                                  color={visual.accent}
+                                />
+                              </View>
+                            </View>
+                            <Text
+                              style={[
+                                styles.metricBentoLabel,
+                                active
+                                  ? styles.metricBentoLabelOnDarkActive
+                                  : styles.metricBentoLabelOnDark,
+                              ]}
+                              numberOfLines={2}
+                            >
+                              {copy.title}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.metricBentoSubtext,
+                                styles.metricBentoSubtextOnDark,
+                                styles.metricCardHintAtBottom,
+                              ]}
+                              numberOfLines={3}
+                            >
+                              {visual.micro}
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
                 <View
                   style={[
                     styles.tripMetricsGroupColumn,

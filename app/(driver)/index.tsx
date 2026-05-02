@@ -75,6 +75,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import Constants from "expo-constants";
 import * as ExpoLocation from "expo-location";
 import { watchPositionAsync } from "expo-location";
+import { useRouter } from "expo-router";
 import {
   useCallback,
   useEffect,
@@ -393,6 +394,7 @@ function formatTripDistance(distance: unknown): string {
 }
 
 export default function DriverRadarScreen() {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const { isDark, mapTheme } = useDriverTheme();
   const colors = useDriverThemeColors();
@@ -583,6 +585,7 @@ export default function DriverRadarScreen() {
   /** Default off = map-first (ref 1); tap route icon to show FROM/distance/TO overlay (ref 2). */
   const [showRouteSummary, setShowRouteSummary] = useState(false);
   const locationWatchRef = useRef<{ remove: () => void } | null>(null);
+  const gpsFallbackWarnedKeyRef = useRef<string | null>(null);
   const initialLoadDoneRef = useRef(false);
   const isRefreshingRef = useRef(false);
 
@@ -1236,6 +1239,15 @@ export default function DriverRadarScreen() {
     [visibleIncomingTrips, acceptedTripId],
   );
 
+  /** Oldest assignment first (FCFS) — used for dashboard queue + default selection. */
+  const visibleAssignableIncomingTripsFcfs = useMemo(
+    () =>
+      [...visibleAssignableIncomingTrips].sort((a, b) =>
+        String(a.created_at ?? "").localeCompare(String(b.created_at ?? "")),
+      ),
+    [visibleAssignableIncomingTrips],
+  );
+
   useEffect(() => {
     if (visibleAssignableIncomingTrips.length === 0) {
       clearNotifyOnlyAfterMission();
@@ -1260,11 +1272,33 @@ export default function DriverRadarScreen() {
   const selectedIncomingTrip =
     visibleIncomingTrips.find((trip) => trip.id === selectedIncomingTripId) ??
     null;
-  /** Among trips still awaiting decision: pick only in single-trip mode. */
-  const pickerFocusedIncoming =
-    visibleAssignableIncomingTrips.length === 1
-      ? visibleAssignableIncomingTrips[0]
-      : null;
+  /**
+   * FCFS queue: post-trip notify-only stays passive until the driver selects / resumes.
+   * Otherwise the oldest waiting assignment is the default "next" trip on the dashboard.
+   */
+  const pickerFocusedIncoming = useMemo(() => {
+    const queue = visibleAssignableIncomingTripsFcfs;
+    if (!queue.length) return null;
+
+    if (assignableTripsNotifyOnlyAfterMission) {
+      if (!selectedIncomingTripId) return null;
+      const want = String(selectedIncomingTripId).toLowerCase();
+      return queue.find((t) => String(t.id).toLowerCase() === want) ?? null;
+    }
+
+    if (queue.length === 1) return queue[0];
+
+    if (selectedIncomingTripId) {
+      const want = String(selectedIncomingTripId).toLowerCase();
+      const hit = queue.find((t) => String(t.id).toLowerCase() === want);
+      if (hit) return hit;
+    }
+    return queue[0];
+  }, [
+    visibleAssignableIncomingTripsFcfs,
+    selectedIncomingTripId,
+    assignableTripsNotifyOnlyAfterMission,
+  ]);
   /**
    * In multi-trip mode, when driver taps "Accept and verify OTP", force that tapped
    * trip into the active card context so OTP UI appears immediately.
@@ -1286,13 +1320,12 @@ export default function DriverRadarScreen() {
   }, [otpClaimTripId, selectedIncomingTrip, visibleIncomingTrips]);
   /**
    * Prefer accepted assignment first so we never flash the notification list during fetch lag.
-   * Otherwise single assignable trip or picker selection among remaining trips.
-   * During post-completion notify-only mode, do not attach a primary incoming trip on Home (badge only);
-   * picker/OTP flows resume after flag clear (notifications "Resume" or Accept).
+   * Otherwise `pickerFocusedIncoming` (FCFS + selection; notify-only stays null until the driver resumes).
+   * OTP claim keeps a focused row when applicable.
    */
   const effectiveFirstIncoming =
     resolvedAcceptedIncomingTrip ??
-    (assignableTripsNotifyOnlyAfterMission ? null : pickerFocusedIncoming) ??
+    pickerFocusedIncoming ??
     otpFocusedIncoming;
 
   // Keep incoming assignments in explicit accept/reject state until the driver acts.
@@ -1300,13 +1333,31 @@ export default function DriverRadarScreen() {
 
   /** Keep selection aligned when only one assignable incoming trip remains. */
   useEffect(() => {
-    if (visibleAssignableIncomingTrips.length !== 1) return;
-    const onlyId = visibleAssignableIncomingTrips[0]?.id;
+    if (visibleAssignableIncomingTripsFcfs.length !== 1) return;
+    const onlyId = visibleAssignableIncomingTripsFcfs[0]?.id;
     if (!onlyId) return;
     setSelectedIncomingTripId((prev) =>
       prev == null || prev === "" ? String(onlyId) : prev,
     );
-  }, [visibleAssignableIncomingTrips]);
+  }, [visibleAssignableIncomingTripsFcfs]);
+
+  /**
+   * Multi-assignment (not notify-only): default selection to FCFS head so dashboard + map
+   * always wire to a real trip row without an extra tap.
+   */
+  useEffect(() => {
+    if (assignableTripsNotifyOnlyAfterMission) return;
+    const q = visibleAssignableIncomingTripsFcfs;
+    if (q.length <= 1) return;
+    const headId = String(q[0]?.id ?? "");
+    if (!headId) return;
+    setSelectedIncomingTripId((prev) => {
+      if (prev == null || String(prev).trim() === "") return headId;
+      const want = String(prev).toLowerCase();
+      if (q.some((t) => String(t.id).toLowerCase() === want)) return prev;
+      return headId;
+    });
+  }, [assignableTripsNotifyOnlyAfterMission, visibleAssignableIncomingTripsFcfs]);
   // OTP only for non-roster (ad-hoc) trips; connected/roster trips accept directly.
   const pendingOtpTripsRequiringOtp = pendingOtpTrips.filter(
     (t) => !isRosterTrip(t),
@@ -1349,6 +1400,18 @@ export default function DriverRadarScreen() {
   const effectiveIncomingId = String(
     effectiveFirstIncoming?.id ?? "",
   ).toLowerCase();
+
+  /** 1-based position in the FCFS assignable queue (oldest first) for the trip shown on the job card. */
+  const incomingAssignmentQueueMeta = useMemo(() => {
+    const list = visibleAssignableIncomingTripsFcfs;
+    const activeId = effectiveFirstIncoming?.id;
+    if (!activeId || list.length <= 1) return null;
+    const idx = list.findIndex(
+      (t) => String(t.id).toLowerCase() === String(activeId).toLowerCase(),
+    );
+    if (idx < 0) return null;
+    return { position: idx + 1, total: list.length };
+  }, [visibleAssignableIncomingTripsFcfs, effectiveFirstIncoming?.id]);
 
   // Use driver's accepted offer (commission % or per km) for this org so commission matches control screen
   const acceptedInviteForOrg =
@@ -1796,9 +1859,9 @@ export default function DriverRadarScreen() {
     activeMission ||
       isAcceptedIncomingFlow ||
       otpClaimTripId ||
-      (hasSingleAssignableIncomingTrip &&
-        effectiveFirstIncoming &&
-        !assignableTripsNotifyOnlyAfterMission) ||
+      (effectiveFirstIncoming &&
+        !assignableTripsNotifyOnlyAfterMission &&
+        (hasSingleAssignableIncomingTrip || hasAssignableIncomingTrip)) ||
       assignmentFeedback != null,
   );
   const activeGuidanceStep = activeGuidanceTrip
@@ -1808,6 +1871,20 @@ export default function DriverRadarScreen() {
     activeGuidanceTrip && activeGuidanceStep
       ? getDriverGuidanceConfig(activeGuidanceStep, activeGuidanceTrip)
       : null;
+  const routeContextTrip = useMemo(
+    () =>
+      (activeGuidanceTrip ??
+        resolvedAcceptedIncomingTrip ??
+        activeMission ??
+        effectiveFirstIncoming ??
+        null) as tripsService.TripRow | null,
+    [
+      activeGuidanceTrip,
+      resolvedAcceptedIncomingTrip,
+      activeMission,
+      effectiveFirstIncoming,
+    ],
+  );
   const guidanceTargetCoordinate =
     activeGuidanceTrip && activeGuidance?.target
       ? getTripStopCoordinate(activeGuidanceTrip, activeGuidance.target)
@@ -2101,8 +2178,7 @@ export default function DriverRadarScreen() {
   // not a straight-line fallback, throughout assignment -> completion.
   const routeFetchKey = useMemo(() => {
     if (!shouldShowMap) return null;
-    const tripForRoute = (activeMission ||
-      effectiveFirstIncoming) as tripsService.TripRow | null;
+    const tripForRoute = routeContextTrip;
     const pickup = tripForRoute
       ? getTripStopCoordinate(tripForRoute, "pickup")
       : null;
@@ -2110,17 +2186,23 @@ export default function DriverRadarScreen() {
       ? getTripStopCoordinate(tripForRoute, "drop")
       : null;
 
+    // Use only real pinned coordinates for route start (never default map center).
+    const routeStart = truckPosition ?? driverMapPosition;
     const start =
-      activeMission && driverMapPosition ? driverMapPosition : pickup;
-    const end = activeMission ? guidanceTargetCoordinate : drop;
+      activeGuidanceTrip ? routeStart : pickup;
+    const end = activeGuidanceTrip ? guidanceTargetCoordinate : drop;
+
+    if (activeGuidanceTrip && !routeStart) return null;
 
     if (!start || !end || !tripForRoute) return null;
     return buildRouteFetchKey(tripForRoute.id, start, end);
   }, [
     shouldShowMap,
-    activeMission,
-    effectiveFirstIncoming,
+    routeContextTrip,
+    activeGuidanceTrip,
+    activeGuidanceStep,
     driverMapPosition,
+    truckPosition,
     guidanceTargetCoordinate,
   ]);
 
@@ -2129,7 +2211,9 @@ export default function DriverRadarScreen() {
       setOptimalRoute(null);
       setOptimalRouteLoading(false);
       optimalRouteKeyRef.current = null;
-      setShowRouteFallback(false);
+      setShowRouteFallback(
+        activeGuidanceStep === "accepted" && !!routeContextTrip,
+      );
       return;
     }
 
@@ -2143,20 +2227,43 @@ export default function DriverRadarScreen() {
       const parsed = parseRouteFetchKey(routeFetchKey);
       if (!parsed) {
         if (!cancelled) {
+          console.warn("[driver-map][route] invalid-route-key", { routeFetchKey });
           setOptimalRoute(null);
           setOptimalRouteLoading(false);
           setShowRouteFallback(true);
         }
         return;
       }
-
       const res = await getOptimalRoute(parsed.from, parsed.to);
 
       if (cancelled) return;
 
-      setOptimalRoute(res ?? null);
+      const hasDistinctEndpoints =
+        !!res &&
+        Array.isArray(res.coordinates) &&
+        res.coordinates.length >= 2 &&
+        distanceMeters(
+          res.coordinates[0].latitude,
+          res.coordinates[0].longitude,
+          res.coordinates[res.coordinates.length - 1].latitude,
+          res.coordinates[res.coordinates.length - 1].longitude,
+        ) > 25;
+      const hasUsableRoute =
+        !!res &&
+        Array.isArray(res.coordinates) &&
+        res.coordinates.length >= 2 &&
+        hasDistinctEndpoints;
+      if (!hasUsableRoute) {
+        console.warn("[driver-map][route] unusable-route-response", {
+          tripId: parsed.tripId,
+          points: Array.isArray(res?.coordinates) ? res.coordinates.length : 0,
+          distance: res?.distance ?? null,
+          duration: res?.duration ?? null,
+        });
+      }
+      setOptimalRoute(hasUsableRoute ? res : null);
       setOptimalRouteLoading(false);
-      setShowRouteFallback(!res);
+      setShowRouteFallback(!hasUsableRoute);
     };
 
     void performFetch();
@@ -2164,7 +2271,7 @@ export default function DriverRadarScreen() {
     return () => {
       cancelled = true;
     };
-  }, [routeFetchKey]);
+  }, [routeFetchKey, activeGuidanceStep, routeContextTrip]);
 
   // When map is shown (online or active trip), get current position for map center and "You" marker.
   useEffect(() => {
@@ -2175,9 +2282,36 @@ export default function DriverRadarScreen() {
     let cancelled = false;
     (async () => {
       try {
+        if (Platform.OS === "web") {
+          if (typeof navigator === "undefined" || !navigator.geolocation) return;
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              if (cancelled) return;
+              setDriverMapPosition({
+                latitude: pos.coords.latitude,
+                longitude: pos.coords.longitude,
+              });
+            },
+            () => {
+              // Keep null so fallback/route guards handle no-position state cleanly.
+              if (!cancelled) setDriverMapPosition(null);
+            },
+            {
+              enableHighAccuracy: true,
+              maximumAge: 0,
+              timeout: 15000,
+            },
+          );
+          return;
+        }
+
         const expoLocation = await getExpoLocation();
         if (!expoLocation) return;
-        const { status } = await expoLocation.getForegroundPermissionsAsync();
+        let { status } = await expoLocation.getForegroundPermissionsAsync();
+        if (status !== "granted") {
+          const req = await expoLocation.requestForegroundPermissionsAsync();
+          status = req.status;
+        }
         if (status !== "granted" || cancelled) return;
         const pos = await expoLocation.getCurrentPositionAsync({});
         if (cancelled) return;
@@ -2194,6 +2328,43 @@ export default function DriverRadarScreen() {
     };
   }, [shouldShowMap]);
 
+  // Web/permission fallback: recover last known driver position from DB so routing can still render.
+  useEffect(() => {
+    if (!shouldShowMap) return;
+    if (driverMapPosition) return;
+    if (!activeGuidanceTrip?.id) return;
+    if (!driver?.id) return;
+    let cancelled = false;
+    (async () => {
+      const { error, location } =
+        await driverLocationService.getLatestDriverLocationForTripOrDriver(
+          activeGuidanceTrip.id,
+          driver.id,
+        );
+      if (cancelled) return;
+      if (error || !location) {
+        const warnKey = `${activeGuidanceTrip.id}:${driver.id}`;
+        if (gpsFallbackWarnedKeyRef.current !== warnKey) {
+          gpsFallbackWarnedKeyRef.current = warnKey;
+          console.warn("[driver-map][gps-fallback] unavailable", {
+            tripId: activeGuidanceTrip.id,
+            driverId: driver.id,
+            reason: error ? "query_error" : "no_location_rows",
+            error: error?.message ?? null,
+          });
+        }
+        return;
+      }
+      setDriverMapPosition({
+        latitude: location.latitude,
+        longitude: location.longitude,
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [shouldShowMap, driverMapPosition, activeGuidanceTrip?.id, driver?.id]);
+
   // If we switch to a different trip, reset the truck marker so it starts from current GPS.
   useEffect(() => {
     const tripId = activeGuidanceTrip?.id ?? null;
@@ -2206,10 +2377,10 @@ export default function DriverRadarScreen() {
   // Road distance from driver's current position to the active guidance target (pickup or drop).
   const distanceToTargetKmGlobal = useMemo(
     () =>
-      activeMission && driverMapPosition && optimalRoute
+      activeGuidanceTrip && driverMapPosition && optimalRoute
         ? optimalRoute.distance / 1000
         : null,
-    [activeMission, driverMapPosition, optimalRoute],
+    [activeGuidanceTrip, driverMapPosition, optimalRoute],
   );
 
   // Stop any in-flight animation when the map closes.
@@ -2533,8 +2704,7 @@ export default function DriverRadarScreen() {
     }
   }, [activeGuidance, activeGuidanceStep, activeGuidanceTrip]);
 
-  const defaultBoundsTrip = (activeMission ||
-    effectiveFirstIncoming) as tripsService.TripRow | null;
+  const defaultBoundsTrip = routeContextTrip;
   const defaultBoundsPickup = defaultBoundsTrip
     ? getTripStopCoordinate(defaultBoundsTrip, "pickup")
     : null;
@@ -2574,10 +2744,16 @@ export default function DriverRadarScreen() {
           : Math.max(110, Math.round(inlineMapHeight * 0.45));
 
       const routeCoords = optimalRoute?.coordinates;
+      const guidanceLegCoords =
+        activeGuidanceTrip && driverMapPosition && guidanceTargetCoordinate
+          ? [driverMapPosition, guidanceTargetCoordinate]
+          : null;
       const coordsForFit =
         routeCoords && routeCoords.length >= 2
           ? subsampleRouteCoordinates(routeCoords, 220)
-          : [pickup, drop];
+          : guidanceLegCoords && guidanceLegCoords.length >= 2
+            ? guidanceLegCoords
+            : [pickup, drop];
 
       const baseFitKey = `${tripForBounds.id}:${pickup.latitude}:${pickup.longitude}:${drop.latitude}:${drop.longitude}`;
       const fitKey = `${baseFitKey}:route:${routeCoords?.length ?? 0}`;
@@ -2597,6 +2773,9 @@ export default function DriverRadarScreen() {
       defaultBoundsDrop,
       defaultBoundsPickup,
       defaultBoundsTrip,
+      activeGuidanceTrip,
+      driverMapPosition,
+      guidanceTargetCoordinate,
       optimalRoute,
       shouldShowMap,
       olaMapBottomPaddingPx,
@@ -2622,6 +2801,18 @@ export default function DriverRadarScreen() {
       !activeMission &&
       !effectiveFirstIncoming &&
       !hasAssignableIncomingTrip,
+  );
+
+  /** Notify-only after a mission: no primary row until the driver opens Notifications or taps Resume. */
+  const showNotifyOnlyAssignmentsHint = Boolean(
+    driver &&
+      isOnline &&
+      !activeMission &&
+      !otpClaimTrip &&
+      !effectiveFirstIncoming &&
+      hasAssignableIncomingTrip &&
+      !assignmentFeedback &&
+      assignableTripsNotifyOnlyAfterMission,
   );
 
   useEffect(() => {
@@ -2796,7 +2987,11 @@ export default function DriverRadarScreen() {
         try {
           const expoLocation = await getExpoLocation();
           if (!expoLocation || cancelled) return;
-          const { status } = await expoLocation.getForegroundPermissionsAsync();
+          let { status } = await expoLocation.getForegroundPermissionsAsync();
+          if (status !== "granted") {
+            const req = await expoLocation.requestForegroundPermissionsAsync();
+            status = req.status;
+          }
           if (status !== "granted" || cancelled) return;
           if (typeof navigator === "undefined" || !navigator.geolocation) return;
 
@@ -2811,8 +3006,9 @@ export default function DriverRadarScreen() {
             },
             () => {},
             {
-              enableHighAccuracy: false,
-              maximumAge: 5000,
+              enableHighAccuracy: true,
+              maximumAge: 0,
+              timeout: 15000,
             },
           );
           locationWatchRef.current = {
@@ -2906,34 +3102,34 @@ export default function DriverRadarScreen() {
     const mapViewportLocked =
       mapInteractionsLocked || isFollowingLocation;
 
-    const mapCenter = driverMapPosition ?? DEFAULT_MAP_REGION;
-
     const showLeaflet =
       Platform.OS === "web" || useLeafletFallback || leafLetForced;
 
     const pickup =
-      shouldShowMap && (effectiveFirstIncoming || activeMission)
+      shouldShowMap && routeContextTrip
         ? getTripStopCoordinate(
-            (activeMission || effectiveFirstIncoming) as tripsService.TripRow,
+            routeContextTrip,
             "pickup",
           )
         : null;
     const drop =
-      shouldShowMap && (effectiveFirstIncoming || activeMission)
+      shouldShowMap && routeContextTrip
         ? getTripStopCoordinate(
-            (activeMission || effectiveFirstIncoming) as tripsService.TripRow,
+            routeContextTrip,
             "drop",
           )
         : null;
+    const mapCenter = driverMapPosition ?? pickup ?? drop ?? DEFAULT_MAP_REGION;
 
-    const leafletMarkers: LeafletMarker[] = [
-      {
+    const leafletMarkers: LeafletMarker[] = [];
+    if (driverMapPosition) {
+      leafletMarkers.push({
         id: "you",
-        coordinate: mapCenter,
+        coordinate: driverMapPosition,
         label: "You",
         color: Theme.primary,
-      },
-    ];
+      });
+    }
     if (pickup) {
       leafletMarkers.push({
         id: "pickup",
@@ -2952,7 +3148,7 @@ export default function DriverRadarScreen() {
     }
 
     const fallbackCoordinates =
-      activeMission && driverMapPosition && guidanceTargetCoordinate
+      activeGuidanceTrip && driverMapPosition && guidanceTargetCoordinate
         ? [driverMapPosition, guidanceTargetCoordinate]
         : pickup && drop
           ? [pickup, drop]
@@ -2967,8 +3163,9 @@ export default function DriverRadarScreen() {
           : [];
 
     // Road distance from driver to current guidance target (pickup or drop)
+    const pinnedPosition = truckPosition ?? driverMapPosition ?? DEFAULT_MAP_REGION;
     const distanceToTargetKm =
-      activeMission && driverMapPosition && optimalRoute
+      activeGuidanceTrip && pinnedPosition && optimalRoute
         ? optimalRoute.distance / 1000
         : null;
 
@@ -2976,7 +3173,7 @@ export default function DriverRadarScreen() {
     const handleFitBoundsLeaflet = () => {
       const leafRef = isFullScreen ? fullLeafletRef : leafletRef;
       if (!leafRef.current) return;
-      const pts = [driverMapPosition, pickup, drop].filter(
+      const pts = [pinnedPosition, pickup, drop].filter(
         (p): p is { latitude: number; longitude: number } => !!p,
       );
       if (pts.length < 2) return;
@@ -2991,21 +3188,21 @@ export default function DriverRadarScreen() {
 
     // Zoom native map to driver's current location
     const handleZoomToDriver = () => {
-      if (!driverMapPosition) return;
+      if (!pinnedPosition) return;
       if (showLeaflet) {
         const leafRef = isFullScreen ? fullLeafletRef : leafletRef;
-        leafRef.current?.focusCurrentLocation(driverMapPosition, 16);
+        leafRef.current?.focusCurrentLocation(pinnedPosition, 16);
       } else {
         const map = targetRef.current;
         try {
           if (map?.animateCamera) {
             map.animateCamera(
-              { center: driverMapPosition, zoom: 16, pitch: 0 },
+              { center: pinnedPosition, zoom: 16, pitch: 0 },
               { duration: 450 },
             );
           } else if (map?.animateToRegion) {
             map.animateToRegion(
-              { ...driverMapPosition, latitudeDelta: 0.005, longitudeDelta: 0.005 },
+              { ...pinnedPosition, latitudeDelta: 0.005, longitudeDelta: 0.005 },
               450,
             );
           }
@@ -3082,10 +3279,10 @@ export default function DriverRadarScreen() {
           >
             {/* Always render the "You" marker so the current-location indication is visible
               immediately, then it updates as driverMapPosition becomes available. */}
-            {OlaAnimatedMarker ? (
+            {OlaAnimatedMarker && driverMapPosition ? (
               <OlaAnimatedMarker
                 animatedProps={youMarkerAnimatedProps}
-                coordinate={driverMapPosition ?? DEFAULT_MAP_REGION}
+                coordinate={driverMapPosition}
                 anchor={{ x: 0.5, y: 1 }}
               >
                 <Reanimated.View
@@ -3136,18 +3333,16 @@ export default function DriverRadarScreen() {
               </OlaAnimatedMarker>
             ) : null}
 
-            {shouldShowMap && (effectiveFirstIncoming || activeMission) && (
+            {shouldShowMap && routeContextTrip && (
               <>
                 {getTripStopCoordinate(
-                  (activeMission ||
-                    effectiveFirstIncoming) as tripsService.TripRow,
+                  routeContextTrip,
                   "pickup",
                 ) && (
                   <MapMarker
                     coordinate={
                       getTripStopCoordinate(
-                        (activeMission ||
-                          effectiveFirstIncoming) as tripsService.TripRow,
+                        routeContextTrip,
                         "pickup",
                       )!
                     }
@@ -3169,15 +3364,13 @@ export default function DriverRadarScreen() {
                   </MapMarker>
                 )}
                 {getTripStopCoordinate(
-                  (activeMission ||
-                    effectiveFirstIncoming) as tripsService.TripRow,
+                  routeContextTrip,
                   "drop",
                 ) && (
                   <MapMarker
                     coordinate={
                       getTripStopCoordinate(
-                        (activeMission ||
-                          effectiveFirstIncoming) as tripsService.TripRow,
+                        routeContextTrip,
                         "drop",
                       )!
                     }
@@ -3198,7 +3391,7 @@ export default function DriverRadarScreen() {
                     </View>
                   </MapMarker>
                 )}
-                {optimalRoute ? (
+                {optimalRoute && optimalRoute.coordinates.length >= 2 ? (
                   <>
                     <MapPolyline
                       coordinates={optimalRoute.coordinates}
@@ -3219,20 +3412,18 @@ export default function DriverRadarScreen() {
                   showRouteFallback &&
                   (() => {
                     const fallbackPickup = getTripStopCoordinate(
-                      (activeMission ||
-                        effectiveFirstIncoming) as tripsService.TripRow,
+                      routeContextTrip,
                       "pickup",
                     );
                     const fallbackDrop = getTripStopCoordinate(
-                      (activeMission ||
-                        effectiveFirstIncoming) as tripsService.TripRow,
+                      routeContextTrip,
                       "drop",
                     );
                     const fallbackCoordinates =
-                      activeMission &&
-                      driverMapPosition &&
+      activeGuidanceTrip &&
+                      pinnedPosition &&
                       guidanceTargetCoordinate
-                        ? [driverMapPosition, guidanceTargetCoordinate]
+                        ? [pinnedPosition, guidanceTargetCoordinate]
                         : fallbackPickup && fallbackDrop
                           ? [fallbackPickup, fallbackDrop]
                           : [];
@@ -3260,70 +3451,6 @@ export default function DriverRadarScreen() {
             )}
           </MapView>
         )}
-
-        {/* Primary trip HUD: one surface — hide when route overview or Live route card is open */}
-        {activeGuidance &&
-        !showRouteSummary &&
-        !showTrackingInfoCard &&
-        otpClaimTripId == null ? (
-          <View
-            pointerEvents="none"
-            style={[
-              styles.mapGuidanceChip,
-              isFullScreen
-                ? {
-                    top:
-                      (controlsVariant === "embedded"
-                        ? insets.top + 96
-                        : insets.top + 10) + 54,
-                    left: Layout.screenPaddingHorizontal,
-                    right: Layout.screenPaddingHorizontal,
-                  }
-                : { left: 14, right: 72, bottom: 18 },
-              { backgroundColor: colors.surface, borderColor: colors.border },
-            ]}
-          >
-            <View style={styles.mapGuidanceHeaderRow}>
-              <View
-                style={[
-                  styles.mapGuidanceIconWrap,
-                  { backgroundColor: colors.emeraldMuted },
-                ]}
-              >
-                <FontAwesome
-                  name={activeGuidance.icon}
-                  size={14}
-                  color={colors.emerald}
-                />
-              </View>
-              <Text
-                style={[styles.mapGuidanceTitle, { color: colors.text }]}
-                numberOfLines={1}
-              >
-                {activeGuidance.title}
-              </Text>
-            </View>
-            <Text
-              style={[styles.mapGuidanceSubtitle, { color: colors.textMuted }]}
-              numberOfLines={2}
-            >
-              {activeGuidance.subtitle}
-            </Text>
-            {distanceToTargetKm != null &&
-              (activeGuidanceStep === "accepted" ||
-                activeGuidanceStep === "transit") ? (
-              <Text
-                style={[styles.mapGuidanceDistance, { color: colors.emerald }]}
-                numberOfLines={1}
-              >
-                {formatRoadDistanceM(distanceToTargetKm * 1000)}{" "}
-                {activeGuidanceStep === "accepted"
-                  ? "to pickup"
-                  : "to destination"}
-              </Text>
-            ) : null}
-          </View>
-        ) : null}
 
         {/* Map controls + route summary — hidden during OTP entry */}
         {otpClaimTripId == null ? (
@@ -3874,6 +4001,7 @@ export default function DriverRadarScreen() {
               onRefresh={fetch}
               onTripCompleted={() => {
                 justCompletedTripRef.current = true;
+                setSelectedIncomingTripId(null);
                 setAssignableTripsNotifyOnlyAfterMission(true);
                 void AsyncStorage.setItem(DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY, "1");
                 persistPostMissionPendingSnapshot();
@@ -3912,6 +4040,7 @@ export default function DriverRadarScreen() {
               onRefresh={fetch}
               onTripCompleted={() => {
                 justCompletedTripRef.current = true;
+                setSelectedIncomingTripId(null);
                 setAssignableTripsNotifyOnlyAfterMission(true);
                 void AsyncStorage.setItem(DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY, "1");
                 persistPostMissionPendingSnapshot();
@@ -4076,7 +4205,25 @@ export default function DriverRadarScreen() {
         ) : showNewAssignmentCard &&
           effectiveFirstIncoming &&
           !assignmentFeedback ? (
-          <JobRequestCard
+          <>
+            {incomingAssignmentQueueMeta ? (
+              <Text
+                style={[
+                  styles.offlineCardSubtitle,
+                  {
+                    color: colors.textMuted,
+                    textAlign: "center",
+                    marginBottom: 10,
+                    paddingHorizontal: 8,
+                  },
+                ]}
+              >
+                Queue (oldest first): {incomingAssignmentQueueMeta.position} of{" "}
+                {incomingAssignmentQueueMeta.total} — next up is the earliest
+                assignment.
+              </Text>
+            ) : null}
+            <JobRequestCard
             assignmentId={String(effectiveFirstIncoming.id)}
             pickup={effectiveFirstIncoming.pickup_area?.trim() || "—"}
             dropoff={effectiveFirstIncoming.drop_location?.trim() || "—"}
@@ -4142,6 +4289,77 @@ export default function DriverRadarScreen() {
             variant={mapSheet ? "page" : "card"}
             assignedByLine={assignerLineForJobCard}
           />
+          </>
+        ) : showNotifyOnlyAssignmentsHint ? (
+          <View
+            style={[
+              styles.centerCardWrap,
+              styles.centerCardConstraint,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                borderWidth: 1,
+                paddingVertical: 20,
+                paddingHorizontal: 18,
+              },
+            ]}
+          >
+            <Text style={[styles.offlineCardTitle, { color: colors.text, textAlign: "center" }]}>
+              Assignments waiting
+            </Text>
+            <Text
+              style={[
+                styles.offlineCardSubtitle,
+                {
+                  color: colors.textMuted,
+                  textAlign: "center",
+                  marginTop: 10,
+                },
+              ]}
+            >
+              {visibleAssignableIncomingTripsFcfs.length > 1
+                ? "Several trips are waiting (oldest first in queue). Open Notifications to pick one, or resume to show the next assignment on the dashboard."
+                : "Your next assignment is paused on the dashboard after your last trip. Open Notifications, or resume here to accept it."}
+            </Text>
+            {assignableTripsNotifyOnlyAfterMission ? (
+              <TouchableOpacity
+                style={[
+                  styles.goOnlineBtn,
+                  { backgroundColor: colors.emerald, marginTop: 16, width: "100%" },
+                ]}
+                onPress={() => {
+                  clearNotifyOnlyAfterMission();
+                  if (visibleAssignableIncomingTripsFcfs.length > 1) {
+                    const first = visibleAssignableIncomingTripsFcfs[0];
+                    if (first?.id) setSelectedIncomingTripId(String(first.id));
+                  }
+                  triggerSuccess("Assignments shown on dashboard.");
+                }}
+                activeOpacity={0.88}
+              >
+                <FontAwesome name="th-large" size={16} color={Theme.textOnPrimary} />
+                <Text style={styles.goOnlineBtnText}>Resume on dashboard</Text>
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity
+              style={[
+                styles.searchOfflineBtn,
+                {
+                  marginTop: 10,
+                  width: "100%",
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                },
+              ]}
+              onPress={() => router.push("/(driver)/notifications")}
+              activeOpacity={0.88}
+            >
+              <FontAwesome name="bell" size={16} color={colors.text} />
+              <Text style={[styles.searchOfflineBtnText, { color: colors.text }]}>
+                Open notifications
+              </Text>
+            </TouchableOpacity>
+          </View>
         ) : showSearchingOverlay ? (
           <View style={styles.driverSearchingEmptyWrap}>
             <View style={styles.driverSearchingEmptyContent}>

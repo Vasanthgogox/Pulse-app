@@ -162,54 +162,91 @@ async function resolveGenericPartyNamesForTrips(
   });
 }
 
+const TRIP_EMBED_FIELDS_FULL =
+  "trip_number, display_trip_id, status, pickup_area, drop_location";
+const TRIP_EMBED_FIELDS_LEGACY = "trip_number, status, pickup_area, drop_location";
+
+const TRIP_MESSAGES_EMBED = `trip_messages ( id, conversation_id, content, sender_role, sender_name, sender_user_id, created_at, is_read, message_type, metadata )`;
+
+function tripConversationSelect(tripEmbedFields: string): string {
+  return `
+      *,
+      trips!inner ( ${tripEmbedFields} ),
+      ${TRIP_MESSAGES_EMBED}
+    `;
+}
+
+/** PostgREST fails the whole row if an embedded column does not exist on `trips`. */
+function isMissingTripsDisplayTripIdError(err: unknown): boolean {
+  const e = err as { message?: string; code?: string } | null;
+  if (!e) return false;
+  const m = String(e.message ?? "").toLowerCase();
+  if (!m.includes("display_trip_id")) return false;
+  return (
+    m.includes("does not exist") ||
+    m.includes("unknown") ||
+    m.includes("column") ||
+    m.includes("schema cache")
+  );
+}
+
 export async function getConversationsByOrganization(
   organizationId: string,
 ): Promise<TripConversation[]> {
-  const selectConv = `
-      *,
-      trips!inner ( trip_number, pickup_area, drop_location ),
-      trip_messages ( id, conversation_id, content, sender_role, sender_name, sender_user_id, created_at, is_read, message_type, metadata )
-    `;
+  async function loadMerged(tripEmbedFields: string): Promise<unknown[]> {
+    const selectConv = tripConversationSelect(tripEmbedFields);
+    const [{ data: ownOrgRows, error: ownErr }, supplierTripsRes] = await Promise.all([
+      supabase()
+        .from("trip_conversations")
+        .select(selectConv)
+        .eq("organization_id", organizationId)
+        .order("last_message_at", { ascending: false, nullsFirst: false }),
+      getTripsWhereOrgIsSupplier(organizationId),
+    ]);
 
-  const [{ data: ownOrgRows, error: ownErr }, supplierTripsRes] = await Promise.all([
-    supabase()
-      .from("trip_conversations")
-      .select(selectConv)
-      .eq("organization_id", organizationId)
-      .order("last_message_at", { ascending: false, nullsFirst: false }),
-    getTripsWhereOrgIsSupplier(organizationId),
-  ]);
+    if (ownErr) throw ownErr;
 
-  if (ownErr) throw ownErr;
+    const supplierTripIds = (supplierTripsRes.trips ?? [])
+      .map((t: TripRow) => t.id)
+      .filter((id): id is string => !!id);
 
-  const supplierTripIds = (supplierTripsRes.trips ?? [])
-    .map((t: TripRow) => t.id)
-    .filter((id): id is string => !!id);
+    let supplierRows: unknown[] = [];
+    if (supplierTripIds.length > 0) {
+      const { data: supRows, error: supErr } = await supabase()
+        .from("trip_conversations")
+        .select(selectConv)
+        .in("trip_id", supplierTripIds)
+        .order("last_message_at", { ascending: false, nullsFirst: false });
+      if (supErr) throw supErr;
+      supplierRows = supRows ?? [];
+    }
 
-  let supplierRows: unknown[] = [];
-  if (supplierTripIds.length > 0) {
-    const { data: supRows, error: supErr } = await supabase()
-      .from("trip_conversations")
-      .select(selectConv)
-      .in("trip_id", supplierTripIds)
-      .order("last_message_at", { ascending: false, nullsFirst: false });
-    if (supErr) throw supErr;
-    supplierRows = supRows ?? [];
+    const byId = new Map<string, unknown>();
+    for (const row of ownOrgRows ?? [])
+      byId.set((row as unknown as { id: string }).id, row);
+    for (const row of supplierRows)
+      byId.set((row as unknown as { id: string }).id, row);
+
+    return Array.from(byId.values()).sort((a: any, b: any) => {
+      const ta = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+      const tb = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+      return tb - ta;
+    });
   }
 
-  const byId = new Map<string, unknown>();
-  for (const row of ownOrgRows ?? []) byId.set((row as { id: string }).id, row);
-  for (const row of supplierRows) byId.set((row as { id: string }).id, row);
-
-  const merged = Array.from(byId.values()).sort((a: any, b: any) => {
-    const ta = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
-    const tb = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
-    return tb - ta;
-  });
+  let merged: unknown[];
+  try {
+    merged = await loadMerged(TRIP_EMBED_FIELDS_FULL);
+  } catch (err) {
+    if (!isMissingTripsDisplayTripIdError(err)) throw err;
+    merged = await loadMerged(TRIP_EMBED_FIELDS_LEGACY);
+  }
 
   const conversations: TripConversation[] = merged.map((row: any) => ({
     ...row,
     trip_number: row.trips?.trip_number ?? "",
+    display_trip_id: row.trips?.display_trip_id ?? null,
+    trip_status: row.trips?.status ?? null,
     pickup_area: row.trips?.pickup_area ?? "",
     drop_location: row.trips?.drop_location ?? "",
     messages: ((row.trip_messages ?? []) as TripMessageRow[]).sort(
@@ -225,27 +262,38 @@ export async function getConversationsByOrganization(
 export async function getTripConversationById(
   conversationId: string,
 ): Promise<TripConversation | null> {
-  const selectConv = `
-      *,
-      trips!inner ( trip_number, pickup_area, drop_location ),
-      trip_messages ( id, conversation_id, content, sender_role, sender_name, sender_user_id, created_at, is_read, message_type, metadata )
-    `;
-  const { data, error } = await supabase()
+  let res = await supabase()
     .from("trip_conversations")
-    .select(selectConv)
+    .select(tripConversationSelect(TRIP_EMBED_FIELDS_FULL))
     .eq("id", conversationId)
     .maybeSingle();
 
-  if (error || !data) return null;
+  if (res.error && isMissingTripsDisplayTripIdError(res.error)) {
+    res = await supabase()
+      .from("trip_conversations")
+      .select(tripConversationSelect(TRIP_EMBED_FIELDS_LEGACY))
+      .eq("id", conversationId)
+      .maybeSingle();
+  }
 
-  const row = data as {
-    trips?: { trip_number?: string; pickup_area?: string; drop_location?: string };
+  if (res.error || !res.data) return null;
+
+  const row = res.data as unknown as {
+    trips?: {
+      trip_number?: string;
+      display_trip_id?: string | null;
+      status?: string | null;
+      pickup_area?: string;
+      drop_location?: string;
+    };
     trip_messages?: TripMessageRow[];
   } & Record<string, unknown>;
 
   const base: TripConversation = {
     ...row,
     trip_number: String(row.trips?.trip_number ?? ""),
+    display_trip_id: row.trips?.display_trip_id ?? null,
+    trip_status: row.trips?.status ?? null,
     pickup_area: String(row.trips?.pickup_area ?? ""),
     drop_location: String(row.trips?.drop_location ?? ""),
     messages: ((row.trip_messages ?? []) as TripMessageRow[]).sort(
@@ -560,37 +608,103 @@ export async function getConversationsByDriverIds(
 ): Promise<TripConversation[]> {
   if (!driverIds.length) return [];
 
-  const { data, error } = await supabase()
+  type DriverChatTripMini = {
+    id: string;
+    trip_number: string | null;
+    driver_display_trip_id: string | null;
+    pickup_area: string | null;
+    drop_location: string | null;
+  };
+  type DriverChatConversationRow = TripConversationRow & {
+    id: string;
+    trip_id: string;
+    trips?: DriverChatTripMini | null;
+    trip_messages?: TripMessageRow[];
+  };
+
+  const mapRows = (
+    convRows: DriverChatConversationRow[],
+    tripsById: Map<string, DriverChatTripMini>,
+    messagesByConversationId: Map<string, TripMessageRow[]>,
+  ): TripConversation[] =>
+    convRows.map((row) => {
+      const tr = row.trips ?? tripsById.get(String(row.trip_id ?? "")) ?? null;
+      const perDriver =
+        tr?.driver_display_trip_id != null && String(tr.driver_display_trip_id).trim() !== ""
+          ? String(tr.driver_display_trip_id).trim()
+          : "";
+      return {
+        ...row,
+        trip_number: perDriver || tr?.trip_number || "",
+        pickup_area: tr?.pickup_area ?? "",
+        drop_location: tr?.drop_location ?? "",
+        messages: (
+          row.trip_messages ??
+          messagesByConversationId.get(String(row.id ?? "")) ??
+          []
+        ) as TripMessageRow[],
+      };
+    });
+
+  const primary = await supabase()
     .from("trip_conversations")
     .select(
       `
       *,
-      trips!inner ( trip_number, pickup_area, drop_location ),
+      trips!inner ( trip_number, driver_display_trip_id, pickup_area, drop_location ),
       trip_messages ( id, conversation_id, content, sender_role, sender_name, sender_user_id, created_at, is_read, message_type, metadata )
     `,
     )
     .in("driver_id", driverIds)
     .order("last_message_at", { ascending: false, nullsFirst: false });
 
-  if (error) throw error;
+  if (!primary.error) {
+    return mapRows((primary.data ?? []) as DriverChatConversationRow[], new Map(), new Map());
+  }
 
-  return (data ?? []).map((row: any) => {
-    const tr = row.trips;
-    const perDriver =
-      tr?.driver_display_trip_id != null && String(tr.driver_display_trip_id).trim() !== ""
-        ? String(tr.driver_display_trip_id).trim()
-        : "";
-    return {
-      ...row,
-      trip_number: perDriver || tr?.trip_number || "",
-      pickup_area: tr?.pickup_area ?? "",
-      drop_location: tr?.drop_location ?? "",
-      messages: ((row.trip_messages ?? []) as TripMessageRow[]).sort(
-        (a, b) =>
-          new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-      ),
-    };
-  });
+  // Fallback for environments where embedded select can fail (e.g. RLS recursion / PostgREST 500).
+  const { data: convRows, error: convErr } = await supabase()
+    .from("trip_conversations")
+    .select("*")
+    .in("driver_id", driverIds)
+    .order("last_message_at", { ascending: false, nullsFirst: false });
+  if (convErr) throw primary.error;
+
+  const normalizedConvRows = (convRows ?? []) as DriverChatConversationRow[];
+  const tripIds = Array.from(new Set(normalizedConvRows.map((r) => String(r.trip_id ?? "")).filter(Boolean)));
+  const convIds = Array.from(new Set(normalizedConvRows.map((r) => String(r.id ?? "")).filter(Boolean)));
+
+  const emptyTripsRes: { data: DriverChatTripMini[]; error: null } = { data: [], error: null };
+  const emptyMessagesRes: { data: TripMessageRow[]; error: null } = { data: [], error: null };
+  const [tripRes, msgRes] = await Promise.all([
+    tripIds.length
+      ? supabase()
+          .from("trips")
+          .select("id, trip_number, driver_display_trip_id, pickup_area, drop_location")
+          .in("id", tripIds)
+      : Promise.resolve(emptyTripsRes),
+    convIds.length
+      ? supabase()
+          .from("trip_messages")
+          .select("id, conversation_id, content, sender_role, sender_name, sender_user_id, created_at, is_read, message_type, metadata")
+          .in("conversation_id", convIds)
+          .order("created_at", { ascending: true })
+      : Promise.resolve(emptyMessagesRes),
+  ]);
+
+  const tripsById = new Map<string, DriverChatTripMini>();
+  for (const tr of (tripRes.data ?? []) as DriverChatTripMini[]) {
+    tripsById.set(String(tr.id ?? ""), tr);
+  }
+
+  const messagesByConversationId = new Map<string, TripMessageRow[]>();
+  for (const msg of (msgRes.data ?? []) as TripMessageRow[]) {
+    const cid = String(msg.conversation_id ?? "");
+    if (!messagesByConversationId.has(cid)) messagesByConversationId.set(cid, []);
+    messagesByConversationId.get(cid)!.push(msg);
+  }
+
+  return mapRows(normalizedConvRows, tripsById, messagesByConversationId);
 }
 
 /** Sends a message as the driver role. Thin wrapper for consistency. */

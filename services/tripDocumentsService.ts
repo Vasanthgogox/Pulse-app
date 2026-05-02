@@ -69,6 +69,12 @@ export interface UploadTripDocumentResult {
   error: Error | null;
 }
 
+export interface UploadTripChatImageResult {
+  fileName: string;
+  mimeType: string | null;
+  storagePath: string;
+}
+
 const SIGNED_URL_EXPIRY_SEC = 3600;
 
 /**
@@ -215,6 +221,38 @@ export async function uploadTripDocument(
   }
 
   return { doc: row as TripDocumentRow, error: null };
+}
+
+/**
+ * Upload a trip image for chat/progress updates only (non-POD).
+ * Stores the file under a dedicated folder and does not create a trip_documents row.
+ */
+export async function uploadTripChatImage(
+  tripId: string,
+  file: { arrayBuffer: ArrayBuffer; fileName: string; mimeType: string },
+): Promise<{ result: UploadTripChatImageResult | null; error: Error | null }> {
+  const ext = file.fileName.split(".").pop()?.toLowerCase() || "jpg";
+  const path = `${tripId}/chat/${randomUUID()}.${ext}`;
+  const { error: uploadError } = await supabase()
+    .storage.from(BUCKET)
+    .upload(path, file.arrayBuffer, {
+      contentType: file.mimeType || "image/jpeg",
+      upsert: false,
+    });
+  if (uploadError) {
+    return {
+      result: null,
+      error: new Error(uploadError.message),
+    };
+  }
+  return {
+    result: {
+      fileName: file.fileName,
+      mimeType: file.mimeType || null,
+      storagePath: path,
+    },
+    error: null,
+  };
 }
 
 /**

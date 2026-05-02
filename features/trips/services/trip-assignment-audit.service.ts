@@ -8,19 +8,20 @@ import { supabase } from '@/lib/supabase';
 /** After first confirmed "table missing" (PostgREST PGRST205 / 404), skip further HTTP calls this session. */
 let tripAssignmentAuditTableUnavailable = false;
 
-function isMissingTripAssignmentAuditTable(error: {
-  code?: string;
-  message?: string;
-}): boolean {
-  const code = error.code ?? '';
-  const msg = (error.message ?? '').toLowerCase();
-  return (
-    code === '42P01' ||
-    code === 'PGRST205' ||
-    msg.includes('does not exist') ||
-    msg.includes('schema cache') ||
-    msg.includes('could not find the table')
-  );
+/** PostgREST 404 / PGRST205 when relation missing from API — same as trip_documents edge case. */
+function isTripAssignmentAuditTableMissing(
+  err: { message?: string; code?: string; status?: number } | null | undefined,
+): boolean {
+  if (!err) return false;
+  const code = String(err.code ?? '').toUpperCase();
+  if (code === '42P01' || code === 'PGRST205') return true;
+  if (err.status === 404) return true;
+  const m = String(err.message ?? '').toLowerCase();
+  if (m.includes('schema cache')) return true;
+  if (m.includes('could not find the table')) return true;
+  if (m.includes('does not exist') && m.includes('trip_assignment_audit')) return true;
+  if (m.includes('trip_assignment_audit') && m.includes('not found')) return true;
+  return false;
 }
 
 export type AssignmentEventType = 'assignment' | 'reassignment' | 'completed';
@@ -58,7 +59,7 @@ export async function insertTripAssignmentAudit(
       } as Record<string, unknown>);
 
     if (error) {
-      if (isMissingTripAssignmentAuditTable(error)) {
+      if (isTripAssignmentAuditTableMissing(error)) {
         tripAssignmentAuditTableUnavailable = true;
         return { error: null };
       }
@@ -112,7 +113,7 @@ export async function getLatestAssignmentAuditByTripIds(
       .order('changed_at', { ascending: false });
 
     if (error) {
-      if (isMissingTripAssignmentAuditTable(error)) {
+      if (isTripAssignmentAuditTableMissing(error)) {
         tripAssignmentAuditTableUnavailable = true;
         return { error: null, byTripId };
       }
@@ -126,8 +127,10 @@ export async function getLatestAssignmentAuditByTripIds(
       }
     }
     return { error: null, byTripId };
-  } catch {
-    return { error: null, byTripId };
+  } catch (e) {
+    const err = e as { message?: string; code?: string; status?: number };
+    if (isTripAssignmentAuditTableMissing(err)) return { error: null, byTripId };
+    return { error: e instanceof Error ? e : new Error(String(e)), byTripId };
   }
 }
 
@@ -153,7 +156,7 @@ export async function getTripAssignmentAuditHistory(
       .limit(Math.max(1, Math.min(50, limit)));
 
     if (error) {
-      if (isMissingTripAssignmentAuditTable(error)) {
+      if (isTripAssignmentAuditTableMissing(error)) {
         tripAssignmentAuditTableUnavailable = true;
         return { error: null, rows: [] };
       }

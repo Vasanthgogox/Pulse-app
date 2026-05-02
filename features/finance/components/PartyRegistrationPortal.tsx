@@ -905,7 +905,7 @@ function PartyRegistrationPortalInner(
           <View
             style={[styles.sidebar, !layoutWide && styles.sidebarNarrow]}
           >
-            <Pressable style={styles.backBtn} onPress={onClose} hitSlop={12}>
+            <Pressable style={styles.backBtn} onPress={onClose} hitSlop={12} testID="party-close-btn">
               <ChevronLeft size={22} color="#fff" strokeWidth={2.5} />
             </Pressable>
             <View style={styles.sideIconWrap}>
@@ -966,7 +966,7 @@ function PartyRegistrationPortalInner(
             ) : null}
 
             {formError ? (
-              <View style={styles.errorBar}>
+              <View style={styles.errorBar} testID="party-form-error">
                 <Text style={styles.errorBarText}>{formError}</Text>
               </View>
             ) : null}
@@ -1028,6 +1028,7 @@ function PartyRegistrationPortalInner(
                         value={orgOrCompanyName}
                         onChangeText={setOrgOrCompanyName}
                         autoCapitalize="words"
+                        testID="party-org-name-input"
                       />
                     </Field>
                     <View style={[styles.row2, layoutWide && styles.row2Web]}>
@@ -1039,6 +1040,7 @@ function PartyRegistrationPortalInner(
                             placeholderTextColor={Theme.textMuted}
                             value={contactName}
                             onChangeText={setContactName}
+                            testID="party-contact-name-input"
                           />
                         </Field>
                       </View>
@@ -1063,6 +1065,7 @@ function PartyRegistrationPortalInner(
                                   : (x) =>
                                       setPhoneDigits(x.replace(/[^\d+]/g, ""))
                               }
+                              testID="party-phone-input"
                             />
                             <Smartphone
                               size={18}
@@ -1112,6 +1115,7 @@ function PartyRegistrationPortalInner(
                                 onPress={handleAddAsOfflineInstead}
                                 disabled={submitting}
                                 style={styles.clientOfflineLink}
+                                testID="party-add-offline-btn"
                               >
                                 <Text style={styles.clientOfflineLinkText}>
                                   Add as offline instead
@@ -1144,6 +1148,7 @@ function PartyRegistrationPortalInner(
                           placeholderTextColor={Theme.textMuted}
                           value={driverName}
                           onChangeText={setDriverName}
+                          testID="party-driver-name-input"
                         />
                       </View>
                     </Field>
@@ -1165,6 +1170,7 @@ function PartyRegistrationPortalInner(
                                   : (x) =>
                                       setDriverPhone(x.replace(/[^\d+]/g, ""))
                               }
+                              testID="party-driver-phone-input"
                             />
                           </View>
                         </Field>
@@ -1184,6 +1190,7 @@ function PartyRegistrationPortalInner(
                               autoCapitalize="characters"
                               value={driverDl}
                               onChangeText={(t) => setDriverDl(t.toUpperCase())}
+                              testID="party-driver-dl-input"
                             />
                           </View>
                         </Field>
@@ -1205,6 +1212,7 @@ function PartyRegistrationPortalInner(
                           autoCorrect={false}
                           value={driverEmail}
                           onChangeText={setDriverEmail}
+                          testID="party-driver-email-input"
                         />
                       </View>
                     </Field>
@@ -1338,6 +1346,7 @@ function PartyRegistrationPortalInner(
                                   onPress={handleAddDriverOfflineInstead}
                                   disabled={submitting}
                                   style={styles.clientOfflineLink}
+                                  testID="party-driver-add-offline-btn"
                                 >
                                   <Text style={styles.clientOfflineLinkText}>
                                     Add as offline driver instead
@@ -1370,6 +1379,7 @@ function PartyRegistrationPortalInner(
                           onChangeText={(t) =>
                             setVehicleReg(formatIndianVehicleNumberInput(t))
                           }
+                          testID="party-vehicle-reg-input"
                         />
                       </View>
                     </Field>
@@ -1383,6 +1393,7 @@ function PartyRegistrationPortalInner(
                               vehicleCategory === cat && styles.vehicleChipActive,
                             ]}
                             onPress={() => setVehicleCategory(cat)}
+                            testID={`party-vehicle-category-${cat}`}
                           >
                             <Text
                               style={[
@@ -1412,6 +1423,7 @@ function PartyRegistrationPortalInner(
                             placeholderTextColor={Theme.textMuted}
                             value={vehicleModel}
                             onChangeText={setVehicleModel}
+                            testID="party-vehicle-model-input"
                           />
                         </View>
                       ) : (
@@ -1428,6 +1440,7 @@ function PartyRegistrationPortalInner(
                               styles.presetFieldPress,
                             ]}
                             onPress={() => setModelPickerOpen(true)}
+                            testID="party-vehicle-model-picker"
                           >
                             <Text
                               style={
@@ -1474,6 +1487,7 @@ function PartyRegistrationPortalInner(
                               keyboardType="decimal-pad"
                               value={vehicleCapacity}
                               onChangeText={setVehicleCapacity}
+                              testID="party-vehicle-capacity-input"
                             />
                           </View>
                           {renderPortalSpecHint(
@@ -1491,11 +1505,13 @@ function PartyRegistrationPortalInner(
                               placeholderTextColor={Theme.textMuted}
                               value={vehicleBodyFt}
                               onChangeText={setVehicleBodyFt}
+                              testID="party-vehicle-body-input"
                             />
                           ) : (
                             <Pressable
                               style={[styles.input, styles.presetFieldPress]}
                               onPress={() => setBodyLengthPickerOpen(true)}
+                              testID="party-vehicle-body-picker"
                             >
                               <Text
                                 style={
@@ -1540,6 +1556,7 @@ function PartyRegistrationPortalInner(
                           placeholderTextColor={Theme.textMuted}
                           value={vehicleAxle}
                           onChangeText={setVehicleAxle}
+                          testID="party-vehicle-axle-input"
                         />
                       </View>
                       {renderPortalSpecHint(
@@ -1623,6 +1640,7 @@ function PartyRegistrationPortalInner(
                     onInviteDriver &&
                     driverExistingMatches.some((m) => m.is_in_fleet === true))
                 }
+                testID="party-continue-btn"
               >
                 <Text style={styles.primaryBtnText}>Continue</Text>
                 <ArrowRight size={22} color="#fff" strokeWidth={2.5} />
@@ -1633,6 +1651,7 @@ function PartyRegistrationPortalInner(
                   style={styles.reviewGhostBtnWide}
                   onPress={() => setStep("form")}
                   hitSlop={8}
+                  testID="party-edit-details-btn"
                 >
                   <Text style={styles.ghostBtnText}>← Edit details</Text>
                 </Pressable>
@@ -1645,6 +1664,7 @@ function PartyRegistrationPortalInner(
                   ]}
                   onPress={() => void confirmSave()}
                   disabled={!organizationId || submitting}
+                  testID="party-save-btn"
                 >
                   {submitting ? (
                     <ActivityIndicator color="#fff" />
