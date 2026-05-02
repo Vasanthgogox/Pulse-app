@@ -112,6 +112,18 @@ function statusMatchesFilter(status: string, filter: StatusFilterTab): boolean {
   return tab?.statuses.includes(s) ?? false;
 }
 
+/** Hide GET LOAD row state pill when the active status chip already matches (see GET LOAD cards). */
+function shouldHideGetLoadStatePill(
+  filter: StatusFilterTab,
+  stateLabel: string,
+  quoteAccepted: boolean,
+): boolean {
+  if (filter === "OPEN" && stateLabel === "OPEN") return true;
+  if (filter === "QUOTED" && stateLabel === "QUOTED") return true;
+  if (filter === "AWARDED" && quoteAccepted) return true;
+  return false;
+}
+
 /** Status pill colors for Hire Partner cards (Tesla palette, no indigo). */
 function giveLoadStatusPillStyles(status: string): {
   pill: object;
@@ -1414,6 +1426,8 @@ export function LoadCenterView({
     load: IndentRow,
     isDone: boolean,
     stretchInGrid = false,
+    /** Hide redundant "Claimed" pill when the Claimed sub-tab is already selected */
+    hideClaimedContextPill = true,
   ) => {
     const acceptedQuote = myQuotes.find(
       (q) =>
@@ -1440,11 +1454,13 @@ export function LoadCenterView({
       >
         <View style={[styles.loadCardOrb, { pointerEvents: "none" }]} />
         <View style={styles.loadCardHeroRow}>
-          <View style={styles.loadPillRow}>
-            <View style={styles.loadTypePill}>
-              <Text style={styles.loadTypePillText}>CLAIMED</Text>
+          {!hideClaimedContextPill ? (
+            <View style={styles.loadPillRow}>
+              <View style={styles.loadTypePill}>
+                <Text style={styles.loadTypePillText}>CLAIMED</Text>
+              </View>
             </View>
-          </View>
+          ) : null}
           <Text style={styles.loadCardIdCompact} numberOfLines={1}>
             {getIndentDisplayNumber(load)}
             {load.trip_number ? ` · ${load.trip_number}` : ""}
@@ -1947,11 +1963,6 @@ export function LoadCenterView({
                           />
                           <View style={styles.loadCardHeroRow}>
                             <View style={styles.loadPillRow}>
-                              <View style={styles.loadTypePill}>
-                                <Text style={styles.loadTypePillText}>
-                                  GIVE LOAD
-                                </Text>
-                              </View>
                               <View
                                 style={[styles.loadStatePill, statusPill.pill]}
                               >
@@ -2278,6 +2289,11 @@ export function LoadCenterView({
                     };
                   };
                   const sp = getStatePill();
+                  const hideGetLoadStatePill = shouldHideGetLoadStatePill(
+                    statusFilterTab,
+                    sp.label,
+                    isAccepted,
+                  );
                   const metaLine = isAccepted
                     ? "Awarded — open Claimed to deploy"
                     : isRejected
@@ -2312,18 +2328,19 @@ export function LoadCenterView({
                           ]}
                         />
                         <View style={styles.loadCardHeroRow}>
-                          <View style={styles.loadPillRow}>
-                            <View style={styles.loadTypePill}>
-                              <Text style={styles.loadTypePillText}>
-                                GET LOAD
-                              </Text>
+                          {!hideGetLoadStatePill ? (
+                            <View style={styles.loadPillRow}>
+                              <View style={[styles.loadStatePill, sp.wrap]}>
+                                <Text
+                                  style={[styles.loadStatePillText, sp.txt]}
+                                >
+                                  {sp.label}
+                                </Text>
+                              </View>
                             </View>
-                            <View style={[styles.loadStatePill, sp.wrap]}>
-                              <Text style={[styles.loadStatePillText, sp.txt]}>
-                                {sp.label}
-                              </Text>
-                            </View>
-                          </View>
+                          ) : (
+                            <View style={{ flex: 1 }} />
+                          )}
                           <Text style={styles.loadCardDateHero}>
                             {formatIndentCardDate(load.pickup_date)}
                           </Text>
