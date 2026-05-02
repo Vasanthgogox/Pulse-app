@@ -2,54 +2,59 @@
  * Connections tab — clients, suppliers, and fleet drivers.
  * `hubMode`: Network screen layout (nested cards, shared header search/filters in parent).
  */
-import Theme from '@/constants/Theme';
+import Theme from "@/constants/Theme";
 import {
-  getOrganizationLocationsByIds,
-  getOrganizationLocationsByNames,
-} from '@/features/organization/services/organization.service';
-import {
-  HUB_CAROUSEL_MIN_HEIGHT,
-  HubConnectionListCard,
-  type HubConnectionItem,
+    HUB_CAROUSEL_MIN_HEIGHT,
+    HubConnectionListCard,
+    type HubConnectionItem,
 } from "@/features/network/components/NetworkConnectionHubCards";
 import { runConnectionInvite } from "@/features/network/utils/connectionInvite.util";
 import {
-  averageRatingForRatedParty,
-  averageScoreDeduped,
-  getRatingsForClients,
-  getRatingsForDrivers,
-  getRatingsForSuppliers,
+    getOrganizationLocationsByIds,
+    getOrganizationLocationsByNames,
+} from "@/features/organization/services/organization.service";
+import {
+    averageRatingForRatedParty,
+    averageScoreDeduped,
+    getRatingsForClients,
+    getRatingsForDrivers,
+    getRatingsForSuppliers,
 } from "@/features/ratings";
-import { useClientsQuery, useDriversQuery, useSuppliersQuery, useTripsQuery } from '@/lib/queries';
-import { uniqueRealtimeChannelTopic } from '@/lib/realtimeTopic';
-import { getInitials } from '@/lib/stringUtils';
-import { supabase } from '@/lib/supabase';
 import {
-  LayoutGrid,
-  List,
-  MessageCircle,
-  Search,
-  Users,
-  Zap,
-} from 'lucide-react-native';
-import { useQuery } from '@tanstack/react-query';
-import React, { useEffect, useMemo, useState } from 'react';
+    useClientsQuery,
+    useDriversQuery,
+    useSuppliersQuery,
+    useTripsQuery,
+} from "@/lib/queries";
+import { uniqueRealtimeChannelTopic } from "@/lib/realtimeTopic";
+import { getInitials } from "@/lib/stringUtils";
+import { supabase } from "@/lib/supabase";
+import { useQuery } from "@tanstack/react-query";
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  FlatList,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  useWindowDimensions,
-  View,
+    LayoutGrid,
+    List,
+    MessageCircle,
+    Search,
+    Users,
+    Zap,
+} from "lucide-react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+    ActivityIndicator,
+    Alert,
+    Animated,
+    FlatList,
+    Pressable,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    useWindowDimensions,
+    View,
 } from "react-native";
 
-export type ConnectionFilterTab = 'ALL' | 'CLIENT' | 'SUPPLIER' | 'DRIVER';
+export type ConnectionFilterTab = "ALL" | "CLIENT" | "SUPPLIER" | "DRIVER";
 
 interface ConnectionsViewProps {
   orgId: string;
@@ -67,14 +72,27 @@ interface ConnectionsViewProps {
   hubFilter?: ConnectionFilterTab;
 }
 
-const COVER_TOKENS = [Theme.ledgerNetBarBg, Theme.textPrimaryDark, Theme.cinematicHeaderBg, Theme.primary, Theme.darkGreen, Theme.teslaRed] as const;
+const COVER_TOKENS = [
+  Theme.ledgerNetBarBg,
+  Theme.textPrimaryDark,
+  Theme.cinematicHeaderBg,
+  Theme.primary,
+  Theme.darkGreen,
+  Theme.teslaRed,
+] as const;
 function seedColor(id: string): string {
   let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h + id.charCodeAt(i)) % COVER_TOKENS.length;
+  for (let i = 0; i < id.length; i++)
+    h = (h + id.charCodeAt(i)) % COVER_TOKENS.length;
   return COVER_TOKENS[h];
 }
 
-function subtleAvatarTone(seed: string): { bg: string; border: string; text: string; dot: string } {
+function subtleAvatarTone(seed: string): {
+  bg: string;
+  border: string;
+  text: string;
+  dot: string;
+} {
   const shift = seed.length % 2;
   return {
     bg: shift === 0 ? "#F8FAFC" : "#F1F5F9",
@@ -85,15 +103,17 @@ function subtleAvatarTone(seed: string): { bg: string; border: string; text: str
 }
 
 function roleTone(role: ConnectedOrg["role"]) {
-  if (role === "CLIENT") return { bg: Theme.networkClientTintBg, text: Theme.primary };
-  if (role === "DRIVER") return { bg: Theme.networkDriverTintBg, text: Theme.warning };
+  if (role === "CLIENT")
+    return { bg: Theme.networkClientTintBg, text: Theme.primary };
+  if (role === "DRIVER")
+    return { bg: Theme.networkDriverTintBg, text: Theme.warning };
   return { bg: Theme.networkSupplierTintBg, text: Theme.positive };
 }
 
 export interface ConnectedOrg {
   id: string;
   name: string;
-  role: 'CLIENT' | 'SUPPLIER' | 'DRIVER';
+  role: "CLIENT" | "SUPPLIER" | "DRIVER";
   is_integrated: boolean;
   avatar_url?: string | null;
   avatar_seed?: string | null;
@@ -117,7 +137,8 @@ function getConnectionLocation(item: ConnectedOrg): string | null {
     .trim();
   if (cityState) return cityState;
 
-  const direct = item.business_location ?? item.location ?? item.headquarters ?? null;
+  const direct =
+    item.business_location ?? item.location ?? item.headquarters ?? null;
   if (direct && direct.trim()) {
     const parts = direct
       .split(",")
@@ -140,10 +161,17 @@ function GridCard({ item }: { item: ConnectedOrg }) {
   const color = seedColor(item.id);
   const avatarTone = subtleAvatarTone(item.id);
   const tone = roleTone(item.role);
-  const roleSub = item.role === "CLIENT" ? "Client" : item.role === "DRIVER" ? "Driver" : "Supplier";
+  const roleSub =
+    item.role === "CLIENT"
+      ? "Client"
+      : item.role === "DRIVER"
+        ? "Driver"
+        : "Supplier";
 
-  const onIn = () => Animated.spring(scale, { toValue: 0.98, useNativeDriver: true }).start();
-  const onOut = () => Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start();
+  const onIn = () =>
+    Animated.spring(scale, { toValue: 0.98, useNativeDriver: true }).start();
+  const onOut = () =>
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start();
 
   return (
     <Pressable onPressIn={onIn} onPressOut={onOut} style={styles.gridCardWrap}>
@@ -152,12 +180,26 @@ function GridCard({ item }: { item: ConnectedOrg }) {
         <View
           style={[
             styles.onlineIndicator,
-            { backgroundColor: item.is_integrated ? Theme.positive : Theme.borderMedium },
+            {
+              backgroundColor: item.is_integrated
+                ? Theme.positive
+                : Theme.borderMedium,
+            },
           ]}
         />
         <View style={styles.gridAvatarOverlap}>
-          <View style={[styles.gridAvatar, { backgroundColor: avatarTone.bg, borderColor: avatarTone.border }]}>
-            <Text style={[styles.gridAvatarText, { color: avatarTone.text }]}>{getInitials(item.name)}</Text>
+          <View
+            style={[
+              styles.gridAvatar,
+              {
+                backgroundColor: avatarTone.bg,
+                borderColor: avatarTone.border,
+              },
+            ]}
+          >
+            <Text style={[styles.gridAvatarText, { color: avatarTone.text }]}>
+              {getInitials(item.name)}
+            </Text>
             {item.is_integrated && (
               <View style={styles.gridZapDot}>
                 <Zap size={7} color="#fff" fill="#fff" />
@@ -171,10 +213,12 @@ function GridCard({ item }: { item: ConnectedOrg }) {
           </Text>
           <Text style={styles.gridHeadline} numberOfLines={2}>
             {roleSub}
-            {item.is_integrated ? ' · on Pulse' : ' · Not on app'}
+            {item.is_integrated ? " · on Pulse" : " · Not on app"}
           </Text>
           <View style={styles.gridMutualRow}>
-            <View style={[styles.gridMiniDot, { backgroundColor: avatarTone.dot }]} />
+            <View
+              style={[styles.gridMiniDot, { backgroundColor: avatarTone.dot }]}
+            />
             <Text style={styles.gridMutualText} numberOfLines={1}>
               In your Q network
             </Text>
@@ -184,7 +228,7 @@ function GridCard({ item }: { item: ConnectedOrg }) {
               styles.gridRoleBadge,
               {
                 backgroundColor: tone.bg,
-                alignSelf: 'center',
+                alignSelf: "center",
               },
             ]}
           >
@@ -216,14 +260,23 @@ function ListCard({ item }: { item: ConnectedOrg }) {
   const avatarTone = subtleAvatarTone(item.id);
   const tone = roleTone(item.role);
 
-  const onIn = () => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start();
-  const onOut = () => Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start();
+  const onIn = () =>
+    Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start();
+  const onOut = () =>
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start();
 
   return (
     <Pressable onPressIn={onIn} onPressOut={onOut}>
       <Animated.View style={[styles.listCard, { transform: [{ scale }] }]}>
-        <View style={[styles.listAvatar, { backgroundColor: avatarTone.bg, borderColor: avatarTone.border }]}>
-          <Text style={[styles.listAvatarText, { color: avatarTone.text }]}>{getInitials(item.name)}</Text>
+        <View
+          style={[
+            styles.listAvatar,
+            { backgroundColor: avatarTone.bg, borderColor: avatarTone.border },
+          ]}
+        >
+          <Text style={[styles.listAvatarText, { color: avatarTone.text }]}>
+            {getInitials(item.name)}
+          </Text>
           {item.is_integrated && (
             <View style={styles.listZapDot}>
               <Zap size={7} color="#fff" fill="#fff" />
@@ -232,15 +285,14 @@ function ListCard({ item }: { item: ConnectedOrg }) {
         </View>
 
         <View style={styles.listInfo}>
-          <Text style={styles.listName} numberOfLines={1}>{item.name.toUpperCase()}</Text>
+          <Text style={styles.listName} numberOfLines={1}>
+            {item.name.toUpperCase()}
+          </Text>
           <View style={styles.listBadges}>
-            <View
-              style={[
-                styles.roleBadge,
-                { backgroundColor: tone.bg },
-              ]}
-            >
-              <Text style={[styles.roleText, { color: tone.text }]}>{item.role}</Text>
+            <View style={[styles.roleBadge, { backgroundColor: tone.bg }]}>
+              <Text style={[styles.roleText, { color: tone.text }]}>
+                {item.role}
+              </Text>
             </View>
             {item.is_integrated && (
               <View style={styles.appBadge}>
@@ -280,14 +332,20 @@ export function ConnectionsView({
   hubFilter,
 }: ConnectionsViewProps) {
   const { width: windowWidth } = useWindowDimensions();
-  const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<ConnectionFilterTab>('ALL');
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<ConnectionFilterTab>("ALL");
   const [isGrid, setIsGrid] = useState(!hubMode);
   const [refreshing, setRefreshing] = useState(false);
   const [invitingId, setInvitingId] = useState<string | null>(null);
-  const [clientRatingsById, setClientRatingsById] = useState<Record<string, number | null>>({});
-  const [supplierRatingsById, setSupplierRatingsById] = useState<Record<string, number | null>>({});
-  const [driverRatingsById, setDriverRatingsById] = useState<Record<string, number | null>>({});
+  const [clientRatingsById, setClientRatingsById] = useState<
+    Record<string, number | null>
+  >({});
+  const [supplierRatingsById, setSupplierRatingsById] = useState<
+    Record<string, number | null>
+  >({});
+  const [driverRatingsById, setDriverRatingsById] = useState<
+    Record<string, number | null>
+  >({});
   const [ratingsVersion, setRatingsVersion] = useState(0);
   const [globalAverages, setGlobalAverages] = useState<{
     client: number | null;
@@ -310,7 +368,8 @@ export function ConnectionsView({
   const tripCountBySupplierId = useMemo(() => {
     const map = new Map<string, number>();
     for (const t of tripsQ.data ?? []) {
-      if (t.supplier_id) map.set(t.supplier_id, (map.get(t.supplier_id) ?? 0) + 1);
+      if (t.supplier_id)
+        map.set(t.supplier_id, (map.get(t.supplier_id) ?? 0) + 1);
     }
     return map;
   }, [tripsQ.data]);
@@ -322,30 +381,60 @@ export function ConnectionsView({
     return map;
   }, [tripsQ.data]);
   const locationLookupOrganizationIds = useMemo(
-    () => [
-      ...new Set([
-        ...((clientsQ.data ?? []) as { id: string; linked_organization_id?: string | null }[])
-          .map((row) => row.id)
-          .filter((id): id is string => Boolean(id)),
-        ...((suppliersQ.data ?? []) as { id: string; linked_organization_id?: string | null }[])
-          .map((row) => row.id)
-          .filter((id): id is string => Boolean(id)),
-        ...((clientsQ.data ?? []) as { linked_organization_id?: string | null }[])
-          .map((row) => row.linked_organization_id)
-          .filter((id): id is string => Boolean(id)),
-        ...((suppliersQ.data ?? []) as { linked_organization_id?: string | null }[])
-          .map((row) => row.linked_organization_id)
-          .filter((id): id is string => Boolean(id)),
-      ]),
-    ].sort(),
+    () =>
+      [
+        ...new Set([
+          ...(
+            (clientsQ.data ?? []) as {
+              id: string;
+              linked_organization_id?: string | null;
+            }[]
+          )
+            .map((row) => row.id)
+            .filter((id): id is string => Boolean(id)),
+          ...(
+            (suppliersQ.data ?? []) as {
+              id: string;
+              linked_organization_id?: string | null;
+            }[]
+          )
+            .map((row) => row.id)
+            .filter((id): id is string => Boolean(id)),
+          ...(
+            (clientsQ.data ?? []) as {
+              linked_organization_id?: string | null;
+            }[]
+          )
+            .map((row) => row.linked_organization_id)
+            .filter((id): id is string => Boolean(id)),
+          ...(
+            (suppliersQ.data ?? []) as {
+              linked_organization_id?: string | null;
+            }[]
+          )
+            .map((row) => row.linked_organization_id)
+            .filter((id): id is string => Boolean(id)),
+        ]),
+      ].sort(),
     [clientsQ.data, suppliersQ.data],
   );
   const organizationLocationsQ = useQuery({
-    queryKey: ['network', 'connections', 'organization-locations', locationLookupOrganizationIds],
+    queryKey: [
+      "network",
+      "connections",
+      "organization-locations",
+      locationLookupOrganizationIds,
+    ],
     queryFn: async () => {
-      const { error: orgErr, locations } = await getOrganizationLocationsByIds(locationLookupOrganizationIds);
+      const { error: orgErr, locations } = await getOrganizationLocationsByIds(
+        locationLookupOrganizationIds,
+      );
       if (orgErr) {
-        if (__DEV__) console.warn('[ConnectionsView] organization locations:', orgErr.message);
+        if (__DEV__)
+          console.warn(
+            "[ConnectionsView] organization locations:",
+            orgErr.message,
+          );
         return [];
       }
       return locations;
@@ -353,24 +442,35 @@ export function ConnectionsView({
     enabled: locationLookupOrganizationIds.length > 0,
   });
   const locationLookupNames = useMemo(
-    () => [
-      ...new Set([
-        ...((clientsQ.data ?? []) as { name?: string | null }[])
-          .map((row) => normalizeName(row.name))
-          .filter(Boolean),
-        ...((suppliersQ.data ?? []) as { name?: string | null }[])
-          .map((row) => normalizeName(row.name))
-          .filter(Boolean),
-      ]),
-    ].sort(),
+    () =>
+      [
+        ...new Set([
+          ...((clientsQ.data ?? []) as { name?: string | null }[])
+            .map((row) => normalizeName(row.name))
+            .filter(Boolean),
+          ...((suppliersQ.data ?? []) as { name?: string | null }[])
+            .map((row) => normalizeName(row.name))
+            .filter(Boolean),
+        ]),
+      ].sort(),
     [clientsQ.data, suppliersQ.data],
   );
   const organizationLocationsByNameQ = useQuery({
-    queryKey: ['network', 'connections', 'organization-locations-by-name', locationLookupNames],
+    queryKey: [
+      "network",
+      "connections",
+      "organization-locations-by-name",
+      locationLookupNames,
+    ],
     queryFn: async () => {
-      const { error: orgErr, locations } = await getOrganizationLocationsByNames(locationLookupNames);
+      const { error: orgErr, locations } =
+        await getOrganizationLocationsByNames(locationLookupNames);
       if (orgErr) {
-        if (__DEV__) console.warn('[ConnectionsView] organization locations by name:', orgErr.message);
+        if (__DEV__)
+          console.warn(
+            "[ConnectionsView] organization locations by name:",
+            orgErr.message,
+          );
         return [];
       }
       return locations;
@@ -378,7 +478,10 @@ export function ConnectionsView({
     enabled: locationLookupNames.length > 0,
   });
   const organizationLocationById = useMemo(() => {
-    const map: Record<string, { city: string | null; state: string | null; address_line: string | null }> = {};
+    const map: Record<
+      string,
+      { city: string | null; state: string | null; address_line: string | null }
+    > = {};
     for (const location of organizationLocationsQ.data ?? []) {
       map[location.id] = {
         city: location.city ?? null,
@@ -389,7 +492,10 @@ export function ConnectionsView({
     return map;
   }, [organizationLocationsQ.data]);
   const organizationLocationByName = useMemo(() => {
-    const map: Record<string, { city: string | null; state: string | null; address_line: string | null }> = {};
+    const map: Record<
+      string,
+      { city: string | null; state: string | null; address_line: string | null }
+    > = {};
     for (const location of organizationLocationsByNameQ.data ?? []) {
       const key = normalizeName((location as { name?: string | null }).name);
       if (!key) continue;
@@ -407,8 +513,8 @@ export function ConnectionsView({
     const channel = supabase()
       .channel(uniqueRealtimeChannelTopic(`network-ratings-${orgId}`))
       .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'ratings' },
+        "postgres_changes",
+        { event: "*", schema: "public", table: "ratings" },
         () => setRatingsVersion((version) => version + 1),
       )
       .subscribe();
@@ -420,7 +526,12 @@ export function ConnectionsView({
 
   useEffect(() => {
     let cancelled = false;
-    const clientIds = ((clientsQ.data ?? []) as { id: string; linked_organization_id?: string | null }[])
+    const clientIds = (
+      (clientsQ.data ?? []) as {
+        id: string;
+        linked_organization_id?: string | null;
+      }[]
+    )
       .flatMap((c) => [c.id, c.linked_organization_id])
       .filter((id): id is string => Boolean(id));
     if (clientIds.length === 0) {
@@ -538,24 +649,47 @@ export function ConnectionsView({
     };
   }, [driversQ.data, ratingsVersion]);
 
-  const effectiveSearch = hubMode ? (hubSearch ?? '') : search;
-  const effectiveFilter: ConnectionFilterTab = hubMode ? (hubFilter ?? 'ALL') : filter;
+  const effectiveSearch = hubMode ? (hubSearch ?? "") : search;
+  const effectiveFilter: ConnectionFilterTab = hubMode
+    ? (hubFilter ?? "ALL")
+    : filter;
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([clientsQ.refetch(), suppliersQ.refetch(), driversQ.refetch()]);
+    await Promise.all([
+      clientsQ.refetch(),
+      suppliersQ.refetch(),
+      driversQ.refetch(),
+    ]);
     setRatingsVersion((version) => version + 1);
     setRefreshing(false);
     onRefresh?.();
   };
 
   const connections = useMemo<ConnectedOrg[]>(() => {
-    const clients: ConnectedOrg[] = ((clientsQ.data ?? []) as {
-      id: string; name: string; phone?: string | null; linked_organization_id?: string | null; is_integrated?: boolean; avatar_url?: string | null; avatar_seed?: string | null; mutual_count?: number | null; mutual_connections_count?: number | null; rating?: number | null; average_rating?: number | null; city?: string | null; state?: string | null; location?: string | null; business_location?: string | null; headquarters?: string | null;
-    }[]).map((c) => ({
+    const clients: ConnectedOrg[] = (
+      (clientsQ.data ?? []) as {
+        id: string;
+        name: string;
+        phone?: string | null;
+        linked_organization_id?: string | null;
+        is_integrated?: boolean;
+        avatar_url?: string | null;
+        avatar_seed?: string | null;
+        mutual_count?: number | null;
+        mutual_connections_count?: number | null;
+        rating?: number | null;
+        average_rating?: number | null;
+        city?: string | null;
+        state?: string | null;
+        location?: string | null;
+        business_location?: string | null;
+        headquarters?: string | null;
+      }[]
+    ).map((c) => ({
       id: c.id,
       name: c.name,
-      role: 'CLIENT' as const,
+      role: "CLIENT" as const,
       is_integrated: c.is_integrated ?? Boolean(c.linked_organization_id),
       avatar_url: c.avatar_url ?? null,
       avatar_seed: c.avatar_seed ?? null,
@@ -570,13 +704,13 @@ export function ConnectionsView({
       linked_organization_id: c.linked_organization_id ?? null,
       city:
         c.city ??
-        organizationLocationById[c.linked_organization_id ?? '']?.city ??
+        organizationLocationById[c.linked_organization_id ?? ""]?.city ??
         organizationLocationById[c.id]?.city ??
         organizationLocationByName[normalizeName(c.name)]?.city ??
         null,
       state:
         c.state ??
-        organizationLocationById[c.linked_organization_id ?? '']?.state ??
+        organizationLocationById[c.linked_organization_id ?? ""]?.state ??
         organizationLocationById[c.id]?.state ??
         organizationLocationByName[normalizeName(c.name)]?.state ??
         null,
@@ -586,13 +720,33 @@ export function ConnectionsView({
       total_trips: tripCountByClientId.get(c.id) ?? null,
     }));
 
-    const suppliers: ConnectedOrg[] = ((suppliersQ.data ?? []) as {
-      id: string; name: string | null; phone?: string | null; linked_organization_id?: string | null; supplier_type?: string | null; is_integrated?: boolean; avatar_url?: string | null; avatar_seed?: string | null; mutual_count?: number | null; mutual_connections_count?: number | null; rating?: number | null; average_rating?: number | null; city?: string | null; state?: string | null; location?: string | null; business_location?: string | null; headquarters?: string | null;
-    }[]).map((s) => ({
+    const suppliers: ConnectedOrg[] = (
+      (suppliersQ.data ?? []) as {
+        id: string;
+        name: string | null;
+        phone?: string | null;
+        linked_organization_id?: string | null;
+        supplier_type?: string | null;
+        is_integrated?: boolean;
+        avatar_url?: string | null;
+        avatar_seed?: string | null;
+        mutual_count?: number | null;
+        mutual_connections_count?: number | null;
+        rating?: number | null;
+        average_rating?: number | null;
+        city?: string | null;
+        state?: string | null;
+        location?: string | null;
+        business_location?: string | null;
+        headquarters?: string | null;
+      }[]
+    ).map((s) => ({
       id: s.id,
       name: s.name ?? "Supplier",
-      role: 'SUPPLIER' as const,
-      is_integrated: s.is_integrated ?? (s.supplier_type === "integrated" || Boolean(s.linked_organization_id)),
+      role: "SUPPLIER" as const,
+      is_integrated:
+        s.is_integrated ??
+        (s.supplier_type === "integrated" || Boolean(s.linked_organization_id)),
       avatar_url: s.avatar_url ?? null,
       avatar_seed: s.avatar_seed ?? null,
       mutual_count: s.mutual_count ?? s.mutual_connections_count ?? null,
@@ -606,13 +760,13 @@ export function ConnectionsView({
       linked_organization_id: s.linked_organization_id ?? null,
       city:
         s.city ??
-        organizationLocationById[s.linked_organization_id ?? '']?.city ??
+        organizationLocationById[s.linked_organization_id ?? ""]?.city ??
         organizationLocationById[s.id]?.city ??
         organizationLocationByName[normalizeName(s.name)]?.city ??
         null,
       state:
         s.state ??
-        organizationLocationById[s.linked_organization_id ?? '']?.state ??
+        organizationLocationById[s.linked_organization_id ?? ""]?.state ??
         organizationLocationById[s.id]?.state ??
         organizationLocationByName[normalizeName(s.name)]?.state ??
         null,
@@ -628,29 +782,48 @@ export function ConnectionsView({
       .map((d) => ({
         id: `driver-${d.id}`,
         name: d.name,
-        role: 'DRIVER' as const,
+        role: "DRIVER" as const,
         is_integrated: !!d.user_id,
         avatar_url: d.avatar_url ?? null,
         avatar_seed: d.avatar_seed ?? null,
-        mutual_count: (d as { mutual_count?: number | null; mutual_connections_count?: number | null }).mutual_count ??
-          (d as { mutual_count?: number | null; mutual_connections_count?: number | null }).mutual_connections_count ??
+        mutual_count:
+          (
+            d as {
+              mutual_count?: number | null;
+              mutual_connections_count?: number | null;
+            }
+          ).mutual_count ??
+          (
+            d as {
+              mutual_count?: number | null;
+              mutual_connections_count?: number | null;
+            }
+          ).mutual_connections_count ??
           null,
         rating:
           driverRatingsById[d.id] ??
-          (d as { rating?: number | null; average_rating?: number | null }).rating ??
-          (d as { rating?: number | null; average_rating?: number | null }).average_rating ??
+          (d as { rating?: number | null; average_rating?: number | null })
+            .rating ??
+          (d as { rating?: number | null; average_rating?: number | null })
+            .average_rating ??
           globalAverages.driver,
         phone: (d as { phone?: string | null }).phone ?? null,
         city: (d as { city?: string | null }).city ?? null,
         state: (d as { state?: string | null }).state ?? null,
         location: (d as { location?: string | null }).location ?? null,
-        business_location: (d as { business_location?: string | null }).business_location ?? null,
-        headquarters: (d as { headquarters?: string | null }).headquarters ?? null,
+        business_location:
+          (d as { business_location?: string | null }).business_location ??
+          null,
+        headquarters:
+          (d as { headquarters?: string | null }).headquarters ?? null,
         total_trips: tripCountByDriverId.get(d.id) ?? null,
       }));
 
-    let all = [...clients, ...suppliers, ...drivers].sort((a, b) => a.name.localeCompare(b.name));
-    if (effectiveFilter !== 'ALL') all = all.filter((c) => c.role === effectiveFilter);
+    let all = [...clients, ...suppliers, ...drivers].sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+    if (effectiveFilter !== "ALL")
+      all = all.filter((c) => c.role === effectiveFilter);
     if (effectiveSearch.trim()) {
       const q = effectiveSearch.toLowerCase();
       all = all.filter((c) => c.name.toLowerCase().includes(q));
@@ -680,7 +853,12 @@ export function ConnectionsView({
     is_integrated: c.is_integrated,
     avatarUrl: c.avatar_url,
     avatarSeed: c.avatar_seed,
-    entityType: c.role === 'DRIVER' ? 'driver' : c.role === 'SUPPLIER' ? 'supplier' : 'client',
+    entityType:
+      c.role === "DRIVER"
+        ? "driver"
+        : c.role === "SUPPLIER"
+          ? "supplier"
+          : "client",
     mutualCount: c.mutual_count,
     rating: c.rating,
     locationLabel: getConnectionLocation(c),
@@ -693,7 +871,10 @@ export function ConnectionsView({
   const inviteOffAppParty = async (item: ConnectedOrg) => {
     if (item.is_integrated) return;
     if (!item.phone?.trim()) {
-      Alert.alert("Phone missing", `Add a phone number for ${item.name} before sending an invite.`);
+      Alert.alert(
+        "Phone missing",
+        `Add a phone number for ${item.name} before sending an invite.`,
+      );
       return;
     }
 
@@ -707,7 +888,8 @@ export function ConnectionsView({
     }
   };
 
-  const isLoading = clientsQ.isLoading || suppliersQ.isLoading || driversQ.isLoading;
+  const isLoading =
+    clientsQ.isLoading || suppliersQ.isLoading || driversQ.isLoading;
   const total =
     ((clientsQ.data ?? []) as unknown[]).length +
     ((suppliersQ.data ?? []) as unknown[]).length +
@@ -743,13 +925,16 @@ export function ConnectionsView({
         contentContainerStyle={styles.hubScrollContent}
       >
         {connections.map((item) => (
-          <View key={`hub-scroll-${item.role}-${item.id}`} style={styles.hubScrollCardWrap}>
-              <HubConnectionListCard
-                item={toHubItem(item)}
-                layout="carousel"
-                onActionPress={() => void inviteOffAppParty(item)}
-                onCardPress={() => onOpenProfile?.(item)}
-              />
+          <View
+            key={`hub-scroll-${item.role}-${item.id}`}
+            style={styles.hubScrollCardWrap}
+          >
+            <HubConnectionListCard
+              item={toHubItem(item)}
+              layout="carousel"
+              onActionPress={() => void inviteOffAppParty(item)}
+              onCardPress={() => onOpenProfile?.(item)}
+            />
           </View>
         ))}
       </ScrollView>
@@ -792,20 +977,30 @@ export function ConnectionsView({
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>{(clientsQ.data ?? []).length}</Text>
-              <Text style={[styles.statLabel, { color: Theme.primary }]}>Clients</Text>
+              <Text style={styles.statValue}>
+                {(clientsQ.data ?? []).length}
+              </Text>
+              <Text style={[styles.statLabel, { color: Theme.primary }]}>
+                Clients
+              </Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>{(suppliersQ.data ?? []).length}</Text>
-              <Text style={[styles.statLabel, { color: Theme.positive }]}>Suppliers</Text>
+              <Text style={styles.statValue}>
+                {(suppliersQ.data ?? []).length}
+              </Text>
+              <Text style={[styles.statLabel, { color: Theme.positive }]}>
+                Suppliers
+              </Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
               <Text style={styles.statValue}>
                 {(driversQ.data ?? []).filter((d) => !d.left_at).length}
               </Text>
-              <Text style={[styles.statLabel, { color: Theme.warning }]}>Drivers</Text>
+              <Text style={[styles.statLabel, { color: Theme.warning }]}>
+                Drivers
+              </Text>
             </View>
           </View>
 
@@ -825,24 +1020,37 @@ export function ConnectionsView({
               style={[styles.viewToggle, !isGrid && styles.viewToggleActive]}
               onPress={() => setIsGrid(false)}
             >
-              <List size={16} color={!isGrid ? '#fff' : Theme.textSecondary} />
+              <List size={16} color={!isGrid ? "#fff" : Theme.textSecondary} />
             </Pressable>
             <Pressable
               style={[styles.viewToggle, isGrid && styles.viewToggleActive]}
               onPress={() => setIsGrid(true)}
             >
-              <LayoutGrid size={16} color={isGrid ? '#fff' : Theme.textSecondary} />
+              <LayoutGrid
+                size={16}
+                color={isGrid ? "#fff" : Theme.textSecondary}
+              />
             </Pressable>
           </View>
 
           <View style={styles.filterRow}>
-            {(['ALL', 'CLIENT', 'SUPPLIER', 'DRIVER'] as ConnectionFilterTab[]).map((t) => (
+            {(
+              ["ALL", "CLIENT", "SUPPLIER", "DRIVER"] as ConnectionFilterTab[]
+            ).map((t) => (
               <Pressable
                 key={t}
-                style={[styles.filterTab, filter === t && styles.filterTabActive]}
+                style={[
+                  styles.filterTab,
+                  filter === t && styles.filterTabActive,
+                ]}
                 onPress={() => setFilter(t)}
               >
-                <Text style={[styles.filterTabText, filter === t && styles.filterTabTextActive]}>
+                <Text
+                  style={[
+                    styles.filterTabText,
+                    filter === t && styles.filterTabTextActive,
+                  ]}
+                >
                   {t}
                 </Text>
               </Pressable>
@@ -871,7 +1079,11 @@ export function ConnectionsView({
           scrollEnabled
           nestedScrollEnabled
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Theme.primary} />
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={Theme.primary}
+            />
           }
           ListEmptyComponent={<EmptyState />}
         />
@@ -888,7 +1100,11 @@ export function ConnectionsView({
           scrollEnabled
           nestedScrollEnabled
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Theme.primary} />
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={Theme.primary}
+            />
           }
           ListEmptyComponent={<EmptyState />}
         />
@@ -903,7 +1119,11 @@ export function ConnectionsView({
           scrollEnabled
           nestedScrollEnabled
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Theme.primary} />
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={Theme.primary}
+            />
           }
           ListEmptyComponent={<EmptyState />}
         />
@@ -920,7 +1140,8 @@ function EmptyState() {
       </View>
       <Text style={styles.emptyTitle}>No connections yet</Text>
       <Text style={styles.emptySub}>
-        Use Discover to find clients and suppliers and invite them to your network
+        Use Discover to find clients and suppliers and invite them to your
+        network
       </Text>
     </View>
   );
@@ -936,7 +1157,11 @@ const styles = StyleSheet.create({
     paddingVertical: 32,
     gap: 10,
   },
-  embeddedLoadingText: { fontSize: 12, fontWeight: "600", color: Theme.textSecondary },
+  embeddedLoadingText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.textSecondary,
+  },
   embeddedEmptyWrap: { minHeight: 200, paddingBottom: 16 },
   embeddedGridRoot: { paddingBottom: 8 },
   gridRowEmbedded: {
@@ -984,28 +1209,43 @@ const styles = StyleSheet.create({
   },
 
   statsBar: {
-    flexDirection: 'row',
+    flexDirection: "row",
     backgroundColor: Theme.networkCardBackground,
     paddingVertical: 14,
     paddingHorizontal: 20,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.networkCardBorder,
   },
-  statItem: { flex: 1, alignItems: 'center', gap: 2 },
-  statValue: { fontSize: 22, fontWeight: '900', color: Theme.textPrimary, letterSpacing: -0.5 },
-  statLabel: { fontSize: 9, fontWeight: '800', color: Theme.textSecondary, letterSpacing: 0.8, textTransform: 'uppercase' },
-  statDivider: { width: StyleSheet.hairlineWidth, backgroundColor: Theme.surfaceBorder, marginVertical: 4 },
+  statItem: { flex: 1, alignItems: "center", gap: 2 },
+  statValue: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: Theme.textPrimary,
+    letterSpacing: -0.5,
+  },
+  statLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textSecondary,
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  statDivider: {
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: Theme.surfaceBorder,
+    marginVertical: 4,
+  },
 
   searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
     margin: 14,
   },
   searchBox: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 10,
     backgroundColor: Theme.networkCardBackground,
     borderRadius: 12,
@@ -1013,7 +1253,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 11,
   },
-  searchInput: { flex: 1, fontSize: 14, color: Theme.textPrimary, fontWeight: '500' },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: Theme.textPrimary,
+    fontWeight: "500",
+  },
   viewToggle: {
     width: 40,
     height: 40,
@@ -1021,12 +1266,20 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.screenBackground,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderMedium,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
-  viewToggleActive: { backgroundColor: Theme.primary, borderColor: Theme.primary },
+  viewToggleActive: {
+    backgroundColor: Theme.primary,
+    borderColor: Theme.primary,
+  },
 
-  filterRow: { flexDirection: 'row', paddingHorizontal: 14, paddingBottom: 12, gap: 8 },
+  filterRow: {
+    flexDirection: "row",
+    paddingHorizontal: 14,
+    paddingBottom: 12,
+    gap: 8,
+  },
   filterTab: {
     paddingHorizontal: 14,
     paddingVertical: 7,
@@ -1035,8 +1288,16 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.networkCardBorder,
   },
-  filterTabActive: { backgroundColor: Theme.primary, borderColor: Theme.primary },
-  filterTabText: { fontSize: 11, fontWeight: '800', color: Theme.textSecondary, letterSpacing: 0.5 },
+  filterTabActive: {
+    backgroundColor: Theme.primary,
+    borderColor: Theme.primary,
+  },
+  filterTabText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.textSecondary,
+    letterSpacing: 0.5,
+  },
   filterTabTextActive: { color: Theme.textOnPrimary },
 
   // Grid layout
@@ -1052,41 +1313,46 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.04,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 1 },
-    position: 'relative',
-    overflow: 'hidden',
+    position: "relative",
+    overflow: "hidden",
     paddingBottom: 12,
   },
   gridCover: {
     height: 56,
-    width: '100%',
+    width: "100%",
   },
   gridAvatarOverlap: {
     marginTop: -32,
-    alignItems: 'center',
+    alignItems: "center",
     zIndex: 2,
   },
-  gridBody: { paddingHorizontal: 12, paddingTop: 4, alignItems: 'center' },
+  gridBody: { paddingHorizontal: 12, paddingTop: 4, alignItems: "center" },
   gridHeadline: {
     fontSize: 10,
-    fontWeight: '500',
+    fontWeight: "500",
     color: Theme.textSecondary,
-    textAlign: 'center',
+    textAlign: "center",
     lineHeight: 14,
     marginTop: 4,
   },
   gridMutualRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
     marginTop: 8,
     paddingHorizontal: 4,
   },
   gridMiniDot: { width: 6, height: 6, borderRadius: 3 },
-  gridMutualText: { fontSize: 9, fontWeight: '500', color: Theme.textSecondary, flex: 1 },
+  gridMutualText: {
+    fontSize: 9,
+    fontWeight: "500",
+    color: Theme.textSecondary,
+    flex: 1,
+  },
   gridConnectOutline: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 6,
     marginHorizontal: 10,
     marginTop: 10,
@@ -1095,9 +1361,14 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: Theme.primary,
   },
-  gridConnectOutlineText: { fontSize: 11, fontWeight: '600', color: Theme.primary, letterSpacing: 0.1 },
+  gridConnectOutlineText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.primary,
+    letterSpacing: 0.1,
+  },
   onlineIndicator: {
-    position: 'absolute',
+    position: "absolute",
     top: 10,
     right: 10,
     width: 8,
@@ -1111,35 +1382,40 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     marginTop: 8,
   },
-  gridRoleText: { fontSize: 8, fontWeight: '600', letterSpacing: 0.25 },
+  gridRoleText: { fontSize: 8, fontWeight: "600", letterSpacing: 0.25 },
   gridAvatar: {
     width: 64,
     height: 64,
     borderRadius: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     borderWidth: 3,
-    position: 'relative',
+    position: "relative",
   },
-  gridAvatarText: { fontSize: 13, fontWeight: '400', letterSpacing: 0.24, color: '#6B7280' },
+  gridAvatarText: {
+    fontSize: 13,
+    fontWeight: "400",
+    letterSpacing: 0.24,
+    color: "#6B7280",
+  },
   gridZapDot: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 2,
     right: 2,
     width: 17,
     height: 17,
     borderRadius: 9,
     backgroundColor: Theme.positive,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     borderWidth: 2,
     borderColor: Theme.screenBackground,
   },
   gridName: {
     fontSize: 12,
-    fontWeight: '500',
-    color: '#475569',
-    textAlign: 'center',
+    fontWeight: "500",
+    color: "#475569",
+    textAlign: "center",
     marginTop: 2,
     lineHeight: 16,
     letterSpacing: 0.1,
@@ -1148,8 +1424,8 @@ const styles = StyleSheet.create({
   // List layout
   listContent: { paddingHorizontal: 14, paddingBottom: 40, gap: 8 },
   listCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
     backgroundColor: Theme.networkCardBackground,
     borderRadius: 16,
@@ -1165,40 +1441,55 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     borderWidth: 1.5,
-    position: 'relative',
+    position: "relative",
   },
-  listAvatarText: { fontSize: 11, fontWeight: '400', letterSpacing: 0.2, color: '#6B7280' },
+  listAvatarText: {
+    fontSize: 11,
+    fontWeight: "400",
+    letterSpacing: 0.2,
+    color: "#6B7280",
+  },
   listZapDot: {
-    position: 'absolute',
+    position: "absolute",
     bottom: -2,
     right: -2,
     width: 16,
     height: 16,
     borderRadius: 8,
     backgroundColor: Theme.positive,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     borderWidth: 2,
     borderColor: Theme.screenBackground,
   },
   listInfo: { flex: 1, gap: 5 },
-  listName: { fontSize: 12, fontWeight: '500', color: '#475569', letterSpacing: 0.08 },
-  listBadges: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  listName: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#475569",
+    letterSpacing: 0.08,
+  },
+  listBadges: { flexDirection: "row", alignItems: "center", gap: 6 },
   roleBadge: { borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3 },
-  roleText: { fontSize: 9, fontWeight: '500', letterSpacing: 0.2 },
+  roleText: { fontSize: 9, fontWeight: "500", letterSpacing: 0.2 },
   appBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 3,
     backgroundColor: `${Theme.positive}18`,
     borderRadius: 5,
     paddingHorizontal: 6,
     paddingVertical: 3,
   },
-  appBadgeText: { fontSize: 8, fontWeight: '600', color: Theme.positive, letterSpacing: 0.25 },
+  appBadgeText: {
+    fontSize: 8,
+    fontWeight: "600",
+    color: Theme.positive,
+    letterSpacing: 0.25,
+  },
   listMsgBtn: {
     width: 40,
     height: 40,
@@ -1206,16 +1497,37 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.networkMessageTintBg,
     borderWidth: 1,
     borderColor: Theme.networkMessageTintBorder,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   // Empty state
-  empty: { alignItems: 'center', paddingTop: 56, paddingHorizontal: 40, gap: 10 },
-  emptyIcon: {
-    width: 72, height: 72, borderRadius: 20,
-    backgroundColor: Theme.surface, alignItems: 'center', justifyContent: 'center', marginBottom: 4,
+  empty: {
+    alignItems: "center",
+    paddingTop: 56,
+    paddingHorizontal: 40,
+    gap: 10,
   },
-  emptyTitle: { fontSize: 17, fontWeight: '800', color: Theme.textPrimary, letterSpacing: -0.3, textAlign: 'center' },
-  emptySub: { fontSize: 13, color: Theme.textSecondary, textAlign: 'center', lineHeight: 19 },
+  emptyIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 20,
+    backgroundColor: Theme.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  emptyTitle: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: Theme.textPrimary,
+    letterSpacing: -0.3,
+    textAlign: "center",
+  },
+  emptySub: {
+    fontSize: 13,
+    color: Theme.textSecondary,
+    textAlign: "center",
+    lineHeight: 19,
+  },
 });
