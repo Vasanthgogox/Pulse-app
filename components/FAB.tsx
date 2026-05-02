@@ -1,3 +1,4 @@
+import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { SemanticAddIcon } from '@/components/SemanticAddIcon';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
@@ -33,7 +34,7 @@ export function FAB({
 
   return (
     <TouchableOpacity
-      style={[styles.fab, { bottom: 24 + insets.bottom }]}
+      style={[styles.fab, { bottom: Layout.fabBottomOffset + insets.bottom }]}
       onPress={onPress}
       activeOpacity={0.9}
       accessibilityLabel={label}
@@ -66,17 +67,17 @@ export function FAB({
 const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: Theme.primary,
+    right: Layout.fabRightOffset,
+    width: Layout.fabSize,
+    height: Layout.fabSize,
+    borderRadius: Layout.fabBorderRadius,
+    backgroundColor: Theme.darkBackground,
     borderWidth: 2.5,
     borderColor: '#ffffff',
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 10,
-    shadowColor: Theme.primary,
+    elevation: Layout.fabElevation,
+    shadowColor: Theme.darkBackground,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.32,
     shadowRadius: 16,
