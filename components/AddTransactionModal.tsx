@@ -219,6 +219,34 @@ export function formatAmountDuePlaceholder(amount: number | null | undefined): s
   });
 }
 
+/**
+ * Split a non-negative integer total across buckets proportional to weights (≥0).
+ * Remainder units go to the largest fractional remainders. Equal split when all weights are 0.
+ */
+export function allocateIntegerByWeights(total: number, weights: number[]): number[] {
+  const n = weights.length;
+  if (n === 0) return [];
+  const safeTotal = Math.max(0, Math.round(total));
+  const sumW = weights.reduce((a, b) => a + Math.max(0, b), 0);
+  if (sumW <= 0) {
+    const base = Math.floor(safeTotal / n);
+    const rem = safeTotal - base * n;
+    return Array.from({ length: n }, (_, i) => base + (i < rem ? 1 : 0));
+  }
+  const raw = weights.map((w) => (safeTotal * Math.max(0, w)) / sumW);
+  const floors = raw.map((x) => Math.floor(x));
+  let remainder = safeTotal - floors.reduce((a, b) => a + b, 0);
+  const order = raw
+    .map((x, i) => ({ i, frac: x - floors[i] }))
+    .sort((a, b) => b.frac - a.frac);
+  const out = [...floors];
+  for (let k = 0; k < order.length && remainder > 0; k++) {
+    out[order[k].i] += 1;
+    remainder -= 1;
+  }
+  return out;
+}
+
 /** Legacy expense categories (backward compat); prefer CLIENT/SUPPLIER/DRIVER/VEHICLE_CATEGORIES. */
 export const EXPENSE_CATEGORIES = [
   "DRIVER SALARY",
@@ -398,6 +426,14 @@ export const ALL_LEDGER_CATEGORY_VALUES: readonly string[] = [
   ...VEHICLE_EXPENSE_PARTIES.map((p) => p.id),
 ];
 
+/** One row when splitting a single payment across multiple trips (ledger sync). */
+export type TripLedgerAllocation = {
+  tripId: string;
+  amount: number;
+  tripNumber?: string | null;
+  indentId?: string | null;
+};
+
 export interface AddTransactionData {
   type: TransactionType;
   amount: number;
@@ -422,6 +458,8 @@ export interface AddTransactionData {
   paymentMode?: string | null;
   /** Reference number / UTR for online transactions */
   paymentReference?: string | null;
+  /** When set (multi-trip batch), parent creates one ledger row per item with that trip_id and amount. */
+  tripAllocations?: TripLedgerAllocation[];
 }
 
 export interface PartyOption {
@@ -642,7 +680,8 @@ export function AddTransactionModal({
     [type, dueAmountIn, dueAmountOut],
   );
   const [partyId, setPartyId] = useState<string | null>(null);
-  const [tripId, setTripId] = useState<string | null>(null);
+  /** Ledger mission list: multiple trips allowed; submit splits amount across rows by suggested dues. */
+  const [selectedTripIds, setSelectedTripIds] = useState<string[]>([]);
   const [category, setCategory] = useState<string | null>(null);
   const [paymentModeId, setPaymentModeId] = useState<string>(PAYMENT_MODES[0].id);
   const [paymentReference, setPaymentReference] = useState<string>("");
@@ -714,7 +753,9 @@ export function AddTransactionModal({
   );
 
   /** When set, amount is pre-filled from entity detail but remains editable. */
-  const amount = Math.round(parseFloat(amountStr) || 0);
+  const amount = Math.round(
+    parseFloat(amountStr.replace(/,/g, "").trim()) || 0,
+  );
 
   /** When a client or supplier is selected (or party is locked), show only trips related to that party. */
   const effectivePartyIdForTrips = isPartyLocked ? lockedPartyId : partyId;
@@ -860,7 +901,7 @@ export function AddTransactionModal({
   useEffect(() => {
     setSmartTagHighlight(null);
     setSmartTagSuggestedAmount(null);
-  }, [tripId]);
+  }, [selectedTripIds]);
 
   useEffect(() => {
     if (!visible) setLedgerSubmitConfirmVisible(false);
@@ -955,34 +996,26 @@ export function AddTransactionModal({
     [type, safeClients, safeSuppliers, safeDrivers],
   );
 
-  /** Trip list for ledger can be a superset (e.g. merged loads); resolve selection from mission base too so preview + chips work. */
+  const resolveTripOptionById = useCallback(
+    (id: string): TripOption | null => {
+      const fromSafe = safeTrips.find((t) => t.id === id);
+      if (fromSafe) return fromSafe as TripOption;
+      const fromMission = ledgerMissionTripsBase.find((t) => t.id === id);
+      return fromMission ? (fromMission as TripOption) : null;
+    },
+    [safeTrips, ledgerMissionTripsBase],
+  );
+
+  /** Trip list for ledger can be a superset (e.g. merged loads); first selected id drives party chips when multiple trips share context. */
   const selectedTrip = useMemo((): TripOption | null => {
-    if (!tripId) return null;
-    const fromSafe = safeTrips.find((t) => t.id === tripId);
-    if (fromSafe) return fromSafe as TripOption;
-    const fromMission = ledgerMissionTripsBase.find((t) => t.id === tripId);
-    if (fromMission) return fromMission as TripOption;
-    return null;
-  }, [tripId, safeTrips, ledgerMissionTripsBase]);
+    if (selectedTripIds.length === 0) return null;
+    return resolveTripOptionById(selectedTripIds[0]);
+  }, [selectedTripIds, resolveTripOptionById]);
   const selectedTripPayoutMode = useMemo(
     () => (selectedTrip ? resolveTripLedgerTripType(selectedTrip) : null),
     [selectedTrip],
   );
   const tripNumber = selectedTrip?.trip_number ?? null;
-
-  const tripFinancialSnapshot = useMemo(() => {
-    if (!selectedTrip) return null;
-    const t = selectedTrip as TripOption;
-    if (t.client_price == null && t.supplier_rate == null) return null;
-    return computeTripEntryFinancialSnapshot(
-      tripOptionToLedgerFinancialInput(t),
-      ledgerTransactions ?? [],
-      viewerOrgId,
-      t.driver_id && driverOffersByDriverId
-        ? driverOffersByDriverId[t.driver_id] ?? null
-        : null,
-    );
-  }, [selectedTrip, ledgerTransactions, viewerOrgId, driverOffersByDriverId]);
 
   const tripFinancialPreviewByTripId = useMemo(() => {
     const m: Record<string, ReturnType<typeof computeTripEntryFinancialSnapshot>> = {};
@@ -1102,44 +1135,48 @@ export function AddTransactionModal({
     [viewerOrgId, linkedSupplierIdByOrgId, safeSuppliers],
   );
 
-  /** Single-trip selection: placeholder reflects that trip's dues, not party-wide totals from props. */
+  /** Per-trip suggested due weight for placeholder + multi-trip amount split (aligned with mission chips). */
+  const getLedgerTripDueWeight = useCallback(
+    (trip: TripOption): number => {
+      const preview = tripFinancialPreviewByTripId[trip.id];
+      if (!preview) return 0;
+      const f = preview.financials;
+      const tripPayType = preview.trip_type;
+      if (type === "in") return Math.max(0, f.client_receivable);
+      const localSupplier = resolveLocalSupplierPartyIdFromTrip(trip);
+      const driverId = (trip.driver_id ?? "").trim() || null;
+      if (effectivePartyId && localSupplier && effectivePartyId === localSupplier)
+        return Math.max(0, f.supplier_payable);
+      if (effectivePartyId && driverId && effectivePartyId === driverId)
+        return Math.max(0, f.driver_payable);
+      if (tripPayType === "asset") return Math.max(0, f.driver_payable);
+      return Math.max(0, f.supplier_payable);
+    },
+    [
+      tripFinancialPreviewByTripId,
+      type,
+      effectivePartyId,
+      resolveLocalSupplierPartyIdFromTrip,
+    ],
+  );
+
+  /** Selected trip(s): placeholder = sum of suggested dues, not party-wide totals from props. */
   const ledgerAmountPlaceholder = useMemo(() => {
     const base = amountPlaceholder;
-    if (!tripId || !tripFinancialSnapshot || !selectedTrip) return base;
-    const f = tripFinancialSnapshot.financials;
-    let tripAmt: number | null = null;
-    if (type === "in") {
-      if (f.client_receivable > 0) tripAmt = f.client_receivable;
-    } else {
-      const localSupplier = resolveLocalSupplierPartyIdFromTrip(selectedTrip);
-      const driverId = (selectedTrip.driver_id ?? "").trim() || null;
-      if (effectivePartyId && localSupplier && effectivePartyId === localSupplier) {
-        if (f.supplier_payable > 0) tripAmt = f.supplier_payable;
-      } else if (effectivePartyId && driverId && effectivePartyId === driverId) {
-        if (f.driver_payable > 0) tripAmt = f.driver_payable;
-      } else {
-        const mode =
-          selectedTripPayoutMode ?? resolveTripLedgerTripType(selectedTrip);
-        if (mode === "asset") {
-          if (f.driver_payable > 0) tripAmt = f.driver_payable;
-        } else if (f.supplier_payable > 0) {
-          tripAmt = f.supplier_payable;
-        }
-      }
+    if (selectedTripIds.length === 0) return base;
+    let sum = 0;
+    for (const tid of selectedTripIds) {
+      const trip = resolveTripOptionById(tid);
+      if (!trip) continue;
+      sum += getLedgerTripDueWeight(trip);
     }
-    if (tripAmt != null && tripAmt > 0) {
-      return formatAmountDuePlaceholder(tripAmt);
-    }
+    if (sum > 0) return formatAmountDuePlaceholder(sum);
     return base;
   }, [
     amountPlaceholder,
-    tripId,
-    tripFinancialSnapshot,
-    selectedTrip,
-    type,
-    effectivePartyId,
-    selectedTripPayoutMode,
-    resolveLocalSupplierPartyIdFromTrip,
+    selectedTripIds,
+    resolveTripOptionById,
+    getLedgerTripDueWeight,
   ]);
 
   const applyTripSmartTag = useCallback(
@@ -1162,7 +1199,7 @@ export function AddTransactionModal({
             ? f.supplier_payable
             : f.driver_payable;
       if (!(amt > 0)) return;
-      setTripId(trip.id);
+      setSelectedTripIds([trip.id]);
       setSmartTagSuggestedAmount(amt);
       setSmartTagHighlight(tag);
       setAmountStr(String(amt));
@@ -1602,7 +1639,7 @@ export function AddTransactionModal({
     effectivePartyId != null &&
     VEHICLE_EXPENSE_PARTIES.some((p) => p.id === effectivePartyId);
   const supplierNeedsTrip =
-    requireTripForSupplierOut && isSupplierPayment && !tripId;
+    requireTripForSupplierOut && isSupplierPayment && selectedTripIds.length === 0;
 
   // Trip required when not locked, party is selected (not misc), and there are trips to link.
   // Monthly Salary: trip is optional (driver payment type "salary").
@@ -1612,7 +1649,7 @@ export function AddTransactionModal({
     effectivePartyId !== "misc" &&
     filteredTrips.length > 0 &&
     !(isDriverPayment && driverPaymentType === "salary");
-  const hasValidTrip = !tripRequired || tripId != null;
+  const hasValidTrip = !tripRequired || selectedTripIds.length > 0;
 
   // Party required: user must select a party (incl. Misc when no other option).
   // When tripLocked, party is derived from trip on submit — no party field shown.
@@ -1724,11 +1761,6 @@ export function AddTransactionModal({
       setDriverIdForSalary(
         isDriverSalaryEntry ? (initialEntry.contact_id ?? null) : null,
       );
-      setTripId(
-        initialEntry.trip_id === undefined || initialEntry.trip_id === null
-          ? null
-          : initialEntry.trip_id,
-      );
       const matchedClientCat =
         desc && (CLIENT_CATEGORIES as readonly string[]).includes(desc);
       const matchedSupplierCat =
@@ -1748,10 +1780,10 @@ export function AddTransactionModal({
         isDriverSalaryEntry && initialEntry.contact_id != null ? initialEntry.contact_id : null
       );
       const tid = initialEntry.trip_id;
-      setTripId(tid !== undefined && tid !== null ? tid : null);
+      setSelectedTripIds(tid !== undefined && tid !== null ? [tid] : []);
       setCategory(desc && (EXPENSE_CATEGORIES as readonly string[]).includes(desc) ? desc : null);
     } else {
-      if (defaultTripId != null) setTripId(defaultTripId);
+      if (defaultTripId != null) setSelectedTripIds([defaultTripId]);
       if (defaultType != null) setType(defaultType);
       if (defaultContactId != null) {
         setPartyId(defaultContactId);
@@ -1763,7 +1795,7 @@ export function AddTransactionModal({
         setPartyId(null);
       }
       setAmountStr(lockedAmount != null ? String(lockedAmount) : "");
-      if (defaultTripId == null) setTripId(null);
+      if (defaultTripId == null) setSelectedTripIds([]);
       setCategory(null);
       setDriverPaymentType(
         (defaultDriverPaymentType == null ? null : defaultDriverPaymentType) as DriverPaymentType | null
@@ -1803,44 +1835,49 @@ export function AddTransactionModal({
   // Keep trip as the primary selector. If party/trip conflict, clear party instead of trip.
   // Skip when tripLocked — trip is fixed and party is derived from it.
   useEffect(() => {
-    if (!visible || tripLocked || !effectivePartyIdForTrips || !tripId) return;
-    const trip = safeTrips.find((t) => t.id === tripId);
-    if (!trip) return;
+    if (!visible || tripLocked || !effectivePartyIdForTrips || selectedTripIds.length === 0)
+      return;
     const isSupplier = safeSuppliers.some(
       (s) => s.id === effectivePartyIdForTrips,
     );
     const isDriver = safeDrivers.some((d) => d.id === effectivePartyIdForTrips);
-    const clientIdMatch = trip.client_id === effectivePartyIdForTrips;
-    const clientNameMatch =
-      Boolean(effectivePartyName && (trip.client_name || "").trim()) &&
-      (trip.client_name || "").trim().toLowerCase() ===
-        (effectivePartyName || "").trim().toLowerCase();
     const supplierLinkedOrgId =
       supplierLinkedOrgIds?.[effectivePartyIdForTrips];
-    const tripMatches =
-      clientIdMatch ||
-      clientNameMatch ||
-      (isSupplier &&
-        (trip.supplier_id === effectivePartyIdForTrips ||
-          (supplierLinkedOrgId != null &&
-            (trip as { organization_id?: string }).organization_id ===
-              supplierLinkedOrgId))) ||
-      (isDriver && trip.driver_id === effectivePartyIdForTrips);
-    if (!tripMatches) {
-      setPartyId(null);
-      if (partyId === "driver-salary") setDriverIdForSalary(null);
+    for (const tid of selectedTripIds) {
+      const trip = safeTrips.find((t) => t.id === tid);
+      if (!trip) continue;
+      const clientIdMatch = trip.client_id === effectivePartyIdForTrips;
+      const clientNameMatch =
+        Boolean(effectivePartyName && (trip.client_name || "").trim()) &&
+        (trip.client_name || "").trim().toLowerCase() ===
+          (effectivePartyName || "").trim().toLowerCase();
+      const tripMatches =
+        clientIdMatch ||
+        clientNameMatch ||
+        (isSupplier &&
+          (trip.supplier_id === effectivePartyIdForTrips ||
+            (supplierLinkedOrgId != null &&
+              (trip as { organization_id?: string }).organization_id ===
+                supplierLinkedOrgId))) ||
+        (isDriver && trip.driver_id === effectivePartyIdForTrips);
+      if (!tripMatches) {
+        setPartyId(null);
+        if (partyId === "driver-salary") setDriverIdForSalary(null);
+        return;
+      }
     }
   }, [
     visible,
     effectivePartyIdForTrips,
     effectivePartyName,
     partyId,
-    tripId,
+    selectedTripIds,
     safeTrips,
     safeSuppliers,
     safeDrivers,
     type,
     supplierLinkedOrgIds,
+    tripLocked,
   ]);
 
   // Sync entry date when opening for edit or new. When from client or trip, always use today.
@@ -2000,9 +2037,23 @@ export function AddTransactionModal({
       return effectivePartyName?.trim() || "—";
     })();
 
-    const reconTripSummary =
-      [tripNumber || lockedTripDisplay || null, selectedTrip?.route_label].filter(Boolean).join(" · ") ||
-      (tripId ? "Trip linked" : "No voyage linked");
+    const reconTripSummary = (() => {
+      if (selectedTripIds.length === 0) return "No voyage linked";
+      if (selectedTripIds.length === 1) {
+        return (
+          [tripNumber || lockedTripDisplay || null, selectedTrip?.route_label]
+            .filter(Boolean)
+            .join(" · ") || "Trip linked"
+        );
+      }
+      const labels = selectedTripIds
+        .slice(0, 3)
+        .map((id) => resolveTripOptionById(id)?.trip_number ?? id)
+        .join(", ");
+      const extra =
+        selectedTripIds.length > 3 ? ` +${selectedTripIds.length - 3} more` : "";
+      return `${selectedTripIds.length} voyages · ${labels}${extra}`;
+    })();
 
     const reconReferenceSummary =
       paymentModeId === "CASH"
@@ -2042,7 +2093,8 @@ export function AddTransactionModal({
     tripNumber,
     lockedTripDisplay,
     selectedTrip,
-    tripId,
+    selectedTripIds,
+    resolveTripOptionById,
     paymentModeId,
     paymentReference,
     entryDate,
@@ -2243,23 +2295,54 @@ export function AddTransactionModal({
     const normalizedCategory =
       category === "SUPPLIER COST" ? "SUPPLIER PAYMENT" : category;
 
-    const selectedTripModeForGuard =
-      selectedTrip != null
-        ? selectedTripPayoutMode ?? resolveTripLedgerTripType(selectedTrip)
-        : null;
-    const isSupplierPaymentForAssetTrip =
-      type === "out" &&
-      selectedTripModeForGuard === "asset" &&
-      ((normalizedCategory != null &&
-        SUPPLIER_CATEGORIES.includes(normalizedCategory as SupplierCategory)) ||
-        finalContactType === "supplier");
-    if (isSupplierPaymentForAssetTrip) {
-      Alert.alert(
-        "Supplier payment restricted",
-        "Supplier payment is not allowed for asset-based trips. Use driver payment or vehicle expense for this trip.",
-      );
-      return;
+    const guardTrips: TripOption[] =
+      selectedTripIds.length > 0
+        ? selectedTripIds
+            .map((id) => resolveTripOptionById(id))
+            .filter((t): t is TripOption => t != null)
+        : selectedTrip
+          ? [selectedTrip]
+          : [];
+    for (const tr of guardTrips) {
+      const mode = resolveTripLedgerTripType(tr);
+      const isSupplierPaymentForAssetTrip =
+        type === "out" &&
+        mode === "asset" &&
+        ((normalizedCategory != null &&
+          SUPPLIER_CATEGORIES.includes(normalizedCategory as SupplierCategory)) ||
+          finalContactType === "supplier");
+      if (isSupplierPaymentForAssetTrip) {
+        Alert.alert(
+          "Supplier payment restricted",
+          "Supplier payment is not allowed for asset-based trips. Use driver payment or vehicle expense for this trip.",
+        );
+        return;
+      }
     }
+
+    const tripAllocations: TripLedgerAllocation[] | undefined =
+      !isUnlinkedMisc &&
+      !isEditMode &&
+      selectedTripIds.length > 1
+        ? (() => {
+            const weightPaise = selectedTripIds.map((tid) => {
+              const trip = resolveTripOptionById(tid);
+              if (!trip) return 0;
+              return Math.round(getLedgerTripDueWeight(trip) * 100);
+            });
+            const totalPaise = Math.round(amount * 100);
+            const allocated = allocateIntegerByWeights(totalPaise, weightPaise);
+            return selectedTripIds.map((tid, i) => {
+              const trip = resolveTripOptionById(tid);
+              return {
+                tripId: tid,
+                amount: Math.round(allocated[i]) / 100,
+                tripNumber: trip?.trip_number ?? null,
+                indentId: trip?.indent_id ?? undefined,
+              };
+            });
+          })()
+        : undefined;
 
     const data: AddTransactionData = {
       type,
@@ -2276,8 +2359,20 @@ export function AddTransactionModal({
               ? cashOutPayeeId
               : effectivePartyId,
       partyName: finalPartyName,
-      tripId: isUnlinkedMisc ? null : tripId,
-      tripNumber: isUnlinkedMisc ? null : tripNumber || null,
+      tripId:
+        isUnlinkedMisc
+          ? null
+          : selectedTripIds.length === 1
+            ? selectedTripIds[0]
+            : tripAllocations && tripAllocations.length > 0
+              ? null
+              : null,
+      tripNumber:
+        isUnlinkedMisc
+          ? null
+          : selectedTripIds.length === 1
+            ? tripNumber || null
+            : null,
       category:
         type === "in"
           ? (isClientPayment || tripLocked)
@@ -2298,12 +2393,14 @@ export function AddTransactionModal({
             effectivePartyName ??
             null)
           : undefined,
-      indentId: selectedTrip?.indent_id ?? undefined,
+      indentId:
+        selectedTripIds.length === 1 ? selectedTrip?.indent_id ?? undefined : undefined,
       transactionDate: /^\d{4}-\d{2}-\d{2}$/.test(entryDate)
         ? entryDate
         : undefined,
       paymentMode: paymentModeId,
       paymentReference: paymentReference.trim() || null,
+      tripAllocations,
     };
     if (isEditMode && initialEntry?.id) {
       onSubmit(data, { entryId: initialEntry.id });
@@ -2312,7 +2409,7 @@ export function AddTransactionModal({
       onSubmit(data);
       setAmountStr("");
       setPartyId(null);
-      setTripId(null);
+      setSelectedTripIds([]);
       setCategory(null);
       setDriverPaymentType(null);
       onClose();
@@ -3104,8 +3201,11 @@ export function AddTransactionModal({
           >
             <View style={styles.missionTripBlock}>
               <TouchableOpacity
-                style={[styles.missionTripRowCompact, tripId == null && styles.missionTripRowCompactOn]}
-                onPress={() => setTripId(null)}
+                style={[
+                  styles.missionTripRowCompact,
+                  selectedTripIds.length === 0 && styles.missionTripRowCompactOn,
+                ]}
+                onPress={() => setSelectedTripIds([])}
                 activeOpacity={0.85}
               >
                 <View style={styles.missionTripIconPlaceholder}>
@@ -3114,7 +3214,7 @@ export function AddTransactionModal({
                 <Text style={styles.missionTripRouteInline} numberOfLines={1}>
                   No associated trip
                 </Text>
-                {tripId == null ? (
+                {selectedTripIds.length === 0 ? (
                   <FontAwesome name="check" size={12} color={accent} />
                 ) : null}
               </TouchableOpacity>
@@ -3123,7 +3223,7 @@ export function AddTransactionModal({
               <Text style={styles.missionFilterEmpty}>No trips match these filters.</Text>
             ) : null}
             {missionTripsFiltered.map((t) => {
-              const selected = tripId === t.id;
+              const selected = selectedTripIds.includes(t.id);
               const routeLine = (t.route_label || "").trim() || "—";
               const partyVis = getLedgerTripPartyVisual(t);
               const sub = [t.trip_date].filter(Boolean).join(" · ");
@@ -3199,7 +3299,15 @@ export function AddTransactionModal({
                 <View key={t.id} style={styles.missionTripBlock}>
                   <TouchableOpacity
                     style={[styles.missionTripRowCompact, selected && styles.missionTripRowCompactOn]}
-                    onPress={() => setTripId(t.id)}
+                    onPress={() => {
+                      if (isEditMode || tripLocked) {
+                        setSelectedTripIds([t.id]);
+                        return;
+                      }
+                      setSelectedTripIds((prev) =>
+                        prev.includes(t.id) ? prev.filter((x) => x !== t.id) : [...prev, t.id],
+                      );
+                    }}
                     activeOpacity={0.85}
                   >
                     <PartyAvatar
@@ -4358,10 +4466,10 @@ export function AddTransactionModal({
                   <TouchableOpacity
                     style={[
                       styles.pickerItem,
-                      !tripId && styles.pickerItemActive,
+                      selectedTripIds.length === 0 && styles.pickerItemActive,
                     ]}
                     onPress={() => {
-                      setTripId(null);
+                      setSelectedTripIds([]);
                       setShowTripPicker(false);
                     }}
                     activeOpacity={0.6}
@@ -4377,10 +4485,12 @@ export function AddTransactionModal({
                         key={t.id}
                         style={[
                           styles.pickerItem,
-                          tripId === t.id && styles.pickerItemActive,
+                          selectedTripIds.length === 1 &&
+                            selectedTripIds[0] === t.id &&
+                            styles.pickerItemActive,
                         ]}
                         onPress={() => {
-                          setTripId(t.id);
+                          setSelectedTripIds([t.id]);
                           setShowTripPicker(false);
                         }}
                         activeOpacity={0.6}
@@ -4511,13 +4621,36 @@ export function AddTransactionModal({
     if (showTripPicker) {
       return (
         <ScrollView style={pickerModalScrollStyle} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator>
-          <TouchableOpacity style={[styles.pickerItem, !tripId && styles.pickerItemActive]} onPress={() => { setTripId(null); setShowTripPicker(false); }} activeOpacity={0.6}>
+          <TouchableOpacity
+            style={[
+              styles.pickerItem,
+              selectedTripIds.length === 0 && styles.pickerItemActive,
+            ]}
+            onPress={() => {
+              setSelectedTripIds([]);
+              setShowTripPicker(false);
+            }}
+            activeOpacity={0.6}
+          >
             <Text style={styles.pickerItemText}>General</Text>
           </TouchableOpacity>
           {filteredTrips.map((t) => {
             const routeAndDate = [t.route_label, t.trip_date].filter(Boolean).join(" · ");
             return (
-              <TouchableOpacity key={t.id} style={[styles.pickerItem, tripId === t.id && styles.pickerItemActive]} onPress={() => { setTripId(t.id); setShowTripPicker(false); }} activeOpacity={0.6}>
+              <TouchableOpacity
+                key={t.id}
+                style={[
+                  styles.pickerItem,
+                  selectedTripIds.length === 1 &&
+                    selectedTripIds[0] === t.id &&
+                    styles.pickerItemActive,
+                ]}
+                onPress={() => {
+                  setSelectedTripIds([t.id]);
+                  setShowTripPicker(false);
+                }}
+                activeOpacity={0.6}
+              >
                 <View style={styles.pickerItemTripContent}>
                   <Text style={styles.pickerItemText} numberOfLines={1}>{t.trip_number}</Text>
                   {routeAndDate ? <Text style={styles.pickerItemSubtext} numberOfLines={1}>{routeAndDate}</Text> : null}
