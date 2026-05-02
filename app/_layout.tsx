@@ -278,6 +278,7 @@ function RootLayoutNav() {
           <AppAlertHost />
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="index" />
+            <Stack.Screen name="welcome" options={{ animation: 'fade' }} />
             <Stack.Screen name="sign-in" options={{ animation: 'fade' }} />
             <Stack.Screen name="sign-up" options={{ animation: 'fade' }} />
             <Stack.Screen name="(tabs)" />

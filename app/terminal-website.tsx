@@ -1,5 +1,10 @@
+import { ROUTES } from '@/lib/routes';
 import { useRouter } from 'expo-router';
+import { useEffect, useRef } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+
+/** Posted by landing HTML inside iframe so parent can SPA-navigate (avoids full document reload). */
+const PULSE_SIGN_IN_NAV = 'pulse-sign-in-nav' as const;
 
 const WEBSITE_HTML = `<!doctype html>
 <html lang="en">
@@ -404,12 +409,42 @@ const WEBSITE_HTML = `<!doctype html>
         window.scrollTo({ top, behavior: 'smooth' });
       });
     });
+
+    document.body.addEventListener(
+      'click',
+      function (event) {
+        const el = event.target;
+        if (!el || typeof el.closest !== 'function') return;
+        const anchor = el.closest('a[href^="/sign-in"], a[href^="/welcome"]');
+        if (!anchor) return;
+        event.preventDefault();
+        event.stopPropagation();
+        try {
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: '${PULSE_SIGN_IN_NAV}', v: 1 }, '*');
+          }
+        } catch (_) {}
+      },
+      true
+    );
   </script>
 </body>
 </html>`;
 
 export default function TerminalWebsitePage() {
   const router = useRouter();
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type !== PULSE_SIGN_IN_NAV || event.data?.v !== 1) return;
+      if (iframeRef.current?.contentWindow !== event.source) return;
+      router.push(ROUTES.WELCOME);
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [router]);
 
   if (Platform.OS !== 'web') {
     return (
@@ -418,7 +453,7 @@ export default function TerminalWebsitePage() {
           Pulse<Text style={styles.nativeTitleDot}>.</Text> Website
         </Text>
         <Text style={styles.nativeBody}>This page is designed for web. Continue to sign in.</Text>
-        <Pressable onPress={() => router.push('/sign-in')} style={styles.nativeBtn}>
+        <Pressable onPress={() => router.push(ROUTES.WELCOME)} style={styles.nativeBtn}>
           <Text style={styles.nativeBtnText}>Go to Sign In</Text>
         </Pressable>
       </View>
@@ -427,6 +462,7 @@ export default function TerminalWebsitePage() {
 
   return (
     <iframe
+      ref={iframeRef}
       title="Pulse Website"
       srcDoc={WEBSITE_HTML}
       style={{ width: '100%', height: '100vh', border: 'none' }}
