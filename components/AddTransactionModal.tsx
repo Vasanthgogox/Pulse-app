@@ -351,6 +351,11 @@ export const PAYMENT_MODES = [
   { id: 'CREDIT', name: 'Credit' },
 ] as const;
 
+/** True when mode is cash (case-insensitive so stored/legacy values still match). */
+function isLedgerCashPaymentMode(id: string | null | undefined): boolean {
+  return (id ?? "").trim().toUpperCase() === "CASH";
+}
+
 const LEDGER_LAST_PAYMENT_MODE_KEY = "@q/ledger_last_payment_mode";
 type FontAwesomeIconName = React.ComponentProps<typeof FontAwesome>["name"];
 
@@ -927,7 +932,7 @@ export function AddTransactionModal({
   }, [fullPage, visible, paymentModeId, initialEntry?.id]);
 
   useEffect(() => {
-    if (paymentModeId === "CASH" && paymentReference.trim() !== "") {
+    if (isLedgerCashPaymentMode(paymentModeId) && paymentReference.trim() !== "") {
       setPaymentReference("");
     }
   }, [paymentModeId, paymentReference]);
@@ -2055,10 +2060,9 @@ export function AddTransactionModal({
       return `${selectedTripIds.length} voyages · ${labels}${extra}`;
     })();
 
-    const reconReferenceSummary =
-      paymentModeId === "CASH"
-        ? "— (cash)"
-        : paymentReference.trim() || "—";
+    const reconReferenceSummary = isLedgerCashPaymentMode(paymentModeId)
+      ? "— (cash)"
+      : paymentReference.trim() || "—";
 
     const reconDateSummary = formatLedgerDateDdMmYyyy(entryDate);
 
@@ -3030,8 +3034,10 @@ export function AddTransactionModal({
       </View>
     );
 
+    const needsLedgerPaymentReference = !isLedgerCashPaymentMode(paymentModeId);
+
     const ledgerReferenceCard =
-      paymentModeId !== "CASH" ? (
+      needsLedgerPaymentReference ? (
         <View style={[styles.syncReferenceCard, styles.syncReferenceCardTripBand]}>
           <Text style={[styles.syncReferenceEyebrow, styles.syncReferenceEyebrowLedger]}>
             Reference / UTR
@@ -3501,8 +3507,8 @@ export function AddTransactionModal({
               ]}
             >
               {ledgerModeCategoryTopBand}
-              {ledgerSyncHeroDateRow}
               {ledgerReferenceCard}
+              {ledgerSyncHeroDateRow}
             </View>
           </View>
         </View>
@@ -3849,7 +3855,7 @@ export function AddTransactionModal({
                 )}
               </View>
 
-              {paymentModeId !== "CASH" && (
+              {!isLedgerCashPaymentMode(paymentModeId) && (
                 <View style={[styles.fieldBlockFull, { marginTop: 0, borderTopWidth: 0 }]}>
                   <Text style={[styles.tagLabel, styles.fieldLabel]}>REFERENCE NO / UTR</Text>
                   <TextInput

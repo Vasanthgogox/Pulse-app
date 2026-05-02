@@ -1358,21 +1358,46 @@ export default function TripDetailScreen({
                 </View>
               </View>
               <View style={styles.refHeroRouteRow}>
-                <View style={styles.refHeroRouteCol}>
+                <View style={[styles.refHeroRouteCol, styles.refHeroRouteColJustify]}>
                   <Text style={[styles.refHeroCity, isMobile && styles.refHeroCityMobile]}>
                     {originSplit.primary.toUpperCase()}
                   </Text>
                   <Text style={styles.refHeroState}>{originStateLabel.toUpperCase()}</Text>
                 </View>
-                <View style={styles.refHeroToRow}>
-                  <View style={styles.refHeroToDot} />
-                  <View style={styles.refHeroToLine} />
+                <View style={styles.refHeroConnectorWrap}>
+                  <View style={styles.refHeroToRow}>
+                    <View style={styles.refHeroToDot} />
+                    <View style={styles.refHeroToLine} />
+                  </View>
                 </View>
-                <View style={[styles.refHeroRouteCol, styles.refHeroRouteColRight]}>
-                  <Text style={[styles.refHeroCity, isMobile && styles.refHeroCityMobile]} numberOfLines={2}>
+                <View
+                  style={[
+                    styles.refHeroRouteCol,
+                    styles.refHeroRouteColRight,
+                    styles.refHeroRouteColJustify,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.refHeroCity,
+                      isMobile && styles.refHeroCityMobile,
+                      isMobile && styles.refHeroCityMobileDest,
+                      Platform.OS === "web" && isMobile && styles.refHeroCityWebDest,
+                      styles.refHeroCityRight,
+                    ]}
+                    numberOfLines={1}
+                    {...(Platform.OS === "web"
+                      ? {}
+                      : {
+                          adjustsFontSizeToFit: true as const,
+                          minimumFontScale: 0.45,
+                        })}
+                  >
                     {destinationSplit.primary.toUpperCase()}
                   </Text>
-                  <Text style={styles.refHeroState}>{destinationStateLabel.toUpperCase()}</Text>
+                  <Text style={[styles.refHeroState, styles.refHeroStateRight]}>
+                    {destinationStateLabel.toUpperCase()}
+                  </Text>
                 </View>
               </View>
               <View style={styles.refHeroMetaShell}>
@@ -1416,9 +1441,11 @@ export default function TripDetailScreen({
                     <Text style={styles.refAssetChangeBtnText}>Change</Text>
                   </TouchableOpacity>
                 </View>
-                <Text style={styles.refAssetLabel}>Authorized Pilot</Text>
-                <Text style={styles.refAssetValue} numberOfLines={1}>{allocatedDriverName}</Text>
-                <Text style={styles.refAssetSubtle}>{driverRatingLabel} rank</Text>
+                <View style={styles.refAssetBody}>
+                  <Text style={styles.refAssetLabel}>Authorized Pilot</Text>
+                  <Text style={styles.refAssetValue} numberOfLines={1}>{allocatedDriverName}</Text>
+                  <Text style={styles.refAssetSubtle}>{driverRatingLabel} rank</Text>
+                </View>
               </View>
 
               <View style={styles.refAssetCard}>
@@ -1434,9 +1461,11 @@ export default function TripDetailScreen({
                     <Text style={styles.refAssetChangeBtnText}>Change</Text>
                   </TouchableOpacity>
                 </View>
-                <Text style={styles.refAssetLabel}>Vehicle Asset</Text>
-                <Text style={styles.refAssetValue} numberOfLines={1}>{allocatedVehicleLabel}</Text>
-                <Text style={styles.refAssetSubtle}>{vehicleTypeLabel} · {vehicleCapacityLabel}</Text>
+                <View style={styles.refAssetBody}>
+                  <Text style={styles.refAssetLabel}>Vehicle Asset</Text>
+                  <Text style={styles.refAssetValue} numberOfLines={1}>{allocatedVehicleLabel}</Text>
+                  <Text style={styles.refAssetSubtle}>{vehicleTypeLabel} · {vehicleCapacityLabel}</Text>
+                </View>
               </View>
             </View>
 
@@ -6620,12 +6649,22 @@ const styles = StyleSheet.create({
   },
   refHeroRouteRow: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
+    alignItems: "stretch",
+    gap: 6,
   },
   refHeroRouteCol: {
     flex: 1,
     minWidth: 0,
+  },
+  refHeroRouteColJustify: {
+    justifyContent: "center",
+  },
+  refHeroConnectorWrap: {
+    justifyContent: "center",
+    alignItems: "center",
+    alignSelf: "stretch",
+    flexShrink: 0,
+    paddingHorizontal: 2,
   },
   refHeroRouteColRight: {
     alignItems: "flex-end",
@@ -6686,6 +6725,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 10,
+    minHeight: 30,
+  },
+  refAssetBody: {
+    alignSelf: "stretch",
+    width: "100%",
   },
   refAssetIconWrap: {
     width: 30,
@@ -6981,17 +7025,20 @@ const styles = StyleSheet.create({
     borderColor: "#eef2f7",
     paddingHorizontal: 12,
     paddingVertical: 14,
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 5,
   },
   refVaultCardTitle: {
-    textAlign: "center",
+    textAlign: "left",
+    alignSelf: "stretch",
     fontSize: 10,
     fontWeight: "800",
     color: "#0f172a",
     textTransform: "uppercase",
   },
   refVaultCardStatus: {
+    alignSelf: "stretch",
+    textAlign: "left",
     fontSize: 8,
     fontWeight: "800",
     color: "#94a3b8",
@@ -7000,15 +7047,17 @@ const styles = StyleSheet.create({
   },
   refVaultViewBtn: {
     marginTop: 6,
+    alignSelf: "stretch",
     borderRadius: 10,
     backgroundColor: "#f8fafc",
     borderWidth: 1,
     borderColor: "#eef2f7",
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 8,
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    justifyContent: "center",
+    gap: 6,
   },
   refVaultViewText: {
     fontSize: 8,
@@ -7066,6 +7115,22 @@ const styles = StyleSheet.create({
     letterSpacing: -0.6,
     lineHeight: 32,
   },
+  // Slightly tighter than origin so long destination names wrap cleanly in the right column.
+  refHeroCityMobileDest: {
+    fontSize: 28,
+    letterSpacing: -0.7,
+    lineHeight: 30,
+  },
+  refHeroCityWebDest: {
+    fontSize: 21,
+    letterSpacing: -0.85,
+    lineHeight: 24,
+  },
+  refHeroCityRight: {
+    textAlign: "right",
+    alignSelf: "stretch",
+    width: "100%",
+  },
   refHeroState: {
     marginTop: 2,
     marginBottom: 10,
@@ -7074,6 +7139,11 @@ const styles = StyleSheet.create({
     color: "#94a3b8",
     textTransform: "uppercase",
     letterSpacing: 2.2,
+  },
+  refHeroStateRight: {
+    textAlign: "right",
+    alignSelf: "stretch",
+    width: "100%",
   },
   refHeroToRow: { flexDirection: "row", alignItems: "center", gap: 8, marginVertical: 4 },
   refHeroToDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Theme.positive },
