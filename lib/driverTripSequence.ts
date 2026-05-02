@@ -7,7 +7,7 @@ function toTime(value: string | null | undefined): number {
 }
 
 export function formatDriverTripSequence(n: number): string {
-  return `TRP${String(Math.max(1, n)).padStart(3, "0")}`;
+  return `DRV${String(Math.max(1, n)).padStart(3, "0")}`;
 }
 
 /**
@@ -55,6 +55,8 @@ export function getDriverTripDisplayNumber(
   trip: TripRow,
   byTripId: Record<string, string>,
 ): string {
+  const fromDb = trip.driver_display_trip_id?.trim();
+  if (fromDb) return fromDb;
   return byTripId[String(trip.id)] ?? "—";
 }
 

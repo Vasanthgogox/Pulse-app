@@ -17,6 +17,11 @@ export interface TripRow {
   sequence_number?: number | null;
   /** User-facing trip ID e.g. TRP001. Set by trigger from sequence_number. */
   display_trip_id?: string | null;
+  /**
+   * Per-driver sequential label (DRV###). Independent from fleet `trip_number` / TRP sequence.
+   * Populated when `driver_id` is set.
+   */
+  driver_display_trip_id?: string | null;
   indent_id: string | null;
   source: string;
   pickup_area: string;
@@ -182,6 +187,16 @@ export async function getShipperDisplayNamesForSupplierTrips(
 
 /** Display label for a trip (TRP001-style when present). */
 export function getTripDisplayNumber(row: TripRow): string {
+  return row.display_trip_id ?? row.trip_number ?? "—";
+}
+
+/**
+ * Driver-facing label when the DB has assigned `driver_display_trip_id` (DRV###).
+ * Falls back to fleet numbers only if not yet assigned (e.g. unassigned trip).
+ */
+export function resolveDriverFacingTripLabel(row: TripRow): string {
+  const drv = row.driver_display_trip_id?.trim();
+  if (drv) return drv;
   return row.display_trip_id ?? row.trip_number ?? "—";
 }
 

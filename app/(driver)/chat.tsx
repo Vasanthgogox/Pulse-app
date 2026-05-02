@@ -161,6 +161,20 @@ function DriverStatusNoteCard({ u }: { u: ParsedDriverStatusNote }) {
   );
 }
 
+function isStatusNoteRedundantWithChat(
+  u: ParsedDriverStatusNote,
+  messages: TripMessageRow[],
+): boolean {
+  const t = new Date(u.timestamp).getTime();
+  return messages.some(
+    (m) =>
+      m.sender_role === "driver" &&
+      m.message_type === "text" &&
+      m.content.trim() === u.message.trim() &&
+      Math.abs(new Date(m.created_at).getTime() - t) < 120_000,
+  );
+}
+
 function MessageThread({
   conv,
   messageInput,
@@ -168,6 +182,7 @@ function MessageThread({
   showEmoji,
   setShowEmoji,
   onSend,
+  onSendTripChat,
   onBack,
 }: {
   conv: TripConversation;
@@ -176,6 +191,8 @@ function MessageThread({
   showEmoji: boolean;
   setShowEmoji: (v: boolean) => void;
   onSend: () => void;
+  /** Mirrors Quick Status into trip_messages so Command Hub receives it (notes alone do not sync). */
+  onSendTripChat: (text: string) => Promise<void>;
   onBack: () => void;
 }) {
   const scrollRef = useRef<ScrollView>(null);
@@ -207,6 +224,7 @@ function MessageThread({
       items.push({ key: `m-${m.id}`, kind: "msg", m });
     }
     statusNotes.forEach((u, i) => {
+      if (isStatusNoteRedundantWithChat(u, conv.messages)) return;
       items.push({
         key: `s-${u.timestamp}-${i}-${u.message.slice(0, 12)}`,
         kind: "status",
@@ -231,6 +249,11 @@ function MessageThread({
     if (!res.error) {
       const { trip: next } = await tripsService.getTripById(conv.trip_id);
       if (next) setTrip(next);
+      try {
+        await onSendTripChat(label);
+      } catch {
+        // Notes updated; chat sync failed — user can resend from text field
+      }
     }
     setStatusSending(null);
   };
@@ -522,6 +545,9 @@ export default function DriverChatScreen() {
             showEmoji={showEmoji}
             setShowEmoji={setShowEmoji}
             onSend={handleSend}
+            onSendTripChat={(text) =>
+              sendMessage(selectedConv.id, selectedConv.organization_id, text)
+            }
             onBack={() => {
               setSelectedId(null);
               setMessageInput("");
@@ -592,6 +618,9 @@ export default function DriverChatScreen() {
           showEmoji={showEmoji}
           setShowEmoji={setShowEmoji}
           onSend={handleSend}
+          onSendTripChat={(text) =>
+            sendMessage(selectedConv.id, selectedConv.organization_id, text)
+          }
           onBack={() => { setSelectedId(null); setMessageInput(""); setShowEmoji(false); }}
         />
       )}

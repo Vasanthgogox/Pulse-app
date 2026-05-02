@@ -1,6 +1,6 @@
 /**
- * Driver “quick status” lines stored in `trips.notes` as `[UPDATE|step|iso|message]`.
- * Shown in the full driver message screen; not on the live trip tab.
+ * Driver quick-status lines stored in `trips.notes` as `[UPDATE|step|iso|message]`.
+ * The driver chat UI also mirrors each tap into `trip_messages` so dispatchers see it in Command Hub.
  */
 import { supabase } from '@/lib/supabase';
 import type { TripRow } from '@/services/tripsService';

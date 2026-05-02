@@ -573,16 +573,22 @@ export async function getConversationsByDriverIds(
 
   if (error) throw error;
 
-  return (data ?? []).map((row: any) => ({
-    ...row,
-    trip_number: row.trips?.trip_number ?? "",
-    pickup_area: row.trips?.pickup_area ?? "",
-    drop_location: row.trips?.drop_location ?? "",
-    messages: ((row.trip_messages ?? []) as TripMessageRow[]).sort(
-      (a, b) =>
-        new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-    ),
-  }));
+  return (data ?? []).map((row: any) => {
+    const tr = row.trips;
+    const drv = tr?.driver_display_trip_id != null && String(tr.driver_display_trip_id).trim() !== ""
+      ? String(tr.driver_display_trip_id).trim()
+      : "";
+    return {
+      ...row,
+      trip_number: drv || tr?.trip_number || "",
+      pickup_area: tr?.pickup_area ?? "",
+      drop_location: tr?.drop_location ?? "",
+      messages: ((row.trip_messages ?? []) as TripMessageRow[]).sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      ),
+    };
+  });
 }
 
 /** Sends a message as the driver role. Thin wrapper for consistency. */
