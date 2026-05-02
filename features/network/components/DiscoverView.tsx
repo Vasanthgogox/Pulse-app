@@ -42,6 +42,7 @@ import {
   FlatList,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -51,8 +52,15 @@ import {
 
 interface DiscoverViewProps {
   orgId: string;
-  /** When true, list does not scroll (nested in parent ScrollView). */
+  /** When true, render the hub grid instead of a standalone scrolling list. */
   embedded?: boolean;
+  /**
+   * When true with `embedded`, grid scrolls inside a bounded area so the parent can keep
+   * a static section header (e.g. Network tab "Grow your network").
+   */
+  embeddedScrollable?: boolean;
+  /** Max height of the embedded scroll area; defaults from window size when omitted. */
+  embeddedScrollMaxHeight?: number;
   search?: string;
   onSearchChange?: (value: string) => void;
   showSearchChrome?: boolean;
@@ -337,6 +345,8 @@ const DISCOVER_COLS_DESKTOP = 7;
 const DISCOVER_ROWS_DESKTOP = 2;
 const DISCOVER_COLS_MOBILE = 2;
 const DISCOVER_ROWS_MOBILE = 3;
+/** Matches discoverOrganizations fetch limit — show full result set inside embedded scroll. */
+const EMBEDDED_SCROLL_ITEM_CAP = 40;
 const LIST_STATIC_HORIZONTAL_PAD = 14 * 2;
 const DISCOVER_GRID_GAP_PX = 12;
 /** Before `onLayout` reports width, cap provisional outer width so 7-up math stays modest vs narrow columns. */
@@ -345,6 +355,8 @@ const DISCOVER_EMBEDDED_PROVISIONAL_OUTER_CAP = 520;
 export function DiscoverView({
   orgId,
   embedded,
+  embeddedScrollable = false,
+  embeddedScrollMaxHeight: embeddedScrollMaxHeightProp,
   search: searchProp,
   onSearchChange,
   showSearchChrome = true,
@@ -352,7 +364,7 @@ export function DiscoverView({
   onInviteCountChange,
   inviteDailyCapReached = false,
 }: DiscoverViewProps) {
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   /** Measured width of the embedded discover grid (list or outer container), for fixed card columns. */
   const [embeddedListWidth, setEmbeddedListWidth] = useState(0);
   const recordEmbeddedListWidth = useCallback((w: number) => {
@@ -450,6 +462,19 @@ export function DiscoverView({
     ? DISCOVER_ROWS_DESKTOP
     : DISCOVER_ROWS_MOBILE;
   const discoverMaxVisible = discoverColumnCount * discoverRowCap;
+
+  const embeddedScrollMaxHeight = useMemo(() => {
+    if (embeddedScrollMaxHeightProp != null && embeddedScrollMaxHeightProp > 0) {
+      return embeddedScrollMaxHeightProp;
+    }
+    return Math.min(560, Math.round(windowHeight * 0.48));
+  }, [embeddedScrollMaxHeightProp, windowHeight]);
+
+  const discoverDisplayCap = useMemo(
+    () =>
+      embedded && embeddedScrollable ? EMBEDDED_SCROLL_ITEM_CAP : discoverMaxVisible,
+    [embedded, embeddedScrollable, discoverMaxVisible],
+  );
 
   /**
    * Fixed pixel width per card column (same as a full 7- or 2-up row). Rows use `justifyContent:
@@ -614,14 +639,14 @@ export function DiscoverView({
     const items: ListItem[] = [];
     const display = (search ? connectableOrgs : [...recommended, ...rest]).slice(
       0,
-      discoverMaxVisible,
+      discoverDisplayCap,
     );
     if (search && display.length > 0) {
       items.push({ _type: 'header', label: 'Fresh profiles', count: connectableOrgs.length });
     }
     for (const org of display) items.push({ _type: 'org', org });
     return items;
-  }, [connectableOrgs, recommended, rest, search, discoverMaxVisible]);
+  }, [connectableOrgs, recommended, rest, search, discoverDisplayCap]);
 
   const embeddedDiscoverSections = useMemo(() => {
     const orgItems = listData.filter(
@@ -638,6 +663,58 @@ export function DiscoverView({
       rows: chunkBySize(orgItems, discoverColumnCount),
     };
   }, [listData, discoverColumnCount]);
+
+  const embeddedGridBody = (
+    <>
+      {embeddedDiscoverSections.header ? (
+        <View style={styles.gridHeaderCell}>
+          <SectionLabel
+            label={embeddedDiscoverSections.header.label}
+            count={embeddedDiscoverSections.header.count}
+          />
+        </View>
+      ) : null}
+      {embeddedDiscoverSections.rows.map((row, ri) => (
+        <View key={`discover-grid-${ri}`} style={styles.discoverGridRow}>
+          {row.map((item) => (
+            <View
+              key={item.org.id}
+              style={[
+                styles.discoverGridCell,
+                embedded &&
+                  embeddedDiscoverCellWidth != null && {
+                    width: embeddedDiscoverCellWidth,
+                    minWidth: embeddedDiscoverCellWidth,
+                    maxWidth: embeddedDiscoverCellWidth,
+                    flexGrow: 0,
+                    flexShrink: 0,
+                    alignSelf: "flex-start",
+                  },
+              ]}
+            >
+              <View style={styles.discoverGridCardWrap}>
+                <OrgCard
+                  org={item.org}
+                  locationFallback={organizationLocationById[item.org.id]}
+                  onConnect={() => tryBeginConnectionRequest(item.org)}
+                  onCancel={() => void handleCancelRequest(item.org)}
+                  loading={connecting === item.org.id}
+                  onOpenProfile={() =>
+                    onOpenProfile?.({
+                      ...item.org,
+                      rating_value:
+                        item.org.rating ?? item.org.average_rating ?? null,
+                      location_value: getBusinessLocation(item.org),
+                    })
+                  }
+                />
+              </View>
+            </View>
+          ))}
+        </View>
+      ))}
+    </>
+  );
 
   return (
     <View
@@ -694,68 +771,23 @@ export function DiscoverView({
             <View style={styles.embeddedGridLoading}>
               <ActivityIndicator size="small" color={Theme.primary} />
             </View>
+          ) : embeddedScrollable ? (
+            <ScrollView
+              style={[styles.embeddedDiscoverScroll, { maxHeight: embeddedScrollMaxHeight }]}
+              contentContainerStyle={styles.listStatic}
+              onLayout={(e) => recordEmbeddedListWidth(e.nativeEvent.layout.width)}
+              nestedScrollEnabled
+              showsVerticalScrollIndicator
+              keyboardShouldPersistTaps="handled"
+            >
+              {embeddedGridBody}
+            </ScrollView>
           ) : (
             <View
               style={styles.listStatic}
               onLayout={(e) => recordEmbeddedListWidth(e.nativeEvent.layout.width)}
             >
-              {embeddedDiscoverSections.header ? (
-                <View style={styles.gridHeaderCell}>
-                  <SectionLabel
-                    label={embeddedDiscoverSections.header.label}
-                    count={embeddedDiscoverSections.header.count}
-                  />
-                </View>
-              ) : null}
-              {embeddedDiscoverSections.rows.map((row, ri) => (
-                <View key={`discover-grid-${ri}`} style={styles.discoverGridRow}>
-                  {row.map((item) => (
-                    <View
-                      key={item.org.id}
-                      style={[
-                        styles.discoverGridCell,
-                        embedded &&
-                          embeddedDiscoverCellWidth != null && {
-                            width: embeddedDiscoverCellWidth,
-                            minWidth: embeddedDiscoverCellWidth,
-                            maxWidth: embeddedDiscoverCellWidth,
-                            flexGrow: 0,
-                            flexShrink: 0,
-                            alignSelf: "flex-start",
-                          },
-                      ]}
-                    >
-                      <View style={styles.discoverGridCardWrap}>
-                        <OrgCard
-                          org={item.org}
-                          locationFallback={
-                            organizationLocationById[item.org.id]
-                          }
-                          onConnect={() =>
-                            tryBeginConnectionRequest(item.org)
-                          }
-                          onCancel={() =>
-                            void handleCancelRequest(item.org)
-                          }
-                          loading={connecting === item.org.id}
-                          onOpenProfile={() =>
-                            onOpenProfile?.({
-                              ...item.org,
-                              rating_value:
-                                item.org.rating ??
-                                item.org.average_rating ??
-                                null,
-                              location_value: getBusinessLocation(
-                                item.org,
-                              ),
-                            })
-                          }
-                        />
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              ))}
+              {embeddedGridBody}
             </View>
           )}
         </View>
@@ -932,6 +964,10 @@ const styles = StyleSheet.create({
   },
   resultCountText: { fontSize: 10, fontWeight: '900', color: Theme.primary },
   list: { paddingHorizontal: 14, paddingBottom: 40, gap: 12 },
+  embeddedDiscoverScroll: {
+    width: "100%",
+    alignSelf: "stretch",
+  },
   listStatic: {
     paddingHorizontal: 14,
     paddingBottom: 24,
