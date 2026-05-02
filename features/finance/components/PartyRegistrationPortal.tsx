@@ -26,6 +26,7 @@ import {
   normalizeBodyLengthKey,
 } from "@/features/vehicles/utils/vehicleFormOptions.util";
 import { showAppAlert } from "@/lib/appAlert";
+import { validateEmail } from "@/lib/emailValidation";
 import { formatIndianVehicleNumberInput, formatMobileNumber } from "@/lib/format";
 import {
   normalizeIndianPhoneForMetadata,
@@ -43,6 +44,7 @@ import {
   Cpu,
   Key,
   Layers,
+  Mail,
   RotateCcw,
   ShieldCheck,
   Smartphone,
@@ -249,6 +251,16 @@ function PartyRegistrationPortalInner(
     string | null
   >(null);
   const driverPhoneLookupIdRef = useRef(0);
+  const [driverEmail, setDriverEmail] = useState("");
+  const [driverPayableAmount, setDriverPayableAmount] = useState<number | null>(
+    null,
+  );
+  const [driverCommissionPercent, setDriverCommissionPercent] = useState<
+    number | null
+  >(null);
+  const [driverCommissionPerKm, setDriverCommissionPerKm] = useState<
+    number | null
+  >(null);
 
   // Vehicle — aligned with AddVehicleModal (category chips + preset pickers + specs)
   const [vehicleReg, setVehicleReg] = useState("");
@@ -276,6 +288,10 @@ function PartyRegistrationPortalInner(
     setDriverName("");
     setDriverPhone("");
     setDriverDl("");
+    setDriverEmail("");
+    setDriverPayableAmount(null);
+    setDriverCommissionPercent(null);
+    setDriverCommissionPerKm(null);
     setDriverExistingMatches([]);
     setDriverPhoneLookupLoading(false);
     setDriverPhoneLookupError(null);
@@ -367,6 +383,10 @@ function PartyRegistrationPortalInner(
           const dlFromRpc = one.license_number?.trim();
           if (dlFromRpc) {
             setDriverDl((prev) => (prev.trim() ? prev : dlFromRpc.toUpperCase()));
+          }
+          const em = one.email?.trim();
+          if (em) {
+            setDriverEmail((prev) => (prev.trim() ? prev : em));
           }
         }
       });
@@ -492,6 +512,14 @@ function PartyRegistrationPortalInner(
         setFormError(dl);
         return false;
       }
+      const emailTrim = driverEmail.trim();
+      if (emailTrim) {
+        const eErr = validateEmail(emailTrim);
+        if (eErr) {
+          setFormError(eErr);
+          return false;
+        }
+      }
       return true;
     }
     const regErr = validateIndianVehicleNumber(vehicleReg);
@@ -527,6 +555,7 @@ function PartyRegistrationPortalInner(
     vehicleBodyFt,
     driverRegisteredAtPhone,
     driverExistingMatches,
+    driverEmail,
     onInviteDriver,
     t,
   ]);
@@ -593,13 +622,13 @@ function PartyRegistrationPortalInner(
     driverSource: "organization",
     name: driverName.trim(),
     phone: driverPhone.trim(),
-    email: "",
+    email: driverEmail.trim(),
     emergencyContact: "",
     emergencyName: "",
     licenseNumber: driverDl.trim().toUpperCase(),
-    payableAmount: null,
-    commissionPercent: null,
-    commissionPerKm: null,
+    payableAmount: driverPayableAmount,
+    commissionPercent: driverCommissionPercent,
+    commissionPerKm: driverCommissionPerKm,
   });
 
   const confirmSave = async () => {
@@ -714,7 +743,12 @@ function PartyRegistrationPortalInner(
       ];
     }
     if (kind === "driver") {
-      return [
+      const lines: {
+        label: string;
+        value: string;
+        Icon: SummaryIcon;
+        emphasis?: boolean;
+      }[] = [
         {
           label: "Driver",
           value: driverName.trim(),
@@ -728,6 +762,33 @@ function PartyRegistrationPortalInner(
           Icon: Key,
         },
       ];
+      if (driverEmail.trim()) {
+        lines.push({
+          label: "Email",
+          value: driverEmail.trim(),
+          Icon: Mail,
+        });
+      }
+      const offerBits: string[] = [];
+      if (driverPayableAmount != null && driverPayableAmount > 0) {
+        offerBits.push(
+          `Fixed ₹${driverPayableAmount.toLocaleString("en-IN")}`,
+        );
+      }
+      if (driverCommissionPercent != null && driverCommissionPercent > 0) {
+        offerBits.push(`${driverCommissionPercent}% commission`);
+      }
+      if (driverCommissionPerKm != null && driverCommissionPerKm > 0) {
+        offerBits.push(`₹${driverCommissionPerKm}/km`);
+      }
+      if (offerBits.length > 0) {
+        lines.push({
+          label: "Compensation",
+          value: offerBits.join(" · "),
+          Icon: BookUser,
+        });
+      }
+      return lines;
     }
     return [
       {
@@ -764,6 +825,10 @@ function PartyRegistrationPortalInner(
     driverName,
     driverPhonePretty,
     driverDl,
+    driverEmail,
+    driverPayableAmount,
+    driverCommissionPercent,
+    driverCommissionPerKm,
     vehicleReg,
     vehicleCategory,
     vehicleModel,
@@ -1108,6 +1173,104 @@ function PartyRegistrationPortalInner(
                               onChangeText={(t) => setDriverDl(t.toUpperCase())}
                             />
                           </View>
+                        </Field>
+                      </View>
+                    </View>
+                    <Field label="Email" optionalHint="optional">
+                      <View style={styles.inputIconRow}>
+                        <Mail
+                          size={18}
+                          color={Theme.textMuted}
+                          style={styles.inputLeadingIcon}
+                        />
+                        <TextInput
+                          style={[styles.input, styles.inputPadded]}
+                          placeholder="name@example.com"
+                          placeholderTextColor={Theme.textMuted}
+                          keyboardType="email-address"
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                          value={driverEmail}
+                          onChangeText={setDriverEmail}
+                        />
+                      </View>
+                    </Field>
+                    <Field label="Fixed salary (₹)" optionalHint="optional">
+                      <TextInput
+                        style={styles.input}
+                        placeholder="e.g. 25000"
+                        placeholderTextColor={Theme.textMuted}
+                        keyboardType="numeric"
+                        value={
+                          driverPayableAmount != null &&
+                          driverPayableAmount !== 0
+                            ? String(driverPayableAmount)
+                            : ""
+                        }
+                        onChangeText={(v) => {
+                          const n =
+                            v.trim() === ""
+                              ? null
+                              : parseFloat(v.replace(/[^0-9.]/g, ""));
+                          setDriverPayableAmount(
+                            n != null && !Number.isNaN(n) ? n : null,
+                          );
+                        }}
+                      />
+                    </Field>
+                    <View style={[styles.row2, layoutWide && styles.row2Web]}>
+                      <View style={layoutWide ? styles.row2Grow : undefined}>
+                        <Field label="Commission (%)" optionalHint="optional">
+                          <TextInput
+                            style={styles.input}
+                            placeholder="e.g. 10"
+                            placeholderTextColor={Theme.textMuted}
+                            keyboardType="numeric"
+                            value={
+                              driverCommissionPercent != null &&
+                              driverCommissionPercent !== 0
+                                ? String(driverCommissionPercent)
+                                : ""
+                            }
+                            onChangeText={(v) => {
+                              const n =
+                                v.trim() === ""
+                                  ? null
+                                  : parseFloat(v.replace(/[^0-9.]/g, ""));
+                              const val =
+                                n != null && !Number.isNaN(n)
+                                  ? Math.min(100, Math.max(0, n))
+                                  : null;
+                              setDriverCommissionPercent(val);
+                            }}
+                          />
+                        </Field>
+                      </View>
+                      <View style={layoutWide ? styles.row2Grow : undefined}>
+                        <Field label="Per km (₹/km)" optionalHint="optional">
+                          <TextInput
+                            style={styles.input}
+                            placeholder="e.g. 8"
+                            placeholderTextColor={Theme.textMuted}
+                            keyboardType="numeric"
+                            value={
+                              driverCommissionPerKm != null &&
+                              driverCommissionPerKm !== 0
+                                ? String(driverCommissionPerKm)
+                                : ""
+                            }
+                            onChangeText={(v) => {
+                              const n =
+                                v.trim() === ""
+                                  ? null
+                                  : parseFloat(v.replace(/[^0-9.]/g, ""));
+                              setDriverCommissionPerKm(
+                                n != null && !Number.isNaN(n) && n >= 0
+                                  ? n
+                                  : null,
+                              );
+                            }}
+                          />
                         </Field>
                       </View>
                     </View>
