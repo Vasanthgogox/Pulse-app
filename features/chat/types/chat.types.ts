@@ -67,6 +67,8 @@ export interface TripMessageRow {
 
 export interface TripConversation extends TripConversationRow {
   trip_number: string;
+  display_trip_id?: string | null;
+  trip_status?: string | null;
   pickup_area: string;
   drop_location: string;
   messages: TripMessageRow[];
