@@ -333,6 +333,7 @@ export function FinanceModals(props: FinanceModalsProps) {
         onComplete={onAddDriverInviteComplete}
         onAddDriver={onAddDriverDirect}
         salariedOnly={true}
+        organizationId={organizationId}
       />
 
       {selectedEntity && (

@@ -14,6 +14,8 @@ export {
     getDriverInvitesSent,
     getDriverLedgerByDriver,
     getDriverLedgerByDriverIds,
+    getDriverCompensationForOrgAndUserId,
+    getDriverCompensationForOrgByDriverPhone,
     getDriverOffersByOrganization,
     getDriversByOrganization,
     inviteDriver,
@@ -27,6 +29,7 @@ export {
     type DriverLedgerType,
     type DriverOffer,
     type DriverRow,
+    type DriverCompensationSnapshot,
     type ExistingDriverMatch,
     type UpdateDriverData
 } from './services/drivers.service';

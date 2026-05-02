@@ -4,6 +4,7 @@
  * One service per domain (microservices). Same DB as Q-unified-base.
  */
 import { DEFAULT_PAGE_SIZE, type PageOpts } from "@/lib/pagination";
+import { normalizeIndianPhoneForMetadata } from "@/lib/phoneValidation";
 import { supabase } from "@/lib/supabase";
 
 export interface CreateDriverServiceData {
@@ -127,6 +128,68 @@ function normalizePhone(phone: string | null | undefined): string {
   return (phone ?? "").replace(/\s/g, "").trim();
 }
 
+/** Latest salary/commission row for this org + driver user (e.g. pre-fill Add Driver when platform match selected). */
+export interface DriverCompensationSnapshot {
+  payableAmount: number | null;
+  commissionPercent: number | null;
+  commissionPerKm: number | null;
+}
+
+export async function getDriverCompensationForOrgAndUserId(
+  orgId: string,
+  userId: string,
+): Promise<DriverCompensationSnapshot | null> {
+  const oid = (orgId ?? "").trim();
+  const uid = (userId ?? "").trim();
+  if (!oid || !uid) return null;
+  const { data, error } = await supabase()
+    .from("drivers")
+    .select("payable_amount, commission_percent, commission_per_km")
+    .eq("organization_id", oid)
+    .eq("user_id", uid)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return null;
+  const r = data as {
+    payable_amount?: number | null;
+    commission_percent?: number | null;
+    commission_per_km?: number | null;
+  };
+  return {
+    payableAmount: r.payable_amount ?? null,
+    commissionPercent: r.commission_percent ?? null,
+    commissionPerKm: r.commission_per_km ?? null,
+  };
+}
+
+/** Look up compensation from an existing driver row in this org by stored phone (E164). */
+export async function getDriverCompensationForOrgByDriverPhone(
+  orgId: string,
+  phoneRaw: string,
+): Promise<DriverCompensationSnapshot | null> {
+  const oid = (orgId ?? "").trim();
+  const e164 = normalizeIndianPhoneForMetadata((phoneRaw ?? "").trim());
+  if (!oid || !e164) return null;
+  const { data, error } = await supabase()
+    .from("drivers")
+    .select("payable_amount, commission_percent, commission_per_km")
+    .eq("organization_id", oid)
+    .eq("phone", e164)
+    .maybeSingle();
+  if (error || !data) return null;
+  const r = data as {
+    payable_amount?: number | null;
+    commission_percent?: number | null;
+    commission_per_km?: number | null;
+  };
+  return {
+    payableAmount: r.payable_amount ?? null,
+    commissionPercent: r.commission_percent ?? null,
+    commissionPerKm: r.commission_per_km ?? null,
+  };
+}
+
 /**
  * Add driver directly (no invitation). Inserts into public.drivers.
  * If a driver with the same phone already exists in this org and has left (left_at set),
@@ -148,6 +211,9 @@ export async function createDriver(
         phone: data.phone.trim() || null,
         email: (data.email || "").trim() || null,
         left_at: null,
+        payable_amount: data.payableAmount ?? null,
+        commission_percent: data.commissionPercent ?? null,
+        commission_per_km: data.commissionPerKm ?? null,
       });
       if (!error && driver) return { error: null, driver };
       // If update failed (e.g. RLS), fall through to insert

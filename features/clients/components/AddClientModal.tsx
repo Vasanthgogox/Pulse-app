@@ -116,7 +116,7 @@ export function AddClientModal({
       const result = await pickContactForNameAndPhone();
       if (result.ok) {
         setContactPerson(result.contact.name);
-        setPhone(result.contact.phone);
+        setPhone(formatMobileNumber(result.contact.phone));
         setInviteeMatch(null);
         setSearchedNoResult(false);
         setDriverRegisteredAtPhone(false);
@@ -219,6 +219,11 @@ export function AddClientModal({
 
   const handleSendInvitation = async () => {
     if (!inviteeMatch || !onSendInvitation) return;
+    const phoneErr = validatePhone(phone.trim());
+    if (phoneErr) {
+      setError(phoneErr);
+      return;
+    }
     setError(null);
     setSubmitting(true);
     try {
@@ -252,6 +257,11 @@ export function AddClientModal({
 
   const handleSubmit = () => {
     if (!canSubmit) return;
+    const phoneErr = validatePhone(phone.trim());
+    if (phoneErr) {
+      setError(phoneErr);
+      return;
+    }
     if (driverRegisteredAtPhone) {
       setError(t("errorDriverCannotAddAsClient"));
       return;
@@ -324,6 +334,7 @@ export function AddClientModal({
             value={phone}
             onChangeText={handlePhoneChangeText}
             keyboardType="phone-pad"
+            maxLength={10}
             autoCorrect={false}
             spellCheck={false}
             autoComplete="off"
@@ -595,6 +606,7 @@ export function AddClientModal({
                 value={phone}
                 onChangeText={handlePhoneChangeText}
                 keyboardType="phone-pad"
+                maxLength={10}
                 autoCorrect={false}
                 spellCheck={false}
                 autoComplete="off"

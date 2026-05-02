@@ -12,6 +12,12 @@ import Theme from '@/constants/Theme';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { getSignedAvatarUrl } from '@/lib/avatarUpload';
 import { pickContactForNameAndPhone } from '@/lib/contactPicker';
+import {
+  formatIndianDrivingLicenseInput,
+  normalizeIndianDrivingLicense,
+  validateIndianDrivingLicenseOptional,
+  validateIndianDrivingLicenseRequired,
+} from '@/lib/drivingLicenseValidation';
 import { validatePhone } from '@/lib/phoneValidation';
 import { formatMobileNumber } from '@/lib/format';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
@@ -32,7 +38,11 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ExistingDriverMatch } from '../services/drivers.service';
-import { getDriverProfileAvatar, searchExistingDriversByPhone } from '../services/drivers.service';
+import {
+  getDriverCompensationForOrgAndUserId,
+  getDriverProfileAvatar,
+  searchExistingDriversByPhone,
+} from '../services/drivers.service';
 
 export type DriverSource = 'organization' | 'partner';
 
@@ -89,22 +99,20 @@ interface AddDriverModalProps {
   visible?: boolean;
   /** When true (e.g. from Finance Drivers tab), only add salaried driver: step 1 = DL, name, phone; step 2 = salary split (fixed, commission %, per km). Requires onAddDriver; no invite. */
   salariedOnly?: boolean;
+  /** When set, pre-fill salary/commission/per-km from the last driver row for this org when an existing platform driver is selected. */
+  organizationId?: string | null;
 }
 
 const PHONE_DEBOUNCE_MS = 400;
 const MIN_PHONE_LENGTH_FOR_SEARCH = 8;
-const DL_SANITIZE_REGEX = /[\s-]/g;
-const DL_FORMAT_REGEX = /^[A-Z]{2}[0-9]{2}[0-9]{4}[0-9]{7}$/;
-
-const validateDrivingLicenseNumber = (licenseNumber: string): string | null => {
-  const trimmed = licenseNumber.trim();
-  if (!trimmed) return null;
-  const normalized = trimmed.toUpperCase().replace(DL_SANITIZE_REGEX, '');
-  if (DL_FORMAT_REGEX.test(normalized)) return null;
-  return 'Enter a valid DL number (e.g. MH12 20180001234).';
-};
-
-export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, salariedOnly = false }: AddDriverModalProps) {
+export function AddDriverModal({
+  onClose,
+  onComplete,
+  onAddDriver,
+  visible,
+  salariedOnly = false,
+  organizationId = null,
+}: AddDriverModalProps) {
   const { t } = useLanguage();
   const insets = useSafeAreaInsets();
   const STEPS_BASE = salariedOnly ? STEPS_SALARIED_ONLY_KEYS : STEPS_FULL_KEYS;
@@ -138,7 +146,11 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
     try {
       const result = await pickContactForNameAndPhone();
       if (result.ok) {
-        setFormData((p) => ({ ...p, name: result.contact.name, phone: result.contact.phone }));
+        setFormData((p) => ({
+          ...p,
+          name: result.contact.name,
+          phone: formatMobileNumber(result.contact.phone),
+        }));
       } else if (result.reason === 'no_phone' || result.reason === 'permission_denied' || result.reason === 'unavailable') {
         setError(result.message ?? (result.reason === 'permission_denied' ? t('contactAccessDenied') : t('couldNotLoadContact')));
       }
@@ -229,6 +241,35 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
     };
   }, [existingMatches]);
 
+  useEffect(() => {
+    if (!organizationId || !selectedMatchUserId) return;
+    let cancelled = false;
+    void getDriverCompensationForOrgAndUserId(organizationId, selectedMatchUserId).then((snap) => {
+      if (cancelled || !snap) return;
+      const snapAny =
+        snap.payableAmount != null ||
+        snap.commissionPercent != null ||
+        snap.commissionPerKm != null;
+      if (!snapAny) return;
+      setFormData((p) => {
+        const userEntered =
+          (p.payableAmount != null && p.payableAmount > 0) ||
+          (p.commissionPercent != null && p.commissionPercent > 0) ||
+          (p.commissionPerKm != null && p.commissionPerKm > 0);
+        if (userEntered) return p;
+        return {
+          ...p,
+          payableAmount: snap.payableAmount ?? p.payableAmount,
+          commissionPercent: snap.commissionPercent ?? p.commissionPercent,
+          commissionPerKm: snap.commissionPerKm ?? p.commissionPerKm,
+        };
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [organizationId, selectedMatchUserId]);
+
   const step = STEPS[stepIndex];
 
   // Debounced lookup: when phone changes, after delay search existing drivers (single RPC, O(1) result).
@@ -276,7 +317,7 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
     return () => clearTimeout(t);
   }, [formData.phone]);
   useEffect(() => {
-    setLicenseValidationError(validateDrivingLicenseNumber(formData.licenseNumber));
+    setLicenseValidationError(validateIndianDrivingLicenseOptional(formData.licenseNumber));
   }, [formData.licenseNumber]);
   const isReview = step.id === 'review';
   const canProceedDriver = salariedOnly
@@ -286,7 +327,14 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
       !phoneValidationError &&
       !licenseValidationError
     : !!formData.phone.trim() && !phoneValidationError;
-  const canProceed = step.id === 'driver' ? canProceedDriver : true;
+  const canProceedDocuments =
+    !!formData.licenseNumber.trim() && !licenseValidationError;
+  const canProceed =
+    step.id === 'driver'
+      ? canProceedDriver
+      : step.id === 'documents'
+        ? canProceedDocuments
+        : true;
 
   /**
    * On review: show Send Invitation only when phone maps to an existing driver account.
@@ -303,10 +351,28 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
       }
     }
     if (isReview) {
+      const phoneErr = validatePhone(formData.phone.trim());
+      if (phoneErr) {
+        setError(phoneErr);
+        return;
+      }
+      if (!reviewUseInvite && onAddDriver) {
+        const dlErr = validateIndianDrivingLicenseRequired(formData.licenseNumber);
+        if (dlErr) {
+          setError(dlErr);
+          return;
+        }
+      }
       setError(null);
       setSubmitting(true);
+      const payload: DriverFormData = {
+        ...formData,
+        licenseNumber: formData.licenseNumber.trim()
+          ? normalizeIndianDrivingLicense(formData.licenseNumber)
+          : '',
+      };
       if (reviewUseInvite) {
-        const result = onComplete(formData);
+        const result = onComplete(payload);
         const p = result as void | Promise<unknown>;
         if (typeof p?.then === 'function') {
           p.then(() => {
@@ -321,7 +387,7 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
           onClose();
         }
       } else if (onAddDriver) {
-        const result = onAddDriver(formData) as void | Promise<unknown>;
+        const result = onAddDriver(payload) as void | Promise<unknown>;
         if (typeof result?.then === 'function') {
           result
             .then(() => {
@@ -402,6 +468,7 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
               value={formData.phone}
               onChangeText={(v) => setFormData((p) => ({ ...p, phone: formatMobileNumber(v) }))}
               keyboardType="phone-pad"
+              maxLength={10}
               autoCorrect={false}
               spellCheck={false}
               autoComplete="off"
@@ -457,7 +524,12 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
                   placeholder="e.g. MH12 20180001234"
                   placeholderTextColor={Theme.placeholder}
                   value={formData.licenseNumber}
-                  onChangeText={(v) => setFormData((p) => ({ ...p, licenseNumber: v }))}
+                  onChangeText={(v) =>
+                    setFormData((p) => ({
+                      ...p,
+                      licenseNumber: formatIndianDrivingLicenseInput(v),
+                    }))
+                  }
                   autoCorrect={false}
                   spellCheck={false}
                   autoComplete="off"
@@ -614,13 +686,19 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
             <Text style={labelStyle}>License Number</Text>
             <TextInput
               style={[inputStyle, { fontFamily: 'monospace' }]}
-              placeholder="DL-XXXXXXXXXX"
+              placeholder="e.g. MH12 20180001234"
               placeholderTextColor={Theme.placeholder}
               value={formData.licenseNumber}
-              onChangeText={(v) => setFormData((p) => ({ ...p, licenseNumber: v }))}
+              onChangeText={(v) =>
+                setFormData((p) => ({
+                  ...p,
+                  licenseNumber: formatIndianDrivingLicenseInput(v),
+                }))
+              }
               autoCorrect={false}
               spellCheck={false}
               autoComplete="off"
+              autoCapitalize="characters"
             />
             {licenseValidationError && (
               <Text style={[styles.errorText, { color: Theme.negative }]}>

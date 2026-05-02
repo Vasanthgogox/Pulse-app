@@ -1077,13 +1077,14 @@ export default function DriverDetailScreen({
   const ratingValue =
     driverRatingAvg && driverRatingAvg > 0 ? driverRatingAvg : 0;
   const ratingFilledStars = Math.max(0, Math.min(5, Math.round(ratingValue)));
+  /** Matched platform driver: same copy as Account section (`sendInvitation` → "Send request"). */
   const profileActionLabel = canSendMatchedInvite
-    ? "Send invitation"
+    ? t("sendInvitation")
     : inviteAlreadySentForMatch
-      ? "Invitation sent"
+      ? t("invitationSentLabel")
       : isNotInApp
-        ? "Invite to app"
-        : "Integrated";
+        ? t("linkToAppAccount")
+        : t("integrated");
   const heroDecorAnimatedStyle = isWebDesktop
     ? {
         opacity: heroDecorProgress.interpolate({
@@ -1419,7 +1420,7 @@ export default function DriverDetailScreen({
               />
               <Text style={styles.profilePreviewActionText}>
                 {inviting && canSendMatchedInvite
-                  ? "Sending..."
+                  ? t("sending")
                   : profileActionLabel}
               </Text>
             </TouchableOpacity>
