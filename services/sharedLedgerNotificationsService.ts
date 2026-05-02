@@ -8,6 +8,12 @@ import {
     type LedgerRow,
 } from "@/features/finance/services/finance.service";
 import { getSuppliersByOrganization } from "@/features/suppliers/services/suppliers.service";
+import {
+  getTripsByOrganization,
+  getTripsWhereOrgIsClient,
+  getTripsWhereOrgIsSupplier,
+} from "@/features/trips/services/trips.service";
+import { isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import { supabase } from "@/lib/supabase";
 import {
     getDisputesForPartner,
@@ -159,22 +165,78 @@ function matchesAmountAndDate(
   return delta <= 2;
 }
 
+async function getLoadBasedTripIdsForSharedLedger(
+  organizationId: string,
+): Promise<Set<string>> {
+  const [ownedRes, clientRes, supplierRes] = await Promise.all([
+    getTripsByOrganization(organizationId),
+    getTripsWhereOrgIsClient(organizationId),
+    getTripsWhereOrgIsSupplier(organizationId),
+  ]);
+  const allTrips = [
+    ...(ownedRes.error ? [] : (ownedRes.trips ?? [])),
+    ...(clientRes.error ? [] : (clientRes.trips ?? [])),
+    ...(supplierRes.error ? [] : (supplierRes.trips ?? [])),
+  ];
+  return new Set(
+    allTrips
+      .filter((trip) => isLoadBasedTrip(trip))
+      .map((trip) => String(trip.id)),
+  );
+}
+
+async function filterToLoadBasedSharedLedgerNotifications(
+  organizationId: string,
+  rows: SharedLedgerNotificationRow[],
+): Promise<SharedLedgerNotificationRow[]> {
+  if (rows.length === 0) return rows;
+  const [loadBasedTripIds, txRes] = await Promise.all([
+    getLoadBasedTripIdsForSharedLedger(organizationId),
+    getTransactionsByOrganization(organizationId),
+  ]);
+  const partnerKeysWithLoadBasedTx = new Set(
+    (txRes.error ? [] : (txRes.transactions ?? []))
+      .filter((tx) => {
+        const tripId = String(tx.trip_id ?? "").trim();
+        if (!tripId) return false;
+        return loadBasedTripIds.has(tripId);
+      })
+      .map((tx) => String(tx.contact_id ?? "").trim())
+      .filter(Boolean),
+  );
+  return rows.filter((row) => {
+    if (
+      row.event_type !== "pending_partner_followup" &&
+      row.event_type !== "partner_only_ghost" &&
+      row.event_type !== "mismatch_detected"
+    ) {
+      return true;
+    }
+    if (row.event_type === "mismatch_detected") {
+      const partnerKey = String(row.partner_key ?? "").trim();
+      return !!partnerKey && partnerKeysWithLoadBasedTx.has(partnerKey);
+    }
+    const tripId = String(row.trip_id ?? "").trim();
+    return !!tripId && loadBasedTripIds.has(tripId);
+  });
+}
+
 async function getDerivedSharedLedgerNotifications(
   organizationId: string,
 ): Promise<SharedLedgerNotificationRow[]> {
-  const [{ clients }, { suppliers }, txRes, disputesReceivedRes] =
+  const [{ clients }, { suppliers }, txRes, disputesReceivedRes, localLoadBasedTripIds] =
     await Promise.all([
       getClientsByOrganization(organizationId),
       getSuppliersByOrganization(organizationId),
       getTransactionsByOrganization(organizationId),
       getDisputesReceived(organizationId),
+      getLoadBasedTripIdsForSharedLedger(organizationId),
     ]);
 
   const localTxs = txRes.error ? [] : (txRes.transactions ?? []);
   const disputesReceived = disputesReceivedRes.error
     ? []
     : (disputesReceivedRes.disputes ?? []);
-
   const partners: IntegratedPartnerRef[] = [];
   for (const c of clients) {
     if (!(c.is_integrated || c.linked_organization_id)) continue;
@@ -223,7 +285,13 @@ async function getDerivedSharedLedgerNotifications(
       const localPartnerTxs = localTxs.filter(
         (t) =>
           t.contact_type === partner.contactType &&
-          String(t.contact_id ?? "").trim() === partner.id,
+          String(t.contact_id ?? "").trim() === partner.id &&
+          !!t.trip_id &&
+          localLoadBasedTripIds.has(String(t.trip_id)),
+      );
+      const sharedEntriesLoadBased = sharedEntries.filter(
+        (e) =>
+          !!e.reference_id && localLoadBasedTripIds.has(String(e.reference_id)),
       );
 
       const unmatchedLocalRecent = localPartnerTxs.filter((tx) => {
@@ -232,7 +300,7 @@ async function getDerivedSharedLedgerNotifications(
         const daysOld =
           (Date.now() - new Date(localDate).getTime()) / (24 * 60 * 60 * 1000);
         if (!Number.isFinite(daysOld) || daysOld > 7) return false;
-        return !sharedEntries.some((se) =>
+        return !sharedEntriesLoadBased.some((se) =>
           matchesAmountAndDate(
             tx,
             Math.abs(Number(se.amount ?? 0)),
@@ -270,7 +338,7 @@ async function getDerivedSharedLedgerNotifications(
         });
       }
 
-      for (const e of sharedEntries) {
+      for (const e of sharedEntriesLoadBased) {
         const eAbs = Math.abs(Number(e.amount ?? 0));
         const matched = localPartnerTxs.some((tx) =>
           matchesAmountAndDate(tx, eAbs, e.transaction_date),
@@ -308,7 +376,7 @@ async function getDerivedSharedLedgerNotifications(
         (s, tx) => s + localAmountAbs(tx),
         0,
       );
-      const partnerGross = sharedEntries.reduce(
+      const partnerGross = sharedEntriesLoadBased.reduce(
         (s, e) => s + Math.abs(Number(e.amount ?? 0)),
         0,
       );
@@ -427,7 +495,11 @@ export async function getSharedLedgerNotifications(
   );
   if (!error) {
     const rows = extractRpcRows(data);
-    return { error: null, notifications: rows.map(toRow) };
+    const filtered = await filterToLoadBasedSharedLedgerNotifications(
+      organizationId,
+      rows.map(toRow),
+    );
+    return { error: null, notifications: filtered };
   }
 
   // Fallback to direct table read on any RPC failure (permissions/signature/version drift).
@@ -479,7 +551,11 @@ export async function getSharedLedgerNotifications(
   }
 
   const rows = (tableRows ?? []) as Array<Record<string, unknown>>;
-  return { error: null, notifications: rows.map(toRow) };
+  const filtered = await filterToLoadBasedSharedLedgerNotifications(
+    organizationId,
+    rows.map(toRow),
+  );
+  return { error: null, notifications: filtered };
 }
 
 export async function getSharedLedgerNotificationsCount(
@@ -496,15 +572,11 @@ export async function getSharedLedgerNotificationsCount(
     },
   );
   if (!error) {
-    const rows = extractRpcRows(data);
-    const first = (rows[0] ?? {}) as Record<string, unknown>;
-    const actionable = Number(
-      first.actionable_count ??
-        first.actionableCount ??
-        first.open_count ??
-        first.count ??
-        0,
+    const notificationsRes = await getSharedLedgerNotifications(
+      organizationId,
+      "action_required",
     );
+    const actionable = notificationsRes.notifications.length;
     return {
       error: null,
       count: { actionableCount: Number.isFinite(actionable) ? actionable : 0 },
@@ -519,7 +591,11 @@ export async function getSharedLedgerNotificationsCount(
     .eq("status", "open");
 
   if (tableError) {
-    const derived = await getDerivedSharedLedgerNotifications(organizationId);
+    const derivedRaw = await getDerivedSharedLedgerNotifications(organizationId);
+    const derived = await filterToLoadBasedSharedLedgerNotifications(
+      organizationId,
+      derivedRaw,
+    );
     const actionable = derived.filter((r) => r.status === "open").length;
     if (actionable > 0 || rpcOrTableUnavailable(tableError.message)) {
       return {
