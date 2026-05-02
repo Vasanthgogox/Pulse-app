@@ -41,6 +41,7 @@ export {
   getTripById,
   getTripByIndentId,
   getTripDisplayNumber,
+  humanizeTripIdInRpcError,
   getTripsByDriver,
   getTripsByDriverIds,
   createTrip,

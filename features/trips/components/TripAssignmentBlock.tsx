@@ -21,6 +21,7 @@ import {
     getDriverAvailabilityByPhone,
     getTripsByOrganization,
     getTripDisplayNumber,
+    humanizeTripIdInRpcError,
     isTripCompleted,
     updateTripAssignment,
     type TripRow,
@@ -353,7 +354,9 @@ export function TripAssignmentBlock({
         excludeTripId: trip.id,
       });
     if (availabilityError) {
-      setPhoneError(availabilityError.message);
+      setPhoneError(
+        humanizeTripIdInRpcError(availabilityError.message, trip),
+      );
       return;
     }
     if (availability.isBusy) {
@@ -424,7 +427,7 @@ export function TripAssignmentBlock({
       );
       if (rpcErr) {
         setPhoneSaving(false);
-        setPhoneError(rpcErr.message);
+        setPhoneError(humanizeTripIdInRpcError(rpcErr.message, trip));
         return;
       }
       if (matchedVehicle) {
@@ -433,7 +436,8 @@ export function TripAssignmentBlock({
           { vehicle_id: matchedVehicle.id },
           auditOpts,
         );
-        if (vehicleErr) setPhoneError(vehicleErr.message);
+        if (vehicleErr)
+          setPhoneError(humanizeTripIdInRpcError(vehicleErr.message, trip));
       }
     } else {
       const { error } = await assignTripDriverByPhone(
@@ -444,7 +448,7 @@ export function TripAssignmentBlock({
       );
       if (error) {
         setPhoneSaving(false);
-        setPhoneError(error.message);
+        setPhoneError(humanizeTripIdInRpcError(error.message, trip));
         return;
       }
       if (matchedVehicle) {
@@ -453,7 +457,8 @@ export function TripAssignmentBlock({
           { vehicle_id: matchedVehicle.id },
           auditOpts,
         );
-        if (vehicleErr) setPhoneError(vehicleErr.message);
+        if (vehicleErr)
+          setPhoneError(humanizeTripIdInRpcError(vehicleErr.message, trip));
       } else if (phoneVehicleInput.trim()) {
         const { error: vehicleErr } = await updateTripAssignment(
           trip.id,
@@ -463,7 +468,8 @@ export function TripAssignmentBlock({
           },
           auditOpts,
         );
-        if (vehicleErr) setPhoneError(vehicleErr.message);
+        if (vehicleErr)
+          setPhoneError(humanizeTripIdInRpcError(vehicleErr.message, trip));
       }
     }
     const willHaveVehicleAssigned =

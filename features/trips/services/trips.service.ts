@@ -185,6 +185,17 @@ export function getTripDisplayNumber(row: TripRow): string {
   return row.display_trip_id ?? row.trip_number ?? "—";
 }
 
+/**
+ * Replace this trip's UUID in Postgres/RPC error strings with TRP-style labels so users never see raw IDs.
+ */
+export function humanizeTripIdInRpcError(message: string, trip: TripRow): string {
+  const id = trip.id?.trim();
+  if (!id || !message) return message;
+  const label = getTripDisplayNumber(trip);
+  const re = new RegExp(id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+  return message.replace(re, label);
+}
+
 export async function getTripById(
   tripId: string,
 ): Promise<{ error: Error | null; trip: TripRow | null }> {
