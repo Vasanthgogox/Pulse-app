@@ -1171,13 +1171,13 @@ function NetworkScreenInner() {
               <View
                 style={[
                   styles.sectionHeadingRowSpread,
-                  isMobileLayout && styles.sectionHeadingRowSpreadMobile,
+                  isMobileLayout && styles.sectionHeadingRowSpreadDiscoverMobile,
                 ]}
               >
                 <View
                   style={[
                     styles.sectionHeadingRowCompact,
-                    isMobileLayout && styles.sectionHeadingRowCompactMobile,
+                    isMobileLayout && styles.sectionHeadingRowCompactDiscoverMobile,
                   ]}
                 >
                   <Compass size={14} color={Theme.textSecondary} />
@@ -1186,7 +1186,12 @@ function NetworkScreenInner() {
                     <Text style={styles.sectionHeading}>Grow your network</Text>
                   </View>
                 </View>
-                <View style={styles.discoverHeaderActions}>
+                <View
+                  style={[
+                    styles.discoverHeaderActions,
+                    isMobileLayout && styles.discoverHeaderActionsDiscoverMobile,
+                  ]}
+                >
                   {discoverInviteCount > 0 && (
                     <View style={[
                       styles.inviteCountPill,
@@ -1201,7 +1206,12 @@ function NetworkScreenInner() {
                     </View>
                   )}
                   {discoverSearchOpen ? (
-                    <View style={styles.discoverSearchInline}>
+                    <View
+                      style={[
+                        styles.discoverSearchInline,
+                        isMobileLayout && styles.discoverSearchInlineDiscoverMobile,
+                      ]}
+                    >
                       <Search size={13} color={Theme.textSecondary} />
                       <TextInput
                         style={styles.discoverSearchInput}
@@ -2790,6 +2800,17 @@ const styles = StyleSheet.create({
     flexDirection: "column",
     gap: 10,
   },
+  /** Discover: keep title + search on one row (default SpreadMobile stacks them). */
+  sectionHeadingRowSpreadDiscoverMobile: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  sectionHeadingRowCompactDiscoverMobile: {
+    flex: 1,
+    minWidth: 0,
+  },
   sectionTitleBlock: {
     minWidth: 0,
     gap: 4,
@@ -2907,6 +2928,10 @@ const styles = StyleSheet.create({
     minWidth: 44,
     gap: 8,
   },
+  discoverHeaderActionsDiscoverMobile: {
+    flexShrink: 0,
+    alignSelf: "center",
+  },
   inviteCountPill: {
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -2949,6 +2974,13 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     backgroundColor: Theme.surfaceGray,
     borderWidth: 0,
+  },
+  discoverSearchInlineDiscoverMobile: {
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: "100%",
+    width: "100%",
   },
   discoverSearchInput: {
     flex: 1,
