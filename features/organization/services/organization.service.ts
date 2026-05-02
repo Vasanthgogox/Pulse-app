@@ -41,6 +41,22 @@ function isNetworkError(e: unknown): boolean {
   );
 }
 
+/** PostgREST: RPC not in schema / not deployed (avoid noisy 404 in console). */
+function isMissingRpcError(err: { code?: string; message?: string } | null): boolean {
+  if (!err) return false;
+  const m = String(err.message ?? "").toLowerCase();
+  const status = (err as { status?: number; statusCode?: number }).status ??
+    (err as { status?: number; statusCode?: number }).statusCode;
+  return (
+    status === 404 ||
+    err.code === "PGRST202" ||
+    err.code === "42883" ||
+    m.includes("could not find the function") ||
+    m.includes("schema cache") ||
+    m.includes("does not exist")
+  );
+}
+
 export async function getOrganizationsForUser(): Promise<{
   error: Error | null;
   organizations: CurrentOrganization[];
@@ -102,12 +118,25 @@ export async function getOrganizationsForUser(): Promise<{
     }
 
     // 2) No memberships from direct query: try RPC (creates missing owner memberships in some schemas)
-    const { data: rpcOrgs, error: rpcError } = await supabase()
-      .rpc("get_organizations_for_user")
-      .select("id, name, slug, owner_id");
+    const { data: rpcOrgs, error: rpcError } = await supabase().rpc(
+      "get_organizations_for_user",
+    );
+
+    if (rpcError) {
+      if (isMissingRpcError(rpcError)) {
+        if (__DEV__) {
+          console.warn(
+            "[getOrganizationsForUser] get_organizations_for_user RPC missing; apply supabase/migrations/20260517120000_get_organizations_for_user_rpc.sql or use org memberships only.",
+            rpcError.message,
+          );
+        }
+        return { error: null, organizations: [] };
+      }
+      return { error: new Error(rpcError.message), organizations: [] };
+    }
 
     const rpcList = Array.isArray(rpcOrgs) ? rpcOrgs : rpcOrgs ? [rpcOrgs] : [];
-    if (!rpcError && rpcList.length) {
+    if (rpcList.length) {
       const organizations: CurrentOrganization[] = rpcList.map(
         (o: { id: string; name?: string | null }) =>
           mapToCurrentOrganization({ id: o.id, name: o.name ?? null }),

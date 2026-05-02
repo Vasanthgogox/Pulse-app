@@ -14,7 +14,26 @@ import { notifyTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
 import { getLinkedDriversForCurrentUser } from "@/features/drivers/services/drivers.service";
 import * as tripsService from "@/services/tripsService";
 import * as chatService from "../services/chat.service";
-import type { TripConversation, TripMessageRow } from "../types/chat.types";
+import type {
+  TripConversation,
+  TripConversationRow,
+  TripMessageRow,
+} from "../types/chat.types";
+import type { TripRow } from "@/services/tripsService";
+
+function buildMinimalDriverTripConversation(
+  trip: TripRow,
+  row: TripConversationRow,
+): TripConversation {
+  const perDriver = trip.driver_display_trip_id?.trim();
+  return {
+    ...row,
+    trip_number: perDriver || trip.trip_number || "",
+    pickup_area: trip.pickup_area ?? "",
+    drop_location: trip.drop_location ?? "",
+    messages: [],
+  };
+}
 
 interface DriverChatContextType {
   conversations: TripConversation[];
@@ -63,7 +82,26 @@ export function DriverChatProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     try {
       const data = await chatService.getConversationsByDriverIds(driverIds);
-      setConversations(data);
+      setConversations((prev) => {
+        const byId = new Map<string, TripConversation>();
+        for (const c of data) {
+          byId.set(c.id, c);
+        }
+        for (const c of prev) {
+          if (
+            !byId.has(c.id) &&
+            c.driver_id &&
+            driverIds.includes(String(c.driver_id))
+          ) {
+            byId.set(c.id, c);
+          }
+        }
+        return Array.from(byId.values()).sort((a, b) => {
+          const ta = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+          const tb = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+          return tb - ta;
+        });
+      });
       return data;
     } catch {
       setConversations([]);
@@ -92,13 +130,15 @@ export function DriverChatProvider({ children }: { children: ReactNode }) {
       if (!resolvedDriverIds.length) return null;
       const { error, trip } = await tripsService.getTripById(id);
       if (error || !trip?.driver_id || !trip.organization_id) return null;
-      if (!resolvedDriverIds.includes(trip.driver_id)) return null;
+      const assignedDriverId = String(trip.driver_id);
+      if (!resolvedDriverIds.some((d) => String(d) === assignedDriverId)) return null;
       const partyName =
         (profile as { full_name?: string; displayName?: string })?.full_name ||
         (profile as { displayName?: string })?.displayName ||
         "Driver";
+      let created: TripConversationRow;
       try {
-        await chatService.getOrCreateConversation({
+        created = await chatService.getOrCreateConversation({
           tripId: trip.id,
           partyType: "driver",
           partyName,
@@ -108,9 +148,18 @@ export function DriverChatProvider({ children }: { children: ReactNode }) {
       } catch {
         return null;
       }
-      const list = await loadConversations();
-      const conv = list.find((c) => String(c.trip_id) === String(trip.id));
-      return conv?.id ?? null;
+
+      // Merge immediately so the chat UI has a row even if list refetch lags or RLS differs on SELECT.
+      const minimal = buildMinimalDriverTripConversation(trip, created);
+      setConversations((prev) => {
+        if (prev.some((c) => c.id === minimal.id)) {
+          return prev.map((c) => (c.id === minimal.id ? { ...c, ...minimal } : c));
+        }
+        return [minimal, ...prev];
+      });
+
+      void loadConversations();
+      return created.id;
     },
     [driverIds, profile, loadConversations, uid],
   );

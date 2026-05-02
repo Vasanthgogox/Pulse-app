@@ -20,7 +20,7 @@ import {
 } from '@expo-google-fonts/plus-jakarta-sans';
 import { Tabs, useRouter } from 'expo-router';
 import { useEffect } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
 
 function DriverTabsNavigator() {
   return (
@@ -60,14 +60,15 @@ function DriverTabsNavigator() {
 }
 
 export default function DriverAppLayout() {
-  // ✅ Keep fonts from HEAD
-  const [fontsLoaded] = usePlusJakartaFonts({
+  // Web uses FontFaceObserver (expo-font) with a timeout; on failure we still mount so the app is usable with system fonts.
+  const [fontsLoaded, fontError] = usePlusJakartaFonts({
     PlusJakartaSans_400Regular,
     PlusJakartaSans_500Medium,
     PlusJakartaSans_600SemiBold,
     PlusJakartaSans_700Bold,
     PlusJakartaSans_800ExtraBold,
   });
+  const fontsReady = fontsLoaded || fontError != null;
 
   // ✅ Keep roleVerified from deepak/main
   const { user, profile, roleVerified, loading } = useAuth();
@@ -98,9 +99,18 @@ export default function DriverAppLayout() {
     }
   }, [loading, user, profile, roleVerified, router]);
 
+  useEffect(() => {
+    if (fontError && __DEV__ && Platform.OS === 'web') {
+      console.warn(
+        '[DriverAppLayout] Plus Jakarta font load failed; using system fallbacks.',
+        fontError,
+      );
+    }
+  }, [fontError]);
+
   // ✅ Gate includes fonts + auth checks
   const gate =
-    !fontsLoaded ||
+    !fontsReady ||
     loading ||
     !user ||
     !profile ||

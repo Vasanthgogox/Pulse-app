@@ -55,6 +55,8 @@ export function getDriverTripDisplayNumber(
   trip: TripRow,
   byTripId: Record<string, string>,
 ): string {
+  const fromDb = trip.driver_display_trip_id?.trim();
+  if (fromDb) return fromDb;
   return byTripId[String(trip.id)] ?? "—";
 }
 
