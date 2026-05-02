@@ -327,9 +327,9 @@ const styles = StyleSheet.create({
   },
   innerRing: {
     position: "absolute",
-    width: FAB_SIZE - 10,
-    height: FAB_SIZE - 10,
-    borderRadius: (FAB_SIZE - 10) / 2,
+    width: Layout.fabSize - 10,
+    height: Layout.fabSize - 10,
+    borderRadius: (Layout.fabSize - 10) / 2,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.8)",
   },
