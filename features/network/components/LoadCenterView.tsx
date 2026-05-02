@@ -28,7 +28,7 @@ import { indentCanBroadcastToPulseNetwork } from "@/features/network/utils/inden
 import {
     assignAggregateTripDriverByPhone,
     generateTripOtp,
-    getDriverAvailabilityByPhone,
+    getDriverAvailabilityByPhoneGlobal,
     humanizeTripIdInRpcError,
     regenerateTripOtp,
     setInitialTripForDetail,
@@ -468,7 +468,10 @@ export function LoadCenterView({
           setAggregatePhoneInTrip(false);
           return;
         }
-        const { result } = await getDriverAvailabilityByPhone(orgId, last10);
+        const { result } = await getDriverAvailabilityByPhoneGlobal(last10, {
+          anyOpenTripBlocks: true,
+          requireAuthoritativeRpc: true,
+        });
         setAggregatePhoneInTrip(result.isBusy);
       });
     }, 400);
@@ -1247,8 +1250,10 @@ export function LoadCenterView({
         return;
       }
       const { error: availabilityError, result: availability } =
-        await getDriverAvailabilityByPhone(orgId, phoneTrimmed, {
+        await getDriverAvailabilityByPhoneGlobal(phoneTrimmed, {
           excludeTripId: trip.id,
+          anyOpenTripBlocks: true,
+          requireAuthoritativeRpc: true,
         });
       if (availabilityError) {
         throw availabilityError;
