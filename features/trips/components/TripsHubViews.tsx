@@ -12,7 +12,11 @@ import {
     type TripAdjustment,
 } from "@/features/trips/services/tripAdjustments";
 import { isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
-import { isAggregateTrip, shouldShowAggregateTripKindPill } from "@/lib/driverUtils";
+import {
+  isAggregateTrip,
+  shouldShowAggregateTripKindPill,
+  shouldShowIntegratedSubtypePillForHub,
+} from "@/lib/driverUtils";
 import type { TripHubPartyMeta } from "../utils/tripHubPartyMeta";
 import {
     formatINR,
@@ -522,7 +526,9 @@ export function TripsHubTripCard({
   });
   const showAssetTripIcon = !showAggregateKindPill;
   const typeLabel = showAssetTripIcon ? tr("tripAsset") : tr("tripAggregate");
-  const subTypeLabel = hasSupplierLink ? tr("integrated") : tr("manual");
+  const subTypeLabel = shouldShowIntegratedSubtypePillForHub(trip)
+    ? tr("integrated")
+    : tr("manual");
   /** `undefined` while adjustment map loads — hub uses raw rates. */
   const adj = financeAdjustments;
   const revenue = tripHubRevenue(trip, currentOrganizationId, adj);
@@ -1168,7 +1174,9 @@ export function TripsHubTableView({
         });
         const showAssetTripIcon = !showAggregateKindPill;
         const typeLabel = showAssetTripIcon ? tr("tripAsset") : tr("tripAggregate");
-        const subTypeLabel = hasSupplierLink ? tr("integrated") : tr("manual");
+        const subTypeLabel = shouldShowIntegratedSubtypePillForHub(t)
+          ? tr("integrated")
+          : tr("manual");
         const routeShort = `${t.pickup_area ?? "—"} → ${t.drop_location ?? "—"}`;
         const routeDisplay = routeShort.toUpperCase();
         const pnl = tripHubPnl(t, currentOrganizationId, rowAdj);
