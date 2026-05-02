@@ -2,6 +2,7 @@
  * Human-readable place line from expo reverse geocode (driver trip strip / map callouts).
  */
 import * as Location from 'expo-location';
+import { Platform } from 'react-native';
 
 export function formatGeocodedPlaceLine(place: Location.LocationGeocodedAddress): string {
   const parts = [
@@ -27,6 +28,9 @@ export async function reverseGeocodePlaceLabel(
   latitude: number,
   longitude: number,
 ): Promise<string | null> {
+  // expo-location web warns: Geocoding API removed in SDK 49; skip on web.
+  if (Platform.OS === 'web') return null;
+
   try {
     const results = (await Promise.race([
       Location.reverseGeocodeAsync({ latitude, longitude }),
@@ -48,6 +52,8 @@ export async function reverseGeocodeCityStateLabel(
   latitude: number,
   longitude: number,
 ): Promise<string | null> {
+  if (Platform.OS === 'web') return null;
+
   try {
     const results = (await Promise.race([
       Location.reverseGeocodeAsync({ latitude, longitude }),

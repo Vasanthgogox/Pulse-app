@@ -71,6 +71,35 @@ export function parseRouteFetchKey(
 const MAPBOX_DIRECTIONS_BASE = 'https://api.mapbox.com/directions/v5/mapbox/driving';
 const OSRM_DIRECTIONS_BASE = 'https://router.project-osrm.org/route/v1/driving';
 const NETLIFY_ROUTE_PROXY_PATH = '/.netlify/functions/route-proxy';
+
+/**
+ * Netlify route proxy is only available on Netlify deploys (or when explicitly configured).
+ * Expo web on localhost would otherwise GET /.netlify/functions/... → 404 noise every route fetch.
+ */
+function buildWebRouteProxyUrl(from: LatLon, to: LatLon): string | null {
+  if (typeof window === 'undefined') return null;
+
+  const explicit =
+    typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_ROUTE_PROXY_URL?.trim();
+  const params = new URLSearchParams({
+    fromLat: String(from.latitude),
+    fromLon: String(from.longitude),
+    toLat: String(to.latitude),
+    toLon: String(to.longitude),
+  }).toString();
+
+  if (explicit) {
+    const base = explicit.split('?')[0]?.replace(/\/$/, '') ?? explicit;
+    return base.includes('route-proxy') ? `${base}?${params}` : `${base}${NETLIFY_ROUTE_PROXY_PATH}?${params}`;
+  }
+
+  const host = window.location.hostname;
+  if (host.endsWith('.netlify.app')) {
+    return `${window.location.origin}${NETLIFY_ROUTE_PROXY_PATH}?${params}`;
+  }
+
+  return null;
+}
 const OSRM_NETWORK_ERROR_COOLDOWN_MS = 60_000;
 const OSRM_TEMPORARY_BACKOFF_MS = 5 * 60_000;
 const OSRM_FETCH_TIMEOUT_MS = 8_000;
@@ -269,16 +298,11 @@ async function getGoogleRoute(from: LatLon, to: LatLon): Promise<RouteResult | n
  * Prioritizes OSRM (Truly free, no token) -> Mapbox (Token required) -> Google (Token required).
  */
 export async function getOptimalRoute(from: LatLon, to: LatLon): Promise<RouteResult | null> {
-  // Web-specific: prefer server-side proxy to avoid browser CORS/provider blocking.
-  if (typeof window !== 'undefined') {
+  // Web-specific: optional server-side proxy (Netlify) to avoid browser CORS/provider blocking.
+  const proxyUrl = buildWebRouteProxyUrl(from, to);
+  if (proxyUrl) {
     try {
-      const params = new URLSearchParams({
-        fromLat: String(from.latitude),
-        fromLon: String(from.longitude),
-        toLat: String(to.latitude),
-        toLon: String(to.longitude),
-      });
-      const proxyRes = await fetch(`${NETLIFY_ROUTE_PROXY_PATH}?${params.toString()}`);
+      const proxyRes = await fetch(proxyUrl);
       if (proxyRes.ok) {
         const payload = (await proxyRes.json()) as {
           ok?: boolean;

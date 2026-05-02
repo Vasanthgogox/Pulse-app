@@ -26,6 +26,8 @@ export interface TripRow {
   source: string;
   pickup_area: string;
   drop_location: string;
+  /** Optional legacy / synced column; UI may fall back when drop_location is empty. */
+  drop_area?: string | null;
   /** From place search; optional. */
   pickup_lat?: number | null;
   pickup_lon?: number | null;

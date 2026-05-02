@@ -32,4 +32,16 @@ declare module 'expo-location' {
   export function getCurrentPositionAsync(options?: object): Promise<{
     coords: { latitude: number; longitude: number; accuracy?: number | null };
   }>;
+
+  /** Foreground location subscription; stub matches driver map follow mode usage. */
+  export function watchPositionAsync(
+    options: {
+      accuracy?: Accuracy;
+      distanceInterval?: number;
+      timeInterval?: number;
+    },
+    callback: (position: {
+      coords: { latitude: number; longitude: number; accuracy?: number | null };
+    }) => void,
+  ): Promise<{ remove: () => void }>;
 }
