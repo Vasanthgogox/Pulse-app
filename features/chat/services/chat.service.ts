@@ -608,37 +608,103 @@ export async function getConversationsByDriverIds(
 ): Promise<TripConversation[]> {
   if (!driverIds.length) return [];
 
-  const { data, error } = await supabase()
+  type DriverChatTripMini = {
+    id: string;
+    trip_number: string | null;
+    driver_display_trip_id: string | null;
+    pickup_area: string | null;
+    drop_location: string | null;
+  };
+  type DriverChatConversationRow = TripConversationRow & {
+    id: string;
+    trip_id: string;
+    trips?: DriverChatTripMini | null;
+    trip_messages?: TripMessageRow[];
+  };
+
+  const mapRows = (
+    convRows: DriverChatConversationRow[],
+    tripsById: Map<string, DriverChatTripMini>,
+    messagesByConversationId: Map<string, TripMessageRow[]>,
+  ): TripConversation[] =>
+    convRows.map((row) => {
+      const tr = row.trips ?? tripsById.get(String(row.trip_id ?? "")) ?? null;
+      const perDriver =
+        tr?.driver_display_trip_id != null && String(tr.driver_display_trip_id).trim() !== ""
+          ? String(tr.driver_display_trip_id).trim()
+          : "";
+      return {
+        ...row,
+        trip_number: perDriver || tr?.trip_number || "",
+        pickup_area: tr?.pickup_area ?? "",
+        drop_location: tr?.drop_location ?? "",
+        messages: (
+          row.trip_messages ??
+          messagesByConversationId.get(String(row.id ?? "")) ??
+          []
+        ) as TripMessageRow[],
+      };
+    });
+
+  const primary = await supabase()
     .from("trip_conversations")
     .select(
       `
       *,
-      trips!inner ( trip_number, pickup_area, drop_location ),
+      trips!inner ( trip_number, driver_display_trip_id, pickup_area, drop_location ),
       trip_messages ( id, conversation_id, content, sender_role, sender_name, sender_user_id, created_at, is_read, message_type, metadata )
     `,
     )
     .in("driver_id", driverIds)
     .order("last_message_at", { ascending: false, nullsFirst: false });
 
-  if (error) throw error;
+  if (!primary.error) {
+    return mapRows((primary.data ?? []) as DriverChatConversationRow[], new Map(), new Map());
+  }
 
-  return (data ?? []).map((row: any) => {
-    const tr = row.trips;
-    const perDriver =
-      tr?.driver_display_trip_id != null && String(tr.driver_display_trip_id).trim() !== ""
-        ? String(tr.driver_display_trip_id).trim()
-        : "";
-    return {
-      ...row,
-      trip_number: perDriver || tr?.trip_number || "",
-      pickup_area: tr?.pickup_area ?? "",
-      drop_location: tr?.drop_location ?? "",
-      messages: ((row.trip_messages ?? []) as TripMessageRow[]).sort(
-        (a, b) =>
-          new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-      ),
-    };
-  });
+  // Fallback for environments where embedded select can fail (e.g. RLS recursion / PostgREST 500).
+  const { data: convRows, error: convErr } = await supabase()
+    .from("trip_conversations")
+    .select("*")
+    .in("driver_id", driverIds)
+    .order("last_message_at", { ascending: false, nullsFirst: false });
+  if (convErr) throw primary.error;
+
+  const normalizedConvRows = (convRows ?? []) as DriverChatConversationRow[];
+  const tripIds = Array.from(new Set(normalizedConvRows.map((r) => String(r.trip_id ?? "")).filter(Boolean)));
+  const convIds = Array.from(new Set(normalizedConvRows.map((r) => String(r.id ?? "")).filter(Boolean)));
+
+  const emptyTripsRes: { data: DriverChatTripMini[]; error: null } = { data: [], error: null };
+  const emptyMessagesRes: { data: TripMessageRow[]; error: null } = { data: [], error: null };
+  const [tripRes, msgRes] = await Promise.all([
+    tripIds.length
+      ? supabase()
+          .from("trips")
+          .select("id, trip_number, driver_display_trip_id, pickup_area, drop_location")
+          .in("id", tripIds)
+      : Promise.resolve(emptyTripsRes),
+    convIds.length
+      ? supabase()
+          .from("trip_messages")
+          .select("id, conversation_id, content, sender_role, sender_name, sender_user_id, created_at, is_read, message_type, metadata")
+          .in("conversation_id", convIds)
+          .order("created_at", { ascending: true })
+      : Promise.resolve(emptyMessagesRes),
+  ]);
+
+  const tripsById = new Map<string, DriverChatTripMini>();
+  for (const tr of (tripRes.data ?? []) as DriverChatTripMini[]) {
+    tripsById.set(String(tr.id ?? ""), tr);
+  }
+
+  const messagesByConversationId = new Map<string, TripMessageRow[]>();
+  for (const msg of (msgRes.data ?? []) as TripMessageRow[]) {
+    const cid = String(msg.conversation_id ?? "");
+    if (!messagesByConversationId.has(cid)) messagesByConversationId.set(cid, []);
+    messagesByConversationId.get(cid)!.push(msg);
+  }
+
+  return mapRows(normalizedConvRows, tripsById, messagesByConversationId);
 }
 
 /** Sends a message as the driver role. Thin wrapper for consistency. */

@@ -75,6 +75,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import Constants from "expo-constants";
 import * as ExpoLocation from "expo-location";
 import { watchPositionAsync } from "expo-location";
+import { useRouter } from "expo-router";
 import {
   useCallback,
   useEffect,
@@ -393,6 +394,7 @@ function formatTripDistance(distance: unknown): string {
 }
 
 export default function DriverRadarScreen() {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const { isDark, mapTheme } = useDriverTheme();
   const colors = useDriverThemeColors();
@@ -1237,6 +1239,15 @@ export default function DriverRadarScreen() {
     [visibleIncomingTrips, acceptedTripId],
   );
 
+  /** Oldest assignment first (FCFS) — used for dashboard queue + default selection. */
+  const visibleAssignableIncomingTripsFcfs = useMemo(
+    () =>
+      [...visibleAssignableIncomingTrips].sort((a, b) =>
+        String(a.created_at ?? "").localeCompare(String(b.created_at ?? "")),
+      ),
+    [visibleAssignableIncomingTrips],
+  );
+
   useEffect(() => {
     if (visibleAssignableIncomingTrips.length === 0) {
       clearNotifyOnlyAfterMission();
@@ -1261,11 +1272,33 @@ export default function DriverRadarScreen() {
   const selectedIncomingTrip =
     visibleIncomingTrips.find((trip) => trip.id === selectedIncomingTripId) ??
     null;
-  /** Among trips still awaiting decision: pick only in single-trip mode. */
-  const pickerFocusedIncoming =
-    visibleAssignableIncomingTrips.length === 1
-      ? visibleAssignableIncomingTrips[0]
-      : null;
+  /**
+   * FCFS queue: post-trip notify-only stays passive until the driver selects / resumes.
+   * Otherwise the oldest waiting assignment is the default "next" trip on the dashboard.
+   */
+  const pickerFocusedIncoming = useMemo(() => {
+    const queue = visibleAssignableIncomingTripsFcfs;
+    if (!queue.length) return null;
+
+    if (assignableTripsNotifyOnlyAfterMission) {
+      if (!selectedIncomingTripId) return null;
+      const want = String(selectedIncomingTripId).toLowerCase();
+      return queue.find((t) => String(t.id).toLowerCase() === want) ?? null;
+    }
+
+    if (queue.length === 1) return queue[0];
+
+    if (selectedIncomingTripId) {
+      const want = String(selectedIncomingTripId).toLowerCase();
+      const hit = queue.find((t) => String(t.id).toLowerCase() === want);
+      if (hit) return hit;
+    }
+    return queue[0];
+  }, [
+    visibleAssignableIncomingTripsFcfs,
+    selectedIncomingTripId,
+    assignableTripsNotifyOnlyAfterMission,
+  ]);
   /**
    * In multi-trip mode, when driver taps "Accept and verify OTP", force that tapped
    * trip into the active card context so OTP UI appears immediately.
@@ -1287,13 +1320,12 @@ export default function DriverRadarScreen() {
   }, [otpClaimTripId, selectedIncomingTrip, visibleIncomingTrips]);
   /**
    * Prefer accepted assignment first so we never flash the notification list during fetch lag.
-   * Otherwise single assignable trip or picker selection among remaining trips.
-   * During post-completion notify-only mode, do not attach a primary incoming trip on Home (badge only);
-   * picker/OTP flows resume after flag clear (notifications "Resume" or Accept).
+   * Otherwise `pickerFocusedIncoming` (FCFS + selection; notify-only stays null until the driver resumes).
+   * OTP claim keeps a focused row when applicable.
    */
   const effectiveFirstIncoming =
     resolvedAcceptedIncomingTrip ??
-    (assignableTripsNotifyOnlyAfterMission ? null : pickerFocusedIncoming) ??
+    pickerFocusedIncoming ??
     otpFocusedIncoming;
 
   // Keep incoming assignments in explicit accept/reject state until the driver acts.
@@ -1301,13 +1333,31 @@ export default function DriverRadarScreen() {
 
   /** Keep selection aligned when only one assignable incoming trip remains. */
   useEffect(() => {
-    if (visibleAssignableIncomingTrips.length !== 1) return;
-    const onlyId = visibleAssignableIncomingTrips[0]?.id;
+    if (visibleAssignableIncomingTripsFcfs.length !== 1) return;
+    const onlyId = visibleAssignableIncomingTripsFcfs[0]?.id;
     if (!onlyId) return;
     setSelectedIncomingTripId((prev) =>
       prev == null || prev === "" ? String(onlyId) : prev,
     );
-  }, [visibleAssignableIncomingTrips]);
+  }, [visibleAssignableIncomingTripsFcfs]);
+
+  /**
+   * Multi-assignment (not notify-only): default selection to FCFS head so dashboard + map
+   * always wire to a real trip row without an extra tap.
+   */
+  useEffect(() => {
+    if (assignableTripsNotifyOnlyAfterMission) return;
+    const q = visibleAssignableIncomingTripsFcfs;
+    if (q.length <= 1) return;
+    const headId = String(q[0]?.id ?? "");
+    if (!headId) return;
+    setSelectedIncomingTripId((prev) => {
+      if (prev == null || String(prev).trim() === "") return headId;
+      const want = String(prev).toLowerCase();
+      if (q.some((t) => String(t.id).toLowerCase() === want)) return prev;
+      return headId;
+    });
+  }, [assignableTripsNotifyOnlyAfterMission, visibleAssignableIncomingTripsFcfs]);
   // OTP only for non-roster (ad-hoc) trips; connected/roster trips accept directly.
   const pendingOtpTripsRequiringOtp = pendingOtpTrips.filter(
     (t) => !isRosterTrip(t),
@@ -1350,6 +1400,18 @@ export default function DriverRadarScreen() {
   const effectiveIncomingId = String(
     effectiveFirstIncoming?.id ?? "",
   ).toLowerCase();
+
+  /** 1-based position in the FCFS assignable queue (oldest first) for the trip shown on the job card. */
+  const incomingAssignmentQueueMeta = useMemo(() => {
+    const list = visibleAssignableIncomingTripsFcfs;
+    const activeId = effectiveFirstIncoming?.id;
+    if (!activeId || list.length <= 1) return null;
+    const idx = list.findIndex(
+      (t) => String(t.id).toLowerCase() === String(activeId).toLowerCase(),
+    );
+    if (idx < 0) return null;
+    return { position: idx + 1, total: list.length };
+  }, [visibleAssignableIncomingTripsFcfs, effectiveFirstIncoming?.id]);
 
   // Use driver's accepted offer (commission % or per km) for this org so commission matches control screen
   const acceptedInviteForOrg =
@@ -1797,9 +1859,9 @@ export default function DriverRadarScreen() {
     activeMission ||
       isAcceptedIncomingFlow ||
       otpClaimTripId ||
-      (hasSingleAssignableIncomingTrip &&
-        effectiveFirstIncoming &&
-        !assignableTripsNotifyOnlyAfterMission) ||
+      (effectiveFirstIncoming &&
+        !assignableTripsNotifyOnlyAfterMission &&
+        (hasSingleAssignableIncomingTrip || hasAssignableIncomingTrip)) ||
       assignmentFeedback != null,
   );
   const activeGuidanceStep = activeGuidanceTrip
@@ -2741,6 +2803,18 @@ export default function DriverRadarScreen() {
       !hasAssignableIncomingTrip,
   );
 
+  /** Notify-only after a mission: no primary row until the driver opens Notifications or taps Resume. */
+  const showNotifyOnlyAssignmentsHint = Boolean(
+    driver &&
+      isOnline &&
+      !activeMission &&
+      !otpClaimTrip &&
+      !effectiveFirstIncoming &&
+      hasAssignableIncomingTrip &&
+      !assignmentFeedback &&
+      assignableTripsNotifyOnlyAfterMission,
+  );
+
   useEffect(() => {
     if (!showSearchingOverlay) return;
     searchPulseAnim.setValue(0);
@@ -3378,68 +3452,6 @@ export default function DriverRadarScreen() {
           </MapView>
         )}
 
-        {/* Primary trip HUD: one surface — hide when route overview or Live route card is open */}
-        {activeGuidance &&
-        activeGuidanceStep !== "accepted" &&
-        !showRouteSummary &&
-        !showTrackingInfoCard &&
-        otpClaimTripId == null ? (
-          <View
-            pointerEvents="none"
-            style={[
-              styles.mapGuidanceChip,
-              isFullScreen
-                ? {
-                    top:
-                      (controlsVariant === "embedded"
-                        ? insets.top + 96
-                        : insets.top + 10) + 54,
-                    left: Layout.screenPaddingHorizontal,
-                    right: Layout.screenPaddingHorizontal,
-                  }
-                : { left: 14, right: 72, bottom: 18 },
-              { backgroundColor: colors.surface, borderColor: colors.border },
-            ]}
-          >
-            <View style={styles.mapGuidanceHeaderRow}>
-              <View
-                style={[
-                  styles.mapGuidanceIconWrap,
-                  { backgroundColor: colors.emeraldMuted },
-                ]}
-              >
-                <FontAwesome
-                  name={activeGuidance.icon}
-                  size={14}
-                  color={colors.emerald}
-                />
-              </View>
-              <Text
-                style={[styles.mapGuidanceTitle, { color: colors.text }]}
-                numberOfLines={1}
-              >
-                {activeGuidance.title}
-              </Text>
-            </View>
-            <Text
-              style={[styles.mapGuidanceSubtitle, { color: colors.textMuted }]}
-              numberOfLines={2}
-            >
-              {activeGuidance.subtitle}
-            </Text>
-            {distanceToTargetKm != null &&
-              activeGuidanceStep === "transit" ? (
-              <Text
-                style={[styles.mapGuidanceDistance, { color: colors.emerald }]}
-                numberOfLines={1}
-              >
-                {formatRoadDistanceM(distanceToTargetKm * 1000)}{" "}
-                {"to destination"}
-              </Text>
-            ) : null}
-          </View>
-        ) : null}
-
         {/* Map controls + route summary — hidden during OTP entry */}
         {otpClaimTripId == null ? (
           <>
@@ -3989,6 +4001,7 @@ export default function DriverRadarScreen() {
               onRefresh={fetch}
               onTripCompleted={() => {
                 justCompletedTripRef.current = true;
+                setSelectedIncomingTripId(null);
                 setAssignableTripsNotifyOnlyAfterMission(true);
                 void AsyncStorage.setItem(DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY, "1");
                 persistPostMissionPendingSnapshot();
@@ -4027,6 +4040,7 @@ export default function DriverRadarScreen() {
               onRefresh={fetch}
               onTripCompleted={() => {
                 justCompletedTripRef.current = true;
+                setSelectedIncomingTripId(null);
                 setAssignableTripsNotifyOnlyAfterMission(true);
                 void AsyncStorage.setItem(DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY, "1");
                 persistPostMissionPendingSnapshot();
@@ -4191,7 +4205,25 @@ export default function DriverRadarScreen() {
         ) : showNewAssignmentCard &&
           effectiveFirstIncoming &&
           !assignmentFeedback ? (
-          <JobRequestCard
+          <>
+            {incomingAssignmentQueueMeta ? (
+              <Text
+                style={[
+                  styles.offlineCardSubtitle,
+                  {
+                    color: colors.textMuted,
+                    textAlign: "center",
+                    marginBottom: 10,
+                    paddingHorizontal: 8,
+                  },
+                ]}
+              >
+                Queue (oldest first): {incomingAssignmentQueueMeta.position} of{" "}
+                {incomingAssignmentQueueMeta.total} — next up is the earliest
+                assignment.
+              </Text>
+            ) : null}
+            <JobRequestCard
             assignmentId={String(effectiveFirstIncoming.id)}
             pickup={effectiveFirstIncoming.pickup_area?.trim() || "—"}
             dropoff={effectiveFirstIncoming.drop_location?.trim() || "—"}
@@ -4257,6 +4289,77 @@ export default function DriverRadarScreen() {
             variant={mapSheet ? "page" : "card"}
             assignedByLine={assignerLineForJobCard}
           />
+          </>
+        ) : showNotifyOnlyAssignmentsHint ? (
+          <View
+            style={[
+              styles.centerCardWrap,
+              styles.centerCardConstraint,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                borderWidth: 1,
+                paddingVertical: 20,
+                paddingHorizontal: 18,
+              },
+            ]}
+          >
+            <Text style={[styles.offlineCardTitle, { color: colors.text, textAlign: "center" }]}>
+              Assignments waiting
+            </Text>
+            <Text
+              style={[
+                styles.offlineCardSubtitle,
+                {
+                  color: colors.textMuted,
+                  textAlign: "center",
+                  marginTop: 10,
+                },
+              ]}
+            >
+              {visibleAssignableIncomingTripsFcfs.length > 1
+                ? "Several trips are waiting (oldest first in queue). Open Notifications to pick one, or resume to show the next assignment on the dashboard."
+                : "Your next assignment is paused on the dashboard after your last trip. Open Notifications, or resume here to accept it."}
+            </Text>
+            {assignableTripsNotifyOnlyAfterMission ? (
+              <TouchableOpacity
+                style={[
+                  styles.goOnlineBtn,
+                  { backgroundColor: colors.emerald, marginTop: 16, width: "100%" },
+                ]}
+                onPress={() => {
+                  clearNotifyOnlyAfterMission();
+                  if (visibleAssignableIncomingTripsFcfs.length > 1) {
+                    const first = visibleAssignableIncomingTripsFcfs[0];
+                    if (first?.id) setSelectedIncomingTripId(String(first.id));
+                  }
+                  triggerSuccess("Assignments shown on dashboard.");
+                }}
+                activeOpacity={0.88}
+              >
+                <FontAwesome name="th-large" size={16} color={Theme.textOnPrimary} />
+                <Text style={styles.goOnlineBtnText}>Resume on dashboard</Text>
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity
+              style={[
+                styles.searchOfflineBtn,
+                {
+                  marginTop: 10,
+                  width: "100%",
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                },
+              ]}
+              onPress={() => router.push("/(driver)/notifications")}
+              activeOpacity={0.88}
+            >
+              <FontAwesome name="bell" size={16} color={colors.text} />
+              <Text style={[styles.searchOfflineBtnText, { color: colors.text }]}>
+                Open notifications
+              </Text>
+            </TouchableOpacity>
+          </View>
         ) : showSearchingOverlay ? (
           <View style={styles.driverSearchingEmptyWrap}>
             <View style={styles.driverSearchingEmptyContent}>

@@ -268,7 +268,10 @@ export function DriverTripFlowCard({
   }, [driverLatitude, driverLongitude, driverLocationLabel]);
 
   const shareTripDocumentInChat = useCallback(
-    async (doc: tripDocumentsService.TripDocumentRow, documentTypeLabel: string) => {
+    async (
+      doc: { storage_path: string; file_name: string; mime_type: string | null },
+      documentTypeLabel: string,
+    ) => {
       const tripId = localTrip.id;
       const orgId = localTrip.organization_id;
       const driverId = localTrip.driver_id;
@@ -506,22 +509,31 @@ export function DriverTripFlowCard({
         setStagePhotoUploading(false);
         return;
       }
-      const { doc, error } = await tripDocumentsService.uploadTripDocument(id, profile.uid, {
-        arrayBuffer,
-        fileName,
-        mimeType,
-      });
-      if (error) setStepError(error.message);
-      else if (doc) {
-        const stageLabel =
-          step === 'accepted'
-            ? 'Trip photo (pickup)'
-            : step === 'transit'
-              ? 'Trip photo (en route)'
-              : step === 'reached'
-                ? 'Trip photo (drop-off)'
-                : 'Trip photo';
-        await shareTripDocumentInChat(doc, stageLabel);
+      const stageLabel =
+        step === 'accepted'
+          ? 'Trip photo (pickup)'
+          : step === 'transit'
+            ? 'Trip photo (en route)'
+            : step === 'reached'
+              ? 'Trip photo (drop-off)'
+              : 'Trip photo';
+      const { result: chatUpload, error: chatUploadError } =
+        await tripDocumentsService.uploadTripChatImage(id, {
+          arrayBuffer,
+          fileName,
+          mimeType,
+        });
+      if (chatUploadError) {
+        setStepError(chatUploadError.message);
+      } else if (chatUpload) {
+        await shareTripDocumentInChat(
+          {
+            storage_path: chatUpload.storagePath,
+            file_name: chatUpload.fileName,
+            mime_type: chatUpload.mimeType,
+          },
+          stageLabel,
+        );
         onRefresh?.();
       }
     } catch (e) {
