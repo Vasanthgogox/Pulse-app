@@ -29,6 +29,7 @@ import {
     assignAggregateTripDriverByPhone,
     generateTripOtp,
     getDriverAvailabilityByPhone,
+    humanizeTripIdInRpcError,
     regenerateTripOtp,
     setInitialTripForDetail,
     updateTripSupplier,
@@ -1273,7 +1274,7 @@ export function LoadCenterView({
         setAssigningTripId(null);
         Alert.alert(
           "Trip created",
-          `Driver could not be assigned. ${assignAggErr.message}\n\nAssign driver from trip detail to generate OTP.`,
+          `Driver could not be assigned. ${humanizeTripIdInRpcError(assignAggErr.message, trip)}\n\nAssign driver from trip detail to generate OTP.`,
         );
         setInitialTripForDetail(trip);
         router.push(
