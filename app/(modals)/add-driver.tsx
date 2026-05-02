@@ -86,20 +86,33 @@ export default function AddDriverScreen() {
 
   if (Platform.OS === 'web') {
     return (
-      <PartyRegistrationPortal
-        visible
-        initialKind="driver"
-        onClose={() => closeModal(router as CloseModalRouter)}
-        organizationId={partyPortal.organizationId}
-        noOrganizationMessage={
-          currentOrganization ? null : partyPortal.NO_ORG_MESSAGE
-        }
-        onRefreshOrganization={partyPortal.refreshOrganization}
-        onAddClient={partyPortal.handleAddClientComplete}
-        onAddSupplier={partyPortal.handleAddSupplierComplete}
-        onAddDriver={partyPortal.handleAddDriverDirect}
-        onAddVehicle={partyPortal.handleAddVehicleComplete}
-      />
+      <>
+        <PartyRegistrationPortal
+          visible
+          initialKind="driver"
+          onClose={() => closeModal(router as CloseModalRouter)}
+          organizationId={partyPortal.organizationId}
+          noOrganizationMessage={
+            currentOrganization ? null : partyPortal.NO_ORG_MESSAGE
+          }
+          onRefreshOrganization={partyPortal.refreshOrganization}
+          onAddClient={partyPortal.handleAddClientComplete}
+          onAddSupplier={partyPortal.handleAddSupplierComplete}
+          onAddDriver={partyPortal.handleAddDriverDirect}
+          onAddVehicle={partyPortal.handleAddVehicleComplete}
+          onInviteDriver={handleInvite}
+        />
+        <ThemedAlertModal
+          visible={themedInfo != null}
+          title={themedInfo?.title ?? ''}
+          message={themedInfo?.message ?? ''}
+          okText="OK"
+          variant={themedInfo?.variant === 'warning' ? 'warning' : 'neutral'}
+          okVariant="primary"
+          onOk={onThemedInfoOk}
+          onRequestClose={onThemedInfoOk}
+        />
+      </>
     );
   }
 

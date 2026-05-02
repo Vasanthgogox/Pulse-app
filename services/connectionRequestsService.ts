@@ -199,9 +199,60 @@ export async function getConnectionInviteesByPhones(phones: string[]): Promise<{
   return { error: null, inviteesByPhone };
 }
 
+/** Flatten PostgREST / Supabase error fields for duplicate detection (PostgrestError has no HTTP status on the instance). */
+function connectionRequestInsertErrorFingerprint(error: unknown): string {
+  if (error == null) return "";
+  if (typeof error === "string") return error.toLowerCase();
+  if (typeof error !== "object") return String(error).toLowerCase();
+  const e = error as Record<string, unknown>;
+  const parts: string[] = [];
+  for (const k of ["message", "details", "hint", "code", "status", "statusCode"] as const) {
+    const v = e[k];
+    if (v != null) parts.push(String(v));
+  }
+  if (e.cause != null) parts.push(connectionRequestInsertErrorFingerprint(e.cause));
+  try {
+    parts.push(JSON.stringify(error));
+  } catch {
+    /* ignore circular refs */
+  }
+  return parts.join(" ").toLowerCase();
+}
+
+/**
+ * True when the insert failed because this (from_org, to_org) pair already exists.
+ * PostgREST returns JSON with `code` "23505"; browsers still show HTTP 409 in the Network panel.
+ */
+function isDuplicateConnectionRequestInsertError(error: unknown): boolean {
+  const f = connectionRequestInsertErrorFingerprint(error);
+  if (f.includes("23505")) return true;
+  if (f.includes("duplicate key")) return true;
+  if (f.includes("unique constraint")) return true;
+  if (f.includes("unique violation")) return true;
+  if (f.includes("connection_requests_from_organization_id_to_organization_id")) return true;
+  // Some proxies/clients only preserve status text in the message
+  if (/\b409\b/.test(f) && (f.includes("conflict") || f.includes("duplicate") || f.includes("unique")))
+    return true;
+  return false;
+}
+
+async function selectConnectionRequestIdForOrgPair(
+  fromOrgId: string,
+  toOrgId: string,
+): Promise<string | null> {
+  const { data, error } = await supabase()
+    .from("connection_requests")
+    .select("id")
+    .eq("from_organization_id", fromOrgId)
+    .eq("to_organization_id", toOrgId)
+    .maybeSingle();
+  if (error || !data || typeof (data as { id?: string }).id !== "string") return null;
+  return (data as { id: string }).id;
+}
+
 /**
  * Create a connection request (invite another org as client and/or supplier).
- * Validates at least one role and rejects self-invite. On duplicate (23505) returns alreadyInvited.
+ * Validates at least one role and rejects self-invite. On duplicate insert returns alreadyInvited (no error).
  */
 export async function createConnectionRequest(
   fromOrgId: string,
@@ -225,6 +276,13 @@ export async function createConnectionRequest(
       requestId: null,
       alreadyInvited: false,
     };
+
+  // Preflight: if a row already exists, skip insert (avoids a redundant 409 in DevTools and races with duplicate handling).
+  const existingId = await selectConnectionRequestIdForOrgPair(fromOrgId, toOrgId);
+  if (existingId) {
+    return { error: null, requestId: existingId, alreadyInvited: true };
+  }
+
   const { data, error } = await supabase()
     .from('connection_requests')
     .insert({
@@ -237,19 +295,13 @@ export async function createConnectionRequest(
     .select('id')
     .maybeSingle();
   if (error) {
-    const code = (error as { code?: string }).code;
-    if (code === '23505') {
-      const { data: existing } = await supabase()
-        .from('connection_requests')
-        .select('id')
-        .eq('from_organization_id', fromOrgId)
-        .eq('to_organization_id', toOrgId)
-        .maybeSingle();
-      return {
-        error: null,
-        requestId: existing?.id ?? null,
-        alreadyInvited: true,
-      };
+    // After any insert failure, prefer a read probe: handles duplicate + odd client error shapes.
+    const afterErrorId = await selectConnectionRequestIdForOrgPair(fromOrgId, toOrgId);
+    if (afterErrorId) {
+      return { error: null, requestId: afterErrorId, alreadyInvited: true };
+    }
+    if (isDuplicateConnectionRequestInsertError(error)) {
+      return { error: null, requestId: null, alreadyInvited: true };
     }
     const msg = (error as { message?: string }).message ?? '';
     const friendly =

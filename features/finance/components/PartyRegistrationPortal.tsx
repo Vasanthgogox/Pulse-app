@@ -3,8 +3,15 @@
  * Two steps: fill form → review and confirm → calls Finance entity handlers.
  */
 import Theme from "@/constants/Theme";
-import type { AddClientFormData } from "@/features/clients/components/AddClientModal";
+import type {
+  AddClientFormData,
+  ConnectionInviteeMatch,
+} from "@/features/clients/components/AddClientModal";
 import type { DriverFormData } from "@/features/drivers/components/AddDriverModal";
+import {
+  searchExistingDriversByPhone,
+  type ExistingDriverMatch,
+} from "@/features/drivers/services/drivers.service";
 import type { SupplierFormData } from "@/features/suppliers/components/AddSupplierModal";
 import type { AddVehicleCompletePayload } from "@/features/vehicles/components/AddVehicleModal";
 import {
@@ -18,7 +25,8 @@ import {
   getModelSelectOptions,
   normalizeBodyLengthKey,
 } from "@/features/vehicles/utils/vehicleFormOptions.util";
-import { formatIndianVehicleNumberInput } from "@/lib/format";
+import { showAppAlert } from "@/lib/appAlert";
+import { formatIndianVehicleNumberInput, formatMobileNumber } from "@/lib/format";
 import {
   normalizeIndianPhoneForMetadata,
   validatePhone,
@@ -43,9 +51,13 @@ import {
   Verified,
 } from "lucide-react-native";
 import { isContactPickerAvailable, pickContactForNameAndPhone } from "@/lib/contactPicker";
+import { useLanguage } from "@/contexts/LanguageContext";
+import {
+  inviteeProfileIsDriver,
+  inviteeSuggestedCompanyName,
+} from "@/services/connectionRequestsService";
 import {
   ActivityIndicator,
-  Alert,
   Dimensions,
   KeyboardAvoidingView,
   Modal,
@@ -61,7 +73,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { ComponentType, ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export type PartyRegistrationKind =
   | "client"
@@ -84,6 +96,25 @@ export interface PartyRegistrationPortalProps {
   onAddSupplier: (data: SupplierFormData) => Promise<void>;
   onAddDriver: (data: DriverFormData) => Promise<void>;
   onAddVehicle: (payload: AddVehicleCompletePayload) => Promise<void>;
+  /**
+   * When set with `onSendInvitation`, debounced phone lookup (same as AddClientModal)
+   * auto-fills contact / org from platform data and enables connection invite for customer flow.
+   */
+  searchInviteeByPhone?: (
+    phone: string,
+  ) => Promise<ConnectionInviteeMatch | null>;
+  /** Called from review step when a non-driver platform match exists (instead of offline create). */
+  onSendInvitation?: (toOrgId: string) => Promise<void>;
+  /**
+   * Same as client invite, for supplier: `createConnectionRequest` with carrier flag.
+   * When set with `searchInviteeByPhone`, enables debounced lookup + invite on the supplier form.
+   */
+  onSendSupplierInvitation?: (toOrgId: string) => Promise<void>;
+  /**
+   * When set, debounced phone lookup + review “Send invitation” path (AddDriverModal parity).
+   * If no app account match, review still saves via `onAddDriver`.
+   */
+  onInviteDriver?: (data: DriverFormData) => Promise<void>;
 }
 
 const DL_CLEAN = /[\s-]/g;
@@ -91,6 +122,9 @@ const DL_CLEAN = /[\s-]/g;
 /** Stacked layout uses full width below 720px; sheet rounding/shadow only below this for nicer tablet-stacked. */
 const PARTY_PORTAL_STACKED_SHEET_MAX_WIDTH = 640;
 const DL_FORMAT = /^[A-Z]{2}[0-9]{2}[0-9]{4}[0-9]{7}$/;
+
+const MIN_PHONE_LENGTH_FOR_SEARCH = 8;
+const PHONE_DEBOUNCE_MS = 400;
 
 const READY_TO_SAVE_SUMMARY_COPY =
   "Saved records stay private to your current organization — Finance, trips, and assignments will pick them up automatically.";
@@ -161,16 +195,36 @@ function PartyRegistrationPortalInner(
     onAddSupplier,
     onAddDriver,
     onAddVehicle,
+    searchInviteeByPhone,
+    onSendInvitation,
+    onSendSupplierInvitation,
+    onInviteDriver,
     layoutWide,
   } = props;
 
+  const { t } = useLanguage();
   const [kind, setKind] = useState<PartyRegistrationKind>(initialKind);
   const [step, setStep] = useState<"form" | "review">("form");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [importLoading, setImportLoading] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const [inviteeMatch, setInviteeMatch] =
+    useState<ConnectionInviteeMatch | null>(null);
+  const [phoneSearchLoading, setPhoneSearchLoading] = useState(false);
+  const [searchedNoResult, setSearchedNoResult] = useState(false);
+  const [driverRegisteredAtPhone, setDriverRegisteredAtPhone] = useState(false);
+  const phoneLookupSearchIdRef = useRef(0);
   const { width: viewportW, height: viewportH } = useWindowDimensions();
+
+  const hasClientInviteSearch =
+    kind === "client" &&
+    Boolean(searchInviteeByPhone && onSendInvitation);
+  const hasSupplierInviteSearch =
+    kind === "supplier" &&
+    Boolean(searchInviteeByPhone && onSendSupplierInvitation);
+  const showPhoneInviteeUi = hasClientInviteSearch || hasSupplierInviteSearch;
+  const inviteeIsDriver = inviteeProfileIsDriver(inviteeMatch?.profile_role);
 
   const stackedSheetVisuals =
     !layoutWide &&
@@ -186,6 +240,15 @@ function PartyRegistrationPortalInner(
   const [driverName, setDriverName] = useState("");
   const [driverPhone, setDriverPhone] = useState("");
   const [driverDl, setDriverDl] = useState("");
+  const [driverExistingMatches, setDriverExistingMatches] = useState<
+    ExistingDriverMatch[]
+  >([]);
+  const [driverPhoneLookupLoading, setDriverPhoneLookupLoading] =
+    useState(false);
+  const [driverPhoneLookupError, setDriverPhoneLookupError] = useState<
+    string | null
+  >(null);
+  const driverPhoneLookupIdRef = useRef(0);
 
   // Vehicle — aligned with AddVehicleModal (category chips + preset pickers + specs)
   const [vehicleReg, setVehicleReg] = useState("");
@@ -213,6 +276,9 @@ function PartyRegistrationPortalInner(
     setDriverName("");
     setDriverPhone("");
     setDriverDl("");
+    setDriverExistingMatches([]);
+    setDriverPhoneLookupLoading(false);
+    setDriverPhoneLookupError(null);
     setVehicleReg("");
     setVehicleCategory("");
     setVehicleModel("");
@@ -223,7 +289,96 @@ function PartyRegistrationPortalInner(
     setBodyLengthIsOther(false);
     setBodyLengthPickerOpen(false);
     setVehicleAxle("");
+    setInviteeMatch(null);
+    setPhoneSearchLoading(false);
+    setSearchedNoResult(false);
+    setDriverRegisteredAtPhone(false);
   }, [visible, initialKind]);
+
+  // Add Client / Supplier — debounced phone lookup (AddClientModal / AddSupplierModal parity).
+  useEffect(() => {
+    if (!visible) return;
+    if (kind === "client") {
+      if (!searchInviteeByPhone || !onSendInvitation) return;
+    } else if (kind === "supplier") {
+      if (!searchInviteeByPhone || !onSendSupplierInvitation) return;
+    } else {
+      return;
+    }
+    const normalized = phoneDigits.trim().replace(/\s+/g, "");
+    setInviteeMatch(null);
+    setSearchedNoResult(false);
+    setDriverRegisteredAtPhone(false);
+    if (normalized.length < MIN_PHONE_LENGTH_FOR_SEARCH) {
+      setPhoneSearchLoading(false);
+      return;
+    }
+    const id = ++phoneLookupSearchIdRef.current;
+    setPhoneSearchLoading(true);
+    const timer = setTimeout(() => {
+      searchInviteeByPhone(normalized).then((result) => {
+        if (phoneLookupSearchIdRef.current !== id) return;
+        setPhoneSearchLoading(false);
+        setInviteeMatch(result ?? null);
+        setSearchedNoResult(!result);
+        setDriverRegisteredAtPhone(
+          Boolean(result && inviteeProfileIsDriver(result.profile_role)),
+        );
+        if (result) {
+          setContactName((prev) => (prev.trim() ? prev : result.full_name));
+          const suggested = inviteeSuggestedCompanyName(result);
+          if (suggested) {
+            setOrgOrCompanyName((prev) => (prev.trim() ? prev : suggested));
+          }
+        }
+      });
+    }, PHONE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [
+    visible,
+    kind,
+    phoneDigits,
+    searchInviteeByPhone,
+    onSendInvitation,
+    onSendSupplierInvitation,
+  ]);
+
+  // Add Driver (web) — debounced lookup for in-app invite when `onInviteDriver` is provided.
+  useEffect(() => {
+    if (!visible || kind !== "driver" || !onInviteDriver) return;
+    const normalized = driverPhone.trim().replace(/\s+/g, "");
+    setDriverExistingMatches([]);
+    setDriverPhoneLookupError(null);
+    if (normalized.length < MIN_PHONE_LENGTH_FOR_SEARCH) {
+      setDriverPhoneLookupLoading(false);
+      return;
+    }
+    const id = ++driverPhoneLookupIdRef.current;
+    setDriverPhoneLookupLoading(true);
+    const timer = setTimeout(() => {
+      searchExistingDriversByPhone(normalized).then(({ error: err, matches }) => {
+        if (driverPhoneLookupIdRef.current !== id) return;
+        setDriverPhoneLookupLoading(false);
+        setDriverPhoneLookupError(err?.message ?? null);
+        setDriverExistingMatches(matches);
+        if (matches.length === 1) {
+          const one = matches[0];
+          setDriverName((prev) => (prev.trim() ? prev : one.full_name));
+          const dlFromRpc = one.license_number?.trim();
+          if (dlFromRpc) {
+            setDriverDl((prev) => (prev.trim() ? prev : dlFromRpc.toUpperCase()));
+          }
+        }
+      });
+    }, PHONE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [visible, kind, driverPhone, onInviteDriver]);
+
+  const handleDriverPhoneLookupChange = (text: string) => {
+    setDriverPhone(formatMobileNumber(text));
+    setDriverExistingMatches([]);
+    setDriverPhoneLookupError(null);
+  };
 
   const insets = useSafeAreaInsets();
   const axleRecommendations = useMemo(
@@ -291,6 +446,14 @@ function PartyRegistrationPortalInner(
       return false;
     }
     if (kind === "client" || kind === "supplier") {
+      if (kind === "client" && driverRegisteredAtPhone) {
+        setFormError(t("errorDriverCannotAddAsClient"));
+        return false;
+      }
+      if (kind === "supplier" && driverRegisteredAtPhone) {
+        setFormError(t("errorDriverCannotAddAsSupplier"));
+        return false;
+      }
       const nameOk = contactName.trim().length >= 2;
       const phoneErr = validatePhone(phoneDigits);
       if (!nameOk) {
@@ -304,6 +467,13 @@ function PartyRegistrationPortalInner(
       return true;
     }
     if (kind === "driver") {
+      if (
+        onInviteDriver &&
+        driverExistingMatches.some((m) => m.is_in_fleet === true)
+      ) {
+        setFormError(t("existingDriverInFleetDetail"));
+        return false;
+      }
       if (driverName.trim().length < 2) {
         setFormError("Enter the driver's name.");
         return false;
@@ -355,7 +525,29 @@ function PartyRegistrationPortalInner(
     vehicleModel,
     vehicleCapacity,
     vehicleBodyFt,
+    driverRegisteredAtPhone,
+    driverExistingMatches,
+    onInviteDriver,
+    t,
   ]);
+
+  const handlePhoneLookupChange = (text: string) => {
+    const hadInviteeMatch = inviteeMatch != null;
+    setPhoneDigits(formatMobileNumber(text));
+    setInviteeMatch(null);
+    setSearchedNoResult(false);
+    setDriverRegisteredAtPhone(false);
+    if (hadInviteeMatch) {
+      setContactName("");
+      setOrgOrCompanyName("");
+    }
+  };
+
+  const handleAddAsOfflineInstead = () => {
+    setInviteeMatch(null);
+    setSearchedNoResult(false);
+    setDriverRegisteredAtPhone(false);
+  };
 
   const goReview = () => {
     if (!validateFormForKind()) return;
@@ -371,10 +563,21 @@ function PartyRegistrationPortalInner(
         setImportError(null);
         if (kind === "driver") {
           setDriverName(result.contact.name);
-          setDriverPhone(result.contact.phone.replace(/^\+91/, "").replace(/^\+/, ""));
+          setDriverPhone(
+            formatMobileNumber(
+              result.contact.phone.replace(/^\+91/, "").replace(/^\+/, ""),
+            ),
+          );
+          setDriverExistingMatches([]);
+          setDriverPhoneLookupError(null);
         } else {
           setContactName(result.contact.name);
           setPhoneDigits(result.contact.phone.replace(/^\+91/, "").replace(/^\+/, ""));
+          if (kind === "client" || kind === "supplier") {
+            setInviteeMatch(null);
+            setSearchedNoResult(false);
+            setDriverRegisteredAtPhone(false);
+          }
         }
       } else if (result.reason !== "cancelled") {
         setImportError(result.message ?? "Could not load contact. Please type manually.");
@@ -410,6 +613,12 @@ function PartyRegistrationPortalInner(
       if (kind === "client") {
         const pNorm =
           normalizeIndianPhoneForMetadata(phoneDigits) ?? phoneDigits.trim();
+        const inviteeIsDrv = inviteeProfileIsDriver(inviteeMatch?.profile_role);
+        if (inviteeMatch && onSendInvitation && !inviteeIsDrv) {
+          await onSendInvitation(inviteeMatch.organization_id);
+          onClose();
+          return;
+        }
         await onAddClient({
           organizationName: orgOrCompanyName.trim(),
           contactPerson: contactName.trim(),
@@ -418,6 +627,12 @@ function PartyRegistrationPortalInner(
       } else if (kind === "supplier") {
         const pNorm =
           normalizeIndianPhoneForMetadata(phoneDigits) ?? phoneDigits.trim();
+        const inviteeIsDrv = inviteeProfileIsDriver(inviteeMatch?.profile_role);
+        if (inviteeMatch && onSendSupplierInvitation && !inviteeIsDrv) {
+          await onSendSupplierInvitation(inviteeMatch.organization_id);
+          onClose();
+          return;
+        }
         await onAddSupplier({
           name: contactName.trim(),
           companyName: orgOrCompanyName.trim(),
@@ -426,7 +641,13 @@ function PartyRegistrationPortalInner(
       } else if (kind === "driver") {
         const dp = buildDriverPayload();
         const pn = normalizeIndianPhoneForMetadata(dp.phone) ?? dp.phone.trim();
-        await onAddDriver({ ...dp, phone: pn });
+        const payload = { ...dp, phone: pn };
+        if (onInviteDriver && driverExistingMatches.length > 0) {
+          await onInviteDriver(payload);
+          onClose();
+          return;
+        }
+        await onAddDriver(payload);
       } else {
         await onAddVehicle(
           vehiclePayloadFromInputs(
@@ -445,7 +666,7 @@ function PartyRegistrationPortalInner(
         e && typeof e === "object" && "message" in e
           ? String((e as { message?: string }).message)
           : "Something went wrong. Try again.";
-      Alert.alert("Could not save", msg);
+      showAppAlert("Could not save", msg);
     } finally {
       setSubmitting(false);
     }
@@ -554,6 +775,21 @@ function PartyRegistrationPortalInner(
   if (!visible) return null;
 
   const formTitle = `New ${headline}`;
+
+  const reviewDriverInvite =
+    kind === "driver" &&
+    Boolean(onInviteDriver) &&
+    driverExistingMatches.length > 0;
+
+  const reviewSaveLabel =
+    inviteeMatch &&
+    !inviteeIsDriver &&
+    ((kind === "client" && onSendInvitation) ||
+      (kind === "supplier" && onSendSupplierInvitation))
+      ? t("sendInvitation")
+      : reviewDriverInvite
+        ? t("sendInvitation")
+        : "Save";
 
   const narrowShellMaxHeight =
     !layoutWide && viewportH > 0
@@ -737,10 +973,17 @@ function PartyRegistrationPortalInner(
                               placeholder="10-digit mobile"
                               placeholderTextColor={Theme.textMuted}
                               keyboardType="phone-pad"
-                              maxLength={14}
+                              maxLength={
+                                kind === "client" || kind === "supplier"
+                                  ? 10
+                                  : 14
+                              }
                               value={phoneDigits}
-                              onChangeText={(x) =>
-                                setPhoneDigits(x.replace(/[^\d+]/g, ""))
+                              onChangeText={
+                                kind === "client" || kind === "supplier"
+                                  ? handlePhoneLookupChange
+                                  : (x) =>
+                                      setPhoneDigits(x.replace(/[^\d+]/g, ""))
                               }
                             />
                             <Smartphone
@@ -752,6 +995,59 @@ function PartyRegistrationPortalInner(
                         </Field>
                       </View>
                     </View>
+                    {showPhoneInviteeUi ? (
+                      <>
+                        <Text style={styles.clientPhoneLookupHint}>
+                          Search by number to find someone on the platform and invite
+                          their organization.
+                        </Text>
+                        {phoneDigits.trim().replace(/\s+/g, "").length >=
+                          MIN_PHONE_LENGTH_FOR_SEARCH && phoneSearchLoading ? (
+                          <View style={styles.clientLookupLoadingRow}>
+                            <ActivityIndicator size="small" color="#2563eb" />
+                            <Text style={styles.clientLookupLoadingText}>
+                              Looking up…
+                            </Text>
+                          </View>
+                        ) : null}
+                        {inviteeMatch ? (
+                          <View style={styles.clientInviteeCard}>
+                            <Text style={styles.clientInviteeLabel}>
+                              {inviteeIsDriver
+                                ? t("inviteeRegisteredDriver")
+                                : t("inviteeFoundOnPlatform")}
+                            </Text>
+                            <Text style={styles.clientInviteeName}>
+                              {inviteeMatch.full_name || inviteeMatch.phone}
+                            </Text>
+                            <Text style={styles.clientInviteeHint}>
+                              {inviteeIsDriver
+                                ? kind === "supplier"
+                                  ? t("addSupplierInviteeHintDriver")
+                                  : t("addClientInviteeHintDriver")
+                                : kind === "supplier"
+                                  ? t("addSupplierInviteeHintDefault")
+                                  : t("addClientInviteeHintDefault")}
+                            </Text>
+                            {!inviteeIsDriver ? (
+                              <Pressable
+                                onPress={handleAddAsOfflineInstead}
+                                disabled={submitting}
+                                style={styles.clientOfflineLink}
+                              >
+                                <Text style={styles.clientOfflineLinkText}>
+                                  Add as offline instead
+                                </Text>
+                              </Pressable>
+                            ) : null}
+                          </View>
+                        ) : searchedNoResult ? (
+                          <Text style={styles.clientNoMatchHint}>
+                            No account with this number. Add as offline below.
+                          </Text>
+                        ) : null}
+                      </>
+                    ) : null}
                   </>
                 )}
 
@@ -781,12 +1077,15 @@ function PartyRegistrationPortalInner(
                             <TextInput
                               style={[styles.input, styles.phoneInput]}
                               keyboardType="phone-pad"
-                              maxLength={14}
+                              maxLength={onInviteDriver ? 10 : 14}
                               placeholder="10-digit number"
                               placeholderTextColor={Theme.textMuted}
                               value={driverPhone}
-                              onChangeText={(x) =>
-                                setDriverPhone(x.replace(/[^\d+]/g, ""))
+                              onChangeText={
+                                onInviteDriver
+                                  ? handleDriverPhoneLookupChange
+                                  : (x) =>
+                                      setDriverPhone(x.replace(/[^\d+]/g, ""))
                               }
                             />
                           </View>
@@ -812,6 +1111,48 @@ function PartyRegistrationPortalInner(
                         </Field>
                       </View>
                     </View>
+                    {onInviteDriver ? (
+                      <>
+                        <Text style={styles.clientPhoneLookupHint}>
+                          {t("existingDriverOnPlatform")}. If this number matches a
+                          driver account, you can send an in-app invitation on the
+                          next step.
+                        </Text>
+                        {driverPhone.trim().replace(/\s+/g, "").length >=
+                          MIN_PHONE_LENGTH_FOR_SEARCH && driverPhoneLookupLoading ? (
+                          <View style={styles.clientLookupLoadingRow}>
+                            <ActivityIndicator size="small" color="#2563eb" />
+                            <Text style={styles.clientLookupLoadingText}>
+                              Looking up…
+                            </Text>
+                          </View>
+                        ) : null}
+                        {driverPhoneLookupError ? (
+                          <Text style={styles.importContactsError}>
+                            {driverPhoneLookupError}
+                          </Text>
+                        ) : null}
+                        {driverExistingMatches.length > 0 ? (
+                          <View style={styles.clientInviteeCard}>
+                            <Text style={styles.clientInviteeLabel}>
+                              {driverExistingMatches.some((m) => m.is_in_fleet)
+                                ? t("existingDriverInFleet")
+                                : t("existingDriverNotInFleet")}
+                            </Text>
+                            <Text style={styles.clientInviteeName}>
+                              {driverExistingMatches[0]?.full_name ||
+                                driverExistingMatches[0]?.phone ||
+                                "—"}
+                            </Text>
+                            <Text style={styles.clientInviteeHint}>
+                              {driverExistingMatches.some((m) => m.is_in_fleet)
+                                ? t("existingDriverInFleetDetail")
+                                : "Tap Continue, then use Send request on the review screen to invite them in the app."}
+                            </Text>
+                          </View>
+                        ) : null}
+                      </>
+                    ) : null}
                   </>
                 )}
 
@@ -1050,10 +1391,23 @@ function PartyRegistrationPortalInner(
               <Pressable
                 style={[
                   styles.primaryBtn,
-                  !organizationId && styles.primaryBtnDisabled,
+                  (!organizationId ||
+                    ((kind === "client" || kind === "supplier") &&
+                      driverRegisteredAtPhone) ||
+                    (kind === "driver" &&
+                      onInviteDriver &&
+                      driverExistingMatches.some((m) => m.is_in_fleet === true))) &&
+                    styles.primaryBtnDisabled,
                 ]}
                 onPress={goReview}
-                disabled={!organizationId}
+                disabled={
+                  !organizationId ||
+                  ((kind === "client" || kind === "supplier") &&
+                    driverRegisteredAtPhone) ||
+                  (kind === "driver" &&
+                    onInviteDriver &&
+                    driverExistingMatches.some((m) => m.is_in_fleet === true))
+                }
               >
                 <Text style={styles.primaryBtnText}>Continue</Text>
                 <ArrowRight size={22} color="#fff" strokeWidth={2.5} />
@@ -1082,7 +1436,9 @@ function PartyRegistrationPortalInner(
                   ) : (
                     <>
                       <Check size={22} color="#fff" strokeWidth={2.8} />
-                      <Text style={styles.confirmBtnText}>Save</Text>
+                      <Text style={styles.confirmBtnText}>
+                        {reviewSaveLabel}
+                      </Text>
                     </>
                   )}
                 </Pressable>
@@ -2007,5 +2363,69 @@ const styles = StyleSheet.create({
     marginTop: 6,
     marginLeft: 2,
     lineHeight: 16,
+  },
+  clientPhoneLookupHint: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#64748b",
+    marginTop: 4,
+    marginBottom: 8,
+    lineHeight: 17,
+  },
+  clientLookupLoadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 10,
+  },
+  clientLookupLoadingText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#2563eb",
+  },
+  clientInviteeCard: {
+    backgroundColor: "#eff6ff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 8,
+  },
+  clientInviteeLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#1d4ed8",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    marginBottom: 6,
+  },
+  clientInviteeName: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#0f172a",
+    marginBottom: 6,
+  },
+  clientInviteeHint: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#475569",
+    lineHeight: 17,
+    marginBottom: 8,
+  },
+  clientOfflineLink: {
+    alignSelf: "flex-start",
+    paddingVertical: 4,
+  },
+  clientOfflineLinkText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#2563eb",
+  },
+  clientNoMatchHint: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#64748b",
+    marginBottom: 4,
+    lineHeight: 17,
   },
 });

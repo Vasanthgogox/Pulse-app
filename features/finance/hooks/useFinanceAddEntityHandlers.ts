@@ -17,10 +17,10 @@ import { createSupplier } from "@/features/suppliers/services/suppliers.service"
 import type { SupplierFormData } from "@/features/suppliers/components/AddSupplierModal";
 import { createVehicle } from "@/features/vehicles/services/vehicles.service";
 import type { AddVehicleCompletePayload } from "@/features/vehicles/components/AddVehicleModal";
+import { showAppAlert } from "@/lib/appAlert";
 import { queryKeys } from "@/lib/queryKeys";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
-import { Alert } from "react-native";
 
 const NO_ORG_MESSAGE =
   "No organization loaded. Sign out and sign in again to refresh, or ensure you are added as a member of an organization in the dashboard.";
@@ -93,29 +93,79 @@ export function useFinanceAddEntityHandlers(
   const handleSendClientInvitation = useCallback(
     async (toOrgId: string) => {
       if (!organizationId) throw new Error(NO_ORG_MESSAGE);
-      const { error } = await createConnectionRequest(organizationId, toOrgId, {
-        requestShipperClient: true,
-        requestCarrierSupplier: false,
-      });
+      const trimmedTo = toOrgId.trim();
+      if (!trimmedTo) throw new Error("Missing invitee organization.");
+      const { error, alreadyInvited } = await createConnectionRequest(
+        organizationId,
+        trimmedTo,
+        {
+          requestShipperClient: true,
+          requestCarrierSupplier: false,
+        },
+      );
       if (error) throw error;
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.connectionRequests.sent(organizationId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.connectionRequests.received(organizationId),
+        }),
+      ]);
       setEntitiesRefreshKey((k) => k + 1);
       setShowAddClientModal(false);
+      showAppAlert(
+        alreadyInvited ? "Already sent" : "Request sent",
+        alreadyInvited
+          ? "A connection request to this organization is already on file."
+          : "They will see your invitation in the app. Pending invites appear on your Customers list.",
+      );
     },
-    [organizationId, setEntitiesRefreshKey, setShowAddClientModal],
+    [
+      organizationId,
+      queryClient,
+      setEntitiesRefreshKey,
+      setShowAddClientModal,
+    ],
   );
 
   const handleSendSupplierInvitation = useCallback(
     async (toOrgId: string) => {
       if (!organizationId) throw new Error(NO_ORG_MESSAGE);
-      const { error } = await createConnectionRequest(organizationId, toOrgId, {
-        requestShipperClient: false,
-        requestCarrierSupplier: true,
-      });
+      const trimmedTo = toOrgId.trim();
+      if (!trimmedTo) throw new Error("Missing invitee organization.");
+      const { error, alreadyInvited } = await createConnectionRequest(
+        organizationId,
+        trimmedTo,
+        {
+          requestShipperClient: false,
+          requestCarrierSupplier: true,
+        },
+      );
       if (error) throw error;
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.connectionRequests.sent(organizationId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.connectionRequests.received(organizationId),
+        }),
+      ]);
       setEntitiesRefreshKey((k) => k + 1);
       setShowAddSupplierModal(false);
+      showAppAlert(
+        alreadyInvited ? "Already sent" : "Request sent",
+        alreadyInvited
+          ? "A connection request to this organization is already on file."
+          : "They will see your invitation in the app.",
+      );
     },
-    [organizationId, setEntitiesRefreshKey, setShowAddSupplierModal],
+    [
+      organizationId,
+      queryClient,
+      setEntitiesRefreshKey,
+      setShowAddSupplierModal,
+    ],
   );
 
   const handleAddVehicleComplete = useCallback(
@@ -155,13 +205,13 @@ export function useFinanceAddEntityHandlers(
       setShowAddDriverModal(false);
       if (!inviteSent) {
         if (inviteAlreadyExists) {
-          Alert.alert(
-            'Already invited',
-            `An invitation was already sent to this driver (${(inviteStatus ?? 'pending').toUpperCase()}).`,
+          showAppAlert(
+            "Already invited",
+            `An invitation was already sent to this driver (${(inviteStatus ?? "pending").toUpperCase()}).`,
           );
           return;
         }
-        Alert.alert(
+        showAppAlert(
           "Driver added",
           'They\'ll see the invitation in the app once they sign up with this phone number (choose "Driver" when signing up). You can assign trips to them after they accept.',
         );

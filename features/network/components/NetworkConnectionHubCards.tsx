@@ -1,13 +1,27 @@
 /**
  * Connection cards for Network hub (reference: nested white card, grey inner band, role pills, handshake).
  */
-import Theme from "@/constants/Theme";
 import { PartyAvatar } from "@/components/PartyAvatar";
-import { getInitials } from "@/lib/stringUtils";
+import Theme from "@/constants/Theme";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
-import { Check, Send, ShieldCheck, Star, Users, Zap } from "lucide-react-native";
+import { getInitials } from "@/lib/stringUtils";
+import {
+    Check,
+    Send,
+    ShieldCheck,
+    Star,
+    Users,
+    Zap,
+} from "lucide-react-native";
 import React from "react";
-import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+    ActivityIndicator,
+    Animated,
+    Pressable,
+    StyleSheet,
+    Text,
+    View,
+} from "react-native";
 
 export type HubConnectionRole = "CLIENT" | "SUPPLIER" | "DRIVER";
 
@@ -32,15 +46,28 @@ const ROLE_STYLES: Record<
   HubConnectionRole,
   { bg: string; color: string; label: string }
 > = {
-  CLIENT: { bg: Theme.networkClientTintBg, color: Theme.primary, label: "CLIENT" },
-  SUPPLIER: { bg: Theme.networkSupplierTintBg, color: Theme.positive, label: "SUPPLIER" },
-  DRIVER: { bg: Theme.networkDriverTintBg, color: Theme.warning, label: "DRIVER" },
+  CLIENT: {
+    bg: Theme.networkClientTintBg,
+    color: Theme.primary,
+    label: "CLIENT",
+  },
+  SUPPLIER: {
+    bg: Theme.networkSupplierTintBg,
+    color: Theme.positive,
+    label: "SUPPLIER",
+  },
+  DRIVER: {
+    bg: Theme.networkDriverTintBg,
+    color: Theme.warning,
+    label: "DRIVER",
+  },
 };
 
 function seedColor(id: string): string {
   const tones = [Theme.textRouteCard, Theme.textPrimaryDark, Theme.primary];
   let idx = 0;
-  for (let i = 0; i < id.length; i += 1) idx = (idx + id.charCodeAt(i)) % tones.length;
+  for (let i = 0; i < id.length; i += 1)
+    idx = (idx + id.charCodeAt(i)) % tones.length;
   return tones[idx];
 }
 
@@ -66,13 +93,18 @@ export function HubConnectionListCard({
   const scale = React.useRef(new Animated.Value(1)).current;
   const rs = ROLE_STYLES[item.role];
   const isDriver = item.role === "DRIVER";
-  const canPressAction = Boolean(onActionPress && !item.actionDisabled && !item.actionLoading);
+  const canPressAction = Boolean(
+    onActionPress && !item.actionDisabled && !item.actionLoading,
+  );
   const mutuals = item.mutualCount ?? 0;
-  const rating = typeof item.rating === "number" && Number.isFinite(item.rating)
-    ? item.rating.toFixed(1)
-    : null;
-  const onIn = () => Animated.spring(scale, { toValue: 0.98, useNativeDriver: true }).start();
-  const onOut = () => Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start();
+  const rating =
+    typeof item.rating === "number" && Number.isFinite(item.rating)
+      ? item.rating.toFixed(1)
+      : null;
+  const onIn = () =>
+    Animated.spring(scale, { toValue: 0.98, useNativeDriver: true }).start();
+  const onOut = () =>
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start();
   const isCarousel = layout === "carousel";
 
   return (
@@ -95,21 +127,36 @@ export function HubConnectionListCard({
           <View style={styles.coverPlane} />
           <View style={styles.coverWidget}>
             {item.is_integrated ? (
-              <Zap size={10} color={Theme.textPrimaryDark} fill={Theme.textPrimaryDark} />
+              <Zap
+                size={10}
+                color={Theme.textPrimaryDark}
+                fill={Theme.textPrimaryDark}
+              />
             ) : (
-              <ShieldCheck size={10} color={Theme.textSecondary} strokeWidth={2.2} />
+              <ShieldCheck
+                size={10}
+                color={Theme.textSecondary}
+                strokeWidth={2.2}
+              />
             )}
             <Text style={styles.coverWidgetText}>
               {item.is_integrated ? "LIVE" : "INVITE"}
             </Text>
           </View>
           <View style={[styles.coverRoleChip, { backgroundColor: rs.bg }]}>
-            <Text style={[styles.coverRoleText, { color: rs.color }]}>{rs.label}</Text>
+            <Text style={[styles.coverRoleText, { color: rs.color }]}>
+              {rs.label}
+            </Text>
           </View>
         </View>
 
         <View style={styles.profileBlock}>
-          <View style={[styles.profileHeroRow, isCarousel && styles.profileHeroRowCarousel]}>
+          <View
+            style={[
+              styles.profileHeroRow,
+              isCarousel && styles.profileHeroRowCarousel,
+            ]}
+          >
             <View style={[styles.profileHeroCol, styles.profileHeroColLeft]}>
               {typeof item.totalTrips === "number" && item.totalTrips >= 0 ? (
                 <View style={styles.hubMetricPill}>
@@ -121,22 +168,50 @@ export function HubConnectionListCard({
                 <View style={styles.profileHeroColGap} />
               )}
             </View>
-            <View style={[styles.heroAvatar, isCarousel && styles.heroAvatarCarousel]}>
+            <View
+              style={[
+                styles.heroAvatar,
+                isCarousel && styles.heroAvatarCarousel,
+              ]}
+            >
               <PartyAvatar
                 name={item.name}
                 avatarUrl={item.avatarUrl}
                 avatarSeed={item.avatarSeed}
-                entityType={item.entityType ?? (isDriver ? "driver" : item.role === "SUPPLIER" ? "supplier" : "client")}
+                entityType={
+                  item.entityType ??
+                  (isDriver
+                    ? "driver"
+                    : item.role === "SUPPLIER"
+                      ? "supplier"
+                      : "client")
+                }
                 size={isCarousel ? 48 : 62}
                 borderStyle={styles.heroAvatarImage}
               />
             </View>
             <View style={[styles.profileHeroCol, styles.profileHeroColRight]}>
-              <View style={[styles.hubMetricPill, styles.hubMetricPillRating, !rating && styles.hubMetricPillRatingEmpty]}>
+              <View
+                style={[
+                  styles.hubMetricPill,
+                  styles.hubMetricPillRating,
+                  !rating && styles.hubMetricPillRatingEmpty,
+                ]}
+              >
                 {rating ? (
-                  <Star size={10} color={Theme.driverGold} fill={Theme.driverGold} strokeWidth={2.2} />
+                  <Star
+                    size={10}
+                    color={Theme.driverGold}
+                    fill={Theme.driverGold}
+                    strokeWidth={2.2}
+                  />
                 ) : null}
-                <Text style={[styles.hubRatingText, !rating && styles.hubRatingTextEmpty]}>
+                <Text
+                  style={[
+                    styles.hubRatingText,
+                    !rating && styles.hubRatingTextEmpty,
+                  ]}
+                >
                   {rating ?? "No rating"}
                 </Text>
               </View>
@@ -155,14 +230,19 @@ export function HubConnectionListCard({
           </Text>
 
           <View style={styles.cardMetaStack}>
-            <View style={[styles.metaChip, mutuals > 0 && styles.metaChipStrong]}>
+            <View
+              style={[styles.metaChip, mutuals > 0 && styles.metaChipStrong]}
+            >
               <Users
                 size={10}
                 color={mutuals > 0 ? Theme.textOnPrimary : Theme.textSecondary}
                 strokeWidth={2.5}
               />
               <Text
-                style={[styles.metaChipText, mutuals > 0 && styles.metaChipTextStrong]}
+                style={[
+                  styles.metaChipText,
+                  mutuals > 0 && styles.metaChipTextStrong,
+                ]}
                 numberOfLines={1}
               >
                 {mutuals > 0
@@ -176,21 +256,34 @@ export function HubConnectionListCard({
         <View style={styles.cardFooter}>
           {item.is_integrated ? (
             <View style={styles.connectedStateTag}>
-              <Check size={13} color={Theme.textPrimaryDark} strokeWidth={2.5} />
+              <Check
+                size={13}
+                color={Theme.textPrimaryDark}
+                strokeWidth={2.5}
+              />
               <Text style={styles.connectedStateTagText}>Connected</Text>
             </View>
           ) : (
             <Pressable
-              style={[styles.inviteBtn, item.actionLoading && styles.inviteBtnLoading]}
+              style={[
+                styles.inviteBtn,
+                item.actionLoading && styles.inviteBtnLoading,
+              ]}
               onPress={onActionPress}
               disabled={!canPressAction}
             >
               {item.actionLoading ? (
                 <ActivityIndicator size={12} color={Theme.textPrimaryDark} />
               ) : (
-                <Send size={12} color={Theme.textPrimaryDark} strokeWidth={2.4} />
+                <Send
+                  size={12}
+                  color={Theme.textPrimaryDark}
+                  strokeWidth={2.4}
+                />
               )}
-              <Text style={styles.inviteBtnText}>{item.actionLabel ?? "Send invite"}</Text>
+              <Text style={styles.inviteBtnText}>
+                {item.actionLabel ?? "Send invite"}
+              </Text>
             </Pressable>
           )}
         </View>
@@ -207,7 +300,9 @@ export function HubConnectionGridCard({ item }: { item: HubConnectionItem }) {
     <View style={styles.gridOuter}>
       <View style={styles.gridTopRow}>
         <View style={[styles.rolePillSm, { backgroundColor: rs.bg }]}>
-          <Text style={[styles.rolePillSmText, { color: rs.color }]}>{rs.label}</Text>
+          <Text style={[styles.rolePillSmText, { color: rs.color }]}>
+            {rs.label}
+          </Text>
         </View>
         {item.is_integrated ? (
           <View style={styles.onAppPillSm}>
@@ -218,7 +313,9 @@ export function HubConnectionGridCard({ item }: { item: HubConnectionItem }) {
       <View style={[styles.gridInner, { borderColor: Theme.borderLight }]}>
         <View style={styles.gridAvatarWrap}>
           <View style={[styles.gridAvatar, { backgroundColor: avatarBg }]}>
-            <Text style={[styles.gridAvatarTxt, { color }]}>{getInitials(item.name)}</Text>
+            <Text style={[styles.gridAvatarTxt, { color }]}>
+              {getInitials(item.name)}
+            </Text>
           </View>
           <View style={styles.gridOnlineDot} />
         </View>
@@ -415,7 +512,13 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 10,
   },
-  cardPills: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1, flexWrap: "wrap" },
+  cardPills: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+    flexWrap: "wrap",
+  },
   rolePill: {
     paddingHorizontal: 7,
     paddingVertical: 3,
@@ -423,7 +526,12 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.networkCardBorder,
   },
-  rolePillText: { fontSize: 8, fontWeight: "600", fontStyle: "italic", letterSpacing: 0.2 },
+  rolePillText: {
+    fontSize: 8,
+    fontWeight: "600",
+    fontStyle: "italic",
+    letterSpacing: 0.2,
+  },
   onAppPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -433,7 +541,12 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 8,
   },
-  onAppPillText: { fontSize: 8, fontWeight: "900", color: Theme.positive, letterSpacing: 0.5 },
+  onAppPillText: {
+    fontSize: 8,
+    fontWeight: "900",
+    color: Theme.positive,
+    letterSpacing: 0.5,
+  },
   innerBand: {
     flexDirection: "row",
     alignItems: "center",
@@ -695,7 +808,12 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 6,
   },
-  onAppPillSmText: { fontSize: 7, fontWeight: "600", color: Theme.positive, letterSpacing: 0.2 },
+  onAppPillSmText: {
+    fontSize: 7,
+    fontWeight: "600",
+    color: Theme.positive,
+    letterSpacing: 0.2,
+  },
   gridInner: {
     backgroundColor: Theme.screenBackground,
     borderRadius: 16,
@@ -713,7 +831,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#EEF2F7",
   },
-  gridAvatarTxt: { fontSize: 11, fontWeight: "400", letterSpacing: 0.2, color: "#6B7280" },
+  gridAvatarTxt: {
+    fontSize: 11,
+    fontWeight: "400",
+    letterSpacing: 0.2,
+    color: "#6B7280",
+  },
   gridOnlineDot: {
     position: "absolute",
     right: 0,
