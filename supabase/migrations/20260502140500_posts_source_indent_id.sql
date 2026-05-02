@@ -11,6 +11,9 @@ CREATE INDEX IF NOT EXISTS idx_posts_source_indent_id
   WHERE source_indent_id IS NOT NULL;
 
 -- Network feed: expose source_indent_id to clients (post detail, BidSheet).
+-- DROP required: OUT parameters / return row type cannot change under CREATE OR REPLACE (42P13).
+DROP FUNCTION IF EXISTS public.get_network_feed(uuid, integer, integer);
+
 CREATE OR REPLACE FUNCTION public.get_network_feed(p_org_id uuid, p_limit integer DEFAULT 30, p_offset integer DEFAULT 0)
 RETURNS TABLE (
   id uuid,
