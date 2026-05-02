@@ -5,10 +5,6 @@
 import Theme from "@/constants/Theme";
 import type { AddClientFormData } from "@/features/clients/components/AddClientModal";
 import type { DriverFormData } from "@/features/drivers/components/AddDriverModal";
-import {
-  getDriverCompensationForOrgByDriverPhone,
-  searchExistingDriversByPhone,
-} from "@/features/drivers/services/drivers.service";
 import type { SupplierFormData } from "@/features/suppliers/components/AddSupplierModal";
 import type { AddVehicleCompletePayload } from "@/features/vehicles/components/AddVehicleModal";
 import {
@@ -22,13 +18,7 @@ import {
   getModelSelectOptions,
   normalizeBodyLengthKey,
 } from "@/features/vehicles/utils/vehicleFormOptions.util";
-import { formatIndianVehicleNumberInput, formatMobileNumber } from "@/lib/format";
-import {
-  formatIndianDrivingLicenseInput,
-  normalizeIndianDrivingLicense,
-  validateIndianDrivingLicenseOptional,
-  validateIndianDrivingLicenseRequired,
-} from "@/lib/drivingLicenseValidation";
+import { formatIndianVehicleNumberInput } from "@/lib/format";
 import {
   normalizeIndianPhoneForMetadata,
   validatePhone,
@@ -42,7 +32,6 @@ import {
   Building2,
   Check,
   ChevronLeft,
-  Coins,
   Cpu,
   Key,
   Layers,
@@ -72,7 +61,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { ComponentType, ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 export type PartyRegistrationKind =
   | "client"
@@ -93,21 +82,26 @@ export interface PartyRegistrationPortalProps {
   onRefreshOrganization?: () => void;
   onAddClient: (data: AddClientFormData) => Promise<void>;
   onAddSupplier: (data: SupplierFormData) => Promise<void>;
-  /** Creates/links driver row (offline / direct add). */
   onAddDriver: (data: DriverFormData) => Promise<void>;
-  /**
-   * When the phone matches an existing driver app account, sends in-app `driver_invites`
-   * (same as Finance Add Driver modal → inviteDriver). Omit only if driver flows are unused.
-   */
-  onInviteDriver?: (data: DriverFormData) => Promise<void>;
   onAddVehicle: (payload: AddVehicleCompletePayload) => Promise<void>;
 }
 
+const DL_CLEAN = /[\s-]/g;
+
 /** Stacked layout uses full width below 720px; sheet rounding/shadow only below this for nicer tablet-stacked. */
 const PARTY_PORTAL_STACKED_SHEET_MAX_WIDTH = 640;
+const DL_FORMAT = /^[A-Z]{2}[0-9]{2}[0-9]{4}[0-9]{7}$/;
 
 const READY_TO_SAVE_SUMMARY_COPY =
   "Saved records stay private to your current organization — Finance, trips, and assignments will pick them up automatically.";
+
+function dlError(raw: string): string | null {
+  const n = raw.trim().toUpperCase().replace(DL_CLEAN, "");
+  if (!n) return null;
+  return DL_FORMAT.test(n)
+    ? null
+    : "Use a valid DL number (e.g. TN01 20200001234).";
+}
 
 type SummaryIcon = ComponentType<{
   size?: number;
@@ -166,7 +160,6 @@ function PartyRegistrationPortalInner(
     onAddClient,
     onAddSupplier,
     onAddDriver,
-    onInviteDriver,
     onAddVehicle,
     layoutWide,
   } = props;
@@ -193,12 +186,6 @@ function PartyRegistrationPortalInner(
   const [driverName, setDriverName] = useState("");
   const [driverPhone, setDriverPhone] = useState("");
   const [driverDl, setDriverDl] = useState("");
-  const [driverPayableAmount, setDriverPayableAmount] = useState<number | null>(null);
-  const [driverCommissionPercent, setDriverCommissionPercent] = useState<number | null>(null);
-  const [driverCommissionPerKm, setDriverCommissionPerKm] = useState<number | null>(null);
-  /** Phone maps to an auth driver profile — review uses inviteDriver path (in-app invite). */
-  const [driverHasPlatformMatch, setDriverHasPlatformMatch] = useState(false);
-  const driverPhoneLookupGenRef = useRef(0);
 
   // Vehicle — aligned with AddVehicleModal (category chips + preset pickers + specs)
   const [vehicleReg, setVehicleReg] = useState("");
@@ -226,10 +213,6 @@ function PartyRegistrationPortalInner(
     setDriverName("");
     setDriverPhone("");
     setDriverDl("");
-    setDriverPayableAmount(null);
-    setDriverCommissionPercent(null);
-    setDriverCommissionPerKm(null);
-    setDriverHasPlatformMatch(false);
     setVehicleReg("");
     setVehicleCategory("");
     setVehicleModel("");
@@ -286,7 +269,7 @@ function PartyRegistrationPortalInner(
       case "supplier":
         return "Company and contact — saved only as this supplier.";
       case "driver":
-        return "Name, phone, licence — optional fixed salary, commission %, or ₹/km.";
+        return "Name, phone, and licence — saved only as this driver.";
       default:
         return "Registration and specs — saved only as this vehicle.";
     }
@@ -301,64 +284,6 @@ function PartyRegistrationPortalInner(
     return normalizeIndianPhoneForMetadata(driverPhone) ?? driverPhone.trim();
   }, [driverPhone]);
 
-  /** Inline phone errors on the form step (national number beside +91). */
-  const partyPhoneInlineError = useMemo(() => {
-    if (kind !== "client" && kind !== "supplier") return null;
-    return phoneDigits.trim() ? validatePhone(phoneDigits) : null;
-  }, [kind, phoneDigits]);
-
-  const driverPhoneInlineError = useMemo(() => {
-    if (kind !== "driver") return null;
-    return driverPhone.trim() ? validatePhone(driverPhone) : null;
-  }, [kind, driverPhone]);
-
-  const driverDlInlineError = useMemo(() => {
-    if (kind !== "driver") return null;
-    return driverDl.trim() ? validateIndianDrivingLicenseOptional(driverDl) : null;
-  }, [kind, driverDl]);
-
-  const DRIVER_COMP_PREFETCH_MS = 450;
-  useEffect(() => {
-    if (!visible || kind !== "driver") return;
-    const trimmed = driverPhone.trim();
-    if (!trimmed || validatePhone(trimmed)) {
-      setDriverHasPlatformMatch(false);
-      return;
-    }
-    const lookupId = ++driverPhoneLookupGenRef.current;
-    const tid = setTimeout(() => {
-      void searchExistingDriversByPhone(trimmed).then(({ matches }) => {
-        if (driverPhoneLookupGenRef.current !== lookupId) return;
-        setDriverHasPlatformMatch(matches.length > 0);
-        /** Same as AddDriverModal: one platform match → pre-fill name (and DL if empty). */
-        if (matches.length === 1) {
-          const one = matches[0];
-          setDriverName((prev) => (prev.trim() ? prev : one.full_name || prev));
-          setDriverDl((prev) =>
-            prev.trim()
-              ? prev
-              : formatIndianDrivingLicenseInput(one.license_number ?? ""),
-          );
-        }
-      });
-      if (organizationId) {
-        void getDriverCompensationForOrgByDriverPhone(organizationId, trimmed).then((snap) => {
-          if (driverPhoneLookupGenRef.current !== lookupId) return;
-          if (!snap) return;
-          const anySnap =
-            snap.payableAmount != null ||
-            snap.commissionPercent != null ||
-            snap.commissionPerKm != null;
-          if (!anySnap) return;
-          setDriverPayableAmount((prev) => prev ?? snap.payableAmount);
-          setDriverCommissionPercent((prev) => prev ?? snap.commissionPercent);
-          setDriverCommissionPerKm((prev) => prev ?? snap.commissionPerKm);
-        });
-      }
-    }, DRIVER_COMP_PREFETCH_MS);
-    return () => clearTimeout(tid);
-  }, [visible, kind, organizationId, driverPhone]);
-
   const validateFormForKind = useCallback(() => {
     setFormError(null);
     if (!organizationId) {
@@ -367,12 +292,13 @@ function PartyRegistrationPortalInner(
     }
     if (kind === "client" || kind === "supplier") {
       const nameOk = contactName.trim().length >= 2;
-      const phoneErr = phoneDigits.trim() ? validatePhone(phoneDigits) : "Enter a 10-digit mobile number.";
-      const errs: string[] = [];
-      if (!nameOk) errs.push("Enter the contact person's name.");
-      if (phoneErr) errs.push(phoneErr);
-      if (errs.length) {
-        setFormError(errs.join(" "));
+      const phoneErr = validatePhone(phoneDigits);
+      if (!nameOk) {
+        setFormError("Enter the contact person's name.");
+        return false;
+      }
+      if (phoneErr) {
+        setFormError(phoneErr);
         return false;
       }
       return true;
@@ -387,9 +313,13 @@ function PartyRegistrationPortalInner(
         setFormError(pErr);
         return false;
       }
-      const dlErr = validateIndianDrivingLicenseRequired(driverDl);
-      if (dlErr) {
-        setFormError(dlErr);
+      const dl = dlError(driverDl);
+      if (!driverDl.trim()) {
+        setFormError("Enter the driving licence number.");
+        return false;
+      }
+      if (dl) {
+        setFormError(dl);
         return false;
       }
       return true;
@@ -441,10 +371,10 @@ function PartyRegistrationPortalInner(
         setImportError(null);
         if (kind === "driver") {
           setDriverName(result.contact.name);
-          setDriverPhone(formatMobileNumber(result.contact.phone));
+          setDriverPhone(result.contact.phone.replace(/^\+91/, "").replace(/^\+/, ""));
         } else {
           setContactName(result.contact.name);
-          setPhoneDigits(formatMobileNumber(result.contact.phone));
+          setPhoneDigits(result.contact.phone.replace(/^\+91/, "").replace(/^\+/, ""));
         }
       } else if (result.reason !== "cancelled") {
         setImportError(result.message ?? "Could not load contact. Please type manually.");
@@ -463,45 +393,13 @@ function PartyRegistrationPortalInner(
     email: "",
     emergencyContact: "",
     emergencyName: "",
-    licenseNumber: normalizeIndianDrivingLicense(driverDl),
-    payableAmount: driverPayableAmount,
-    commissionPercent: driverCommissionPercent,
-    commissionPerKm: driverCommissionPerKm,
+    licenseNumber: driverDl.trim().toUpperCase(),
+    payableAmount: null,
+    commissionPercent: null,
+    commissionPerKm: null,
   });
 
-  /**
-   * direct — driver row only (trip assignment; no in-app invite).
-   * invite — in-app driver_invites when handler exists.
-   * auto — invite if platform match + handler, else direct (single Save button).
-   */
-  const completeDriverSubmit = async (
-    mode: "direct" | "invite" | "auto",
-  ): Promise<void> => {
-    const dp = buildDriverPayload();
-    const pn = normalizeIndianPhoneForMetadata(dp.phone) ?? dp.phone.trim();
-    const payload: DriverFormData = { ...dp, phone: pn };
-    if (mode === "direct") {
-      await onAddDriver(payload);
-      return;
-    }
-    if (mode === "invite") {
-      if (!onInviteDriver) {
-        throw new Error(
-          "Invitation is not available. Use Save to add the driver without sending an in-app request.",
-        );
-      }
-      await onInviteDriver(payload);
-      return;
-    }
-    const { matches } = await searchExistingDriversByPhone(driverPhone.trim());
-    if (matches.length > 0 && onInviteDriver) {
-      await onInviteDriver(payload);
-    } else {
-      await onAddDriver(payload);
-    }
-  };
-
-  const submitClosingFlow = async (work: () => Promise<void>) => {
+  const confirmSave = async () => {
     if (!validateFormForKind()) {
       setStep("form");
       return;
@@ -509,21 +407,6 @@ function PartyRegistrationPortalInner(
     setSubmitting(true);
     setFormError(null);
     try {
-      await work();
-      onClose();
-    } catch (e: unknown) {
-      const msg =
-        e && typeof e === "object" && "message" in e
-          ? String((e as { message?: string }).message)
-          : "Something went wrong. Try again.";
-      Alert.alert("Could not save", msg);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const confirmSave = async () => {
-    await submitClosingFlow(async () => {
       if (kind === "client") {
         const pNorm =
           normalizeIndianPhoneForMetadata(phoneDigits) ?? phoneDigits.trim();
@@ -541,7 +424,9 @@ function PartyRegistrationPortalInner(
           phone: pNorm,
         });
       } else if (kind === "driver") {
-        await completeDriverSubmit("auto");
+        const dp = buildDriverPayload();
+        const pn = normalizeIndianPhoneForMetadata(dp.phone) ?? dp.phone.trim();
+        await onAddDriver({ ...dp, phone: pn });
       } else {
         await onAddVehicle(
           vehiclePayloadFromInputs(
@@ -554,7 +439,16 @@ function PartyRegistrationPortalInner(
           ),
         );
       }
-    });
+      onClose();
+    } catch (e: unknown) {
+      const msg =
+        e && typeof e === "object" && "message" in e
+          ? String((e as { message?: string }).message)
+          : "Something went wrong. Try again.";
+      Alert.alert("Could not save", msg);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const summaryLinesData = useMemo(() => {
@@ -599,12 +493,7 @@ function PartyRegistrationPortalInner(
       ];
     }
     if (kind === "driver") {
-      const lines: {
-        label: string;
-        value: string;
-        Icon: SummaryIcon;
-        emphasis?: boolean;
-      }[] = [
+      return [
         {
           label: "Driver",
           value: driverName.trim(),
@@ -618,28 +507,6 @@ function PartyRegistrationPortalInner(
           Icon: Key,
         },
       ];
-      if (driverPayableAmount != null && driverPayableAmount > 0) {
-        lines.push({
-          label: "Fixed salary (₹)",
-          value: driverPayableAmount.toLocaleString("en-IN"),
-          Icon: Coins,
-        });
-      }
-      if (driverCommissionPercent != null && driverCommissionPercent > 0) {
-        lines.push({
-          label: "Commission (%)",
-          value: String(driverCommissionPercent),
-          Icon: Coins,
-        });
-      }
-      if (driverCommissionPerKm != null && driverCommissionPerKm > 0) {
-        lines.push({
-          label: "Per km (₹/km)",
-          value: String(driverCommissionPerKm),
-          Icon: Coins,
-        });
-      }
-      return lines;
     }
     return [
       {
@@ -676,9 +543,6 @@ function PartyRegistrationPortalInner(
     driverName,
     driverPhonePretty,
     driverDl,
-    driverPayableAmount,
-    driverCommissionPercent,
-    driverCommissionPerKm,
     vehicleReg,
     vehicleCategory,
     vehicleModel,
@@ -690,12 +554,6 @@ function PartyRegistrationPortalInner(
   if (!visible) return null;
 
   const formTitle = `New ${headline}`;
-
-  /** Platform driver with invite handler → dual CTAs (Save vs Send invitation). */
-  const reviewDriverInvite =
-    kind === "driver" &&
-    driverHasPlatformMatch &&
-    Boolean(onInviteDriver);
 
   const narrowShellMaxHeight =
     !layoutWide && viewportH > 0
@@ -752,9 +610,7 @@ function PartyRegistrationPortalInner(
               </>
             ) : (
               <Text style={styles.sideSubtitle}>
-                {reviewDriverInvite
-                  ? "This number matches a driver on the platform — Save adds them to your fleet without notifying the app, or Send invitation delivers an in-app request with any compensation you entered."
-                  : "Check the summary looks right, then tap Save."}
+                Check the summary looks right, then tap Save.
               </Text>
             )}
           </View>
@@ -874,21 +730,18 @@ function PartyRegistrationPortalInner(
                       </View>
                       <View style={layoutWide ? styles.row2Grow : undefined}>
                         <Field label="Phone">
-                          <View
-                            style={[
-                              styles.phoneOuter,
-                              partyPhoneInlineError ? styles.phoneOuterInvalid : null,
-                            ]}
-                          >
+                          <View style={styles.phoneOuter}>
                             <Text style={styles.phoneCc}>🇮🇳 +91</Text>
                             <TextInput
                               style={[styles.input, styles.phoneInput]}
                               placeholder="10-digit mobile"
                               placeholderTextColor={Theme.textMuted}
                               keyboardType="phone-pad"
-                              maxLength={10}
+                              maxLength={14}
                               value={phoneDigits}
-                              onChangeText={(x) => setPhoneDigits(formatMobileNumber(x))}
+                              onChangeText={(x) =>
+                                setPhoneDigits(x.replace(/[^\d+]/g, ""))
+                              }
                             />
                             <Smartphone
                               size={18}
@@ -896,9 +749,6 @@ function PartyRegistrationPortalInner(
                               style={styles.phoneIcon}
                             />
                           </View>
-                          {partyPhoneInlineError ? (
-                            <Text style={styles.fieldInlineError}>{partyPhoneInlineError}</Text>
-                          ) : null}
                         </Field>
                       </View>
                     </View>
@@ -926,27 +776,20 @@ function PartyRegistrationPortalInner(
                     <View style={[styles.row2, layoutWide && styles.row2Web]}>
                       <View style={layoutWide ? styles.row2Grow : undefined}>
                         <Field label="Mobile">
-                          <View
-                            style={[
-                              styles.phoneOuter,
-                              styles.inputIconRow,
-                              driverPhoneInlineError ? styles.phoneOuterInvalid : null,
-                            ]}
-                          >
+                          <View style={[styles.phoneOuter, styles.inputIconRow]}>
                             <Text style={styles.phoneCc}>🇮🇳 +91</Text>
                             <TextInput
                               style={[styles.input, styles.phoneInput]}
                               keyboardType="phone-pad"
-                              maxLength={10}
+                              maxLength={14}
                               placeholder="10-digit number"
                               placeholderTextColor={Theme.textMuted}
                               value={driverPhone}
-                              onChangeText={(x) => setDriverPhone(formatMobileNumber(x))}
+                              onChangeText={(x) =>
+                                setDriverPhone(x.replace(/[^\d+]/g, ""))
+                              }
                             />
                           </View>
-                          {driverPhoneInlineError ? (
-                            <Text style={styles.fieldInlineError}>{driverPhoneInlineError}</Text>
-                          ) : null}
                         </Field>
                       </View>
                       <View style={layoutWide ? styles.row2Grow : undefined}>
@@ -958,102 +801,17 @@ function PartyRegistrationPortalInner(
                               style={styles.inputLeadingIcon}
                             />
                             <TextInput
-                              style={[
-                                styles.input,
-                                styles.inputPadded,
-                                driverDlInlineError ? styles.inputInvalidOutline : null,
-                              ]}
+                              style={[styles.input, styles.inputPadded]}
                               placeholder="TN01 20200001234"
                               placeholderTextColor={Theme.textMuted}
                               autoCapitalize="characters"
                               value={driverDl}
-                              onChangeText={(t) =>
-                                setDriverDl(formatIndianDrivingLicenseInput(t))
-                              }
+                              onChangeText={(t) => setDriverDl(t.toUpperCase())}
                             />
                           </View>
-                          {driverDlInlineError ? (
-                            <Text style={styles.fieldInlineError}>{driverDlInlineError}</Text>
-                          ) : null}
                         </Field>
                       </View>
                     </View>
-                    <Text style={styles.compensationSectionTitle}>Compensation (optional)</Text>
-                    <View style={[styles.row2, layoutWide && styles.row2Web]}>
-                      <View style={layoutWide ? styles.row2Grow : undefined}>
-                        <Field label="Fixed salary (₹)" optionalHint="optional">
-                          <TextInput
-                            style={styles.input}
-                            placeholder="e.g. 25000"
-                            placeholderTextColor={Theme.textMuted}
-                            keyboardType="numeric"
-                            value={
-                              driverPayableAmount != null && driverPayableAmount !== 0
-                                ? String(driverPayableAmount)
-                                : ""
-                            }
-                            onChangeText={(v) => {
-                              const n =
-                                v.trim() === ""
-                                  ? null
-                                  : parseFloat(v.replace(/[^0-9.]/g, ""));
-                              setDriverPayableAmount(
-                                n != null && !Number.isNaN(n) ? n : null,
-                              );
-                            }}
-                          />
-                        </Field>
-                      </View>
-                      <View style={layoutWide ? styles.row2Grow : undefined}>
-                        <Field label="Commission (%)" optionalHint="optional">
-                          <TextInput
-                            style={styles.input}
-                            placeholder="e.g. 10"
-                            placeholderTextColor={Theme.textMuted}
-                            keyboardType="numeric"
-                            value={
-                              driverCommissionPercent != null &&
-                              driverCommissionPercent !== 0
-                                ? String(driverCommissionPercent)
-                                : ""
-                            }
-                            onChangeText={(v) => {
-                              const n =
-                                v.trim() === ""
-                                  ? null
-                                  : parseFloat(v.replace(/[^0-9.]/g, ""));
-                              const val =
-                                n != null && !Number.isNaN(n)
-                                  ? Math.min(100, Math.max(0, n))
-                                  : null;
-                              setDriverCommissionPercent(val);
-                            }}
-                          />
-                        </Field>
-                      </View>
-                    </View>
-                    <Field label="Per km (₹/km)" optionalHint="optional">
-                      <TextInput
-                        style={styles.input}
-                        placeholder="e.g. 8"
-                        placeholderTextColor={Theme.textMuted}
-                        keyboardType="numeric"
-                        value={
-                          driverCommissionPerKm != null && driverCommissionPerKm !== 0
-                            ? String(driverCommissionPerKm)
-                            : ""
-                        }
-                        onChangeText={(v) => {
-                          const n =
-                            v.trim() === ""
-                              ? null
-                              : parseFloat(v.replace(/[^0-9.]/g, ""));
-                          setDriverCommissionPerKm(
-                            n != null && !Number.isNaN(n) && n >= 0 ? n : null,
-                          );
-                        }}
-                      />
-                    </Field>
                   </>
                 )}
 
@@ -1309,71 +1067,25 @@ function PartyRegistrationPortalInner(
                 >
                   <Text style={styles.ghostBtnText}>← Edit details</Text>
                 </Pressable>
-                {reviewDriverInvite ? (
-                  <View
-                    style={[
-                      styles.reviewDriverCtaGroup,
-                      layoutWide && styles.reviewDriverCtaGroupWide,
-                    ]}
-                  >
-                    <Pressable
-                      style={[
-                        styles.reviewSaveSecondaryBtn,
-                        (!organizationId || submitting) && styles.primaryBtnDisabled,
-                      ]}
-                      onPress={() =>
-                        void submitClosingFlow(() => completeDriverSubmit("direct"))
-                      }
-                      disabled={!organizationId || submitting}
-                    >
-                      {submitting ? (
-                        <ActivityIndicator color={Theme.buttonPrimary} />
-                      ) : (
-                        <Text style={styles.reviewSaveSecondaryBtnText}>Save</Text>
-                      )}
-                    </Pressable>
-                    <Pressable
-                      style={[
-                        styles.confirmBtn,
-                        styles.reviewInvitePrimaryBtn,
-                        (!organizationId || submitting) && styles.primaryBtnDisabled,
-                      ]}
-                      onPress={() =>
-                        void submitClosingFlow(() => completeDriverSubmit("invite"))
-                      }
-                      disabled={!organizationId || submitting}
-                    >
-                      {submitting ? (
-                        <ActivityIndicator color="#fff" />
-                      ) : (
-                        <>
-                          <Check size={22} color="#fff" strokeWidth={2.8} />
-                          <Text style={styles.confirmBtnText}>Send invitation</Text>
-                        </>
-                      )}
-                    </Pressable>
-                  </View>
-                ) : (
-                  <Pressable
-                    style={[
-                      styles.confirmBtn,
-                      styles.confirmBtnFlexible,
-                      (!organizationId || submitting) &&
-                        styles.primaryBtnDisabled,
-                    ]}
-                    onPress={() => void confirmSave()}
-                    disabled={!organizationId || submitting}
-                  >
-                    {submitting ? (
-                      <ActivityIndicator color="#fff" />
-                    ) : (
-                      <>
-                        <Check size={22} color="#fff" strokeWidth={2.8} />
-                        <Text style={styles.confirmBtnText}>Save</Text>
-                      </>
-                    )}
-                  </Pressable>
-                )}
+                <Pressable
+                  style={[
+                    styles.confirmBtn,
+                    styles.confirmBtnFlexible,
+                    (!organizationId || submitting) &&
+                      styles.primaryBtnDisabled,
+                  ]}
+                  onPress={() => void confirmSave()}
+                  disabled={!organizationId || submitting}
+                >
+                  {submitting ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <>
+                      <Check size={22} color="#fff" strokeWidth={2.8} />
+                      <Text style={styles.confirmBtnText}>Save</Text>
+                    </>
+                  )}
+                </Pressable>
               </View>
             )}
           </ScrollView>
@@ -2012,15 +1724,6 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.6,
   },
-  compensationSectionTitle: {
-    marginTop: 8,
-    marginBottom: 4,
-    fontSize: 11,
-    fontWeight: "700",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-  },
   optionalPill: {
     fontSize: 10,
     fontWeight: "600",
@@ -2044,9 +1747,6 @@ const styles = StyleSheet.create({
   inputIconRow: {
     position: "relative",
   },
-  inputInvalidOutline: {
-    borderColor: Theme.negative,
-  },
   inputLeadingIcon: {
     position: "absolute",
     left: 14,
@@ -2068,15 +1768,6 @@ const styles = StyleSheet.create({
     gap: 8,
     minHeight: 50,
     position: "relative",
-  },
-  phoneOuterInvalid: {
-    borderColor: Theme.negative,
-  },
-  fieldInlineError: {
-    marginTop: 6,
-    fontSize: 13,
-    fontWeight: "600",
-    color: Theme.negative,
   },
   phoneCc: {
     fontSize: 14,
@@ -2159,41 +1850,6 @@ const styles = StyleSheet.create({
   reviewGhostBtnWide: {
     paddingVertical: 12,
     paddingHorizontal: 4,
-  },
-  reviewDriverCtaGroup: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    flexWrap: "wrap",
-    gap: 10,
-    alignSelf: "stretch",
-  },
-  reviewDriverCtaGroupWide: {
-    flex: 1,
-    minWidth: 0,
-    justifyContent: "flex-end",
-  },
-  reviewSaveSecondaryBtn: {
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderRadius: 22,
-    borderWidth: 2,
-    borderColor: Theme.buttonPrimary,
-    backgroundColor: "transparent",
-    minHeight: 52,
-    justifyContent: "center",
-    alignItems: "center",
-    minWidth: 120,
-  },
-  reviewSaveSecondaryBtnText: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: Theme.buttonPrimary,
-  },
-  reviewInvitePrimaryBtn: {
-    flex: 1,
-    minWidth: 160,
-    minHeight: 52,
   },
 
   summarySheet: {

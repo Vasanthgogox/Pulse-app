@@ -97,8 +97,7 @@ export default function AddDriverScreen() {
         onRefreshOrganization={partyPortal.refreshOrganization}
         onAddClient={partyPortal.handleAddClientComplete}
         onAddSupplier={partyPortal.handleAddSupplierComplete}
-        onAddDriver={handleAddDriver}
-        onInviteDriver={handleInvite}
+        onAddDriver={partyPortal.handleAddDriverDirect}
         onAddVehicle={partyPortal.handleAddVehicleComplete}
       />
     );
@@ -111,7 +110,6 @@ export default function AddDriverScreen() {
         onComplete={handleInvite}
         onAddDriver={handleAddDriver}
         salariedOnly
-        organizationId={currentOrganization?.id ?? null}
       />
       <ThemedAlertModal
         visible={themedInfo != null}

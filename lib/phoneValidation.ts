@@ -38,29 +38,14 @@ export function normalizeIndianPhoneForMetadata(phone: string): string | null {
 }
 
 /**
- * Validates a phone number string (required Indian mobile: exactly 10 national digits).
+ * Validates a phone number string.
  * @param phone - Raw input: 10 digits or +91 followed by 10 digits (spaces/dashes allowed).
  * @returns Error message if invalid, or null if valid.
  */
 export function validatePhone(phone: string): string | null {
   const tenDigits = extractIndianMobileTenDigits(phone);
   if (tenDigits === null) {
-    const trimmed = (phone ?? '').trim();
-    if (trimmed.length === 0) return null;
-    const d = trimmed.replace(/\D/g, '');
-    let national = d;
-    if (d.length >= 12 && d.startsWith(INDIA_COUNTRY_CODE)) {
-      national = d.slice(2);
-    } else if (d.length === 11 && d.startsWith('0')) {
-      national = d.slice(1);
-    }
-    if (national.length > 0 && national.length < REQUIRED_DIGITS) {
-      return `Enter exactly 10 digits (${national.length}/${REQUIRED_DIGITS}).`;
-    }
-    if (national.length > REQUIRED_DIGITS) {
-      return `Enter exactly ${REQUIRED_DIGITS} digits (Indian mobile).`;
-    }
-    return `Enter exactly ${REQUIRED_DIGITS} digits (Indian mobile), or +${INDIA_COUNTRY_CODE} and ${REQUIRED_DIGITS} digits.`;
+    return 'Enter a 10-digit number or +91 followed by 10 digits (e.g. +91 98765 43210).';
   }
   if (PLACEHOLDER_PHONES.test(tenDigits)) {
     return 'Enter a valid phone number.';

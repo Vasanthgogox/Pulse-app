@@ -1671,7 +1671,6 @@ export function FinanceScreen() {
         onAddClient={handleAddClientComplete}
         onAddSupplier={handleAddSupplierComplete}
         onAddDriver={handleAddDriverDirect}
-        onInviteDriver={handleAddDriverInviteComplete}
         onAddVehicle={handleAddVehicleComplete}
       />
 
