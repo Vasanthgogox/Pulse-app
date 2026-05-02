@@ -175,7 +175,7 @@ export default function SalaryRequestScreen() {
     request: salaryRequestsService.SalaryRequestRow;
   } | null>(null);
   const [successCopiedId, setSuccessCopiedId] = useState(false);
-  /** Transaction summary accordion on success screen */
+  /** Request summary accordion on success screen */
   const [successSummaryExpanded, setSuccessSummaryExpanded] = useState(true);
 
   const load = useCallback(() => {
@@ -666,8 +666,8 @@ export default function SalaryRequestScreen() {
       maximumFractionDigits: 2,
     });
     const refDisplay = formatRequestRefDisplay(req.id);
-    /** Immersive success hero — vivid green aligned with payment confirmation patterns */
-    const heroGreen = Theme.positive;
+    /** Driver app emerald — same as tabs, CTAs, and `colors.emerald` */
+    const heroGreen = colors.emerald;
 
     return (
       <View style={[styles.successRoot, { backgroundColor: heroGreen }]}>
@@ -737,8 +737,8 @@ export default function SalaryRequestScreen() {
             contentContainerStyle={styles.successSheetScrollContent}
           >
             <View style={styles.successPayeeRow}>
-              <View style={[styles.successPayeeIcon, { backgroundColor: Theme.positiveMuted }]}>
-                <Building2 size={26} color={Theme.driverEmerald} strokeWidth={2.2} />
+              <View style={[styles.successPayeeIcon, { backgroundColor: colors.emeraldMuted }]}>
+                <Building2 size={26} color={colors.emerald} strokeWidth={2.2} />
               </View>
               <View style={styles.successPayeeTextCol}>
                 <Text style={[styles.successCapsLabel, { color: colors.textMuted }]}>Payee organization</Text>
@@ -762,8 +762,8 @@ export default function SalaryRequestScreen() {
               accessibilityState={{ expanded: successSummaryExpanded }}
             >
               <View style={styles.successAccordionHeadLeft}>
-                <ReceiptText size={20} color={Theme.driverEmerald} strokeWidth={2.2} />
-                <Text style={[styles.successAccordionTitle, { color: colors.text }]}>Transaction summary</Text>
+                <ReceiptText size={20} color={colors.emerald} strokeWidth={2.2} />
+                <Text style={[styles.successAccordionTitle, { color: colors.text }]}>Request summary</Text>
               </View>
               <View
                 style={{
@@ -794,7 +794,7 @@ export default function SalaryRequestScreen() {
                     <Text style={[styles.successCopyMono, { color: colors.text }]} numberOfLines={1}>
                       {refDisplay}
                     </Text>
-                    <FontAwesome name={successCopiedId ? 'check' : 'copy'} size={12} color={Theme.driverEmerald} />
+                    <FontAwesome name={successCopiedId ? 'check' : 'copy'} size={12} color={colors.emerald} />
                   </Pressable>
                 </View>
 
@@ -834,26 +834,15 @@ export default function SalaryRequestScreen() {
               </View>
             ) : null}
 
-            <View style={styles.successActionsRow}>
-              <TouchableOpacity
-                style={[styles.successDoneBtn, { backgroundColor: Theme.positive }]}
-                onPress={goBack}
-                activeOpacity={0.88}
-                accessibilityRole="button"
-                accessibilityLabel="Done"
-              >
-                <Text style={styles.successDoneBtnText}>Done</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.successShareSq, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                onPress={shareSalaryRequestSuccess}
-                activeOpacity={0.88}
-                accessibilityRole="button"
-                accessibilityLabel="Share"
-              >
-                <Share2 size={22} color={colors.text} strokeWidth={2.2} />
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              style={[styles.successDoneBtn, { backgroundColor: colors.emerald }]}
+              onPress={goBack}
+              activeOpacity={0.88}
+              accessibilityRole="button"
+              accessibilityLabel="Done"
+            >
+              <Text style={styles.successDoneBtnText}>Done</Text>
+            </TouchableOpacity>
 
             <View style={styles.successFooterTrust}>
               <View style={styles.successFooterTrustRow}>
@@ -1818,33 +1807,20 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
-  successActionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 20,
-  },
   successDoneBtn: {
-    flex: 3,
+    width: '100%',
     paddingVertical: 16,
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: MIN_TOUCH,
+    marginBottom: 20,
   },
   successDoneBtnText: {
     fontSize: 17,
     fontWeight: '800',
     color: Theme.textOnPrimary,
     letterSpacing: 0.3,
-  },
-  successShareSq: {
-    width: 56,
-    height: 56,
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   successFooterTrust: {
     alignItems: 'center',
