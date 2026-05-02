@@ -1672,6 +1672,9 @@ export function FinanceScreen() {
         onAddSupplier={handleAddSupplierComplete}
         onAddDriver={handleAddDriverDirect}
         onAddVehicle={handleAddVehicleComplete}
+        searchInviteeByPhone={searchInviteeByPhone}
+        onSendInvitation={handleSendClientInvitation}
+        onSendSupplierInvitation={handleSendSupplierInvitation}
       />
 
       <FinanceModals

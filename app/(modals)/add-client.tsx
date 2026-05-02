@@ -97,7 +97,7 @@ export default function AddClientScreen() {
     if (alreadyInvited) {
       // Still close; they can see in Network > Requests
     }
-    closeModal(router, returnTo);
+    /** Caller closes UI (`AddClientModal.onClose` / `PartyRegistrationPortal.onClose`). */
   };
 
   if (isLoading) {
@@ -119,6 +119,8 @@ export default function AddClientScreen() {
         onAddSupplier={partyPortal.handleAddSupplierComplete}
         onAddDriver={partyPortal.handleAddDriverDirect}
         onAddVehicle={partyPortal.handleAddVehicleComplete}
+        searchInviteeByPhone={searchInviteeByPhone}
+        onSendInvitation={handleSendInvitation}
       />
     );
   }
