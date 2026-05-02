@@ -2758,6 +2758,101 @@ export default function DriverRadarScreen() {
       return;
     }
 
+    const applyFollowPosition = (latitude: number, longitude: number) => {
+      const next = { latitude, longitude };
+      setDriverMapPosition(next);
+      youLatSv.value = withTiming(next.latitude, { duration: 450 });
+      youLonSv.value = withTiming(next.longitude, { duration: 450 });
+
+      const showLeaflet =
+        Platform.OS === "web" || useLeafletFallback || leafLetForced;
+      if (showLeaflet) {
+        const targetRef = isFullMapVisible ? fullLeafletRef : leafletRef;
+        targetRef.current?.focusCurrentLocation?.(next, 15);
+        return;
+      }
+
+      const targetRef = isFullMapVisible ? fullMapRef : mapRef;
+      const mapAny = targetRef.current as any;
+      if (!mapAny) return;
+      try {
+        if (mapAny?.animateCamera) {
+          mapAny.animateCamera(
+            {
+              center: next,
+              zoom: 18,
+              pitch: 0,
+              heading: Number(youHeadingSv.value) || 0,
+            },
+            { duration: 450 },
+          );
+        } else if (mapAny?.animateToRegion) {
+          mapAny.animateToRegion(
+            {
+              latitude: next.latitude,
+              longitude: next.longitude,
+              latitudeDelta: 0.005,
+              longitudeDelta: 0.005,
+            },
+            450,
+          );
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    // Web: expo-location's watchPositionAsync unsubscribes via
+    // LocationEventEmitter.removeSubscription, but on web LocationEventEmitter is the new
+    // expo-modules-core EventEmitter — no removeSubscription — so unmount throws.
+    // navigator.geolocation avoids that teardown path.
+    if (Platform.OS === "web") {
+      let cancelled = false;
+      const watchState = { id: null as number | null };
+
+      void (async () => {
+        try {
+          const expoLocation = await getExpoLocation();
+          if (!expoLocation || cancelled) return;
+          const { status } = await expoLocation.getForegroundPermissionsAsync();
+          if (status !== "granted" || cancelled) return;
+          if (typeof navigator === "undefined" || !navigator.geolocation) return;
+
+          locationWatchRef.current?.remove?.();
+          watchState.id = navigator.geolocation.watchPosition(
+            (position) => {
+              if (cancelled) return;
+              applyFollowPosition(
+                position.coords.latitude,
+                position.coords.longitude,
+              );
+            },
+            () => {},
+            {
+              enableHighAccuracy: false,
+              maximumAge: 5000,
+            },
+          );
+          locationWatchRef.current = {
+            remove: () => {
+              if (watchState.id != null) {
+                navigator.geolocation.clearWatch(watchState.id);
+                watchState.id = null;
+              }
+            },
+          };
+        } catch {
+          // ignore
+        }
+      })();
+
+      return () => {
+        cancelled = true;
+        locationWatchRef.current?.remove?.();
+        locationWatchRef.current = null;
+      };
+    }
+
     let cancelled = false;
 
     (async () => {
@@ -2781,52 +2876,7 @@ export default function DriverRadarScreen() {
           } as any,
           (pos: any) => {
             if (cancelled) return;
-            const next = {
-              latitude: pos.coords.latitude,
-              longitude: pos.coords.longitude,
-            };
-            setDriverMapPosition(next);
-            // Keep the animated marker in sync with follow updates.
-            youLatSv.value = withTiming(next.latitude, { duration: 450 });
-            youLonSv.value = withTiming(next.longitude, { duration: 450 });
-
-            // Keep the visible map centered while following.
-            const showLeaflet =
-              Platform.OS === "web" || useLeafletFallback || leafLetForced;
-            if (showLeaflet) {
-              const targetRef = isFullMapVisible ? fullLeafletRef : leafletRef;
-              targetRef.current?.focusCurrentLocation?.(next, 15);
-              return;
-            }
-
-            const targetRef = isFullMapVisible ? fullMapRef : mapRef;
-            const mapAny = targetRef.current as any;
-            if (!mapAny) return;
-            try {
-              if (mapAny?.animateCamera) {
-                mapAny.animateCamera(
-                  {
-                    center: next,
-                    zoom: 18,
-                    pitch: 0,
-                    heading: Number(youHeadingSv.value) || 0,
-                  },
-                  { duration: 450 },
-                );
-              } else if (mapAny?.animateToRegion) {
-                mapAny.animateToRegion(
-                  {
-                    latitude: next.latitude,
-                    longitude: next.longitude,
-                    latitudeDelta: 0.005,
-                    longitudeDelta: 0.005,
-                  },
-                  450,
-                );
-              }
-            } catch {
-              // ignore
-            }
+            applyFollowPosition(pos.coords.latitude, pos.coords.longitude);
           },
         );
       } catch {
