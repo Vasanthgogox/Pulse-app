@@ -25,8 +25,20 @@ import * as salaryRequestsService from '@/services/salaryRequestsService';
 import * as tripsService from '@/services/tripsService';
 import { NeededByCalendar } from '@/components/driver/NeededByCalendar';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { ArrowRight, CalendarDays, ChevronDown, ShieldCheck } from 'lucide-react-native';
+import {
+  ArrowLeft,
+  ArrowRight,
+  Building2,
+  CalendarDays,
+  ChevronDown,
+  Clock,
+  ReceiptText,
+  Send,
+  Share2,
+  ShieldCheck,
+} from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Clipboard from 'expo-clipboard';
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { usePathname, useRouter, useSegments } from 'expo-router';
@@ -35,16 +47,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -70,6 +83,13 @@ function toISODate(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+}
+
+/** Compact display ref from UUID (copy still uses full id). */
+function formatRequestRefDisplay(id: string): string {
+  const hex = id.replace(/-/g, '');
+  if (hex.length >= 14) return `${hex.slice(0, 14).toUpperCase()}`;
+  return id;
 }
 
 function formatRupeeDisplay(raw: string): string {
@@ -148,13 +168,15 @@ export default function SalaryRequestScreen() {
     setHeaderAvatarFailed(false);
   }, [avatarUri]);
 
-  /** Success state: show full-screen success and stored submission details */
+  /** Success state: full-screen confirmation using the row returned from `driver_salary_requests` */
   const [isSuccess, setIsSuccess] = useState(false);
   const [successPayload, setSuccessPayload] = useState<{
-    requestType: salaryRequestsService.SalaryRequestType;
-    amount: string;
     orgName: string;
+    request: salaryRequestsService.SalaryRequestRow;
   } | null>(null);
+  const [successCopiedId, setSuccessCopiedId] = useState(false);
+  /** Request summary accordion on success screen */
+  const [successSummaryExpanded, setSuccessSummaryExpanded] = useState(true);
 
   const load = useCallback(() => {
     if (!profile?.uid) {
@@ -193,6 +215,8 @@ export default function SalaryRequestScreen() {
   const resetSalaryRequestScreen = useCallback(() => {
     setIsSuccess(false);
     setSuccessPayload(null);
+    setSuccessCopiedId(false);
+    setSuccessSummaryExpanded(true);
     setWidgetPage(0);
     setSalaryRequestAmount('');
     setSalaryRequestReason('');
@@ -507,8 +531,19 @@ export default function SalaryRequestScreen() {
     }
     // No additional notes / attachments in the 2-widget driver form.
 
+    const monthForDb =
+      salaryRequestType === 'monthly'
+        ? toISODate(
+            new Date(
+              (salaryRequestDate ?? defaultSalaryRequestDate).getFullYear(),
+              (salaryRequestDate ?? defaultSalaryRequestDate).getMonth(),
+              1
+            )
+          )
+        : undefined;
+
     setSalaryRequestSubmitting(true);
-    const { error } = await salaryRequestsService.createSalaryRequest(
+    const { error, request } = await salaryRequestsService.createSalaryRequest(
       org.driverId,
       org.orgId,
       salaryRequestType,
@@ -517,7 +552,7 @@ export default function SalaryRequestScreen() {
         note: trimmedReason ? trimmedReason.slice(0, VALIDATION.NOTES_MAX_LENGTH) : null,
         createdBy: profile?.uid ?? null,
         tripIds: salaryRequestType === 'trip_based' && selectedSalaryTripIds.length > 0 ? selectedSalaryTripIds : undefined,
-        salaryMonth: undefined,
+        salaryMonth: monthForDb,
       }
     );
     setSalaryRequestSubmitting(false);
@@ -525,11 +560,11 @@ export default function SalaryRequestScreen() {
       showAppAlert('Request failed', error.message);
       return;
     }
-    setSuccessPayload({
-      requestType: salaryRequestType,
-      amount: String(amount),
-      orgName: org.orgName,
-    });
+    if (!request) {
+      showAppAlert('Request failed', 'Could not load request details. Check your connection and try again.');
+      return;
+    }
+    setSuccessPayload({ orgName: org.orgName, request });
     setIsSuccess(true);
     load();
   }, [
@@ -540,6 +575,7 @@ export default function SalaryRequestScreen() {
     salaryRequestAmount,
     salaryRequestReason,
     salaryRequestDate,
+    defaultSalaryRequestDate,
     selectedSalaryTripIds,
     neededByDate,
     profile?.uid,
@@ -554,42 +590,270 @@ export default function SalaryRequestScreen() {
     if (isSuccess) {
       setIsSuccess(false);
       setSuccessPayload(null);
+      setSuccessCopiedId(false);
+      setSuccessSummaryExpanded(true);
       setSalaryRequestAmount('');
     }
     router.back();
   }, [widgetPage, isSuccess, router]);
 
-  // —— Success state (premium full-screen confirmation) ——
+  const copySuccessRequestId = useCallback(async () => {
+    const id = successPayload?.request?.id;
+    if (!id) return;
+    try {
+      await Clipboard.setStringAsync(id);
+      setSuccessCopiedId(true);
+      setTimeout(() => setSuccessCopiedId(false), 2000);
+    } catch {
+      showAppAlert('Copy failed', 'Could not copy to clipboard.');
+    }
+  }, [successPayload]);
+
+  const shareSalaryRequestSuccess = useCallback(async () => {
+    if (!successPayload?.request) return;
+    const req = successPayload.request;
+    const org = successPayload.orgName;
+    const amount = Number(req.amount);
+    const refDisplay = formatRequestRefDisplay(req.id);
+    const message = [
+      `Salary request — ${org}`,
+      `Amount: ₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      `Reference: ${refDisplay}`,
+      `ID: ${req.id}`,
+    ].join('\n');
+    try {
+      await Share.share({ message });
+    } catch {
+      /* dismissed */
+    }
+  }, [successPayload]);
+
+  const paymentModeLabel = useCallback((t: salaryRequestsService.SalaryRequestType | string) => {
+    if (t === 'trip_based') return 'Trip-Based Settlement';
+    if (t === 'monthly') return 'Monthly Salary';
+    if (t === 'advance') return 'Advance Payment';
+    return String(t);
+  }, []);
+
+  // —— Success state (premium full-screen confirmation; data from DB row) ——
   if (isSuccess && successPayload) {
+    const req = successPayload.request;
+    const orgName = successPayload.orgName;
+    const amountDisplay = Number(req.amount);
+    const reqType = req.request_type as salaryRequestsService.SalaryRequestType;
+    const tripIds = Array.isArray(req.trip_ids) ? req.trip_ids : [];
+    const submittedAt = new Date(req.created_at);
+    const submittedLabel = Number.isFinite(submittedAt.getTime())
+      ? submittedAt.toLocaleString('en-IN', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        })
+      : '—';
+    let salaryPeriodLabel: string | null = null;
+    if (reqType === 'monthly' && req.salary_month) {
+      const sm = new Date(req.salary_month);
+      salaryPeriodLabel = Number.isFinite(sm.getTime())
+        ? sm.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })
+        : null;
+    }
+
+    const amountFormatted = amountDisplay.toLocaleString('en-IN', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    const refDisplay = formatRequestRefDisplay(req.id);
+    /** Driver app emerald — same as tabs, CTAs, and `colors.emerald` */
+    const heroGreen = colors.emerald;
+
     return (
-      <View
-        style={[
-          styles.successContainer,
-          {
-            paddingTop: insets.top,
-            paddingBottom: tabBarClearance + 24,
-            backgroundColor: colors.background,
-          },
-        ]}
-      >
-        <View style={[styles.successCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={[styles.successIconWrap, { backgroundColor: colors.emeraldMuted }]}>
-            <FontAwesome name="check-circle" size={48} color={colors.emerald} />
-          </View>
-          <Text style={[styles.successTitle, { color: colors.text }]}>Request submitted</Text>
-          <Text style={[styles.successMessage, { color: colors.textMuted }]}>
-            Your {successPayload.requestType === 'monthly' ? 'monthly' : successPayload.requestType === 'advance' ? 'advance' : 'trip-based'} salary request for ₹
-            {Number(successPayload.amount).toLocaleString('en-IN')} has been sent to {successPayload.orgName}. You’ll be notified once it’s processed.
-          </Text>
+      <View style={[styles.successRoot, { backgroundColor: heroGreen }]}>
+        <View
+          style={[
+            styles.successTopBar,
+            {
+              paddingTop: insets.top + 8,
+              paddingLeft: Math.max(insets.left, 16),
+              paddingRight: Math.max(insets.right, 16),
+            },
+          ]}
+        >
           <TouchableOpacity
-            style={[styles.successButton, { backgroundColor: colors.emerald }]}
             onPress={goBack}
-            activeOpacity={0.85}
+            style={styles.successIconBtn}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityLabel="Go back"
             accessibilityRole="button"
-            accessibilityLabel="Back to Dashboard"
           >
-            <Text style={styles.successButtonText}>Back to Dashboard</Text>
+            <ArrowLeft size={22} color={Theme.textOnPrimary} strokeWidth={2.4} />
           </TouchableOpacity>
+          <View style={styles.successStatusChip}>
+            <Clock size={13} color="rgba(167,243,208,0.95)" strokeWidth={2.5} />
+            <Text style={styles.successStatusChipText}>Pending approval</Text>
+          </View>
+          <TouchableOpacity
+            onPress={shareSalaryRequestSuccess}
+            style={styles.successIconBtn}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityLabel="Share request details"
+            accessibilityRole="button"
+          >
+            <Share2 size={20} color={Theme.textOnPrimary} strokeWidth={2.2} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.successHero}>
+          <View style={styles.successSendCircleOuter}>
+            <Send size={44} color={heroGreen} strokeWidth={2.4} style={{ marginLeft: 3 }} />
+          </View>
+          <Text style={styles.successHeroEyebrow}>Request sent successfully</Text>
+          <View style={styles.successAmountRow}>
+            <Text style={styles.successRupee}>₹</Text>
+            <Text style={styles.successAmountDigits} numberOfLines={1} adjustsFontSizeToFit>
+              {amountFormatted}
+            </Text>
+          </View>
+        </View>
+
+        <View
+          style={[
+            styles.successSheet,
+            {
+              backgroundColor: Theme.screenBackground,
+              paddingBottom: tabBarClearance + 20,
+              shadowColor: Theme.shadow,
+            },
+          ]}
+        >
+          <View style={styles.successSheetHandle} />
+
+          <ScrollView
+            style={styles.successSheetScroll}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.successSheetScrollContent}
+          >
+            <View style={styles.successPayeeRow}>
+              <View style={[styles.successPayeeIcon, { backgroundColor: colors.emeraldMuted }]}>
+                <Building2 size={26} color={colors.emerald} strokeWidth={2.2} />
+              </View>
+              <View style={styles.successPayeeTextCol}>
+                <Text style={[styles.successCapsLabel, { color: colors.textMuted }]}>Payee organization</Text>
+                <Text style={[styles.successPayeeName, { color: colors.text }]} numberOfLines={3}>
+                  {orgName}
+                </Text>
+              </View>
+            </View>
+
+            <Pressable
+              onPress={() => setSuccessSummaryExpanded((v) => !v)}
+              style={({ pressed }) => [
+                styles.successAccordionHead,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  opacity: pressed ? 0.92 : 1,
+                },
+              ]}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: successSummaryExpanded }}
+            >
+              <View style={styles.successAccordionHeadLeft}>
+                <ReceiptText size={20} color={colors.emerald} strokeWidth={2.2} />
+                <Text style={[styles.successAccordionTitle, { color: colors.text }]}>Request summary</Text>
+              </View>
+              <View
+                style={{
+                  transform: [{ rotate: successSummaryExpanded ? '180deg' : '0deg' }],
+                }}
+              >
+                <ChevronDown size={22} color={colors.textMuted} strokeWidth={2.2} />
+              </View>
+            </Pressable>
+
+            {successSummaryExpanded ? (
+              <View style={[styles.successDetailCard, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+                <View style={styles.successSummaryRow}>
+                  <Text style={[styles.successSummaryLabel, { color: colors.textMuted }]}>Reference ID</Text>
+                  <Pressable
+                    onPress={copySuccessRequestId}
+                    style={({ pressed }) => [
+                      styles.successCopyPill,
+                      {
+                        backgroundColor: Theme.screenBackground,
+                        borderColor: colors.border,
+                        opacity: pressed ? 0.85 : 1,
+                      },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Copy full reference ID"
+                  >
+                    <Text style={[styles.successCopyMono, { color: colors.text }]} numberOfLines={1}>
+                      {refDisplay}
+                    </Text>
+                    <FontAwesome name={successCopiedId ? 'check' : 'copy'} size={12} color={colors.emerald} />
+                  </Pressable>
+                </View>
+
+                <View style={styles.successSummaryRow}>
+                  <Text style={[styles.successSummaryLabel, { color: colors.textMuted }]}>Request date</Text>
+                  <Text style={[styles.successSummaryValue, { color: colors.text }]}>{submittedLabel}</Text>
+                </View>
+
+                <View style={styles.successSummaryRow}>
+                  <Text style={[styles.successSummaryLabel, { color: colors.textMuted }]}>Payment mode</Text>
+                  <Text style={[styles.successSummaryValue, { color: colors.text }]}>{paymentModeLabel(reqType)}</Text>
+                </View>
+
+                {reqType === 'trip_based' && tripIds.length > 0 ? (
+                  <View style={styles.successSummaryRow}>
+                    <Text style={[styles.successSummaryLabel, { color: colors.textMuted }]}>Trips</Text>
+                    <Text style={[styles.successSummaryValue, { color: colors.text }]}>
+                      {tripIds.length} selected
+                    </Text>
+                  </View>
+                ) : null}
+
+                {salaryPeriodLabel ? (
+                  <View style={styles.successSummaryRow}>
+                    <Text style={[styles.successSummaryLabel, { color: colors.textMuted }]}>Salary period</Text>
+                    <Text style={[styles.successSummaryValue, { color: colors.text }]}>{salaryPeriodLabel}</Text>
+                  </View>
+                ) : null}
+
+                <View style={[styles.successSummaryRow, styles.successSummaryRowLast]}>
+                  <Text style={[styles.successSummaryLabel, { color: colors.textMuted }]}>Request status</Text>
+                  <View style={[styles.successStatusPill, { backgroundColor: Theme.warningMuted, borderColor: 'rgba(180, 83, 9, 0.22)' }]}>
+                    <View style={[styles.successStatusDot, { backgroundColor: Theme.warning }]} />
+                    <Text style={[styles.successStatusText, { color: Theme.warning }]}>Awaiting approval</Text>
+                  </View>
+                </View>
+              </View>
+            ) : null}
+
+            <TouchableOpacity
+              style={[styles.successDoneBtn, { backgroundColor: colors.emerald }]}
+              onPress={goBack}
+              activeOpacity={0.88}
+              accessibilityRole="button"
+              accessibilityLabel="Done"
+            >
+              <Text style={styles.successDoneBtnText}>Done</Text>
+            </TouchableOpacity>
+
+            <View style={styles.successFooterTrust}>
+              <View style={styles.successFooterTrustRow}>
+                <ShieldCheck size={12} color={colors.textMuted} strokeWidth={2.4} />
+                <Text style={[styles.successFooterTrustCaps, { color: colors.textMuted }]}>Secure banking protocol</Text>
+              </View>
+              <Text style={[styles.successFooterFine, { color: colors.textMuted }]}>
+                Encrypted in transit. You’ll be notified when your fleet acts on this request.
+              </Text>
+            </View>
+          </ScrollView>
         </View>
       </View>
     );
@@ -1311,60 +1575,278 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
   },
-  successContainer: {
+  successRoot: {
+    flex: 1,
+  },
+  successTopBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    zIndex: 2,
+  },
+  successIconBtn: {
+    width: MIN_TOUCH,
+    height: MIN_TOUCH,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: MIN_TOUCH / 2,
+  },
+  successStatusChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.22)',
+  },
+  successStatusChipText: {
+    color: Theme.textOnPrimary,
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+    fontStyle: 'italic',
+    textTransform: 'uppercase',
+  },
+  successHero: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    minHeight: 200,
   },
-  successCard: {
-    width: '100%',
-    maxWidth: 400,
-    borderRadius: 24,
-    borderWidth: 1,
-    paddingVertical: 40,
-    paddingHorizontal: 28,
-    alignItems: 'center',
-    shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 24,
-    elevation: 8,
-  },
-  successIconWrap: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
+  successSendCircleOuter: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: Theme.textOnPrimary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 28,
+    marginBottom: 22,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+    elevation: 10,
   },
-  successTitle: {
-    fontSize: 24,
+  successHeroEyebrow: {
+    color: Theme.textOnPrimary,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 2.2,
+    textTransform: 'uppercase',
+    opacity: 0.95,
+    textAlign: 'center',
+    marginBottom: 14,
+  },
+  successAmountRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    maxWidth: '100%',
+  },
+  successRupee: {
+    color: Theme.textOnPrimary,
+    fontSize: 28,
+    fontWeight: '600',
+    marginTop: 8,
+    marginRight: 4,
+    opacity: 0.95,
+  },
+  successAmountDigits: {
+    color: Theme.textOnPrimary,
+    fontSize: 52,
     fontWeight: '800',
-    letterSpacing: -0.3,
-    marginBottom: 12,
-    textAlign: 'center',
+    letterSpacing: -1.5,
   },
-  successMessage: {
-    fontSize: 15,
-    lineHeight: 22,
-    textAlign: 'center',
-    marginBottom: 36,
-    paddingHorizontal: 8,
+  successSheet: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    shadowOffset: { width: 0, height: -12 },
+    shadowOpacity: 0.12,
+    shadowRadius: 28,
+    elevation: 16,
+    maxHeight: '56%',
+    minHeight: 260,
   },
-  successButton: {
+  successSheetHandle: {
+    alignSelf: 'center',
+    width: 48,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Theme.borderMedium,
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  successSheetScroll: {
+    flex: 1,
+  },
+  successSheetScrollContent: {
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingBottom: 8,
+  },
+  successPayeeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginBottom: 20,
+    marginTop: 8,
+  },
+  successPayeeIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  successPayeeTextCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  successCapsLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  successPayeeName: {
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+  },
+  successAccordionHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: 10,
+  },
+  successAccordionHeadLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  successAccordionTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  successDetailCard: {
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 16,
+    gap: 14,
+    marginBottom: 20,
+  },
+  successSummaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    minHeight: 36,
+  },
+  successSummaryRowLast: {
+    marginTop: 4,
+    alignItems: 'center',
+  },
+  successSummaryLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    flexShrink: 0,
+    maxWidth: '44%',
+  },
+  successSummaryValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    flex: 1,
+    textAlign: 'right',
+  },
+  successCopyPill: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    maxWidth: '56%',
+    minHeight: 36,
+  },
+  successCopyMono: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
+    textAlign: 'right',
+  },
+  successStatusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  successStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  successStatusText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  successDoneBtn: {
     width: '100%',
-    paddingVertical: 18,
-    borderRadius: BUTTON_RADIUS,
+    paddingVertical: 16,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: MIN_TOUCH,
+    marginBottom: 20,
   },
-  successButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
+  successDoneBtnText: {
+    fontSize: 17,
+    fontWeight: '800',
     color: Theme.textOnPrimary,
+    letterSpacing: 0.3,
+  },
+  successFooterTrust: {
+    alignItems: 'center',
+    paddingTop: 4,
+    paddingBottom: 4,
+    gap: 6,
+    opacity: 0.85,
+  },
+  successFooterTrustRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  successFooterTrustCaps: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+  },
+  successFooterFine: {
+    fontSize: 11,
+    fontWeight: '500',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    lineHeight: 16,
+    paddingHorizontal: 12,
   },
   header: {
     flexDirection: 'row',
