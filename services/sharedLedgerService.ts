@@ -152,7 +152,7 @@ export async function getSharedLedgerEntriesForPartner(
   const { data, error } = await supabase().rpc('get_shared_ledger_entries', {
     org_id: orgId,
     partner_key: partnerKey,
-  });
+  }).limit(500);
   if (error) return { error: new Error(error.message), entries: [] };
   const rows = (Array.isArray(data) ? data : []) as Array<{
     id: string;
