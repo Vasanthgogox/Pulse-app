@@ -48,6 +48,7 @@ import {
 import { regenerateTripOtp } from "../../services/tripOtp.service";
 import { getTripDisplayNumber, updateTripStatus, type TripRow } from "../../services/trips.service";
 import { supabase } from "@/lib/supabase";
+import { AggregateTripOtpPanel } from "../AggregateTripOtpPanel";
 import { TripAssignmentBlock } from "../TripAssignmentBlock";
 import { TripAdjustmentModal } from "./TripAdjustmentModal";
 import { TripDetailFinanceView } from "./TripDetailFinanceView";
@@ -2877,8 +2878,8 @@ export default function TripDetailScreen({
                     previousDriverName={detail.previousDriverName}
                     latestReassignmentSummary={detail.latestReassignmentSummary}
                     driverAssignOrgId={
-                      detail.showAssignByPhone
-                        ? currentOrganization?.id ?? null
+                      isAggregate && currentOrganization?.id
+                        ? currentOrganization.id
                         : null
                     }
                     onVehicleDisplayChange={(value) => {
@@ -2887,65 +2888,16 @@ export default function TripDetailScreen({
                     }}
                     inlineSection={
                       isAggregate ? (
-                        <View style={styles.otpStateCardInline}>
-                          <View style={styles.otpStateHeader}>
-                            {aggregateOtpState === "verified" ? (
-                              <View style={[styles.otpStateBadge, styles.otpStateBadgeVerified]}>
-                                <Text
-                                  style={[
-                                    styles.otpStateBadgeText,
-                                    styles.otpStateBadgeTextVerified,
-                                  ]}
-                                >
-                                  Driver verified
-                                </Text>
-                              </View>
-                            ) : null}
-                          </View>
-                          <View style={styles.otpStateBodyRow}>
-                            <View style={styles.otpStateBodyLeft}>
-                              <Text style={styles.otpStateSub}>
-                                {!canGenerateAggregateOtp
-                                  ? "OTP will unlock after assigning both driver and vehicle."
-                                  : aggregateOtpState === "verified"
-                                  ? "Driver has verified assignment from the driver app."
-                                  : detail.tripOtp?.expires_at
-                                    ? `OTP generated. Expires at ${new Date(
-                                        detail.tripOtp!.expires_at!,
-                                      ).toLocaleString("en-IN")}`
-                                    : "OTP will be generated during assignment confirmation flow."}
-                              </Text>
-                              {aggregateOtpState !== "verified" && detail.tripOtp?.code ? (
-                                <View style={styles.otpCodeRow}>
-                                  <Text style={styles.otpCodeLabel}>OTP</Text>
-                                  <Text style={styles.otpCodeValue}>{detail.tripOtp?.code}</Text>
-                                </View>
-                              ) : null}
-                            </View>
-                            <View style={styles.otpStateBodyRight}>
-                              {aggregateOtpState === "verified" ? (
-                                <Text style={styles.otpActionStatus}>Status: Verified</Text>
-                              ) : null}
-                              {canGenerateAggregateOtp && aggregateOtpState !== "verified" ? (
-                                <TouchableOpacity
-                                  style={styles.otpResendBtn}
-                                  onPress={handleResendOtp}
-                                  disabled={otpResending}
-                                  activeOpacity={0.8}
-                                >
-                                  <Text style={styles.otpResendBtnText}>
-                                    {otpResending ? "Resending..." : "Resend OTP"}
-                                  </Text>
-                                </TouchableOpacity>
-                              ) : null}
-                              {!canGenerateAggregateOtp ? (
-                                <View style={styles.otpDisabledBtn}>
-                                  <Text style={styles.otpDisabledBtnText}>Assign to enable OTP</Text>
-                                </View>
-                              ) : null}
-                            </View>
-                          </View>
-                        </View>
+                        <AggregateTripOtpPanel
+                          variant="inline"
+                          tripNumber={getTripDisplayNumber(trip)}
+                          aggregateOtpState={aggregateOtpState}
+                          canGenerateAggregateOtp={canGenerateAggregateOtp}
+                          otpLockedByTripProgress={otpLockedByTripProgress}
+                          tripOtp={detail.tripOtp}
+                          onResendOtp={handleResendOtp}
+                          otpResending={otpResending}
+                        />
                       ) : null
                     }
                   />
@@ -3090,12 +3042,28 @@ export default function TripDetailScreen({
                   previousDriverName={detail.previousDriverName}
                   latestReassignmentSummary={detail.latestReassignmentSummary}
                   driverAssignOrgId={
-                    detail.showAssignByPhone ? currentOrganization?.id ?? null : null
+                    isAggregate && currentOrganization?.id
+                      ? currentOrganization.id
+                      : null
                   }
                   onVehicleDisplayChange={(value) => {
                     const normalized = formatIndianVehicleNumber(value ?? "");
                     detail.setDisplayVehicleFromInput(normalized);
                   }}
+                  inlineSection={
+                    isAggregate ? (
+                      <AggregateTripOtpPanel
+                        variant="sheet"
+                        tripNumber={getTripDisplayNumber(trip)}
+                        aggregateOtpState={aggregateOtpState}
+                        canGenerateAggregateOtp={canGenerateAggregateOtp}
+                        otpLockedByTripProgress={otpLockedByTripProgress}
+                        tripOtp={detail.tripOtp}
+                        onResendOtp={handleResendOtp}
+                        otpResending={otpResending}
+                      />
+                    ) : null
+                  }
                 />
               ) : null
             }
@@ -3528,7 +3496,7 @@ export default function TripDetailScreen({
                   previousDriverName={detail.previousDriverName}
                   latestReassignmentSummary={detail.latestReassignmentSummary}
                   driverAssignOrgId={
-                    detail.showAssignByPhone && currentOrganization?.id
+                    isAggregate && currentOrganization?.id
                       ? currentOrganization.id
                       : null
                   }
@@ -3536,6 +3504,20 @@ export default function TripDetailScreen({
                     const normalized = formatIndianVehicleNumber(value ?? "");
                     detail.setDisplayVehicleFromInput(normalized);
                   }}
+                  inlineSection={
+                    isAggregate ? (
+                      <AggregateTripOtpPanel
+                        variant="sheet"
+                        tripNumber={getTripDisplayNumber(trip)}
+                        aggregateOtpState={aggregateOtpState}
+                        canGenerateAggregateOtp={canGenerateAggregateOtp}
+                        otpLockedByTripProgress={otpLockedByTripProgress}
+                        tripOtp={detail.tripOtp}
+                        onResendOtp={handleResendOtp}
+                        otpResending={otpResending}
+                      />
+                    ) : null
+                  }
                 />
               ) : null}
             </ScrollView>

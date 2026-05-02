@@ -14,6 +14,7 @@ export {
 export { TripTrackingBlock, type TripTrackingBlockProps } from './components/TripTrackingBlock';
 export { TripFinanceBlock, type TripFinanceBlockProps } from './components/TripFinanceBlock';
 export { TripAssignmentBlock, type TripAssignmentBlockProps, type AssignmentSource } from './components/TripAssignmentBlock';
+export { AggregateTripOtpPanel, type AggregateTripOtpPanelProps, type AggregateOtpUiState } from './components/AggregateTripOtpPanel';
 export { TripExpandableCard, type TripExpandableCardProps } from './components/TripExpandableCard';
 export {
   TripsHubTripCard,
