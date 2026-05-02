@@ -16,6 +16,7 @@ import { useClientsForTrip } from "./useClientsForTrip";
 import Theme from "@/constants/Theme";
 import Layout from "@/constants/Layout";
 import { regenerateTripOtp } from "@/features/trips/services/tripOtp.service";
+import { getDriverAvailabilityByPhoneGlobal } from "@/features/trips/services/trips.service";
 import { ThemedAlertModal } from "@/components/ThemedAlertModal";
 import { useWindowDimensions } from "react-native";
 
@@ -52,6 +53,42 @@ export function AddTripModal({
 
   const handleSubmit = async () => {
     if (submitting) return;
+    const isAggregateImmediateAssignment =
+      form.state.supplySource === "aggregate" && !form.state.assignLater;
+    const rawDriverPhone = form.state.driverPhone.trim();
+    const normalized =
+      rawDriverPhone.length > 0
+        ? normalizeIndianPhoneForMetadata(rawDriverPhone)
+        : null;
+    const normalizedDriver = (normalized ?? rawDriverPhone) || undefined;
+
+    // Hard guard at submit-time to avoid debounce/race gaps from field-level lookup.
+    if (isAggregateImmediateAssignment && normalizedDriver) {
+      const { error: availabilityError, result } =
+        await getDriverAvailabilityByPhoneGlobal(normalizedDriver, {
+          anyOpenTripBlocks: true,
+          requireAuthoritativeRpc: true,
+        });
+      if (availabilityError) {
+        Alert.alert("Unable to validate driver", availabilityError.message);
+        return;
+      }
+      if (result.isBusy) {
+        form.setters.setDriverPhoneTripConflict(
+          true,
+          result.ongoingTripLabel ?? null,
+        );
+        form.setters.setDriverPhoneConfirmed(false);
+        const who = form.state.driverPhoneName?.trim() || "Driver";
+        Alert.alert(
+          "Driver busy",
+          `${who} is already assigned to ${result.ongoingTripLabel ?? "another active trip"}. Complete or unassign that trip first.`,
+        );
+        return;
+      }
+      form.setters.setDriverPhoneTripConflict(false, null);
+    }
+
     if (!form.canSubmit) {
       setSubmitAttempted(true);
       const errNow = form.getValidationError();
@@ -62,12 +99,6 @@ export function AddTripModal({
     }
     setSubmitting(true);
     try {
-      const rawDriverPhone = form.state.driverPhone.trim();
-      const normalized =
-        rawDriverPhone.length > 0
-          ? normalizeIndianPhoneForMetadata(rawDriverPhone)
-          : null;
-      const normalizedDriver = (normalized ?? rawDriverPhone) || undefined;
       const options: AddTripCompleteOptions = {
         supplySource: form.state.supplySource,
         driverPhone: normalizedDriver,

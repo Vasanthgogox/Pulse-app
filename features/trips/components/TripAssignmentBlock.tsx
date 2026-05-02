@@ -19,6 +19,7 @@ import {
     assignTripDriverByPhone,
     getActiveDriverIds,
     getDriverAvailabilityByPhone,
+    getDriverAvailabilityByPhoneGlobal,
     getTripsByOrganization,
     getTripDisplayNumber,
     humanizeTripIdInRpcError,
@@ -326,11 +327,15 @@ export function TripAssignmentBlock({
         setPhoneName(matches[0]?.full_name ?? null);
         const orgForDriver =
           (driverAssignOrgId ?? organizationId).trim() || organizationId;
-        const { result } = await getDriverAvailabilityByPhone(
-          orgForDriver,
-          normalized,
-          { excludeTripId: trip.id },
-        );
+        const { result } = driverAssignOrgId
+          ? await getDriverAvailabilityByPhoneGlobal(normalized, {
+              excludeTripId: trip.id,
+              anyOpenTripBlocks: true,
+              requireAuthoritativeRpc: true,
+            })
+          : await getDriverAvailabilityByPhone(orgForDriver, normalized, {
+              excludeTripId: trip.id,
+            });
         setPhoneDriverBusy(result.isBusy);
         setPhoneBusyTripLabel(result.ongoingTripLabel ?? null);
       });
@@ -354,10 +359,15 @@ export function TripAssignmentBlock({
     }
     const orgForDriver =
       (driverAssignOrgId ?? organizationId).trim() || organizationId;
-    const { error: availabilityError, result: availability } =
-      await getDriverAvailabilityByPhone(orgForDriver, trimmed, {
-        excludeTripId: trip.id,
-      });
+    const { error: availabilityError, result: availability } = driverAssignOrgId
+      ? await getDriverAvailabilityByPhoneGlobal(trimmed, {
+          excludeTripId: trip.id,
+          anyOpenTripBlocks: true,
+          requireAuthoritativeRpc: true,
+        })
+      : await getDriverAvailabilityByPhone(orgForDriver, trimmed, {
+          excludeTripId: trip.id,
+        });
     if (availabilityError) {
       setPhoneError(
         humanizeTripIdInRpcError(availabilityError.message, trip),
