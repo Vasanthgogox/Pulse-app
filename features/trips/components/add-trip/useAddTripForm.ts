@@ -112,7 +112,23 @@ function computeValidationIssues(state: AddTripFormState): AddTripValidationIssu
     if (err8) push('driverPhone', `Driver for tracking: ${err8}`);
   }
 
-  if (state.supplySource === 'aggregate' && state.driverPhoneName && !state.driverPhoneConfirmed) {
+  if (state.supplySource === 'aggregate' && state.driverPhoneTripConflict) {
+    const lab = state.driverPhoneTripConflictLabel?.trim();
+    const who = state.driverPhoneName?.trim() || 'This driver';
+    push(
+      'driverPhone',
+      lab
+        ? `${who} is already on trip ${lab}. Finish or reassign that trip first.`
+        : `${who} is already on another trip. Use a different number or complete that trip first.`,
+    );
+  }
+
+  if (
+    state.supplySource === 'aggregate' &&
+    state.driverPhoneName &&
+    !state.driverPhoneConfirmed &&
+    !state.driverPhoneTripConflict
+  ) {
     push('driverConfirm', `Tap to confirm the driver: ${state.driverPhoneName}`);
   }
 
@@ -148,6 +164,8 @@ const initialState: AddTripFormState = {
   aggregateDriverName: '',
   driverPhoneName: null,
   driverPhoneConfirmed: false,
+  driverPhoneTripConflict: false,
+  driverPhoneTripConflictLabel: null,
   aggregateVehicleText: '',
 };
 
@@ -183,6 +201,8 @@ export function useAddTripForm() {
     driverPhone: v === 'asset' ? '' : s.driverPhone,
     driverPhoneName: v === 'asset' ? null : s.driverPhoneName,
     driverPhoneConfirmed: v === 'asset' ? false : s.driverPhoneConfirmed,
+    driverPhoneTripConflict: v === 'asset' ? false : s.driverPhoneTripConflict,
+    driverPhoneTripConflictLabel: v === 'asset' ? null : s.driverPhoneTripConflictLabel,
     aggregateVehicleText: v === 'asset' ? '' : s.aggregateVehicleText,
   })), []);
   const setSupplierSelection = useCallback(
@@ -208,6 +228,8 @@ export function useAddTripForm() {
             aggregateDriverName: '',
             driverPhoneName: null as string | null,
             driverPhoneConfirmed: false,
+            driverPhoneTripConflict: false,
+            driverPhoneTripConflictLabel: null as string | null,
             aggregateVehicleText: '',
           }
         : {}),
@@ -223,6 +245,17 @@ export function useAddTripForm() {
         driverPhone: v,
         // A new lookup must be re-confirmed by the user.
         driverPhoneConfirmed: false,
+        driverPhoneTripConflict: false,
+        driverPhoneTripConflictLabel: null,
+      })),
+    [],
+  );
+  const setDriverPhoneTripConflict = useCallback(
+    (conflict: boolean, label: string | null) =>
+      setState((s) => ({
+        ...s,
+        driverPhoneTripConflict: conflict,
+        driverPhoneTripConflictLabel: label,
       })),
     [],
   );
@@ -453,6 +486,7 @@ export function useAddTripForm() {
       setDriverPhone,
       setDriverPhoneName,
       setDriverPhoneConfirmed,
+      setDriverPhoneTripConflict,
       setAggregateVehicleText,
       setAggregateDriverName,
       clearClientSelection,
@@ -479,6 +513,7 @@ export function useAddTripForm() {
       setDriverPhone,
       setDriverPhoneName,
       setDriverPhoneConfirmed,
+      setDriverPhoneTripConflict,
       setAggregateVehicleText,
       setAggregateDriverName,
       clearClientSelection,

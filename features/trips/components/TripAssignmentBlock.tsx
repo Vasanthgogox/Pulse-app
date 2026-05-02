@@ -605,6 +605,14 @@ export function TripAssignmentBlock({
   const hasAssignment = hasDriver || hasVehicle;
   const showSourceBadge = hasAssignment && assignmentSource !== "unassigned";
 
+  /**
+   * Aggregate trips: once driver / vehicle are on the trip, do not open assign-by-phone or
+   * fleet pickers from the manifest rows (avoids showing assignment UI when already allocated).
+   * OTP / resend stays available via parent `inlineSection` (e.g. web trip detail).
+   */
+  const suppressAggregateDriverAssignTap = showAssignByPhone && hasDriver;
+  const suppressAggregateVehicleAssignTap = showAssignByPhone && hasVehicle;
+
   const openDriverPicker = useCallback(() => {
     setAssignMode("driver");
     setAssignSearch("");
@@ -1153,11 +1161,21 @@ export function TripAssignmentBlock({
 
         <View style={styles.manifestStack}>
           <TouchableOpacity
-            style={styles.manifestNodeShell}
-            disabled={!effectiveCanAssign}
-            activeOpacity={effectiveCanAssign ? 0.88 : 1}
+            style={[
+              styles.manifestNodeShell,
+              suppressAggregateDriverAssignTap &&
+                styles.manifestNodeShellNonInteractive,
+              Platform.OS === "web" && suppressAggregateDriverAssignTap
+                ? ({ cursor: "default" } as const)
+                : null,
+            ]}
+            disabled={!effectiveCanAssign || suppressAggregateDriverAssignTap}
+            activeOpacity={
+              effectiveCanAssign && !suppressAggregateDriverAssignTap ? 0.88 : 1
+            }
             onPress={() =>
               !!effectiveCanAssign &&
+              !suppressAggregateDriverAssignTap &&
               (showAssignByPhone
                 ? openPhoneModal(
                     hasDriver || !!(previousDriverName ?? "").trim(),
@@ -1196,10 +1214,23 @@ export function TripAssignmentBlock({
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.manifestNodeShell}
-            disabled={!effectiveCanAssign}
-            activeOpacity={effectiveCanAssign ? 0.88 : 1}
-            onPress={() => !!effectiveCanAssign && openVehiclePicker()}
+            style={[
+              styles.manifestNodeShell,
+              suppressAggregateVehicleAssignTap &&
+                styles.manifestNodeShellNonInteractive,
+              Platform.OS === "web" && suppressAggregateVehicleAssignTap
+                ? ({ cursor: "default" } as const)
+                : null,
+            ]}
+            disabled={!effectiveCanAssign || suppressAggregateVehicleAssignTap}
+            activeOpacity={
+              effectiveCanAssign && !suppressAggregateVehicleAssignTap ? 0.88 : 1
+            }
+            onPress={() =>
+              !!effectiveCanAssign &&
+              !suppressAggregateVehicleAssignTap &&
+              openVehiclePicker()
+            }
           >
             <View style={styles.manifestNodeInner}>
               <View style={styles.manifestNodeCopy}>
@@ -2903,6 +2934,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e2e8f0",
     overflow: "hidden",
+  },
+  manifestNodeShellNonInteractive: {
+    opacity: 0.92,
   },
   manifestNodeInner: {
     flexDirection: "row",
