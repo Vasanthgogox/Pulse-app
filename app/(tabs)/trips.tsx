@@ -1573,6 +1573,31 @@ export default function TripsScreen() {
                         ) : null}
                       </TouchableOpacity>
                     ))}
+                    <View style={styles.tripsFilterGroupSeparator} />
+                    {subTabs.map((tab) => (
+                      <TouchableOpacity
+                        key={tab.id}
+                        style={[
+                          styles.tab,
+                          styles.tripsMobileTab,
+                          styles.tabSubPill,
+                          tab.isActive && styles.tabSubPillActive,
+                        ]}
+                        onPress={tab.onPress}
+                        activeOpacity={0.7}
+                        accessibilityRole="tab"
+                        accessibilityState={{ selected: tab.isActive }}
+                      >
+                        <Text
+                          style={[
+                            styles.tabSubPillText,
+                            tab.isActive && styles.tabSubPillTextActive,
+                          ]}
+                        >
+                          {tab.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
                   </ScrollView>
                   <ScrollView
                     horizontal
@@ -1658,6 +1683,40 @@ export default function TripsScreen() {
                       isCompactWeb && styles.tripsBottomHeaderRowWebCompact,
                     ]}
                   >
+                    {!isMobile ? (
+                      <View
+                        style={[
+                          styles.tripsTabClusterWeb,
+                          isCompactWeb && styles.tripsTabClusterWebCompact,
+                        ]}
+                      >
+                        {subTabs.map((tab) => (
+                          <TouchableOpacity
+                            key={tab.id}
+                            style={[
+                              styles.tabSubPill,
+                              styles.tripsScopePillWeb,
+                              tab.isActive && styles.tripsScopePillActiveWeb,
+                            ]}
+                            onPress={tab.onPress}
+                            activeOpacity={0.75}
+                            accessibilityRole="tab"
+                            accessibilityState={{ selected: tab.isActive }}
+                          >
+                            <Text
+                              style={[
+                                styles.tabSubPillText,
+                                styles.tripsScopePillTextWeb,
+                                tab.isActive &&
+                                  styles.tripsScopePillTextActiveWeb,
+                              ]}
+                            >
+                              {tab.label}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    ) : null}
                     <View
                       style={[
                         styles.tripsToolbarWeb,
