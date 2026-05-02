@@ -227,7 +227,15 @@ export async function sendChatMessage(params: {
     rpcError != null &&
     (rpcError.code === "42883" ||
       String(rpcError.message ?? "").toLowerCase().includes("send_trip_chat_message"));
-  if (!isMissingRpc && rpcError) throw rpcError;
+
+  // Drivers are usually not organization_members; older RPC versions rejected them.
+  // Direct insert still succeeds via RLS policy "Drivers can send messages in their conversations".
+  const isDriverRpcDenied =
+    rpcError != null &&
+    senderRole === "driver" &&
+    String(rpcError.message ?? "").toLowerCase().includes("not authorized");
+
+  if (!isMissingRpc && !isDriverRpcDenied && rpcError) throw rpcError;
 
   const { data, error } = await supabase()
     .from("trip_messages")
