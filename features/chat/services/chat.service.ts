@@ -1,17 +1,16 @@
 import { supabase } from "@/lib/supabase";
 import type {
-  ConversationPartyType,
-  DocumentShareMetadata,
-  LedgerEventMetadata,
-  MessageSenderRole,
-  MessageType,
-  NetworkConversation,
-  NetworkConversationRow,
-  NetworkMessageRow,
-  NetworkPartner,
-  TripConversation,
-  TripConversationRow,
-  TripMessageRow,
+    ConversationPartyType,
+    DocumentShareMetadata,
+    MessageSenderRole,
+    MessageType,
+    NetworkConversation,
+    NetworkConversationRow,
+    NetworkMessageRow,
+    NetworkPartner,
+    TripConversation,
+    TripConversationRow,
+    TripMessageRow
 } from "../types/chat.types";
 
 export interface TripForCompose {
@@ -28,7 +27,9 @@ export interface TripForCompose {
   driver_display_name: string | null;
 }
 
-export async function getTripsForCompose(organizationId: string): Promise<TripForCompose[]> {
+export async function getTripsForCompose(
+  organizationId: string,
+): Promise<TripForCompose[]> {
   const { data, error } = await supabase()
     .from("trips")
     // Match trips hub: * only. Listing non-existent columns (e.g. supplier_name on older
@@ -52,12 +53,13 @@ export async function getTripsForCompose(organizationId: string): Promise<TripFo
     supplier_id: (row.supplier_id as string | null | undefined) ?? null,
     supplier_name: (row.supplier_name as string | null | undefined) ?? null,
     driver_id: (row.driver_id as string | null | undefined) ?? null,
-    driver_display_name: (row.driver_display_name as string | null | undefined) ?? null,
+    driver_display_name:
+      (row.driver_display_name as string | null | undefined) ?? null,
   }));
 
   // Resolve supplier display names when trips table doesn't carry denormalized supplier_name.
   const supplierIds = Array.from(
-    new Set(trips.map((t) => t.supplier_id).filter((v): v is string => !!v))
+    new Set(trips.map((t) => t.supplier_id).filter((v): v is string => !!v)),
   );
   if (supplierIds.length === 0) return trips;
 
@@ -73,20 +75,24 @@ export async function getTripsForCompose(organizationId: string): Promise<TripFo
 
   return trips.map((t) => ({
     ...t,
-    supplier_name: t.supplier_name?.trim() || (t.supplier_id ? supplierNameById.get(t.supplier_id) ?? null : null),
+    supplier_name:
+      t.supplier_name?.trim() ||
+      (t.supplier_id ? (supplierNameById.get(t.supplier_id) ?? null) : null),
   }));
 }
 
 export async function getConversationsByOrganization(
-  organizationId: string
+  organizationId: string,
 ): Promise<TripConversation[]> {
   const { data, error } = await supabase()
     .from("trip_conversations")
-    .select(`
+    .select(
+      `
       *,
       trips!inner ( trip_number, pickup_area, drop_location ),
       trip_messages ( * )
-    `)
+    `,
+    )
     .eq("organization_id", organizationId)
     .order("last_message_at", { ascending: false, nullsFirst: false });
 
@@ -98,7 +104,8 @@ export async function getConversationsByOrganization(
     pickup_area: row.trips?.pickup_area ?? "",
     drop_location: row.trips?.drop_location ?? "",
     messages: ((row.trip_messages ?? []) as TripMessageRow[]).sort(
-      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      (a, b) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
     ),
   }));
 
@@ -107,24 +114,36 @@ export async function getConversationsByOrganization(
     new Set(
       conversations
         .filter((c) => c.party_type === "client" && c.client_id)
-        .map((c) => c.client_id as string)
-    )
+        .map((c) => c.client_id as string),
+    ),
   );
   const unresolvedSupplierIds = Array.from(
     new Set(
       conversations
         .filter((c) => c.party_type === "supplier" && c.supplier_id)
-        .map((c) => c.supplier_id as string)
-    )
+        .map((c) => c.supplier_id as string),
+    ),
   );
 
   const [clientsResp, suppliersResp] = await Promise.all([
     unresolvedClientIds.length
-      ? supabase().from("clients").select("id, name").in("id", unresolvedClientIds)
+      ? supabase()
+          .from("clients")
+          .select("id, name")
+          .in("id", unresolvedClientIds)
       : Promise.resolve({ data: [] as { id: string; name: string | null }[] }),
     unresolvedSupplierIds.length
-      ? supabase().from("suppliers").select("id, company_name, name").in("id", unresolvedSupplierIds)
-      : Promise.resolve({ data: [] as { id: string; company_name: string | null; name: string | null }[] }),
+      ? supabase()
+          .from("suppliers")
+          .select("id, company_name, name")
+          .in("id", unresolvedSupplierIds)
+      : Promise.resolve({
+          data: [] as {
+            id: string;
+            company_name: string | null;
+            name: string | null;
+          }[],
+        }),
   ]);
 
   const clientNameById = new Map<string, string>();
@@ -139,7 +158,9 @@ export async function getConversationsByOrganization(
   }
 
   return conversations.map((c) => {
-    const partyRaw = String(c.party_name ?? "").trim().toLowerCase();
+    const partyRaw = String(c.party_name ?? "")
+      .trim()
+      .toLowerCase();
     const isGeneric =
       partyRaw === "" ||
       partyRaw === "supplier" ||
@@ -148,10 +169,16 @@ export async function getConversationsByOrganization(
     if (!isGeneric) return c;
 
     if (c.party_type === "client" && c.client_id) {
-      return { ...c, party_name: clientNameById.get(c.client_id) ?? c.party_name };
+      return {
+        ...c,
+        party_name: clientNameById.get(c.client_id) ?? c.party_name,
+      };
     }
     if (c.party_type === "supplier" && c.supplier_id) {
-      return { ...c, party_name: supplierNameById.get(c.supplier_id) ?? c.party_name };
+      return {
+        ...c,
+        party_name: supplierNameById.get(c.supplier_id) ?? c.party_name,
+      };
     }
     return c;
   });
@@ -170,8 +197,8 @@ export async function getOrCreateConversation(params: {
     partyType === "client"
       ? "client_id"
       : partyType === "supplier"
-      ? "supplier_id"
-      : "driver_id";
+        ? "supplier_id"
+        : "driver_id";
 
   const payload = {
     organization_id: organizationId,
@@ -211,14 +238,17 @@ export async function sendChatMessage(params: {
   } = params;
 
   // Preferred path: DB RPC writes source message and mirrors to linked partner org.
-  const { data: rpcData, error: rpcError } = await supabase().rpc("send_trip_chat_message", {
-    p_conversation_id: conversationId,
-    p_content: content,
-    p_sender_role: senderRole,
-    p_sender_name: senderName,
-    p_sender_user_id: senderUserId,
-    p_message_type: messageType,
-  });
+  const { data: rpcData, error: rpcError } = await supabase().rpc(
+    "send_trip_chat_message",
+    {
+      p_conversation_id: conversationId,
+      p_content: content,
+      p_sender_role: senderRole,
+      p_sender_name: senderName,
+      p_sender_user_id: senderUserId,
+      p_message_type: messageType,
+    },
+  );
 
   if (!rpcError && rpcData) return rpcData as TripMessageRow;
 
@@ -226,7 +256,9 @@ export async function sendChatMessage(params: {
   const isMissingRpc =
     rpcError != null &&
     (rpcError.code === "42883" ||
-      String(rpcError.message ?? "").toLowerCase().includes("send_trip_chat_message"));
+      String(rpcError.message ?? "")
+        .toLowerCase()
+        .includes("send_trip_chat_message"));
 
   // Drivers are usually not organization_members; older RPC versions rejected them.
   // Direct insert still succeeds via RLS policy "Drivers can send messages in their conversations".
@@ -256,7 +288,9 @@ export async function sendChatMessage(params: {
   return data;
 }
 
-export async function markConversationRead(conversationId: string): Promise<void> {
+export async function markConversationRead(
+  conversationId: string,
+): Promise<void> {
   const { error } = await supabase().rpc("mark_conversation_read", {
     p_conversation_id: conversationId,
   });
@@ -264,7 +298,7 @@ export async function markConversationRead(conversationId: string): Promise<void
 }
 
 export async function getMessagesByConversation(
-  conversationId: string
+  conversationId: string,
 ): Promise<TripMessageRow[]> {
   const { data, error } = await supabase()
     .from("trip_messages")
@@ -279,7 +313,7 @@ export async function getMessagesByConversation(
 // ── Network conversations ─────────────────────────────────────────────────────
 
 export async function getNetworkConversationsByOrg(
-  orgId: string
+  orgId: string,
 ): Promise<NetworkConversation[]> {
   const { data, error } = await supabase()
     .from("network_conversations")
@@ -297,7 +331,8 @@ export async function getNetworkConversationsByOrg(
       partner_name: isA ? row.org_b_name : row.org_a_name,
       unread_count: isA ? row.unread_count_a : row.unread_count_b,
       messages: ((row.network_messages ?? []) as NetworkMessageRow[]).sort(
-        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        (a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
       ),
     };
   });
@@ -312,7 +347,8 @@ export async function getOrCreateNetworkConversation(params: {
   const { orgId, orgName, partnerOrgId, partnerOrgName } = params;
   // Canonical ordering ensures one row per pair
   const [aId, bId] = [orgId, partnerOrgId].sort();
-  const [aName, bName] = aId === orgId ? [orgName, partnerOrgName] : [partnerOrgName, orgName];
+  const [aName, bName] =
+    aId === orgId ? [orgName, partnerOrgName] : [partnerOrgName, orgName];
 
   const { data: existing } = await supabase()
     .from("network_conversations")
@@ -325,7 +361,12 @@ export async function getOrCreateNetworkConversation(params: {
 
   const { data, error } = await supabase()
     .from("network_conversations")
-    .insert({ org_a_id: aId, org_b_id: bId, org_a_name: aName, org_b_name: bName })
+    .insert({
+      org_a_id: aId,
+      org_b_id: bId,
+      org_a_name: aName,
+      org_b_name: bName,
+    })
     .select()
     .single();
 
@@ -340,11 +381,18 @@ export async function sendNetworkMessage(params: {
   senderName: string;
   content: string;
 }): Promise<NetworkMessageRow> {
-  const { conversationId, senderOrgId, senderUserId, senderName, content } = params;
+  const { conversationId, senderOrgId, senderUserId, senderName, content } =
+    params;
 
   const { data, error } = await supabase()
     .from("network_messages")
-    .insert({ conversation_id: conversationId, sender_org_id: senderOrgId, sender_user_id: senderUserId, sender_name: senderName, content })
+    .insert({
+      conversation_id: conversationId,
+      sender_org_id: senderOrgId,
+      sender_user_id: senderUserId,
+      sender_name: senderName,
+      content,
+    })
     .select()
     .single();
 
@@ -354,7 +402,7 @@ export async function sendNetworkMessage(params: {
 
 export async function markNetworkConversationRead(
   conversationId: string,
-  readerOrgId: string
+  readerOrgId: string,
 ): Promise<void> {
   const { error } = await supabase().rpc("mark_network_conversation_read", {
     p_conversation_id: conversationId,
@@ -363,7 +411,9 @@ export async function markNetworkConversationRead(
   if (error) throw error;
 }
 
-export async function getIntegratedPartners(orgId: string): Promise<NetworkPartner[]> {
+export async function getIntegratedPartners(
+  orgId: string,
+): Promise<NetworkPartner[]> {
   const [{ data: suppliers }, { data: clients }] = await Promise.all([
     supabase()
       .from("suppliers")
@@ -383,13 +433,19 @@ export async function getIntegratedPartners(orgId: string): Promise<NetworkPartn
   for (const s of suppliers ?? []) {
     if (s.linked_organization_id && !seen.has(s.linked_organization_id)) {
       seen.add(s.linked_organization_id);
-      partners.push({ org_id: s.linked_organization_id, name: s.company_name ?? s.name ?? "Partner" });
+      partners.push({
+        org_id: s.linked_organization_id,
+        name: s.company_name ?? s.name ?? "Partner",
+      });
     }
   }
   for (const c of clients ?? []) {
     if (c.linked_organization_id && !seen.has(c.linked_organization_id)) {
       seen.add(c.linked_organization_id);
-      partners.push({ org_id: c.linked_organization_id, name: c.name ?? "Partner" });
+      partners.push({
+        org_id: c.linked_organization_id,
+        name: c.name ?? "Partner",
+      });
     }
   }
   return partners;
@@ -399,17 +455,19 @@ export async function getIntegratedPartners(orgId: string): Promise<NetworkPartn
 
 /** Fetches all trip conversations where the party is the driver (by driver record IDs). */
 export async function getConversationsByDriverIds(
-  driverIds: string[]
+  driverIds: string[],
 ): Promise<TripConversation[]> {
   if (!driverIds.length) return [];
 
   const { data, error } = await supabase()
     .from("trip_conversations")
-    .select(`
+    .select(
+      `
       *,
       trips!inner ( trip_number, pickup_area, drop_location ),
       trip_messages ( * )
-    `)
+    `,
+    )
     .in("driver_id", driverIds)
     .order("last_message_at", { ascending: false, nullsFirst: false });
 
@@ -421,7 +479,8 @@ export async function getConversationsByDriverIds(
     pickup_area: row.trips?.pickup_area ?? "",
     drop_location: row.trips?.drop_location ?? "",
     messages: ((row.trip_messages ?? []) as TripMessageRow[]).sort(
-      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      (a, b) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
     ),
   }));
 }
@@ -450,7 +509,14 @@ export async function sendDocumentShareMessage(params: {
   senderUserId: string | null;
   metadata: DocumentShareMetadata;
 }): Promise<TripMessageRow> {
-  const { conversationId, organizationId, senderRole, senderName, senderUserId, metadata } = params;
+  const {
+    conversationId,
+    organizationId,
+    senderRole,
+    senderName,
+    senderUserId,
+    metadata,
+  } = params;
 
   const { data, error } = await supabase()
     .from("trip_messages")
@@ -476,8 +542,22 @@ export async function sendDocumentShareMessage(params: {
 export async function getShareableDocumentsForTrip(params: {
   vehicleId: string | null;
   driverId: string | null;
-}): Promise<{ key: string; label: string; storage_path: string; entity_type: "vehicle" | "driver"; entity_id: string }[]> {
-  const results: { key: string; label: string; storage_path: string; entity_type: "vehicle" | "driver"; entity_id: string }[] = [];
+}): Promise<
+  {
+    key: string;
+    label: string;
+    storage_path: string;
+    entity_type: "vehicle" | "driver";
+    entity_id: string;
+  }[]
+> {
+  const results: {
+    key: string;
+    label: string;
+    storage_path: string;
+    entity_type: "vehicle" | "driver";
+    entity_id: string;
+  }[] = [];
 
   if (params.vehicleId) {
     const { data: vehicle } = await supabase()

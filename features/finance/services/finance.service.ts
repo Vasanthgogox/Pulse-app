@@ -7,33 +7,35 @@
  * Use getDoubleEntryFromLedgerRow (features/finance/accounting/accountingModel.ts) for consistent interpretation.
  * Service-layer validation: amount cap, date format, string length.
  */
-import { interpretLedgerRowStructured } from '@/features/finance/ledger/ledgerEntryModel';
-import { supabase } from '@/lib/supabase';
-import { LEDGER_PAGE_SIZE, type PageOpts } from '@/lib/pagination';
-import { VALIDATION, dateISO } from '@/lib/validation';
-import { getAvatarUriForSeed } from '@/constants/DriverLevels';
-import { resolveAvatarPublicUrl } from '@/lib/avatarUpload';
-import { notifyTripChatMessagesChanged } from '@/lib/tripChatInvalidate';
-import { postLedgerEventToChat } from '@/features/chat/services/chatLedgerBridge.service';
+import { getAvatarUriForSeed } from "@/constants/DriverLevels";
+import { postLedgerEventToChat } from "@/features/chat/services/chatLedgerBridge.service";
+import { interpretLedgerRowStructured } from "@/features/finance/ledger/ledgerEntryModel";
+import { resolveAvatarPublicUrl } from "@/lib/avatarUpload";
+import { LEDGER_PAGE_SIZE, type PageOpts } from "@/lib/pagination";
+import { supabase } from "@/lib/supabase";
+import { notifyTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
+import { VALIDATION, dateISO } from "@/lib/validation";
 
 /** Join trips for ledger rows; older DBs may not have `trips.display_trip_id` yet (PostgREST 400). */
 const LEDGER_TX_SELECT_WITH_TRIPS =
-  '*, trips(trip_number, display_trip_id)' as const;
-const LEDGER_TX_SELECT_WITH_TRIPS_LEGACY = '*, trips(trip_number)' as const;
+  "*, trips(trip_number, display_trip_id)" as const;
+const LEDGER_TX_SELECT_WITH_TRIPS_LEGACY = "*, trips(trip_number)" as const;
 
-function isMissingTripsDisplayTripIdError(error: {
-  message?: string;
-  code?: string;
-} | null): boolean {
+function isMissingTripsDisplayTripIdError(
+  error: {
+    message?: string;
+    code?: string;
+  } | null,
+): boolean {
   if (!error?.message) return false;
   const msg = error.message.toLowerCase();
-  if (!msg.includes('display_trip_id')) return false;
+  if (!msg.includes("display_trip_id")) return false;
   return (
-    error.code === '42703' ||
-    msg.includes('does not exist') ||
-    msg.includes('schema cache') ||
-    msg.includes('could not find') ||
-    msg.includes('column')
+    error.code === "42703" ||
+    msg.includes("does not exist") ||
+    msg.includes("schema cache") ||
+    msg.includes("could not find") ||
+    msg.includes("column")
   );
 }
 
@@ -44,22 +46,22 @@ export async function getProfileImage(
   if (!contactId || !contactType) return null;
 
   // Only drivers have a user_id → profiles link; clients/suppliers have no direct profile connection.
-  if (contactType !== 'driver') return null;
+  if (contactType !== "driver") return null;
 
   // Step 1: get user_id from the driver record
   const { data: driverData, error: driverError } = await supabase()
-    .from('drivers')
-    .select('user_id')
-    .eq('id', contactId)
+    .from("drivers")
+    .select("user_id")
+    .eq("id", contactId)
     .maybeSingle();
 
   if (driverError || !driverData?.user_id) return null;
 
   // Step 2: get avatar_url + avatar_seed from profiles
   const { data: profileData, error: profileError } = await supabase()
-    .from('profiles')
-    .select('avatar_url, avatar_seed')
-    .eq('id', driverData.user_id)
+    .from("profiles")
+    .select("avatar_url, avatar_seed")
+    .eq("id", driverData.user_id)
     .maybeSingle();
 
   if (profileError || !profileData) return null;
@@ -69,7 +71,7 @@ export async function getProfileImage(
   if (publicUrl) return publicUrl;
 
   // Fall back to preset avatar from seed
-  const seed = (profileData.avatar_seed ?? '').trim();
+  const seed = (profileData.avatar_seed ?? "").trim();
   if (!seed) return null;
   return getAvatarUriForSeed(seed);
 }
@@ -89,14 +91,14 @@ export interface LedgerRow {
   created_at: string;
   /** From cash_entries for entity tab aggregation */
   contact_id?: string | null;
-  contact_type?: 'client' | 'supplier' | 'driver' | null;
+  contact_type?: "client" | "supplier" | "driver" | null;
   vehicle_number?: string | null;
   driver_name?: string | null;
   trips?: { trip_number: string; display_trip_id?: string | null } | null;
   primary_category?: string | null;
   payment_mode?: string | null;
   payment_reference?: string | null;
-  reconciliation_status?: 'match_found' | 'reconciled' | 'mismatch' | null;
+  reconciliation_status?: "match_found" | "reconciled" | "mismatch" | null;
   reconciliation_label?: string | null;
   reconciliation_action_label?: string | null;
   reconciliation_helper_text?: string | null;
@@ -117,7 +119,7 @@ export interface CreateLedgerEntryData {
   transaction_date?: string;
   /** When provided, stored on cash_entries for aggregation and auto-tag */
   contact_id?: string | null;
-  contact_type?: 'client' | 'supplier' | 'driver' | null;
+  contact_type?: "client" | "supplier" | "driver" | null;
   category?: string | null;
   indent_id?: string | null;
   vehicle_number?: string | null;
@@ -127,20 +129,20 @@ export interface CreateLedgerEntryData {
   ledger_category?: string | null;
 }
 
-type LedgerContactType = 'client' | 'supplier' | 'driver';
+type LedgerContactType = "client" | "supplier" | "driver";
 
 const GENERIC_PARTY_LABELS = new Set([
-  '',
-  '-',
-  '—',
-  'party',
-  'client',
-  'supplier',
-  'driver',
+  "",
+  "-",
+  "—",
+  "party",
+  "client",
+  "supplier",
+  "driver",
 ]);
 
 function normalizePartyName(raw: string | null | undefined): string {
-  return String(raw ?? '').trim();
+  return String(raw ?? "").trim();
 }
 
 function isGenericPartyName(raw: string | null | undefined): boolean {
@@ -155,24 +157,30 @@ async function resolveContactDisplayName(
   const trimmedContactId = contactId.trim();
   if (!trimmedContactId) return null;
 
-  if (contactType === 'client') {
+  if (contactType === "client") {
     const { data } = await supabase()
-      .from('clients')
-      .select('name')
-      .eq('organization_id', orgId)
-      .eq('id', trimmedContactId)
+      .from("clients")
+      .select("name")
+      .eq("organization_id", orgId)
+      .eq("id", trimmedContactId)
       .maybeSingle();
-    return normalizePartyName((data as { name?: string | null } | null)?.name) || null;
+    return (
+      normalizePartyName((data as { name?: string | null } | null)?.name) ||
+      null
+    );
   }
 
-  if (contactType === 'supplier') {
+  if (contactType === "supplier") {
     const { data } = await supabase()
-      .from('suppliers')
-      .select('name, company_name')
-      .eq('organization_id', orgId)
-      .eq('id', trimmedContactId)
+      .from("suppliers")
+      .select("name, company_name")
+      .eq("organization_id", orgId)
+      .eq("id", trimmedContactId)
       .maybeSingle();
-    const row = data as { name?: string | null; company_name?: string | null } | null;
+    const row = data as {
+      name?: string | null;
+      company_name?: string | null;
+    } | null;
     return (
       normalizePartyName(row?.name) ||
       normalizePartyName(row?.company_name) ||
@@ -181,12 +189,14 @@ async function resolveContactDisplayName(
   }
 
   const { data } = await supabase()
-    .from('drivers')
-    .select('name')
-    .eq('organization_id', orgId)
-    .eq('id', trimmedContactId)
+    .from("drivers")
+    .select("name")
+    .eq("organization_id", orgId)
+    .eq("id", trimmedContactId)
     .maybeSingle();
-  return normalizePartyName((data as { name?: string | null } | null)?.name) || null;
+  return (
+    normalizePartyName((data as { name?: string | null } | null)?.name) || null
+  );
 }
 
 async function resolveTripContextForLedgerWrite(params: {
@@ -219,7 +229,11 @@ async function resolveTripContextForLedgerWrite(params: {
     throw new Error("Selected trip was not found.");
   }
 
-  const row = tripById as { id: string; organization_id: string; trip_number: string | null };
+  const row = tripById as {
+    id: string;
+    organization_id: string;
+    trip_number: string | null;
+  };
   if (row.organization_id === orgId) {
     return {
       tripId: row.id,
@@ -227,9 +241,12 @@ async function resolveTripContextForLedgerWrite(params: {
     };
   }
 
-  const candidateTripNumber = requestedTripNumber || String(row.trip_number ?? "").trim();
+  const candidateTripNumber =
+    requestedTripNumber || String(row.trip_number ?? "").trim();
   if (!candidateTripNumber) {
-    throw new Error("Invalid trip context: trip belongs to another organization.");
+    throw new Error(
+      "Invalid trip context: trip belongs to another organization.",
+    );
   }
 
   const { data: localTrip, error: localTripError } = await supabase()
@@ -246,12 +263,17 @@ async function resolveTripContextForLedgerWrite(params: {
   }
 
   if (!localTrip) {
-    throw new Error("Invalid trip context: selected trip does not belong to current organization.");
+    throw new Error(
+      "Invalid trip context: selected trip does not belong to current organization.",
+    );
   }
 
   return {
     tripId: String((localTrip as { id: string }).id),
-    tripNumber: String((localTrip as { trip_number?: string | null }).trip_number ?? candidateTripNumber),
+    tripNumber: String(
+      (localTrip as { trip_number?: string | null }).trip_number ??
+        candidateTripNumber,
+    ),
   };
 }
 
@@ -285,15 +307,17 @@ type LedgerDescriptionMeta = {
   category?: string | null;
 };
 
-const LEDGER_META_PREFIX = '[[QMETA:';
-const LEDGER_META_SUFFIX = ']]';
+const LEDGER_META_PREFIX = "[[QMETA:";
+const LEDGER_META_SUFFIX = "]]";
 
 function cleanTextValue(raw: string | null | undefined): string | null {
-  const normalized = String(raw ?? '').trim();
+  const normalized = String(raw ?? "").trim();
   return normalized.length > 0 ? normalized : null;
 }
 
-function normalizeLedgerMeta(meta: LedgerDescriptionMeta): LedgerDescriptionMeta | null {
+function normalizeLedgerMeta(
+  meta: LedgerDescriptionMeta,
+): LedgerDescriptionMeta | null {
   const normalized: LedgerDescriptionMeta = {
     trip_number: cleanTextValue(meta.trip_number),
     indent_id: cleanTextValue(meta.indent_id),
@@ -308,14 +332,16 @@ function normalizeLedgerMeta(meta: LedgerDescriptionMeta): LedgerDescriptionMeta
 }
 
 function stripLedgerMeta(description: string | null | undefined): string {
-  const raw = String(description ?? '');
+  const raw = String(description ?? "");
   const idx = raw.lastIndexOf(LEDGER_META_PREFIX);
   if (idx < 0) return raw.trim();
   return raw.slice(0, idx).trim();
 }
 
-function extractLedgerMeta(description: string | null | undefined): LedgerDescriptionMeta {
-  const raw = String(description ?? '');
+function extractLedgerMeta(
+  description: string | null | undefined,
+): LedgerDescriptionMeta {
+  const raw = String(description ?? "");
   const idx = raw.lastIndexOf(LEDGER_META_PREFIX);
   if (idx < 0) return {};
   const start = idx + LEDGER_META_PREFIX.length;
@@ -340,16 +366,15 @@ function buildDescriptionWithMeta(
   if (!normalizedMeta) return cleanDescription;
   const metaSuffix = ` ${LEDGER_META_PREFIX}${JSON.stringify(normalizedMeta)}${LEDGER_META_SUFFIX}`;
   if (!maxLength || maxLength <= 0) return `${cleanDescription}${metaSuffix}`;
-  if (metaSuffix.length >= maxLength) return cleanDescription.slice(0, maxLength);
+  if (metaSuffix.length >= maxLength)
+    return cleanDescription.slice(0, maxLength);
   const baseAllowed = Math.max(0, maxLength - metaSuffix.length);
   return `${cleanDescription.slice(0, baseAllowed)}${metaSuffix}`;
 }
 
 function normalizePrimaryCategory(raw: string | null | undefined): string {
-  const firstPart = stripLedgerMeta(raw)
-    .split('|')[0]
-    ?.trim();
-  return firstPart || 'ENTRY';
+  const firstPart = stripLedgerMeta(raw).split("|")[0]?.trim();
+  return firstPart || "ENTRY";
 }
 
 function parsePaymentMode(raw: string | null | undefined): string | null {
@@ -370,35 +395,38 @@ function deriveReconciliationMeta(row: {
   description?: string | null;
   trip_id?: string | null;
   contact_id?: string | null;
-  contact_type?: LedgerRow['contact_type'];
+  contact_type?: LedgerRow["contact_type"];
   amount_in?: number;
   amount_out?: number;
 }): Pick<
   LedgerRow,
-  | 'reconciliation_status'
-  | 'reconciliation_label'
-  | 'reconciliation_action_label'
-  | 'reconciliation_helper_text'
+  | "reconciliation_status"
+  | "reconciliation_label"
+  | "reconciliation_action_label"
+  | "reconciliation_helper_text"
 > {
-  const description = String(row.description ?? '').toLowerCase();
-  if (description.includes('shared ledger sync')) {
+  const description = String(row.description ?? "").toLowerCase();
+  if (description.includes("shared ledger sync")) {
     return {
-      reconciliation_status: 'reconciled',
-      reconciliation_label: 'Reconciled',
-      reconciliation_action_label: 'View linked entry',
-      reconciliation_helper_text: 'Linked using shared ledger reconciliation.',
+      reconciliation_status: "reconciled",
+      reconciliation_label: "Reconciled",
+      reconciliation_action_label: "View linked entry",
+      reconciliation_helper_text: "Linked using shared ledger reconciliation.",
     };
   }
 
   const hasCounterparty = !!row.contact_id && !!row.contact_type;
   const hasTripAnchor = !!row.trip_id;
-  const hasMoney = Number(row.amount_in ?? 0) > 0 || Number(row.amount_out ?? 0) > 0;
+  const hasMoney =
+    Number(row.amount_in ?? 0) > 0 || Number(row.amount_out ?? 0) > 0;
   if (hasCounterparty && hasTripAnchor && hasMoney) {
     return {
-      reconciliation_status: 'match_found',
-      reconciliation_label: 'Match found',
-      reconciliation_action_label: Number(row.amount_out ?? 0) > 0 ? 'Edit & link' : 'Validate & link',
-      reconciliation_helper_text: 'Trip, party, and amount are ready for reconciliation.',
+      reconciliation_status: "match_found",
+      reconciliation_label: "Match found",
+      reconciliation_action_label:
+        Number(row.amount_out ?? 0) > 0 ? "Edit & link" : "Validate & link",
+      reconciliation_helper_text:
+        "Trip, party, and amount are ready for reconciliation.",
     };
   }
 
@@ -430,10 +458,15 @@ function toLedgerRow(row: {
   ledger_flow_type?: string | null;
   ledger_category?: string | null;
 }): LedgerRow {
-  const descriptionRaw = row.description ?? 'ENTRY';
-  const description = stripLedgerMeta(descriptionRaw) || 'ENTRY';
+  const descriptionRaw = row.description ?? "ENTRY";
+  const description = stripLedgerMeta(descriptionRaw) || "ENTRY";
   const meta = extractLedgerMeta(descriptionRaw);
-  const tripNumber = row.trips?.display_trip_id ?? row.trips?.trip_number ?? row.trip_number ?? meta.trip_number ?? null;
+  const tripNumber =
+    row.trips?.display_trip_id ??
+    row.trips?.trip_number ??
+    row.trip_number ??
+    meta.trip_number ??
+    null;
   const interpreted = interpretLedgerRowStructured({
     contact_id: row.contact_id,
     contact_type: row.contact_type,
@@ -448,26 +481,33 @@ function toLedgerRow(row: {
     organization_id: row.organization_id,
     trip_id: row.trip_id ?? null,
     trip_number: tripNumber,
-    party_name: row.party_name ?? '—',
+    party_name: row.party_name ?? "—",
     description,
     amount_in: Number(row.amount_in ?? 0),
     amount_out: Number(row.amount_out ?? 0),
     transaction_date: row.transaction_date,
     created_at: row.created_at,
     contact_id: row.contact_id ?? null,
-    contact_type: (row.contact_type as LedgerRow['contact_type']) ?? null,
+    contact_type: (row.contact_type as LedgerRow["contact_type"]) ?? null,
     vehicle_number: row.vehicle_number ?? meta.vehicle_number ?? null,
     driver_name: row.driver_name ?? meta.driver_name ?? null,
-    trips: row.trips ? { trip_number: row.trips.trip_number, display_trip_id: row.trips.display_trip_id ?? row.trips.trip_number } : null,
+    trips: row.trips
+      ? {
+          trip_number: row.trips.trip_number,
+          display_trip_id: row.trips.display_trip_id ?? row.trips.trip_number,
+        }
+      : null,
     profileImageUrl: null,
-    primary_category: (row.ledger_category ?? '').trim() || normalizePrimaryCategory(descriptionRaw),
+    primary_category:
+      (row.ledger_category ?? "").trim() ||
+      normalizePrimaryCategory(descriptionRaw),
     payment_mode: parsePaymentMode(descriptionRaw),
     payment_reference: parsePaymentReference(descriptionRaw),
     ...deriveReconciliationMeta({
       description,
       trip_id: row.trip_id,
       contact_id: row.contact_id,
-      contact_type: (row.contact_type as LedgerRow['contact_type']) ?? null,
+      contact_type: (row.contact_type as LedgerRow["contact_type"]) ?? null,
       amount_in: row.amount_in,
       amount_out: row.amount_out,
     }),
@@ -479,15 +519,19 @@ function toLedgerRow(row: {
 
 export async function getTransactionsByOrganization(
   orgId: string,
-  opts?: PageOpts
-): Promise<{ error: Error | null; transactions: LedgerRow[]; hasMore?: boolean }> {
+  opts?: PageOpts,
+): Promise<{
+  error: Error | null;
+  transactions: LedgerRow[];
+  hasMore?: boolean;
+}> {
   const base = (tripSelect: string) =>
     supabase()
-      .from('transactions')
+      .from("transactions")
       .select(tripSelect)
-      .eq('organization_id', orgId)
-      .order('transaction_date', { ascending: false })
-      .order('created_at', { ascending: false });
+      .eq("organization_id", orgId)
+      .order("transaction_date", { ascending: false })
+      .order("created_at", { ascending: false });
 
   type Row = Parameters<typeof toLedgerRow>[0];
 
@@ -525,25 +569,25 @@ export async function getTransactionsByOrganization(
 /** Fetch ledger transactions for a specific party (client/entity level). */
 export async function getTransactionsByOrganizationAndParty(
   orgId: string,
-  partyName: string
+  partyName: string,
 ): Promise<{ error: Error | null; transactions: LedgerRow[] }> {
   if (!partyName?.trim()) return getTransactionsByOrganization(orgId);
   let { data, error } = await supabase()
-    .from('transactions')
+    .from("transactions")
     .select(LEDGER_TX_SELECT_WITH_TRIPS)
-    .eq('organization_id', orgId)
-    .ilike('party_name', `%${partyName.trim()}%`)
-    .order('transaction_date', { ascending: false })
-    .order('created_at', { ascending: false });
+    .eq("organization_id", orgId)
+    .ilike("party_name", `%${partyName.trim()}%`)
+    .order("transaction_date", { ascending: false })
+    .order("created_at", { ascending: false });
 
   if (error && isMissingTripsDisplayTripIdError(error)) {
     ({ data, error } = await supabase()
-      .from('transactions')
+      .from("transactions")
       .select(LEDGER_TX_SELECT_WITH_TRIPS_LEGACY)
-      .eq('organization_id', orgId)
-      .ilike('party_name', `%${partyName.trim()}%`)
-      .order('transaction_date', { ascending: false })
-      .order('created_at', { ascending: false }));
+      .eq("organization_id", orgId)
+      .ilike("party_name", `%${partyName.trim()}%`)
+      .order("transaction_date", { ascending: false })
+      .order("created_at", { ascending: false }));
   }
 
   if (error) return { error: new Error(error.message), transactions: [] };
@@ -554,25 +598,25 @@ export async function getTransactionsByOrganizationAndParty(
 /** Fetch ledger transactions for a specific contact (client/supplier id). Used for dispute audit. */
 export async function getTransactionsByOrganizationAndContactId(
   orgId: string,
-  contactId: string
+  contactId: string,
 ): Promise<{ error: Error | null; transactions: LedgerRow[] }> {
   if (!contactId?.trim()) return { error: null, transactions: [] };
   let { data, error } = await supabase()
-    .from('transactions')
+    .from("transactions")
     .select(LEDGER_TX_SELECT_WITH_TRIPS)
-    .eq('organization_id', orgId)
-    .eq('contact_id', contactId)
-    .order('transaction_date', { ascending: false })
-    .order('created_at', { ascending: false });
+    .eq("organization_id", orgId)
+    .eq("contact_id", contactId)
+    .order("transaction_date", { ascending: false })
+    .order("created_at", { ascending: false });
 
   if (error && isMissingTripsDisplayTripIdError(error)) {
     ({ data, error } = await supabase()
-      .from('transactions')
+      .from("transactions")
       .select(LEDGER_TX_SELECT_WITH_TRIPS_LEGACY)
-      .eq('organization_id', orgId)
-      .eq('contact_id', contactId)
-      .order('transaction_date', { ascending: false })
-      .order('created_at', { ascending: false }));
+      .eq("organization_id", orgId)
+      .eq("contact_id", contactId)
+      .order("transaction_date", { ascending: false })
+      .order("created_at", { ascending: false }));
   }
 
   if (error) return { error: new Error(error.message), transactions: [] };
@@ -583,27 +627,27 @@ export async function getTransactionsByOrganizationAndContactId(
 /** Fetch ledger transactions for a driver (contact_type=driver, contact_id=driverId). Used for driver LEDGER tab. */
 export async function getTransactionsByOrganizationAndDriver(
   orgId: string,
-  driverId: string
+  driverId: string,
 ): Promise<{ error: Error | null; transactions: LedgerRow[] }> {
   if (!driverId?.trim()) return { error: null, transactions: [] };
   let { data, error } = await supabase()
-    .from('transactions')
+    .from("transactions")
     .select(LEDGER_TX_SELECT_WITH_TRIPS)
-    .eq('organization_id', orgId)
-    .eq('contact_type', 'driver')
-    .eq('contact_id', driverId.trim())
-    .order('transaction_date', { ascending: false })
-    .order('created_at', { ascending: false });
+    .eq("organization_id", orgId)
+    .eq("contact_type", "driver")
+    .eq("contact_id", driverId.trim())
+    .order("transaction_date", { ascending: false })
+    .order("created_at", { ascending: false });
 
   if (error && isMissingTripsDisplayTripIdError(error)) {
     ({ data, error } = await supabase()
-      .from('transactions')
+      .from("transactions")
       .select(LEDGER_TX_SELECT_WITH_TRIPS_LEGACY)
-      .eq('organization_id', orgId)
-      .eq('contact_type', 'driver')
-      .eq('contact_id', driverId.trim())
-      .order('transaction_date', { ascending: false })
-      .order('created_at', { ascending: false }));
+      .eq("organization_id", orgId)
+      .eq("contact_type", "driver")
+      .eq("contact_id", driverId.trim())
+      .order("transaction_date", { ascending: false })
+      .order("created_at", { ascending: false }));
   }
 
   if (error) return { error: new Error(error.message), transactions: [] };
@@ -654,31 +698,39 @@ async function tryNotifyLinkedPartyChatAfterLedgerInsert(
   orgId: string,
   row: InsertedTxnRowForChat,
 ): Promise<void> {
-  const ct = (row.contact_type ?? '').toLowerCase();
-  if (!row.trip_id || !(ct === 'client' || ct === 'supplier') || !row.contact_id) return;
+  const ct = (row.contact_type ?? "").toLowerCase();
+  if (
+    !row.trip_id ||
+    !(ct === "client" || ct === "supplier") ||
+    !row.contact_id
+  )
+    return;
 
   const isIn = row.amount_in > 0;
   try {
     const { data: linkedOrg, error: linkErr } =
-      ct === 'client'
+      ct === "client"
         ? await supabase()
-            .from('clients')
-            .select('linked_organization_id, name')
-            .eq('id', row.contact_id!)
+            .from("clients")
+            .select("linked_organization_id, name")
+            .eq("id", row.contact_id!)
             .maybeSingle()
         : await supabase()
-            .from('suppliers')
-            .select('linked_organization_id, company_name, name')
-            .eq('id', row.contact_id!)
+            .from("suppliers")
+            .select("linked_organization_id, company_name, name")
+            .eq("id", row.contact_id!)
             .maybeSingle();
 
     if (linkErr) {
-      console.warn('[finance] linked party lookup failed (ledger_event skipped)', {
-        transactionId: row.id,
-        contactType: ct,
-        contactId: row.contact_id,
-        message: linkErr.message,
-      });
+      console.warn(
+        "[finance] linked party lookup failed (ledger_event skipped)",
+        {
+          transactionId: row.id,
+          contactType: ct,
+          contactId: row.contact_id,
+          message: linkErr.message,
+        },
+      );
       return;
     }
 
@@ -688,19 +740,32 @@ async function tryNotifyLinkedPartyChatAfterLedgerInsert(
     // so receiver org name must fall back to the client/supplier record we already read.
     const receiverOrgId = linkedOrg.linked_organization_id;
     const receiverPartyFallback =
-      ct === 'client'
+      ct === "client"
         ? normalizePartyName((linkedOrg as { name?: string | null }).name)
         : normalizePartyName(
-            (linkedOrg as { company_name?: string | null; name?: string | null }).company_name,
+            (
+              linkedOrg as {
+                company_name?: string | null;
+                name?: string | null;
+              }
+            ).company_name,
           ) || normalizePartyName((linkedOrg as { name?: string | null }).name);
 
     const [{ data: senderOrg }, { data: receiverOrgRow }] = await Promise.all([
-      supabase().from('organizations').select('id, name').eq('id', orgId).maybeSingle(),
-      supabase().from('organizations').select('id, name').eq('id', receiverOrgId).maybeSingle(),
+      supabase()
+        .from("organizations")
+        .select("id, name")
+        .eq("id", orgId)
+        .maybeSingle(),
+      supabase()
+        .from("organizations")
+        .select("id, name")
+        .eq("id", receiverOrgId)
+        .maybeSingle(),
     ]);
 
     if (!senderOrg?.id) {
-      console.warn('[finance] sender org missing for ledger_event', {
+      console.warn("[finance] sender org missing for ledger_event", {
         transactionId: row.id,
       });
       return;
@@ -715,11 +780,11 @@ async function tryNotifyLinkedPartyChatAfterLedgerInsert(
       tripId: row.trip_id!,
       transactionId: row.id,
       amount: isIn ? row.amount_in : row.amount_out,
-      flow: isIn ? 'in' : 'out',
-      contactType: ct as 'client' | 'supplier',
+      flow: isIn ? "in" : "out",
+      contactType: ct as "client" | "supplier",
       contactId: row.contact_id!,
-      category: normalizePrimaryCategory(row.description) ?? 'Payment',
-      paymentMode: parsePaymentMode(row.description) ?? 'Cash',
+      category: normalizePrimaryCategory(row.description) ?? "Payment",
+      paymentMode: parsePaymentMode(row.description) ?? "Cash",
       referenceNumber: parsePaymentReference(row.description),
       notes: null,
       senderOrgId: senderOrg.id,
@@ -728,7 +793,7 @@ async function tryNotifyLinkedPartyChatAfterLedgerInsert(
       receiverOrgName: receiverOrgNameResolved,
     });
   } catch (e) {
-    console.warn('[finance] ledger_event chat post failed', {
+    console.warn("[finance] ledger_event chat post failed", {
       transactionId: row.id,
       tripId: row.trip_id,
       organizationId: orgId,
@@ -741,26 +806,40 @@ async function tryNotifyLinkedPartyChatAfterLedgerInsert(
 
 export async function createLedgerEntry(
   orgId: string,
-  entry: CreateLedgerEntryData
+  entry: CreateLedgerEntryData,
 ): Promise<{ error: Error | null; row: LedgerRow | null }> {
   const enriched = enrichLedgerMetaFromRow(entry);
-  const amountIn = Math.max(0, Math.min(VALIDATION.AMOUNT_MAX, enriched.amount_in ?? 0));
-  const amountOut = Math.max(0, Math.min(VALIDATION.AMOUNT_MAX, enriched.amount_out ?? 0));
-  const rawDate = (enriched.transaction_date ?? new Date().toISOString().slice(0, 10)).slice(0, 10);
+  const amountIn = Math.max(
+    0,
+    Math.min(VALIDATION.AMOUNT_MAX, enriched.amount_in ?? 0),
+  );
+  const amountOut = Math.max(
+    0,
+    Math.min(VALIDATION.AMOUNT_MAX, enriched.amount_out ?? 0),
+  );
+  const rawDate = (
+    enriched.transaction_date ?? new Date().toISOString().slice(0, 10)
+  ).slice(0, 10);
   const dateErr = dateISO()(rawDate);
   const date = dateErr ? new Date().toISOString().slice(0, 10) : rawDate;
   if (enriched.contact_type && !enriched.contact_id) {
     return {
-      error: new Error('Missing contact_id for ledger contact_type entry.'),
+      error: new Error("Missing contact_id for ledger contact_type entry."),
       row: null,
     };
   }
-  const normalizedContactType = (enriched.contact_type ?? null) as LedgerContactType | null;
+  const normalizedContactType = (enriched.contact_type ??
+    null) as LedgerContactType | null;
   const normalizedContactId = normalizePartyName(enriched.contact_id);
-  const fallbackPartyName = normalizePartyName(enriched.party_name || '—') || '—';
+  const fallbackPartyName =
+    normalizePartyName(enriched.party_name || "—") || "—";
   const resolvedPartyName =
     normalizedContactType && normalizedContactId
-      ? await resolveContactDisplayName(orgId, normalizedContactType, normalizedContactId)
+      ? await resolveContactDisplayName(
+          orgId,
+          normalizedContactType,
+          normalizedContactId,
+        )
       : null;
   if (
     normalizedContactType &&
@@ -769,21 +848,22 @@ export async function createLedgerEntry(
     isGenericPartyName(fallbackPartyName)
   ) {
     return {
-      error: new Error(`Missing ${normalizedContactType} name for selected contact.`),
+      error: new Error(
+        `Missing ${normalizedContactType} name for selected contact.`,
+      ),
       row: null,
     };
   }
-  const partyName = ((resolvedPartyName || fallbackPartyName).trim() || '—').slice(
-    0,
-    VALIDATION.PARTY_NAME_MAX_LENGTH,
-  );
+  const partyName = (
+    (resolvedPartyName || fallbackPartyName).trim() || "—"
+  ).slice(0, VALIDATION.PARTY_NAME_MAX_LENGTH);
   const tripContext = await resolveTripContextForLedgerWrite({
     orgId,
     tripId: enriched.trip_id,
     tripNumber: enriched.trip_number,
   });
   const description = buildDescriptionWithMeta(
-    entry.description ?? 'ENTRY',
+    entry.description ?? "ENTRY",
     {
       trip_number: tripContext.tripNumber,
       indent_id: entry.indent_id,
@@ -814,14 +894,14 @@ export async function createLedgerEntry(
   };
 
   let { data, error } = await supabase()
-    .from('transactions')
+    .from("transactions")
     .insert(payload)
     .select(LEDGER_TX_SELECT_WITH_TRIPS)
     .single();
 
   if (error && isMissingTripsDisplayTripIdError(error)) {
     ({ data, error } = await supabase()
-      .from('transactions')
+      .from("transactions")
       .insert(payload)
       .select(LEDGER_TX_SELECT_WITH_TRIPS_LEGACY)
       .single());
@@ -842,26 +922,42 @@ export async function createLedgerEntry(
 export async function updateLedgerEntry(
   orgId: string,
   entryId: string,
-  entry: CreateLedgerEntryData
+  entry: CreateLedgerEntryData,
 ): Promise<{ error: Error | null; row: LedgerRow | null }> {
   const enriched = enrichLedgerMetaFromRow(entry);
-  const amountIn = Math.max(0, Math.min(VALIDATION.AMOUNT_MAX, enriched.amount_in ?? 0));
-  const amountOut = Math.max(0, Math.min(VALIDATION.AMOUNT_MAX, enriched.amount_out ?? 0));
-  const rawDate = (enriched.transaction_date ?? new Date().toISOString().slice(0, 10)).slice(0, 10);
-  const date = dateISO()(rawDate) ? new Date().toISOString().slice(0, 10) : rawDate;
+  const amountIn = Math.max(
+    0,
+    Math.min(VALIDATION.AMOUNT_MAX, enriched.amount_in ?? 0),
+  );
+  const amountOut = Math.max(
+    0,
+    Math.min(VALIDATION.AMOUNT_MAX, enriched.amount_out ?? 0),
+  );
+  const rawDate = (
+    enriched.transaction_date ?? new Date().toISOString().slice(0, 10)
+  ).slice(0, 10);
+  const date = dateISO()(rawDate)
+    ? new Date().toISOString().slice(0, 10)
+    : rawDate;
   const isCashIn = amountIn > 0;
   if (enriched.contact_type && !enriched.contact_id) {
     return {
-      error: new Error('Missing contact_id for ledger contact_type entry.'),
+      error: new Error("Missing contact_id for ledger contact_type entry."),
       row: null,
     };
   }
-  const normalizedContactType = (enriched.contact_type ?? null) as LedgerContactType | null;
+  const normalizedContactType = (enriched.contact_type ??
+    null) as LedgerContactType | null;
   const normalizedContactId = normalizePartyName(enriched.contact_id);
-  const fallbackPartyName = normalizePartyName(enriched.party_name || '—') || '—';
+  const fallbackPartyName =
+    normalizePartyName(enriched.party_name || "—") || "—";
   const resolvedPartyName =
     normalizedContactType && normalizedContactId
-      ? await resolveContactDisplayName(orgId, normalizedContactType, normalizedContactId)
+      ? await resolveContactDisplayName(
+          orgId,
+          normalizedContactType,
+          normalizedContactId,
+        )
       : null;
   if (
     normalizedContactType &&
@@ -870,21 +966,22 @@ export async function updateLedgerEntry(
     isGenericPartyName(fallbackPartyName)
   ) {
     return {
-      error: new Error(`Missing ${normalizedContactType} name for selected contact.`),
+      error: new Error(
+        `Missing ${normalizedContactType} name for selected contact.`,
+      ),
       row: null,
     };
   }
-  const partyName = ((resolvedPartyName || fallbackPartyName).trim() || '—').slice(
-    0,
-    VALIDATION.PARTY_NAME_MAX_LENGTH,
-  );
+  const partyName = (
+    (resolvedPartyName || fallbackPartyName).trim() || "—"
+  ).slice(0, VALIDATION.PARTY_NAME_MAX_LENGTH);
   const tripContext = await resolveTripContextForLedgerWrite({
     orgId,
     tripId: enriched.trip_id,
     tripNumber: enriched.trip_number,
   });
   const description = buildDescriptionWithMeta(
-    entry.description ?? 'ENTRY',
+    entry.description ?? "ENTRY",
     {
       trip_number: tripContext.tripNumber,
       indent_id: entry.indent_id,
@@ -912,25 +1009,25 @@ export async function updateLedgerEntry(
   };
 
   let { data, error } = await supabase()
-    .from('transactions')
+    .from("transactions")
     .update(payload)
-    .eq('id', entryId)
-    .eq('organization_id', orgId)
+    .eq("id", entryId)
+    .eq("organization_id", orgId)
     .select(LEDGER_TX_SELECT_WITH_TRIPS)
     .single();
 
   if (error && isMissingTripsDisplayTripIdError(error)) {
     ({ data, error } = await supabase()
-      .from('transactions')
+      .from("transactions")
       .update(payload)
-      .eq('id', entryId)
-      .eq('organization_id', orgId)
+      .eq("id", entryId)
+      .eq("organization_id", orgId)
       .select(LEDGER_TX_SELECT_WITH_TRIPS_LEGACY)
       .single());
   }
 
   if (error) return { error: new Error(error.message), row: null };
-  if (!data) return { error: new Error('Update returned no row'), row: null };
+  if (!data) return { error: new Error("Update returned no row"), row: null };
 
   const row = data as {
     id: string;

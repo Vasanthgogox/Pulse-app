@@ -29,6 +29,8 @@ export type TripHubPartyMeta = {
   supplierLinkedOrgId: string | null;
   driverAvatarUrl: string | null;
   driverAvatarSeed: string | null;
+  /** From drivers.tracking_only — OTP/ad-hoc lane for trip-kind pill only. */
+  driverTrackingOnly?: boolean | null;
 };
 
 function isGenericSupplierLabel(value: string): boolean {
@@ -159,6 +161,7 @@ export function buildTripHubPartyMetaByTripId(
       supplierLinkedOrgId: (supplierRow?.linked_organization_id ?? "").trim() || null,
       driverAvatarUrl: (driverRow?.avatar_url ?? "").trim() || null,
       driverAvatarSeed: (driverRow?.avatar_seed ?? "").trim() || null,
+      driverTrackingOnly: driverRow?.tracking_only === true ? true : driverRow ? false : null,
     });
   }
   return meta;

@@ -2,9 +2,9 @@
  * Trips service — Supabase only (mobile). Same DB as Q-unified-base.
  */
 import {
-  DEFAULT_PAGE_SIZE,
-  DRIVER_TRIPS_PAGE_SIZE,
-  type PageOpts,
+    DEFAULT_PAGE_SIZE,
+    DRIVER_TRIPS_PAGE_SIZE,
+    type PageOpts,
 } from "@/lib/pagination";
 import { supabase } from "@/lib/supabase";
 
@@ -379,7 +379,10 @@ async function ensurePublicUserRecord(userId?: string | null): Promise<void> {
     }
     // Never block trip creation: insert uses FK fallbacks; upsert can fail on transient/network quirks.
     if (__DEV__) {
-      console.warn("[ensurePublicUserRecord] users upsert skipped:", error.message);
+      console.warn(
+        "[ensurePublicUserRecord] users upsert skipped:",
+        error.message,
+      );
     }
   }
 }
@@ -421,7 +424,20 @@ async function getDriverOngoingTrip(
   >[];
   return {
     error: null,
-    trip: rows[0] ?? null,
+    trip:
+      rows.find((row) => {
+        const status = String(row.status ?? "")
+          .trim()
+          .toLowerCase();
+        // "Busy" applies only after the driver actually accepts/starts the trip.
+        // Pre-acceptance assignment (status="assigned", started_at=null) must stay available.
+        const isAcceptedStatus =
+          status === "in_progress" ||
+          status === "in_transit" ||
+          status === "picked_up" ||
+          status === "at_drop";
+        return isAcceptedStatus || row.started_at != null;
+      }) ?? null,
   };
 }
 
@@ -555,7 +571,9 @@ function isUuidString(value: string): boolean {
   );
 }
 
-function normalizeNullableUuid(value: string | null | undefined): string | null {
+function normalizeNullableUuid(
+  value: string | null | undefined,
+): string | null {
   const raw = String(value ?? "").trim();
   if (!raw) return null;
   return isUuidString(raw) ? raw : null;
@@ -583,7 +601,8 @@ function shouldRetryCreateWithFallbackTripNumber(
   const isPgUniqueViolation = code === "23505";
   return (
     isPgUniqueViolation ||
-    (mentionsTripIdentity && (isIdentityGenerationFailure || isIdentityConflict))
+    (mentionsTripIdentity &&
+      (isIdentityGenerationFailure || isIdentityConflict))
   );
 }
 
@@ -652,8 +671,12 @@ async function getOrganizationOwnerId(orgId: string): Promise<string | null> {
   return normalizeNullableUuid(row?.owner_id);
 }
 
-function parseTripNumberSequence(value: string | null | undefined): number | null {
-  const raw = String(value ?? "").trim().toUpperCase();
+function parseTripNumberSequence(
+  value: string | null | undefined,
+): number | null {
+  const raw = String(value ?? "")
+    .trim()
+    .toUpperCase();
   const m = /^TRP(\d+)$/.exec(raw);
   if (!m) return null;
   // Ignore legacy/random fallback ids like TRP66831046490792; keep only canonical sequence widths.
@@ -706,8 +729,10 @@ async function getNextOrgTripSequence(orgId: string): Promise<number> {
     .order("created_at", { ascending: false })
     .limit(500);
 
-  let tripRows: { trip_number?: string | null; display_trip_id?: string | null }[] =
-    [];
+  let tripRows: {
+    trip_number?: string | null;
+    display_trip_id?: string | null;
+  }[] = [];
   if (tripResWithDisplay.error) {
     if (
       !isMissingColumnError(
@@ -787,13 +812,10 @@ export async function createTrip(
     Number.isFinite(loadTonsRaw) && loadTonsRaw >= 0 ? loadTonsRaw : null;
   const advancePaidRaw = Number(data.advance_paid);
   const advancePaid =
-    Number.isFinite(advancePaidRaw) && advancePaidRaw >= 0
-      ? advancePaidRaw
-      : 0;
+    Number.isFinite(advancePaidRaw) && advancePaidRaw >= 0 ? advancePaidRaw : 0;
   const explicitId = normalizeNullableUuid(data.id) ?? undefined;
   const ownerUserId =
-    normalizeNullableUuid(data.owner_user_id) ??
-    normalizeNullableUuid(userId);
+    normalizeNullableUuid(data.owner_user_id) ?? normalizeNullableUuid(userId);
   const creatorUserId =
     normalizeNullableUuid(data.created_by_user_id) ??
     normalizeNullableUuid(userId);
@@ -908,7 +930,9 @@ export async function createTrip(
           .single();
         if (!retryError) return { error: null, trip: retryRow as TripRow };
         lastError = new Error(buildPostgrestErrorMessage(retryError));
-        if (!isTripIdentityUniqueConflict(retryError.message, retryError.code)) {
+        if (
+          !isTripIdentityUniqueConflict(retryError.message, retryError.code)
+        ) {
           return { error: lastError, trip: null };
         }
       }
@@ -927,7 +951,8 @@ export async function createTrip(
           .insert(explicitInsertData as Record<string, unknown>)
           .select()
           .single();
-        if (!explicitError) return { error: null, trip: explicitRow as TripRow };
+        if (!explicitError)
+          return { error: null, trip: explicitRow as TripRow };
         if (isMissingColumnError(explicitError.message, explicitError.code)) {
           const minimalInsertData = {
             ...insertData,
@@ -938,10 +963,14 @@ export async function createTrip(
             .insert(minimalInsertData as Record<string, unknown>)
             .select()
             .single();
-          if (!minimalError) return { error: null, trip: minimalRow as TripRow };
+          if (!minimalError)
+            return { error: null, trip: minimalRow as TripRow };
           lastError = new Error(buildPostgrestErrorMessage(minimalError));
           if (
-            !isTripIdentityUniqueConflict(minimalError.message, minimalError.code)
+            !isTripIdentityUniqueConflict(
+              minimalError.message,
+              minimalError.code,
+            )
           ) {
             return { error: lastError, trip: null };
           }
@@ -949,7 +978,12 @@ export async function createTrip(
           continue;
         }
         lastError = new Error(buildPostgrestErrorMessage(explicitError));
-        if (!isTripIdentityUniqueConflict(explicitError.message, explicitError.code)) {
+        if (
+          !isTripIdentityUniqueConflict(
+            explicitError.message,
+            explicitError.code,
+          )
+        ) {
           return { error: lastError, trip: null };
         }
         candidateSeq += 1;
@@ -963,7 +997,10 @@ export async function createTrip(
     }
 
     if (!shouldRetryCreateWithFallbackTripNumber(error.message, error.code)) {
-      return { error: new Error(buildPostgrestErrorMessage(error)), trip: null };
+      return {
+        error: new Error(buildPostgrestErrorMessage(error)),
+        trip: null,
+      };
     }
 
     let lastError: Error | null = null;
@@ -979,7 +1016,12 @@ export async function createTrip(
         .single();
       if (!retryError) return { error: null, trip: retryRow as TripRow };
       lastError = new Error(buildPostgrestErrorMessage(retryError));
-      if (!shouldRetryCreateWithFallbackTripNumber(retryError.message, retryError.code)) {
+      if (
+        !shouldRetryCreateWithFallbackTripNumber(
+          retryError.message,
+          retryError.code,
+        )
+      ) {
         return { error: lastError, trip: null };
       }
     }
@@ -1007,14 +1049,19 @@ export interface TripOtpInfo {
 export async function createTripWithOtp(
   orgId: string,
   userId: string,
-  data: CreateTripData
+  data: CreateTripData,
 ): Promise<{
   error: Error | null;
   trip: TripRow | null;
   otp: TripOtpInfo | null;
 }> {
   const { error, trip } = await createTrip(orgId, userId, data);
-  if (error || !trip) return { error: error ?? new Error('No trip returned'), trip: null, otp: null };
+  if (error || !trip)
+    return {
+      error: error ?? new Error("No trip returned"),
+      trip: null,
+      otp: null,
+    };
   const isAggregate = !!data.supplier_id;
   const hasAssignment =
     !!data.driver_id || !!data.vehicle_id || !!data.vehicle_display_number;
@@ -1259,10 +1306,10 @@ export async function assignAggregateTripDriverByPhone(
       };
     }
     if (trimmedVehicleDisplay) {
-      const { error: vehicleError, trip: updatedTrip } = await updateTripAssignment(
-        tripId,
-        { vehicle_display_number: trimmedVehicleDisplay },
-      );
+      const { error: vehicleError, trip: updatedTrip } =
+        await updateTripAssignment(tripId, {
+          vehicle_display_number: trimmedVehicleDisplay,
+        });
       if (vehicleError) return { error: vehicleError, trip: null };
       return { error: null, trip: updatedTrip ?? trip };
     }
@@ -1326,9 +1373,12 @@ async function validateSupplierLinkForCompletion(
   if (tripError) return { error: new Error(tripError.message) };
   if (!trip) return { error: new Error("Trip not found.") };
 
-  const source = String(trip.source ?? "").trim().toLowerCase();
+  const source = String(trip.source ?? "")
+    .trim()
+    .toLowerCase();
   const supplierId = String(trip.supplier_id ?? "").trim();
-  const requiresSupplierLink = source === "direct_quote" || supplierId.length > 0;
+  const requiresSupplierLink =
+    source === "direct_quote" || supplierId.length > 0;
   if (!requiresSupplierLink) return { error: null };
 
   if (!supplierId) {
@@ -1565,15 +1615,31 @@ export async function updateTripPayment(
 export async function getActiveDriverIds(orgId: string): Promise<Set<string>> {
   const { data } = await supabase()
     .from("trips")
-    .select("driver_id")
+    .select("driver_id, status, started_at")
     .eq("organization_id", orgId)
     .not("driver_id", "is", null)
     .not("status", "in", `("${ONGOING_TRIP_TERMINAL_STATUSES.join('","')}")`);
 
   const ids = new Set<string>();
   for (const row of data ?? []) {
-    const id = (row as { driver_id?: string | null }).driver_id;
-    if (id) ids.add(id);
+    const r = row as {
+      driver_id?: string | null;
+      status?: string | null;
+      started_at?: string | null;
+    };
+    const id = r.driver_id;
+    if (!id) continue;
+    const status = String(r.status ?? "")
+      .trim()
+      .toLowerCase();
+    const isAcceptedStatus =
+      status === "in_progress" ||
+      status === "in_transit" ||
+      status === "picked_up" ||
+      status === "at_drop";
+    if (isAcceptedStatus || r.started_at != null) {
+      ids.add(id);
+    }
   }
   return ids;
 }
