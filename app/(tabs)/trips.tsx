@@ -97,10 +97,6 @@ type DateFilter =
   | "this_month"
   | "custom";
 
-const TRIPS_FAB_SIZE_MOBILE = 56;
-const TRIPS_FAB_SIZE_DESKTOP = 56;
-const CHAT_FAB_STACK_OFFSET = 68;
-
 type TripsListLayout = "cards" | "table";
 type HistoryTripMetricId =
   | "due_to_get"
@@ -161,13 +157,12 @@ export default function TripsScreen() {
   const isMobile = width < 560;
   // Use mobile layout behavior for narrow web widths as well.
   const isMobileViewport = width < 820;
-  const tripsFabSize = isMobile ? TRIPS_FAB_SIZE_MOBILE : TRIPS_FAB_SIZE_DESKTOP;
   const insets = useSafeAreaInsets();
   const webChatFabBaseBottom =
     Layout.demoTabBarScrollBottomInset +
     insets.bottom +
     Layout.tabBarBottomPaddingMin;
-  const tripsFabBottom = webChatFabBaseBottom + CHAT_FAB_STACK_OFFSET;
+  const tripsFabBottom = webChatFabBaseBottom + Layout.fabStackOffset;
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const fallbackFabVisibilityProgress = useSharedValue(1);
   const fabVisibilityProgress =
@@ -1608,6 +1603,31 @@ export default function TripsScreen() {
                         ) : null}
                       </TouchableOpacity>
                     ))}
+                    <View style={styles.tripsFilterGroupSeparator} />
+                    {subTabs.map((tab) => (
+                      <TouchableOpacity
+                        key={tab.id}
+                        style={[
+                          styles.tab,
+                          styles.tripsMobileTab,
+                          styles.tabSubPill,
+                          tab.isActive && styles.tabSubPillActive,
+                        ]}
+                        onPress={tab.onPress}
+                        activeOpacity={0.7}
+                        accessibilityRole="tab"
+                        accessibilityState={{ selected: tab.isActive }}
+                      >
+                        <Text
+                          style={[
+                            styles.tabSubPillText,
+                            tab.isActive && styles.tabSubPillTextActive,
+                          ]}
+                        >
+                          {tab.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
                   </ScrollView>
                   <ScrollView
                     horizontal
@@ -1706,6 +1726,40 @@ export default function TripsScreen() {
                       isCompactWeb && styles.tripsBottomHeaderRowWebCompact,
                     ]}
                   >
+                    {!isMobile ? (
+                      <View
+                        style={[
+                          styles.tripsTabClusterWeb,
+                          isCompactWeb && styles.tripsTabClusterWebCompact,
+                        ]}
+                      >
+                        {subTabs.map((tab) => (
+                          <TouchableOpacity
+                            key={tab.id}
+                            style={[
+                              styles.tabSubPill,
+                              styles.tripsScopePillWeb,
+                              tab.isActive && styles.tripsScopePillActiveWeb,
+                            ]}
+                            onPress={tab.onPress}
+                            activeOpacity={0.75}
+                            accessibilityRole="tab"
+                            accessibilityState={{ selected: tab.isActive }}
+                          >
+                            <Text
+                              style={[
+                                styles.tabSubPillText,
+                                styles.tripsScopePillTextWeb,
+                                tab.isActive &&
+                                  styles.tripsScopePillTextActiveWeb,
+                              ]}
+                            >
+                              {tab.label}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    ) : null}
                     <View
                       style={[
                         styles.tripsToolbarWeb,
@@ -2696,8 +2750,6 @@ export default function TripsScreen() {
             onPress={() => router.push("/add-trip")}
             accessibilityLabel={tr("addTrip")}
             icon="road"
-            size={tripsFabSize}
-            iconSize={20}
           />
         </Animated.View>
       )}

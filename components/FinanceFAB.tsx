@@ -3,6 +3,7 @@
  * Positioning: this component is presentational only. The parent screen
  * should wrap it in an absolutely positioned container.
  */
+import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import {
   Building2,
@@ -27,8 +28,6 @@ import {
   type ViewStyle,
   type StyleProp,
 } from "react-native";
-
-const FAB_SIZE = 56;
 
 export type FABIconName =
   | "plus"
@@ -98,7 +97,7 @@ export function FinanceFAB({
   showPlusSuffix = true,
   testID,
   style,
-  size = FAB_SIZE,
+  size = Layout.fabSize,
 }: FinanceFABProps) {
   const pressScale = React.useRef(new Animated.Value(1)).current;
   const idlePulse = React.useRef(new Animated.Value(0)).current;
@@ -145,7 +144,7 @@ export function FinanceFAB({
     }).start();
   };
 
-  const fabBgColor = Theme.primary;
+  const fabBgColor = Theme.darkBackground;
   const fabIconColor = "#ffffff";
   const IconComponent = getLucideIcon(icon);
   const shouldShowPlus = showPlusSuffix && icon !== "plus";
@@ -213,14 +212,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   fab: {
-    width: FAB_SIZE,
-    height: FAB_SIZE,
-    borderRadius: FAB_SIZE / 2,
+    width: Layout.fabSize,
+    height: Layout.fabSize,
+    borderRadius: Layout.fabBorderRadius,
     borderWidth: 2.5,
     borderColor: "#ffffff",
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: Theme.primary,
+    shadowColor: Theme.darkBackground,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.32,
     shadowRadius: 16,

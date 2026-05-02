@@ -95,6 +95,11 @@ export const Layout = {
   tabBarActiveIconElevation: 6,
   /** FAB size and elevation */
   fabSize: 56,
+  /**
+   * Vertical offset between stacked FABs (chat lower, primary/action upper).
+   * Upper FAB `bottom` = lower FAB `bottom` + fabStackOffset (~fabSize + gap).
+   */
+  fabStackOffset: 64,
   fabBorderRadius: 28,
   fabShadowOffsetY: 4,
   fabShadowOpacity: 0.3,

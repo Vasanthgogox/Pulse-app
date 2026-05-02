@@ -89,8 +89,6 @@ import { FinanceTabBody } from "./FinanceTabBody";
 import type { FinancialRowData } from "./FinancialRow";
 import type { EntityListFilter } from "./TreasurySummaryCard";
 
-const CHAT_FAB_STACK_OFFSET = 60;
-
 function financeSubTabToPartyKind(
   tab: FinanceSubTab,
 ): PartyRegistrationKind | null {
@@ -1619,7 +1617,7 @@ export function FinanceScreen() {
                   Layout.demoTabBarScrollBottomInset +
                   insets.bottom +
                   Layout.tabBarBottomPaddingMin +
-                  CHAT_FAB_STACK_OFFSET,
+                  Layout.fabStackOffset,
               },
             ]}
           >

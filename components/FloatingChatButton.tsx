@@ -19,7 +19,6 @@ import { useTripChat } from "@/features/chat/contexts/TripChatContext";
 import { useMobileNetworkDockExpanded } from "@/lib/mobileDockState";
 import { ROUTES } from "@/lib/routes";
 
-const FAB_SIZE = 56;
 type ChatTab = "trips" | "network";
 
 function useShouldShow(): boolean {
@@ -306,21 +305,21 @@ const styles = StyleSheet.create({
     paddingRight: Layout.screenPaddingHorizontal + 6,
   },
   touchable: {
-    width: FAB_SIZE,
-    height: FAB_SIZE,
+    width: Layout.fabSize,
+    height: Layout.fabSize,
     alignItems: "center",
     justifyContent: "center",
   },
   circle: {
-    width: FAB_SIZE,
-    height: FAB_SIZE,
-    borderRadius: FAB_SIZE / 2,
-    backgroundColor: Theme.primary,
+    width: Layout.fabSize,
+    height: Layout.fabSize,
+    borderRadius: Layout.fabBorderRadius,
+    backgroundColor: Theme.darkBackground,
     borderWidth: 2.5,
     borderColor: "#fff",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: Theme.primary,
+    shadowColor: Theme.darkBackground,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.32,
     shadowRadius: 16,

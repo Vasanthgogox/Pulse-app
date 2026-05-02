@@ -183,7 +183,6 @@ interface LoadCenterViewProps {
 }
 
 const TESLA_BLACK = "#171A20";
-const CHAT_FAB_STACK_OFFSET = 60;
 
 export function LoadCenterView({
   contentTopPadding = 0,
@@ -1363,7 +1362,7 @@ export function LoadCenterView({
     Layout.demoTabBarScrollBottomInset +
     insets.bottom +
     Layout.tabBarBottomPaddingMin +
-    CHAT_FAB_STACK_OFFSET;
+    Layout.fabStackOffset;
   const paddingBottom = useMemo(() => {
     const base = 24 + Layout.demoTabBarScrollBottomInset + insets.bottom + 24;
     if (loadSubTab !== "GIVE_LOAD") return base;
@@ -2521,8 +2520,6 @@ export function LoadCenterView({
                 onPress={onCreateIndentPress}
                 accessibilityLabel="Broadcast New Indent"
                 icon="package"
-                size={40}
-                iconSize={17}
               />
             ) : (
               <TouchableOpacity
