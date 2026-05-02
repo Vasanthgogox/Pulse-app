@@ -103,6 +103,40 @@ export async function submitBid(input: {
   return { error: null, bidId: data?.id ?? null, alreadyBid: false };
 }
 
+/**
+ * Pulse / story bid: single RPC inserts bid + upserts direct_quotes for posts.source_indent_id.
+ * Replaces client-side fuzzy indent matching.
+ */
+export async function submitPulseBidWithDirectQuote(input: {
+  postId: string;
+  bidderOrganizationId: string;
+  amount: number;
+  note?: string;
+}): Promise<{ error: Error | null; bidId: string | null; alreadyBid: boolean }> {
+  const { data, error } = await supabase().rpc('submit_pulse_bid_with_direct_quote', {
+    p_post_id: input.postId,
+    p_bidder_org_id: input.bidderOrganizationId,
+    p_amount: input.amount,
+    p_note: input.note ?? '',
+  });
+
+  if (error) {
+    let msg = error.message;
+    if (msg.includes('POST_NOT_LINKED_TO_INDENT')) {
+      msg =
+        'This story is not linked to an indent. Ask the publisher to broadcast from a load indent, or quote from Get Load.';
+    }
+    return { error: new Error(msg), bidId: null, alreadyBid: false };
+  }
+
+  const row = data as { bid_id?: string; already_bid?: boolean } | null;
+  return {
+    error: null,
+    bidId: row?.bid_id ?? null,
+    alreadyBid: Boolean(row?.already_bid),
+  };
+}
+
 export async function acceptBid(
   bidId: string,
 ): Promise<{ error: Error | null }> {

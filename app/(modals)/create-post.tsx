@@ -4,9 +4,10 @@
  */
 import Theme from "@/constants/Theme";
 import Layout from "@/constants/Layout";
+import { useAuth } from "@/contexts/AuthContext";
 import { BroadcastPickIndentCard } from "@/features/network/components/BroadcastPickIndentCard";
 import { createPost, type PostType } from "@/features/network/services/posts.service";
-import { getIndentDisplayNumber } from "@/features/indents";
+import { createIndent, getIndentDisplayNumber } from "@/features/indents";
 import { indentCanBroadcastToPulseNetwork } from "@/features/network/utils/indentBroadcastEligibility.util";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
@@ -64,6 +65,7 @@ export default function CreatePostScreen() {
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const { currentOrganization: organization } = useOrganization();
+  const { profile } = useAuth();
   const orgId = organization?.id ?? null;
   const invalidatePosts = useInvalidatePosts(orgId);
   const invalidateIndents = useInvalidateIndents();
@@ -204,19 +206,47 @@ export default function CreatePostScreen() {
       });
       error = res.error;
     } else if (type === "LOAD" && loadEntryMode === "manual") {
-      const res = await createPost({
-        organizationId: orgId,
-        type: "LOAD",
-        content: content.trim() || undefined,
-        origin: origin.trim() || undefined,
-        destination: destination.trim() || undefined,
-        vehicleType: vehicleType || undefined,
-        weightTonnes: Number.isNaN(weightParsed) ? undefined : weightParsed,
-        rateOffer: Number.isNaN(parsed) ? undefined : parsed,
-        material: material.trim() || undefined,
-        expiresAt,
-      });
-      error = res.error;
+      const weightTonnes = Number.isNaN(weightParsed) || weightParsed <= 0 ? 6 : weightParsed;
+      const weightKg = Math.max(100, weightTonnes * 1000);
+      const rateNum = Number.isNaN(parsed) || parsed <= 0 ? 1 : parsed;
+      const mat = material.trim() || "General";
+      const veh = vehicleType.trim() || "Open Body";
+      const { error: indentErr, indent: pulseIndent } = await createIndent(
+        orgId,
+        {
+          pickup_area: origin.trim(),
+          drop_location: destination.trim(),
+          client_name: mat.slice(0, 200),
+          client_price: rateNum,
+          supplier_target: rateNum,
+          vehicle_type: veh,
+          load_type: mat.slice(0, 100),
+          weight: weightKg,
+          pickup_date: null,
+          circulation_target: "both",
+          owner_user_id: profile?.uid ?? undefined,
+          created_by_user_id: profile?.uid ?? undefined,
+        },
+        { action: "share" },
+      );
+      if (indentErr || !pulseIndent) {
+        error = indentErr ?? new Error("Could not create indent for this story");
+      } else {
+        const res = await createPost({
+          organizationId: orgId,
+          type: "LOAD",
+          content: content.trim() || undefined,
+          origin: origin.trim() || undefined,
+          destination: destination.trim() || undefined,
+          vehicleType: veh || undefined,
+          weightTonnes: weightTonnes,
+          rateOffer: rateNum,
+          material: mat || undefined,
+          expiresAt,
+          sourceIndentId: pulseIndent.id,
+        });
+        error = res.error;
+      }
     } else {
       const res = await createPost({
         organizationId: orgId,
