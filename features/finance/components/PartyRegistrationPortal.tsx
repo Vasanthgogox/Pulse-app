@@ -261,6 +261,8 @@ function PartyRegistrationPortalInner(
   const [driverCommissionPerKm, setDriverCommissionPerKm] = useState<
     number | null
   >(null);
+  /** When true, Save creates a fleet driver row via `onAddDriver` instead of sending an in-app invite. */
+  const [driverPreferOfflineOnly, setDriverPreferOfflineOnly] = useState(false);
 
   // Vehicle — aligned with AddVehicleModal (category chips + preset pickers + specs)
   const [vehicleReg, setVehicleReg] = useState("");
@@ -292,6 +294,7 @@ function PartyRegistrationPortalInner(
     setDriverPayableAmount(null);
     setDriverCommissionPercent(null);
     setDriverCommissionPerKm(null);
+    setDriverPreferOfflineOnly(false);
     setDriverExistingMatches([]);
     setDriverPhoneLookupLoading(false);
     setDriverPhoneLookupError(null);
@@ -398,6 +401,11 @@ function PartyRegistrationPortalInner(
     setDriverPhone(formatMobileNumber(text));
     setDriverExistingMatches([]);
     setDriverPhoneLookupError(null);
+    setDriverPreferOfflineOnly(false);
+  };
+
+  const handleAddDriverOfflineInstead = () => {
+    setDriverPreferOfflineOnly(true);
   };
 
   const insets = useSafeAreaInsets();
@@ -671,7 +679,11 @@ function PartyRegistrationPortalInner(
         const dp = buildDriverPayload();
         const pn = normalizeIndianPhoneForMetadata(dp.phone) ?? dp.phone.trim();
         const payload = { ...dp, phone: pn };
-        if (onInviteDriver && driverExistingMatches.length > 0) {
+        if (
+          onInviteDriver &&
+          driverExistingMatches.length > 0 &&
+          !driverPreferOfflineOnly
+        ) {
           await onInviteDriver(payload);
           onClose();
           return;
@@ -844,7 +856,8 @@ function PartyRegistrationPortalInner(
   const reviewDriverInvite =
     kind === "driver" &&
     Boolean(onInviteDriver) &&
-    driverExistingMatches.length > 0;
+    driverExistingMatches.length > 0 &&
+    !driverPreferOfflineOnly;
 
   const reviewSaveLabel =
     inviteeMatch &&
@@ -1312,6 +1325,26 @@ function PartyRegistrationPortalInner(
                                 ? t("existingDriverInFleetDetail")
                                 : "Tap Continue, then use Send request on the review screen to invite them in the app."}
                             </Text>
+                            {!driverExistingMatches.some(
+                              (m) => m.is_in_fleet === true,
+                            ) ? (
+                              driverPreferOfflineOnly ? (
+                                <Text style={styles.clientInviteeHint}>
+                                  Offline fleet record only — no in-app invite will
+                                  be sent.
+                                </Text>
+                              ) : (
+                                <Pressable
+                                  onPress={handleAddDriverOfflineInstead}
+                                  disabled={submitting}
+                                  style={styles.clientOfflineLink}
+                                >
+                                  <Text style={styles.clientOfflineLinkText}>
+                                    Add as offline driver instead
+                                  </Text>
+                                </Pressable>
+                              )
+                            ) : null}
                           </View>
                         ) : null}
                       </>
@@ -1549,6 +1582,25 @@ function PartyRegistrationPortalInner(
                 </View>
               </View>
             )}
+
+            {step === "review" &&
+            kind === "driver" &&
+            onInviteDriver &&
+            driverExistingMatches.length > 0 &&
+            !driverExistingMatches.some((m) => m.is_in_fleet === true) &&
+            !driverPreferOfflineOnly ? (
+              <View style={styles.reviewDriverOfflineLinkWrap}>
+                <Pressable
+                  onPress={handleAddDriverOfflineInstead}
+                  disabled={submitting}
+                  style={styles.clientOfflineLink}
+                >
+                  <Text style={styles.clientOfflineLinkText}>
+                    Add as offline driver instead
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
 
             {step === "form" ? (
               <Pressable
@@ -2583,6 +2635,10 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     color: "#2563eb",
+  },
+  reviewDriverOfflineLinkWrap: {
+    paddingHorizontal: 20,
+    paddingBottom: 8,
   },
   clientNoMatchHint: {
     fontSize: 12,
