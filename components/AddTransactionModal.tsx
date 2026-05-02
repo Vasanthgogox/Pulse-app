@@ -162,6 +162,7 @@ function ledgerPaymentTypeLucide(kind: string, size = 20) {
       return <Sparkles {...p} color="#db2777" />;
     case "SUPPLIER PAYMENT":
     case "DRIVER SALARY":
+    case "DRIVER COMMISSION":
     case "SUPPLIER COST":
       return <Wallet {...p} color="#0f766e" />;
     default:
@@ -250,6 +251,7 @@ export function allocateIntegerByWeights(total: number, weights: number[]): numb
 /** Legacy expense categories (backward compat); prefer CLIENT/SUPPLIER/DRIVER/VEHICLE_CATEGORIES. */
 export const EXPENSE_CATEGORIES = [
   "DRIVER SALARY",
+  "DRIVER COMMISSION",
   "SUPPLIER PAYMENT",
   "FUEL",
   "TOLL",
@@ -391,6 +393,7 @@ const PAYMENT_TYPE_ICON: Record<string, FontAwesomeIconName> = {
   "Detention Charges": "clock-o",
   "Cancellation Charges": "ban",
   Commission: "line-chart",
+  "DRIVER COMMISSION": "line-chart",
   Penalty: "exclamation-triangle",
   "Permit / Tax": "file-text-o",
   Fuel: "tint",
@@ -1529,6 +1532,19 @@ export function AddTransactionModal({
   const effectivePartyName =
     isPartyLocked && type === "in"
       ? resolvedLockedPartyName
+      : tripLocked &&
+          category === "DRIVER COMMISSION" &&
+          type === "out" &&
+          ((selectedTrip?.driver_id &&
+            safeDrivers.find((d) => d.id === selectedTrip.driver_id)?.name?.trim()) ||
+            ((selectedTrip as { driver_display_name?: string | null } | null)
+              ?.driver_display_name ?? "")
+              .trim())
+        ? ((selectedTrip?.driver_id &&
+            safeDrivers.find((d) => d.id === selectedTrip.driver_id)?.name?.trim()) ||
+            ((selectedTrip as { driver_display_name?: string | null } | null)
+              ?.driver_display_name ?? "")
+              .trim())
       : type === "out" && cashOutPayeeName?.trim()
         ? cashOutPayeeName.trim()
         : type === "out" &&
@@ -1580,13 +1596,17 @@ export function AddTransactionModal({
   const tripLockedOutPayoutCounterpartyId =
     tripLocked &&
     type === "out" &&
-    partyId != null &&
-    partyId !== "misc" &&
-    partyId !== "driver-salary" &&
-    (safeDrivers.some((d) => d.id === partyId) ||
-      safeSuppliers.some((s) => s.id === partyId))
-      ? partyId
-      : null;
+    (
+      (partyId != null &&
+        partyId !== "misc" &&
+        partyId !== "driver-salary" &&
+        (safeDrivers.some((d) => d.id === partyId) ||
+          safeSuppliers.some((s) => s.id === partyId)))
+        ? partyId
+        : (category === "DRIVER COMMISSION" && selectedTrip?.driver_id
+            ? selectedTrip.driver_id
+            : null)
+    );
   const tripLockedOutPayoutCounterpartyName =
     tripLockedOutPayoutCounterpartyId == null
       ? null
@@ -1602,6 +1622,8 @@ export function AddTransactionModal({
     (isDriverSalaryParty ||
       (cashOutPayeeId != null &&
         safeDrivers.some((d) => d.id === cashOutPayeeId)));
+  const isDriverCommissionCategory =
+    type === "out" && category === "DRIVER COMMISSION";
   const isSupplierPayment =
     type === "out" &&
     !hidePartyForCashOut &&
@@ -1627,7 +1649,9 @@ export function AddTransactionModal({
     if (hidePartyForCashOut && type === "out") return []; // Vehicle: category is the first field (party = vehicle category)
     // Legacy / fallback: old EXPENSE_CATEGORIES for any other Cash OUT
     return hidePartyForCashOut
-      ? EXPENSE_CATEGORIES.filter((c) => c !== "DRIVER SALARY")
+      ? EXPENSE_CATEGORIES.filter(
+          (c) => c !== "DRIVER SALARY" && c !== "DRIVER COMMISSION",
+        )
       : [...EXPENSE_CATEGORIES];
   }, [
     type,
@@ -1959,7 +1983,7 @@ export function AddTransactionModal({
       visible &&
       hidePartyForCashOut &&
       type === "out" &&
-      category === "DRIVER SALARY"
+      (category === "DRIVER SALARY" || category === "DRIVER COMMISSION")
     )
       setCategory(null);
   }, [visible, hidePartyForCashOut, type, category]);
@@ -1982,7 +2006,11 @@ export function AddTransactionModal({
       return;
     }
     if (type === "out") {
-      if (category !== "SUPPLIER PAYMENT" && category !== "DRIVER SALARY")
+      if (
+        category !== "SUPPLIER PAYMENT" &&
+        category !== "DRIVER SALARY" &&
+        category !== "DRIVER COMMISSION"
+      )
         setCategory("SUPPLIER PAYMENT");
     }
   }, [
@@ -1993,6 +2021,26 @@ export function AddTransactionModal({
     isSupplierPayment,
     isClientPayment,
     category,
+  ]);
+
+  // Driver Commission should resolve against a driver counterparty.
+  useEffect(() => {
+    if (!visible) return;
+    if (type !== "out" || category !== "DRIVER COMMISSION") return;
+    if (tripLocked || isPartyLocked) return;
+    if (partyId != null && safeDrivers.some((d) => d.id === partyId)) return;
+    const preferredDriverId =
+      selectedTrip?.driver_id ?? (safeDrivers.length > 0 ? safeDrivers[0].id : null);
+    if (preferredDriverId) setPartyId(preferredDriverId);
+  }, [
+    visible,
+    type,
+    category,
+    tripLocked,
+    isPartyLocked,
+    partyId,
+    safeDrivers,
+    selectedTrip,
   ]);
 
   /** Vehicle number: from selected trip when present, else from explicit vehicle pick (aggregated flow). */
@@ -2176,13 +2224,22 @@ export function AddTransactionModal({
             lockedPartyName ??
             null;
         } else {
+          const preferDriverForCommission = isDriverCommissionCategory;
           const preferredOutId =
-            selectedTripMode === "asset"
+            preferDriverForCommission
+              ? (selectedTrip.driver_id ?? selectedTrip.supplier_id ?? null)
+              : selectedTripMode === "asset"
               ? (selectedTrip.driver_id ?? selectedTrip.supplier_id ?? null)
               : (selectedTrip.supplier_id ?? selectedTrip.driver_id ?? null);
           derivedContactId = preferredOutId;
           derivedContactType =
-            selectedTripMode === "asset"
+            preferDriverForCommission
+              ? selectedTrip.driver_id
+                ? "driver"
+                : selectedTrip.supplier_id
+                  ? "supplier"
+                  : null
+              : selectedTripMode === "asset"
               ? selectedTrip.driver_id
                 ? "driver"
                 : selectedTrip.supplier_id
