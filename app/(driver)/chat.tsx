@@ -60,7 +60,7 @@ function LetterAvatar({ name, own, size = 32 }: { name: string; own?: boolean; s
     <View
       style={{
         width: size, height: size, borderRadius: size / 2,
-        backgroundColor: own ? "#0f172a" : "#efefef",
+        backgroundColor: own ? Theme.driverEmeraldDark : "#efefef",
         borderWidth: 1, borderColor: own ? "transparent" : "#e5e7eb",
         alignItems: "center", justifyContent: "center", flexShrink: 0,
       }}
@@ -609,7 +609,7 @@ const dr = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 14,
-    backgroundColor: "#0f172a",
+    backgroundColor: Theme.driverEmeraldDark,
     borderBottomLeftRadius: 18,
     borderBottomRightRadius: 18,
   },
@@ -633,7 +633,10 @@ const dr = StyleSheet.create({
     padding: 12, borderRadius: 18,
     backgroundColor: "#fff", borderWidth: 1, borderColor: "#eef2f7",
   },
-  convItemActive: { backgroundColor: "#0f172a", borderColor: "#0f172a" },
+  convItemActive: {
+    backgroundColor: Theme.driverEmeraldDark,
+    borderColor: Theme.driverEmeraldDark,
+  },
   convAvatar: {
     width: 44, height: 44, borderRadius: 13,
     backgroundColor: "#e8eaf6",
@@ -654,7 +657,7 @@ const dr = StyleSheet.create({
   header: {
     flexDirection: "row", alignItems: "center", gap: 12,
     paddingHorizontal: 16, paddingVertical: 14,
-    backgroundColor: "#0f172a",
+    backgroundColor: Theme.driverEmeraldDark,
     borderBottomLeftRadius: 18, borderBottomRightRadius: 18,
   },
   headerTitle: { fontSize: 15, fontWeight: "900", color: "#fff", textTransform: "uppercase", fontStyle: "italic" },
@@ -664,7 +667,10 @@ const dr = StyleSheet.create({
   bubbleWrapOwn: { justifyContent: "flex-end" },
   bubbleWrapOther: { justifyContent: "flex-start" },
   bubble: { borderRadius: 16, paddingHorizontal: 13, paddingVertical: 9 },
-  bubbleOwn: { backgroundColor: "#5b5ef4", borderBottomRightRadius: 4 },
+  bubbleOwn: {
+    backgroundColor: Theme.driverEmerald,
+    borderBottomRightRadius: 4,
+  },
   bubbleOther: {
     backgroundColor: "#fff", borderBottomLeftRadius: 4,
     borderWidth: 1, borderColor: "#f0f0f0",
@@ -752,7 +758,9 @@ const dr = StyleSheet.create({
   },
   sendBtn: {
     width: 40, height: 40, borderRadius: 20,
-    backgroundColor: Theme.primary, alignItems: "center", justifyContent: "center",
+    backgroundColor: Theme.driverEmerald,
+    alignItems: "center",
+    justifyContent: "center",
   },
   sendBtnOff: { backgroundColor: "#e2e8f0" },
 });

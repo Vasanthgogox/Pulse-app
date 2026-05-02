@@ -26,6 +26,7 @@ import { getVehicleDocumentViewUrl } from "@/features/vehicles/services/vehicleD
 import { getVehicleById } from "@/features/vehicles/services/vehicles.service";
 import type { VehicleDocuments } from "@/features/vehicles/utils/vehicleDocuments.util";
 import { DOCUMENT_EXPIRY_ORDER, DOCUMENT_LABELS } from "@/features/vehicles/utils/vehicleDocuments.util";
+import { useTripChat } from "@/features/chat/contexts/TripChatContext";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { canAssignTrip, getCapabilitiesFromProfile } from "@/lib/capabilities";
 import { isAggregateTrip, shouldShowAggregateTripKindPill } from "@/lib/driverUtils";
@@ -49,7 +50,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import type * as ExpoLocationTypes from "expo-location";
 import { useRouter } from "expo-router";
-import { ReceiptText } from "lucide-react-native";
+import { MessageSquare, ReceiptText } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -244,6 +245,7 @@ export default function TripDetailScreen({
   const { t } = useLanguage();
   const { profile, user } = useAuth();
   const { currentOrganization } = useOrganization();
+  const { initiateDriverConversationForTrip } = useTripChat();
   const queryClient = useQueryClient();
   const [trip, setTrip] = useState<TripRow | null>(null);
   const { data: shipperNameByTripId = {} } = useShipperDisplayNamesQuery(currentOrganization?.id ?? null);
@@ -2555,6 +2557,39 @@ export default function TripDetailScreen({
     router.push(`/(modals)/ledger-sync?${params.toString()}`);
   }, [trip, driverName, router, t]);
 
+  /** Same trip thread as Command Hub — opens dispatcher Chat modal with this conversation. */
+  const handleOpenTripChat = useCallback(async () => {
+    if (!trip?.id || !trip.organization_id) return;
+    if (!trip.driver_id) {
+      Alert.alert(
+        t("tripChatNeedsDriverTitle"),
+        t("tripChatNeedsDriverBody"),
+      );
+      return;
+    }
+    const id = await initiateDriverConversationForTrip({
+      tripId: trip.id,
+      fleetOrganizationId: trip.organization_id,
+      driverId: trip.driver_id,
+      driverDisplayName: driverName?.trim() || "Driver",
+      tripNumber: getTripDisplayNumber(trip),
+      pickupArea: trip.pickup_area ?? "",
+      dropLocation: trip.drop_location ?? "",
+    });
+    if (!id) {
+      Alert.alert(t("tripChatOpenFailedTitle"), t("tripChatOpenFailedBody"));
+      return;
+    }
+    router.push({
+      pathname: "/(modals)/chat",
+      params: {
+        tab: "trips",
+        conversationId: id,
+        ts: String(Date.now()),
+      },
+    });
+  }, [trip, driverName, initiateDriverConversationForTrip, router, t]);
+
   /** Sum driver payments (amount_out where contact_type=driver) — internal-only "paid" side. */
   const paidToDriver = useMemo(
     () =>
@@ -2946,6 +2981,7 @@ export default function TripDetailScreen({
             title={t('trip')}
             showBack
             onBack={onBack}
+            onChatClick={handleOpenTripChat}
             onLoadClick={() => { onBack(); router.push('/load-board'); }}
             onNetworkClick={() => { onBack(); router.push('/(tabs)/network'); }}
             onNotificationClick={() => { onBack(); router.push('/milestone'); }}
@@ -3237,24 +3273,35 @@ export default function TripDetailScreen({
             </Text>
           </View>
         </View>
-        <TouchableOpacity
-          onPress={openAddEntry}
-          style={styles.headerAction}
-          activeOpacity={0.8}
-          accessibilityLabel={t("addEntry")}
-        >
-          <SemanticAddIcon
-            IconComponent={ReceiptText}
-            iconSize={16}
-            iconColor={Theme.textOnPrimary}
-            badgeSize={16}
-            badgeIconSize={11}
-            badgeBackgroundColor={Theme.textOnPrimary}
-            badgeIconColor={Theme.darkBackground}
-            badgeOffsetX={-7}
-            badgeOffsetY={-5}
-          />
-        </TouchableOpacity>
+        <View style={styles.headerRightActions}>
+          <TouchableOpacity
+            onPress={() => void handleOpenTripChat()}
+            style={styles.headerChatBtn}
+            activeOpacity={0.8}
+            accessibilityLabel={t("tripChatNeedsDriverTitle")}
+            accessibilityRole="button"
+          >
+            <MessageSquare size={18} color={Theme.darkGreen} strokeWidth={2.4} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={openAddEntry}
+            style={styles.headerAction}
+            activeOpacity={0.8}
+            accessibilityLabel={t("addEntry")}
+          >
+            <SemanticAddIcon
+              IconComponent={ReceiptText}
+              iconSize={16}
+              iconColor={Theme.textOnPrimary}
+              badgeSize={16}
+              badgeIconSize={11}
+              badgeBackgroundColor={Theme.textOnPrimary}
+              badgeIconColor={Theme.darkBackground}
+              badgeOffsetX={-7}
+              badgeOffsetY={-5}
+            />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -4449,6 +4496,21 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surfaceGray,
   },
   headerCenter: { flex: 1, minWidth: 0 },
+  headerRightActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  headerChatBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(21,128,61,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(21,128,61,0.28)",
+  },
   headerTitle: {
     fontSize: 16,
     fontWeight: "800",

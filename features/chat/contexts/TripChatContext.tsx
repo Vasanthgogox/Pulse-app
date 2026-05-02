@@ -63,6 +63,17 @@ export interface InitiateConversationParams {
   partyId: string;
 }
 
+export interface InitiateDriverConversationParams {
+  tripId: string;
+  /** Fleet org that owns the trip (`trips.organization_id`) — required for supplier views too */
+  fleetOrganizationId: string;
+  driverId: string;
+  driverDisplayName: string;
+  tripNumber: string;
+  pickupArea: string;
+  dropLocation: string;
+}
+
 interface TripChatContextType {
   organizationId: string | null;
   conversations: TripConversation[];
@@ -75,8 +86,17 @@ interface TripChatContextType {
   markAsRead: (conversationId: string) => Promise<void>;
   getTotalUnreadCount: () => number;
   refreshConversations: () => Promise<void>;
+  /** Loads one thread by id and merges into state (deep links when list omits it). */
+  hydrateConversationById: (conversationId: string) => Promise<TripConversation | null>;
   /** Creates (or returns existing) conversation. Returns conversation id. */
   initiateConversation: (params: InitiateConversationParams) => Promise<string | null>;
+  /**
+   * Opens the driver ↔ fleet thread for a trip using the trip's owning org id.
+   * Use from Trip Details so suppliers and fleet see the same conversation as Command Hub.
+   */
+  initiateDriverConversationForTrip: (
+    params: InitiateDriverConversationParams
+  ) => Promise<string | null>;
 }
 
 const TripChatContext = createContext<TripChatContextType | undefined>(undefined);
@@ -150,7 +170,7 @@ export function TripChatProvider({ children }: { children: ReactNode }) {
           setConversations((prev) => {
             const hasConv = prev.some((c) => c.id === newMsg.conversation_id);
             if (!hasConv) {
-              setTimeout(() => void loadConversations(), 0);
+              void loadConversations();
               return prev;
             }
             return prev.map((conv) => {
@@ -161,9 +181,13 @@ export function TripChatProvider({ children }: { children: ReactNode }) {
                 newMsg.sender_role === "client" ||
                 newMsg.sender_role === "supplier" ||
                 newMsg.sender_role === "driver";
+              const nextMessages = [...conv.messages, newMsg].sort(
+                (a, b) =>
+                  new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+              );
               return {
                 ...conv,
-                messages: [...conv.messages, newMsg],
+                messages: nextMessages,
                 last_message_at: newMsg.created_at,
                 last_message_preview: newMsg.content.slice(0, 120),
                 unread_dispatcher_count: fromParty
@@ -313,6 +337,49 @@ export function TripChatProvider({ children }: { children: ReactNode }) {
     [organizationId]
   );
 
+  const initiateDriverConversationForTrip = useCallback(
+    async (params: InitiateDriverConversationParams): Promise<string | null> => {
+      const fleetOrg = params.fleetOrganizationId?.trim();
+      const driverId = params.driverId?.trim();
+      if (!fleetOrg || !driverId) return null;
+      try {
+        const conv = await chatService.getOrCreateConversation({
+          tripId: params.tripId,
+          partyType: "driver",
+          partyName: params.driverDisplayName.trim() || "Driver",
+          organizationId: fleetOrg,
+          partyId: driverId,
+        });
+        await loadConversations();
+        return conv.id;
+      } catch {
+        return null;
+      }
+    },
+    [loadConversations]
+  );
+
+  const hydrateConversationById = useCallback(
+    async (conversationId: string): Promise<TripConversation | null> => {
+      try {
+        const conv = await chatService.getTripConversationById(conversationId);
+        if (!conv) return null;
+        setConversations((prev) => {
+          if (prev.some((c) => c.id === conv.id)) {
+            return prev.map((c) =>
+              c.id === conv.id ? { ...c, ...conv, messages: conv.messages } : c
+            );
+          }
+          return [conv, ...prev];
+        });
+        return conv;
+      } catch {
+        return null;
+      }
+    },
+    []
+  );
+
   return (
     <TripChatContext.Provider
       value={{
@@ -323,7 +390,9 @@ export function TripChatProvider({ children }: { children: ReactNode }) {
         markAsRead,
         getTotalUnreadCount,
         refreshConversations: loadConversations,
+        hydrateConversationById,
         initiateConversation,
+        initiateDriverConversationForTrip,
       }}
     >
       {children}
