@@ -12,7 +12,8 @@ import {
     type TripAdjustment,
 } from "@/features/trips/services/tripAdjustments";
 import { isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
-import { isAggregateTrip } from "@/lib/driverUtils";
+import { isAggregateTrip, shouldShowAggregateTripKindPill } from "@/lib/driverUtils";
+import type { TripHubPartyMeta } from "../utils/tripHubPartyMeta";
 import {
     formatINR,
     formatLedgerDate,
@@ -54,7 +55,6 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getTripDisplayNumber, type TripRow } from "../services/trips.service";
-import type { TripHubPartyMeta } from "../utils/tripHubPartyMeta";
 
 if (
   Platform.OS === "android" &&
@@ -483,6 +483,11 @@ export type TripsHubTripCardProps = {
    * Omitted or `undefined` = use raw `client_price` / `supplier_rate` (e.g. while map loads).
    */
   financeAdjustments?: TripAdjustment[] | null;
+  /**
+   * Supplier linked org + driver flags for the Asset vs Aggregate **pill** only.
+   * When omitted, pill matches legacy `supplier_id` semantics.
+   */
+  kindPillMeta?: Pick<TripHubPartyMeta, "supplierLinkedOrgId" | "driverTrackingOnly"> | null;
 };
 
 export function TripsHubTripCard({
@@ -505,15 +510,19 @@ export function TripsHubTripCard({
   ledgerTxnCount,
   lastLedgerDateLabel,
   financeAdjustments,
+  kindPillMeta,
 }: TripsHubTripCardProps) {
   const { width: cardViewportWidth } = useWindowDimensions();
   const compactMetricGrid = cardViewportWidth > 0 && cardViewportWidth < 640;
-  const aggregate = isAggregateTrip(trip);
-  // Keep Trips hub labels aligned with Trip Detail header semantics:
-  // aggregate is determined by supplier linkage, not by assignment completeness.
-  const showAssetTripIcon = !aggregate;
+  const hasSupplierLink = isAggregateTrip(trip);
+  const showAggregateKindPill = shouldShowAggregateTripKindPill(trip, {
+    viewerOrganizationId: currentOrganizationId,
+    supplierLinkedOrganizationId: kindPillMeta?.supplierLinkedOrgId ?? null,
+    driverTrackingOnly: kindPillMeta?.driverTrackingOnly,
+  });
+  const showAssetTripIcon = !showAggregateKindPill;
   const typeLabel = showAssetTripIcon ? tr("tripAsset") : tr("tripAggregate");
-  const subTypeLabel = aggregate ? tr("integrated") : tr("manual");
+  const subTypeLabel = hasSupplierLink ? tr("integrated") : tr("manual");
   /** `undefined` while adjustment map loads — hub uses raw rates. */
   const adj = financeAdjustments;
   const revenue = tripHubRevenue(trip, currentOrganizationId, adj);
@@ -532,7 +541,7 @@ export function TripsHubTripCard({
   const supplierNameResolved = (displaySupplierName ?? "").trim();
   const showSupplierParty =
     !!supplierNameResolved ||
-    aggregate ||
+    hasSupplierLink ||
     isLoadBasedTrip(trip);
   const supplierLine =
     supplierNameResolved || (showSupplierParty ? tr("tripsHubAwaitingData") : "");
@@ -1150,18 +1159,21 @@ export function TripsHubTableView({
           (r) => r.reconciliation_status === "mismatch",
         );
         const hasSalesConflict = hasLedgerMismatch;
-        const aggregate = isAggregateTrip(t);
-        // Keep Trips hub labels aligned with Trip Detail header semantics:
-        // aggregate is determined by supplier linkage, not by assignment completeness.
-        const showAssetTripIcon = !aggregate;
+        const meta = partyMetaByTripId?.get(t.id);
+        const hasSupplierLink = isAggregateTrip(t);
+        const showAggregateKindPill = shouldShowAggregateTripKindPill(t, {
+          viewerOrganizationId: currentOrganizationId,
+          supplierLinkedOrganizationId: meta?.supplierLinkedOrgId ?? null,
+          driverTrackingOnly: meta?.driverTrackingOnly,
+        });
+        const showAssetTripIcon = !showAggregateKindPill;
         const typeLabel = showAssetTripIcon ? tr("tripAsset") : tr("tripAggregate");
-        const subTypeLabel = aggregate ? tr("integrated") : tr("manual");
+        const subTypeLabel = hasSupplierLink ? tr("integrated") : tr("manual");
         const routeShort = `${t.pickup_area ?? "—"} → ${t.drop_location ?? "—"}`;
         const routeDisplay = routeShort.toUpperCase();
         const pnl = tripHubPnl(t, currentOrganizationId, rowAdj);
         const marginPct = marginPercentLabel(t, currentOrganizationId, rowAdj);
         const displayClient = (clientNameByTripId?.[t.id] ?? t.client_name ?? "").trim();
-        const meta = partyMetaByTripId?.get(t.id);
         const supplierLine = (meta?.displaySupplierName ?? "").trim() || "—";
         const clientOrgFields = linkedOrgAvatarFields(
           meta?.clientLinkedOrgId,
@@ -1173,7 +1185,7 @@ export function TripsHubTableView({
         );
         const showSupplierParty =
           (supplierLine !== "—" && supplierLine.trim() !== "") ||
-          aggregate ||
+          hasSupplierLink ||
           isLoadBasedTrip(t);
         const driverFb = t.driver_id
           ? `driver-entity:${String(t.driver_id).trim()}`
@@ -1223,15 +1235,15 @@ export function TripsHubTableView({
           entityType: "supplier",
         });
         const vehicleLine = (t.vehicle_display_number ?? "").trim();
-        const payableKindLabel = !aggregate
+        const payableKindLabel = !hasSupplierLink
           ? tr("tripsHubColVehicle")
           : tr("tripsHubSupplierShort");
-        const payableNameDisplay = !aggregate
+        const payableNameDisplay = !hasSupplierLink
           ? (vehicleLine || tr("tripsHubAwaitingData"))
           : payablePartyName === "—"
             ? "—"
             : payablePartyName.toUpperCase();
-        const payableStatusLine = !aggregate
+        const payableStatusLine = !hasSupplierLink
           ? payableTarget > 0
             ? `${tr("tripsHubColCost").toUpperCase()} ${formatINR(payableTarget)}`
             : "NO VEHICLE EXPENSE"
@@ -1481,7 +1493,7 @@ export function TripsHubTableView({
                     <View style={styles.manifestSettlementIconChipPay}>
                       <View style={[styles.manifestSettlementChipOrb, styles.manifestSettlementChipOrbPayA]} />
                       <View style={[styles.manifestSettlementChipOrb, styles.manifestSettlementChipOrbPayB]} />
-                      {aggregate && supplierPayRenderable && showSupplierParty ? (
+                      {hasSupplierLink && supplierPayRenderable && showSupplierParty ? (
                         <View style={styles.manifestSettlementAvatarRingPay}>
                           <HubPartyAvatar
                             size="compact"

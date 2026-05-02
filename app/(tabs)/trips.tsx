@@ -34,7 +34,8 @@ import {
 } from "@/features/trips/utils/tripHubMetrics";
 import { canAccessTrips, getCapabilitiesFromProfile } from "@/lib/capabilities";
 import { queryKeys } from "@/lib/queryKeys";
-import { isAggregateTrip } from "@/lib/driverUtils";
+import { shouldShowAggregateTripKindPill } from "@/lib/driverUtils";
+import type { TripHubPartyMeta } from "@/features/trips/utils/tripHubPartyMeta";
 import { formatLedgerDate } from "@/lib/format";
 import {
   useAssignmentAuditQuery,
@@ -102,15 +103,24 @@ type HistoryTripMetricId =
 
 const TRIPS_PAGE_BG = "#f4f5f7";
 
-/** Aligns list + Intake / In motion hub counts with All / Asset / Aggregate. */
+/** Aligns list + Intake / In motion hub counts with All / Asset / Aggregate (same pill logic as hub cards). */
 function tripMatchesSupplyFilter(
   trip: TripRow,
   supplyFilter: SupplyFilter,
+  partyMeta: Pick<
+    TripHubPartyMeta,
+    "supplierLinkedOrgId" | "driverTrackingOnly"
+  > | undefined,
+  viewerOrganizationId: string | null | undefined,
 ): boolean {
   if (supplyFilter === "all") return true;
-  const aggregateTrip = isAggregateTrip(trip);
-  if (supplyFilter === "aggregated") return aggregateTrip;
-  return !aggregateTrip;
+  const showAggregatePill = shouldShowAggregateTripKindPill(trip, {
+    viewerOrganizationId,
+    supplierLinkedOrganizationId: partyMeta?.supplierLinkedOrgId ?? null,
+    driverTrackingOnly: partyMeta?.driverTrackingOnly,
+  });
+  if (supplyFilter === "aggregated") return showAggregatePill;
+  return !showAggregatePill;
 }
 
 function supplierNameFallbackMapsEqual(
@@ -319,6 +329,20 @@ export default function TripsScreen() {
     [showCompletedList, trips],
   );
 
+  /** Pill context only (linked org + tracking_only); independent of async supplier name fallback. */
+  const tripKindPillMetaByTripId = useMemo(
+    () =>
+      buildTripHubPartyMetaByTripId(
+        trips,
+        clients,
+        suppliers,
+        drivers,
+        transactions,
+        {},
+      ),
+    [trips, clients, suppliers, drivers, transactions],
+  );
+
   /** Active ops trips only — used to resolve which trips have any uploaded document (POD split). */
   const activeOpsTripIdsSorted = useMemo(() => {
     if (showCompletedList) return "";
@@ -359,8 +383,20 @@ export default function TripsScreen() {
 
   const tripsForHubMetricCounts = useMemo(
     () =>
-      tripsByStatus.filter((t) => tripMatchesSupplyFilter(t, supplyFilter)),
-    [tripsByStatus, supplyFilter],
+      tripsByStatus.filter((t) =>
+        tripMatchesSupplyFilter(
+          t,
+          supplyFilter,
+          tripKindPillMetaByTripId.get(t.id),
+          currentOrganization?.id,
+        ),
+      ),
+    [
+      tripsByStatus,
+      supplyFilter,
+      tripKindPillMetaByTripId,
+      currentOrganization?.id,
+    ],
   );
 
   const metricCounts = useMemo(() => {
@@ -372,7 +408,12 @@ export default function TripsScreen() {
       const completedTripsCount = trips.filter(
         (t) =>
           isCompletedStatus(t.status) &&
-          tripMatchesSupplyFilter(t, supplyFilter),
+          tripMatchesSupplyFilter(
+            t,
+            supplyFilter,
+            tripKindPillMetaByTripId.get(t.id),
+            currentOrganization?.id,
+          ),
       ).length;
       counts.delivered_docs_pending += completedTripsCount;
     }
@@ -383,6 +424,8 @@ export default function TripsScreen() {
     showCompletedList,
     trips,
     supplyFilter,
+    tripKindPillMetaByTripId,
+    currentOrganization?.id,
   ]);
 
   const transactionsByTripId = useMemo(() => {
@@ -416,7 +459,14 @@ export default function TripsScreen() {
       }
     }
     if (supplyFilter !== "all") {
-      list = list.filter((t) => tripMatchesSupplyFilter(t, supplyFilter));
+      list = list.filter((t) =>
+        tripMatchesSupplyFilter(
+          t,
+          supplyFilter,
+          tripKindPillMetaByTripId.get(t.id),
+          currentOrganization?.id,
+        ),
+      );
     }
 
     if (paymentFilter !== "all") {
@@ -545,6 +595,7 @@ export default function TripsScreen() {
     activeMetricTab,
     tripIdsWithDocuments,
     supplyFilter,
+    tripKindPillMetaByTripId,
     searchQuery,
     shipperNameByTripId,
     showCompletedList,
@@ -2642,6 +2693,16 @@ export default function TripsScreen() {
                             trip={t}
                             currentOrganizationId={
                               currentOrganization?.id ?? null
+                            }
+                            kindPillMeta={
+                              party
+                                ? {
+                                    supplierLinkedOrgId:
+                                      party.supplierLinkedOrgId,
+                                    driverTrackingOnly:
+                                      party.driverTrackingOnly,
+                                  }
+                                : null
                             }
                             financeAdjustments={tripFinanceAdjForHubLookup(
                               tripFinanceAdjForHub,

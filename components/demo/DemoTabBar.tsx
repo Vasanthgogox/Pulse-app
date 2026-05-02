@@ -1194,10 +1194,10 @@ export function DemoTabBar({
               accessibilityRole="button"
             >
               <Text style={styles.mobileNetworkActionLabel}>Messages</Text>
-              <View style={[styles.mobileNetworkActionBtn, styles.mobileNetworkMessageBtn]}>
-                <FontAwesome5 name="comment-alt" size={17} color="#ffffff" solid />
+              <View style={styles.mobileNetworkActionBtn}>
+                <FontAwesome5 name="comment-alt" size={17} color="#0f172a" solid />
                 {messageUnreadCount > 0 ? (
-                  <View style={[styles.mobileNetworkActionBadge, styles.mobileNetworkMessageBadge]}>
+                  <View style={styles.mobileNetworkActionBadge}>
                     <Text style={styles.mobileNetworkActionBadgeText}>
                       {messageUnreadCount > 9 ? "9+" : messageUnreadCount}
                     </Text>
@@ -1482,12 +1482,6 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     elevation: 12,
   },
-  mobileNetworkMessageBtn: {
-    backgroundColor: Theme.primary,
-    borderColor: "#ffffff",
-    shadowColor: Theme.primary,
-    shadowOpacity: 0.32,
-  },
   mobileNetworkActionBadge: {
     position: "absolute",
     top: -5,
@@ -1506,9 +1500,6 @@ const styles = StyleSheet.create({
     fontSize: 7,
     fontWeight: "900",
     color: "#ffffff",
-  },
-  mobileNetworkMessageBadge: {
-    backgroundColor: "#0f172a",
   },
   mobileNetworkSwitch: {
     width: 64,

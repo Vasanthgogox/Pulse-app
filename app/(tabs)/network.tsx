@@ -1122,37 +1122,50 @@ function NetworkScreenInner() {
                       );
                     })}
                   </ScrollView>
-                  {connSearchOpen ? (
-                    <View style={styles.inlineSearchBox}>
-                      <Search size={13} color={Theme.textSecondary} />
-                      <TextInput
-                        style={styles.inlineSearchInput}
-                        placeholder="Search…"
-                        placeholderTextColor={Theme.textSecondary}
-                        value={connSearch}
-                        onChangeText={setConnSearch}
-                        returnKeyType="search"
-                        autoFocus
-                      />
+                  <View
+                    style={[
+                      styles.connectionsSearchSlot,
+                      isMobileLayout && styles.connectionsSearchSlotMobile,
+                      isMobileLayout && connSearchOpen && styles.connectionsSearchSlotMobileOpen,
+                    ]}
+                  >
+                    {connSearchOpen ? (
+                      <View
+                        style={[
+                          styles.inlineSearchBox,
+                          isMobileLayout && styles.inlineSearchBoxMobile,
+                        ]}
+                      >
+                        <Search size={13} color={Theme.textSecondary} />
+                        <TextInput
+                          style={styles.inlineSearchInput}
+                          placeholder="Search…"
+                          placeholderTextColor={Theme.textSecondary}
+                          value={connSearch}
+                          onChangeText={setConnSearch}
+                          returnKeyType="search"
+                          autoFocus
+                        />
+                        <Pressable
+                          onPress={() => {
+                            setConnSearch("");
+                            setConnSearchOpen(false);
+                          }}
+                          hitSlop={8}
+                        >
+                          <Text style={styles.inlineSearchClose}>×</Text>
+                        </Pressable>
+                      </View>
+                    ) : (
                       <Pressable
-                        onPress={() => {
-                          setConnSearch("");
-                          setConnSearchOpen(false);
-                        }}
+                        onPress={() => setConnSearchOpen(true)}
+                        style={({ pressed }) => [styles.inlineSearchIconBtn, pressed && { opacity: 0.72 }]}
                         hitSlop={8}
                       >
-                        <Text style={styles.inlineSearchClose}>×</Text>
+                        <Search size={13} color={Theme.textPrimaryDark} strokeWidth={2.4} />
                       </Pressable>
-                    </View>
-                  ) : (
-                    <Pressable
-                      onPress={() => setConnSearchOpen(true)}
-                      style={({ pressed }) => [styles.inlineSearchIconBtn, pressed && { opacity: 0.72 }]}
-                      hitSlop={8}
-                    >
-                      <Search size={13} color={Theme.textPrimaryDark} strokeWidth={2.4} />
-                    </Pressable>
-                  )}
+                    )}
+                  </View>
                 </View>
               </View>
               <ConnectionsView
@@ -1168,40 +1181,36 @@ function NetworkScreenInner() {
 
           <View style={[styles.sectionBlock, isWideNetwork && styles.networkMergedPaneTertiary]}>
             <View style={[styles.discoverCard, isWideNetwork && styles.networkMergedCard]}>
-              <View
-                style={[
-                  styles.sectionHeadingRowSpread,
-                  isMobileLayout && styles.sectionHeadingRowSpreadMobile,
-                ]}
-              >
-                <View
-                  style={[
-                    styles.sectionHeadingRowCompact,
-                    isMobileLayout && styles.sectionHeadingRowCompactMobile,
-                  ]}
-                >
-                  <Compass size={14} color={Theme.textSecondary} />
-                  <View style={styles.sectionTitleBlock}>
-                    <Text style={styles.sectionKicker}>Discover potential allies</Text>
-                    <Text style={styles.sectionHeading}>Grow your network</Text>
-                  </View>
-                </View>
-                <View style={styles.discoverHeaderActions}>
-                  {discoverInviteCount > 0 && (
-                    <View style={[
-                      styles.inviteCountPill,
-                      discoverInviteCount >= discoverInviteLimit && styles.inviteCountPillOver,
-                    ]}>
-                      <Text style={[
-                        styles.inviteCountPillText,
-                        discoverInviteCount >= discoverInviteLimit && styles.inviteCountPillTextOver,
-                      ]}>
-                        {discoverInviteCount}/{discoverInviteLimit} invites
-                      </Text>
+              {isMobileLayout && discoverSearchOpen ? (
+                <View style={[styles.sectionHeadingRowSpread, styles.discoverHeaderStackMobile]}>
+                  <View style={styles.discoverHeaderTitleRowMobile}>
+                    <View style={[styles.sectionHeadingRowCompact, styles.discoverHeaderTitleFlexMobile]}>
+                      <Compass size={14} color={Theme.textSecondary} />
+                      <View style={styles.sectionTitleBlock}>
+                        <Text style={styles.sectionKicker}>Discover potential allies</Text>
+                        <Text style={styles.sectionHeading}>Grow your network</Text>
+                      </View>
                     </View>
-                  )}
-                  {discoverSearchOpen ? (
-                    <View style={styles.discoverSearchInline}>
+                    {discoverInviteCount > 0 ? (
+                      <View
+                        style={[
+                          styles.inviteCountPill,
+                          discoverInviteCount >= discoverInviteLimit && styles.inviteCountPillOver,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.inviteCountPillText,
+                            discoverInviteCount >= discoverInviteLimit && styles.inviteCountPillTextOver,
+                          ]}
+                        >
+                          {discoverInviteCount}/{discoverInviteLimit} invites
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <View style={styles.discoverSearchFullRowMobile}>
+                    <View style={[styles.discoverSearchInline, styles.discoverSearchInlineDiscoverMobile]}>
                       <Search size={13} color={Theme.textSecondary} />
                       <TextInput
                         style={styles.discoverSearchInput}
@@ -1223,17 +1232,86 @@ function NetworkScreenInner() {
                         <Text style={styles.discoverSearchClose}>×</Text>
                       </Pressable>
                     </View>
-                  ) : (
-                    <Pressable
-                      onPress={() => setDiscoverSearchOpen(true)}
-                      style={({ pressed }) => [styles.discoverSearchIconBtn, pressed && { opacity: 0.72 }]}
-                      hitSlop={8}
-                    >
-                      <Search size={14} color={Theme.textPrimaryDark} strokeWidth={2.4} />
-                    </Pressable>
-                  )}
+                  </View>
                 </View>
-              </View>
+              ) : (
+                <View
+                  style={[
+                    styles.sectionHeadingRowSpread,
+                    isMobileLayout && styles.sectionHeadingRowSpreadDiscoverMobile,
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.sectionHeadingRowCompact,
+                      isMobileLayout && styles.sectionHeadingRowCompactDiscoverMobile,
+                    ]}
+                  >
+                    <Compass size={14} color={Theme.textSecondary} />
+                    <View style={styles.sectionTitleBlock}>
+                      <Text style={styles.sectionKicker}>Discover potential allies</Text>
+                      <Text style={styles.sectionHeading}>Grow your network</Text>
+                    </View>
+                  </View>
+                  <View
+                    style={[
+                      styles.discoverHeaderActions,
+                      isMobileLayout && styles.discoverHeaderActionsDiscoverMobile,
+                    ]}
+                  >
+                    {discoverInviteCount > 0 && (
+                      <View style={[
+                        styles.inviteCountPill,
+                        discoverInviteCount >= discoverInviteLimit && styles.inviteCountPillOver,
+                      ]}>
+                        <Text style={[
+                          styles.inviteCountPillText,
+                          discoverInviteCount >= discoverInviteLimit && styles.inviteCountPillTextOver,
+                        ]}>
+                          {discoverInviteCount}/{discoverInviteLimit} invites
+                        </Text>
+                      </View>
+                    )}
+                    {discoverSearchOpen ? (
+                      <View
+                        style={[
+                          styles.discoverSearchInline,
+                          isMobileLayout && styles.discoverSearchInlineDiscoverMobile,
+                        ]}
+                      >
+                        <Search size={13} color={Theme.textSecondary} />
+                        <TextInput
+                          style={styles.discoverSearchInput}
+                          placeholder="Search network..."
+                          placeholderTextColor={Theme.textSecondary}
+                          value={discoverSearch}
+                          onChangeText={setDiscoverSearch}
+                          returnKeyType="search"
+                          autoCapitalize="words"
+                          autoFocus
+                        />
+                        <Pressable
+                          onPress={() => {
+                            setDiscoverSearch("");
+                            setDiscoverSearchOpen(false);
+                          }}
+                          hitSlop={8}
+                        >
+                          <Text style={styles.discoverSearchClose}>×</Text>
+                        </Pressable>
+                      </View>
+                    ) : (
+                      <Pressable
+                        onPress={() => setDiscoverSearchOpen(true)}
+                        style={({ pressed }) => [styles.discoverSearchIconBtn, pressed && { opacity: 0.72 }]}
+                        hitSlop={8}
+                      >
+                        <Search size={14} color={Theme.textPrimaryDark} strokeWidth={2.4} />
+                      </Pressable>
+                    )}
+                  </View>
+                </View>
+              )}
               <DiscoverView
                 orgId={orgId}
                 embedded
@@ -2695,8 +2773,24 @@ const styles = StyleSheet.create({
   },
   connectionsHeaderControlsMobile: {
     width: "100%" as const,
-    justifyContent: "space-between",
-    gap: 10,
+    flexDirection: "column",
+    alignItems: "stretch",
+    alignSelf: "stretch",
+    gap: 8,
+  },
+  connectionsSearchSlot: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    minWidth: 0,
+  },
+  connectionsSearchSlotMobile: {
+    width: "100%",
+    justifyContent: "flex-end",
+  },
+  connectionsSearchSlotMobileOpen: {
+    alignSelf: "stretch",
+    justifyContent: "flex-start",
   },
   inlineFilterScroll: {
     flexDirection: "row",
@@ -2747,6 +2841,13 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surfaceGray,
     borderWidth: 0,
   },
+  inlineSearchBoxMobile: {
+    maxWidth: "100%",
+    width: "100%",
+    flex: 1,
+    minWidth: 0,
+    minHeight: 32,
+  },
   inlineSearchInput: {
     flex: 1,
     minWidth: 0,
@@ -2789,6 +2890,36 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     flexDirection: "column",
     gap: 10,
+  },
+  /** Discover: keep title + search on one row (default SpreadMobile stacks them). */
+  sectionHeadingRowSpreadDiscoverMobile: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  discoverHeaderStackMobile: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: 10,
+  },
+  discoverHeaderTitleRowMobile: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    width: "100%",
+  },
+  discoverHeaderTitleFlexMobile: {
+    flex: 1,
+    minWidth: 0,
+  },
+  discoverSearchFullRowMobile: {
+    width: "100%",
+  },
+  sectionHeadingRowCompactDiscoverMobile: {
+    flex: 1,
+    minWidth: 0,
   },
   sectionTitleBlock: {
     minWidth: 0,
@@ -2907,6 +3038,10 @@ const styles = StyleSheet.create({
     minWidth: 44,
     gap: 8,
   },
+  discoverHeaderActionsDiscoverMobile: {
+    flexShrink: 0,
+    alignSelf: "center",
+  },
   inviteCountPill: {
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -2949,6 +3084,13 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     backgroundColor: Theme.surfaceGray,
     borderWidth: 0,
+  },
+  discoverSearchInlineDiscoverMobile: {
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: "100%",
+    width: "100%",
   },
   discoverSearchInput: {
     flex: 1,
