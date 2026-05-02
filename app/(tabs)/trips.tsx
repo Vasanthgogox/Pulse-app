@@ -8,10 +8,7 @@ import { FinanceFAB } from "@/components/FinanceFAB";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  useDemoTabBarVisibilityProgressOptional,
-  useTabBarAwareScrollProps,
-} from "@/contexts/DemoTabBarScrollContext";
+import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { LedgerReportModal } from "@/features/finance";
@@ -59,7 +56,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import {
     Modal,
     NativeScrollEvent,
@@ -105,6 +101,17 @@ type HistoryTripMetricId =
   | "no_due_to_pay";
 
 const TRIPS_PAGE_BG = "#f4f5f7";
+
+/** Aligns list + Intake / In motion hub counts with All / Asset / Aggregate. */
+function tripMatchesSupplyFilter(
+  trip: TripRow,
+  supplyFilter: SupplyFilter,
+): boolean {
+  if (supplyFilter === "all") return true;
+  const aggregateTrip = isAggregateTrip(trip);
+  if (supplyFilter === "aggregated") return aggregateTrip;
+  return !aggregateTrip;
+}
 
 function supplierNameFallbackMapsEqual(
   a: Record<string, string>,
@@ -164,13 +171,6 @@ export default function TripsScreen() {
     Layout.tabBarBottomPaddingMin;
   const tripsFabBottom = webChatFabBaseBottom + Layout.fabStackOffset;
   const tabBarScrollProps = useTabBarAwareScrollProps();
-  const fallbackFabVisibilityProgress = useSharedValue(1);
-  const fabVisibilityProgress =
-    useDemoTabBarVisibilityProgressOptional() ?? fallbackFabVisibilityProgress;
-  const fabVisibilityStyle = useAnimatedStyle(() => ({
-    opacity: fabVisibilityProgress.value,
-    transform: [{ scale: 0.92 + fabVisibilityProgress.value * 0.08 }],
-  }));
   const screenTopPad =
     Platform.OS === "web" ? 0 : insets.top + Layout.headerPaddingBelowInset;
   const tripsScrollBottomPad =
@@ -357,14 +357,33 @@ export default function TripsScreen() {
     },
   });
 
+  const tripsForHubMetricCounts = useMemo(
+    () =>
+      tripsByStatus.filter((t) => tripMatchesSupplyFilter(t, supplyFilter)),
+    [tripsByStatus, supplyFilter],
+  );
+
   const metricCounts = useMemo(() => {
-    const counts = countTripsByMetric(tripsByStatus, tripIdsWithDocuments);
+    const counts = countTripsByMetric(
+      tripsForHubMetricCounts,
+      tripIdsWithDocuments,
+    );
     if (!showCompletedList) {
-      const completedTripsCount = trips.filter((t) => isCompletedStatus(t.status)).length;
+      const completedTripsCount = trips.filter(
+        (t) =>
+          isCompletedStatus(t.status) &&
+          tripMatchesSupplyFilter(t, supplyFilter),
+      ).length;
       counts.delivered_docs_pending += completedTripsCount;
     }
     return counts;
-  }, [tripsByStatus, tripIdsWithDocuments, showCompletedList, trips]);
+  }, [
+    tripsForHubMetricCounts,
+    tripIdsWithDocuments,
+    showCompletedList,
+    trips,
+    supplyFilter,
+  ]);
 
   const transactionsByTripId = useMemo(() => {
     const map = new Map<string, LedgerRow[]>();
@@ -397,11 +416,7 @@ export default function TripsScreen() {
       }
     }
     if (supplyFilter !== "all") {
-      list = list.filter((t) => {
-        const aggregateTrip = isAggregateTrip(t);
-        if (supplyFilter === "aggregated") return aggregateTrip;
-        return !aggregateTrip;
-      });
+      list = list.filter((t) => tripMatchesSupplyFilter(t, supplyFilter));
     }
 
     if (paymentFilter !== "all") {
@@ -2735,7 +2750,7 @@ export default function TripsScreen() {
         </ScrollView>
       )}
       {canAccess && (
-        <Animated.View
+        <View
           style={[
             styles.fabWrap,
             {
@@ -2743,7 +2758,6 @@ export default function TripsScreen() {
               right: Layout.screenPaddingHorizontal,
               bottom: tripsFabBottom,
             },
-            fabVisibilityStyle,
           ]}
         >
           <FinanceFAB
@@ -2751,7 +2765,7 @@ export default function TripsScreen() {
             accessibilityLabel={tr("addTrip")}
             icon="road"
           />
-        </Animated.View>
+        </View>
       )}
       <LedgerReportModal
         visible={tripLedgerExportOpen}

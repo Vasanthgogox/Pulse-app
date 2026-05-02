@@ -392,16 +392,15 @@ export default function TripDetailScreen({
       });
   }, [detail.trip?.notes]);
 
-  /** ETA for tracking HUD: prefer DB interval / duration string, else manifest minutes. */
+  /** ETA for tracking HUD — must run before loading/error early returns (hooks rule). */
   const trackingEtaLabel = useMemo(() => {
-    const tr = detail.trip;
+    const tr = detail.trip as (TripRow & TripWebExtra) | null | undefined;
     if (!tr) return "—";
-    const te = tr as TripRow & TripWebExtra;
-    const dm = te.duration_minutes;
-    const durationLabel = dm
-      ? `${Math.floor(dm / 60)}h ${dm % 60}m`
-      : "—";
-
+    const dm = tr.duration_minutes;
+    const durationLabel =
+      dm != null && Number(dm) > 0
+        ? `${Math.floor(Number(dm) / 60)}h ${Number(dm) % 60}m`
+        : "—";
     const raw = tr.estimated_duration;
     if (raw != null && String(raw).trim()) {
       const s = String(raw).trim();
