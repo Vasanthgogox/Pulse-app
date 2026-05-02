@@ -4,6 +4,7 @@ import {
   Alert,
   FlatList,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -38,6 +39,10 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import Theme from "@/constants/Theme";
 import { isAggregateTrip } from "@/lib/driverUtils";
 import {
+  getTripDisplayNumber,
+  type TripRow,
+} from "@/features/trips/services/trips.service";
+import {
   QUICK_MESSAGES,
   TripConversation,
   useTripChat,
@@ -64,10 +69,15 @@ import { DocumentShareCard } from "./DocumentShareCard";
 import { DocumentShareSheet } from "./DocumentShareSheet";
 import type { ConversationPartyType, LedgerEventMetadata, TripMessageRow } from "../types/chat.types";
 import { useAuth } from "@/contexts/AuthContext";
+import {
+  isTerminalTripStatus,
+  parseTripIdSortKey,
+} from "@/features/chat/utils/tripConversationSort";
 
 type TabId = "trips" | "network";
 
 const QUICK_EMOJIS = ["👍", "🤝", "🚛", "📍", "✅", "📦", "⚠️", "🕒", "😊", "🙌", "📞", "💯"];
+const TRIP_PARTY_FILTERS: ConversationPartyType[] = ["client", "driver", "supplier"];
 
 function getInitials(name: string) {
   return name
@@ -154,6 +164,17 @@ function partyLabel(type: ConversationPartyType) {
   return type === "client" ? "CLIENT" : type === "supplier" ? "SUPPLIER" : "DRIVER";
 }
 
+function partyFilterSheetLabel(type: ConversationPartyType): string {
+  return type === "client" ? "Client" : type === "supplier" ? "Supplier" : "Driver";
+}
+
+function getConversationTripLabel(conversation: Pick<TripConversation, "trip_number" | "display_trip_id">): string {
+  return getTripDisplayNumber({
+    trip_number: conversation.trip_number,
+    display_trip_id: conversation.display_trip_id ?? null,
+  } as TripRow);
+}
+
 type ComposePartyRow =
   | {
       kind: "selectable";
@@ -215,6 +236,8 @@ export function ChatScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
+  /** Web dispatcher layout: use anchored popovers instead of mobile-style bottom sheets. */
+  const isWebDesktopUI = Platform.OS === "web" && isDesktop;
   const { profile } = useAuth();
   const { currentOrganization } = useOrganization();
   const currentOrgId = currentOrganization?.id ?? "";
@@ -244,6 +267,12 @@ export function ChatScreen() {
   const [initiating, setInitiating] = useState(false);
   const [showNetCompose, setShowNetCompose] = useState(false);
   const [netComposeSearch, setNetComposeSearch] = useState("");
+  const [showTripSearch, setShowTripSearch] = useState(false);
+  const [tripSidebarSearch, setTripSidebarSearch] = useState("");
+  const [showTripFilterModal, setShowTripFilterModal] = useState(false);
+  const [tripPartyFilters, setTripPartyFilters] = useState<ConversationPartyType[]>([
+    ...TRIP_PARTY_FILTERS,
+  ]);
   const deepLinkAppliedRef = useRef<string | null>(null);
   /** Avoid repeating hydrate when RLS returns null for the same URL. */
   const deeplinkHydrateFailedForKeyRef = useRef<string | null>(null);
@@ -276,16 +305,39 @@ export function ChatScreen() {
 
   const tripUnread = getTotalUnreadCount();
   const netUnread = netTotal();
-  const sortedConversations = useMemo(() => {
-    return [...conversations].sort((a, b) => {
-      const unreadDiff = (b.unread_dispatcher_count ?? 0) - (a.unread_dispatcher_count ?? 0);
-      if (unreadDiff !== 0) return unreadDiff;
-      return (
-        new Date(b.last_message_at ?? 0).getTime() -
-        new Date(a.last_message_at ?? 0).getTime()
-      );
-    });
-  }, [conversations]);
+  const filteredAndSortedConversations = useMemo(() => {
+    const trimmedSearch = tripSidebarSearch.trim().toLowerCase();
+    const hasSearch = trimmedSearch.length > 0;
+    const normalizedFilters = tripPartyFilters.length
+      ? tripPartyFilters
+      : TRIP_PARTY_FILTERS;
+    const filterSet = new Set<ConversationPartyType>(normalizedFilters);
+
+    return conversations
+      .filter((conv) => filterSet.has(conv.party_type))
+      .filter((conv) => {
+        if (!hasSearch) return true;
+        const displayId = getConversationTripLabel(conv);
+        const haystack = `${displayId} ${conv.trip_number}`.toLowerCase();
+        return haystack.includes(trimmedSearch);
+      })
+      .sort((a, b) => {
+        const aActive = isTerminalTripStatus(a.trip_status) ? 0 : 1;
+        const bActive = isTerminalTripStatus(b.trip_status) ? 0 : 1;
+        if (bActive !== aActive) return bActive - aActive;
+
+        const aDisplayId = getConversationTripLabel(a);
+        const bDisplayId = getConversationTripLabel(b);
+        const aTripKey = parseTripIdSortKey(aDisplayId);
+        const bTripKey = parseTripIdSortKey(bDisplayId);
+        if (bTripKey !== aTripKey) return bTripKey - aTripKey;
+
+        return (
+          new Date(b.last_message_at ?? 0).getTime() -
+          new Date(a.last_message_at ?? 0).getTime()
+        );
+      });
+  }, [conversations, tripPartyFilters, tripSidebarSearch]);
   const sortedNetChats = useMemo(() => {
     return [...netChats].sort((a, b) => {
       const unreadDiff = (b.unreadCount ?? 0) - (a.unreadCount ?? 0);
@@ -470,6 +522,7 @@ export function ChatScreen() {
   };
 
   const openCompose = async () => {
+    setShowTripFilterModal(false);
     setShowCompose(true);
     setComposeSearch("");
     setExpandedTripId(null);
@@ -537,6 +590,15 @@ export function ChatScreen() {
         p.name.toLowerCase().includes(netComposeSearch.toLowerCase())
       )
     : netPartners;
+  const hasTripPartyFilter = tripPartyFilters.length < TRIP_PARTY_FILTERS.length;
+
+  const toggleTripPartyFilter = (partyType: ConversationPartyType) => {
+    setTripPartyFilters((prev) =>
+      prev.includes(partyType)
+        ? prev.filter((type) => type !== partyType)
+        : [...prev, partyType],
+    );
+  };
 
   // Partners that don't yet have a conversation
   const existingPartnerOrgIds = new Set(netChats.map((c) => c.partnerId));
@@ -557,6 +619,8 @@ export function ChatScreen() {
 
   const renderConvItem = ({ item }: { item: TripConversation }) => {
     const active = selectedConvId === item.id;
+    const displayTripId = getConversationTripLabel(item);
+    const isActiveTrip = !isTerminalTripStatus(item.trip_status);
     const time = item.last_message_at
       ? new Date(item.last_message_at).toLocaleTimeString("en-IN", {
           hour: "2-digit",
@@ -580,9 +644,12 @@ export function ChatScreen() {
         </View>
         <View style={s.chatBody}>
           <View style={s.chatRow}>
-            <Text style={[s.chatTitle, active && s.chatTitleActive]} numberOfLines={1}>
-              {item.trip_number}
-            </Text>
+            <View style={s.chatTitleRow}>
+              <Text style={[s.chatTitle, active && s.chatTitleActive]} numberOfLines={1}>
+                {displayTripId}
+              </Text>
+              {isActiveTrip ? <View style={[s.activeTripDot, active && s.activeTripDotActive]} /> : null}
+            </View>
             <Text style={[s.chatTime, active && s.chatTimeActive]}>{time}</Text>
           </View>
           <Text style={[s.chatPartyLabel, active && s.chatPartyLabelActive]}>
@@ -658,11 +725,37 @@ export function ChatScreen() {
             <Text style={s.brandTitle}>Command Hub</Text>
           </View>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-            <TouchableOpacity hitSlop={10}>
-              <Filter size={16} color="rgba(255,255,255,0.72)" />
-            </TouchableOpacity>
             {activeTab === "trips" && (
-              <TouchableOpacity hitSlop={10} onPress={openCompose} style={s.composeBtn}>
+              <>
+                <TouchableOpacity hitSlop={10} onPress={() => setShowTripSearch((prev) => !prev)}>
+                  <Search size={16} color="rgba(255,255,255,0.72)" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  hitSlop={10}
+                  onPress={() => {
+                    setShowCompose(false);
+                    setShowTripFilterModal((prev) => !prev);
+                  }}
+                  style={s.filterBtn}
+                >
+                  <Filter size={16} color="rgba(255,255,255,0.72)" />
+                  {hasTripPartyFilter ? <View style={s.filterActiveDot} /> : null}
+                </TouchableOpacity>
+              </>
+            )}
+            {activeTab === "trips" && (
+              <TouchableOpacity
+                hitSlop={10}
+                onPress={() => {
+                  setShowTripFilterModal(false);
+                  if (isWebDesktopUI && showCompose) {
+                    setShowCompose(false);
+                    return;
+                  }
+                  void openCompose();
+                }}
+                style={s.composeBtn}
+              >
                 <Edit3 size={14} color="#fff" />
               </TouchableOpacity>
             )}
@@ -698,6 +791,82 @@ export function ChatScreen() {
           })}
         </View>
 
+        {activeTab === "trips" && showTripSearch && (
+          <View style={s.sidebarSearchRow}>
+            <Search size={15} color="#94a3b8" style={{ marginRight: 8 }} />
+            <TextInput
+              style={s.sidebarSearchInput}
+              value={tripSidebarSearch}
+              onChangeText={setTripSidebarSearch}
+              placeholder="Search trip id…"
+              placeholderTextColor="#94a3b8"
+              autoCapitalize="characters"
+            />
+            {tripSidebarSearch.length > 0 && (
+              <TouchableOpacity onPress={() => setTripSidebarSearch("")} hitSlop={8}>
+                <X size={14} color="#94a3b8" />
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        {activeTab === "trips" && isWebDesktopUI && showCompose && (
+          <View style={s.composePopoverLayer} pointerEvents="box-none">
+            <TouchableOpacity
+              style={s.tripFilterPopoverBackdrop}
+              onPress={() => setShowCompose(false)}
+              activeOpacity={1}
+            />
+            <View style={s.composePopoverCard}>
+              <ComposePanelBody tripListScrollStyle={{ maxHeight: 520 }} />
+            </View>
+          </View>
+        )}
+
+        {activeTab === "trips" && isDesktop && showTripFilterModal && (
+          <View style={s.tripFilterPopoverLayer} pointerEvents="box-none">
+            <TouchableOpacity
+              style={s.tripFilterPopoverBackdrop}
+              onPress={() => setShowTripFilterModal(false)}
+              activeOpacity={1}
+            />
+            <View style={s.tripFilterPopoverCard}>
+              <View style={s.tripFilterPopoverHeader}>
+                <Text style={s.tripFilterPopoverTitle}>Trip Filters</Text>
+                <TouchableOpacity onPress={() => setShowTripFilterModal(false)} hitSlop={8}>
+                  <X size={16} color="#94a3b8" />
+                </TouchableOpacity>
+              </View>
+              <Text style={s.tripFilterPopoverSub}>Filter by conversation party</Text>
+              <View style={s.filterChipWrap}>
+                {TRIP_PARTY_FILTERS.map((partyType, index) => {
+                  const selected = tripPartyFilters.includes(partyType);
+                  const isLast = index === TRIP_PARTY_FILTERS.length - 1;
+                  return (
+                    <TouchableOpacity
+                      key={partyType}
+                      style={[s.filterChip, isLast && s.filterChipLast, selected && s.filterChipActive]}
+                      onPress={() => toggleTripPartyFilter(partyType)}
+                      activeOpacity={0.75}
+                    >
+                      <Text style={[s.filterChipText, selected && s.filterChipTextActive]}>
+                        {partyFilterSheetLabel(partyType)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <TouchableOpacity
+                style={s.filterResetBtn}
+                onPress={() => setTripPartyFilters([...TRIP_PARTY_FILTERS])}
+                activeOpacity={0.8}
+              >
+                <Text style={s.filterResetText}>Reset to all parties</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {activeTab === "trips" &&
           (isLoading ? (
             <View style={{ paddingTop: 40, alignItems: "center" }}>
@@ -705,7 +874,7 @@ export function ChatScreen() {
             </View>
           ) : (
             <FlatList
-              data={sortedConversations}
+              data={filteredAndSortedConversations}
               keyExtractor={(i) => i.id}
               renderItem={renderConvItem}
               ListEmptyComponent={
@@ -864,9 +1033,220 @@ export function ChatScreen() {
     );
   }
 
-  // ── Compose modal ─────────────────────────────────────────────────────────────
+  function TripFilterModal() {
+    if (isDesktop) return null;
+    return (
+      <Modal
+        visible={showTripFilterModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowTripFilterModal(false)}
+      >
+        <View style={cm.backdrop}>
+          <View style={cm.sheet}>
+            <View style={cm.header}>
+              <View>
+                <Text style={cm.title}>Trip Filters</Text>
+                <Text style={cm.subtitle}>Filter trip chats by conversation party.</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowTripFilterModal(false)} hitSlop={8} style={cm.closeBtn}>
+                <X size={20} color="#94a3b8" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={s.filterChipWrap}>
+              {TRIP_PARTY_FILTERS.map((partyType, index) => {
+                const selected = tripPartyFilters.includes(partyType);
+                const isLast = index === TRIP_PARTY_FILTERS.length - 1;
+                return (
+                  <TouchableOpacity
+                    key={partyType}
+                    style={[s.filterChip, isLast && s.filterChipLast, selected && s.filterChipActive]}
+                    onPress={() => toggleTripPartyFilter(partyType)}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={[s.filterChipText, selected && s.filterChipTextActive]}>
+                      {partyFilterSheetLabel(partyType)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <TouchableOpacity
+              style={s.filterResetBtn}
+              onPress={() => setTripPartyFilters([...TRIP_PARTY_FILTERS])}
+              activeOpacity={0.8}
+            >
+              <Text style={s.filterResetText}>Reset to all parties</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    );
+  }
+
+  // ── New conversation (compose) ───────────────────────────────────────────────
+
+  function ComposePanelBody({
+    tripListScrollStyle,
+  }: {
+    tripListScrollStyle?: { maxHeight?: number; flex?: number };
+  }) {
+    const scrollStyle = tripListScrollStyle ?? { flex: 1 };
+    return (
+      <>
+        <View style={cm.header}>
+          <View>
+            <Text style={cm.title}>New Conversation</Text>
+            <Text style={cm.subtitle}>Select a trip and a party to chat with.</Text>
+          </View>
+          <TouchableOpacity onPress={() => setShowCompose(false)} hitSlop={8} style={cm.closeBtn}>
+            <X size={20} color="#94a3b8" />
+          </TouchableOpacity>
+        </View>
+
+        <View style={cm.searchRow}>
+          <Search size={15} color="#94a3b8" style={{ marginRight: 8 }} />
+          <TextInput
+            style={cm.searchInput}
+            value={composeSearch}
+            onChangeText={setComposeSearch}
+            placeholder="Search trips, clients, routes…"
+            placeholderTextColor="#94a3b8"
+            autoFocus={!isWebDesktopUI}
+          />
+          {composeSearch.length > 0 && (
+            <TouchableOpacity onPress={() => setComposeSearch("")} hitSlop={8}>
+              <X size={14} color="#94a3b8" />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {composeLoading ? (
+          <View style={{ paddingTop: 48, alignItems: "center" }}>
+            <ActivityIndicator color={Theme.primary} />
+          </View>
+        ) : composeTripListIssue === "no_org" ? (
+          <View style={{ paddingTop: 48, alignItems: "center", gap: 8, paddingHorizontal: 24 }}>
+            <MessageSquare size={28} color="#e2e8f0" />
+            <Text style={{ fontSize: 13, color: "#94a3b8", textAlign: "center" }}>
+              No organization selected. Open the workspace switcher and pick your company, then try again.
+            </Text>
+          </View>
+        ) : composeTripListIssue === "fetch_failed" ? (
+          <View style={{ paddingTop: 48, alignItems: "center", gap: 8, paddingHorizontal: 24 }}>
+            <MessageSquare size={28} color="#e2e8f0" />
+            <Text style={{ fontSize: 13, color: "#94a3b8", textAlign: "center" }}>
+              Could not load trips. Check your connection and open this screen again.
+            </Text>
+          </View>
+        ) : filteredComposeTrips.length === 0 ? (
+          <View style={{ paddingTop: 48, alignItems: "center", gap: 8 }}>
+            <MessageSquare size={28} color="#e2e8f0" />
+            <Text style={{ fontSize: 13, color: "#94a3b8" }}>
+              {composeSearch.trim() ? "No matching trips" : "No active trips found"}
+            </Text>
+          </View>
+        ) : composeTripsWithChatParties.length === 0 ? (
+          <View style={{ paddingTop: 48, alignItems: "center", gap: 8, paddingHorizontal: 24 }}>
+            <MessageSquare size={28} color="#e2e8f0" />
+            <Text style={{ fontSize: 13, color: "#94a3b8", textAlign: "center", lineHeight: 20 }}>
+              Trips matched your filters, but none have a linked client, supplier, or driver ID on the
+              trip record. Assign parties on each trip first, then return here to start chat.
+            </Text>
+          </View>
+        ) : (
+          <ScrollView showsVerticalScrollIndicator={false} style={scrollStyle}>
+            {composeTripsWithChatParties.map((trip) => {
+              const isExpanded = expandedTripId === trip.id;
+              const tripLabel = trip.display_trip_id ?? trip.trip_number;
+
+              const partyRows = getComposePartyRows(trip);
+
+              return (
+                <View key={trip.id} style={cm.tripCard}>
+                  <TouchableOpacity
+                    style={cm.tripRow}
+                    onPress={() => setExpandedTripId(isExpanded ? null : trip.id)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={cm.tripInfo}>
+                      <Text style={cm.tripNumber}>{tripLabel}</Text>
+                      <Text style={cm.tripRoute} numberOfLines={1}>
+                        {trip.pickup_area} → {trip.drop_location}
+                      </Text>
+                    </View>
+                    {isExpanded ? (
+                      <ChevronDown size={16} color="#94a3b8" />
+                    ) : (
+                      <ChevronRight size={16} color="#94a3b8" />
+                    )}
+                  </TouchableOpacity>
+
+                  {isExpanded && (
+                    <View style={cm.partyList}>
+                      {partyRows.map((row) =>
+                        row.kind === "unassigned_driver" ? (
+                          <View
+                            key="driver-unassigned"
+                            style={[cm.partyRow, cm.partyRowDisabled]}
+                          >
+                            <View
+                              style={cm.partyRowDisabledOverlay}
+                              pointerEvents="none"
+                            />
+                            <View style={[cm.partyIconWrap, cm.partyIconWrapMuted]}>
+                              <PartyIcon partyType="driver" size={14} />
+                            </View>
+                            <View style={{ flex: 1, minWidth: 0 }}>
+                              <Text style={[cm.partyType, cm.partyTypeMuted]}>DRIVER</Text>
+                              <Text style={[cm.partyName, cm.partyNameMuted]} numberOfLines={1}>
+                                Not assigned
+                              </Text>
+                            </View>
+                            <Text style={cm.partyDisabledHint}>—</Text>
+                          </View>
+                        ) : (
+                          <TouchableOpacity
+                            key={`${row.partyType}-${row.id}`}
+                            style={cm.partyRow}
+                            onPress={() =>
+                              handleInitiate(trip, row.partyType, row.name, row.id)
+                            }
+                            disabled={initiating}
+                            activeOpacity={0.7}
+                          >
+                            <View style={cm.partyIconWrap}>
+                              <PartyIcon partyType={row.partyType} size={14} />
+                            </View>
+                            <View style={{ flex: 1, minWidth: 0 }}>
+                              <Text style={cm.partyType}>{partyLabel(row.partyType)}</Text>
+                              <Text style={cm.partyName} numberOfLines={1}>
+                                {row.name}
+                              </Text>
+                            </View>
+                            {initiating ? (
+                              <ActivityIndicator size="small" color={Theme.primary} />
+                            ) : (
+                              <Plus size={14} color={Theme.primary} />
+                            )}
+                          </TouchableOpacity>
+                        )
+                      )}
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+          </ScrollView>
+        )}
+      </>
+    );
+  }
 
   function ComposeModal() {
+    if (isWebDesktopUI) return null;
     return (
       <Modal
         visible={showCompose}
@@ -876,154 +1256,7 @@ export function ChatScreen() {
       >
         <View style={cm.backdrop}>
           <View style={cm.sheet}>
-            {/* Header */}
-            <View style={cm.header}>
-              <View>
-                <Text style={cm.title}>New Conversation</Text>
-                <Text style={cm.subtitle}>Select a trip and a party to chat with.</Text>
-              </View>
-              <TouchableOpacity onPress={() => setShowCompose(false)} hitSlop={8} style={cm.closeBtn}>
-                <X size={20} color="#94a3b8" />
-              </TouchableOpacity>
-            </View>
-
-            {/* Search */}
-            <View style={cm.searchRow}>
-              <Search size={15} color="#94a3b8" style={{ marginRight: 8 }} />
-              <TextInput
-                style={cm.searchInput}
-                value={composeSearch}
-                onChangeText={setComposeSearch}
-                placeholder="Search trips, clients, routes…"
-                placeholderTextColor="#94a3b8"
-                autoFocus
-              />
-              {composeSearch.length > 0 && (
-                <TouchableOpacity onPress={() => setComposeSearch("")} hitSlop={8}>
-                  <X size={14} color="#94a3b8" />
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {/* Trip list */}
-            {composeLoading ? (
-              <View style={{ paddingTop: 48, alignItems: "center" }}>
-                <ActivityIndicator color={Theme.primary} />
-              </View>
-            ) : composeTripListIssue === "no_org" ? (
-              <View style={{ paddingTop: 48, alignItems: "center", gap: 8, paddingHorizontal: 24 }}>
-                <MessageSquare size={28} color="#e2e8f0" />
-                <Text style={{ fontSize: 13, color: "#94a3b8", textAlign: "center" }}>
-                  No organization selected. Open the workspace switcher and pick your company, then try again.
-                </Text>
-              </View>
-            ) : composeTripListIssue === "fetch_failed" ? (
-              <View style={{ paddingTop: 48, alignItems: "center", gap: 8, paddingHorizontal: 24 }}>
-                <MessageSquare size={28} color="#e2e8f0" />
-                <Text style={{ fontSize: 13, color: "#94a3b8", textAlign: "center" }}>
-                  Could not load trips. Check your connection and open this screen again.
-                </Text>
-              </View>
-            ) : filteredComposeTrips.length === 0 ? (
-              <View style={{ paddingTop: 48, alignItems: "center", gap: 8 }}>
-                <MessageSquare size={28} color="#e2e8f0" />
-                <Text style={{ fontSize: 13, color: "#94a3b8" }}>
-                  {composeSearch.trim() ? "No matching trips" : "No active trips found"}
-                </Text>
-              </View>
-            ) : composeTripsWithChatParties.length === 0 ? (
-              <View style={{ paddingTop: 48, alignItems: "center", gap: 8, paddingHorizontal: 24 }}>
-                <MessageSquare size={28} color="#e2e8f0" />
-                <Text style={{ fontSize: 13, color: "#94a3b8", textAlign: "center", lineHeight: 20 }}>
-                  Trips matched your filters, but none have a linked client, supplier, or driver ID on the
-                  trip record. Assign parties on each trip first, then return here to start chat.
-                </Text>
-              </View>
-            ) : (
-              <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
-                {composeTripsWithChatParties.map((trip) => {
-                  const isExpanded = expandedTripId === trip.id;
-                  const tripLabel = trip.display_trip_id ?? trip.trip_number;
-
-                  const partyRows = getComposePartyRows(trip);
-
-                  return (
-                    <View key={trip.id} style={cm.tripCard}>
-                      <TouchableOpacity
-                        style={cm.tripRow}
-                        onPress={() => setExpandedTripId(isExpanded ? null : trip.id)}
-                        activeOpacity={0.7}
-                      >
-                        <View style={cm.tripInfo}>
-                          <Text style={cm.tripNumber}>{tripLabel}</Text>
-                          <Text style={cm.tripRoute} numberOfLines={1}>
-                            {trip.pickup_area} → {trip.drop_location}
-                          </Text>
-                        </View>
-                        {isExpanded ? (
-                          <ChevronDown size={16} color="#94a3b8" />
-                        ) : (
-                          <ChevronRight size={16} color="#94a3b8" />
-                        )}
-                      </TouchableOpacity>
-
-                      {isExpanded && (
-                        <View style={cm.partyList}>
-                          {partyRows.map((row) =>
-                            row.kind === "unassigned_driver" ? (
-                              <View
-                                key="driver-unassigned"
-                                style={[cm.partyRow, cm.partyRowDisabled]}
-                              >
-                                <View
-                                  style={cm.partyRowDisabledOverlay}
-                                  pointerEvents="none"
-                                />
-                                <View style={[cm.partyIconWrap, cm.partyIconWrapMuted]}>
-                                  <PartyIcon partyType="driver" size={14} />
-                                </View>
-                                <View style={{ flex: 1, minWidth: 0 }}>
-                                  <Text style={[cm.partyType, cm.partyTypeMuted]}>DRIVER</Text>
-                                  <Text style={[cm.partyName, cm.partyNameMuted]} numberOfLines={1}>
-                                    Not assigned
-                                  </Text>
-                                </View>
-                                <Text style={cm.partyDisabledHint}>—</Text>
-                              </View>
-                            ) : (
-                              <TouchableOpacity
-                                key={`${row.partyType}-${row.id}`}
-                                style={cm.partyRow}
-                                onPress={() =>
-                                  handleInitiate(trip, row.partyType, row.name, row.id)
-                                }
-                                disabled={initiating}
-                                activeOpacity={0.7}
-                              >
-                                <View style={cm.partyIconWrap}>
-                                  <PartyIcon partyType={row.partyType} size={14} />
-                                </View>
-                                <View style={{ flex: 1, minWidth: 0 }}>
-                                  <Text style={cm.partyType}>{partyLabel(row.partyType)}</Text>
-                                  <Text style={cm.partyName} numberOfLines={1}>
-                                    {row.name}
-                                  </Text>
-                                </View>
-                                {initiating ? (
-                                  <ActivityIndicator size="small" color={Theme.primary} />
-                                ) : (
-                                  <Plus size={14} color={Theme.primary} />
-                                )}
-                              </TouchableOpacity>
-                            )
-                          )}
-                        </View>
-                      )}
-                    </View>
-                  );
-                })}
-              </ScrollView>
-            )}
+            <ComposePanelBody />
           </View>
         </View>
       </Modal>
@@ -1079,12 +1312,13 @@ export function ChatScreen() {
       >
         <View style={s.desktop}>
           <View style={s.desktopList}>
-            <ChatList />
+            {ChatList()}
           </View>
           <View style={s.desktopDetail}>{detailPanel}</View>
         </View>
         <ComposeModal />
         <NetworkComposeModal />
+        <TripFilterModal />
         <DocumentShareSheet
           visible={showDocShare}
           vehicleId={selectedConv?.trip_id ? null : null}
@@ -1104,9 +1338,10 @@ export function ChatScreen() {
       end={{ x: 1, y: 1 }}
       style={[s.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}
     >
-      {!isMobileDetail ? <ChatList /> : detailPanel}
+      {!isMobileDetail ? ChatList() : detailPanel}
       <ComposeModal />
       <NetworkComposeModal />
+      <TripFilterModal />
       <DocumentShareSheet
         visible={showDocShare}
         vehicleId={null}
@@ -1212,8 +1447,31 @@ const s = StyleSheet.create({
     fontStyle: "italic",
     textTransform: "uppercase",
   },
+  filterBtn: { position: "relative" },
+  filterActiveDot: {
+    position: "absolute",
+    top: -1,
+    right: -3,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: Theme.primary,
+    borderWidth: 1,
+    borderColor: "#0f172a",
+  },
 
   tabRow: { flexDirection: "row", gap: 6, paddingHorizontal: 14, paddingBottom: 10, marginTop: 10 },
+  sidebarSearchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f1f5f9",
+    borderRadius: 14,
+    marginHorizontal: 14,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  sidebarSearchInput: { flex: 1, fontSize: 13, color: "#1e293b", fontWeight: "600" },
   tabPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -1270,8 +1528,17 @@ const s = StyleSheet.create({
     alignItems: "center",
     marginBottom: 2,
   },
+  chatTitleRow: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1, minWidth: 0 },
   chatTitle: { fontSize: 12, fontWeight: "900", color: "#0f172a", flex: 1, textTransform: "uppercase", fontStyle: "italic" },
   chatTitleActive: { color: "#fff" },
+  activeTripDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Theme.primary,
+    flexShrink: 0,
+  },
+  activeTripDotActive: { backgroundColor: "#fff" },
   chatTime: { fontSize: 9, color: "#94a3b8", marginLeft: 8, flexShrink: 0, textTransform: "uppercase", fontWeight: "700" },
   chatTimeActive: { color: "rgba(255,255,255,0.55)" },
   chatPartyLabel: { fontSize: 9, fontWeight: "900", color: Theme.primary, letterSpacing: 0.9, marginBottom: 2 },
@@ -1472,6 +1739,109 @@ const s = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.12)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.22)",
+  },
+
+  /** Trip filter sheet (used inside `cm.sheet`; styles live on `s` with list chrome). */
+  filterChipWrap: {
+    width: "100%",
+    flexDirection: "column",
+    marginBottom: 16,
+  },
+  filterChip: {
+    width: "100%",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+    backgroundColor: "#f8fafc",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  filterChipLast: { marginBottom: 0 },
+  filterChipActive: { borderColor: Theme.primary, backgroundColor: Theme.primary },
+  filterChipText: {
+    color: "#475569",
+    fontSize: 14,
+    fontWeight: "700",
+    letterSpacing: 0.2,
+  },
+  filterChipTextActive: { color: "#fff" },
+  filterResetBtn: {
+    width: "100%",
+    marginTop: 4,
+    borderRadius: 14,
+    backgroundColor: "#f1f5f9",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  filterResetText: { color: "#334155", fontSize: 14, fontWeight: "700" },
+  tripFilterPopoverLayer: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    left: 0,
+    bottom: 0,
+    zIndex: 80,
+  },
+  tripFilterPopoverBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "transparent",
+  },
+  tripFilterPopoverCard: {
+    position: "absolute",
+    top: 96,
+    left: 10,
+    right: 10,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    padding: 14,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
+  },
+  tripFilterPopoverHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 2,
+  },
+  tripFilterPopoverTitle: { fontSize: 14, color: "#0f172a", fontWeight: "800" },
+  tripFilterPopoverSub: { fontSize: 11, color: "#94a3b8", marginBottom: 12 },
+
+  composePopoverLayer: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    left: 0,
+    bottom: 0,
+    zIndex: 90,
+  },
+  composePopoverCard: {
+    position: "absolute",
+    top: 88,
+    left: 10,
+    right: 10,
+    maxHeight: "78%",
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    padding: 14,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 10,
   },
 });
 

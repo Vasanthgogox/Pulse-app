@@ -16,8 +16,8 @@ import {
 import { computeDriverCommissionForTrip } from "@/features/finance/aggregation/aggregateDrivers";
 import { useDriverAvatarUri } from "@/lib/avatarUpload";
 import {
-  buildDriverTripNumberMap,
-  getDriverTripDisplayNumber,
+    buildDriverTripNumberMap,
+    getDriverTripDisplayNumber,
 } from "@/lib/driverTripSequence";
 import { isAggregateTrip } from "@/lib/driverUtils";
 import { formatINR } from "@/lib/format";
@@ -30,20 +30,20 @@ import * as tripsService from "@/services/tripsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { type Href, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { Pressable as HoldPressable } from "react-native-gesture-handler";
 import {
-  ActivityIndicator,
-  Image,
-  Linking,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Image,
+    Linking,
+    Modal,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
+import { Pressable as HoldPressable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 /** Format "Updated X min ago" for live tracking card. */

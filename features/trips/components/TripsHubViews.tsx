@@ -836,6 +836,25 @@ export type TripsHubTableViewProps = {
    * (toolbar, search/sort, and Filters panel behave like table mode).
    */
   renderBody?: (templateTrips: TripRow[]) => ReactNode;
+  dateRangeFilter?:
+    | "all"
+    | "today"
+    | "yesterday"
+    | "tomorrow"
+    | "this_week"
+    | "this_month"
+    | "custom";
+  onDateRangeFilterChange?: (
+    next:
+      | "all"
+      | "today"
+      | "yesterday"
+      | "tomorrow"
+      | "this_week"
+      | "this_month"
+      | "custom",
+  ) => void;
+  onOpenDateRangePicker?: () => void;
 };
 
 function txnAmount(row: LedgerRow): number {
@@ -896,6 +915,9 @@ export function TripsHubTableView({
   partyMetaByTripId,
   financeAdjustmentsByTripId,
   renderBody,
+  dateRangeFilter = "all",
+  onDateRangeFilterChange,
+  onOpenDateRangePicker,
 }: TripsHubTableViewProps) {
   const insets = useSafeAreaInsets();
   const { width: layoutWidth } = useWindowDimensions();
@@ -1014,7 +1036,10 @@ export function TripsHubTableView({
 
   const classifyTripFilter = (trip: TripRow): "verified" | "pending" | "attention" => {
     const entries = transactionsByTripId.get(trip.id) ?? [];
-    const hasMismatch = entries.some((r) => r.reconciliation_status === "mismatch");
+    // Shared-ledger attention signals apply only to load-based trips.
+    const hasMismatch =
+      isLoadBasedTrip(trip) &&
+      entries.some((r) => r.reconciliation_status === "mismatch");
     if (hasMismatch) return "attention";
     const stageUpper = getStageLabel(trip).toUpperCase();
     if (
@@ -1042,26 +1067,63 @@ export function TripsHubTableView({
           Showing {templateTrips.length} of {trips.length} trips
         </Text>
         <View style={styles.auditToolbarControls}>
-          <View style={styles.auditSearchWrap}>
-            <FontAwesome name="search" size={12} color={Theme.textSecondary} />
-            <TextInput
-              value={tableQuery}
-              onChangeText={setTableQuery}
-              placeholder="Search trip / client / supplier"
-              placeholderTextColor={Theme.textMuted}
-              style={styles.auditSearchInput}
-            />
-            {tableQuery ? (
-              <Pressable
-                onPress={() => setTableQuery("")}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel="Clear table search"
-              >
-                <FontAwesome name="times-circle" size={14} color={Theme.textMuted} />
-              </Pressable>
-            ) : null}
-          </View>
+          {onDateRangeFilterChange ? (
+            <View style={styles.auditDatePresetRow}>
+              {(
+                [
+                  { id: "all" as const, label: "ALL" },
+                  { id: "today" as const, label: "TODAY" },
+                  { id: "yesterday" as const, label: "YESTERDAY" },
+                  { id: "this_week" as const, label: "THIS WEEK" },
+                  { id: "this_month" as const, label: "THIS MONTH" },
+                ] as const
+              ).map(({ id, label }) => (
+                <TouchableOpacity
+                  key={id}
+                  style={[
+                    styles.auditDateChip,
+                    dateRangeFilter === id && styles.auditDateChipActive,
+                  ]}
+                  onPress={() => onDateRangeFilterChange(id)}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: dateRangeFilter === id }}
+                >
+                  <Text
+                    style={[
+                      styles.auditDateChipText,
+                      dateRangeFilter === id && styles.auditDateChipTextActive,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+              {onOpenDateRangePicker ? (
+                <TouchableOpacity
+                  style={[
+                    styles.auditDateIconBtn,
+                    dateRangeFilter === "custom" && styles.auditDateChipActive,
+                  ]}
+                  onPress={onOpenDateRangePicker}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open custom date range"
+                >
+                  <FontAwesome
+                    name="calendar"
+                    size={12}
+                    color={
+                      dateRangeFilter === "custom"
+                        ? Theme.textPrimaryDark
+                        : Theme.textMuted
+                    }
+                  />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          ) : null}
           <TouchableOpacity
             style={styles.auditToolbarBtn}
             onPress={cycleSortKey}
@@ -1083,6 +1145,26 @@ export function TripsHubTableView({
             <FontAwesome name="sliders" size={13} color={Theme.textSecondary} />
             <Text style={styles.auditToolbarText}>Filters</Text>
           </TouchableOpacity>
+          <View style={styles.auditSearchWrap}>
+            <FontAwesome name="search" size={12} color={Theme.textSecondary} />
+            <TextInput
+              value={tableQuery}
+              onChangeText={setTableQuery}
+              placeholder="Search trip / client / supplier"
+              placeholderTextColor={Theme.textMuted}
+              style={styles.auditSearchInput}
+            />
+            {tableQuery ? (
+              <Pressable
+                onPress={() => setTableQuery("")}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Clear table search"
+              >
+                <FontAwesome name="times-circle" size={14} color={Theme.textMuted} />
+              </Pressable>
+            ) : null}
+          </View>
         </View>
       </View>
 
@@ -1161,9 +1243,9 @@ export function TripsHubTableView({
         const mySales = tripHubRevenue(t, currentOrganizationId, rowAdj);
         const cost = tripHubCost(t, currentOrganizationId, rowAdj);
         const ledgerRoll = summarizeTripLedgerForHub(entries);
-        const hasLedgerMismatch = entries.some(
-          (r) => r.reconciliation_status === "mismatch",
-        );
+        const hasLedgerMismatch =
+          isLoadBasedTrip(t) &&
+          entries.some((r) => r.reconciliation_status === "mismatch");
         const hasSalesConflict = hasLedgerMismatch;
         const meta = partyMetaByTripId?.get(t.id);
         const hasSupplierLink = isAggregateTrip(t);
@@ -2552,6 +2634,49 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: Theme.textSecondary,
     letterSpacing: 0.3,
+  },
+  auditDatePresetRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  auditDateChip: {
+    minHeight: 32,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceGray,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  auditDateChipActive: {
+    backgroundColor: Theme.screenBackground,
+    borderColor: Theme.textPrimaryDark,
+  },
+  auditDateChipText: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  auditDateChipTextActive: {
+    color: Theme.textPrimaryDark,
+  },
+  auditDateIconBtn: {
+    minHeight: 32,
+    minWidth: 32,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceGray,
+    alignItems: "center",
+    justifyContent: "center",
   },
   manifestFilterRow: {
     flexDirection: "row",

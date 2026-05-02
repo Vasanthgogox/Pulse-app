@@ -9,6 +9,7 @@ import Theme from "@/constants/Theme";
 import { useGlobalFabAnimation } from "@/hooks/useGlobalFabAnimation";
 import { useIntegratedChat } from "@/features/chat/contexts/IntegratedChatContext";
 import { useTripChat } from "@/features/chat/contexts/TripChatContext";
+import { getTripDisplayNumber } from "@/features/trips/services/trips.service";
 import { useMobileNetworkDockExpanded } from "@/lib/mobileDockState";
 import { ROUTES } from "@/lib/routes";
 
@@ -75,7 +76,10 @@ export function FloatingChatButton() {
       conversations.slice(0, 5).map((c) => ({
         id: c.id,
         type: "trips" as const,
-        title: c.trip_number || "TRIP NODE",
+        title: getTripDisplayNumber({
+          display_trip_id: c.display_trip_id ?? null,
+          trip_number: c.trip_number,
+        } as any),
         lastMsg: c.last_message_preview || `${c.pickup_area} -> ${c.drop_location}`,
         time: c.last_message_at
           ? new Date(c.last_message_at).toLocaleTimeString("en-IN", {
@@ -84,7 +88,12 @@ export function FloatingChatButton() {
               hour12: true,
             })
           : "now",
-        code: (c.trip_number || "TN").slice(0, 2).toUpperCase(),
+        code: getTripDisplayNumber({
+          display_trip_id: c.display_trip_id ?? null,
+          trip_number: c.trip_number,
+        } as any)
+          .slice(0, 2)
+          .toUpperCase(),
         unread: c.unread_dispatcher_count || 0,
       })),
     [conversations]

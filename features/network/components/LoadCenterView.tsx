@@ -1936,8 +1936,13 @@ export function LoadCenterView({
                       parseAmount(load["supplier_rate"]) ??
                       parseAmount(load.supplier_target) ??
                       parseAmount(load.client_price);
-                    const statusPill = giveLoadStatusPillStyles(status);
                     const bidCount = quoteCounts[load.id] ?? 0;
+                    const terminalForQuotePill =
+                      status === "awarded" ||
+                      statusMatchesFilter(status, "DONE");
+                    const displayStatus =
+                      !terminalForQuotePill && bidCount > 0 ? "quoted" : status;
+                    const statusPill = giveLoadStatusPillStyles(displayStatus);
                     const showPulseToNetwork =
                       Boolean(onShareToNetwork) &&
                       indentCanBroadcastToPulseNetwork(load) &&
@@ -1972,7 +1977,7 @@ export function LoadCenterView({
                                     statusPill.text,
                                   ]}
                                 >
-                                  {status.toUpperCase()}
+                                  {displayStatus.toUpperCase()}
                                 </Text>
                               </View>
                             </View>

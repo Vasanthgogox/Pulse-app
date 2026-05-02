@@ -222,6 +222,8 @@ export function AddTripFormFields({
     !collapsePreviewByDefault,
   );
   const [clientListExpanded, setClientListExpanded] = useState(true);
+  const [driverListExpanded, setDriverListExpanded] = useState(true);
+  const [vehicleListExpanded, setVehicleListExpanded] = useState(true);
   const [partnerListExpanded, setPartnerListExpanded] = useState(true);
   const [pickupDropdownOpen, setPickupDropdownOpen] = useState(false);
   const [dropDropdownOpen, setDropDropdownOpen] = useState(false);
@@ -474,6 +476,10 @@ export function AddTripFormFields({
     ...v,
     isBusy: vehicleIdsOnActiveTrip.includes(v.id),
   }));
+  const selectedDriverRow =
+    driverOptions.find((d) => d.id === state.driverId) ?? null;
+  const selectedVehicleRow =
+    vehicleOptions.find((v) => v.id === state.vehicleId) ?? null;
 
   const scrollBlocked = pickupDropdownOpen || dropDropdownOpen;
 
@@ -743,7 +749,14 @@ export function AddTripFormFields({
               <View style={styles.gridCol}>
                 <Text style={[styles.label, labelStyle]}>Tons</Text>
                 <TextInput
-                  style={[styles.input, inputStyle, outlineErr("tons")]}
+                  style={[
+                    styles.input,
+                    inputStyle,
+                    outlineErr("tons"),
+                    isCompactMobile &&
+                    Platform.OS === "web" &&
+                    styles.mobileWebNoZoomInput,
+                  ]}
                   placeholder="Enter load weight in tons"
                   placeholderTextColor={Theme.placeholder}
                   value={state.tons}
@@ -1165,20 +1178,38 @@ export function AddTripFormFields({
                         <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
                           Assign driver *
                         </Text>
-                        <TouchableOpacity
-                          style={[
-                            styles.addClientBtn,
-                            !allocationWideLayout && styles.addClientBtnFleetFullWidth,
-                            Platform.OS === "web"
-                              ? ({ cursor: "pointer" } as ViewStyle)
-                              : null,
-                          ]}
-                          onPress={handleAddDriverShortcut}
-                          activeOpacity={0.85}
-                        >
-                          <PlusCircle size={14} color={Theme.iconPrimary} />
-                          <Text style={styles.addClientBtnText}>Add driver</Text>
-                        </TouchableOpacity>
+                        <View style={styles.sectionLabelActions}>
+                          {isCompactMobile && state.driverId ? (
+                            <TouchableOpacity
+                              style={styles.changeSelectionBtn}
+                              onPress={() => setDriverListExpanded((p) => !p)}
+                              activeOpacity={0.85}
+                            >
+                              <Text style={styles.changeSelectionBtnText}>
+                                {driverListExpanded ? "Collapse" : "Change"}
+                              </Text>
+                              <FontAwesome
+                                name={driverListExpanded ? "chevron-up" : "chevron-down"}
+                                size={11}
+                                color={Theme.iconPrimary}
+                              />
+                            </TouchableOpacity>
+                          ) : null}
+                          <TouchableOpacity
+                            style={[
+                              styles.addClientBtn,
+                              !allocationWideLayout && styles.addClientBtnFleetFullWidth,
+                              Platform.OS === "web"
+                                ? ({ cursor: "pointer" } as ViewStyle)
+                                : null,
+                            ]}
+                            onPress={handleAddDriverShortcut}
+                            activeOpacity={0.85}
+                          >
+                            <PlusCircle size={14} color={Theme.iconPrimary} />
+                            <Text style={styles.addClientBtnText}>Add driver</Text>
+                          </TouchableOpacity>
+                        </View>
                       </View>
                       {fleetLoading ? (
                         <ActivityIndicator color={Theme.iconPrimary} />
@@ -1190,6 +1221,34 @@ export function AddTripFormFields({
                                 No drivers added yet. Add a driver to continue.
                               </Text>
                             </View>
+                          ) : state.driverId && !driverListExpanded && selectedDriverRow ? (
+                            <TouchableOpacity
+                              style={[styles.clientCard, styles.clientCardOn]}
+                              onPress={() => setDriverListExpanded(true)}
+                              activeOpacity={0.85}
+                            >
+                              <View style={styles.clientMain}>
+                                <PartyAvatar
+                                  name={selectedDriverRow.name ?? "Driver"}
+                                  avatarUrl={(selectedDriverRow as { avatar_url?: string | null }).avatar_url ?? null}
+                                  avatarSeed={(selectedDriverRow as { avatar_seed?: string | null }).avatar_seed ?? null}
+                                  entityType="driver"
+                                  size={38}
+                                  borderStyle={styles.clientAvatarOn}
+                                />
+                                <View style={{ flex: 1, minWidth: 0 }}>
+                                  <Text style={[styles.clientName, styles.clientNameOn]} numberOfLines={1}>
+                                    {selectedDriverRow.name || "—"}
+                                  </Text>
+                                  <Text style={styles.clientSub} numberOfLines={1}>
+                                    {[selectedDriverRow.phone, selectedDriverRow.email].filter(Boolean).join(" · ")}
+                                  </Text>
+                                </View>
+                              </View>
+                              <View style={styles.changeSelectionPill}>
+                                <Text style={styles.changeSelectionPillText}>Change</Text>
+                              </View>
+                            </TouchableOpacity>
                           ) : (
                             driverOptions.map((d) => {
                               const selected = state.driverId === d.id;
@@ -1207,6 +1266,7 @@ export function AddTripFormFields({
                                   onPress={() => {
                                     if (d.isBusy) return;
                                     setters.setDriverId(selected ? null : d.id);
+                                    setDriverListExpanded(false);
                                   }}
                                   disabled={d.isBusy}
                                   activeOpacity={0.85}
@@ -1319,20 +1379,38 @@ export function AddTripFormFields({
                         <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
                           Vehicle *
                         </Text>
-                        <TouchableOpacity
-                          style={[
-                            styles.addClientBtn,
-                            !allocationWideLayout && styles.addClientBtnFleetFullWidth,
-                            Platform.OS === "web"
-                              ? ({ cursor: "pointer" } as ViewStyle)
-                              : null,
-                          ]}
-                          onPress={handleAddVehicleShortcut}
-                          activeOpacity={0.85}
-                        >
-                          <PlusCircle size={14} color={Theme.iconPrimary} />
-                          <Text style={styles.addClientBtnText}>Add vehicle</Text>
-                        </TouchableOpacity>
+                        <View style={styles.sectionLabelActions}>
+                          {isCompactMobile && state.vehicleId ? (
+                            <TouchableOpacity
+                              style={styles.changeSelectionBtn}
+                              onPress={() => setVehicleListExpanded((p) => !p)}
+                              activeOpacity={0.85}
+                            >
+                              <Text style={styles.changeSelectionBtnText}>
+                                {vehicleListExpanded ? "Collapse" : "Change"}
+                              </Text>
+                              <FontAwesome
+                                name={vehicleListExpanded ? "chevron-up" : "chevron-down"}
+                                size={11}
+                                color={Theme.iconPrimary}
+                              />
+                            </TouchableOpacity>
+                          ) : null}
+                          <TouchableOpacity
+                            style={[
+                              styles.addClientBtn,
+                              !allocationWideLayout && styles.addClientBtnFleetFullWidth,
+                              Platform.OS === "web"
+                                ? ({ cursor: "pointer" } as ViewStyle)
+                                : null,
+                            ]}
+                            onPress={handleAddVehicleShortcut}
+                            activeOpacity={0.85}
+                          >
+                            <PlusCircle size={14} color={Theme.iconPrimary} />
+                            <Text style={styles.addClientBtnText}>Add vehicle</Text>
+                          </TouchableOpacity>
+                        </View>
                       </View>
                       {fleetLoading ? (
                         <ActivityIndicator color={Theme.iconPrimary} />
@@ -1344,6 +1422,35 @@ export function AddTripFormFields({
                                 No vehicles added yet. Add a vehicle to continue.
                               </Text>
                             </View>
+                          ) : state.vehicleId && !vehicleListExpanded && selectedVehicleRow ? (
+                            <TouchableOpacity
+                              style={[styles.clientCard, styles.clientCardOn]}
+                              onPress={() => setVehicleListExpanded(true)}
+                              activeOpacity={0.85}
+                            >
+                              <View style={styles.clientMain}>
+                                <View style={styles.vehicleCardIcon}>
+                                  <Truck size={18} color={Theme.iconPrimary} />
+                                </View>
+                                <View style={{ flex: 1, minWidth: 0 }}>
+                                  <Text style={[styles.clientName, styles.clientNameOn]} numberOfLines={1}>
+                                    {formatIndianVehicleNumber(selectedVehicleRow.vehicle_number || "") || "—"}
+                                  </Text>
+                                  <Text style={styles.clientSub} numberOfLines={1}>
+                                    {[
+                                      selectedVehicleRow.vehicle_body_type || selectedVehicleRow.vehicle_type,
+                                      [selectedVehicleRow.vehicle_size, selectedVehicleRow.vehicle_axle].filter(Boolean).join(" "),
+                                    ]
+                                      .filter(Boolean)
+                                      .join(" · ")
+                                      .toUpperCase()}
+                                  </Text>
+                                </View>
+                              </View>
+                              <View style={styles.changeSelectionPill}>
+                                <Text style={styles.changeSelectionPillText}>Change</Text>
+                              </View>
+                            </TouchableOpacity>
                           ) : (
                             vehicleOptions.map((v) => {
                               const selected = state.vehicleId === v.id;
@@ -1362,6 +1469,7 @@ export function AddTripFormFields({
                                   onPress={() => {
                                     if (v.isBusy) return;
                                     setters.setVehicleId(selected ? null : v.id);
+                                    setVehicleListExpanded(false);
                                   }}
                                   disabled={v.isBusy}
                                   activeOpacity={0.85}
@@ -2416,6 +2524,9 @@ const styles = StyleSheet.create({
     minHeight: 52,
     marginBottom: 10,
     ...Platform.select({ web: { outlineStyle: "none" } as any }),
+  },
+  mobileWebNoZoomInput: {
+    fontSize: 16,
   },
   iconField: {
     position: "relative",

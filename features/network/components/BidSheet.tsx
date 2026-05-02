@@ -3,7 +3,6 @@
  */
 import Theme from '@/constants/Theme';
 import { createDirectQuote } from '@/features/indents/services/direct-quotes.service';
-import { getMarketIndentsForOrganization } from '@/features/indents/services/indents.service';
 import { type BidRow } from '@/features/network/services/bids.service';
 import { type PostRow } from '@/features/network/services/posts.service';
 import { useSubmitBidMutation, useUpdateBidMutation } from '@/lib/queries';
@@ -29,6 +28,7 @@ import {
   Text,
   TextInput,
   View,
+  type TextStyle,
 } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -83,134 +83,60 @@ export function BidSheet({ visible, post, orgId, existingBid, onClose, onSuccess
     }
   }, [visible]);
 
-  const matchAndUpsertDirectQuote = async (): Promise<{ linked: boolean; error?: string }> => {
-    if (!post || !orgId) return { linked: false, error: 'Missing context' };
-
-    const invalidateQuoteCaches = (matchedIndentId: string) =>
-      Promise.allSettled([
-        queryClient.invalidateQueries({ queryKey: queryKeys.indents.market(orgId) }),
-        queryClient.invalidateQueries({ queryKey: [...queryKeys.indents.all(orgId), 'my-direct-quotes'] }),
-        queryClient.invalidateQueries({ queryKey: ['indents', matchedIndentId, 'direct-quotes'] }),
-        queryClient.invalidateQueries({ queryKey: ['indents', 'quote-counts'] }),
-        queryClient.invalidateQueries({
-          predicate: (q) =>
-            Array.isArray(q.queryKey) &&
-            q.queryKey[0] === 'indents' &&
-            q.queryKey[1] === 'offer-counts',
-        }),
-      ]);
-
-    /** Story was published from an indent — sync quote to that row only (no fuzzy match). */
-    if (post.source_indent_id) {
-      const quoteRes = await createDirectQuote(
-        post.source_indent_id,
-        orgId,
-        parsedAmount,
-        note.trim() || null,
-      );
-      if (quoteRes.error) return { linked: false, error: quoteRes.error.message };
-      await invalidateQuoteCaches(post.source_indent_id);
-      return { linked: true };
-    }
-
-    const marketRes = await getMarketIndentsForOrganization(orgId);
-    if (marketRes.error) return { linked: false, error: marketRes.error.message };
-
-    const norm = (v: string | null | undefined) => (v ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
-    const short = (v: string | null | undefined) => norm(v).split(',')[0]?.trim() ?? '';
-    const hasTokenOverlap = (a: string | null | undefined, b: string | null | undefined) => {
-      const tokensA = norm(a).split(/[\s,/-]+/).filter((t) => t.length >= 3);
-      const tokensB = new Set(norm(b).split(/[\s,/-]+/).filter((t) => t.length >= 3));
-      if (tokensA.length === 0 || tokensB.size === 0) return false;
-      return tokensA.some((t) => tokensB.has(t));
-    };
-
-    const postOrigin = norm(post.origin);
-    const postDestination = norm(post.destination);
-    const postOriginShort = short(post.origin);
-    const postDestinationShort = short(post.destination);
-    const postVehicleType = norm(post.vehicle_type);
-    const postMaterial = norm(post.material);
-    const postOwnerOrgId = norm(post.organization_id);
-    const postLoadDate = post.load_date ? String(post.load_date).slice(0, 10) : null;
-    const targetAmount = Number(post.rate_offer ?? parsedAmount ?? 0);
-
-    const ranked = (marketRes.indents ?? [])
-      .filter((indent) => norm(indent.organization_id) === postOwnerOrgId)
-      .map((indent) => {
-        const indentOrigin = norm(indent.pickup_area);
-        const indentDest = norm(indent.drop_location);
-        const indentOriginShort = short(indent.pickup_area);
-        const indentDestShort = short(indent.drop_location);
-        const indentVehicle = norm(indent.vehicle_type);
-        const indentMaterial = norm(indent.load_type);
-        const indentDate = indent.pickup_date ? String(indent.pickup_date).slice(0, 10) : null;
-        const indentTarget = Number(indent.supplier_target ?? indent.client_price ?? 0);
-        /** Require both legs to align loosely — pickup-only match was syncing wrong indents. */
-        const originLeg =
-          !!indentOrigin &&
-          (indentOrigin === postOrigin || indentOrigin.includes(postOrigin) || postOrigin.includes(indentOrigin));
-        const destLeg =
-          !!indentDest &&
-          (indentDest === postDestination || indentDest.includes(postDestination) || postDestination.includes(indentDest));
-        const routeStrongMatch = originLeg && destLeg;
-
-        let score = 0;
-        if (indentOrigin && indentOrigin === postOrigin) score += 4;
-        else if (indentOriginShort && indentOriginShort === postOriginShort) score += 2;
-        else if (hasTokenOverlap(indent.pickup_area, post.origin)) score += 1;
-        if (indentDest && indentDest === postDestination) score += 4;
-        else if (indentDestShort && indentDestShort === postDestinationShort) score += 2;
-        else if (hasTokenOverlap(indent.drop_location, post.destination)) score += 1;
-        if (postVehicleType && indentVehicle && indentVehicle === postVehicleType) score += 2;
-        if (postMaterial && indentMaterial && indentMaterial === postMaterial) score += 2;
-        if (postLoadDate && indentDate && indentDate === postLoadDate) score += 2;
-        if (targetAmount > 0 && indentTarget > 0) {
-          const pctDelta = Math.abs(indentTarget - targetAmount) / targetAmount;
-          if (pctDelta <= 0.1) score += 2;
-          else if (pctDelta <= 0.25) score += 1;
-        }
-        return { indent, score, routeStrongMatch };
-      })
-      .filter((row) => row.score >= 4 || row.routeStrongMatch)
-      .sort((a, b) => b.score - a.score);
-
-    const matchedIndent = ranked[0]?.indent;
-    if (!matchedIndent?.id) {
-      return { linked: false, error: 'No matching indent found. Place/update quote from Load Center.' };
-    }
-
-    const quoteRes = await createDirectQuote(matchedIndent.id, orgId, parsedAmount, note.trim() || null);
-    if (quoteRes.error) return { linked: false, error: quoteRes.error.message };
-
-    await invalidateQuoteCaches(matchedIndent.id);
-    return { linked: true };
+  const invalidateQuoteCaches = async (matchedIndentId: string) => {
+    await Promise.allSettled([
+      queryClient.invalidateQueries({ queryKey: queryKeys.indents.market(orgId) }),
+      queryClient.invalidateQueries({ queryKey: [...queryKeys.indents.all(orgId), 'my-direct-quotes'] }),
+      queryClient.invalidateQueries({ queryKey: ['indents', matchedIndentId, 'direct-quotes'] }),
+      queryClient.invalidateQueries({ queryKey: ['indents', 'quote-counts'] }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.indents.all(orgId) }),
+      queryClient.invalidateQueries({
+        predicate: (q) =>
+          Array.isArray(q.queryKey) &&
+          q.queryKey[0] === 'indents' &&
+          q.queryKey[1] === 'offer-counts',
+      }),
+    ]);
   };
 
   const handleSubmit = async () => {
     if (!post || !canSubmit) return;
 
+    if (!post.source_indent_id) {
+      Alert.alert(
+        'Cannot place bid',
+        'This story is not linked to a load indent. Use Get Load to quote, or ask the publisher to broadcast from an indent.',
+      );
+      return;
+    }
+
     let submitError: Error | null = null;
-    let alreadyBid = false;
 
     if (isEditMode && existingBid) {
-      const updateRes = await updateMutation.mutateAsync({ bidId: existingBid.id, amount: parsedAmount, note: note.trim() || undefined });
+      const updateRes = await updateMutation.mutateAsync({
+        bidId: existingBid.id,
+        amount: parsedAmount,
+        note: note.trim() || undefined,
+      });
       submitError = updateRes.error ?? null;
+      if (!submitError) {
+        const quoteRes = await createDirectQuote(
+          post.source_indent_id,
+          orgId,
+          parsedAmount,
+          note.trim() || null,
+        );
+        submitError = quoteRes.error ?? null;
+        if (!submitError) await invalidateQuoteCaches(post.source_indent_id);
+      }
     } else {
       const submitRes = await submitMutation.mutateAsync({ amount: parsedAmount, note: note.trim() || undefined });
       submitError = submitRes.error;
-      alreadyBid = submitRes.alreadyBid ?? false;
+      if (!submitError) await invalidateQuoteCaches(post.source_indent_id);
     }
 
-    if (submitError) return;
-
-    const linkRes = await matchAndUpsertDirectQuote();
-    if (!linkRes.linked) {
-      Alert.alert(
-        isEditMode ? 'Bid updated' : (alreadyBid ? 'Bid already exists' : 'Bid saved'),
-        `Submitted to post feed, but indent quote sync failed: ${linkRes.error ?? 'No matching indent found.'}`,
-      );
-      if (!isEditMode && alreadyBid) onClose();
+    if (submitError) {
+      Alert.alert(isEditMode ? 'Update failed' : 'Bid failed', submitError.message);
       return;
     }
 
@@ -454,7 +380,7 @@ const styles = StyleSheet.create({
     letterSpacing: -1,
     borderWidth: 0,
     ...Platform.select({
-      web: { outlineStyle: 'none', outlineWidth: 0, boxShadow: 'none' } as any,
+      web: { outlineStyle: 'none', outlineWidth: 0, boxShadow: 'none' } as TextStyle,
     }),
   },
   noteContainer: {

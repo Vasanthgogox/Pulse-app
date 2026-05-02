@@ -162,54 +162,91 @@ async function resolveGenericPartyNamesForTrips(
   });
 }
 
+const TRIP_EMBED_FIELDS_FULL =
+  "trip_number, display_trip_id, status, pickup_area, drop_location";
+const TRIP_EMBED_FIELDS_LEGACY = "trip_number, status, pickup_area, drop_location";
+
+const TRIP_MESSAGES_EMBED = `trip_messages ( id, conversation_id, content, sender_role, sender_name, sender_user_id, created_at, is_read, message_type, metadata )`;
+
+function tripConversationSelect(tripEmbedFields: string): string {
+  return `
+      *,
+      trips!inner ( ${tripEmbedFields} ),
+      ${TRIP_MESSAGES_EMBED}
+    `;
+}
+
+/** PostgREST fails the whole row if an embedded column does not exist on `trips`. */
+function isMissingTripsDisplayTripIdError(err: unknown): boolean {
+  const e = err as { message?: string; code?: string } | null;
+  if (!e) return false;
+  const m = String(e.message ?? "").toLowerCase();
+  if (!m.includes("display_trip_id")) return false;
+  return (
+    m.includes("does not exist") ||
+    m.includes("unknown") ||
+    m.includes("column") ||
+    m.includes("schema cache")
+  );
+}
+
 export async function getConversationsByOrganization(
   organizationId: string,
 ): Promise<TripConversation[]> {
-  const selectConv = `
-      *,
-      trips!inner ( trip_number, pickup_area, drop_location ),
-      trip_messages ( id, conversation_id, content, sender_role, sender_name, sender_user_id, created_at, is_read, message_type, metadata )
-    `;
+  async function loadMerged(tripEmbedFields: string): Promise<unknown[]> {
+    const selectConv = tripConversationSelect(tripEmbedFields);
+    const [{ data: ownOrgRows, error: ownErr }, supplierTripsRes] = await Promise.all([
+      supabase()
+        .from("trip_conversations")
+        .select(selectConv)
+        .eq("organization_id", organizationId)
+        .order("last_message_at", { ascending: false, nullsFirst: false }),
+      getTripsWhereOrgIsSupplier(organizationId),
+    ]);
 
-  const [{ data: ownOrgRows, error: ownErr }, supplierTripsRes] = await Promise.all([
-    supabase()
-      .from("trip_conversations")
-      .select(selectConv)
-      .eq("organization_id", organizationId)
-      .order("last_message_at", { ascending: false, nullsFirst: false }),
-    getTripsWhereOrgIsSupplier(organizationId),
-  ]);
+    if (ownErr) throw ownErr;
 
-  if (ownErr) throw ownErr;
+    const supplierTripIds = (supplierTripsRes.trips ?? [])
+      .map((t: TripRow) => t.id)
+      .filter((id): id is string => !!id);
 
-  const supplierTripIds = (supplierTripsRes.trips ?? [])
-    .map((t: TripRow) => t.id)
-    .filter((id): id is string => !!id);
+    let supplierRows: unknown[] = [];
+    if (supplierTripIds.length > 0) {
+      const { data: supRows, error: supErr } = await supabase()
+        .from("trip_conversations")
+        .select(selectConv)
+        .in("trip_id", supplierTripIds)
+        .order("last_message_at", { ascending: false, nullsFirst: false });
+      if (supErr) throw supErr;
+      supplierRows = supRows ?? [];
+    }
 
-  let supplierRows: unknown[] = [];
-  if (supplierTripIds.length > 0) {
-    const { data: supRows, error: supErr } = await supabase()
-      .from("trip_conversations")
-      .select(selectConv)
-      .in("trip_id", supplierTripIds)
-      .order("last_message_at", { ascending: false, nullsFirst: false });
-    if (supErr) throw supErr;
-    supplierRows = supRows ?? [];
+    const byId = new Map<string, unknown>();
+    for (const row of ownOrgRows ?? [])
+      byId.set((row as unknown as { id: string }).id, row);
+    for (const row of supplierRows)
+      byId.set((row as unknown as { id: string }).id, row);
+
+    return Array.from(byId.values()).sort((a: any, b: any) => {
+      const ta = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+      const tb = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+      return tb - ta;
+    });
   }
 
-  const byId = new Map<string, unknown>();
-  for (const row of ownOrgRows ?? []) byId.set((row as { id: string }).id, row);
-  for (const row of supplierRows) byId.set((row as { id: string }).id, row);
-
-  const merged = Array.from(byId.values()).sort((a: any, b: any) => {
-    const ta = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
-    const tb = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
-    return tb - ta;
-  });
+  let merged: unknown[];
+  try {
+    merged = await loadMerged(TRIP_EMBED_FIELDS_FULL);
+  } catch (err) {
+    if (!isMissingTripsDisplayTripIdError(err)) throw err;
+    merged = await loadMerged(TRIP_EMBED_FIELDS_LEGACY);
+  }
 
   const conversations: TripConversation[] = merged.map((row: any) => ({
     ...row,
     trip_number: row.trips?.trip_number ?? "",
+    display_trip_id: row.trips?.display_trip_id ?? null,
+    trip_status: row.trips?.status ?? null,
     pickup_area: row.trips?.pickup_area ?? "",
     drop_location: row.trips?.drop_location ?? "",
     messages: ((row.trip_messages ?? []) as TripMessageRow[]).sort(
@@ -225,27 +262,38 @@ export async function getConversationsByOrganization(
 export async function getTripConversationById(
   conversationId: string,
 ): Promise<TripConversation | null> {
-  const selectConv = `
-      *,
-      trips!inner ( trip_number, pickup_area, drop_location ),
-      trip_messages ( id, conversation_id, content, sender_role, sender_name, sender_user_id, created_at, is_read, message_type, metadata )
-    `;
-  const { data, error } = await supabase()
+  let res = await supabase()
     .from("trip_conversations")
-    .select(selectConv)
+    .select(tripConversationSelect(TRIP_EMBED_FIELDS_FULL))
     .eq("id", conversationId)
     .maybeSingle();
 
-  if (error || !data) return null;
+  if (res.error && isMissingTripsDisplayTripIdError(res.error)) {
+    res = await supabase()
+      .from("trip_conversations")
+      .select(tripConversationSelect(TRIP_EMBED_FIELDS_LEGACY))
+      .eq("id", conversationId)
+      .maybeSingle();
+  }
 
-  const row = data as {
-    trips?: { trip_number?: string; pickup_area?: string; drop_location?: string };
+  if (res.error || !res.data) return null;
+
+  const row = res.data as unknown as {
+    trips?: {
+      trip_number?: string;
+      display_trip_id?: string | null;
+      status?: string | null;
+      pickup_area?: string;
+      drop_location?: string;
+    };
     trip_messages?: TripMessageRow[];
   } & Record<string, unknown>;
 
   const base: TripConversation = {
     ...row,
     trip_number: String(row.trips?.trip_number ?? ""),
+    display_trip_id: row.trips?.display_trip_id ?? null,
+    trip_status: row.trips?.status ?? null,
     pickup_area: String(row.trips?.pickup_area ?? ""),
     drop_location: String(row.trips?.drop_location ?? ""),
     messages: ((row.trip_messages ?? []) as TripMessageRow[]).sort(

@@ -2,7 +2,7 @@ import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tansta
 import {
   getBidsForPost,
   getMyBidForPost,
-  submitBid,
+  submitPulseBidWithDirectQuote,
   updateBid,
   acceptBid,
   rejectBid,
@@ -47,12 +47,15 @@ export function useSubmitBidMutation(postId: string | null, orgId: string | null
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: { amount: number; note?: string }) =>
-      submitBid({ postId: postId!, bidderOrganizationId: orgId!, ...input }),
+      submitPulseBidWithDirectQuote({ postId: postId!, bidderOrganizationId: orgId!, ...input }),
     onSuccess: () => {
       if (postId) {
         qc.invalidateQueries({ queryKey: queryKeys.bids.forPost(postId) });
         qc.invalidateQueries({ queryKey: queryKeys.bids.myBid(postId, orgId ?? '') });
         qc.invalidateQueries({ queryKey: queryKeys.posts.detail(postId) });
+      }
+      if (orgId) {
+        qc.invalidateQueries({ queryKey: queryKeys.indents.all(orgId) });
       }
       invalidateIndentOfferCounts(qc);
     },
@@ -68,6 +71,9 @@ export function useUpdateBidMutation(postId: string | null, orgId: string | null
       if (postId) {
         qc.invalidateQueries({ queryKey: queryKeys.bids.forPost(postId) });
         qc.invalidateQueries({ queryKey: queryKeys.bids.myBid(postId, orgId ?? '') });
+      }
+      if (orgId) {
+        qc.invalidateQueries({ queryKey: queryKeys.indents.all(orgId) });
       }
       invalidateIndentOfferCounts(qc);
     },

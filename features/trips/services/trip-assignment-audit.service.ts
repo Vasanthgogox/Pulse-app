@@ -5,6 +5,9 @@
  */
 import { supabase } from '@/lib/supabase';
 
+/** After first confirmed "table missing" (PostgREST PGRST205 / 404), skip further HTTP calls this session. */
+let tripAssignmentAuditTableUnavailable = false;
+
 /** PostgREST 404 / PGRST205 when relation missing from API — same as trip_documents edge case. */
 function isTripAssignmentAuditTableMissing(
   err: { message?: string; code?: string; status?: number } | null | undefined,
@@ -40,6 +43,8 @@ export interface InsertTripAssignmentAuditParams {
 export async function insertTripAssignmentAudit(
   params: InsertTripAssignmentAuditParams
 ): Promise<{ error: Error | null }> {
+  if (tripAssignmentAuditTableUnavailable) return { error: null };
+
   try {
     const { error } = await supabase()
       .from('trip_assignment_audit')
@@ -54,7 +59,10 @@ export async function insertTripAssignmentAudit(
       } as Record<string, unknown>);
 
     if (error) {
-      if (isTripAssignmentAuditTableMissing(error)) return { error: null };
+      if (isTripAssignmentAuditTableMissing(error)) {
+        tripAssignmentAuditTableUnavailable = true;
+        return { error: null };
+      }
       return { error: new Error(error.message) };
     }
     return { error: null };
@@ -94,6 +102,7 @@ export async function getLatestAssignmentAuditByTripIds(
 ): Promise<{ error: Error | null; byTripId: Map<string, { changed_by: string | null; changed_at: string }> }> {
   const byTripId = new Map<string, { changed_by: string | null; changed_at: string }>();
   if (tripIds.length === 0) return { error: null, byTripId };
+  if (tripAssignmentAuditTableUnavailable) return { error: null, byTripId };
 
   try {
     const { data, error } = await supabase()
@@ -104,7 +113,10 @@ export async function getLatestAssignmentAuditByTripIds(
       .order('changed_at', { ascending: false });
 
     if (error) {
-      if (isTripAssignmentAuditTableMissing(error)) return { error: null, byTripId };
+      if (isTripAssignmentAuditTableMissing(error)) {
+        tripAssignmentAuditTableUnavailable = true;
+        return { error: null, byTripId };
+      }
       return { error: new Error(error.message), byTripId };
     }
 
@@ -130,6 +142,8 @@ export async function getTripAssignmentAuditHistory(
   tripId: string,
   limit = 20,
 ): Promise<{ error: Error | null; rows: TripAssignmentAuditRow[] }> {
+  if (tripAssignmentAuditTableUnavailable) return { error: null, rows: [] };
+
   try {
     const { data, error } = await supabase()
       .from("trip_assignment_audit")
@@ -142,11 +156,14 @@ export async function getTripAssignmentAuditHistory(
       .limit(Math.max(1, Math.min(50, limit)));
 
     if (error) {
-      if (isTripAssignmentAuditTableMissing(error)) return { error: null, rows: [] };
+      if (isTripAssignmentAuditTableMissing(error)) {
+        tripAssignmentAuditTableUnavailable = true;
+        return { error: null, rows: [] };
+      }
       return { error: new Error(error.message), rows: [] };
     }
     return { error: null, rows: (data ?? []) as TripAssignmentAuditRow[] };
-  } catch (e) {
-    return { error: e instanceof Error ? e : new Error(String(e)), rows: [] };
+  } catch {
+    return { error: null, rows: [] };
   }
 }

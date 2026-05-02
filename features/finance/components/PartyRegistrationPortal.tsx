@@ -261,6 +261,8 @@ function PartyRegistrationPortalInner(
   const [driverCommissionPerKm, setDriverCommissionPerKm] = useState<
     number | null
   >(null);
+  /** When true, Save creates a fleet driver row via `onAddDriver` instead of sending an in-app invite. */
+  const [driverPreferOfflineOnly, setDriverPreferOfflineOnly] = useState(false);
 
   // Vehicle — aligned with AddVehicleModal (category chips + preset pickers + specs)
   const [vehicleReg, setVehicleReg] = useState("");
@@ -292,6 +294,7 @@ function PartyRegistrationPortalInner(
     setDriverPayableAmount(null);
     setDriverCommissionPercent(null);
     setDriverCommissionPerKm(null);
+    setDriverPreferOfflineOnly(false);
     setDriverExistingMatches([]);
     setDriverPhoneLookupLoading(false);
     setDriverPhoneLookupError(null);
@@ -398,6 +401,11 @@ function PartyRegistrationPortalInner(
     setDriverPhone(formatMobileNumber(text));
     setDriverExistingMatches([]);
     setDriverPhoneLookupError(null);
+    setDriverPreferOfflineOnly(false);
+  };
+
+  const handleAddDriverOfflineInstead = () => {
+    setDriverPreferOfflineOnly(true);
   };
 
   const insets = useSafeAreaInsets();
@@ -671,7 +679,11 @@ function PartyRegistrationPortalInner(
         const dp = buildDriverPayload();
         const pn = normalizeIndianPhoneForMetadata(dp.phone) ?? dp.phone.trim();
         const payload = { ...dp, phone: pn };
-        if (onInviteDriver && driverExistingMatches.length > 0) {
+        if (
+          onInviteDriver &&
+          driverExistingMatches.length > 0 &&
+          !driverPreferOfflineOnly
+        ) {
           await onInviteDriver(payload);
           onClose();
           return;
@@ -844,7 +856,8 @@ function PartyRegistrationPortalInner(
   const reviewDriverInvite =
     kind === "driver" &&
     Boolean(onInviteDriver) &&
-    driverExistingMatches.length > 0;
+    driverExistingMatches.length > 0 &&
+    !driverPreferOfflineOnly;
 
   const reviewSaveLabel =
     inviteeMatch &&
@@ -892,7 +905,7 @@ function PartyRegistrationPortalInner(
           <View
             style={[styles.sidebar, !layoutWide && styles.sidebarNarrow]}
           >
-            <Pressable style={styles.backBtn} onPress={onClose} hitSlop={12}>
+            <Pressable style={styles.backBtn} onPress={onClose} hitSlop={12} testID="party-close-btn">
               <ChevronLeft size={22} color="#fff" strokeWidth={2.5} />
             </Pressable>
             <View style={styles.sideIconWrap}>
@@ -953,7 +966,7 @@ function PartyRegistrationPortalInner(
             ) : null}
 
             {formError ? (
-              <View style={styles.errorBar}>
+              <View style={styles.errorBar} testID="party-form-error">
                 <Text style={styles.errorBarText}>{formError}</Text>
               </View>
             ) : null}
@@ -1015,6 +1028,7 @@ function PartyRegistrationPortalInner(
                         value={orgOrCompanyName}
                         onChangeText={setOrgOrCompanyName}
                         autoCapitalize="words"
+                        testID="party-org-name-input"
                       />
                     </Field>
                     <View style={[styles.row2, layoutWide && styles.row2Web]}>
@@ -1026,6 +1040,7 @@ function PartyRegistrationPortalInner(
                             placeholderTextColor={Theme.textMuted}
                             value={contactName}
                             onChangeText={setContactName}
+                            testID="party-contact-name-input"
                           />
                         </Field>
                       </View>
@@ -1050,6 +1065,7 @@ function PartyRegistrationPortalInner(
                                   : (x) =>
                                       setPhoneDigits(x.replace(/[^\d+]/g, ""))
                               }
+                              testID="party-phone-input"
                             />
                             <Smartphone
                               size={18}
@@ -1099,6 +1115,7 @@ function PartyRegistrationPortalInner(
                                 onPress={handleAddAsOfflineInstead}
                                 disabled={submitting}
                                 style={styles.clientOfflineLink}
+                                testID="party-add-offline-btn"
                               >
                                 <Text style={styles.clientOfflineLinkText}>
                                   Add as offline instead
@@ -1131,6 +1148,7 @@ function PartyRegistrationPortalInner(
                           placeholderTextColor={Theme.textMuted}
                           value={driverName}
                           onChangeText={setDriverName}
+                          testID="party-driver-name-input"
                         />
                       </View>
                     </Field>
@@ -1152,6 +1170,7 @@ function PartyRegistrationPortalInner(
                                   : (x) =>
                                       setDriverPhone(x.replace(/[^\d+]/g, ""))
                               }
+                              testID="party-driver-phone-input"
                             />
                           </View>
                         </Field>
@@ -1171,6 +1190,7 @@ function PartyRegistrationPortalInner(
                               autoCapitalize="characters"
                               value={driverDl}
                               onChangeText={(t) => setDriverDl(t.toUpperCase())}
+                              testID="party-driver-dl-input"
                             />
                           </View>
                         </Field>
@@ -1192,6 +1212,7 @@ function PartyRegistrationPortalInner(
                           autoCorrect={false}
                           value={driverEmail}
                           onChangeText={setDriverEmail}
+                          testID="party-driver-email-input"
                         />
                       </View>
                     </Field>
@@ -1312,6 +1333,27 @@ function PartyRegistrationPortalInner(
                                 ? t("existingDriverInFleetDetail")
                                 : "Tap Continue, then use Send request on the review screen to invite them in the app."}
                             </Text>
+                            {!driverExistingMatches.some(
+                              (m) => m.is_in_fleet === true,
+                            ) ? (
+                              driverPreferOfflineOnly ? (
+                                <Text style={styles.clientInviteeHint}>
+                                  Offline fleet record only — no in-app invite will
+                                  be sent.
+                                </Text>
+                              ) : (
+                                <Pressable
+                                  onPress={handleAddDriverOfflineInstead}
+                                  disabled={submitting}
+                                  style={styles.clientOfflineLink}
+                                  testID="party-driver-add-offline-btn"
+                                >
+                                  <Text style={styles.clientOfflineLinkText}>
+                                    Add as offline driver instead
+                                  </Text>
+                                </Pressable>
+                              )
+                            ) : null}
                           </View>
                         ) : null}
                       </>
@@ -1337,6 +1379,7 @@ function PartyRegistrationPortalInner(
                           onChangeText={(t) =>
                             setVehicleReg(formatIndianVehicleNumberInput(t))
                           }
+                          testID="party-vehicle-reg-input"
                         />
                       </View>
                     </Field>
@@ -1350,6 +1393,7 @@ function PartyRegistrationPortalInner(
                               vehicleCategory === cat && styles.vehicleChipActive,
                             ]}
                             onPress={() => setVehicleCategory(cat)}
+                            testID={`party-vehicle-category-${cat}`}
                           >
                             <Text
                               style={[
@@ -1379,6 +1423,7 @@ function PartyRegistrationPortalInner(
                             placeholderTextColor={Theme.textMuted}
                             value={vehicleModel}
                             onChangeText={setVehicleModel}
+                            testID="party-vehicle-model-input"
                           />
                         </View>
                       ) : (
@@ -1395,6 +1440,7 @@ function PartyRegistrationPortalInner(
                               styles.presetFieldPress,
                             ]}
                             onPress={() => setModelPickerOpen(true)}
+                            testID="party-vehicle-model-picker"
                           >
                             <Text
                               style={
@@ -1441,6 +1487,7 @@ function PartyRegistrationPortalInner(
                               keyboardType="decimal-pad"
                               value={vehicleCapacity}
                               onChangeText={setVehicleCapacity}
+                              testID="party-vehicle-capacity-input"
                             />
                           </View>
                           {renderPortalSpecHint(
@@ -1458,11 +1505,13 @@ function PartyRegistrationPortalInner(
                               placeholderTextColor={Theme.textMuted}
                               value={vehicleBodyFt}
                               onChangeText={setVehicleBodyFt}
+                              testID="party-vehicle-body-input"
                             />
                           ) : (
                             <Pressable
                               style={[styles.input, styles.presetFieldPress]}
                               onPress={() => setBodyLengthPickerOpen(true)}
+                              testID="party-vehicle-body-picker"
                             >
                               <Text
                                 style={
@@ -1507,6 +1556,7 @@ function PartyRegistrationPortalInner(
                           placeholderTextColor={Theme.textMuted}
                           value={vehicleAxle}
                           onChangeText={setVehicleAxle}
+                          testID="party-vehicle-axle-input"
                         />
                       </View>
                       {renderPortalSpecHint(
@@ -1550,6 +1600,25 @@ function PartyRegistrationPortalInner(
               </View>
             )}
 
+            {step === "review" &&
+            kind === "driver" &&
+            onInviteDriver &&
+            driverExistingMatches.length > 0 &&
+            !driverExistingMatches.some((m) => m.is_in_fleet === true) &&
+            !driverPreferOfflineOnly ? (
+              <View style={styles.reviewDriverOfflineLinkWrap}>
+                <Pressable
+                  onPress={handleAddDriverOfflineInstead}
+                  disabled={submitting}
+                  style={styles.clientOfflineLink}
+                >
+                  <Text style={styles.clientOfflineLinkText}>
+                    Add as offline driver instead
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+
             {step === "form" ? (
               <Pressable
                 style={[
@@ -1571,6 +1640,7 @@ function PartyRegistrationPortalInner(
                     onInviteDriver &&
                     driverExistingMatches.some((m) => m.is_in_fleet === true))
                 }
+                testID="party-continue-btn"
               >
                 <Text style={styles.primaryBtnText}>Continue</Text>
                 <ArrowRight size={22} color="#fff" strokeWidth={2.5} />
@@ -1581,6 +1651,7 @@ function PartyRegistrationPortalInner(
                   style={styles.reviewGhostBtnWide}
                   onPress={() => setStep("form")}
                   hitSlop={8}
+                  testID="party-edit-details-btn"
                 >
                   <Text style={styles.ghostBtnText}>← Edit details</Text>
                 </Pressable>
@@ -1593,6 +1664,7 @@ function PartyRegistrationPortalInner(
                   ]}
                   onPress={() => void confirmSave()}
                   disabled={!organizationId || submitting}
+                  testID="party-save-btn"
                 >
                   {submitting ? (
                     <ActivityIndicator color="#fff" />
@@ -2583,6 +2655,10 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     color: "#2563eb",
+  },
+  reviewDriverOfflineLinkWrap: {
+    paddingHorizontal: 20,
+    paddingBottom: 8,
   },
   clientNoMatchHint: {
     fontSize: 12,

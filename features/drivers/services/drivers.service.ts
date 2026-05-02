@@ -147,17 +147,11 @@ export async function createDriver(
       (d) => d.left_at && normalizePhone(d.phone) === phoneNorm
     );
     if (existing) {
-      const lic =
-        (data.licenseNumber || "").trim().toUpperCase().replace(/\s/g, "") ||
-        null;
       const { error, driver } = await updateDriver(orgId, existing.id, {
         name: (data.name || "").trim() || "—",
         phone: (data.phone ?? "").trim() || null,
         email: (data.email || "").trim() || null,
         left_at: null,
-        license_number: lic,
-        emergency_name: (data.emergencyName || "").trim() || null,
-        emergency_contact: (data.emergencyContact || "").trim() || null,
         payable_amount: data.payableAmount ?? null,
         commission_percent: data.commissionPercent ?? null,
         commission_per_km: data.commissionPerKm ?? null,
@@ -167,16 +161,11 @@ export async function createDriver(
     }
   }
 
-  const licenseNorm =
-    (data.licenseNumber || "").trim().toUpperCase().replace(/\s/g, "") || null;
   const payload = {
     organization_id: orgId,
     name: (data.name || "").trim() || "—",
     phone: (data.phone ?? "").trim() || null,
     email: (data.email || "").trim() || null,
-    license_number: licenseNorm,
-    emergency_name: (data.emergencyName || "").trim() || null,
-    emergency_contact: (data.emergencyContact || "").trim() || null,
     status: "offline",
     payable_amount: data.payableAmount ?? null,
     commission_percent: data.commissionPercent ?? null,
@@ -195,9 +184,6 @@ export interface UpdateDriverData {
   name?: string;
   phone?: string | null;
   email?: string | null;
-  license_number?: string | null;
-  emergency_name?: string | null;
-  emergency_contact?: string | null;
   status?: string;
   assigned_vehicle_id?: string | null;
   /** Set to null to reconnect a driver who had left (clear left_at). */
@@ -219,14 +205,6 @@ export async function updateDriver(
   if (patch.name !== undefined) updates.name = (patch.name ?? '').trim() || '—';
   if (patch.phone !== undefined) updates.phone = (patch.phone ?? '').trim() || null;
   if (patch.email !== undefined) updates.email = (patch.email ?? '').trim() || null;
-  if (patch.license_number !== undefined) {
-    const ln = (patch.license_number ?? '').trim();
-    updates.license_number = ln ? ln.toUpperCase().replace(/\s/g, '') : null;
-  }
-  if (patch.emergency_name !== undefined)
-    updates.emergency_name = (patch.emergency_name ?? '').trim() || null;
-  if (patch.emergency_contact !== undefined)
-    updates.emergency_contact = (patch.emergency_contact ?? '').trim() || null;
   if (patch.assigned_vehicle_id !== undefined) updates.assigned_vehicle_id = patch.assigned_vehicle_id || null;
   if (patch.left_at === null) updates.left_at = null;
   if (patch.payable_amount !== undefined) updates.payable_amount = patch.payable_amount;
@@ -705,17 +683,12 @@ export async function inviteDriver(
     .maybeSingle();
 
   if (existingDriver.data) {
-    const licenseNorm =
-      (data.licenseNumber || "").trim().toUpperCase().replace(/\s/g, "") || null;
     const { data: updated, error: updateErr } = await supabase()
       .from("drivers")
       .update({
         name: (data.name || "").trim() || "—",
         phone: phoneNorm,
         email: (data.email || "").trim() || null,
-        license_number: licenseNorm,
-        emergency_name: (data.emergencyName || "").trim() || null,
-        emergency_contact: (data.emergencyContact || "").trim() || null,
         left_at: null,
         status: "offline",
         payable_amount: data.payableAmount ?? null,
@@ -731,16 +704,11 @@ export async function inviteDriver(
     return { error: null, driver: updated as DriverRow, inviteSent: false };
   }
 
-  const licenseNormInvite =
-    (data.licenseNumber || "").trim().toUpperCase().replace(/\s/g, "") || null;
   const payload = {
     organization_id: orgId,
     name: (data.name || "").trim() || "—",
     phone: phoneNorm,
     email: (data.email || "").trim() || null,
-    license_number: licenseNormInvite,
-    emergency_name: (data.emergencyName || "").trim() || null,
-    emergency_contact: (data.emergencyContact || "").trim() || null,
     status: "offline",
     payable_amount: data.payableAmount ?? null,
     commission_percent: data.commissionPercent ?? null,
