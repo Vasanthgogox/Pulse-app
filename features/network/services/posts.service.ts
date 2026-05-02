@@ -60,6 +60,8 @@ export interface PostRow {
   view_count: number;
   bid_count: number;
   created_at: string;
+  /** Set when a LOAD story is published from an indent (Pulse / Share load). */
+  source_indent_id?: string | null;
   circulation_target?: string | null;
   visibility_scope?: string | null;
   target_role?: string | null;
@@ -119,6 +121,8 @@ export interface CreatePostInput {
   rateOffer?: number;
   material?: string;
   expiresAt?: string;
+  /** When broadcasting from an indent — drives Load Center bid counts and BidSheet → direct_quote. */
+  sourceIndentId?: string | null;
 }
 
 export async function getNetworkFeed(
@@ -174,6 +178,7 @@ export async function createPost(
     rate_offer: input.rateOffer ?? null,
     material: input.material ?? null,
     expires_at: input.expiresAt ?? null,
+    source_indent_id: input.sourceIndentId ?? null,
   });
 
   const primaryType = input.type;

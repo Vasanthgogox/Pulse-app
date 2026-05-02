@@ -79,7 +79,7 @@ export default function AuthCallback() {
         const msg = e instanceof Error ? e.message : "Google sign in failed";
         if (mounted) {
           setMessage("Google sign in failed. Redirecting to sign in…");
-          setRedirectTo(`${ROUTES.SIGN_IN_DIRECT}&oauth_error=${encodeURIComponent(msg)}`);
+          setRedirectTo(`${ROUTES.SIGN_IN}?oauth_error=${encodeURIComponent(msg)}`);
         }
       }
     })();

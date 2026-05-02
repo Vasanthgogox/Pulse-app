@@ -8,6 +8,7 @@ import {
   type OperatingModel,
 } from '@/features/auth';
 import { validateEmail } from '@/lib/emailValidation';
+import { ROUTES } from '@/lib/routes';
 import { formatMobileNumber } from '@/lib/format';
 import INDIA_LOCATIONS from '@/lib/indiaLocations.json';
 import {
@@ -307,7 +308,7 @@ export default function SignUp() {
         existing.masked_email
           ? `Sign in with ${existing.masked_email}.`
           : 'An account with this phone already exists.',
-        [{ text: 'Sign in', onPress: () => router.replace(`/sign-in?direct=1&email=${encodeURIComponent(existing.email!)}`) }],
+        [{ text: 'Sign in', onPress: () => router.replace(`${ROUTES.SIGN_IN}?email=${encodeURIComponent(existing.email!)}`) }],
       );
     }
     // Enter OTP step with mock — start countdown
@@ -521,7 +522,7 @@ export default function SignUp() {
 
                 <View style={styles.altRow}>
                   <Text style={styles.altText}>Already have an account? </Text>
-                  <TouchableOpacity onPress={() => router.replace('/sign-in?direct=1')}>
+                  <TouchableOpacity onPress={() => router.replace(ROUTES.SIGN_IN)}>
                     <Text style={styles.altLink}>Sign in</Text>
                   </TouchableOpacity>
                 </View>
@@ -910,7 +911,7 @@ export default function SignUp() {
                 <TouchableOpacity style={styles.primaryBtn} onPress={() => router.replace('/')}>
                   <Text style={styles.primaryBtnText}>Go to app</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.altRow} onPress={() => router.replace('/sign-in?direct=1')}>
+                <TouchableOpacity style={styles.altRow} onPress={() => router.replace(ROUTES.SIGN_IN)}>
                   <Text style={styles.altLink}>Already have an account? Sign in</Text>
                 </TouchableOpacity>
               </View>

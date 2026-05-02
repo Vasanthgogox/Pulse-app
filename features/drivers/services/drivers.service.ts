@@ -149,7 +149,7 @@ export async function createDriver(
     if (existing) {
       const { error, driver } = await updateDriver(orgId, existing.id, {
         name: (data.name || "").trim() || "—",
-        phone: data.phone.trim() || null,
+        phone: (data.phone ?? "").trim() || null,
         email: (data.email || "").trim() || null,
         left_at: null,
         payable_amount: data.payableAmount ?? null,
@@ -164,7 +164,7 @@ export async function createDriver(
   const payload = {
     organization_id: orgId,
     name: (data.name || "").trim() || "—",
-    phone: data.phone.trim() || null,
+    phone: (data.phone ?? "").trim() || null,
     email: (data.email || "").trim() || null,
     status: "offline",
     payable_amount: data.payableAmount ?? null,
@@ -249,7 +249,8 @@ export async function getLinkedDriversForCurrentUser(
     .from("drivers")
     .select("*")
     .eq("user_id", userId)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(20);
   if (error) return { error: new Error(error.message), drivers: [] };
   return { error: null, drivers: (data ?? []) as DriverRow[] };
 }
@@ -1457,7 +1458,8 @@ export async function getDriverLedgerByDriver(
     .from("driver_ledger")
     .select("*")
     .eq("driver_id", driverId)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(200);
   if (error) return { error: new Error(error.message), entries: [] };
   return { error: null, entries: (data ?? []) as DriverLedgerRow[] };
 }
@@ -1473,7 +1475,8 @@ export async function getDriverLedgerByDriverIds(
     .from("driver_ledger")
     .select("*")
     .in("driver_id", driverIds)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(200);
   if (error) return { error: new Error(error.message), entries: [] };
   return { error: null, entries: (data ?? []) as DriverLedgerRow[] };
 }

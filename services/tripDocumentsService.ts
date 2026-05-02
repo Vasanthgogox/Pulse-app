@@ -30,6 +30,20 @@ export function isTripDocumentsMetaTableUnavailable(
   return false;
 }
 
+/** PostgREST: table not exposed / not in schema cache (HTTP 404 on /rest/v1/trip_documents). */
+export function isTripDocumentsRestEndpointMissing(
+  err: { message?: string; code?: string; status?: number } | null | undefined,
+): boolean {
+  if (!err) return false;
+  const code = String(err.code ?? "").toUpperCase();
+  if (code === "PGRST205") return true;
+  if (err.status === 404) return true;
+  if (isTripDocumentsMetaTableUnavailable(err)) return true;
+  const m = String(err.message ?? "").toLowerCase();
+  if (m.includes("trip_documents") && m.includes("not found")) return true;
+  return false;
+}
+
 /** Generate a UUID v4-style string (React Native has no global crypto). */
 function randomUUID(): string {
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
@@ -201,4 +215,30 @@ export async function uploadTripDocument(
   }
 
   return { doc: row as TripDocumentRow, error: null };
+}
+
+/**
+ * Remove a POD file from storage and the trip_documents row (when present).
+ * Synthetic IDs from storage fallback list still delete by storage_path only.
+ */
+export async function deleteTripDocument(doc: TripDocumentRow): Promise<{ error: Error | null }> {
+  const { error: storageErr } = await supabase().storage.from(BUCKET).remove([doc.storage_path]);
+
+  const synthetic = doc.id.startsWith("storage-") || doc.id.startsWith("storage-meta-");
+  if (!synthetic) {
+    const { error: dbErr } = await supabase().from("trip_documents").delete().eq("id", doc.id);
+    if (dbErr) {
+      // REST 404 / PGRST205: relation missing from API — storage remove still clears the file.
+      if (!storageErr && isTripDocumentsRestEndpointMissing(dbErr)) {
+        return { error: null };
+      }
+      if (storageErr) return { error: new Error(storageErr.message) };
+      return { error: new Error(dbErr.message) };
+    }
+  }
+
+  if (storageErr) {
+    return { error: new Error(storageErr.message) };
+  }
+  return { error: null };
 }

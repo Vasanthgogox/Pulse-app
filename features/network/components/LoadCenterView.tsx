@@ -38,7 +38,7 @@ import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { formatINR, formatMobileNumber } from "@/lib/format";
 import { validatePhone } from "@/lib/phoneValidation";
 import {
-    useDirectQuoteCountsQuery,
+    useIndentOfferCountsQuery,
     useDriversQuery,
     useIndentDirectQuotesQuery,
     useIndentsQuery,
@@ -505,7 +505,7 @@ export function LoadCenterView({
     [hirePartnerLoads],
   );
   const { data: quoteCounts = {}, refetch: refetchQuoteCounts } =
-    useDirectQuoteCountsQuery(giveLoadIds);
+    useIndentOfferCountsQuery(orgId, giveLoadIds);
 
   /** Indent ids where my org's quote is accepted (awarded to me). Used to exclude from Find Work and build Claimed list. */
   const awardedToMeIndentIds = useMemo(

@@ -12,6 +12,7 @@ import {
   getDirectQuoteCountsByIndentIds,
   type DirectQuoteRow,
 } from '@/features/indents/services/direct-quotes.service';
+import { getStoryBidCountsForOwnerIndents } from '@/features/network/services/bids.service';
 import { queryKeys } from '@/lib/queryKeys';
 import { DEFAULT_PAGE_SIZE } from '@/lib/pagination';
 
@@ -80,6 +81,28 @@ export function useDirectQuoteCountsQuery(indentIds: string[] | null) {
       return res.counts;
     },
     enabled: !!indentIds?.length,
+  });
+}
+
+/** direct_quotes + pending Pulse story bids (posts.source_indent_id) for Hire Partner cards. */
+export function useIndentOfferCountsQuery(ownerOrgId: string | null, indentIds: string[]) {
+  const stableKey = indentIds.length ? [...indentIds].sort().join(',') : '';
+  return useQuery<Record<string, number>>({
+    queryKey: ['indents', 'offer-counts', ownerOrgId ?? '', stableKey],
+    queryFn: async () => {
+      const [dq, sb] = await Promise.all([
+        getDirectQuoteCountsByIndentIds(indentIds),
+        getStoryBidCountsForOwnerIndents(ownerOrgId!, indentIds),
+      ]);
+      if (dq.error) throw dq.error;
+      if (sb.error) throw sb.error;
+      const merged: Record<string, number> = { ...dq.counts };
+      for (const [id, n] of Object.entries(sb.counts)) {
+        merged[id] = (merged[id] ?? 0) + n;
+      }
+      return merged;
+    },
+    enabled: !!ownerOrgId && indentIds.length > 0,
   });
 }
 

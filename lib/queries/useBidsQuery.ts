@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getBidsForPost,
   getMyBidForPost,
@@ -10,6 +10,13 @@ import {
 } from '@/features/network/services/bids.service';
 import { queryKeys } from '@/lib/queryKeys';
 
+function invalidateIndentOfferCounts(qc: QueryClient) {
+  qc.invalidateQueries({
+    predicate: (q) =>
+      Array.isArray(q.queryKey) && q.queryKey[0] === 'indents' && q.queryKey[1] === 'offer-counts',
+  });
+}
+
 export function useBidsForPostQuery(postId: string | null) {
   return useQuery({
     queryKey: queryKeys.bids.forPost(postId ?? ''),
@@ -19,7 +26,7 @@ export function useBidsForPostQuery(postId: string | null) {
       return res.bids;
     },
     enabled: !!postId,
-    staleTime: 20_000,
+    staleTime: 300_000,
   });
 }
 
@@ -32,7 +39,7 @@ export function useMyBidQuery(postId: string | null, orgId: string | null) {
       return res.bid;
     },
     enabled: !!postId && !!orgId,
-    staleTime: 20_000,
+    staleTime: 300_000,
   });
 }
 
@@ -47,6 +54,7 @@ export function useSubmitBidMutation(postId: string | null, orgId: string | null
         qc.invalidateQueries({ queryKey: queryKeys.bids.myBid(postId, orgId ?? '') });
         qc.invalidateQueries({ queryKey: queryKeys.posts.detail(postId) });
       }
+      invalidateIndentOfferCounts(qc);
     },
   });
 }
@@ -61,6 +69,7 @@ export function useUpdateBidMutation(postId: string | null, orgId: string | null
         qc.invalidateQueries({ queryKey: queryKeys.bids.forPost(postId) });
         qc.invalidateQueries({ queryKey: queryKeys.bids.myBid(postId, orgId ?? '') });
       }
+      invalidateIndentOfferCounts(qc);
     },
   });
 }
@@ -71,6 +80,7 @@ export function useAcceptBidMutation(postId: string) {
     mutationFn: (bidId: string) => acceptBid(bidId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.bids.forPost(postId) });
+      invalidateIndentOfferCounts(qc);
     },
   });
 }
@@ -81,6 +91,7 @@ export function useRejectBidMutation(postId: string) {
     mutationFn: (bidId: string) => rejectBid(bidId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.bids.forPost(postId) });
+      invalidateIndentOfferCounts(qc);
     },
   });
 }
@@ -92,6 +103,7 @@ export function useWithdrawBidMutation(postId: string, orgId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.bids.forPost(postId) });
       qc.invalidateQueries({ queryKey: queryKeys.bids.myBid(postId, orgId) });
+      invalidateIndentOfferCounts(qc);
     },
   });
 }

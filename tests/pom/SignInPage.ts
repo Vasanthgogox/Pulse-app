@@ -14,7 +14,7 @@ export class SignInPage {
   }
 
   async goto(): Promise<void> {
-    await this.page.goto('/sign-in?direct=1');
+    await this.page.goto('/sign-in');
   }
 
   async waitForReady(): Promise<void> {

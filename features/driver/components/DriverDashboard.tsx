@@ -488,7 +488,7 @@ export default function DriverDashboard() {
             if (!currentIds.has(id)) disappearedLabels.push(displayNum);
           });
           if (disappearedLabels.length > 0) setReassignedTripLabels(disappearedLabels);
-          previousTripsRef.current = new Map(trips.map((t) => [t.id, tripsService.getTripDisplayNumber(t)]));
+          previousTripsRef.current = new Map(trips.map((t) => [t.id, tripsService.resolveDriverFacingTripLabel(t)]));
           setAllTrips(trips);
           const normalizedDriverStatus = String(primaryDriver.status ?? '').toLowerCase();
           const hasActiveTrip = trips.some((t) => isTripInProgress(t));
@@ -2552,7 +2552,7 @@ export default function DriverDashboard() {
                     ]}
                   >
                     <Text style={[styles.offlineCardTitle, { color: colors.text }]}>
-                      {tripsService.getTripDisplayNumber(trip)}
+                      {tripsService.resolveDriverFacingTripLabel(trip)}
                     </Text>
                     {otpClaimTripId === trip.id ? (
                       renderOtpClaimCard(trip, { showCancel: true })

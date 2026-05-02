@@ -1,6 +1,6 @@
 /**
- * Driver chat screen — shows all trip conversations where this driver is the party.
- * Drivers can read all messages (including system events) and reply as "driver" role.
+ * Driver chat screen — trip threads where this driver is the party.
+ * Fleet-only system status logs (message_type system) are hidden here; they remain visible in Command Hub.
  * Ledger cards and doc-share are visible but actions are read-only (no add-to-book or share).
  */
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -20,7 +20,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useDriverChat } from "@/features/chat/contexts/DriverChatContext";
-import { ChatLedgerEventCard, ChatSystemEventCard } from "@/features/chat/components/ChatEventCard";
+import { ChatLedgerEventCard } from "@/features/chat/components/ChatEventCard";
 import { DocumentShareCard } from "@/features/chat/components/DocumentShareCard";
 import type { TripConversation, TripMessageRow } from "@/features/chat/types/chat.types";
 import {
@@ -34,6 +34,15 @@ import type { TripRow } from "@/services/tripsService";
 import * as tripsService from "@/services/tripsService";
 
 const QUICK_EMOJIS = ["👍", "🚛", "📍", "✅", "📦", "⚠️", "🕒", "📞", "💯"];
+
+/** Last chat bubble preview for list rows — fleet system broadcasts excluded. */
+function lastVisibleDriverChatMessage(messages: TripMessageRow[]): TripMessageRow | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.message_type !== "system") return m;
+  }
+  return undefined;
+}
 
 const DRIVER_QUICK_MESSAGES = [
   "I have arrived at pickup.",
@@ -101,7 +110,7 @@ function ChatBubble({ isOwn, content, timestamp, senderName }: {
 function ConvListItem({ conv, active, onPress }: {
   conv: TripConversation; active: boolean; onPress: () => void;
 }) {
-  const last = conv.messages[conv.messages.length - 1];
+  const last = lastVisibleDriverChatMessage(conv.messages);
   const time = conv.last_message_at
     ? new Date(conv.last_message_at).toLocaleTimeString("en-IN", {
         hour: "2-digit", minute: "2-digit", hour12: true,
@@ -161,6 +170,20 @@ function DriverStatusNoteCard({ u }: { u: ParsedDriverStatusNote }) {
   );
 }
 
+function isStatusNoteRedundantWithChat(
+  u: ParsedDriverStatusNote,
+  messages: TripMessageRow[],
+): boolean {
+  const t = new Date(u.timestamp).getTime();
+  return messages.some(
+    (m) =>
+      m.sender_role === "driver" &&
+      m.message_type === "text" &&
+      m.content.trim() === u.message.trim() &&
+      Math.abs(new Date(m.created_at).getTime() - t) < 120_000,
+  );
+}
+
 function MessageThread({
   conv,
   messageInput,
@@ -168,6 +191,7 @@ function MessageThread({
   showEmoji,
   setShowEmoji,
   onSend,
+  onSendTripChat,
   onBack,
 }: {
   conv: TripConversation;
@@ -176,6 +200,8 @@ function MessageThread({
   showEmoji: boolean;
   setShowEmoji: (v: boolean) => void;
   onSend: () => void;
+  /** Mirrors Quick Status into trip_messages so Command Hub receives it (notes alone do not sync). */
+  onSendTripChat: (text: string) => Promise<void>;
   onBack: () => void;
 }) {
   const scrollRef = useRef<ScrollView>(null);
@@ -204,9 +230,11 @@ function MessageThread({
       | { key: string; kind: "status"; u: ParsedDriverStatusNote };
     const items: Row[] = [];
     for (const m of conv.messages) {
+      if (m.message_type === "system") continue;
       items.push({ key: `m-${m.id}`, kind: "msg", m });
     }
     statusNotes.forEach((u, i) => {
+      if (isStatusNoteRedundantWithChat(u, conv.messages)) return;
       items.push({
         key: `s-${u.timestamp}-${i}-${u.message.slice(0, 12)}`,
         kind: "status",
@@ -231,14 +259,16 @@ function MessageThread({
     if (!res.error) {
       const { trip: next } = await tripsService.getTripById(conv.trip_id);
       if (next) setTrip(next);
+      try {
+        await onSendTripChat(label);
+      } catch {
+        // Notes updated; chat sync failed — user can resend from text field
+      }
     }
     setStatusSending(null);
   };
 
   const renderMessage = (m: TripMessageRow) => {
-    if (m.message_type === "system") {
-      return <ChatSystemEventCard message={m} />;
-    }
     if (m.message_type === "document_share") {
       return <DocumentShareCard message={m} isOwn={m.sender_role === "driver"} />;
     }
@@ -522,6 +552,9 @@ export default function DriverChatScreen() {
             showEmoji={showEmoji}
             setShowEmoji={setShowEmoji}
             onSend={handleSend}
+            onSendTripChat={(text) =>
+              sendMessage(selectedConv.id, selectedConv.organization_id, text)
+            }
             onBack={() => {
               setSelectedId(null);
               setMessageInput("");
@@ -592,6 +625,9 @@ export default function DriverChatScreen() {
           showEmoji={showEmoji}
           setShowEmoji={setShowEmoji}
           onSend={handleSend}
+          onSendTripChat={(text) =>
+            sendMessage(selectedConv.id, selectedConv.organization_id, text)
+          }
           onBack={() => { setSelectedId(null); setMessageInput(""); setShowEmoji(false); }}
         />
       )}

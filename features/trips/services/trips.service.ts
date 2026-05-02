@@ -17,6 +17,11 @@ export interface TripRow {
   sequence_number?: number | null;
   /** User-facing trip ID e.g. TRP001. Set by trigger from sequence_number. */
   display_trip_id?: string | null;
+  /**
+   * Per-driver sequential label (TRP### format, independent counter per driver).
+   * Populated when `driver_id` is set; distinct from org-scoped `trip_number`.
+   */
+  driver_display_trip_id?: string | null;
   indent_id: string | null;
   source: string;
   pickup_area: string;
@@ -109,7 +114,7 @@ export async function getTripsByOrganization(
     return { error: null, trips: resultTrips, hasMore };
   }
 
-  const { data, error } = await q;
+  const { data, error } = await q.limit(200);
   if (error) return { error: new Error(error.message), trips: [] };
   return { error: null, trips: processData(data) };
 }
@@ -194,6 +199,16 @@ export function humanizeTripIdInRpcError(message: string, trip: TripRow): string
   const label = getTripDisplayNumber(trip);
   const re = new RegExp(id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
   return message.replace(re, label);
+}
+
+/**
+ * Driver-facing label: per-driver TRP### from `driver_display_trip_id` when set.
+ * Falls back to org trip_number only if not yet assigned (e.g. unassigned trip).
+ */
+export function resolveDriverFacingTripLabel(row: TripRow): string {
+  const perDriver = row.driver_display_trip_id?.trim();
+  if (perDriver) return perDriver;
+  return row.display_trip_id ?? row.trip_number ?? "—";
 }
 
 export async function getTripById(

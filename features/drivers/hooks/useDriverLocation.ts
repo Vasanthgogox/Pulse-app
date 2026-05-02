@@ -56,7 +56,7 @@ export function useDriverLocation(tripId: string | undefined) {
   useEffect(() => {
     if (!tripId) return;
     fetchDriverLocationFromDb();
-    const interval = setInterval(fetchDriverLocationFromDb, 10000);
+    const interval = setInterval(fetchDriverLocationFromDb, 30000);
     return () => clearInterval(interval);
   }, [tripId, fetchDriverLocationFromDb]);
 

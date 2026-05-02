@@ -85,6 +85,34 @@ export function BidSheet({ visible, post, orgId, existingBid, onClose, onSuccess
 
   const matchAndUpsertDirectQuote = async (): Promise<{ linked: boolean; error?: string }> => {
     if (!post || !orgId) return { linked: false, error: 'Missing context' };
+
+    const invalidateQuoteCaches = (matchedIndentId: string) =>
+      Promise.allSettled([
+        queryClient.invalidateQueries({ queryKey: queryKeys.indents.market(orgId) }),
+        queryClient.invalidateQueries({ queryKey: [...queryKeys.indents.all(orgId), 'my-direct-quotes'] }),
+        queryClient.invalidateQueries({ queryKey: ['indents', matchedIndentId, 'direct-quotes'] }),
+        queryClient.invalidateQueries({ queryKey: ['indents', 'quote-counts'] }),
+        queryClient.invalidateQueries({
+          predicate: (q) =>
+            Array.isArray(q.queryKey) &&
+            q.queryKey[0] === 'indents' &&
+            q.queryKey[1] === 'offer-counts',
+        }),
+      ]);
+
+    /** Story was published from an indent — sync quote to that row only (no fuzzy match). */
+    if (post.source_indent_id) {
+      const quoteRes = await createDirectQuote(
+        post.source_indent_id,
+        orgId,
+        parsedAmount,
+        note.trim() || null,
+      );
+      if (quoteRes.error) return { linked: false, error: quoteRes.error.message };
+      await invalidateQuoteCaches(post.source_indent_id);
+      return { linked: true };
+    }
+
     const marketRes = await getMarketIndentsForOrganization(orgId);
     if (marketRes.error) return { linked: false, error: marketRes.error.message };
 
@@ -118,9 +146,14 @@ export function BidSheet({ visible, post, orgId, existingBid, onClose, onSuccess
         const indentMaterial = norm(indent.load_type);
         const indentDate = indent.pickup_date ? String(indent.pickup_date).slice(0, 10) : null;
         const indentTarget = Number(indent.supplier_target ?? indent.client_price ?? 0);
-        const routeStrongMatch =
-          (indentOrigin && (indentOrigin === postOrigin || indentOrigin.includes(postOrigin) || postOrigin.includes(indentOrigin))) ||
-          (indentDest && (indentDest === postDestination || indentDest.includes(postDestination) || postDestination.includes(indentDest)));
+        /** Require both legs to align loosely — pickup-only match was syncing wrong indents. */
+        const originLeg =
+          !!indentOrigin &&
+          (indentOrigin === postOrigin || indentOrigin.includes(postOrigin) || postOrigin.includes(indentOrigin));
+        const destLeg =
+          !!indentDest &&
+          (indentDest === postDestination || indentDest.includes(postDestination) || postDestination.includes(indentDest));
+        const routeStrongMatch = originLeg && destLeg;
 
         let score = 0;
         if (indentOrigin && indentOrigin === postOrigin) score += 4;
@@ -150,12 +183,7 @@ export function BidSheet({ visible, post, orgId, existingBid, onClose, onSuccess
     const quoteRes = await createDirectQuote(matchedIndent.id, orgId, parsedAmount, note.trim() || null);
     if (quoteRes.error) return { linked: false, error: quoteRes.error.message };
 
-    await Promise.allSettled([
-      queryClient.invalidateQueries({ queryKey: queryKeys.indents.market(orgId) }),
-      queryClient.invalidateQueries({ queryKey: [...queryKeys.indents.all(orgId), 'my-direct-quotes'] }),
-      queryClient.invalidateQueries({ queryKey: ['indents', matchedIndent.id, 'direct-quotes'] }),
-      queryClient.invalidateQueries({ queryKey: ['indents', 'quote-counts'] }),
-    ]);
+    await invalidateQuoteCaches(matchedIndent.id);
     return { linked: true };
   };
 

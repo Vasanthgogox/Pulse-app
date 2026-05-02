@@ -6,9 +6,13 @@
  */
 export const ROUTES = {
   INDEX: '/',
+  /** Marketing landing (web). */
+  TERMINAL_WEBSITE: '/terminal-website',
+  /** Business vs driver entry; top “Sign In” goes to {@link ROUTES.SIGN_IN}. */
+  WELCOME: '/welcome',
   SIGN_IN: '/sign-in',
-  /** Direct sign-in form (skip web landing chooser). */
-  SIGN_IN_DIRECT: '/sign-in?direct=1',
+  /** Same as {@link ROUTES.SIGN_IN} — kept for existing call sites (logout, guards). */
+  SIGN_IN_DIRECT: '/sign-in',
   SIGN_UP: '/sign-up',
 
   TABS: {

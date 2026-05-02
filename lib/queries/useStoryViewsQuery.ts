@@ -11,7 +11,7 @@ export function useStoryViewsQuery(postId: string | null, enabled: boolean) {
       return res.views;
     },
     enabled: !!postId && enabled,
-    staleTime: 30_000,
+    staleTime: 300_000,
   });
 }
 
