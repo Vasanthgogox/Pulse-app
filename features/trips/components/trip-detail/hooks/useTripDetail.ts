@@ -657,8 +657,27 @@ export function useTripDetail({
   }, [vehicleDocs]);
 
   const computedTripDocs = useMemo<TripDocItem[]>(() => {
-    const podDoc = tripDocuments[0];
     const hasVehicleDoc = vehiclePreviewDocs.some((doc) => !!doc.storagePath);
+    const podDocs: TripDocItem[] =
+      tripDocuments.length > 0
+        ? tripDocuments.map((podDoc, index) => ({
+            id: `pod-${podDoc.id}`,
+            label: tripDocuments.length > 1 ? `Driver POD ${index + 1}` : "Driver POD",
+            type: (podDoc.mime_type ?? "image/jpeg").includes("pdf") ? "PDF" : "JPG",
+            status: "Uploaded" as const,
+            storagePath: podDoc.storage_path,
+            documentId: podDoc.id,
+            category: "driver" as const,
+          }))
+        : [
+            {
+              id: "pod",
+              label: "Driver POD",
+              type: "JPG",
+              status: "Pending" as const,
+              category: "driver" as const,
+            },
+          ];
     return [
       {
         id: "manifest",
@@ -675,23 +694,7 @@ export function useTripDetail({
         docSource: "vehicle" as const,
         category: "vehicle" as const,
       },
-      podDoc
-        ? {
-            id: "pod",
-            label: "Driver POD",
-            type: (podDoc.mime_type ?? "image/jpeg").includes("pdf") ? "PDF" : "JPG",
-            status: "Uploaded" as const,
-            storagePath: podDoc.storage_path,
-            documentId: podDoc.id,
-            category: "driver" as const,
-          }
-        : {
-            id: "pod",
-            label: "Driver POD",
-            type: "JPG",
-            status: "Pending" as const,
-            category: "driver" as const,
-          },
+      ...podDocs,
     ];
   }, [tripDocuments, vehiclePreviewDocs]);
 
@@ -699,7 +702,9 @@ export function useTripDetail({
     if (!selectedDoc) return undefined;
     return (
       selectedDoc.storagePath ??
-      (selectedDoc.id === "pod" && tripDocuments[0] ? tripDocuments[0].storage_path : undefined)
+      (selectedDoc.id.startsWith("pod") && tripDocuments[0]
+        ? tripDocuments[0].storage_path
+        : undefined)
     );
   }, [selectedDoc, tripDocuments]);
 
@@ -1922,7 +1927,7 @@ export function useTripDetail({
     if (!selectedDoc) {
       return;
     }
-    if (selectedDoc.id !== "pod" || docPreviewStoragePath || !tripId) return;
+    if (!selectedDoc.id.startsWith("pod") || docPreviewStoragePath || !tripId) return;
     if (podModalRefetchDoneRef.current) return;
     podModalRefetchDoneRef.current = true;
     loadTripDocuments();
