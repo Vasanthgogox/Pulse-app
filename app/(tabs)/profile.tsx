@@ -10,10 +10,15 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { EditProfileModal } from "@/features/auth";
-import { averageScore, getRatingsForDrivers } from "@/features/ratings/services/ratings.service";
+import {
+  averageScore,
+  getRatingsForClients,
+  getRatingsForDrivers,
+  getRatingsReceivedAsLinkedOrganization,
+} from "@/features/ratings/services/ratings.service";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { getCapabilitiesFromProfile } from "@/lib/capabilities";
-import { useDriversQuery, useTripsQuery } from "@/lib/queries";
+import { useClientsQuery, useDriversQuery, useTripsQuery } from "@/lib/queries";
 import { queryKeys } from "@/lib/queryKeys";
 import { ROUTES } from "@/lib/routes";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -291,9 +296,12 @@ export default function ProfileScreen() {
 
   const { data: trips = [], isLoading: tripsLoading } = useTripsQuery(orgId);
   const { data: drivers = [] } = useDriversQuery(orgId);
+  const { data: clients = [] } = useClientsQuery(orgId);
 
   const driverIds = useMemo(() => drivers.map((d) => d.id), [drivers]);
   const driverKey = driverIds.length ? driverIds.sort().join(",") : "";
+  const clientIds = useMemo(() => clients.map((c) => c.id).filter(Boolean), [clients]);
+  const clientIdsKey = clientIds.length ? clientIds.sort().join(",") : "";
 
   const { data: fleetRatingData, isLoading: ratingsLoading } = useQuery({
     queryKey: ["q", "profile", "fleetRatings", orgId ?? "", driverKey],
@@ -310,6 +318,41 @@ export default function ProfileScreen() {
       };
     },
     enabled: !!orgId && driverIds.length > 0,
+  });
+
+  /** Supplier/org ratings of your CRM customer records (rated_type client) — not driver scores. */
+  const { data: partnerClientRatingData, isLoading: partnerRatingsLoading } = useQuery({
+    queryKey: ["q", "profile", "partnerClientRatings", orgId ?? "", clientIdsKey],
+    queryFn: async () => {
+      if (!orgId || clientIds.length === 0) {
+        return { avg: null as number | null, count: 0 };
+      }
+      const { error, byClientId } = await getRatingsForClients(clientIds);
+      if (error) throw error;
+      const all = Object.values(byClientId).flat();
+      return {
+        avg: averageScore(all),
+        count: all.length,
+      };
+    },
+    enabled: !!orgId && clientIds.length > 0,
+  });
+
+  /** Partner orgs rated your linked customer identity (integrated client row → your org). */
+  const { data: receivedCustomerRatingData, isLoading: receivedCustomerRatingsLoading } = useQuery({
+    queryKey: ["q", "profile", "receivedCustomerRatings", orgId ?? ""],
+    queryFn: async () => {
+      if (!orgId) {
+        return { avg: null as number | null, count: 0 };
+      }
+      const { error, ratings } = await getRatingsReceivedAsLinkedOrganization(orgId);
+      if (error) throw error;
+      return {
+        avg: averageScore(ratings),
+        count: ratings.length,
+      };
+    },
+    enabled: !!orgId,
   });
 
   const completedTrips = useMemo(
@@ -377,6 +420,12 @@ export default function ProfileScreen() {
         await queryClient.invalidateQueries({ queryKey: queryKeys.drivers.all(orgId) });
         await queryClient.invalidateQueries({
           queryKey: ["q", "profile", "fleetRatings", orgId],
+        });
+        await queryClient.invalidateQueries({
+          queryKey: ["q", "profile", "partnerClientRatings", orgId],
+        });
+        await queryClient.invalidateQueries({
+          queryKey: ["q", "profile", "receivedCustomerRatings", orgId],
         });
       }
     } finally {
@@ -457,6 +506,18 @@ export default function ProfileScreen() {
   const fleetAvg = fleetRatingData?.avg ?? null;
   const fleetCount = fleetRatingData?.count ?? 0;
   const showFleetStars = fleetAvg != null && fleetAvg > 0;
+
+  const partnerClientAvg = partnerClientRatingData?.avg ?? null;
+  const partnerClientCount = partnerClientRatingData?.count ?? 0;
+  const showPartnerClientStars =
+    partnerClientAvg != null && partnerClientAvg > 0 && partnerClientCount > 0;
+
+  const receivedCustomerAvg = receivedCustomerRatingData?.avg ?? null;
+  const receivedCustomerCount = receivedCustomerRatingData?.count ?? 0;
+  const showReceivedCustomerStars =
+    receivedCustomerAvg != null &&
+    receivedCustomerAvg > 0 &&
+    receivedCustomerCount > 0;
 
   useEffect(() => {
     let mounted = true;
@@ -577,26 +638,55 @@ export default function ProfileScreen() {
                   {currentLevelConfig.tier} · {currentLevelConfig.name}
                 </Text>
 
-                {showFleetStars ? (
-                  <View style={styles.ratingPill}>
-                    <FleetStars value={fleetAvg!} />
-                    <Text style={styles.ratingNum}>
-                      {fleetAvg!.toFixed(1)} · {fleetCount} review{fleetCount === 1 ? "" : "s"} (fleet)
-                    </Text>
-                  </View>
-                ) : (
-                  <View style={styles.ratingPillMuted}>
-                    {ratingsLoading && driverIds.length > 0 ? (
-                      <ActivityIndicator size="small" color="rgba(255,255,255,0.6)" />
-                    ) : (
-                      <Text style={styles.ratingPillMutedText}>
-                        {driverIds.length === 0
-                          ? "Add drivers to see fleet service ratings"
-                          : "Not enough driver ratings yet"}
+                <View style={styles.ratingPillsStack}>
+                  {showFleetStars ? (
+                    <View style={styles.ratingPill}>
+                      <FleetStars value={fleetAvg!} />
+                      <Text style={styles.ratingNum}>
+                        {fleetAvg!.toFixed(1)} · {fleetCount} review{fleetCount === 1 ? "" : "s"}{" "}
+                        (fleet)
                       </Text>
-                    )}
-                  </View>
-                )}
+                    </View>
+                  ) : (
+                    <View style={styles.ratingPillMuted}>
+                      {ratingsLoading && driverIds.length > 0 ? (
+                        <ActivityIndicator size="small" color="rgba(255,255,255,0.6)" />
+                      ) : (
+                        <Text style={styles.ratingPillMutedText}>
+                          {driverIds.length === 0
+                            ? "Add drivers to see fleet service ratings"
+                            : "Not enough driver ratings yet"}
+                        </Text>
+                      )}
+                    </View>
+                  )}
+                  {showPartnerClientStars ? (
+                    <View style={[styles.ratingPill, styles.ratingPillPartner]}>
+                      <FleetStars value={partnerClientAvg!} />
+                      <Text style={styles.ratingNum}>
+                        {partnerClientAvg!.toFixed(1)} · {partnerClientCount} review
+                        {partnerClientCount === 1 ? "" : "s"} (partners · your customers)
+                      </Text>
+                    </View>
+                  ) : partnerRatingsLoading && clientIds.length > 0 ? (
+                    <View style={styles.ratingPillMuted}>
+                      <ActivityIndicator size="small" color="rgba(255,255,255,0.6)" />
+                    </View>
+                  ) : null}
+                  {showReceivedCustomerStars ? (
+                    <View style={[styles.ratingPill, styles.ratingPillPartner]}>
+                      <FleetStars value={receivedCustomerAvg!} />
+                      <Text style={styles.ratingNum}>
+                        {receivedCustomerAvg!.toFixed(1)} · {receivedCustomerCount} review
+                        {receivedCustomerCount === 1 ? "" : "s"} (partners · you as customer)
+                      </Text>
+                    </View>
+                  ) : receivedCustomerRatingsLoading ? (
+                    <View style={[styles.ratingPillMuted, styles.ratingPillPartner]}>
+                      <ActivityIndicator size="small" color="rgba(255,255,255,0.6)" />
+                    </View>
+                  ) : null}
+                </View>
 
                 <Text style={styles.aboutText} numberOfLines={2}>
                   {statusText}
@@ -1034,9 +1124,18 @@ const styles = StyleSheet.create({
     letterSpacing: 2.4,
     marginBottom: 8,
   },
+  ratingPillsStack: {
+    width: "100%",
+    alignItems: "center",
+    marginBottom: 4,
+  },
   ratingPill: {
     alignItems: "center",
     marginBottom: 6,
+  },
+  ratingPillPartner: {
+    marginTop: 2,
+    marginBottom: 0,
   },
   ratingNum: {
     fontSize: 10,

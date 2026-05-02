@@ -5,11 +5,13 @@ export {
   createRating,
   getRatingsForClient,
   getRatingsForClients,
+  getRatingsReceivedAsLinkedOrganization,
   getRatingsForTrip,
   getRatingsForSupplier,
   getRatingsForSuppliers,
   getRatingsForDriver,
   getRatingsForDrivers,
+  resolveRatedClientIdForTrip,
 } from "./services/ratings.service";
 export type {
   RatingRow,
