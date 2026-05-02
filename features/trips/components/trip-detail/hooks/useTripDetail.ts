@@ -536,15 +536,50 @@ export function useTripDetail({
 
   // ── Transactions (React Query) ────────────────────────────────────────────
   const orgIdForTransactions = currentOrganization?.id ?? null;
-  const { data: transactionsData = [], refetch: refetchTransactions } =
+  const tripOwnerOrgIdForTransactions = trip?.organization_id ?? null;
+  const secondaryOrgIdForTransactions =
+    orgIdForTransactions &&
+    tripOwnerOrgIdForTransactions &&
+    tripOwnerOrgIdForTransactions !== orgIdForTransactions
+      ? tripOwnerOrgIdForTransactions
+      : null;
+  const { data: primaryTransactionsData = [], refetch: refetchPrimaryTransactions } =
     useTransactionsQuery(orgIdForTransactions);
-  refetchTransactionsRef.current = refetchTransactions;
-  const transactions: LedgerRow[] | null = orgIdForTransactions ? transactionsData : null;
+  const { data: secondaryTransactionsData = [], refetch: refetchSecondaryTransactions } =
+    useTransactionsQuery(secondaryOrgIdForTransactions);
+  refetchTransactionsRef.current = () => {
+    void refetchPrimaryTransactions();
+    if (secondaryOrgIdForTransactions) void refetchSecondaryTransactions();
+  };
+  const transactions: LedgerRow[] | null = useMemo(() => {
+    if (!orgIdForTransactions) return null;
+    const merged = [...primaryTransactionsData, ...secondaryTransactionsData];
+    if (merged.length <= 1) return merged;
+    const deduped = new Map<string, LedgerRow>();
+    for (const row of merged) deduped.set(row.id, row);
+    return Array.from(deduped.values());
+  }, [
+    orgIdForTransactions,
+    primaryTransactionsData,
+    secondaryTransactionsData,
+  ]);
 
-  const tripLedgerEntries = useMemo(
-    () => getTripLedgerEntries(transactions, trip?.id),
-    [transactions, trip?.id],
-  );
+  const tripLedgerEntries = useMemo(() => {
+    const direct = getTripLedgerEntries(transactions, trip?.id);
+    if (direct.length > 0) return direct;
+    if (!transactions?.length || !trip) return direct;
+
+    // Fallback for legacy/mislinked rows: include entries whose description metadata
+    // references this trip number (e.g. [[QMETA:{"trip_number":"TRP007",...}]]).
+    const tripLabel = getTripDisplayNumber(trip).trim().toLowerCase();
+    if (!tripLabel) return direct;
+    const qmetaNeedle = `"trip_number":"${tripLabel}"`;
+    return transactions.filter((tx) => {
+      const description = String(tx.description ?? "").toLowerCase();
+      if (description.includes(qmetaNeedle)) return true;
+      return String(tx.trip_number ?? "").trim().toLowerCase() === tripLabel;
+    });
+  }, [transactions, trip]);
 
   const { data: tripSubcontracts = [] } = useTripSubcontractsQuery(
     currentOrganization?.id ?? null,

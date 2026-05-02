@@ -1432,6 +1432,120 @@ export interface UpdateTripStatusData {
 
 const COMPLETED_STATUS_SET = new Set(["completed", "delivered", "done"]);
 
+function resolveTripPayoutModeForCompletion(
+  trip:
+    | Pick<TripRow, "trip_payout_mode" | "supplier_id" | "driver_id" | "vehicle_id">
+    | null
+    | undefined,
+): "market" | "asset" {
+  const raw = String(trip?.trip_payout_mode ?? "")
+    .trim()
+    .toLowerCase();
+  if (raw === "market" || raw === "asset") return raw;
+  const hasAssignedFleet =
+    String(trip?.driver_id ?? "").trim().length > 0 ||
+    String(trip?.vehicle_id ?? "").trim().length > 0;
+  if (hasAssignedFleet) return "asset";
+  return String(trip?.supplier_id ?? "").trim() ? "market" : "asset";
+}
+
+async function ensureAssetCompletionAutoEntries(
+  trip: TripRow | null | undefined,
+): Promise<void> {
+  if (!trip?.id || !trip.organization_id) return;
+  if (resolveTripPayoutModeForCompletion(trip) !== "asset") return;
+
+  const existingRes = await supabase()
+    .from("transactions")
+    .select("id, contact_type, amount_in, amount_out")
+    .eq("organization_id", trip.organization_id)
+    .eq("trip_id", trip.id);
+
+  if (existingRes.error) {
+    console.warn("[trip completion] failed to inspect existing entries", {
+      tripId: trip.id,
+      organizationId: trip.organization_id,
+      message: existingRes.error.message,
+    });
+    return;
+  }
+
+  const existing = (existingRes.data ??
+    []) as Array<{
+    id: string;
+    contact_type: string | null;
+    amount_in: number | null;
+    amount_out: number | null;
+  }>;
+  const hasClientIn = existing.some(
+    (r) =>
+      String(r.contact_type ?? "").toLowerCase() === "client" &&
+      Number(r.amount_in ?? 0) > 0,
+  );
+  const hasDriverOut = existing.some(
+    (r) =>
+      String(r.contact_type ?? "").toLowerCase() === "driver" &&
+      Number(r.amount_out ?? 0) > 0,
+  );
+
+  const transactionDate =
+    String(trip.completed_at ?? "").slice(0, 10) ||
+    new Date().toISOString().slice(0, 10);
+  const clientAmount = Math.max(0, Number(trip.client_price ?? 0) || 0);
+  const driverTargetAmount = Math.max(
+    0,
+    Number(trip.driver_commission ?? 0) || Number(trip.supplier_rate ?? 0) || 0,
+  );
+
+  const pendingInserts: Array<Record<string, unknown>> = [];
+  if (!hasClientIn && clientAmount > 0) {
+    pendingInserts.push({
+      organization_id: trip.organization_id,
+      trip_id: trip.id,
+      party_name: String(trip.client_name ?? "").trim() || "Client",
+      description: "TRIP REVENUE AUTO | Mode: System",
+      amount_in: clientAmount,
+      amount_out: 0,
+      transaction_date: transactionDate,
+      contact_id: trip.client_id ?? null,
+      contact_type: "client",
+      ledger_entity_type: "CLIENT",
+      ledger_flow_type: "receivable",
+      ledger_category: "TRIP_REVENUE",
+    });
+  }
+  if (!hasDriverOut && driverTargetAmount > 0 && String(trip.driver_id ?? "").trim()) {
+    pendingInserts.push({
+      organization_id: trip.organization_id,
+      trip_id: trip.id,
+      party_name: String(trip.driver_display_name ?? "").trim() || "Driver",
+      description: "DRIVER COMMISSION AUTO | Mode: System",
+      amount_in: 0,
+      amount_out: driverTargetAmount,
+      transaction_date: transactionDate,
+      contact_id: trip.driver_id,
+      contact_type: "driver",
+      ledger_entity_type: "DRIVER",
+      ledger_flow_type: "payable",
+      ledger_category: "DRIVER_COMMISSION",
+    });
+  }
+
+  if (pendingInserts.length === 0) return;
+
+  const { error: insertError } = await supabase()
+    .from("transactions")
+    .insert(pendingInserts);
+  if (insertError) {
+    console.warn("[trip completion] failed to auto-create asset entries", {
+      tripId: trip.id,
+      organizationId: trip.organization_id,
+      message: insertError.message,
+      count: pendingInserts.length,
+    });
+  }
+}
+
 async function validateSupplierLinkForCompletion(
   tripId: string,
 ): Promise<{ error: Error | null }> {
@@ -1501,6 +1615,24 @@ export async function updateTripStatus(
     const validation = await validateSupplierLinkForCompletion(tripId);
     if (validation.error) return { error: validation.error, trip: null };
   }
+  let wasAlreadyCompleted = false;
+  if (COMPLETED_STATUS_SET.has(status)) {
+    const before = await supabase()
+      .from("trips")
+      .select("status, completed_at")
+      .eq("id", tripId)
+      .maybeSingle();
+    if (!before.error && before.data) {
+      const beforeStatus = String((before.data as { status?: string | null }).status ?? "")
+        .trim()
+        .toLowerCase();
+      const beforeCompletedAt = String(
+        (before.data as { completed_at?: string | null }).completed_at ?? "",
+      ).trim();
+      wasAlreadyCompleted =
+        COMPLETED_STATUS_SET.has(beforeStatus) || beforeCompletedAt.length > 0;
+    }
+  }
   const updates: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
     status,
@@ -1524,7 +1656,11 @@ export async function updateTripStatus(
       trip: null,
     };
   }
-  return { error: null, trip: row as TripRow };
+  const updatedTrip = row as TripRow;
+  if (COMPLETED_STATUS_SET.has(status) && !wasAlreadyCompleted) {
+    await ensureAssetCompletionAutoEntries(updatedTrip);
+  }
+  return { error: null, trip: updatedTrip };
 }
 
 export interface TripDriverOnlineState {
@@ -1589,7 +1725,11 @@ export async function manualAdvanceTrip(
     p_idempotency_key: params.idempotencyKey,
   });
   if (error) return { error: new Error(error.message), trip: null };
-  return { error: null, trip: (data ?? null) as TripRow | null };
+  const trip = (data ?? null) as TripRow | null;
+  if (params.action === "complete" && trip) {
+    await ensureAssetCompletionAutoEntries(trip);
+  }
+  return { error: null, trip };
 }
 
 /**

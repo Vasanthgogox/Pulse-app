@@ -203,10 +203,16 @@ async function resolveTripContextForLedgerWrite(params: {
   orgId: string;
   tripId?: string | null;
   tripNumber?: string | null;
+  indentId?: string | null;
 }): Promise<{ tripId: string | null; tripNumber: string | null }> {
   const { orgId } = params;
   const requestedTripId = String(params.tripId ?? "").trim();
   const requestedTripNumber = String(params.tripNumber ?? "").trim();
+  const requestedIndentId = String(params.indentId ?? "").trim();
+  const looksLikeUuid = (value: string): boolean =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value,
+    );
 
   if (!requestedTripId) {
     return {
@@ -215,6 +221,67 @@ async function resolveTripContextForLedgerWrite(params: {
     };
   }
 
+  const resolveLocalTripByIndent = async (
+    candidateIndentId: string,
+  ): Promise<{ tripId: string | null; tripNumber: string | null }> => {
+    const normalized = String(candidateIndentId ?? "").trim();
+    if (!normalized) return { tripId: null, tripNumber: null };
+    const { data: localTripByIndent, error: localTripByIndentError } =
+      await supabase()
+        .from("trips")
+        .select("id, trip_number")
+        .eq("organization_id", orgId)
+        .eq("indent_id", normalized)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+    if (localTripByIndentError) {
+      console.warn("[finance] trip context mapping by indent failed", {
+        orgId,
+        indentId: normalized,
+        detail: localTripByIndentError.message,
+      });
+      return { tripId: null, tripNumber: null };
+    }
+    if (!localTripByIndent) return { tripId: null, tripNumber: null };
+    return {
+      tripId: String((localTripByIndent as { id: string }).id),
+      tripNumber: String(
+        (localTripByIndent as { trip_number?: string | null }).trip_number ?? "",
+      ).trim() || null,
+    };
+  };
+
+  const resolveLocalTripByNumber = async (
+    candidateTripNumber: string,
+  ): Promise<{ tripId: string | null; tripNumber: string | null }> => {
+    const normalized = String(candidateTripNumber ?? "").trim();
+    if (!normalized) return { tripId: null, tripNumber: null };
+    const { data: localTrip, error: localTripError } = await supabase()
+      .from("trips")
+      .select("id, trip_number")
+      .eq("organization_id", orgId)
+      .eq("trip_number", normalized)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (localTripError) {
+      console.warn("[finance] trip context mapping by number failed", {
+        orgId,
+        tripNumber: normalized,
+        detail: localTripError.message,
+      });
+      return { tripId: null, tripNumber: normalized };
+    }
+    if (!localTrip) return { tripId: null, tripNumber: normalized };
+    return {
+      tripId: String((localTrip as { id: string }).id),
+      tripNumber: String(
+        (localTrip as { trip_number?: string | null }).trip_number ?? normalized,
+      ),
+    };
+  };
+
   const { data: tripById, error: tripByIdError } = await supabase()
     .from("trips")
     .select("id, organization_id, trip_number")
@@ -222,11 +289,37 @@ async function resolveTripContextForLedgerWrite(params: {
     .maybeSingle();
 
   if (tripByIdError) {
-    throw new Error(`Failed to resolve trip context: ${tripByIdError.message}`);
+    const mappedByIndent = await resolveLocalTripByIndent(requestedIndentId);
+    if (mappedByIndent.tripId) return mappedByIndent;
+    const mappedByNumber = await resolveLocalTripByNumber(requestedTripNumber);
+    if (mappedByNumber.tripId || mappedByNumber.tripNumber) return mappedByNumber;
+    if (looksLikeUuid(requestedTripId)) {
+      return {
+        tripId: requestedTripId,
+        tripNumber: requestedTripNumber || null,
+      };
+    }
+    return {
+      tripId: null,
+      tripNumber: requestedTripNumber || null,
+    };
   }
 
   if (!tripById) {
-    throw new Error("Selected trip was not found.");
+    const mappedByIndent = await resolveLocalTripByIndent(requestedIndentId);
+    if (mappedByIndent.tripId) return mappedByIndent;
+    const mappedByNumber = await resolveLocalTripByNumber(requestedTripNumber);
+    if (mappedByNumber.tripId || mappedByNumber.tripNumber) return mappedByNumber;
+    if (looksLikeUuid(requestedTripId)) {
+      return {
+        tripId: requestedTripId,
+        tripNumber: requestedTripNumber || null,
+      };
+    }
+    return {
+      tripId: null,
+      tripNumber: requestedTripNumber || null,
+    };
   }
 
   const row = tripById as {
@@ -243,38 +336,70 @@ async function resolveTripContextForLedgerWrite(params: {
 
   const candidateTripNumber =
     requestedTripNumber || String(row.trip_number ?? "").trim();
+  const mappedByIndent = await resolveLocalTripByIndent(requestedIndentId);
+  if (mappedByIndent.tripId) {
+    return {
+      tripId: mappedByIndent.tripId,
+      tripNumber: mappedByIndent.tripNumber ?? (candidateTripNumber || null),
+    };
+  }
   if (!candidateTripNumber) {
-    throw new Error(
-      "Invalid trip context: trip belongs to another organization.",
-    );
+    return {
+      // Cross-org trips can still be the intended anchor for shared-ledger entries.
+      tripId: row.id,
+      tripNumber: requestedTripNumber || null,
+    };
   }
 
-  const { data: localTrip, error: localTripError } = await supabase()
-    .from("trips")
-    .select("id, trip_number")
-    .eq("organization_id", orgId)
-    .eq("trip_number", candidateTripNumber)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const mappedByNumber = await resolveLocalTripByNumber(candidateTripNumber);
+  if (mappedByNumber.tripId) return mappedByNumber;
 
-  if (localTripError) {
-    throw new Error(`Failed to map trip context: ${localTripError.message}`);
-  }
-
-  if (!localTrip) {
-    throw new Error(
-      "Invalid trip context: selected trip does not belong to current organization.",
-    );
-  }
-
+  // Avoid wrong-trip attachments on trip_number collisions (e.g. both orgs have TRP001).
   return {
-    tripId: String((localTrip as { id: string }).id),
-    tripNumber: String(
-      (localTrip as { trip_number?: string | null }).trip_number ??
-        candidateTripNumber,
-    ),
+    tripId: row.id,
+    tripNumber: candidateTripNumber || null,
   };
+}
+
+async function syncTripAmountPaidFromLedger(
+  orgId: string,
+  tripId: string | null | undefined,
+): Promise<void> {
+  const normalizedTripId = String(tripId ?? "").trim();
+  if (!normalizedTripId) return;
+  const { data: sums, error: sumsError } = await supabase()
+    .from("transactions")
+    .select("amount_in")
+    .eq("organization_id", orgId)
+    .eq("trip_id", normalizedTripId);
+  if (sumsError) {
+    console.warn("[finance] trip amount_paid sync read failed", {
+      organizationId: orgId,
+      tripId: normalizedTripId,
+      message: sumsError.message,
+    });
+    return;
+  }
+  const totalIn = (sums ?? []).reduce(
+    (sum, row) => sum + Number((row as { amount_in?: number | null }).amount_in ?? 0),
+    0,
+  );
+  const amountPaid = Math.max(0, Math.round(totalIn * 100) / 100);
+  const { error: updateError } = await supabase()
+    .from("trips")
+    .update({
+      amount_paid: amountPaid,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", normalizedTripId)
+    .eq("organization_id", orgId);
+  if (updateError) {
+    console.warn("[finance] trip amount_paid sync write failed", {
+      organizationId: orgId,
+      tripId: normalizedTripId,
+      message: updateError.message,
+    });
+  }
 }
 
 function enrichLedgerMetaFromRow(
@@ -861,6 +986,7 @@ export async function createLedgerEntry(
     orgId,
     tripId: enriched.trip_id,
     tripNumber: enriched.trip_number,
+    indentId: enriched.indent_id,
   });
   const description = buildDescriptionWithMeta(
     entry.description ?? "ENTRY",
@@ -913,6 +1039,7 @@ export async function createLedgerEntry(
     organization_id: string;
   };
 
+  await syncTripAmountPaidFromLedger(orgId, row.trip_id ?? null);
   await tryNotifyLinkedPartyChatAfterLedgerInsert(orgId, row);
   notifyTripChatMessagesChanged();
 
@@ -979,6 +1106,7 @@ export async function updateLedgerEntry(
     orgId,
     tripId: enriched.trip_id,
     tripNumber: enriched.trip_number,
+    indentId: enriched.indent_id,
   });
   const description = buildDescriptionWithMeta(
     entry.description ?? "ENTRY",
@@ -1049,6 +1177,7 @@ export async function updateLedgerEntry(
     ledger_category?: string | null;
   };
 
+  await syncTripAmountPaidFromLedger(orgId, row.trip_id ?? null);
   // updateLedgerEntry intentionally does not post to chat to avoid duplicate events.
   return { error: null, row: toLedgerRow(row) };
 }
