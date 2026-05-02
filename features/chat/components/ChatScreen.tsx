@@ -17,12 +17,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import {
   ArrowLeft,
+  Bell,
   Briefcase,
   ChevronDown,
   ChevronRight,
-  Edit3,
   Filter,
   Hash,
+  MapPin,
   MessageSquare,
   MoreVertical,
   Plus,
@@ -175,6 +176,12 @@ function getConversationTripLabel(conversation: Pick<TripConversation, "trip_num
   } as TripRow);
 }
 
+function formatTripStatusLabel(status: string | null | undefined): string {
+  const raw = String(status ?? "").trim();
+  if (!raw) return "ACTIVE";
+  return raw.replace(/_/g, " ").toUpperCase();
+}
+
 type ComposePartyRow =
   | {
       kind: "selectable";
@@ -278,7 +285,7 @@ export function ChatScreen() {
   const [initiating, setInitiating] = useState(false);
   const [showNetCompose, setShowNetCompose] = useState(false);
   const [netComposeSearch, setNetComposeSearch] = useState("");
-  const [showTripSearch, setShowTripSearch] = useState(false);
+  const [tripChatScope, setTripChatScope] = useState<"active" | "history">("active");
   const [tripSidebarSearch, setTripSidebarSearch] = useState("");
   const [showTripFilterModal, setShowTripFilterModal] = useState(false);
   const [tripPartyFilters, setTripPartyFilters] = useState<ConversationPartyType[]>([
@@ -358,6 +365,65 @@ export function ChatScreen() {
       return new Date(bLast || 0).getTime() - new Date(aLast || 0).getTime();
     });
   }, [netChats]);
+  const groupedTripRows = useMemo(() => {
+    const q = tripSidebarSearch.trim().toLowerCase();
+    const byTrip = new Map<
+      string,
+      {
+        tripId: string;
+        tripLabel: string;
+        pickup: string;
+        drop: string;
+        rows: TripConversation[];
+        totalUnread: number;
+        lastAt: number;
+      }
+    >();
+    for (const conv of filteredAndSortedConversations) {
+      const tripKey = conv.trip_id;
+      const tripLabel = getConversationTripLabel(conv);
+      if (!byTrip.has(tripKey)) {
+        byTrip.set(tripKey, {
+          tripId: tripKey,
+          tripLabel,
+          pickup: conv.pickup_area,
+          drop: conv.drop_location,
+          rows: [],
+          totalUnread: 0,
+          lastAt: 0,
+        });
+      }
+      const row = byTrip.get(tripKey)!;
+      row.rows.push(conv);
+      row.totalUnread += conv.unread_dispatcher_count ?? 0;
+      row.lastAt = Math.max(row.lastAt, new Date(conv.last_message_at ?? 0).getTime());
+    }
+
+    let list = [...byTrip.values()];
+    if (q) {
+      list = list.filter((trip) => {
+        const hay = `${trip.tripLabel} ${trip.pickup} ${trip.drop} ${trip.rows
+          .map((r) => `${r.party_name} ${r.party_type}`)
+          .join(" ")}`.toLowerCase();
+        return hay.includes(q);
+      });
+    }
+
+    list = list.filter((trip) => {
+      const st = trip.rows[0]?.trip_status;
+      const terminal = isTerminalTripStatus(st);
+      return tripChatScope === "history" ? terminal : !terminal;
+    });
+
+    return list.sort((a, b) => b.lastAt - a.lastAt);
+  }, [filteredAndSortedConversations, tripSidebarSearch, tripChatScope]);
+
+  const tripChatFilteredConversations = useMemo(() => {
+    return filteredAndSortedConversations.filter((conv) => {
+      const terminal = isTerminalTripStatus(conv.trip_status);
+      return tripChatScope === "history" ? terminal : !terminal;
+    });
+  }, [filteredAndSortedConversations, tripChatScope]);
 
   useEffect(() => {
     const tabParamRaw = Array.isArray(params.tab) ? params.tab[0] : params.tab;
@@ -608,7 +674,6 @@ export function ChatScreen() {
         p.name.toLowerCase().includes(netComposeSearch.toLowerCase())
       )
     : netPartners;
-  const hasTripPartyFilter = tripPartyFilters.length < TRIP_PARTY_FILTERS.length;
 
   const toggleTripPartyFilter = (partyType: ConversationPartyType) => {
     setTripPartyFilters((prev) =>
@@ -742,47 +807,7 @@ export function ChatScreen() {
             </TouchableOpacity>
             <Text style={s.brandTitle}>Command Hub</Text>
           </View>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-            {activeTab === "trips" && (
-              <>
-                <TouchableOpacity hitSlop={10} onPress={() => setShowTripSearch((prev) => !prev)}>
-                  <Search size={16} color="rgba(255,255,255,0.72)" />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  hitSlop={10}
-                  onPress={() => {
-                    setShowCompose(false);
-                    setShowTripFilterModal((prev) => !prev);
-                  }}
-                  style={s.filterBtn}
-                >
-                  <Filter size={16} color="rgba(255,255,255,0.72)" />
-                  {hasTripPartyFilter ? <View style={s.filterActiveDot} /> : null}
-                </TouchableOpacity>
-              </>
-            )}
-            {activeTab === "trips" && (
-              <TouchableOpacity
-                hitSlop={10}
-                onPress={() => {
-                  setShowTripFilterModal(false);
-                  if (isWebDesktopUI && showCompose) {
-                    setShowCompose(false);
-                    return;
-                  }
-                  void openCompose();
-                }}
-                style={s.composeBtn}
-              >
-                <Edit3 size={14} color="#fff" />
-              </TouchableOpacity>
-            )}
-            {activeTab === "network" && netPartners.length > 0 && (
-              <TouchableOpacity hitSlop={10} onPress={() => { setShowNetCompose(true); setNetComposeSearch(""); }} style={s.composeBtn}>
-                <Edit3 size={14} color="#fff" />
-              </TouchableOpacity>
-            )}
-          </View>
+          <View />
         </View>
 
         <View style={s.tabRow}>
@@ -809,22 +834,44 @@ export function ChatScreen() {
           })}
         </View>
 
-        {activeTab === "trips" && showTripSearch && (
+        {activeTab === "trips" && (
           <View style={s.sidebarSearchRow}>
             <Search size={15} color="#94a3b8" style={{ marginRight: 8 }} />
             <TextInput
               style={s.sidebarSearchInput}
               value={tripSidebarSearch}
               onChangeText={setTripSidebarSearch}
-              placeholder="Search trip id…"
+              placeholder="Search trip, route, party…"
               placeholderTextColor="#94a3b8"
-              autoCapitalize="characters"
+              autoCapitalize="none"
             />
             {tripSidebarSearch.length > 0 && (
               <TouchableOpacity onPress={() => setTripSidebarSearch("")} hitSlop={8}>
                 <X size={14} color="#94a3b8" />
               </TouchableOpacity>
             )}
+          </View>
+        )}
+        {activeTab === "trips" && (
+          <View style={s.tripChatScopeRow}>
+            <TouchableOpacity
+              style={[s.tripChatScopePill, tripChatScope === "active" && s.tripChatScopePillOn]}
+              onPress={() => setTripChatScope("active")}
+              activeOpacity={0.82}
+            >
+              <Text style={[s.tripChatScopePillText, tripChatScope === "active" && s.tripChatScopePillTextOn]}>
+                Active
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.tripChatScopePill, tripChatScope === "history" && s.tripChatScopePillOn]}
+              onPress={() => setTripChatScope("history")}
+              activeOpacity={0.82}
+            >
+              <Text style={[s.tripChatScopePillText, tripChatScope === "history" && s.tripChatScopePillTextOn]}>
+                History
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -890,16 +937,121 @@ export function ChatScreen() {
             <View style={{ paddingTop: 40, alignItems: "center" }}>
               <ActivityIndicator color={Theme.primary} />
             </View>
+          ) : isDesktop ? (
+            <ScrollView contentContainerStyle={s.tripHubScrollContent} showsVerticalScrollIndicator={false}>
+              {groupedTripRows.length === 0 ? (
+                <EmptyList
+                  label={
+                    tripChatScope === "history"
+                      ? "No trips in history"
+                      : "No active trip conversations"
+                  }
+                  actionLabel={tripChatScope === "active" ? "Start a conversation" : undefined}
+                  onAction={tripChatScope === "active" ? openCompose : undefined}
+                />
+              ) : (
+                groupedTripRows.map((trip) => {
+                  const tripActive = selectedConv?.trip_id === trip.tripId;
+                  const statusLabel = formatTripStatusLabel(trip.rows[0]?.trip_status);
+                  const openFallback = () => {
+                    const fallback = trip.rows[0];
+                    if (!fallback) return;
+                    setSelectedConvId(fallback.id);
+                    markAsRead(fallback.id);
+                    openDetail();
+                  };
+                  return (
+                    <View key={trip.tripId} style={[s.tripHubCard, tripActive && s.tripHubCardOn]}>
+                      {trip.totalUnread > 0 ? (
+                        <View style={[s.tripHubAlertBar, tripActive && s.tripHubAlertBarOn]}>
+                          <Bell size={13} color={tripActive ? "#fecdd3" : "#e11d48"} />
+                          <Text style={[s.tripHubAlertBarText, tripActive && s.tripHubAlertBarTextOn]}>
+                            Trip alerts · {trip.totalUnread > 99 ? "99+" : trip.totalUnread}
+                          </Text>
+                        </View>
+                      ) : null}
+                      <TouchableOpacity
+                        onPress={openFallback}
+                        activeOpacity={0.88}
+                        style={s.tripHubHeroRow}
+                      >
+                        <View style={[s.tripHubTruckPill, tripActive && s.tripHubTruckPillOn]}>
+                          <Truck size={16} color="#ffffff" />
+                        </View>
+                        <Text
+                          style={[s.tripHubTripTitle, s.tripHubTripTitleInRow, tripActive && s.tripHubTripTitleOn]}
+                          numberOfLines={1}
+                        >
+                          {trip.tripLabel}
+                        </Text>
+                        <View style={s.tripHubHeroTrail}>
+                          <Text
+                            style={[s.tripHubStatusPill, tripActive && s.tripHubStatusPillOn]}
+                            numberOfLines={1}
+                          >
+                            {statusLabel}
+                          </Text>
+                          {trip.totalUnread > 0 ? (
+                            <View style={s.tripHubTotalUnread}>
+                              <Text style={s.tripHubTotalUnreadText}>
+                                {trip.totalUnread > 9 ? "9+" : String(trip.totalUnread)}
+                              </Text>
+                            </View>
+                          ) : null}
+                        </View>
+                      </TouchableOpacity>
+                      <Text style={[s.tripHubRouteLarge, tripActive && s.tripHubRouteLargeOn]} numberOfLines={2}>
+                        {trip.pickup} {"→"} {trip.drop}
+                      </Text>
+                      <View style={s.tripHubPartyIconRow}>
+                        {(["client", "supplier", "driver"] as ConversationPartyType[]).map((partyType) => {
+                          const row = trip.rows.find((r) => r.party_type === partyType);
+                          const on = Boolean(row && selectedConvId === row.id);
+                          const isMissing = !row;
+                          return (
+                            <TouchableOpacity
+                              key={`${trip.tripId}-${partyType}`}
+                              style={[
+                                s.tripHubPartyIconBtn,
+                                on && s.tripHubPartyIconBtnOn,
+                                isMissing && s.tripHubPartyIconBtnOff,
+                              ]}
+                              disabled={isMissing}
+                              onPress={() => {
+                                if (!row) return;
+                                setSelectedConvId(row.id);
+                                markAsRead(row.id);
+                                openDetail();
+                              }}
+                              activeOpacity={0.82}
+                            >
+                              <PartyIcon partyType={partyType} active={on} size={14} />
+                              {(row?.unread_dispatcher_count ?? 0) > 0 ? (
+                                <View style={s.tripHubPartyUnreadDot} />
+                              ) : null}
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  );
+                })
+              )}
+            </ScrollView>
           ) : (
             <FlatList
-              data={filteredAndSortedConversations}
+              data={tripChatFilteredConversations}
               keyExtractor={(i) => i.id}
               renderItem={renderConvItem}
               ListEmptyComponent={
                 <EmptyList
-                  label="No trip conversations"
-                  actionLabel="Start a conversation"
-                  onAction={openCompose}
+                  label={
+                    tripChatScope === "history"
+                      ? "No trips in history"
+                      : "No active trip conversations"
+                  }
+                  actionLabel={tripChatScope === "active" ? "Start a conversation" : undefined}
+                  onAction={tripChatScope === "active" ? openCompose : undefined}
                 />
               }
               contentContainerStyle={{ padding: 10, paddingBottom: 24, gap: 4 }}
@@ -1181,6 +1333,7 @@ export function ChatScreen() {
               const tripLabel = trip.display_trip_id ?? trip.trip_number;
 
               const partyRows = getComposePartyRows(trip);
+              const selectablePartyCount = partyRows.filter((row) => row.kind === "selectable").length;
 
               return (
                 <View key={trip.id} style={cm.tripCard}>
@@ -1190,7 +1343,14 @@ export function ChatScreen() {
                     activeOpacity={0.7}
                   >
                     <View style={cm.tripInfo}>
-                      <Text style={cm.tripNumber}>{tripLabel}</Text>
+                      <View style={cm.tripMetaRow}>
+                        <Text style={cm.tripNumber}>{tripLabel}</Text>
+                        <View style={cm.tripMetaPill}>
+                          <Text style={cm.tripMetaPillText}>
+                            {selectablePartyCount} party{selectablePartyCount > 1 ? "s" : ""}
+                          </Text>
+                        </View>
+                      </View>
                       <Text style={cm.tripRoute} numberOfLines={1}>
                         {trip.pickup_area} → {trip.drop_location}
                       </Text>
@@ -1285,6 +1445,7 @@ export function ChatScreen() {
     activeTab === "trips" ? (
       <TripConversationDetailPanel
         selectedConv={selectedConv}
+        conversations={conversations}
         messagesRef={messagesRef}
         messageInput={messageInput}
         setMessageInput={setMessageInput}
@@ -1300,6 +1461,8 @@ export function ChatScreen() {
         onAddToBook={handleAddToBook}
         onDispute={handleDispute}
         addingToBookId={addingToBook}
+        onSelectConversation={setSelectedConvId}
+        onOpenCompose={openCompose}
       />
     ) : (
       <NetworkDetailPanel
@@ -1442,7 +1605,12 @@ function EmptyDetail() {
 const s = StyleSheet.create({
   root: { flex: 1 },
   desktop: { flex: 1, flexDirection: "row" },
-  desktopList: { width: 340, borderRightWidth: 1, borderRightColor: "#e2e8f0", backgroundColor: "rgba(255,255,255,0.72)" },
+  desktopList: {
+    width: 420,
+    borderRightWidth: 1,
+    borderRightColor: "#dbeafe",
+    backgroundColor: "rgba(255,255,255,0.82)",
+  },
   desktopDetail: { flex: 1, backgroundColor: "transparent" },
 
   listPanel: { flex: 1, backgroundColor: "transparent" },
@@ -1479,17 +1647,268 @@ const s = StyleSheet.create({
   },
 
   tabRow: { flexDirection: "row", gap: 6, paddingHorizontal: 14, paddingBottom: 10, marginTop: 10 },
+  tripHubScrollContent: {
+    paddingHorizontal: 10,
+    paddingBottom: 22,
+    gap: 8,
+  },
+  tripHubCard: {
+    borderRadius: 28,
+    backgroundColor: "#ffffff",
+    borderWidth: 2,
+    borderColor: "#f1f5f9",
+    padding: 12,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 2,
+  },
+  tripHubCardOn: {
+    backgroundColor: "#020617",
+    borderColor: "#020617",
+    shadowOpacity: 0.22,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 5,
+  },
+  tripHubAlertBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    backgroundColor: "#fff1f2",
+    borderWidth: 1,
+    borderColor: "#fecdd3",
+    borderLeftWidth: 3,
+    borderLeftColor: "#f43f5e",
+  },
+  tripHubAlertBarOn: {
+    backgroundColor: "rgba(244,63,94,0.12)",
+    borderColor: "rgba(244,63,94,0.35)",
+    borderLeftColor: "#fb7185",
+  },
+  tripHubAlertBarText: {
+    flex: 1,
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#be123c",
+    textTransform: "uppercase",
+    letterSpacing: 0.55,
+  },
+  tripHubAlertBarTextOn: {
+    color: "#fecdd3",
+  },
+  tripHubHeroRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 6,
+  },
+  tripHubHeroTrail: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexShrink: 0,
+  },
+  tripHubTruckPill: {
+    width: 38,
+    height: 38,
+    borderRadius: 11,
+    backgroundColor: "#0f172a",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
+  tripHubTruckPillOn: {
+    backgroundColor: "rgba(255,255,255,0.12)",
+  },
+  tripHubStatusPill: {
+    flexShrink: 0,
+    maxWidth: 120,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 10,
+    backgroundColor: "#ecfdf5",
+    borderWidth: 1,
+    borderColor: "#d1fae5",
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#059669",
+    textTransform: "uppercase",
+    letterSpacing: 0.45,
+    overflow: "hidden",
+  },
+  tripHubStatusPillOn: {
+    backgroundColor: "rgba(16,185,129,0.15)",
+    borderColor: "rgba(16,185,129,0.45)",
+    color: "#6ee7b7",
+  },
+  tripHubTripTitle: {
+    fontSize: 17,
+    fontWeight: "900",
+    color: "#0f172a",
+    textTransform: "uppercase",
+    fontStyle: "italic",
+    letterSpacing: -0.45,
+    lineHeight: 20,
+  },
+  tripHubTripTitleInRow: {
+    flex: 1,
+    minWidth: 0,
+    paddingTop: 1,
+  },
+  tripHubTripTitleOn: {
+    color: "#ffffff",
+  },
+  tripHubRouteLarge: {
+    marginTop: 0,
+    marginBottom: 10,
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 0.35,
+    lineHeight: 14,
+  },
+  tripHubRouteLargeOn: {
+    color: "rgba(255,255,255,0.55)",
+  },
+  tripHubTotalUnread: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: Theme.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 5,
+  },
+  tripHubTotalUnreadText: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 9,
+  },
+  tripHubPartyIconRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 2,
+  },
+  tripHubPartyIconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.07,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  tripHubPartyIconBtnOn: {
+    backgroundColor: Theme.primary,
+    borderColor: Theme.primary,
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+  },
+  tripHubPartyIconBtnOff: {
+    opacity: 0.34,
+  },
+  tripHubPartyUnreadDot: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
+    backgroundColor: "#f43f5e",
+    borderWidth: 1.5,
+    borderColor: "#fff",
+    shadowColor: "#f43f5e",
+    shadowOpacity: 0.45,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 1 },
+  },
+  commandMetricCard: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#dbeafe",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "#ffffff",
+  },
+  commandMetricCardPrimary: {
+    backgroundColor: "#0f172a",
+    borderColor: "#0f172a",
+  },
+  commandMetricLabel: {
+    fontSize: 8,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    color: "#94a3b8",
+  },
+  commandMetricValue: {
+    marginTop: 5,
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#0f172a",
+    letterSpacing: -0.4,
+    fontStyle: "italic",
+  },
   sidebarSearchRow: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#f1f5f9",
-    borderRadius: 14,
+    borderRadius: 22,
     marginHorizontal: 14,
-    marginBottom: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
+    marginBottom: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
   },
   sidebarSearchInput: { flex: 1, fontSize: 13, color: "#1e293b", fontWeight: "600" },
+  tripChatScopeRow: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 14,
+    marginBottom: 12,
+  },
+  tripChatScopePill: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tripChatScopePillOn: {
+    backgroundColor: "#0f172a",
+    borderColor: "#0f172a",
+  },
+  tripChatScopePillText: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#64748b",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  tripChatScopePillTextOn: {
+    color: "#ffffff",
+  },
   tabPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -1528,6 +1947,186 @@ const s = StyleSheet.create({
     backgroundColor: "#f8fafc",
     borderWidth: 1,
     borderColor: "#eef2f7",
+  },
+  registryWrap: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingTop: 14,
+    paddingBottom: 12,
+  },
+  registryHeadBlock: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#dbeafe",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: "#ffffff",
+  },
+  registryTitle: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#0f172a",
+    textTransform: "uppercase",
+    fontStyle: "italic",
+    letterSpacing: -0.2,
+  },
+  registrySub: {
+    marginTop: 4,
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#64748b",
+    lineHeight: 14,
+  },
+  registrySwitchRow: {
+    flexDirection: "row",
+    marginTop: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#dbeafe",
+    padding: 4,
+    gap: 4,
+    backgroundColor: "#f8fafc",
+  },
+  registrySwitchBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  registrySwitchBtnOn: {
+    backgroundColor: "#0f172a",
+  },
+  registrySwitchBtnOff: {
+    opacity: 0.6,
+  },
+  registrySwitchText: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#475569",
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+  },
+  registrySwitchTextOn: {
+    color: "#fff",
+  },
+  registrySwitchTextOff: {
+    color: "#94a3b8",
+  },
+  registryList: {
+    flex: 1,
+    marginTop: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#dbeafe",
+    backgroundColor: "#ffffff",
+    padding: 10,
+  },
+  registryListTitle: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginBottom: 8,
+  },
+  registryTripBlock: {
+    marginBottom: 8,
+  },
+  registryTripBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f8fafc",
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  registryTripBtnOn: {
+    backgroundColor: "#0f172a",
+    borderColor: "#0f172a",
+  },
+  registryTripId: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#0f172a",
+    textTransform: "uppercase",
+    fontStyle: "italic",
+  },
+  registryTripIdOn: {
+    color: "#fff",
+  },
+  registryTripRoute: {
+    marginTop: 2,
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+  registryTripRouteOn: {
+    color: "rgba(255,255,255,0.68)",
+  },
+  registryPartyList: {
+    marginTop: 6,
+    paddingLeft: 8,
+    gap: 6,
+  },
+  registryPartyRow: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#fff",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  registryPartyRowOn: {
+    borderColor: Theme.primary,
+    backgroundColor: "#eef2ff",
+  },
+  registryPartyType: {
+    fontSize: 8,
+    fontWeight: "900",
+    color: Theme.primary,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  registryPartyTypeOn: {
+    color: Theme.primary,
+  },
+  registryPartyName: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#0f172a",
+  },
+  registryPartyNameOn: {
+    color: "#1e293b",
+  },
+  registryUnreadPill: {
+    marginTop: 4,
+    alignSelf: "flex-start",
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 5,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.primary,
+  },
+  registryUnreadPillText: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#fff",
+  },
+  registryPartyActiveDot: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: "#22c55e",
   },
   chatItemActive: { backgroundColor: "#0f172a", borderColor: "#0f172a" },
   chatIcon: {
@@ -1589,6 +2188,108 @@ const s = StyleSheet.create({
     color: "#60a5fa",
     textTransform: "uppercase",
     letterSpacing: 0.8,
+  },
+  detailMissionBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    backgroundColor: "#ffffff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+  },
+  detailMissionRoute: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flex: 1,
+    minWidth: 0,
+  },
+  detailMissionRouteText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#334155",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  detailMissionUnread: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "#eef2ff",
+    borderWidth: 1,
+    borderColor: "#dbeafe",
+  },
+  detailMissionUnreadText: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: Theme.primary,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  detailSwitchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+  },
+  detailTripSelectorBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 10,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  detailTripSelectorText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#1e293b",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  detailPartyTabs: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  detailPartyTab: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    backgroundColor: "#f8fafc",
+  },
+  detailPartyTabOn: {
+    borderColor: "#0f172a",
+    backgroundColor: "#0f172a",
+  },
+  detailPartyTabOff: {
+    borderStyle: "dashed",
+  },
+  detailPartyTabText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#475569",
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+  },
+  detailPartyTabTextOn: {
+    color: "#ffffff",
+  },
+  detailPartyTabTextOff: {
+    color: "#94a3b8",
   },
 
   detailPanel: { flex: 1, backgroundColor: "transparent" },
@@ -1914,20 +2615,48 @@ const cm = StyleSheet.create({
 
   tripCard: {
     borderRadius: 16,
-    backgroundColor: "#f8fafc",
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
     marginBottom: 8,
     overflow: "hidden",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
   tripRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 12,
     gap: 12,
   },
   tripInfo: { flex: 1, minWidth: 0 },
+  tripMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
   tripNumber: { fontSize: 13, fontWeight: "800", color: "#0f172a" },
-  tripRoute: { fontSize: 12, color: "#94a3b8", marginTop: 2 },
+  tripMetaPill: {
+    backgroundColor: "#eef2ff",
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: "#dbeafe",
+  },
+  tripMetaPillText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.primary,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  tripRoute: { fontSize: 11, color: "#94a3b8", marginTop: 3, lineHeight: 15 },
 
   partyList: {
     borderTopWidth: 1,
@@ -2214,6 +2943,7 @@ function ChatInputBar({
 
 function TripConversationDetailPanel({
   selectedConv,
+  conversations,
   messagesRef,
   messageInput,
   setMessageInput,
@@ -2229,8 +2959,11 @@ function TripConversationDetailPanel({
   onAddToBook,
   onDispute,
   addingToBookId,
+  onSelectConversation,
+  onOpenCompose,
 }: {
   selectedConv: TripConversation | null;
+  conversations: TripConversation[];
   messagesRef: React.RefObject<ScrollView | null>;
   messageInput: string;
   setMessageInput: React.Dispatch<React.SetStateAction<string>>;
@@ -2246,9 +2979,29 @@ function TripConversationDetailPanel({
   onAddToBook: (message: TripMessageRow) => void;
   onDispute: (message: TripMessageRow) => void;
   addingToBookId: string | null;
+  onSelectConversation: (id: string) => void;
+  onOpenCompose: () => void | Promise<void>;
 }) {
   if (!selectedConv) return <EmptyDetail />;
   const quickMsgs = QUICK_MESSAGES[selectedConv.party_type];
+  const PARTY_ORDER: ConversationPartyType[] = ["client", "supplier", "driver"];
+  const sameTripConversations = conversations.filter((conv) => conv.trip_id === selectedConv.trip_id);
+  const partyConversationMap = PARTY_ORDER.reduce((acc, partyType) => {
+    acc[partyType] = sameTripConversations.find((conv) => conv.party_type === partyType) ?? null;
+    return acc;
+  }, {} as Record<ConversationPartyType, TripConversation | null>);
+  const switchConversation = (partyType: ConversationPartyType) => {
+    const target = partyConversationMap[partyType];
+    if (target) {
+      onSelectConversation(target.id);
+      return;
+    }
+    void onOpenCompose();
+  };
+  const tripUnreadTotal = sameTripConversations.reduce(
+    (sum, conv) => sum + (conv.unread_dispatcher_count ?? 0),
+    0,
+  );
 
   return (
     <View style={s.detailPanel}>
@@ -2259,6 +3012,57 @@ function TripConversationDetailPanel({
         isDesktop={isDesktop}
         onCloseDetail={onCloseDetail}
       />
+      <View style={s.detailMissionBar}>
+        <View style={s.detailMissionRoute}>
+          <MapPin size={13} color={Theme.primary} />
+          <Text style={s.detailMissionRouteText} numberOfLines={1}>
+            {selectedConv.pickup_area} {"→"} {selectedConv.drop_location}
+          </Text>
+        </View>
+        <View style={s.detailMissionUnread}>
+          <Text style={s.detailMissionUnreadText}>
+            TRIP ALERTS {tripUnreadTotal > 0 ? `· ${tripUnreadTotal}` : "· CLEAR"}
+          </Text>
+        </View>
+      </View>
+      <View style={s.detailSwitchBar}>
+        <TouchableOpacity
+          style={s.detailTripSelectorBtn}
+          onPress={() => void onOpenCompose()}
+          activeOpacity={0.8}
+        >
+          <Search size={14} color="#1e293b" />
+          <Text style={s.detailTripSelectorText}>Trip selector</Text>
+        </TouchableOpacity>
+        <View style={s.detailPartyTabs}>
+          {PARTY_ORDER.map((partyType) => {
+            const on = selectedConv.party_type === partyType;
+            const hasConversation = Boolean(partyConversationMap[partyType]);
+            return (
+              <TouchableOpacity
+                key={partyType}
+                style={[
+                  s.detailPartyTab,
+                  on && s.detailPartyTabOn,
+                  !hasConversation && s.detailPartyTabOff,
+                ]}
+                onPress={() => switchConversation(partyType)}
+                activeOpacity={0.82}
+              >
+                <Text
+                  style={[
+                    s.detailPartyTabText,
+                    on && s.detailPartyTabTextOn,
+                    !hasConversation && s.detailPartyTabTextOff,
+                  ]}
+                >
+                  {partyLabel(partyType)}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
       <ScrollView
         ref={messagesRef}
         style={s.msgs}

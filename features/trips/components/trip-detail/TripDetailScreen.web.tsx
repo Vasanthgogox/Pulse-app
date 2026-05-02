@@ -573,12 +573,12 @@ export default function TripDetailScreen({
       });
       setEditingProvisionAdjustmentId(null);
     } else {
-      await detail.handleSaveAdjustment({
-        type: inlineAdjType,
-        impact: inlineAdjImpact,
-        amount: inlineAmountNum,
-        reason: inlineFinalReason,
-      });
+    await detail.handleSaveAdjustment({
+      type: inlineAdjType,
+      impact: inlineAdjImpact,
+      amount: inlineAmountNum,
+      reason: inlineFinalReason,
+    });
     }
     setInlineAdjAmount("");
     setInlineAdjReason("");
@@ -1324,9 +1324,9 @@ export default function TripDetailScreen({
               >
                 <MessageSquare size={17} color={Theme.driverEmerald} strokeWidth={2.2} />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.navCircleBtn} activeOpacity={0.85}>
-                <FontAwesome name="share-alt" size={16} color="#0f172a" />
-              </TouchableOpacity>
+            <TouchableOpacity style={styles.navCircleBtn} activeOpacity={0.85}>
+              <FontAwesome name="share-alt" size={16} color="#0f172a" />
+            </TouchableOpacity>
             </View>
           </>
         )}
@@ -1421,10 +1421,10 @@ export default function TripDetailScreen({
                   <Text style={styles.refHeroState}>{originStateLabel.toUpperCase()}</Text>
                 </View>
                 <View style={styles.refHeroConnectorWrap}>
-                  <View style={styles.refHeroToRow}>
-                    <View style={styles.refHeroToDot} />
-                    <View style={styles.refHeroToLine} />
-                  </View>
+                <View style={styles.refHeroToRow}>
+                  <View style={styles.refHeroToDot} />
+                  <View style={styles.refHeroToLine} />
+                </View>
                 </View>
                 <View
                   style={[
@@ -1498,9 +1498,9 @@ export default function TripDetailScreen({
                   </TouchableOpacity>
                 </View>
                 <View style={styles.refAssetBody}>
-                  <Text style={styles.refAssetLabel}>Authorized Pilot</Text>
-                  <Text style={styles.refAssetValue} numberOfLines={1}>{allocatedDriverName}</Text>
-                  <Text style={styles.refAssetSubtle}>{driverRatingLabel} rank</Text>
+                <Text style={styles.refAssetLabel}>Authorized Pilot</Text>
+                <Text style={styles.refAssetValue} numberOfLines={1}>{allocatedDriverName}</Text>
+                <Text style={styles.refAssetSubtle}>{driverRatingLabel} rank</Text>
                 </View>
               </View>
 
@@ -1518,9 +1518,9 @@ export default function TripDetailScreen({
                   </TouchableOpacity>
                 </View>
                 <View style={styles.refAssetBody}>
-                  <Text style={styles.refAssetLabel}>Vehicle Asset</Text>
-                  <Text style={styles.refAssetValue} numberOfLines={1}>{allocatedVehicleLabel}</Text>
-                  <Text style={styles.refAssetSubtle}>{vehicleTypeLabel} · {vehicleCapacityLabel}</Text>
+                <Text style={styles.refAssetLabel}>Vehicle Asset</Text>
+                <Text style={styles.refAssetValue} numberOfLines={1}>{allocatedVehicleLabel}</Text>
+                <Text style={styles.refAssetSubtle}>{vehicleTypeLabel} · {vehicleCapacityLabel}</Text>
                 </View>
               </View>
             </View>
@@ -3205,7 +3205,7 @@ export default function TripDetailScreen({
                   </Text>
                   </View>
                 ))}
-              </View>
+                </View>
 
               <View style={neoStyles.provisionCnDnRow}>
                 <TouchableOpacity
@@ -3320,7 +3320,7 @@ export default function TripDetailScreen({
                     </Text>
                   </TouchableOpacity>
                     ))}
-            </View>
+                  </View>
 
                   {inlineAdjReason === "Other" ? (
                     <TextInput
@@ -3346,7 +3346,7 @@ export default function TripDetailScreen({
                       {editingProvisionAdjustmentId ? "Save changes" : "Save adjustment"}
                     </Text>
                   </TouchableOpacity>
-            </View>
+                </View>
               ) : null}
 
               <View style={neoStyles.provisionAppliedList}>
@@ -3375,7 +3375,7 @@ export default function TripDetailScreen({
                               Voided: {(adj.void_reason ?? "").trim() || "—"}
                             </Text>
                           ) : null}
-                        </View>
+              </View>
                         <Text
                           style={[
                             neoStyles.provisionAppliedAmount,
@@ -3406,7 +3406,7 @@ export default function TripDetailScreen({
                             >
                               <Feather name="trash-2" size={12} color="#94a3b8" />
                             </TouchableOpacity>
-                          </View>
+            </View>
                         ) : null}
                       </View>
                     );
