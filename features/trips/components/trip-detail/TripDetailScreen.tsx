@@ -28,7 +28,7 @@ import type { VehicleDocuments } from "@/features/vehicles/utils/vehicleDocument
 import { DOCUMENT_EXPIRY_ORDER, DOCUMENT_LABELS } from "@/features/vehicles/utils/vehicleDocuments.util";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { canAssignTrip, getCapabilitiesFromProfile } from "@/lib/capabilities";
-import { isAggregateTrip } from "@/lib/driverUtils";
+import { isAggregateTrip, shouldShowAggregateTripKindPill } from "@/lib/driverUtils";
 import { formatIndianVehicleNumber } from "@/lib/format";
 import { useShipperDisplayNamesQuery, useTransactionsQuery, useTripSubcontractsQuery } from "@/lib/queries";
 import { queryKeys } from "@/lib/queryKeys";
@@ -320,6 +320,10 @@ export default function TripDetailScreen({
   const [selectedDoc, setSelectedDoc] = useState<TripDocItem | null>(null);
   /** True when assigned driver has linked their account (user_id set); false when unlinked (e.g. OTP not claimed). */
   const [driverLinked, setDriverLinked] = useState(false);
+  /** OTP / assign-by-phone driver row — drives Aggregate pill when true. */
+  const [driverTrackingOnly, setDriverTrackingOnly] = useState<boolean | null>(
+    null,
+  );
   /** Latest driver location for Live Tracking map (from driver_locations). */
   const [driverLocation, setDriverLocation] = useState<driverLocationService.DriverLocationRow | null>(null);
   const [driverLocationLoading, setDriverLocationLoading] = useState(false);
@@ -1268,6 +1272,7 @@ export default function TripDetailScreen({
       setClientPartyRes(null);
       setSupplierPartyRes(null);
       setDriverLinked(false);
+      setDriverTrackingOnly(null);
       return;
     }
     const fallbackDriverName = (trip.driver_display_name ?? "").trim() || null;
@@ -1290,10 +1295,12 @@ export default function TripDetailScreen({
       setDriverName(fallbackDriverName);
       setDriverAvatarUri(null);
       setDriverLinked(false);
+      setDriverTrackingOnly(null);
       getDriverById(orgId, trip.driver_id).then((res) => {
         if (cancelled) return;
         const d = res.driver;
         if (d) {
+          setDriverTrackingOnly(d.tracking_only === true);
           const fromDriver = (d.name || d.phone || "").trim() || null;
           setDriverName(fromDriver ?? fallbackDriverName ?? "—");
           setDriverLinked(!!d.user_id);
@@ -1318,6 +1325,7 @@ export default function TripDetailScreen({
                 if (cancelled) return;
                 const d2 = res2.driver;
                 if (d2) {
+                  setDriverTrackingOnly(d2.tracking_only === true);
                   const fromDriver2 = (d2.name || d2.phone || "").trim() || null;
                   setDriverName(fromDriver2 ?? fallbackDriverName ?? "—");
                   setDriverLinked(!!d2.user_id);
@@ -1348,6 +1356,7 @@ export default function TripDetailScreen({
           getDriverById(viewerOrgId, trip.driver_id!).then((res3) => {
             if (cancelled) return;
             const d3 = res3.driver;
+            if (d3) setDriverTrackingOnly(d3.tracking_only === true);
             const fromDriver3 = d3 ? (d3.name || d3.phone || "").trim() || null : null;
             setDriverName(fromDriver3 ?? fallbackDriverName ?? "—");
             void resolveDriverAvatarUri(trip.driver_id!, d3?.avatar_url ?? null).then(
@@ -1364,6 +1373,7 @@ export default function TripDetailScreen({
       setDriverName(fallbackDriverName);
       setDriverAvatarUri(null);
       setDriverLinked(false);
+      setDriverTrackingOnly(null);
     }
     const aggregateVehicleDisplay = (trip.vehicle_display_number ?? "").trim();
     if (isAggregateTrip(trip) && aggregateVehicleDisplay) {
@@ -1529,6 +1539,15 @@ export default function TripDetailScreen({
   ]);
 
   const isAggregate = isAggregateTrip(trip);
+  const aggregateTripKindPill = useMemo(
+    () =>
+      shouldShowAggregateTripKindPill(trip, {
+        viewerOrganizationId: currentOrganization?.id ?? null,
+        supplierLinkedOrganizationId: supplierPartyRes?.orgId ?? null,
+        driverTrackingOnly,
+      }),
+    [trip, currentOrganization?.id, supplierPartyRes?.orgId, driverTrackingOnly],
+  );
   /** Roster flow from Load Hub: driver + vehicle set at create — asset-based; do not show OTP/assign-by-phone. */
   const isRosterFromLoadHub =
     trip?.source === "direct_quote" &&
@@ -3187,30 +3206,34 @@ export default function TripDetailScreen({
           <View
             style={[
               styles.tripKindPill,
-              isAggregate
+              aggregateTripKindPill
                 ? styles.tripKindPillAggregate
                 : styles.tripKindPillAsset,
             ]}
             accessibilityLabel={
-              isAggregate ? "Aggregate based trip" : "Asset based trip"
+              aggregateTripKindPill
+                ? "Aggregate based trip"
+                : "Asset based trip"
             }
           >
             <FontAwesome
-              name={isAggregate ? "link" : "truck"}
+              name={aggregateTripKindPill ? "link" : "truck"}
               size={9}
               color={
-                isAggregate ? Theme.aggregatePillText : Theme.darkGreen
+                aggregateTripKindPill
+                  ? Theme.aggregatePillText
+                  : Theme.darkGreen
               }
             />
             <Text
               style={[
                 styles.tripKindPillText,
-                isAggregate
+                aggregateTripKindPill
                   ? styles.tripKindPillTextAggregate
                   : styles.tripKindPillTextAsset,
               ]}
             >
-              {isAggregate ? "AGGREGATE" : "ASSET"}
+              {aggregateTripKindPill ? "AGGREGATE" : "ASSET"}
             </Text>
           </View>
         </View>

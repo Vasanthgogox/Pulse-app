@@ -2,24 +2,31 @@
  * Shared-ledger notifications service.
  * Additive to salary-request notifications; fails soft if backend contract is not deployed yet.
  */
-import { supabase } from '@/lib/supabase';
-import { getClientsByOrganization } from '@/features/clients/services/clients.service';
-import { getSuppliersByOrganization } from '@/features/suppliers/services/suppliers.service';
-import { getTransactionsByOrganization, type LedgerRow } from '@/features/finance/services/finance.service';
+import { getClientsByOrganization } from "@/features/clients/services/clients.service";
 import {
-  getDisputesForPartner,
-  getDisputesReceived,
-  getSharedLedgerEntriesForPartner,
-} from '@/services/sharedLedgerService';
+    getTransactionsByOrganization,
+    type LedgerRow,
+} from "@/features/finance/services/finance.service";
+import { getSuppliersByOrganization } from "@/features/suppliers/services/suppliers.service";
+import { supabase } from "@/lib/supabase";
+import {
+    getDisputesForPartner,
+    getDisputesReceived,
+    getSharedLedgerEntriesForPartner,
+} from "@/services/sharedLedgerService";
 
 export type SharedLedgerNotificationEventType =
-  | 'dispute_received'
-  | 'dispute_status_changed'
-  | 'pending_partner_followup'
-  | 'mismatch_detected'
-  | 'partner_only_ghost';
+  | "dispute_received"
+  | "dispute_status_changed"
+  | "pending_partner_followup"
+  | "mismatch_detected"
+  | "partner_only_ghost";
 
-export type SharedLedgerNotificationStatus = 'open' | 'read' | 'handled' | 'resolved';
+export type SharedLedgerNotificationStatus =
+  | "open"
+  | "read"
+  | "handled"
+  | "resolved";
 
 export interface SharedLedgerNotificationRow {
   id: string;
@@ -46,7 +53,7 @@ export interface SharedLedgerNotificationCount {
 }
 
 const TABLE_SELECT =
-  'id, organization_id, partner_org_id, partner_key, trip_id, transaction_id, source_dispute_id, event_type, status, title, subtitle, amount_meta, payload_json, created_at, updated_at, read_at, handled_at';
+  "id, organization_id, partner_org_id, partner_key, trip_id, transaction_id, source_dispute_id, event_type, status, title, subtitle, amount_meta, payload_json, created_at, updated_at, read_at, handled_at";
 
 function rpcOrTableUnavailable(message: string): boolean {
   return /could not find the function|does not exist|relation .* does not exist|schema cache|no function matches|invalid input value for enum|structure of query does not match function result type|function .* has .* parameters but .* were supplied/i.test(
@@ -60,11 +67,7 @@ function extractRpcRows(data: unknown): Array<Record<string, unknown>> {
   }
   if (data && typeof data === "object") {
     const obj = data as Record<string, unknown>;
-    const candidate =
-      obj.notifications ??
-      obj.rows ??
-      obj.data ??
-      obj.result;
+    const candidate = obj.notifications ?? obj.rows ?? obj.data ?? obj.result;
     if (Array.isArray(candidate)) {
       return candidate as Array<Record<string, unknown>>;
     }
@@ -97,8 +100,8 @@ function toRow(raw: Record<string, unknown>): SharedLedgerNotificationRow {
       : "open";
 
   return {
-    id: String(raw.id ?? ''),
-    organization_id: String(raw.organization_id ?? ''),
+    id: String(raw.id ?? ""),
+    organization_id: String(raw.organization_id ?? ""),
     partner_org_id:
       raw.partner_org_id == null ? null : String(raw.partner_org_id),
     partner_key: raw.partner_key == null ? null : String(raw.partner_key),
@@ -109,15 +112,14 @@ function toRow(raw: Record<string, unknown>): SharedLedgerNotificationRow {
       raw.source_dispute_id == null ? null : String(raw.source_dispute_id),
     event_type: eventType,
     status,
-    title: String(raw.title ?? 'Shared ledger update'),
+    title: String(raw.title ?? "Shared ledger update"),
     subtitle: raw.subtitle == null ? null : String(raw.subtitle),
-    amount_meta:
-      raw.amount_meta == null ? null : Number(raw.amount_meta ?? 0),
+    amount_meta: raw.amount_meta == null ? null : Number(raw.amount_meta ?? 0),
     payload_json:
-      payload != null && typeof payload === 'object'
+      payload != null && typeof payload === "object"
         ? (payload as Record<string, unknown>)
         : {},
-    created_at: String(raw.created_at ?? ''),
+    created_at: String(raw.created_at ?? ""),
     updated_at: raw.updated_at == null ? null : String(raw.updated_at),
     read_at: raw.read_at == null ? null : String(raw.read_at),
     handled_at: raw.handled_at == null ? null : String(raw.handled_at),
@@ -127,8 +129,8 @@ function toRow(raw: Record<string, unknown>): SharedLedgerNotificationRow {
 interface IntegratedPartnerRef {
   id: string;
   name: string;
-  entityType: 'CLIENT' | 'SUPPLIER';
-  contactType: 'client' | 'supplier';
+  entityType: "CLIENT" | "SUPPLIER";
+  contactType: "client" | "supplier";
   partnerOrgId: string | null;
 }
 
@@ -137,7 +139,7 @@ function localAmountAbs(tx: LedgerRow): number {
 }
 
 function normalizeDay(iso: string | null | undefined): string {
-  const raw = String(iso ?? '').trim();
+  const raw = String(iso ?? "").trim();
   return raw.length >= 10 ? raw.slice(0, 10) : raw;
 }
 
@@ -160,43 +162,44 @@ function matchesAmountAndDate(
 async function getDerivedSharedLedgerNotifications(
   organizationId: string,
 ): Promise<SharedLedgerNotificationRow[]> {
-  const [{ clients }, { suppliers }, txRes, disputesReceivedRes] = await Promise.all([
-    getClientsByOrganization(organizationId),
-    getSuppliersByOrganization(organizationId),
-    getTransactionsByOrganization(organizationId),
-    getDisputesReceived(organizationId),
-  ]);
+  const [{ clients }, { suppliers }, txRes, disputesReceivedRes] =
+    await Promise.all([
+      getClientsByOrganization(organizationId),
+      getSuppliersByOrganization(organizationId),
+      getTransactionsByOrganization(organizationId),
+      getDisputesReceived(organizationId),
+    ]);
 
-  const localTxs = txRes.error ? [] : txRes.transactions ?? [];
+  const localTxs = txRes.error ? [] : (txRes.transactions ?? []);
   const disputesReceived = disputesReceivedRes.error
     ? []
-    : disputesReceivedRes.disputes ?? [];
+    : (disputesReceivedRes.disputes ?? []);
 
   const partners: IntegratedPartnerRef[] = [];
   for (const c of clients) {
     if (!(c.is_integrated || c.linked_organization_id)) continue;
     partners.push({
       id: c.id,
-      name: (c.name ?? '').trim() || 'Integrated client',
-      entityType: 'CLIENT',
-      contactType: 'client',
+      name: (c.name ?? "").trim() || "Integrated client",
+      entityType: "CLIENT",
+      contactType: "client",
       partnerOrgId: c.linked_organization_id ?? null,
     });
   }
   for (const s of suppliers) {
     const integrated =
-      s.supplier_type === 'integrated' || s.linked_organization_id != null;
+      s.supplier_type === "integrated" || s.linked_organization_id != null;
     if (!integrated) continue;
     const displayName =
-      (s.name ?? '').trim() ||
-      (s.company_name ?? '').trim() ||
-      (s.contact_person ?? '').trim() ||
-      'Integrated supplier';
+      (s.name ?? "").trim() ||
+      (s.company_name ?? "").trim() ||
+      (s.contact_person ?? "").trim() ||
+      "Integrated supplier";
     partners.push({
       id: s.id,
       name: displayName,
-      entityType: 'SUPPLIER',
-      contactType: 'supplier',
+      entityType: "SUPPLIER",
+      contactType: "supplier",
       partnerOrgId: s.linked_organization_id ?? null,
     });
   }
@@ -216,11 +219,11 @@ async function getDerivedSharedLedgerNotifications(
           : Promise.resolve({ error: null, disputes: [] }),
       ]);
 
-      const sharedEntries = sharedRes.error ? [] : sharedRes.entries ?? [];
+      const sharedEntries = sharedRes.error ? [] : (sharedRes.entries ?? []);
       const localPartnerTxs = localTxs.filter(
         (t) =>
           t.contact_type === partner.contactType &&
-          String(t.contact_id ?? '').trim() === partner.id,
+          String(t.contact_id ?? "").trim() === partner.id,
       );
 
       const unmatchedLocalRecent = localPartnerTxs.filter((tx) => {
@@ -230,7 +233,11 @@ async function getDerivedSharedLedgerNotifications(
           (Date.now() - new Date(localDate).getTime()) / (24 * 60 * 60 * 1000);
         if (!Number.isFinite(daysOld) || daysOld > 7) return false;
         return !sharedEntries.some((se) =>
-          matchesAmountAndDate(tx, Math.abs(Number(se.amount ?? 0)), se.transaction_date),
+          matchesAmountAndDate(
+            tx,
+            Math.abs(Number(se.amount ?? 0)),
+            se.transaction_date,
+          ),
         );
       });
 
@@ -244,8 +251,8 @@ async function getDerivedSharedLedgerNotifications(
           trip_id: sample.trip_id ?? null,
           transaction_id: sample.id,
           source_dispute_id: null,
-          event_type: 'pending_partner_followup',
-          status: 'open',
+          event_type: "pending_partner_followup",
+          status: "open",
           title: `${partner.name} has not reflected your recent shared entry`,
           subtitle: `Follow up for ${partner.entityType.toLowerCase()} reconciliation.`,
           amount_meta: localAmountAbs(sample),
@@ -277,10 +284,10 @@ async function getDerivedSharedLedgerNotifications(
           trip_id: e.reference_id ?? null,
           transaction_id: e.id,
           source_dispute_id: null,
-          event_type: 'partner_only_ghost',
-          status: 'open',
+          event_type: "partner_only_ghost",
+          status: "open",
           title: `${partner.name} posted a shared entry not found in your book`,
-          subtitle: 'Review and merge/fix this shared-ledger record.',
+          subtitle: "Review and merge/fix this shared-ledger record.",
           amount_meta: eAbs,
           payload_json: {
             entity_type: partner.entityType,
@@ -297,7 +304,10 @@ async function getDerivedSharedLedgerNotifications(
         });
       }
 
-      const localGross = localPartnerTxs.reduce((s, tx) => s + localAmountAbs(tx), 0);
+      const localGross = localPartnerTxs.reduce(
+        (s, tx) => s + localAmountAbs(tx),
+        0,
+      );
       const partnerGross = sharedEntries.reduce(
         (s, e) => s + Math.abs(Number(e.amount ?? 0)),
         0,
@@ -311,10 +321,10 @@ async function getDerivedSharedLedgerNotifications(
           trip_id: null,
           transaction_id: null,
           source_dispute_id: null,
-          event_type: 'mismatch_detected',
-          status: 'open',
+          event_type: "mismatch_detected",
+          status: "open",
           title: `Mismatch detected with ${partner.name}`,
-          subtitle: `Your total ${localGross.toLocaleString('en-IN')} vs partner ${partnerGross.toLocaleString('en-IN')}.`,
+          subtitle: `Your total ${localGross.toLocaleString("en-IN")} vs partner ${partnerGross.toLocaleString("en-IN")}.`,
           amount_meta: Math.abs(localGross - partnerGross),
           payload_json: {
             entity_type: partner.entityType,
@@ -329,9 +339,9 @@ async function getDerivedSharedLedgerNotifications(
         });
       }
 
-      const raisedDisputes = raisedRes.error ? [] : raisedRes.disputes ?? [];
+      const raisedDisputes = raisedRes.error ? [] : (raisedRes.disputes ?? []);
       for (const d of raisedDisputes) {
-        if (d.status !== 'RESOLVED') continue;
+        if (d.status !== "RESOLVED") continue;
         add({
           id: `derived:dispute_status_changed:${d.id}`,
           organization_id: organizationId,
@@ -340,10 +350,10 @@ async function getDerivedSharedLedgerNotifications(
           trip_id: d.transaction_id,
           transaction_id: d.transaction_id,
           source_dispute_id: d.id,
-          event_type: 'dispute_status_changed',
-          status: 'resolved',
+          event_type: "dispute_status_changed",
+          status: "resolved",
           title: `Dispute updated with ${partner.name}`,
-          subtitle: 'A dispute you raised has been resolved.',
+          subtitle: "A dispute you raised has been resolved.",
           amount_meta: null,
           payload_json: {
             entity_type: partner.entityType,
@@ -363,7 +373,7 @@ async function getDerivedSharedLedgerNotifications(
   );
 
   for (const d of disputesReceived) {
-    if (d.status !== 'OPEN') continue;
+    if (d.status !== "OPEN") continue;
     const partner =
       partners.find((p) => p.partnerOrgId === d.raised_by_org_id) ?? null;
     add({
@@ -374,12 +384,12 @@ async function getDerivedSharedLedgerNotifications(
       trip_id: d.transaction_id,
       transaction_id: d.transaction_id,
       source_dispute_id: d.id,
-      event_type: 'dispute_received',
-      status: 'open',
+      event_type: "dispute_received",
+      status: "open",
       title: partner
         ? `${partner.name} raised a dispute`
-        : 'A partner raised a dispute',
-      subtitle: 'Review and accept/decline this dispute.',
+        : "A partner raised a dispute",
+      subtitle: "Review and accept/decline this dispute.",
       amount_meta: null,
       payload_json: {
         entity_type: partner?.entityType ?? null,
@@ -402,16 +412,19 @@ async function getDerivedSharedLedgerNotifications(
 
 export async function getSharedLedgerNotifications(
   organizationId: string,
-  statusFilter: 'all' | 'action_required' | 'history' = 'all',
+  statusFilter: "all" | "action_required" | "history" = "all",
 ): Promise<{
   error: Error | null;
   notifications: SharedLedgerNotificationRow[];
   unavailable?: boolean;
 }> {
-  const { data, error } = await supabase().rpc('get_shared_ledger_notifications', {
-    org_id: organizationId,
-    status_filter: statusFilter,
-  });
+  const { data, error } = await supabase().rpc(
+    "get_shared_ledger_notifications",
+    {
+      org_id: organizationId,
+      status_filter: statusFilter,
+    },
+  );
   if (!error) {
     const rows = extractRpcRows(data);
     return { error: null, notifications: rows.map(toRow) };
@@ -419,14 +432,14 @@ export async function getSharedLedgerNotifications(
 
   // Fallback to direct table read on any RPC failure (permissions/signature/version drift).
   let query = supabase()
-    .from('shared_ledger_notifications')
+    .from("shared_ledger_notifications")
     .select(TABLE_SELECT)
-    .eq('organization_id', organizationId)
-    .order('created_at', { ascending: false });
-  if (statusFilter === 'action_required') {
-    query = query.eq('status', 'open');
-  } else if (statusFilter === 'history') {
-    query = query.in('status', ['read', 'handled', 'resolved']);
+    .eq("organization_id", organizationId)
+    .order("created_at", { ascending: false });
+  if (statusFilter === "action_required") {
+    query = query.eq("status", "open");
+  } else if (statusFilter === "history") {
+    query = query.in("status", ["read", "handled", "resolved"]);
   }
 
   const { data: tableRows, error: tableError } = await query;
@@ -434,10 +447,10 @@ export async function getSharedLedgerNotifications(
     if (rpcOrTableUnavailable(tableError.message)) {
       const derived = await getDerivedSharedLedgerNotifications(organizationId);
       const filtered =
-        statusFilter === 'action_required'
-          ? derived.filter((r) => r.status === 'open')
-          : statusFilter === 'history'
-            ? derived.filter((r) => r.status !== 'open')
+        statusFilter === "action_required"
+          ? derived.filter((r) => r.status === "open")
+          : statusFilter === "history"
+            ? derived.filter((r) => r.status !== "open")
             : derived;
       return {
         error: null,
@@ -448,10 +461,10 @@ export async function getSharedLedgerNotifications(
     // If table also failed, still attempt derived notifications as a final safety net.
     const derived = await getDerivedSharedLedgerNotifications(organizationId);
     const filtered =
-      statusFilter === 'action_required'
-        ? derived.filter((r) => r.status === 'open')
-        : statusFilter === 'history'
-          ? derived.filter((r) => r.status !== 'open')
+      statusFilter === "action_required"
+        ? derived.filter((r) => r.status === "open")
+        : statusFilter === "history"
+          ? derived.filter((r) => r.status !== "open")
           : derived;
     if (filtered.length > 0) {
       return { error: null, notifications: filtered };
@@ -476,9 +489,12 @@ export async function getSharedLedgerNotificationsCount(
   count: SharedLedgerNotificationCount;
   unavailable?: boolean;
 }> {
-  const { data, error } = await supabase().rpc('get_shared_ledger_notifications_count', {
-    org_id: organizationId,
-  });
+  const { data, error } = await supabase().rpc(
+    "get_shared_ledger_notifications_count",
+    {
+      org_id: organizationId,
+    },
+  );
   if (!error) {
     const rows = extractRpcRows(data);
     const first = (rows[0] ?? {}) as Record<string, unknown>;
@@ -489,19 +505,22 @@ export async function getSharedLedgerNotificationsCount(
         first.count ??
         0,
     );
-    return { error: null, count: { actionableCount: Number.isFinite(actionable) ? actionable : 0 } };
+    return {
+      error: null,
+      count: { actionableCount: Number.isFinite(actionable) ? actionable : 0 },
+    };
   }
 
   // Fallback to direct table count for open events on any RPC failure.
   const { count, error: tableError } = await supabase()
-    .from('shared_ledger_notifications')
-    .select('id', { count: 'exact', head: true })
-    .eq('organization_id', organizationId)
-    .eq('status', 'open');
+    .from("shared_ledger_notifications")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", organizationId)
+    .eq("status", "open");
 
   if (tableError) {
     const derived = await getDerivedSharedLedgerNotifications(organizationId);
-    const actionable = derived.filter((r) => r.status === 'open').length;
+    const actionable = derived.filter((r) => r.status === "open").length;
     if (actionable > 0 || rpcOrTableUnavailable(tableError.message)) {
       return {
         error: null,
@@ -524,10 +543,13 @@ export async function markSharedLedgerNotificationRead(
   notificationId: string,
   organizationId: string,
 ): Promise<{ error: Error | null; unavailable?: boolean }> {
-  const { error } = await supabase().rpc('mark_shared_ledger_notification_read', {
-    p_id: notificationId,
-    p_org_id: organizationId,
-  });
+  const { error } = await supabase().rpc(
+    "mark_shared_ledger_notification_read",
+    {
+      p_id: notificationId,
+      p_org_id: organizationId,
+    },
+  );
   if (!error) return { error: null };
 
   if (!rpcOrTableUnavailable(error.message)) {
@@ -535,14 +557,14 @@ export async function markSharedLedgerNotificationRead(
   }
 
   const { error: tableError } = await supabase()
-    .from('shared_ledger_notifications')
+    .from("shared_ledger_notifications")
     .update({
-      status: 'read',
+      status: "read",
       read_at: new Date().toISOString(),
     })
-    .eq('id', notificationId)
-    .eq('organization_id', organizationId)
-    .eq('status', 'open');
+    .eq("id", notificationId)
+    .eq("organization_id", organizationId)
+    .eq("status", "open");
   if (tableError) {
     if (rpcOrTableUnavailable(tableError.message)) {
       return { error: null, unavailable: true };
@@ -556,10 +578,13 @@ export async function markSharedLedgerNotificationHandled(
   notificationId: string,
   organizationId: string,
 ): Promise<{ error: Error | null; unavailable?: boolean }> {
-  const { error } = await supabase().rpc('mark_shared_ledger_notification_handled', {
-    p_id: notificationId,
-    p_org_id: organizationId,
-  });
+  const { error } = await supabase().rpc(
+    "mark_shared_ledger_notification_handled",
+    {
+      p_id: notificationId,
+      p_org_id: organizationId,
+    },
+  );
   if (!error) return { error: null };
 
   if (!rpcOrTableUnavailable(error.message)) {
@@ -567,14 +592,14 @@ export async function markSharedLedgerNotificationHandled(
   }
 
   const { error: tableError } = await supabase()
-    .from('shared_ledger_notifications')
+    .from("shared_ledger_notifications")
     .update({
-      status: 'handled',
+      status: "handled",
       handled_at: new Date().toISOString(),
     })
-    .eq('id', notificationId)
-    .eq('organization_id', organizationId)
-    .in('status', ['open', 'read']);
+    .eq("id", notificationId)
+    .eq("organization_id", organizationId)
+    .in("status", ["open", "read"]);
   if (tableError) {
     if (rpcOrTableUnavailable(tableError.message)) {
       return { error: null, unavailable: true };

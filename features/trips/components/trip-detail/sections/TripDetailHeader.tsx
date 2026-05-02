@@ -6,16 +6,26 @@ import { ReceiptText } from "lucide-react-native";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import type { TripRow } from "../../../services/trips.service";
 import { getTripDisplayNumber } from "../../../services/trips.service";
-import { isAggregateTrip } from "@/lib/driverUtils";
+import {
+  shouldShowAggregateTripKindPill,
+  type AggregateTripKindPillContext,
+} from "@/lib/driverUtils";
 
 interface TripDetailHeaderProps {
   trip: TripRow;
   onBack: () => void;
   onAddEntry: () => void;
+  /** When omitted, pill falls back to supplier_id-only semantics. */
+  aggregateTripKindPillContext?: AggregateTripKindPillContext | null;
 }
 
-export function TripDetailHeader({ trip, onBack, onAddEntry }: TripDetailHeaderProps) {
-  const isAggregate = isAggregateTrip(trip);
+export function TripDetailHeader({
+  trip,
+  onBack,
+  onAddEntry,
+  aggregateTripKindPillContext,
+}: TripDetailHeaderProps) {
+  const isAggregate = shouldShowAggregateTripKindPill(trip, aggregateTripKindPillContext);
   const tripNumber = getTripDisplayNumber(trip);
 
   return (
