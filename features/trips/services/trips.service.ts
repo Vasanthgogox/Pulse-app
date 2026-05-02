@@ -391,6 +391,10 @@ const ONGOING_TRIP_TERMINAL_STATUSES = [
   "delivered",
 ] as const;
 
+/**
+ * Any trip for this driver that is not in a terminal status counts as blocking further assignment.
+ * excludeTripId skips the trip being edited so reassignment/unassign workflows keep working.
+ */
 async function getDriverOngoingTrip(
   driverId: string,
   excludeTripId?: string,
@@ -411,24 +415,38 @@ async function getDriverOngoingTrip(
   }
   const { data, error } = await q;
   if (error) return { error: new Error(error.message), trip: null };
+  const rows = (data ?? []) as Pick<
+    TripRow,
+    "id" | "trip_number" | "status" | "started_at"
+  >[];
   return {
     error: null,
-    trip:
-      ((data ?? []) as Pick<
-        TripRow,
-        "id" | "trip_number" | "status" | "started_at"
-      >[]).find((row) => {
-        const status = String(row.status ?? "").trim().toLowerCase();
-        // "Busy" applies only after the driver actually accepts/starts the trip.
-        // Pre-acceptance assignment (status="assigned", started_at=null) must stay available.
-        const isAcceptedStatus =
-          status === "in_progress" ||
-          status === "in_transit" ||
-          status === "picked_up" ||
-          status === "at_drop";
-        return isAcceptedStatus || row.started_at != null;
-      }) ?? null,
+    trip: rows[0] ?? null,
   };
+}
+
+/** Same terminal rule as {@link getDriverOngoingTrip}, for roster vehicle UUIDs. */
+async function getVehicleOngoingTrip(
+  vehicleId: string,
+  excludeTripId?: string,
+): Promise<{
+  error: Error | null;
+  trip: Pick<TripRow, "id" | "trip_number"> | null;
+}> {
+  let q = supabase()
+    .from("trips")
+    .select("id, trip_number")
+    .eq("vehicle_id", vehicleId)
+    .not("status", "in", `("${ONGOING_TRIP_TERMINAL_STATUSES.join('","')}")`)
+    .order("updated_at", { ascending: false })
+    .limit(10);
+  if (excludeTripId != null && excludeTripId.trim() !== "") {
+    q = q.neq("id", excludeTripId);
+  }
+  const { data, error } = await q;
+  if (error) return { error: new Error(error.message), trip: null };
+  const rows = (data ?? []) as Pick<TripRow, "id" | "trip_number">[];
+  return { error: null, trip: rows[0] ?? null };
 }
 
 function getTripIdentifierLabel(
@@ -747,6 +765,21 @@ export async function createTrip(
     }
   }
 
+  const createVehicleId = normalizeNullableUuid(data.vehicle_id);
+  if (createVehicleId != null) {
+    const { error: vErr, trip: vehicleTrip } =
+      await getVehicleOngoingTrip(createVehicleId);
+    if (vErr) return { error: vErr, trip: null };
+    if (vehicleTrip != null) {
+      return {
+        error: new Error(
+          `Vehicle is already assigned to ${getTripIdentifierLabel(vehicleTrip)}. Complete or unassign that trip first.`,
+        ),
+        trip: null,
+      };
+    }
+  }
+
   const clientPrice = Number(data.client_price) || 0;
   const supplierRate = Number(data.supplier_rate) || 0;
   const loadTonsRaw = Number(data.load_tons);
@@ -821,7 +854,7 @@ export async function createTrip(
     load_tons: loadTons,
     advance_paid: advancePaid,
     supplier_id: normalizeNullableUuid(data.supplier_id),
-    supplier_name: (data.supplier_name ?? "").trim() || null,
+    // Not all DBs have trips.supplier_name; resolve name via supplier_id + suppliers / views.
     trip_payout_mode:
       data.trip_payout_mode ??
       (normalizeNullableUuid(data.supplier_id) ? "market" : "asset"),
@@ -1036,6 +1069,20 @@ export async function updateTripAssignment(
       return {
         error: new Error(
           `Driver is already assigned to ${getTripIdentifierLabel(ongoingTrip)}. Complete or unassign that trip first.`,
+        ),
+        trip: null,
+      };
+    }
+  }
+
+  if (data.vehicle_id != null) {
+    const { error: vehicleConflictError, trip: vehicleBusyTrip } =
+      await getVehicleOngoingTrip(data.vehicle_id, tripId);
+    if (vehicleConflictError) return { error: vehicleConflictError, trip: null };
+    if (vehicleBusyTrip != null) {
+      return {
+        error: new Error(
+          `Vehicle is already assigned to ${getTripIdentifierLabel(vehicleBusyTrip)}. Complete or unassign that trip first.`,
         ),
         trip: null,
       };
@@ -1513,31 +1560,20 @@ export async function updateTripPayment(
 }
 
 /**
- * Returns the set of driver_ids that are currently assigned to a non-completed,
- * non-cancelled trip for the given organization. Used to prevent double-assignment
- * of a driver who is already active in another trip.
+ * Driver IDs on any non-terminal trip for this org (matches {@link getDriverOngoingTrip} rules).
  */
 export async function getActiveDriverIds(orgId: string): Promise<Set<string>> {
   const { data } = await supabase()
     .from("trips")
-    .select("driver_id, status, started_at")
+    .select("driver_id")
     .eq("organization_id", orgId)
     .not("driver_id", "is", null)
     .not("status", "in", `("${ONGOING_TRIP_TERMINAL_STATUSES.join('","')}")`);
 
   const ids = new Set<string>();
-  (data ?? []).forEach(
-    (row: {
-      driver_id: string | null;
-      status?: string | null;
-      started_at?: string | null;
-    }) => {
-      const status = String(row.status ?? "").trim().toLowerCase();
-      const isAcceptedStatus = status === "in_progress" || status === "at_drop";
-      if (row.driver_id && (isAcceptedStatus || row.started_at != null)) {
-        ids.add(row.driver_id);
-      }
-    },
-  );
+  for (const row of data ?? []) {
+    const id = (row as { driver_id?: string | null }).driver_id;
+    if (id) ids.add(id);
+  }
   return ids;
 }

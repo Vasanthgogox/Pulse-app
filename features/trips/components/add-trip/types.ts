@@ -62,7 +62,7 @@ export interface AddTripFormState {
   supplierRate: string;
   supplySource: SupplySource;
   supplierId: string | null;
-  /** Display name for chosen supplier (persisted as trips.supplier_name). */
+  /** Display name for chosen supplier (UI; name comes from suppliers row / joins, not always a trips column). */
   supplierDisplayName: string;
   advancePaid: string;
   assignLater: boolean;
