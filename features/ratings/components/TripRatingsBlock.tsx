@@ -52,6 +52,7 @@ import {
   getRatingsForDriver,
   getRatingsForSupplier,
   averageScore,
+  resolveRatedClientIdForTrip,
   type RatingRow,
 } from '../services/ratings.service';
 import type { RaterType, RatedType } from '../types';
@@ -1901,18 +1902,26 @@ export function TripRatingsBlock({
                   );
                   let error: { message: string } | null = null;
                   let usedSchemaFallback = false;
-                  if (trip.client_id) {
+
+                  const ratingOrgId =
+                    trip.organization_id?.trim() ?? effectiveOrganizationId ?? '';
+                  let ratedClientId = trip.client_id?.trim() ?? null;
+                  if (!ratedClientId && ratingOrgId) {
+                    ratedClientId = await resolveRatedClientIdForTrip(trip, ratingOrgId);
+                  }
+
+                  if (ratingOrgId && ratedClientId) {
                     const { rater_type, rater_id } = resolveClientRatingRater(
                       trip,
                       effectiveOrganizationId,
                       isClientViewer,
                     );
-                    const submitRes = await createRating(effectiveOrganizationId, {
+                    const submitRes = await createRating(ratingOrgId, {
                       trip_id: trip.id,
                       rater_type,
                       rater_id,
                       rated_type: 'client',
-                      rated_id: trip.client_id,
+                      rated_id: ratedClientId,
                       score: clientScore,
                       comment: commentPayload,
                     });
@@ -1928,12 +1937,19 @@ export function TripRatingsBlock({
                       Alert.alert('Rating failed', error.message);
                       return;
                     }
+                  } else if (!ratedClientId && (trip.client_name?.trim() || trip.client_id)) {
+                    setClientSubmitting(false);
+                    Alert.alert(
+                      'Cannot save customer rating',
+                      'Match this trip to a customer in Customers (same name as on the trip), or set the trip’s customer so ratings sync to the database.',
+                    );
+                    return;
                   }
                   await AsyncStorage.setItem(clientFeedbackStorageKey, JSON.stringify(payload));
                   setClientFeedback(payload);
                   await loadRatings();
-                  if (trip.client_id) {
-                    const { ratings: clientRatings } = await getRatingsForClient(trip.client_id);
+                  if (ratedClientId) {
+                    const { ratings: clientRatings } = await getRatingsForClient(ratedClientId);
                     setHistClientAvg(averageScore(clientRatings));
                   }
                   if (usedSchemaFallback) {
