@@ -123,7 +123,24 @@ export async function getDriverById(
     .maybeSingle();
   if (error) return { error: new Error(error.message), driver: null };
   const row = data as DriverRow | null;
-  return { error: null, driver: row ? normalizeDriverRow(row) : null };
+  let driver = row ? normalizeDriverRow(row) : null;
+  if (driver && !(driver.email ?? "").trim()) {
+    try {
+      const { data: rows, error: rpcError } = await supabase().rpc(
+        "get_driver_coalesced_email_for_org",
+        { p_org_id: orgId, p_driver_id: driverId },
+      );
+      if (!rpcError && Array.isArray(rows) && rows.length > 0) {
+        const e = (rows[0] as { email?: string | null }).email;
+        if (e != null && String(e).trim() !== "") {
+          driver = { ...driver, email: String(e).trim() };
+        }
+      }
+    } catch {
+      // RPC missing on older DB — keep drivers row as-is
+    }
+  }
+  return { error: null, driver };
 }
 
 /** Normalize phone for comparison (strip spaces; same driver = same number). */
