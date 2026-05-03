@@ -123,6 +123,10 @@ function computeValidationIssues(state: AddTripFormState): AddTripValidationIssu
     );
   }
 
+  if (state.supplySource === 'aggregate' && state.driverPhoneAvailabilityError?.trim()) {
+    push('driverPhone', `Driver availability check: ${state.driverPhoneAvailabilityError.trim()}`);
+  }
+
   if (
     state.supplySource === 'aggregate' &&
     state.driverPhoneName &&
@@ -166,6 +170,7 @@ const initialState: AddTripFormState = {
   driverPhoneConfirmed: false,
   driverPhoneTripConflict: false,
   driverPhoneTripConflictLabel: null,
+  driverPhoneAvailabilityError: null,
   aggregateVehicleText: '',
 };
 
@@ -203,6 +208,7 @@ export function useAddTripForm() {
     driverPhoneConfirmed: v === 'asset' ? false : s.driverPhoneConfirmed,
     driverPhoneTripConflict: v === 'asset' ? false : s.driverPhoneTripConflict,
     driverPhoneTripConflictLabel: v === 'asset' ? null : s.driverPhoneTripConflictLabel,
+    driverPhoneAvailabilityError: v === 'asset' ? null : s.driverPhoneAvailabilityError,
     aggregateVehicleText: v === 'asset' ? '' : s.aggregateVehicleText,
   })), []);
   const setSupplierSelection = useCallback(
@@ -230,6 +236,7 @@ export function useAddTripForm() {
             driverPhoneConfirmed: false,
             driverPhoneTripConflict: false,
             driverPhoneTripConflictLabel: null as string | null,
+            driverPhoneAvailabilityError: null as string | null,
             aggregateVehicleText: '',
           }
         : {}),
@@ -247,6 +254,7 @@ export function useAddTripForm() {
         driverPhoneConfirmed: false,
         driverPhoneTripConflict: false,
         driverPhoneTripConflictLabel: null,
+        driverPhoneAvailabilityError: null,
       })),
     [],
   );
@@ -256,6 +264,14 @@ export function useAddTripForm() {
         ...s,
         driverPhoneTripConflict: conflict,
         driverPhoneTripConflictLabel: label,
+      })),
+    [],
+  );
+  const setDriverPhoneAvailabilityError = useCallback(
+    (message: string | null) =>
+      setState((s) => ({
+        ...s,
+        driverPhoneAvailabilityError: message,
       })),
     [],
   );
@@ -487,6 +503,7 @@ export function useAddTripForm() {
       setDriverPhoneName,
       setDriverPhoneConfirmed,
       setDriverPhoneTripConflict,
+      setDriverPhoneAvailabilityError,
       setAggregateVehicleText,
       setAggregateDriverName,
       clearClientSelection,
@@ -514,6 +531,7 @@ export function useAddTripForm() {
       setDriverPhoneName,
       setDriverPhoneConfirmed,
       setDriverPhoneTripConflict,
+      setDriverPhoneAvailabilityError,
       setAggregateVehicleText,
       setAggregateDriverName,
       clearClientSelection,
