@@ -542,8 +542,13 @@ export function useTripDetail({
   const transactions: LedgerRow[] | null = orgIdForTransactions ? transactionsData : null;
 
   const tripLedgerEntries = useMemo(
-    () => getTripLedgerEntries(transactions, trip?.id),
-    [transactions, trip?.id],
+    () =>
+      getTripLedgerEntries(
+        transactions,
+        trip?.id,
+        trip ? getTripDisplayNumber(trip) : undefined,
+      ),
+    [transactions, trip],
   );
 
   const { data: tripSubcontracts = [] } = useTripSubcontractsQuery(

@@ -415,8 +415,12 @@ function TripPnLInlinePanel({
 }) {
   const { t } = useLanguage();
   const tripLedgerEntries = useMemo(() => {
-    return getTripLedgerEntries(transactions, trip.id);
-  }, [transactions, trip.id]);
+    return getTripLedgerEntries(
+      transactions,
+      trip.id,
+      getTripDisplayNumber(trip),
+    );
+  }, [transactions, trip.id, trip.trip_number, trip.display_trip_id]);
   const grouped = useMemo(
     () => getExpenseGroupedForTrip(trip, tripLedgerEntries),
     [trip, tripLedgerEntries],

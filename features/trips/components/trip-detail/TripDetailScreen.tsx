@@ -859,8 +859,12 @@ export default function TripDetailScreen({
     : null;
 
   const tripLedgerEntries = useMemo(() => {
-    return getTripLedgerEntries(transactions, trip?.id);
-  }, [transactions, trip?.id]);
+    return getTripLedgerEntries(
+      transactions,
+      trip?.id,
+      trip ? getTripDisplayNumber(trip) : undefined,
+    );
+  }, [transactions, trip]);
 
   const { data: tripSubcontracts = [] } = useTripSubcontractsQuery(
     currentOrganization?.id ?? null,
