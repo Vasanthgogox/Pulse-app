@@ -3,7 +3,7 @@
  * O(n): one filter for trip entries, one getExpenseGroupedForTrip pass.
  */
 import Theme from "@/constants/Theme";
-import type { TripRow } from "@/features/trips";
+import { getTripDisplayNumber, type TripRow } from "@/features/trips";
 import { formatINR, formatLedgerDate } from "@/lib/format";
 import {
   getExpenseGroupedForTrip,
@@ -64,7 +64,11 @@ export interface TripPnLStatementContentProps {
 function useTripPnLData(trip: TripRow | null, transactions: LedgerRow[] | null) {
   return useMemo(() => {
     if (!trip) return null;
-    const tripLedgerEntries = getTripLedgerEntries(transactions, trip.id);
+    const tripLedgerEntries = getTripLedgerEntries(
+      transactions,
+      trip.id,
+      getTripDisplayNumber(trip),
+    );
     const grouped = getExpenseGroupedForTrip(trip, tripLedgerEntries);
     const expenseLines = expenseLinesFromGrouped(grouped, trip);
     const sales = Number(trip.client_price ?? 0);
@@ -82,7 +86,7 @@ function useTripPnLData(trip: TripRow | null, transactions: LedgerRow[] | null) 
       net,
       margin,
     };
-  }, [trip, transactions]);
+  }, [trip, trip?.id, trip?.trip_number, trip?.display_trip_id, transactions]);
 }
 
 export function TripPnLStatementContent({

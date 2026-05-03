@@ -236,8 +236,12 @@ export function TripLedgerDetailScreen({
   }, [trip?.id, trip?.vehicle_id, trip?.vehicle_display_number, trip?.driver_id, trip?.driver_display_name, orgId, isPreview]);
 
   const tripLedgerEntries = useMemo(() => {
-    return getTripLedgerEntries(transactions, trip?.id);
-  }, [transactions, trip?.id]);
+    return getTripLedgerEntries(
+      transactions,
+      trip?.id,
+      trip ? getTripDisplayNumber(trip) : undefined,
+    );
+  }, [transactions, trip]);
 
   // Fetch partner integration status + partner ledger entries/summary for this trip.
   // Only applies to CLIENT / SUPPLIER entities (not DRIVER / VEHICLE).

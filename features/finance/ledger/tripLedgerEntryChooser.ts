@@ -43,8 +43,18 @@ const DEFAULT_LABELS: TripLedgerChooserLabels = {
   missingDriver: "This trip has no driver assigned.",
 };
 
-function pushLedgerSync(router: ExpoRouterLike, params: Record<string, string>) {
-  const q = new URLSearchParams(params);
+function pushLedgerSync(
+  router: ExpoRouterLike,
+  params: Record<string, string>,
+  extra?: Record<string, string | null | undefined>,
+) {
+  const merged: Record<string, string> = { ...params };
+  if (extra) {
+    for (const [k, v] of Object.entries(extra)) {
+      if (v != null && String(v).trim() !== "") merged[k] = String(v);
+    }
+  }
+  const q = new URLSearchParams(merged);
   router.push(`/(modals)/ledger-sync?${q.toString()}` as const);
 }
 
@@ -59,6 +69,8 @@ export interface TripLedgerNavigationContext {
   clientNameFromContext?: string | null;
   partnerName?: string | null;
   driverDisplayName?: string | null;
+  /** Optional ledger-sync query pairs (e.g. due hints) merged after base params. */
+  ledgerSyncExtraParams?: Record<string, string | null | undefined>;
 }
 
 /** Open ledger-sync for one trip + counterparty, respecting market vs asset payout rules. */
@@ -74,6 +86,7 @@ export function pushTripLedgerQuickEntry(
     clientNameFromContext,
     partnerName,
     driverDisplayName,
+    ledgerSyncExtraParams,
   } = ctx;
   const L = { ...DEFAULT_LABELS, ...ctx.labels };
   if (!trip?.id) return;
@@ -105,15 +118,19 @@ export function pushTripLedgerQuickEntry(
     }
     const partyName =
       (clientNameFromContext ?? displayClientName ?? trip.client_name ?? "").trim() || "Client";
-    pushLedgerSync(router, {
-      ...base,
-      defaultType: "in",
-      partyContext: "customers",
-      partyId: cid,
-      partyName,
-      entityType: "CLIENT",
-      entityId: cid,
-    });
+    pushLedgerSync(
+      router,
+      {
+        ...base,
+        defaultType: "in",
+        partyContext: "customers",
+        partyId: cid,
+        partyName,
+        entityType: "CLIENT",
+        entityId: cid,
+      },
+      ledgerSyncExtraParams,
+    );
     return;
   }
 
@@ -124,15 +141,19 @@ export function pushTripLedgerQuickEntry(
       return;
     }
     const partyName = (partnerName ?? trip.supplier_name ?? "").trim() || "—";
-    pushLedgerSync(router, {
-      ...base,
-      defaultType: "out",
-      partyContext: "suppliers",
-      partyId: sid,
-      partyName,
-      entityType: "SUPPLIER",
-      entityId: sid,
-    });
+    pushLedgerSync(
+      router,
+      {
+        ...base,
+        defaultType: "out",
+        partyContext: "suppliers",
+        partyId: sid,
+        partyName,
+        entityType: "SUPPLIER",
+        entityId: sid,
+      },
+      ledgerSyncExtraParams,
+    );
     return;
   }
 
@@ -142,12 +163,16 @@ export function pushTripLedgerQuickEntry(
       Alert.alert(L.addTransaction, L.missingVehicle);
       return;
     }
-    pushLedgerSync(router, {
-      ...base,
-      entityType: "VEHICLE",
-      entityId: vid,
-      defaultType: "out",
-    });
+    pushLedgerSync(
+      router,
+      {
+        ...base,
+        entityType: "VEHICLE",
+        entityId: vid,
+        defaultType: "out",
+      },
+      ledgerSyncExtraParams,
+    );
     return;
   }
 
@@ -157,14 +182,18 @@ export function pushTripLedgerQuickEntry(
     return;
   }
   const partyName = (driverDisplayName ?? trip.driver_display_name ?? "").trim() || "Driver";
-  pushLedgerSync(router, {
-    ...base,
-    defaultType: "out",
-    entityType: "DRIVER",
-    entityId: did,
-    partyId: did,
-    partyName,
-  });
+  pushLedgerSync(
+    router,
+    {
+      ...base,
+      defaultType: "out",
+      entityType: "DRIVER",
+      entityId: did,
+      partyId: did,
+      partyName,
+    },
+    ledgerSyncExtraParams,
+  );
 }
 
 export function openTripLedgerEntryChooser(options: TripLedgerNavigationContext): void {

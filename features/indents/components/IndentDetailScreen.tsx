@@ -362,14 +362,14 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
       : '—';
   const dateLabel = formatIndentDate(indent.pickup_date ?? null, indent.created_at);
 
-  // Margin % for supplier rate vs client price (simplified)
   const clientPriceNum = Number(indent.client_price ?? 0);
   const supplierNum = Number(indent.supplier_target ?? 0);
+  const isOwner = !!orgId && indent.organization_id === orgId;
+  // Margin % for supplier rate vs client price — owner-only (never derive from client_price for network viewers)
   const marginPct =
-    clientPriceNum > 0 && supplierNum > 0
+    isOwner && clientPriceNum > 0 && supplierNum > 0
       ? Math.round(((clientPriceNum - supplierNum) / clientPriceNum) * 100)
       : null;
-  const isOwner = !!orgId && indent.organization_id === orgId;
   const myQuoteStatus = normalizeStatus(myQuote?.status);
   const hasMyPendingQuote = myQuoteStatus === 'pending';
   const canSupplierBid = !isOwner && SUPPLIER_BID_ENABLED_STATUSES.has(statusLower);
@@ -541,7 +541,7 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
           </View>
         </View>
 
-        {/* Freight Card with gradient */}
+        {/* Freight Card with gradient — owners see full economics; integrated suppliers see target rate only */}
         <LinearGradient
           colors={[Theme.darkSurface, Theme.darkBackground]}
           start={{ x: 0, y: 0 }}
@@ -550,38 +550,74 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
         >
           <View style={styles.freightGlow} />
           <View style={styles.freightContent}>
-            <View style={styles.freightHeaderRow}>
-              <View>
-                <Text style={styles.freightLabel}>EST. MARKET FREIGHT</Text>
-                <View style={styles.freightValueRow}>
-                  <Text style={styles.freightCurrency}>₹</Text>
-                  <Text style={styles.freightValue}>{freight.replace(/^[^\d,.-]+/, '').trim() || freight}</Text>
+            {isOwner ? (
+              <>
+                <View style={styles.freightHeaderRow}>
+                  <View>
+                    <Text style={styles.freightLabel}>EST. MARKET FREIGHT</Text>
+                    <View style={styles.freightValueRow}>
+                      <Text style={styles.freightCurrency}>₹</Text>
+                      <Text style={styles.freightValue}>
+                        {freight.replace(/^[^\d,.-]+/, '').trim() || freight}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.freightChartIcon}>
+                    <FontAwesome name="line-chart" size={18} color={Theme.positive} />
+                  </View>
                 </View>
-              </View>
-              <View style={styles.freightChartIcon}>
-                <FontAwesome name="line-chart" size={18} color={Theme.positive} />
-              </View>
-            </View>
 
-            <View style={styles.freightDivider} />
+                <View style={styles.freightDivider} />
 
-            <View style={styles.freightGrid}>
-              <View style={styles.freightGridItem}>
-                <Text style={styles.freightGridLabel}>SUPPLIER RATE</Text>
-                <View style={styles.freightGridValueRow}>
-                  <Text style={styles.freightGridValue}>{supplierRate}</Text>
-                  {marginPct != null && (
-                    <Text style={styles.freightMarginPct}> ({marginPct}%)</Text>
-                  )}
+                <View style={styles.freightGrid}>
+                  <View style={styles.freightGridItem}>
+                    <Text style={styles.freightGridLabel}>SUPPLIER RATE</Text>
+                    <View style={styles.freightGridValueRow}>
+                      <Text style={styles.freightGridValue}>{supplierRate}</Text>
+                      {marginPct != null && (
+                        <Text style={styles.freightMarginPct}> ({marginPct}%)</Text>
+                      )}
+                    </View>
+                  </View>
+                  <View style={[styles.freightGridItem, styles.freightGridItemRight]}>
+                    <Text style={styles.freightGridLabel}>CLIENT ENTITY</Text>
+                    <Text style={styles.freightGridValue} numberOfLines={1}>
+                      {clientName}
+                    </Text>
+                  </View>
                 </View>
-              </View>
-              <View style={[styles.freightGridItem, styles.freightGridItemRight]}>
-                <Text style={styles.freightGridLabel}>CLIENT ENTITY</Text>
-                <Text style={styles.freightGridValue} numberOfLines={1}>
-                  {clientName}
-                </Text>
-              </View>
-            </View>
+              </>
+            ) : (
+              <>
+                <View style={styles.freightHeaderRow}>
+                  <View>
+                    <Text style={styles.freightLabel}>TARGET RATE</Text>
+                    <View style={styles.freightValueRow}>
+                      <Text style={styles.freightCurrency}>₹</Text>
+                      <Text style={styles.freightValue}>
+                        {supplierNum > 0
+                          ? supplierRate.replace(/^[^\d,.-]+/, '').trim() || supplierRate
+                          : '—'}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.freightChartIcon}>
+                    <FontAwesome name="line-chart" size={18} color={Theme.positive} />
+                  </View>
+                </View>
+
+                <View style={styles.freightDivider} />
+
+                <View style={styles.freightGrid}>
+                  <View style={styles.freightGridItem}>
+                    <Text style={styles.freightGridLabel}>CLIENT ENTITY</Text>
+                    <Text style={styles.freightGridValue} numberOfLines={1}>
+                      {clientName}
+                    </Text>
+                  </View>
+                </View>
+              </>
+            )}
           </View>
         </LinearGradient>
 
