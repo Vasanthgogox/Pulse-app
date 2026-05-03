@@ -70,14 +70,9 @@ export function AddTripModal({
           requireAuthoritativeRpc: true,
         });
       if (availabilityError) {
-        form.setters.setDriverPhoneAvailabilityError(
-          "Unable to verify driver availability right now. Please retry.",
-        );
-        form.setters.setDriverPhoneTripConflict(false, null);
         Alert.alert("Unable to validate driver", availabilityError.message);
         return;
       }
-      form.setters.setDriverPhoneAvailabilityError(null);
       if (result.isBusy) {
         form.setters.setDriverPhoneTripConflict(
           true,
