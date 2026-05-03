@@ -2,11 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "expo-router";
 import { Hash, MessageSquare, Plus, Users, X } from "lucide-react-native";
 import { Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from "react-native";
-import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import { useGlobalFabAnimation } from "@/hooks/useGlobalFabAnimation";
 import { useIntegratedChat } from "@/features/chat/contexts/IntegratedChatContext";
 import { useTripChat } from "@/features/chat/contexts/TripChatContext";
 import { getTripDisplayNumber } from "@/features/trips/services/trips.service";
@@ -49,7 +47,6 @@ export function FloatingChatButton() {
   const show = useShouldShow();
   const unread = useTotalUnread();
   const networkDockExpanded = useMobileNetworkDockExpanded();
-  const { shellStyle: visibilityStyle, ringStyle } = useGlobalFabAnimation();
   const [showPreview, setShowPreview] = useState(false);
   const [chatTab, setChatTab] = useState<ChatTab>("trips");
   const { chats } = useIntegratedChat();
@@ -117,13 +114,8 @@ export function FloatingChatButton() {
   const previewWidth = Math.max(290, Math.min(380, width - 28));
 
   return (
-    <Animated.View
-      style={[
-        styles.wrap,
-        { bottom },
-        networkDockExpanded && styles.wrapDockExpanded,
-        visibilityStyle,
-      ]}
+    <View
+      style={[styles.wrap, { bottom }, networkDockExpanded && styles.wrapDockExpanded]}
       pointerEvents="box-none"
     >
       {showPreview && (
@@ -134,8 +126,7 @@ export function FloatingChatButton() {
                 <MessageSquare size={18} color="#fff" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.previewTitle}>Command Hub</Text>
-                <Text style={styles.previewSub}>Secure Comms Online</Text>
+                <Text style={styles.previewTitle}>PULSE CHAT</Text>
               </View>
               <TouchableOpacity onPress={() => setShowPreview(false)} style={styles.closeBtn}>
                 <X size={16} color="#fff" />
@@ -248,7 +239,7 @@ export function FloatingChatButton() {
         hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
       >
         <View style={styles.circle}>
-          <Animated.View style={[styles.innerRing, ringStyle]} pointerEvents="none" />
+          <View style={styles.innerRing} pointerEvents="none" />
           {showPreview ? (
             <X size={21} color="#fff" strokeWidth={2.4} />
           ) : (
@@ -261,7 +252,7 @@ export function FloatingChatButton() {
           )}
         </View>
       </TouchableOpacity>
-    </Animated.View>
+    </View>
   );
 }
 
@@ -304,7 +295,8 @@ const styles = StyleSheet.create({
     height: Layout.fabSize - 10,
     borderRadius: (Layout.fabSize - 10) / 2,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.8)",
+    borderColor: "rgba(255,255,255,0.35)",
+    opacity: 0.9,
   },
   badge: {
     position: "absolute",
@@ -359,14 +351,6 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     fontStyle: "italic",
     letterSpacing: -0.2,
-  },
-  previewSub: {
-    marginTop: 2,
-    color: "#60a5fa",
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 1.1,
-    textTransform: "uppercase",
   },
   closeBtn: {
     width: 28,

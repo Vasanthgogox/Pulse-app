@@ -9,6 +9,19 @@ function coerceRatedId(raw: unknown): string | null {
   if (typeof raw === "number" && Number.isFinite(raw)) {
     return String(raw);
   }
+  if (typeof raw === "object" && raw !== null && "id" in raw) {
+    const id = (raw as { id?: unknown }).id;
+    if (typeof id === "string" && id.trim()) return id.trim();
+  }
+  return null;
+}
+
+function normalizeRatedPartyType(raw: unknown): "client" | "supplier" | "driver" | null {
+  const t =
+    (typeof raw === "string" ? raw : typeof raw === "number" ? String(raw) : "")
+      .trim()
+      .toLowerCase();
+  if (t === "client" || t === "supplier" || t === "driver") return t;
   return null;
 }
 
@@ -34,8 +47,8 @@ export function parseFeedbackRequestMetadata(
 
   if (!rawMeta || typeof rawMeta !== "object") return null;
   const o = rawMeta as Record<string, unknown>;
-  const rt = o.rated_party_type;
-  if (rt !== "client" && rt !== "supplier" && rt !== "driver") return null;
+  const rt = normalizeRatedPartyType(o.rated_party_type ?? o.ratedPartyType);
+  if (!rt) return null;
 
   const ratedId = coerceRatedId(o.rated_id);
   if (!ratedId) return null;

@@ -62,6 +62,7 @@ import {
   ensureTripFeedbackPromptMessages,
   getTripsForCompose,
   persistTripFeedbackMessageMetadataIfRated,
+  seedTripConversationFeedbackPromptIfMissing,
   sendDocumentShareMessage,
   type TripForCompose,
 } from "@/features/chat/services/chat.service";
@@ -3690,23 +3691,54 @@ function TripConversationDetailLoaded({
   onOpenCompose: () => void | Promise<void>;
   onFeedbackSubmitted: () => void;
 }) {
-  const { refreshConversations } = useTripChat();
+  const { hydrateConversationById } = useTripChat();
   const [tripRatings, setTripRatings] = useState<RatingRow[]>([]);
-  const tripEligibleForFeedback = isTripFeedbackEligibleStatus(selectedConv.trip_status);
+
+  const effectiveTripStatus = useMemo(() => {
+    const direct = selectedConv.trip_status;
+    if (direct != null && String(direct).trim() !== "") return direct;
+    return composeTrips.find((t) => t.id === selectedConv.trip_id)?.status ?? null;
+  }, [composeTrips, selectedConv.trip_id, selectedConv.trip_status]);
+
+  const tripEligibleForFeedback = isTripFeedbackEligibleStatus(effectiveTripStatus);
 
   useEffect(() => {
     if (!tripEligibleForFeedback) return;
     let cancelled = false;
     void (async () => {
-      const { error } = await ensureTripFeedbackPromptMessages(selectedConv.trip_id);
-      if (error && __DEV__) console.warn("[ensureTripFeedbackPromptMessages]", error.message);
+      const { error: e1 } = await ensureTripFeedbackPromptMessages(selectedConv.trip_id);
+      if (e1 && __DEV__) console.warn("[ensureTripFeedbackPromptMessages]", e1.message);
       if (cancelled) return;
-      await refreshConversations();
+      await hydrateConversationById(selectedConv.id);
+      if (cancelled) return;
+      const { created, error: e2 } = await seedTripConversationFeedbackPromptIfMissing({
+        conversationId: selectedConv.id,
+        organizationId: selectedConv.organization_id,
+        partyType: selectedConv.party_type,
+        partyName: selectedConv.party_name ?? "",
+        clientId: selectedConv.client_id ?? null,
+        supplierId: selectedConv.supplier_id ?? null,
+        driverId: selectedConv.driver_id ?? null,
+      });
+      if (e2 && __DEV__) console.warn("[seedTripConversationFeedbackPromptIfMissing]", e2.message);
+      if (cancelled) return;
+      if (created) await hydrateConversationById(selectedConv.id);
     })();
     return () => {
       cancelled = true;
     };
-  }, [tripEligibleForFeedback, selectedConv.id, selectedConv.trip_id, refreshConversations]);
+  }, [
+    tripEligibleForFeedback,
+    selectedConv.id,
+    selectedConv.trip_id,
+    selectedConv.organization_id,
+    selectedConv.party_type,
+    selectedConv.party_name,
+    selectedConv.client_id,
+    selectedConv.supplier_id,
+    selectedConv.driver_id,
+    hydrateConversationById,
+  ]);
 
   useEffect(() => {
     if (!tripEligibleForFeedback) {
@@ -3725,11 +3757,18 @@ function TripConversationDetailLoaded({
         messages: selectedConv.messages,
         ratings: rows,
       });
+      if (!cancelled) await hydrateConversationById(selectedConv.id);
     })();
     return () => {
       cancelled = true;
     };
-  }, [tripEligibleForFeedback, selectedConv.trip_id, selectedConv.id, selectedConv.messages]);
+  }, [
+    tripEligibleForFeedback,
+    selectedConv.trip_id,
+    selectedConv.id,
+    selectedConv.messages,
+    hydrateConversationById,
+  ]);
 
   const displayMessages = useMemo(
     () =>
@@ -3955,7 +3994,6 @@ function TripConversationDetailLoaded({
             );
           }
           if (m.message_type === "feedback_request") {
-            if (!tripEligibleForFeedback) return null;
             return (
               <ChatTripFeedbackCard
                 key={m.id}
