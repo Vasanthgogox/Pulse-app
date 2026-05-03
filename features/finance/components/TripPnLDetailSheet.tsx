@@ -66,8 +66,12 @@ export function TripPnLDetailSheet({
   const { t } = useLanguage();
   const insets = useSafeAreaInsets();
   const tripLedgerEntries = useMemo(() => {
-    return getTripLedgerEntries(transactions, trip?.id);
-  }, [transactions, trip?.id]);
+    return getTripLedgerEntries(
+      transactions,
+      trip?.id,
+      trip ? getTripDisplayNumber(trip) : undefined,
+    );
+  }, [transactions, trip]);
   const grouped = useMemo(() => {
     if (!trip) return null;
     return getExpenseGroupedForTrip(trip, tripLedgerEntries);

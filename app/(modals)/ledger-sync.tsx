@@ -327,6 +327,19 @@ export default function LedgerSyncScreen() {
     [suppliers],
   );
 
+  /**
+   * Supplier POV on integrated getLoad: try origin/qunifiedbase-style write first (UI trip_id + plain
+   * description). finance.service still runs unanchored+QMETA retry if the DB rejects trip_id.
+   */
+  const qUnifiedPassthroughLedgerTripCreate = useMemo(() => {
+    if (!orgId || !params.tripId) return false;
+    const meta = tripDueMetaById[params.tripId];
+    if (!meta?.indent_id || !meta.isCrossOrgSupplier) return false;
+    const ownerOrg = meta.organization_id;
+    if (!ownerOrg || ownerOrg === orgId) return false;
+    return true;
+  }, [orgId, params.tripId, tripDueMetaById]);
+
   /** When opened from entity detail (vehicle/driver/client/supplier), show that entity's trips. For SUPPLIER, include owned trips and trips where org is client (integrated supplier-created). */
   const filteredTrips = useMemo(() => {
     if (!params.entityType || !params.entityId) return trips;
@@ -460,7 +473,11 @@ export default function LedgerSyncScreen() {
     }
     const meta = tripDueMetaById[tid];
     if (!meta) return { in: null, out: null };
-    const entries = getTripLedgerEntries(transactions, tid);
+    const lockedTrip = trips.find((t) => t.id === tid);
+    const lockedTripNumber = lockedTrip
+      ? getTripDisplayNumber(lockedTrip as TripRow)
+      : null;
+    const entries = getTripLedgerEntries(transactions, tid, lockedTripNumber);
 
     // sales: what we are owed (Cash IN placeholder)
     const sales = meta.isCrossOrgSupplier
@@ -487,7 +504,7 @@ export default function LedgerSyncScreen() {
       in: pendingIn > 0 ? pendingIn : null,
       out: pendingOut > 0 ? pendingOut : null,
     };
-  }, [params.tripId, transactions, tripDueMetaById, orgId]);
+  }, [params.tripId, transactions, tripDueMetaById, orgId, trips]);
 
   const effectiveDueAmountIn = tripComputedDues.in ?? dueAmountInFromQuery;
   const effectiveDueAmountOut = tripComputedDues.out ?? dueAmountOutFromQuery;
@@ -663,6 +680,9 @@ export default function LedgerSyncScreen() {
         indent_id: data.indentId ?? null,
         vehicle_number: data.vehicleNumber ?? null,
         driver_name: resolvedContactType === "driver" ? (data.driverName ?? null) : null,
+        ...(qUnifiedPassthroughLedgerTripCreate && !options?.entryId
+          ? { ledgerWritePassthroughTripContext: true as const }
+          : {}),
       };
 
       const doCreate = options?.entryId
@@ -808,6 +828,8 @@ export default function LedgerSyncScreen() {
       params.partyId,
       params.salaryRequestId,
       t,
+      tripDueMetaById,
+      qUnifiedPassthroughLedgerTripCreate,
     ]
   );
 

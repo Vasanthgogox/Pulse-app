@@ -210,7 +210,10 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
   const vehicleTransactionsByTripId = useMemo(() => {
     const map = new Map<string, LedgerRow[]>();
     for (const trip of vehicleTrips) {
-      map.set(trip.id, getTripLedgerEntries(vehicleTransactions, trip.id));
+      map.set(
+        trip.id,
+        getTripLedgerEntries(vehicleTransactions, trip.id, getTripDisplayNumber(trip)),
+      );
     }
     return map;
   }, [vehicleTrips, vehicleTransactions]);

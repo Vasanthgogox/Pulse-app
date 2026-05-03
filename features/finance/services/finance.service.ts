@@ -39,6 +39,39 @@ function isMissingTripsDisplayTripIdError(
   );
 }
 
+/** DB / PostgREST rejects linking a ledger row to a trip the tenant cannot anchor (cross-org, no local mirror). */
+function isLedgerTripIdRejectedError(
+  error: {
+    message?: string;
+    code?: string;
+    details?: string;
+    hint?: string;
+  } | null,
+): boolean {
+  const msg = `${error?.message ?? ""} ${error?.details ?? ""} ${error?.hint ?? ""}`
+    .toLowerCase()
+    .trim();
+  if (!msg) return false;
+  if (
+    msg.includes("selected trip was not found") ||
+    (msg.includes("selected trip") && msg.includes("not found")) ||
+    (msg.includes("trip") && msg.includes("not found") && msg.includes("selected"))
+  ) {
+    return true;
+  }
+  // Postgres FK / CHECK often surface as 23503 or "violates foreign key" / "is not present in table \"trips\"".
+  if (error?.code === "23503") {
+    return msg.includes("trip") || msg.includes("trips");
+  }
+  if (msg.includes("violates foreign key") && (msg.includes("trip") || msg.includes("trips"))) {
+    return true;
+  }
+  if (msg.includes("is not present in table") && msg.includes("trips")) {
+    return true;
+  }
+  return false;
+}
+
 export async function getProfileImage(
   contactId: string | null | undefined,
   contactType: "client" | "supplier" | "driver" | null | undefined,
@@ -111,6 +144,12 @@ export interface LedgerRow {
 export interface CreateLedgerEntryData {
   trip_id?: string | null;
   trip_number?: string | null;
+  /**
+   * When true (Ledger Sync only): use q-unified-base / qunifiedbase-style write — no
+   * `resolveTripContextForLedgerWrite`, no trip-id retry, description not augmented with QMETA.
+   * For cross-org integrated getLoad (indent) flows where the DB expects the owner trip UUID as sent from the UI.
+   */
+  ledgerWritePassthroughTripContext?: boolean;
   /** Party display name; stored as contact_name */
   party_name: string;
   description: string;
@@ -309,16 +348,23 @@ async function resolveTripContextForLedgerWrite(params: {
     const mappedByIndent = await resolveLocalTripByIndent(requestedIndentId);
     if (mappedByIndent.tripId) return mappedByIndent;
     const mappedByNumber = await resolveLocalTripByNumber(requestedTripNumber);
-    if (mappedByNumber.tripId || mappedByNumber.tripNumber) return mappedByNumber;
+    if (mappedByNumber.tripId) return mappedByNumber;
+    if (mappedByNumber.tripNumber) return mappedByNumber;
+    if (requestedTripNumber) {
+      return {
+        tripId: null,
+        tripNumber: requestedTripNumber,
+      };
+    }
     if (looksLikeUuid(requestedTripId)) {
       return {
         tripId: requestedTripId,
-        tripNumber: requestedTripNumber || null,
+        tripNumber: null,
       };
     }
     return {
       tripId: null,
-      tripNumber: requestedTripNumber || null,
+      tripNumber: null,
     };
   }
 
@@ -354,10 +400,11 @@ async function resolveTripContextForLedgerWrite(params: {
   const mappedByNumber = await resolveLocalTripByNumber(candidateTripNumber);
   if (mappedByNumber.tripId) return mappedByNumber;
 
-  // Avoid wrong-trip attachments on trip_number collisions (e.g. both orgs have TRP001).
+  // No local mirrored trip row: do not reference the owner-org trip_id from this org's ledger.
+  // DB policies / checks often require transactions.trip_id to belong to organization_id; trip_number in meta preserves linkage.
   return {
-    tripId: row.id,
-    tripNumber: candidateTripNumber || null,
+    tripId: null,
+    tripNumber: candidateTripNumber,
   };
 }
 
@@ -497,6 +544,32 @@ function buildDescriptionWithMeta(
   return `${cleanDescription.slice(0, baseAllowed)}${metaSuffix}`;
 }
 
+/** After DB rejects trip_id: null anchor + QMETA trip_number (needed when first attempt used passthrough plain text). */
+function buildUnanchoredLedgerRetryDescription(
+  payloadDescription: string,
+  entry: CreateLedgerEntryData,
+  tripNumber: string | null | undefined,
+): string {
+  const clean =
+    stripLedgerMeta(payloadDescription).trim() ||
+    String(entry.description ?? "ENTRY").trim() ||
+    "ENTRY";
+  const baseLine = clean.split("|")[0]?.trim() || clean;
+  return buildDescriptionWithMeta(
+    baseLine,
+    {
+      trip_number: cleanTextValue(tripNumber),
+      indent_id: entry.indent_id,
+      vehicle_number: entry.vehicle_number,
+      driver_name: entry.driver_name,
+      payment_mode: parsePaymentMode(entry.description),
+      payment_reference: parsePaymentReference(entry.description),
+      category: normalizePrimaryCategory(entry.description),
+    },
+    VALIDATION.DESCRIPTION_MAX_LENGTH,
+  );
+}
+
 function normalizePrimaryCategory(raw: string | null | undefined): string {
   const firstPart = stripLedgerMeta(raw).split("|")[0]?.trim();
   return firstPart || "ENTRY";
@@ -518,6 +591,8 @@ function parsePaymentReference(raw: string | null | undefined): string | null {
 
 function deriveReconciliationMeta(row: {
   description?: string | null;
+  /** Full description before stripLedgerMeta — used to read QMETA trip_number when trip_id is null. */
+  descriptionRaw?: string | null;
   trip_id?: string | null;
   contact_id?: string | null;
   contact_type?: LedgerRow["contact_type"];
@@ -541,7 +616,10 @@ function deriveReconciliationMeta(row: {
   }
 
   const hasCounterparty = !!row.contact_id && !!row.contact_type;
-  const hasTripAnchor = !!row.trip_id;
+  const metaTrip = extractLedgerMeta(row.descriptionRaw ?? row.description ?? "");
+  const hasTripAnchor =
+    !!row.trip_id ||
+    !!(metaTrip.trip_number && String(metaTrip.trip_number).trim());
   const hasMoney =
     Number(row.amount_in ?? 0) > 0 || Number(row.amount_out ?? 0) > 0;
   if (hasCounterparty && hasTripAnchor && hasMoney) {
@@ -630,6 +708,7 @@ function toLedgerRow(row: {
     payment_reference: parsePaymentReference(descriptionRaw),
     ...deriveReconciliationMeta({
       description,
+      descriptionRaw,
       trip_id: row.trip_id,
       contact_id: row.contact_id,
       contact_type: (row.contact_type as LedgerRow["contact_type"]) ?? null,
@@ -933,6 +1012,7 @@ export async function createLedgerEntry(
   orgId: string,
   entry: CreateLedgerEntryData,
 ): Promise<{ error: Error | null; row: LedgerRow | null }> {
+  const passthroughTripContext = entry.ledgerWritePassthroughTripContext === true;
   const enriched = enrichLedgerMetaFromRow(entry);
   const amountIn = Math.max(
     0,
@@ -982,25 +1062,35 @@ export async function createLedgerEntry(
   const partyName = (
     (resolvedPartyName || fallbackPartyName).trim() || "—"
   ).slice(0, VALIDATION.PARTY_NAME_MAX_LENGTH);
-  const tripContext = await resolveTripContextForLedgerWrite({
-    orgId,
-    tripId: enriched.trip_id,
-    tripNumber: enriched.trip_number,
-    indentId: enriched.indent_id,
-  });
-  const description = buildDescriptionWithMeta(
-    entry.description ?? "ENTRY",
-    {
-      trip_number: tripContext.tripNumber,
-      indent_id: entry.indent_id,
-      vehicle_number: entry.vehicle_number,
-      driver_name: entry.driver_name,
-      payment_mode: parsePaymentMode(entry.description),
-      payment_reference: parsePaymentReference(entry.description),
-      category: normalizePrimaryCategory(entry.description),
-    },
-    VALIDATION.DESCRIPTION_MAX_LENGTH,
-  );
+  const tripContext = passthroughTripContext
+    ? {
+        tripId: enriched.trip_id ?? null,
+        tripNumber: enriched.trip_number ?? null,
+      }
+    : await resolveTripContextForLedgerWrite({
+        orgId,
+        tripId: enriched.trip_id,
+        tripNumber: enriched.trip_number,
+        indentId: enriched.indent_id,
+      });
+  const description = passthroughTripContext
+    ? String(enriched.description ?? "ENTRY").slice(
+        0,
+        VALIDATION.DESCRIPTION_MAX_LENGTH,
+      )
+    : buildDescriptionWithMeta(
+        entry.description ?? "ENTRY",
+        {
+          trip_number: tripContext.tripNumber,
+          indent_id: entry.indent_id,
+          vehicle_number: entry.vehicle_number,
+          driver_name: entry.driver_name,
+          payment_mode: parsePaymentMode(entry.description),
+          payment_reference: parsePaymentReference(entry.description),
+          category: normalizePrimaryCategory(entry.description),
+        },
+        VALIDATION.DESCRIPTION_MAX_LENGTH,
+      );
   // DB CHECK: exactly one of amount_in or amount_out must be positive
   const isCashIn = amountIn > 0;
 
@@ -1033,6 +1123,36 @@ export async function createLedgerEntry(
       .single());
   }
 
+  if (
+    error &&
+    isLedgerTripIdRejectedError(error) &&
+    (enriched.contact_type === "supplier" || enriched.contact_type === "client") &&
+    payload.trip_id != null
+  ) {
+    // Integrated / getLoad: trip_id may be rejected (incl. after passthrough first attempt). Retry unanchored + QMETA trip_number.
+    const unanchoredPayload = {
+      ...payload,
+      trip_id: null,
+      description: buildUnanchoredLedgerRetryDescription(
+        payload.description,
+        entry,
+        tripContext.tripNumber ?? enriched.trip_number,
+      ),
+    };
+    ({ data, error } = await supabase()
+      .from("transactions")
+      .insert(unanchoredPayload)
+      .select(LEDGER_TX_SELECT_WITH_TRIPS)
+      .single());
+    if (error && isMissingTripsDisplayTripIdError(error)) {
+      ({ data, error } = await supabase()
+        .from("transactions")
+        .insert(unanchoredPayload)
+        .select(LEDGER_TX_SELECT_WITH_TRIPS_LEGACY)
+        .single());
+    }
+  }
+
   if (error) return { error: new Error(error.message), row: null };
 
   const row = data as InsertedTxnRowForChat & {
@@ -1051,6 +1171,7 @@ export async function updateLedgerEntry(
   entryId: string,
   entry: CreateLedgerEntryData,
 ): Promise<{ error: Error | null; row: LedgerRow | null }> {
+  const passthroughTripContext = entry.ledgerWritePassthroughTripContext === true;
   const enriched = enrichLedgerMetaFromRow(entry);
   const amountIn = Math.max(
     0,
@@ -1102,25 +1223,35 @@ export async function updateLedgerEntry(
   const partyName = (
     (resolvedPartyName || fallbackPartyName).trim() || "—"
   ).slice(0, VALIDATION.PARTY_NAME_MAX_LENGTH);
-  const tripContext = await resolveTripContextForLedgerWrite({
-    orgId,
-    tripId: enriched.trip_id,
-    tripNumber: enriched.trip_number,
-    indentId: enriched.indent_id,
-  });
-  const description = buildDescriptionWithMeta(
-    entry.description ?? "ENTRY",
-    {
-      trip_number: tripContext.tripNumber,
-      indent_id: entry.indent_id,
-      vehicle_number: entry.vehicle_number,
-      driver_name: entry.driver_name,
-      payment_mode: parsePaymentMode(entry.description),
-      payment_reference: parsePaymentReference(entry.description),
-      category: normalizePrimaryCategory(entry.description),
-    },
-    VALIDATION.DESCRIPTION_MAX_LENGTH,
-  );
+  const tripContext = passthroughTripContext
+    ? {
+        tripId: enriched.trip_id ?? null,
+        tripNumber: enriched.trip_number ?? null,
+      }
+    : await resolveTripContextForLedgerWrite({
+        orgId,
+        tripId: enriched.trip_id,
+        tripNumber: enriched.trip_number,
+        indentId: enriched.indent_id,
+      });
+  const description = passthroughTripContext
+    ? String(enriched.description ?? "ENTRY").slice(
+        0,
+        VALIDATION.DESCRIPTION_MAX_LENGTH,
+      )
+    : buildDescriptionWithMeta(
+        entry.description ?? "ENTRY",
+        {
+          trip_number: tripContext.tripNumber,
+          indent_id: entry.indent_id,
+          vehicle_number: entry.vehicle_number,
+          driver_name: entry.driver_name,
+          payment_mode: parsePaymentMode(entry.description),
+          payment_reference: parsePaymentReference(entry.description),
+          category: normalizePrimaryCategory(entry.description),
+        },
+        VALIDATION.DESCRIPTION_MAX_LENGTH,
+      );
 
   const payload = {
     trip_id: tripContext.tripId,
@@ -1152,6 +1283,39 @@ export async function updateLedgerEntry(
       .eq("organization_id", orgId)
       .select(LEDGER_TX_SELECT_WITH_TRIPS_LEGACY)
       .single());
+  }
+
+  if (
+    error &&
+    isLedgerTripIdRejectedError(error) &&
+    (enriched.contact_type === "supplier" || enriched.contact_type === "client") &&
+    payload.trip_id != null
+  ) {
+    const unanchoredPayload = {
+      ...payload,
+      trip_id: null,
+      description: buildUnanchoredLedgerRetryDescription(
+        payload.description,
+        entry,
+        tripContext.tripNumber ?? enriched.trip_number,
+      ),
+    };
+    ({ data, error } = await supabase()
+      .from("transactions")
+      .update(unanchoredPayload)
+      .eq("id", entryId)
+      .eq("organization_id", orgId)
+      .select(LEDGER_TX_SELECT_WITH_TRIPS)
+      .single());
+    if (error && isMissingTripsDisplayTripIdError(error)) {
+      ({ data, error } = await supabase()
+        .from("transactions")
+        .update(unanchoredPayload)
+        .eq("id", entryId)
+        .eq("organization_id", orgId)
+        .select(LEDGER_TX_SELECT_WITH_TRIPS_LEGACY)
+        .single());
+    }
   }
 
   if (error) return { error: new Error(error.message), row: null };

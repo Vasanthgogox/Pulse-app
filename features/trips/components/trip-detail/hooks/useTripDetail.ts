@@ -564,22 +564,15 @@ export function useTripDetail({
     secondaryTransactionsData,
   ]);
 
-  const tripLedgerEntries = useMemo(() => {
-    const direct = getTripLedgerEntries(transactions, trip?.id);
-    if (direct.length > 0) return direct;
-    if (!transactions?.length || !trip) return direct;
-
-    // Fallback for legacy/mislinked rows: include entries whose description metadata
-    // references this trip number (e.g. [[QMETA:{"trip_number":"TRP007",...}]]).
-    const tripLabel = getTripDisplayNumber(trip).trim().toLowerCase();
-    if (!tripLabel) return direct;
-    const qmetaNeedle = `"trip_number":"${tripLabel}"`;
-    return transactions.filter((tx) => {
-      const description = String(tx.description ?? "").toLowerCase();
-      if (description.includes(qmetaNeedle)) return true;
-      return String(tx.trip_number ?? "").trim().toLowerCase() === tripLabel;
-    });
-  }, [transactions, trip]);
+  const tripLedgerEntries = useMemo(
+    () =>
+      getTripLedgerEntries(
+        transactions,
+        trip?.id,
+        trip ? getTripDisplayNumber(trip) : undefined,
+      ),
+    [transactions, trip],
+  );
 
   const { data: tripSubcontracts = [] } = useTripSubcontractsQuery(
     currentOrganization?.id ?? null,
