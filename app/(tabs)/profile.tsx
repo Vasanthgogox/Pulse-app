@@ -15,7 +15,8 @@ import {
   getRatingsForClients,
   getRatingsReceivedAsLinkedOrganization,
 } from "@/features/ratings/services/ratings.service";
-import { getSignedAvatarUrl } from "@/lib/avatarUpload";
+import { getSignedAvatarUrl, pickAndUploadOrgLogo, updateOrganizationLogo } from "@/lib/avatarUpload";
+import { PartyAvatar } from "@/components/PartyAvatar";
 import { getCapabilitiesFromProfile } from "@/lib/capabilities";
 import { useClientsQuery, useDriversQuery, useTripsQuery } from "@/lib/queries";
 import { queryKeys } from "@/lib/queryKeys";
@@ -290,7 +291,7 @@ export default function ProfileScreen() {
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { currentOrganization } = useOrganization();
+  const { currentOrganization, refreshOrganization } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
   const { signOut, user, profile, refreshSession } = useAuth();
 
@@ -375,6 +376,9 @@ export default function ProfileScreen() {
   const [avatarUri, setAvatarUri] = useState<string>(() =>
     getUser2DAvatarUriForSeed(profile?.avatar_seed || DEFAULT_USER_2D_AVATAR_SEED),
   );
+
+  const [orgLogoUri, setOrgLogoUri] = useState<string | null>(null);
+  const [orgLogoUploading, setOrgLogoUploading] = useState(false);
 
   const capabilities = getCapabilitiesFromProfile(profile);
   const hasDispatcherOrFleetAccess =
@@ -559,6 +563,48 @@ export default function ProfileScreen() {
     };
   }, [profile?.avatar_url, avatarSeed]);
 
+  useEffect(() => {
+    let mounted = true;
+    const raw = currentOrganization?.logo_url?.trim();
+    if (!raw) {
+      setOrgLogoUri(null);
+      return;
+    }
+    (async () => {
+      if (raw.startsWith("http://") || raw.startsWith("https://")) {
+        if (mounted) setOrgLogoUri(raw);
+        return;
+      }
+      const signed = await getSignedAvatarUrl(raw);
+      if (mounted) setOrgLogoUri(signed ?? null);
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [currentOrganization?.logo_url]);
+
+  const handleUploadOrgLogo = async () => {
+    if (!orgId || orgLogoUploading) return;
+    setOrgLogoUploading(true);
+    try {
+      const result = await pickAndUploadOrgLogo(orgId);
+      if (result.error) {
+        Alert.alert("Upload failed", result.error.message);
+        return;
+      }
+      if (!result.path) return;
+      const { error } = await updateOrganizationLogo(orgId, result.path);
+      if (error) {
+        Alert.alert("Save failed", error.message);
+        return;
+      }
+      if (result.previewUri) setOrgLogoUri(result.previewUri);
+      await refreshOrganization();
+    } finally {
+      setOrgLogoUploading(false);
+    }
+  };
+
   return (
     <View style={styles.outer}>
       <ScrollView
@@ -621,40 +667,51 @@ export default function ProfileScreen() {
                 style={styles.driverLikeHero}
               >
                 <View style={styles.avatarGlow} />
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.avatarTouch,
-                    pressed && styles.avatarTouchPressed,
-                  ]}
-                  onPress={handleEditProfile}
-                  accessibilityRole="button"
-                >
-                  <View style={styles.avatarFrame}>
-                    <Image
-                      source={{
-                        uri: avatarUri,
-                      }}
-                      style={styles.avatar}
-                    />
-                  </View>
-                  <View style={styles.levelBadgeOnAvatar}>
-                    <Trophy size={11} color="#fff" />
-                    <Text style={styles.levelBadgeText}>Lv {currentLevel}</Text>
-                  </View>
-                  <View style={styles.avatarEditBadge}>
-                    <FontAwesome
-                      name="camera"
-                      size={14}
-                      color={Theme.textPrimaryDark}
-                    />
-                  </View>
-                </Pressable>
+                <View style={styles.heroAvatarGroup}>
+                  {orgLogoUri ? (
+                    <Pressable
+                      style={({ pressed }) => [styles.orgLogoTouch, pressed && { opacity: 0.85 }]}
+                      onPress={() => void handleUploadOrgLogo()}
+                      accessibilityRole="button"
+                      accessibilityLabel="Change org logo"
+                    >
+                      <Image source={{ uri: orgLogoUri }} style={styles.orgLogoHero} />
+                      <View style={styles.avatarEditBadge}>
+                        <FontAwesome name="camera" size={12} color={Theme.textPrimaryDark} />
+                      </View>
+                    </Pressable>
+                  ) : null}
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.avatarTouch,
+                      orgLogoUri && styles.avatarTouchSmall,
+                      pressed && styles.avatarTouchPressed,
+                    ]}
+                    onPress={handleEditProfile}
+                    accessibilityRole="button"
+                  >
+                    <View style={[styles.avatarFrame, orgLogoUri && styles.avatarFrameSmall]}>
+                      <Image source={{ uri: avatarUri }} style={orgLogoUri ? styles.avatarSmall : styles.avatar} />
+                    </View>
+                    {!orgLogoUri && (
+                      <View style={styles.levelBadgeOnAvatar}>
+                        <Trophy size={11} color="#fff" />
+                        <Text style={styles.levelBadgeText}>Lv {currentLevel}</Text>
+                      </View>
+                    )}
+                    <View style={[styles.avatarEditBadge, orgLogoUri && styles.avatarEditBadgeSmall]}>
+                      <FontAwesome name="camera" size={orgLogoUri ? 10 : 14} color={Theme.textPrimaryDark} />
+                    </View>
+                  </Pressable>
+                </View>
 
                 <Text numberOfLines={1} style={styles.nameText}>
-                  {displayName}
+                  {currentOrganization?.name || displayName}
                 </Text>
                 <Text style={styles.tierKicker} numberOfLines={1}>
-                  {currentLevelConfig.tier} · {currentLevelConfig.name}
+                  {orgLogoUri
+                    ? displayName
+                    : `${currentLevelConfig.tier} · ${currentLevelConfig.name}`}
                 </Text>
 
                 <View style={styles.ratingPillsStack}>
@@ -790,6 +847,48 @@ export default function ProfileScreen() {
                   />
                 </View>
               </View>
+
+              {orgId ? (
+                <View style={styles.premiumCard}>
+                  <View style={styles.premiumCardInner}>
+                    <Pressable
+                      onPress={() => void handleUploadOrgLogo()}
+                      style={({ pressed }) => [
+                        styles.orgLogoRow,
+                        pressed && styles.profileItemRowPressed,
+                      ]}
+                      accessibilityRole="button"
+                    >
+                      <View style={styles.orgLogoLeft}>
+                        <View style={styles.profileItemIconBox}>
+                          <FontAwesome name="image" size={16} color={Theme.textMuted} />
+                        </View>
+                        <View style={styles.profileItemTextWrap}>
+                          <Text style={styles.profileItemLabel}>Org Logo</Text>
+                          <Text style={styles.profileItemValue} numberOfLines={1}>
+                            {orgLogoUri ? "Uploaded · tap to change" : "Tap to upload logo"}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.orgLogoPreviewWrap}>
+                        {orgLogoUploading ? (
+                          <ActivityIndicator size="small" color={Theme.primary} />
+                        ) : orgLogoUri ? (
+                          <Image source={{ uri: orgLogoUri }} style={styles.orgLogoPreview} />
+                        ) : (
+                          <View style={styles.orgLogoPlaceholder}>
+                            <PartyAvatar
+                              name={currentOrganization?.name || "Org"}
+                              size={36}
+                            />
+                          </View>
+                        )}
+                        <FontAwesome name="camera" size={12} color={Theme.textMuted} style={{ marginLeft: 6 }} />
+                      </View>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : null}
 
               <View style={styles.premiumCard}>
                 <View style={styles.premiumCardInner}>
@@ -1049,6 +1148,77 @@ const styles = StyleSheet.create({
     height: 130,
     borderRadius: 32,
     backgroundColor: "rgba(255,255,255,0.05)",
+  },
+  heroAvatarGroup: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 10,
+    marginBottom: Layout.spacingMedium,
+  },
+  orgLogoTouch: {
+    position: "relative",
+  },
+  orgLogoHero: {
+    width: 100,
+    height: 100,
+    borderRadius: 22,
+    borderWidth: 4,
+    borderColor: Theme.darkBackground,
+    backgroundColor: Theme.surfaceGray,
+  },
+  avatarTouchSmall: {
+    marginBottom: 0,
+  },
+  avatarFrameSmall: {
+    width: 60,
+    height: 60,
+    borderRadius: 14,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+  },
+  avatarSmall: {
+    width: "100%",
+    height: "100%",
+    backgroundColor: Theme.surfaceGray,
+  },
+  avatarEditBadgeSmall: {
+    width: 26,
+    height: 26,
+    borderRadius: 9,
+    right: -4,
+    bottom: -4,
+  },
+  orgLogoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    minHeight: 56,
+  },
+  orgLogoLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+  },
+  orgLogoPreviewWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  orgLogoPreview: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Theme.border,
+  },
+  orgLogoPlaceholder: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    overflow: "hidden",
   },
   avatarTouch: { marginBottom: Layout.spacingMedium },
   avatarTouchPressed: { transform: [{ scale: 0.98 }] },

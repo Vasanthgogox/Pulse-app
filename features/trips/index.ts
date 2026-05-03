@@ -19,6 +19,7 @@ export { TripExpandableCard, type TripExpandableCardProps } from './components/T
 export {
   TripsHubTripCard,
   TripsHubTableView,
+  linkedOrgAvatarFields,
   DEFAULT_TRIPS_HUB_TABLE_COLUMNS,
   summarizeTripLedgerForHub,
   tripFinanceAdjForHubLookup,

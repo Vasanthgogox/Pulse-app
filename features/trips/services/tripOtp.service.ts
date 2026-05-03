@@ -118,7 +118,8 @@ export async function getPendingOtpClaimCount(): Promise<{ error: Error | null; 
   const { data, error } = await supabase().rpc('get_pending_otp_claim_count');
   if (error) return { error: new Error(error.message), count: 0 };
   const obj = data as { count?: number } | null;
-  const count = typeof obj?.count === 'number' ? obj.count : 0;
+  const rawCount = typeof obj?.count === 'number' ? obj.count : 0;
+  const count = rawCount > 0 ? 1 : 0;
   return { error: null, count };
 }
 
@@ -133,7 +134,7 @@ export async function getPendingOtpTrips(): Promise<{
 }> {
   const { data, error } = await supabase().rpc('get_pending_otp_trips');
   if (error) return { error: new Error(error.message), trips: [] };
-  const rows = (data ?? []) as PendingOtpTripRow[];
+  const rows = ((data ?? []) as PendingOtpTripRow[]).slice(0, 1);
   // Ensure marker flag is set for all rows so UI can branch on it if needed.
   const trips = rows.map((row) => ({ ...row, requires_otp: row.requires_otp ?? true }));
   return { error: null, trips };

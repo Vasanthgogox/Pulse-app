@@ -49,15 +49,17 @@ export function useSubmitBidMutation(postId: string | null, orgId: string | null
     mutationFn: (input: { amount: number; note?: string }) =>
       submitPulseBidWithDirectQuote({ postId: postId!, bidderOrganizationId: orgId!, ...input }),
     onSuccess: () => {
-      if (postId) {
-        qc.invalidateQueries({ queryKey: queryKeys.bids.forPost(postId) });
-        qc.invalidateQueries({ queryKey: queryKeys.bids.myBid(postId, orgId ?? '') });
-        qc.invalidateQueries({ queryKey: queryKeys.posts.detail(postId) });
-      }
-      if (orgId) {
-        qc.invalidateQueries({ queryKey: queryKeys.indents.all(orgId) });
-      }
-      invalidateIndentOfferCounts(qc);
+      try {
+        if (postId) {
+          qc.invalidateQueries({ queryKey: queryKeys.bids.forPost(postId) });
+          qc.invalidateQueries({ queryKey: queryKeys.bids.myBid(postId, orgId ?? '') });
+          qc.invalidateQueries({ queryKey: queryKeys.posts.detail(postId) });
+        }
+        if (orgId) {
+          qc.invalidateQueries({ queryKey: queryKeys.indents.all(orgId) });
+        }
+        invalidateIndentOfferCounts(qc);
+      } catch { /* cache invalidation failure is non-critical */ }
     },
   });
 }
@@ -68,14 +70,16 @@ export function useUpdateBidMutation(postId: string | null, orgId: string | null
     mutationFn: ({ bidId, amount, note }: { bidId: string; amount: number; note?: string }) =>
       updateBid(bidId, orgId!, amount, note),
     onSuccess: () => {
-      if (postId) {
-        qc.invalidateQueries({ queryKey: queryKeys.bids.forPost(postId) });
-        qc.invalidateQueries({ queryKey: queryKeys.bids.myBid(postId, orgId ?? '') });
-      }
-      if (orgId) {
-        qc.invalidateQueries({ queryKey: queryKeys.indents.all(orgId) });
-      }
-      invalidateIndentOfferCounts(qc);
+      try {
+        if (postId) {
+          qc.invalidateQueries({ queryKey: queryKeys.bids.forPost(postId) });
+          qc.invalidateQueries({ queryKey: queryKeys.bids.myBid(postId, orgId ?? '') });
+        }
+        if (orgId) {
+          qc.invalidateQueries({ queryKey: queryKeys.indents.all(orgId) });
+        }
+        invalidateIndentOfferCounts(qc);
+      } catch { /* cache invalidation failure is non-critical */ }
     },
   });
 }
@@ -85,8 +89,10 @@ export function useAcceptBidMutation(postId: string) {
   return useMutation({
     mutationFn: (bidId: string) => acceptBid(bidId),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.bids.forPost(postId) });
-      invalidateIndentOfferCounts(qc);
+      try {
+        qc.invalidateQueries({ queryKey: queryKeys.bids.forPost(postId) });
+        invalidateIndentOfferCounts(qc);
+      } catch { /* cache invalidation failure is non-critical */ }
     },
   });
 }
@@ -96,8 +102,10 @@ export function useRejectBidMutation(postId: string) {
   return useMutation({
     mutationFn: (bidId: string) => rejectBid(bidId),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.bids.forPost(postId) });
-      invalidateIndentOfferCounts(qc);
+      try {
+        qc.invalidateQueries({ queryKey: queryKeys.bids.forPost(postId) });
+        invalidateIndentOfferCounts(qc);
+      } catch { /* cache invalidation failure is non-critical */ }
     },
   });
 }
@@ -107,9 +115,11 @@ export function useWithdrawBidMutation(postId: string, orgId: string) {
   return useMutation({
     mutationFn: (bidId: string) => withdrawBid(bidId),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.bids.forPost(postId) });
-      qc.invalidateQueries({ queryKey: queryKeys.bids.myBid(postId, orgId) });
-      invalidateIndentOfferCounts(qc);
+      try {
+        qc.invalidateQueries({ queryKey: queryKeys.bids.forPost(postId) });
+        qc.invalidateQueries({ queryKey: queryKeys.bids.myBid(postId, orgId) });
+        invalidateIndentOfferCounts(qc);
+      } catch { /* cache invalidation failure is non-critical */ }
     },
   });
 }

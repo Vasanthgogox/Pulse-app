@@ -30,10 +30,12 @@ export function useTripsQuery(orgId: string | null) {
   return useQuery({
     queryKey: queryKeys.trips.all(orgId ?? ''),
     queryFn: async () => {
-      const [ownerRes, supplierRes] = await Promise.all([
+      const [ownerResult, supplierResult] = await Promise.allSettled([
         getTripsByOrganization(orgId!),
         getTripsWhereOrgIsSupplier(orgId!),
       ]);
+      const ownerRes = ownerResult.status === 'fulfilled' ? ownerResult.value : { error: ownerResult.reason as Error, trips: [] };
+      const supplierRes = supplierResult.status === 'fulfilled' ? supplierResult.value : { error: supplierResult.reason as Error, trips: [] };
       if (ownerRes.error) throw ownerRes.error;
       if (supplierRes.error) throw supplierRes.error;
       return mergeTripsLists(ownerRes.trips, supplierRes.trips);

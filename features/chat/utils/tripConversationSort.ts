@@ -1,9 +1,18 @@
 const TERMINAL_TRIP_STATUSES = new Set(["completed", "delivered", "done", "cancelled"]);
 
+/** Trip finished successfully — show in-chat mission debrief (not cancelled). */
+const FEEDBACK_ELIGIBLE_TRIP_STATUSES = new Set(["completed", "delivered", "done"]);
+
 export function isTerminalTripStatus(status: string | null | undefined): boolean {
   const normalized = String(status ?? "").trim().toLowerCase();
   if (!normalized) return false;
   return TERMINAL_TRIP_STATUSES.has(normalized);
+}
+
+export function isTripFeedbackEligibleStatus(status: string | null | undefined): boolean {
+  const normalized = String(status ?? "").trim().toLowerCase();
+  if (!normalized) return false;
+  return FEEDBACK_ELIGIBLE_TRIP_STATUSES.has(normalized);
 }
 
 export function parseTripIdSortKey(label: string): number {

@@ -24,7 +24,10 @@ import {
   tripHubRevenue,
   type TripRow,
 } from "@/features/trips";
-import { TripsHubTableView } from "@/features/trips/components/TripsHubViews";
+import {
+  TripsHubTableView,
+  linkedOrgAvatarFields,
+} from "@/features/trips/components/TripsHubViews";
 import {
   classifyTripMetric,
   countTripsByMetric,
@@ -267,18 +270,21 @@ export default function TripsScreen() {
       return;
     }
     setRefreshing(true);
-    await Promise.all([
-      refetchTrips(),
-      refetchTransactions(),
-      refetchAssignment(),
-      queryClient.invalidateQueries({
-        queryKey: ["q", "trips", "doc-trip-ids", orgId],
-      }),
-      queryClient.invalidateQueries({
-        queryKey: [...queryKeys.tripFinanceAdjustmentsRoot],
-      }),
-    ]);
-    setRefreshing(false);
+    try {
+      await Promise.all([
+        refetchTrips(),
+        refetchTransactions(),
+        refetchAssignment(),
+        queryClient.invalidateQueries({
+          queryKey: ["q", "trips", "doc-trip-ids", orgId],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: [...queryKeys.tripFinanceAdjustmentsRoot],
+        }),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
   }, [
     refetchTrips,
     refetchTransactions,
@@ -2694,6 +2700,14 @@ export default function TripsScreen() {
                         transactionsByTripId.get(t.id) ?? [],
                       );
                       const party = tripHubPartyMetaByTripId.get(t.id);
+                      const clientOrgFields = linkedOrgAvatarFields(
+                        party?.clientLinkedOrgId,
+                        linkedOrgByOrganizationId,
+                      );
+                      const supplierOrgFields = linkedOrgAvatarFields(
+                        party?.supplierLinkedOrgId,
+                        linkedOrgByOrganizationId,
+                      );
                       return (
                         <View
                           key={t.id}
@@ -2723,10 +2737,22 @@ export default function TripsScreen() {
                             clientAvatarUrl={party?.clientAvatarUrl ?? null}
                             clientAvatarSeed={party?.clientAvatarSeed ?? null}
                             clientAvatarFallbackSeed={party?.clientFallbackSeed}
+                            clientOrganizationImageUrl={
+                              clientOrgFields.organizationImageUrl
+                            }
+                            clientOrganizationAvatarSeed={
+                              clientOrgFields.organizationAvatarSeed
+                            }
                             supplierAvatarUrl={party?.supplierAvatarUrl ?? null}
                             supplierAvatarSeed={party?.supplierAvatarSeed ?? null}
                             supplierAvatarFallbackSeed={
                               party?.supplierFallbackSeed
+                            }
+                            supplierOrganizationImageUrl={
+                              supplierOrgFields.organizationImageUrl
+                            }
+                            supplierOrganizationAvatarSeed={
+                              supplierOrgFields.organizationAvatarSeed
                             }
                             cardDate={getTripCardDate(t)}
                             stageLabel={stage}

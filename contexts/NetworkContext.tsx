@@ -33,7 +33,7 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener(setState);
-    NetInfo.fetch().then(setState);
+    NetInfo.fetch().then(setState).catch(() => { /* non-fatal; addEventListener handles ongoing state */ });
     return unsubscribe;
   }, []);
 

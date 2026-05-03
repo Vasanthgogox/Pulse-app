@@ -1,7 +1,10 @@
 import {
-  getTripsWhereOrgIsSupplier,
-  type TripRow,
+    getTripsWhereOrgIsSupplier,
+    type TripRow,
 } from "@/features/trips/services/trips.service";
+import { createRating } from "@/features/ratings/services/ratings.service";
+import type { RatedType, RatingRow } from "@/features/ratings/types";
+import { notifyTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
 import { supabase } from "@/lib/supabase";
 import type {
     ConversationPartyType,
@@ -14,13 +17,21 @@ import type {
     NetworkPartner,
     TripConversation,
     TripConversationRow,
-    TripMessageRow
+    TripMessageRow,
 } from "../types/chat.types";
+import { parseFeedbackRequestMetadata } from "../utils/feedbackRequestMeta";
+import {
+  extractTagsFromRatingComment,
+  findTripRatingMatchingFeedbackMeta,
+} from "../utils/mergeTripFeedbackMessages";
 
 export interface TripForCompose {
   id: string;
   trip_number: string;
   display_trip_id: string | null;
+  /** Trip lifecycle status from `trips.status` (for hub scope / unassigned merge). */
+  status?: string | null;
+  created_at?: string | null;
   pickup_area: string;
   drop_location: string;
   client_id: string | null;
@@ -29,6 +40,8 @@ export interface TripForCompose {
   supplier_name: string | null;
   driver_id: string | null;
   driver_display_name: string | null;
+  client_linked_organization_id: string | null;
+  supplier_linked_organization_id: string | null;
 }
 
 export async function getTripsForCompose(
@@ -50,6 +63,8 @@ export async function getTripsForCompose(
     id: String(row.id ?? ""),
     trip_number: String(row.trip_number ?? ""),
     display_trip_id: (row.display_trip_id as string | null | undefined) ?? null,
+    status: (row.status as string | null | undefined) ?? null,
+    created_at: (row.created_at as string | null | undefined) ?? null,
     pickup_area: String(row.pickup_area ?? ""),
     drop_location: String(row.drop_location ?? ""),
     client_id: (row.client_id as string | null | undefined) ?? null,
@@ -59,22 +74,53 @@ export async function getTripsForCompose(
     driver_id: (row.driver_id as string | null | undefined) ?? null,
     driver_display_name:
       (row.driver_display_name as string | null | undefined) ?? null,
+    client_linked_organization_id: null,
+    supplier_linked_organization_id: null,
   }));
 
-  // Resolve supplier display names when trips table doesn't carry denormalized supplier_name.
+  const clientIds = Array.from(
+    new Set(trips.map((t) => t.client_id).filter((v): v is string => !!v)),
+  );
   const supplierIds = Array.from(
     new Set(trips.map((t) => t.supplier_id).filter((v): v is string => !!v)),
   );
-  if (supplierIds.length === 0) return trips;
+  if (clientIds.length === 0 && supplierIds.length === 0) return trips;
 
-  const { data: suppliers } = await supabase()
-    .from("suppliers")
-    .select("id, company_name, name")
-    .in("id", supplierIds);
+  const [clientsResp, suppliersResp] = await Promise.all([
+    clientIds.length
+      ? supabase()
+          .from("clients")
+          .select("id, linked_organization_id")
+          .in("id", clientIds)
+      : Promise.resolve({
+          data: [] as { id: string; linked_organization_id: string | null }[],
+        }),
+    supplierIds.length
+      ? supabase()
+          .from("suppliers")
+          .select("id, company_name, name, linked_organization_id")
+          .in("id", supplierIds)
+      : Promise.resolve({
+          data: [] as {
+            id: string;
+            company_name: string | null;
+            name: string | null;
+            linked_organization_id: string | null;
+          }[],
+        }),
+  ]);
+
+  const clientLinkedOrgById = new Map<string, string | null>();
+  for (const c of clientsResp.data ?? []) {
+    clientLinkedOrgById.set(c.id, c.linked_organization_id ?? null);
+  }
+
   const supplierNameById = new Map<string, string>();
-  for (const s of suppliers ?? []) {
+  const supplierLinkedOrgById = new Map<string, string | null>();
+  for (const s of suppliersResp.data ?? []) {
     const label = (s.company_name ?? "").trim() || (s.name ?? "").trim();
     if (label) supplierNameById.set(s.id, label);
+    supplierLinkedOrgById.set(s.id, s.linked_organization_id ?? null);
   }
 
   return trips.map((t) => ({
@@ -82,6 +128,10 @@ export async function getTripsForCompose(
     supplier_name:
       t.supplier_name?.trim() ||
       (t.supplier_id ? (supplierNameById.get(t.supplier_id) ?? null) : null),
+    client_linked_organization_id:
+      t.client_id ? (clientLinkedOrgById.get(t.client_id) ?? null) : null,
+    supplier_linked_organization_id:
+      t.supplier_id ? (supplierLinkedOrgById.get(t.supplier_id) ?? null) : null,
   }));
 }
 
@@ -163,10 +213,13 @@ async function resolveGenericPartyNamesForTrips(
 }
 
 const TRIP_EMBED_FIELDS_FULL =
-  "trip_number, display_trip_id, status, pickup_area, drop_location";
-const TRIP_EMBED_FIELDS_LEGACY = "trip_number, status, pickup_area, drop_location";
+  "trip_number, display_trip_id, status, pickup_area, drop_location, driver_id, supplier_id, created_at";
+const TRIP_EMBED_FIELDS_LEGACY =
+  "trip_number, status, pickup_area, drop_location, driver_id, supplier_id, created_at";
 
 const TRIP_MESSAGES_EMBED = `trip_messages ( id, conversation_id, content, sender_role, sender_name, sender_user_id, created_at, is_read, message_type, metadata )`;
+/** Newest N rows per conversation embed — avoids PostgREST dropping tail rows (e.g. `feedback_request`). */
+const TRIP_MESSAGES_EMBED_RECENT = 500;
 
 function tripConversationSelect(tripEmbedFields: string): string {
   return `
@@ -200,7 +253,9 @@ export async function getConversationsByOrganization(
         .from("trip_conversations")
         .select(selectConv)
         .eq("organization_id", organizationId)
-        .order("last_message_at", { ascending: false, nullsFirst: false }),
+        .order("last_message_at", { ascending: false, nullsFirst: false })
+        .order("created_at", { ascending: false, referencedTable: "trip_messages" })
+        .limit(TRIP_MESSAGES_EMBED_RECENT, { referencedTable: "trip_messages" }),
       getTripsWhereOrgIsSupplier(organizationId),
     ]);
 
@@ -216,7 +271,9 @@ export async function getConversationsByOrganization(
         .from("trip_conversations")
         .select(selectConv)
         .in("trip_id", supplierTripIds)
-        .order("last_message_at", { ascending: false, nullsFirst: false });
+        .order("last_message_at", { ascending: false, nullsFirst: false })
+        .order("created_at", { ascending: false, referencedTable: "trip_messages" })
+        .limit(TRIP_MESSAGES_EMBED_RECENT, { referencedTable: "trip_messages" });
       if (supErr) throw supErr;
       supplierRows = supRows ?? [];
     }
@@ -247,6 +304,9 @@ export async function getConversationsByOrganization(
     trip_number: row.trips?.trip_number ?? "",
     display_trip_id: row.trips?.display_trip_id ?? null,
     trip_status: row.trips?.status ?? null,
+    trip_driver_id: row.trips?.driver_id ?? null,
+    trip_supplier_id: row.trips?.supplier_id ?? null,
+    trip_created_at: (row.trips?.created_at as string | null | undefined) ?? null,
     pickup_area: row.trips?.pickup_area ?? "",
     drop_location: row.trips?.drop_location ?? "",
     messages: ((row.trip_messages ?? []) as TripMessageRow[]).sort(
@@ -266,6 +326,8 @@ export async function getTripConversationById(
     .from("trip_conversations")
     .select(tripConversationSelect(TRIP_EMBED_FIELDS_FULL))
     .eq("id", conversationId)
+    .order("created_at", { ascending: false, referencedTable: "trip_messages" })
+    .limit(TRIP_MESSAGES_EMBED_RECENT, { referencedTable: "trip_messages" })
     .maybeSingle();
 
   if (res.error && isMissingTripsDisplayTripIdError(res.error)) {
@@ -273,6 +335,8 @@ export async function getTripConversationById(
       .from("trip_conversations")
       .select(tripConversationSelect(TRIP_EMBED_FIELDS_LEGACY))
       .eq("id", conversationId)
+      .order("created_at", { ascending: false, referencedTable: "trip_messages" })
+      .limit(TRIP_MESSAGES_EMBED_RECENT, { referencedTable: "trip_messages" })
       .maybeSingle();
   }
 
@@ -285,6 +349,9 @@ export async function getTripConversationById(
       status?: string | null;
       pickup_area?: string;
       drop_location?: string;
+      driver_id?: string | null;
+      supplier_id?: string | null;
+      created_at?: string | null;
     };
     trip_messages?: TripMessageRow[];
   } & Record<string, unknown>;
@@ -294,6 +361,9 @@ export async function getTripConversationById(
     trip_number: String(row.trips?.trip_number ?? ""),
     display_trip_id: row.trips?.display_trip_id ?? null,
     trip_status: row.trips?.status ?? null,
+    trip_driver_id: row.trips?.driver_id ?? null,
+    trip_supplier_id: row.trips?.supplier_id ?? null,
+    trip_created_at: row.trips?.created_at ?? null,
     pickup_area: String(row.trips?.pickup_area ?? ""),
     drop_location: String(row.trips?.drop_location ?? ""),
     messages: ((row.trip_messages ?? []) as TripMessageRow[]).sort(
@@ -337,6 +407,30 @@ export async function getOrCreateConversation(params: {
           .includes("ensure_driver_trip_conversation"));
     if (!missingRpc && error) throw error;
     /* Fallback until migration is applied */
+  }
+
+  if (partyType === "client") {
+    const { data: client, error } = await supabase()
+      .from("clients")
+      .select("id, linked_organization_id")
+      .eq("id", partyId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!client?.linked_organization_id) {
+      throw new Error("Client is not linked to an app organization");
+    }
+  }
+
+  if (partyType === "supplier") {
+    const { data: supplier, error } = await supabase()
+      .from("suppliers")
+      .select("id, linked_organization_id")
+      .eq("id", partyId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!supplier?.linked_organization_id) {
+      throw new Error("Supplier is not linked to an app organization");
+    }
   }
 
   const payload = {
@@ -461,9 +555,12 @@ export async function getMessagesByConversation(
 
 // ── Network conversations ─────────────────────────────────────────────────────
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function getNetworkConversationsByOrg(
   orgId: string,
 ): Promise<NetworkConversation[]> {
+  if (!UUID_RE.test(orgId)) return [];
   const { data, error } = await supabase()
     .from("network_conversations")
     .select(`*, network_messages(id, conversation_id, content, sender_org_id, sender_name, sender_user_id, created_at, is_read_by_other, read_at)`)
@@ -547,6 +644,126 @@ export async function sendNetworkMessage(params: {
 
   if (error) throw error;
   return data;
+}
+
+/** Idempotent: inserts `feedback_request` rows for each party thread when missing (DB trigger may have been skipped). */
+export async function ensureTripFeedbackPromptMessages(
+  tripId: string,
+): Promise<{ error: Error | null }> {
+  const id = (tripId ?? "").trim();
+  if (!id) return { error: null };
+  try {
+    const { error } = await supabase().rpc("fn_post_trip_feedback_prompt_to_chats", {
+      p_trip_id: id,
+    });
+    if (error) return { error: new Error(error.message) };
+    return { error: null };
+  } catch (e) {
+    return { error: e instanceof Error ? e : new Error(String(e)) };
+  }
+}
+
+/**
+ * Copies an existing trip-page rating into `feedback_request` message metadata when the chat row
+ * was never updated, so refresh and other clients see the debrief as submitted.
+ */
+export async function persistTripFeedbackMessageMetadataIfRated(params: {
+  tripId: string;
+  messages: TripMessageRow[];
+  ratings: RatingRow[];
+}): Promise<void> {
+  const { tripId, messages, ratings } = params;
+  if (!ratings.length) return;
+  let wrote = false;
+  for (const m of messages) {
+    if (m.message_type !== "feedback_request") continue;
+    const meta = parseFeedbackRequestMetadata(m);
+    if (!meta?.rated_id || meta.submitted_at) continue;
+    const match = findTripRatingMatchingFeedbackMeta(ratings, tripId, meta);
+    if (!match) continue;
+    const base =
+      m.metadata != null && typeof m.metadata === "object"
+        ? { ...(m.metadata as Record<string, unknown>) }
+        : {};
+    const nextMeta = {
+      ...base,
+      submitted_at: match.updated_at ?? match.created_at,
+      submitted_score: match.score,
+      submitted_tags: extractTagsFromRatingComment(match.comment),
+    };
+    const { error } = await supabase()
+      .from("trip_messages")
+      .update({ metadata: nextMeta })
+      .eq("id", m.id);
+    if (!error) wrote = true;
+  }
+  if (wrote) notifyTripChatMessagesChanged();
+}
+
+/**
+ * Persists `ratings` row (org → rated party) and merges submit state into the chat message metadata.
+ */
+export async function submitTripChatFeedback(params: {
+  ratingOrganizationId: string;
+  tripId: string;
+  message: TripMessageRow;
+  score: number;
+  tags: string[];
+}): Promise<{ error: Error | null }> {
+  const { ratingOrganizationId, tripId, message, score, tags } = params;
+  const meta = parseFeedbackRequestMetadata(message);
+  if (!meta) {
+    return { error: new Error("Invalid feedback message") };
+  }
+  if (meta.submitted_at) {
+    return { error: new Error("Feedback already submitted") };
+  }
+
+  const ratedType = meta.rated_party_type as RatedType;
+  const comment = JSON.stringify({
+    source: "trip_chat_feedback",
+    tags,
+  });
+
+  const { error: ratingErr } = await createRating(ratingOrganizationId, {
+    trip_id: tripId,
+    rater_type: "organization",
+    rater_id: ratingOrganizationId,
+    rated_type: ratedType,
+    rated_id: meta.rated_id,
+    score,
+    comment,
+  });
+  if (ratingErr != null) return { error: ratingErr };
+
+  const { data: existing, error: readErr } = await supabase()
+    .from("trip_messages")
+    .select("metadata")
+    .eq("id", message.id)
+    .maybeSingle();
+
+  if (readErr) return { error: new Error(readErr.message) };
+
+  const base =
+    existing?.metadata != null && typeof existing.metadata === "object"
+      ? (existing.metadata as Record<string, unknown>)
+      : {};
+  const nextMeta = {
+    ...base,
+    submitted_at: new Date().toISOString(),
+    submitted_score: score,
+    submitted_tags: tags,
+  };
+
+  const { error: updErr } = await supabase()
+    .from("trip_messages")
+    .update({ metadata: nextMeta })
+    .eq("id", message.id);
+
+  if (updErr) return { error: new Error(updErr.message) };
+
+  notifyTripChatMessagesChanged();
+  return { error: null };
 }
 
 export async function markNetworkConversationRead(
@@ -656,7 +873,9 @@ export async function getConversationsByDriverIds(
     `,
     )
     .in("driver_id", driverIds)
-    .order("last_message_at", { ascending: false, nullsFirst: false });
+    .order("last_message_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false, referencedTable: "trip_messages" })
+    .limit(TRIP_MESSAGES_EMBED_RECENT, { referencedTable: "trip_messages" });
 
   if (!primary.error) {
     return mapRows((primary.data ?? []) as DriverChatConversationRow[], new Map(), new Map());
@@ -701,7 +920,7 @@ export async function getConversationsByDriverIds(
   for (const msg of (msgRes.data ?? []) as TripMessageRow[]) {
     const cid = String(msg.conversation_id ?? "");
     if (!messagesByConversationId.has(cid)) messagesByConversationId.set(cid, []);
-    messagesByConversationId.get(cid)!.push(msg);
+    messagesByConversationId.get(cid)?.push(msg);
   }
 
   return mapRows(normalizedConvRows, tripsById, messagesByConversationId);

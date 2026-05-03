@@ -614,12 +614,12 @@ export default function TripDetailScreen({
       });
       setEditingProvisionAdjustmentId(null);
     } else {
-      await detail.handleSaveAdjustment({
-        type: inlineAdjType,
-        impact: inlineAdjImpact,
-        amount: inlineAmountNum,
-        reason: inlineFinalReason,
-      });
+    await detail.handleSaveAdjustment({
+      type: inlineAdjType,
+      impact: inlineAdjImpact,
+      amount: inlineAmountNum,
+      reason: inlineFinalReason,
+    });
     }
     setInlineAdjAmount("");
     setInlineAdjReason("");
@@ -721,6 +721,10 @@ export default function TripDetailScreen({
       tx.contact_type === "client" ? s + Number(tx.amount_in ?? 0) : s,
     0,
   );
+  // Fallback to trips.amount_paid so UI still reflects receipts even when
+  // transaction query is delayed or filtered by org context.
+  const recordedAmountPaid = Math.max(0, Number(trip.amount_paid ?? 0));
+  const collectedFromClient = Math.max(receivedFromClient, recordedAmountPaid);
   const pending = Math.max(0, sales - received);
 
   const supplierPaid = detail.tripLedgerEntries.reduce(
@@ -1012,7 +1016,7 @@ export default function TripDetailScreen({
   const netManifestYield = Math.max(0, adjSales - adjCost - totalExpenses);
   const revenueSideDelta = adjSales - sales;
   const costSideDelta = adjCost - cost;
-  const receivableAfterAdjustments = Math.max(0, adjSales - receivedFromClient);
+  const receivableAfterAdjustments = Math.max(0, adjSales - collectedFromClient);
   const revenueAdjLineCount = detail.adjustments.filter(
     (a) => a.type === "revenue" && !isAdjustmentVoided(a),
   ).length;
@@ -1164,6 +1168,23 @@ export default function TripDetailScreen({
       <Text style={styles.refSettleHint}>
         After adjusted revenue, adjusted supplier cost, and voyage spend
       </Text>
+
+      <View style={styles.refCollectionsRow}>
+        <View style={styles.refCollectionsCard}>
+          <Text style={styles.refCollectionsLabel}>Collected</Text>
+          <Text style={[styles.refCollectionsValue, styles.refCollectionsValueIn]}>
+            {formatINR(collectedFromClient)}
+          </Text>
+          <Text style={styles.refCollectionsMeta}>From client ledger entries</Text>
+        </View>
+        <View style={[styles.refCollectionsCard, styles.refCollectionsCardRight]}>
+          <Text style={styles.refCollectionsLabel}>Pending</Text>
+          <Text style={[styles.refCollectionsValue, styles.refCollectionsValueOut]}>
+            {formatINR(receivableAfterAdjustments)}
+          </Text>
+          <Text style={styles.refCollectionsMeta}>Against adjusted sales</Text>
+        </View>
+      </View>
 
       <View
         style={[
@@ -1774,10 +1795,10 @@ export default function TripDetailScreen({
                   </Text>
                 </View>
                 <View style={styles.refHeroConnectorWrap}>
-                  <View style={styles.refHeroToRow}>
-                    <View style={styles.refHeroToDot} />
-                    <View style={styles.refHeroToLine} />
-                  </View>
+                <View style={styles.refHeroToRow}>
+                  <View style={styles.refHeroToDot} />
+                  <View style={styles.refHeroToLine} />
+                </View>
                 </View>
                 <View
                   style={[
@@ -3949,8 +3970,8 @@ export default function TripDetailScreen({
                         detail.latestReassignmentSummary
                       }
                       driverAssignOrgId={
-                        isAggregate && currentOrganization?.id
-                          ? currentOrganization.id
+                        isAggregate
+                          ? (currentOrganization?.id ?? null)
                           : null
                       }
                       onVehicleDisplayChange={(value) => {
@@ -4137,9 +4158,7 @@ export default function TripDetailScreen({
                   previousDriverName={detail.previousDriverName}
                   latestReassignmentSummary={detail.latestReassignmentSummary}
                   driverAssignOrgId={
-                    isAggregate && currentOrganization?.id
-                      ? currentOrganization.id
-                      : null
+                    isAggregate ? (currentOrganization?.id ?? null) : null
                   }
                   onVehicleDisplayChange={(value) => {
                     const normalized = formatIndianVehicleNumber(value ?? "");
@@ -4221,7 +4240,7 @@ export default function TripDetailScreen({
                     </Text>
                   </View>
                 ))}
-              </View>
+                </View>
 
               <View style={neoStyles.provisionCnDnRow}>
                 <TouchableOpacity
@@ -4428,7 +4447,7 @@ export default function TripDetailScreen({
                               Voided: {(adj.void_reason ?? "").trim() || "—"}
                             </Text>
                           ) : null}
-                        </View>
+              </View>
                         <Text
                           style={[
                             neoStyles.provisionAppliedAmount,
@@ -4475,7 +4494,7 @@ export default function TripDetailScreen({
                                 color="#94a3b8"
                               />
                             </TouchableOpacity>
-                          </View>
+            </View>
                         ) : null}
                       </View>
                     );
@@ -4667,9 +4686,7 @@ export default function TripDetailScreen({
                   previousDriverName={detail.previousDriverName}
                   latestReassignmentSummary={detail.latestReassignmentSummary}
                   driverAssignOrgId={
-                    isAggregate && currentOrganization?.id
-                      ? currentOrganization.id
-                      : null
+                    isAggregate ? (currentOrganization?.id ?? null) : null
                   }
                   onVehicleDisplayChange={(value) => {
                     const normalized = formatIndianVehicleNumber(value ?? "");
@@ -9565,6 +9582,53 @@ const styles = StyleSheet.create({
     color: "#94a3b8",
     textAlign: "center",
     lineHeight: 14,
+  },
+  refCollectionsRow: {
+    marginTop: 14,
+    width: "100%",
+    flexDirection: "row",
+    gap: 10,
+  },
+  refCollectionsCard: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#eef2f7",
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: "#f8fafc",
+    alignItems: "flex-start",
+    minWidth: 0,
+  },
+  refCollectionsCardRight: {
+    alignItems: "flex-end",
+  },
+  refCollectionsLabel: {
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 1.1,
+    color: "#64748b",
+    textTransform: "uppercase",
+  },
+  refCollectionsValue: {
+    marginTop: 4,
+    fontSize: 18,
+    fontWeight: "900",
+    letterSpacing: -0.3,
+  },
+  refCollectionsValueIn: {
+    color: "#15803d",
+  },
+  refCollectionsValueOut: {
+    color: "#b91c1c",
+  },
+  refCollectionsMeta: {
+    marginTop: 2,
+    fontSize: 8,
+    fontWeight: "600",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
   },
   refSettleMicro: {
     marginTop: 2,

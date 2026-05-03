@@ -552,20 +552,22 @@ export default function DriverDashboard() {
         // ignore
       });
 
-      try {
-        const results = await Location.reverseGeocodeAsync({ latitude, longitude });
-        if (results && results.length > 0) {
-          const place = results[0];
-          const cityState = formatGeocodedCityState(place).trim();
-          if (cityState) {
-            setLocationLabel(cityState);
-          } else {
-            const fallback = formatGeocodedPlaceLine(place).trim();
-            if (fallback) setLocationLabel(fallback);
+      if (Platform.OS !== 'web') {
+        try {
+          const results = await Location.reverseGeocodeAsync({ latitude, longitude });
+          if (results && results.length > 0) {
+            const place = results[0];
+            const cityState = formatGeocodedCityState(place).trim();
+            if (cityState) {
+              setLocationLabel(cityState);
+            } else {
+              const fallback = formatGeocodedPlaceLine(place).trim();
+              if (fallback) setLocationLabel(fallback);
+            }
           }
+        } catch {
+          // ignore reverse geocode failure; use fallback label so we don't show "Location not found" when we have coords (e.g. simulator)
         }
-      } catch {
-        // ignore reverse geocode failure; use fallback label so we don't show "Location not found" when we have coords (e.g. simulator)
       }
     } catch {
       setLocationStatus('error');

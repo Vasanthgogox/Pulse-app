@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
+import { Platform } from "react-native";
 import * as driverLocationService from "@/services/driverLocationService";
 import type * as ExpoLocationTypes from "expo-location";
 
@@ -20,6 +21,7 @@ export function useDriverLocation(tripId: string | undefined) {
       latitude: number,
       longitude: number,
     ): Promise<ExpoLocationTypes.LocationGeocodedAddress[]> => {
+      if (Platform.OS === "web") return [];
       try {
         if (!expoLocationModuleRef.current) {
           expoLocationModuleRef.current = await import("expo-location");

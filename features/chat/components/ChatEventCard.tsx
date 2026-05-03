@@ -8,25 +8,29 @@ import {
 } from "react-native";
 import {
   AlertTriangle,
-  ArrowRight,
   CheckCircle,
-  CreditCard,
+  ChevronRight,
   Truck,
   MapPin,
-  Package,
   XCircle,
   Navigation,
   Clock,
 } from "lucide-react-native";
-import { LinearGradient } from "expo-linear-gradient";
+import { CHAT_ACCENT, CHAT_ACCENT_SOFT } from "@/features/chat/chatTheme";
+import { formatChatPartyName } from "@/features/chat/utils/partyDisplay";
 import Theme from "@/constants/Theme";
+import {
+  partyAvatarBackgroundColor,
+  partyAvatarInitialsTextColor,
+  partyInitialsFromName,
+} from "@/lib/partyAvatarDisplay";
 import type { LedgerEventMetadata, TripMessageRow } from "../types/chat.types";
 
 // ── System event card (trip status changes) ───────────────────────────────────
 
 const STATUS_ICON_MAP: Record<string, { Icon: React.ComponentType<any>; color: string; bg: string }> = {
-  assigned:    { Icon: Truck,         color: "#3b82f6", bg: "#eff6ff" },
-  in_progress: { Icon: Navigation,    color: "#8b5cf6", bg: "#f5f3ff" },
+  assigned:    { Icon: Truck,         color: CHAT_ACCENT, bg: CHAT_ACCENT_SOFT },
+  in_progress: { Icon: Navigation,    color: CHAT_ACCENT, bg: CHAT_ACCENT_SOFT },
   picked_up:   { Icon: MapPin,        color: "#f59e0b", bg: "#fffbeb" },
   in_transit:  { Icon: Truck,         color: "#06b6d4", bg: "#ecfeff" },
   at_drop:     { Icon: MapPin,        color: "#10b981", bg: "#ecfdf5" },
@@ -143,6 +147,20 @@ function splitOrgLine(orgLine: string): { from: string; to: string } {
   return { from: trimmed || "—", to: "" };
 }
 
+function ledgerDateUpper(iso: string): string {
+  try {
+    return new Date(iso)
+      .toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
+      .toUpperCase();
+  } catch {
+    return "";
+  }
+}
+
 export function ChatLedgerEventCard({
   message,
   currentOrgId,
@@ -158,7 +176,6 @@ export function ChatLedgerEventCard({
   const isReceiver = meta.receiver_org_id === currentOrgId;
   const isSender = meta.sender_org_id === currentOrgId;
 
-  const categoryLabel = String(meta.category ?? "Payment").trim() || "Payment";
   const paymentModeLabel = String(meta.payment_mode ?? "Cash").trim() || "Cash";
   const safeAmount = Number(meta.amount ?? 0);
   const flow: "in" | "out" = meta.flow === "out" ? "out" : "in";
@@ -169,7 +186,6 @@ export function ChatLedgerEventCard({
     maximumFractionDigits: 0,
   }).format(Number.isFinite(safeAmount) ? safeAmount : 0);
 
-  const flowColor = flow === "in" ? "#059669" : "#be123c";
   const flowPrefix = flow === "in" ? "+" : "−";
   const isAcknowledged = !!meta.acknowledged_at;
   const isDisputed = !!meta.disputed;
@@ -188,113 +204,107 @@ export function ChatLedgerEventCard({
   const orgLine = resolvedLedgerOrgLine(meta, message.content, conversationPartyName);
   const { from: fromParty, to: toParty } = splitOrgLine(orgLine);
 
-  const flowHeadline = flow === "in" ? "Payment received" : "Payment sent";
-  const stripColors =
-    flow === "in"
-      ? (["#34d399", "#059669"] as const)
-      : (["#fb7185", "#be123c"] as const);
-  const cardTintColors =
-    flow === "in"
-      ? (["#f0fdf4", "#ffffff"] as const)
-      : (["#fff1f2", "#ffffff"] as const);
-  const iconRingColors =
-    flow === "in"
-      ? (["#a7f3d0", "#34d399"] as const)
-      : (["#fecdd3", "#fb7185"] as const);
+  const titleParty = flow === "in" ? fromParty : toParty;
+  const titleDisplay = formatChatPartyName(titleParty);
+  const namedOther = [fromParty, toParty].find((p) => formatChatPartyName(p));
+  const avatarSeedName = titleDisplay ? titleParty : namedOther || "Payment";
+  const avatarBg = partyAvatarBackgroundColor(avatarSeedName);
+  const avatarFg = partyAvatarInitialsTextColor(avatarBg);
+  const dateUpper = ledgerDateUpper(message.created_at);
+  const metaMid = [paymentModeLabel, meta.category].filter(Boolean).join(" · ") || "—";
+  const routeLine = `${fromParty.toUpperCase()} → ${toParty.toUpperCase()}`;
+
+  const isCredit = flow === "in";
+  const amountColor = isCredit ? "#047857" : "#be123c";
 
   return (
-    <View style={s.ledgerCardOuter}>
-      <LinearGradient colors={stripColors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.ledgerAccentStrip} />
-
-      <LinearGradient colors={cardTintColors} style={s.ledgerCardGradient}>
-        <View style={s.ledgerCard}>
-          <View style={s.ledgerTopRow}>
-            <LinearGradient colors={iconRingColors} style={s.ledgerIconRing}>
-              <View style={s.ledgerIconInner}>
-                <CreditCard size={13} color={flow === "in" ? "#047857" : "#9f1239"} />
-              </View>
-            </LinearGradient>
-            <View style={s.ledgerTitleBlock}>
-              <Text style={s.ledgerCategory}>{categoryLabel.toUpperCase()}</Text>
-              <Text style={s.ledgerFlowHeadline} numberOfLines={1}>
-                {flowHeadline}
-              </Text>
-            </View>
-            <View style={s.ledgerAmountBlock}>
-              <Text style={[s.ledgerAmount, { color: flowColor }]} numberOfLines={1}>
-                {flowPrefix}
-                {amountLabel}
-              </Text>
-              <Text style={s.ledgerAmountCaption}>{flow === "in" ? "Credited" : "Debited"}</Text>
-            </View>
-          </View>
-
-          <View style={s.ledgerFlowRow}>
-            <Text style={s.ledgerFlowParty} numberOfLines={1}>
-              {fromParty}
-            </Text>
-            <ArrowRight size={11} color="#cbd5e1" />
-            <Text style={s.ledgerFlowParty} numberOfLines={1}>
-              {toParty || "—"}
+    <View style={s.ledgerWrap}>
+      <View style={s.ledgerCard}>
+        <View style={[s.ledgerAvatarWrap, s.ledgerAvatarWrapAlign]}>
+          <View style={[s.ledgerAvatar, { backgroundColor: avatarBg }]}>
+            <Text style={[s.ledgerAvatarInitials, { color: avatarFg }]}>
+              {partyInitialsFromName(avatarSeedName)}
             </Text>
           </View>
-
-          <View style={s.ledgerBottomBar}>
-            <View style={s.ledgerModePill}>
-              <Text style={s.ledgerModePillText}>{paymentModeLabel}</Text>
-            </View>
-            <View style={s.ledgerBottomRight}>
-              {meta.reference_number ? (
-                <Text style={s.ledgerRefInline} numberOfLines={1}>
-                  #{meta.reference_number}
-                </Text>
-              ) : null}
-              <Text style={s.ledgerTime}>{displayTime}</Text>
-            </View>
-          </View>
-
-          {meta.notes ? (
-            <Text style={s.ledgerNotes} numberOfLines={2}>
-              {meta.notes}
-            </Text>
-          ) : null}
-
-          {isAcknowledged ? (
-            <View style={s.ledgerStatus}>
-              <CheckCircle size={11} color="#059669" />
-              <Text style={[s.ledgerStatusText, { color: "#047857" }]}>Added to book</Text>
-            </View>
-          ) : isDisputed ? (
-            <View style={s.ledgerStatus}>
-              <AlertTriangle size={11} color="#d97706" />
-              <Text style={[s.ledgerStatusText, { color: "#b45309" }]}>Dispute raised</Text>
-            </View>
-          ) : !readOnly && isReceiver && !isSender ? (
-            <View style={s.ledgerActions}>
-              <TouchableOpacity
-                style={s.addToBookBtn}
-                onPress={() => onAddToBook(message)}
-                disabled={addingToBook}
-                activeOpacity={0.8}
-              >
-                {addingToBook ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={s.addToBookText}>Add to book</Text>
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={s.disputeBtn}
-                onPress={() => onDispute(message)}
-                disabled={addingToBook}
-                activeOpacity={0.8}
-              >
-                <Text style={s.disputeText}>Dispute</Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
+          <View
+            style={[
+              s.ledgerAvatarDot,
+              { backgroundColor: isDisputed ? "#f59e0b" : "#22c55e" },
+            ]}
+          />
         </View>
-      </LinearGradient>
+
+        <View style={s.ledgerBody}>
+          {titleDisplay ? (
+            <Text style={s.ledgerTitle} numberOfLines={1}>
+              {titleDisplay}
+            </Text>
+          ) : null}
+          <Text style={s.ledgerMeta} numberOfLines={1}>
+            {dateUpper}
+            {" · "}
+            {metaMid}
+          </Text>
+          <Text style={s.ledgerRoute} numberOfLines={1}>
+            {routeLine}
+          </Text>
+        </View>
+
+        <View style={s.ledgerRight}>
+          <Text style={[s.ledgerAmount, { color: amountColor }]} numberOfLines={1}>
+            {flowPrefix}
+            {amountLabel}
+          </Text>
+          <Text style={s.ledgerTimeRight} numberOfLines={1}>
+            {displayTime}
+          </Text>
+        </View>
+
+        <View style={s.ledgerChevronWrap}>
+          <ChevronRight size={14} color="#cbd5e1" />
+        </View>
+      </View>
+
+      {meta.notes ? (
+        <Text style={s.ledgerNotesBelow} numberOfLines={2}>
+          {meta.notes}
+        </Text>
+      ) : null}
+
+      {isAcknowledged ? (
+        <View style={s.ledgerFooterStatus}>
+          <CheckCircle size={11} color="#059669" />
+          <Text style={s.ledgerFooterStatusText}>Added to book</Text>
+        </View>
+      ) : isDisputed ? (
+        <View style={s.ledgerFooterStatus}>
+          <AlertTriangle size={11} color="#d97706" />
+          <Text style={[s.ledgerFooterStatusText, { color: "#b45309" }]}>Dispute raised</Text>
+        </View>
+      ) : !readOnly && isReceiver && !isSender ? (
+        <View style={s.ledgerActions}>
+          <TouchableOpacity
+            style={s.ledgerAddBtn}
+            onPress={() => onAddToBook(message)}
+            disabled={addingToBook}
+            activeOpacity={0.8}
+          >
+            {addingToBook ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={s.ledgerAddBtnText}>Add to book</Text>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={s.ledgerDisputeBtn}
+            onPress={() => onDispute(message)}
+            disabled={addingToBook}
+            activeOpacity={0.8}
+          >
+            <Text style={s.ledgerDisputeBtnText}>Dispute</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -341,207 +351,180 @@ const s = StyleSheet.create({
     letterSpacing: 0.4,
   },
 
-  // Ledger card — compact “statement line” (~half prior height)
-  ledgerCardOuter: {
-    marginVertical: 3,
-    maxWidth: "88%",
-    width: "88%",
+  // Ledger row — same footprint as system `eventCard` (compact list tile)
+  ledgerWrap: {
     alignSelf: "center",
-    borderRadius: 14,
-    overflow: "hidden",
-    shadowColor: "#0f172a",
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
-  },
-  ledgerAccentStrip: {
-    height: 2,
-    width: "100%",
-  },
-  ledgerCardGradient: {
-    borderBottomLeftRadius: 14,
-    borderBottomRightRadius: 14,
+    maxWidth: "85%",
+    marginVertical: 4,
   },
   ledgerCard: {
-    paddingHorizontal: 11,
-    paddingTop: 9,
-    paddingBottom: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(148, 163, 184, 0.28)",
-    borderTopWidth: 0,
-    backgroundColor: "transparent",
-  },
-  ledgerTopRow: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
+    alignItems: "stretch",
+    gap: 12,
+    backgroundColor: "#ffffff",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#e8ecf1",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.045,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
-  ledgerIconRing: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    padding: 1.5,
-    alignItems: "center",
-    justifyContent: "center",
+  ledgerAvatarWrap: {
+    width: 34,
+    height: 34,
+    position: "relative",
     flexShrink: 0,
   },
-  ledgerIconInner: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 13,
-    backgroundColor: "#fff",
+  ledgerAvatarWrapAlign: {
+    alignSelf: "center",
+  },
+  ledgerAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
   },
-  ledgerTitleBlock: {
+  ledgerAvatarInitials: {
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  ledgerAvatarDot: {
+    position: "absolute",
+    right: -1,
+    bottom: -1,
+    width: 11,
+    height: 11,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: "#ffffff",
+  },
+  ledgerBody: {
     flex: 1,
     minWidth: 0,
+    gap: 3,
+    justifyContent: "center",
+    paddingVertical: 1,
   },
-  ledgerCategory: {
-    fontSize: 8,
-    fontWeight: "800",
+  ledgerTitle: {
+    fontSize: 11,
+    fontWeight: "300",
+    fontStyle: "italic",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.2,
+  },
+  ledgerMeta: {
+    fontSize: 9,
+    fontWeight: "500",
     color: "#64748b",
-    letterSpacing: 1,
-    textTransform: "uppercase",
+    letterSpacing: 0.02,
   },
-  ledgerFlowHeadline: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#0f172a",
-    marginTop: 1,
-    letterSpacing: -0.2,
+  ledgerRoute: {
+    fontSize: 8,
+    fontWeight: "400",
+    color: "#94a3b8",
+    fontStyle: "italic",
+    letterSpacing: 0.15,
   },
-  ledgerAmountBlock: {
+  ledgerRight: {
+    alignSelf: "stretch",
+    justifyContent: "center",
     alignItems: "flex-end",
     flexShrink: 0,
-    maxWidth: "44%",
+    gap: 3,
+    paddingLeft: 12,
+    marginLeft: 2,
+    borderLeftWidth: 1,
+    borderLeftColor: "#f1f5f9",
+    minWidth: 86,
+    maxWidth: "36%",
   },
   ledgerAmount: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: "800",
-    letterSpacing: -0.5,
     fontVariant: ["tabular-nums"],
+    letterSpacing: -0.35,
+    lineHeight: 17,
   },
-  ledgerAmountCaption: {
+  ledgerTimeRight: {
     fontSize: 8,
-    fontWeight: "700",
+    fontWeight: "600",
     color: "#94a3b8",
-    marginTop: 1,
-    letterSpacing: 0.5,
     textTransform: "uppercase",
+    letterSpacing: 0.4,
+    opacity: 0.95,
   },
-  ledgerFlowRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    marginTop: 7,
-    paddingTop: 7,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "rgba(148, 163, 184, 0.35)",
+  ledgerChevronWrap: {
+    justifyContent: "center",
+    alignSelf: "center",
+    paddingLeft: 4,
+    marginLeft: 2,
   },
-  ledgerFlowParty: {
-    flex: 1,
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#334155",
-    minWidth: 0,
-  },
-  ledgerBottomBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
+  ledgerNotesBelow: {
     marginTop: 6,
-    flexWrap: "wrap",
-  },
-  ledgerModePill: {
-    backgroundColor: "rgba(15, 23, 42, 0.05)",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(148, 163, 184, 0.35)",
-  },
-  ledgerModePillText: {
     fontSize: 10,
-    fontWeight: "700",
-    color: "#475569",
+    color: "#64748b",
+    lineHeight: 14,
+    fontWeight: "600",
+    paddingHorizontal: 2,
   },
-  ledgerBottomRight: {
+  ledgerFooterStatus: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    flexShrink: 1,
-    justifyContent: "flex-end",
-    minWidth: 0,
+    marginTop: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: "#f8fafc",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    alignSelf: "flex-start",
   },
-  ledgerRefInline: {
-    fontSize: 9,
-    fontWeight: "600",
-    color: "#94a3b8",
-    flexShrink: 1,
-  },
-  ledgerNotes: {
+  ledgerFooterStatusText: {
     fontSize: 10,
-    color: "#64748b",
-    lineHeight: 13,
-    marginTop: 5,
+    fontWeight: "800",
+    color: "#047857",
   },
   ledgerActions: {
     flexDirection: "row",
-    gap: 6,
-    marginTop: 7,
+    gap: 8,
+    marginTop: 8,
   },
-  addToBookBtn: {
+  ledgerAddBtn: {
     flex: 1,
-    backgroundColor: Theme.primary,
-    borderRadius: 10,
-    paddingVertical: 6,
+    backgroundColor: CHAT_ACCENT,
+    borderRadius: 12,
+    paddingVertical: 8,
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 30,
+    minHeight: 34,
   },
-  addToBookText: {
+  ledgerAddBtnText: {
     fontSize: 11,
     fontWeight: "700",
     color: "#fff",
   },
-  disputeBtn: {
+  ledgerDisputeBtn: {
     flex: 1,
     backgroundColor: "#fff",
-    borderRadius: 10,
-    borderWidth: 1,
+    borderRadius: 12,
+    borderWidth: 2,
     borderColor: "#fbbf24",
-    paddingVertical: 6,
+    paddingVertical: 8,
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 30,
+    minHeight: 34,
   },
-  disputeText: {
+  ledgerDisputeBtnText: {
     fontSize: 11,
     fontWeight: "700",
     color: "#b45309",
-  },
-  ledgerStatus: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    marginTop: 6,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    backgroundColor: "rgba(255,255,255,0.55)",
-    borderRadius: 8,
-    alignSelf: "flex-start",
-  },
-  ledgerStatusText: {
-    fontSize: 10,
-    fontWeight: "700",
-  },
-  ledgerTime: {
-    fontSize: 9,
-    color: "#94a3b8",
-    fontWeight: "700",
-    letterSpacing: 0.2,
   },
 });

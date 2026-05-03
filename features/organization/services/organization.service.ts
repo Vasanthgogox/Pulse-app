@@ -18,10 +18,12 @@ function mapToCurrentOrganization(o: {
   id: string;
   name: string | null;
   operating_model?: string;
+  logo_url?: string | null;
 }): CurrentOrganization {
   return {
     id: o.id,
     name: o.name ?? "",
+    logo_url: o.logo_url ?? null,
     operatingModel: (o.operating_model === "ASSET_BASED" ||
     o.operating_model === "NON_ASSET" ||
     o.operating_model === "HYBRID"
@@ -97,10 +99,31 @@ export async function getOrganizationsForUser(): Promise<{
 
     if (!memError && memberships?.length) {
       const orgIds = [...new Set(memberships.map((m) => m.organization_id))];
-      const { data: orgs, error: orgError } = await supabase()
+      // Try with logo_url first (requires migration 20260503120000_add_org_logo_url); fall back without it.
+      let orgsData: { id: any; name: any; slug: any; owner_id: any; operating_model: any; logo_url?: any }[] | null = null;
+      let orgError: { message: string } | null = null;
+
+      const withLogo = await supabase()
         .from("organizations")
-        .select("id, name, slug, owner_id, operating_model")
+        .select("id, name, slug, owner_id, operating_model, logo_url")
         .in("id", orgIds);
+
+      const isLogoColMissing =
+        withLogo.error &&
+        /column.*logo_url.*does not exist|undefined column/i.test(withLogo.error.message ?? "");
+
+      if (isLogoColMissing) {
+        const fallback = await supabase()
+          .from("organizations")
+          .select("id, name, slug, owner_id, operating_model")
+          .in("id", orgIds);
+        orgsData = fallback.data ?? null;
+        orgError = fallback.error ?? null;
+      } else {
+        orgsData = withLogo.data ?? null;
+        orgError = withLogo.error ?? null;
+      }
+      const orgs = orgsData;
 
       if (!orgError && orgs?.length) {
         return {
@@ -179,6 +202,7 @@ export async function getOrganizationLocationsByNames(orgNames: string[]): Promi
   error: Error | null;
   locations: OrganizationLocation[];
 }> {
+  const escapeLike = (value: string) => value.replace(/[%_\\]/g, '\\$&');
   const uniqueNames = [...new Set(orgNames.map((name) => name.trim()).filter(Boolean))];
   if (uniqueNames.length === 0) return { error: null, locations: [] };
 
@@ -186,7 +210,7 @@ export async function getOrganizationLocationsByNames(orgNames: string[]): Promi
     supabase()
       .from("organizations")
       .select("id, name, city, state, address_line")
-      .ilike("name", name)
+      .ilike("name", escapeLike(name))
       .limit(1),
   );
 

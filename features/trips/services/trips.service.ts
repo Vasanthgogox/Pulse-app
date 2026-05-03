@@ -222,7 +222,7 @@ export async function getTripById(
     .eq("id", tripId)
     .maybeSingle();
   if (error) return { error: new Error(error.message), trip: null };
-  const raw = data as any;
+  const raw = data as (TripRow & { indents?: { indent_number: string | null } | null }) | null;
   const trip: TripRow | null = raw
     ? {
         ...raw,
@@ -244,7 +244,7 @@ export async function getTripByIndentId(
     .limit(1)
     .maybeSingle();
   if (error) return { error: new Error(error.message), trip: null };
-  const raw = data as any;
+  const raw = data as (TripRow & { indents?: { indent_number: string | null } | null }) | null;
   const trip: TripRow | null = raw
     ? {
         ...raw,
@@ -450,23 +450,8 @@ async function getDriverOngoingTrip(
     TripRow,
     "id" | "trip_number" | "status" | "started_at"
   >[];
-  return {
-    error: null,
-    trip:
-      rows.find((row) => {
-        const status = String(row.status ?? "")
-          .trim()
-          .toLowerCase();
-        // "Busy" applies only after the driver actually accepts/starts the trip.
-        // Pre-acceptance assignment (status="assigned", started_at=null) must stay available.
-        const isAcceptedStatus =
-          status === "in_progress" ||
-          status === "in_transit" ||
-          status === "picked_up" ||
-          status === "at_drop";
-        return isAcceptedStatus || row.started_at != null;
-      }) ?? null,
-  };
+  // Single-active-trip rule: any non-terminal trip blocks a new assignment immediately.
+  return { error: null, trip: rows[0] ?? null };
 }
 
 /**
@@ -537,13 +522,20 @@ export interface DriverAvailabilityByPhoneResult {
   ongoingTripLabel: string | null;
 }
 
+function normalizePhoneLast10(value: string): string {
+  return String(value ?? "")
+    .trim()
+    .replace(/\s+/g, "")
+    .replace(/\D/g, "")
+    .slice(-10);
+}
+
 /**
- * Check if a phone maps to a driver in this org who is already on an ongoing trip.
+ * Check if a phone maps to a driver in this org who already has an active trip.
  * Used as preflight validation for OTP/aggregate assignment flows.
  *
- * @param opts.anyOpenTripBlocks When true, any non-terminal trip for this driver counts
- *   (including `assigned` / not yet started). Default false — only trips the driver
- *   has effectively started block reassignment/OTP flows.
+ * Single-active-trip rule: any non-terminal trip (including `assigned`) blocks
+ * additional assignment.
  */
 export async function getDriverAvailabilityByPhone(
   orgId: string,
@@ -623,6 +615,166 @@ export async function getDriverAvailabilityByPhone(
       driverId: match.id,
       ongoingTripId: trip?.id ?? null,
       ongoingTripLabel: trip ? getTripIdentifierLabel(trip) : null,
+    },
+  };
+}
+
+/**
+ * Global phone-level availability check (cross-org).
+ * Use for aggregate assign-by-phone so one real driver (same phone) cannot
+ * be assigned on overlapping trips across different driver rows/orgs.
+ */
+export async function getDriverAvailabilityByPhoneGlobal(
+  phone: string,
+  opts?: {
+    excludeTripId?: string | null;
+    anyOpenTripBlocks?: boolean;
+    /**
+     * Fail closed for aggregate assignment flows.
+     * When true, this check must use the SECURITY DEFINER RPC result only.
+     */
+    requireAuthoritativeRpc?: boolean;
+  },
+): Promise<{ error: Error | null; result: DriverAvailabilityByPhoneResult }> {
+  const rpcCheck = await supabase().rpc("get_driver_phone_active_trip", {
+    p_phone: phone,
+    p_exclude_trip_id: opts?.excludeTripId ?? null,
+  });
+  if (!rpcCheck.error) {
+    const obj = (rpcCheck.data ?? {}) as {
+      is_busy?: boolean;
+      trip_id?: string | null;
+      trip_label?: string | null;
+    };
+    if (obj.is_busy === true) {
+      return {
+        error: null,
+        result: {
+          isBusy: true,
+          driverId: null,
+          ongoingTripId: obj.trip_id ?? null,
+          ongoingTripLabel: obj.trip_label ?? "another active trip",
+        },
+      };
+    }
+    // RPC is authoritative and already phone-global.
+    if (opts?.requireAuthoritativeRpc) {
+      return {
+        error: null,
+        result: {
+          isBusy: false,
+          driverId: null,
+          ongoingTripId: null,
+          ongoingTripLabel: null,
+        },
+      };
+    }
+  } else if (opts?.requireAuthoritativeRpc) {
+    return {
+      error: new Error(rpcCheck.error.message),
+      result: {
+        isBusy: true,
+        driverId: null,
+        ongoingTripId: null,
+        ongoingTripLabel: null,
+      },
+    };
+  }
+
+  const normalized = (phone ?? "").trim().replace(/\s+/g, "");
+  const last10 = normalizePhoneLast10(normalized);
+  if (last10.length < 10) {
+    return {
+      error: null,
+      result: {
+        isBusy: false,
+        driverId: null,
+        ongoingTripId: null,
+        ongoingTripLabel: null,
+      },
+    };
+  }
+
+  const { data: allDrivers, error: driverError } = await supabase()
+    .from("drivers")
+    .select("id, phone")
+    .not("phone", "is", null);
+  if (driverError) {
+    return {
+      error: new Error(driverError.message),
+      result: {
+        isBusy: false,
+        driverId: null,
+        ongoingTripId: null,
+        ongoingTripLabel: null,
+      },
+    };
+  }
+
+  const matchingDriverIds = ((allDrivers ?? []) as { id: string; phone: string | null }[])
+    .filter((d) => normalizePhoneLast10(d.phone ?? "") === last10)
+    .map((d) => d.id);
+  if (matchingDriverIds.length === 0) {
+    return {
+      error: null,
+      result: {
+        isBusy: false,
+        driverId: null,
+        ongoingTripId: null,
+        ongoingTripLabel: null,
+      },
+    };
+  }
+
+  const terminal = ONGOING_TRIP_TERMINAL_STATUSES.join('","');
+  let q = supabase()
+    .from("trips")
+    .select("id, trip_number, status, started_at, driver_id")
+    .in("driver_id", matchingDriverIds)
+    .not("status", "in", `("${terminal}")`)
+    .order("updated_at", { ascending: false })
+    .limit(25);
+  const excludeTripId = opts?.excludeTripId ?? "";
+  if (excludeTripId.trim()) q = q.neq("id", excludeTripId.trim());
+  const { data: tripRows, error: tripError } = await q;
+  if (tripError) {
+    return {
+      error: new Error(tripError.message),
+      result: {
+        isBusy: false,
+        driverId: null,
+        ongoingTripId: null,
+        ongoingTripLabel: null,
+      },
+    };
+  }
+
+  const rows = (tripRows ?? []) as Array<
+    Pick<TripRow, "id" | "trip_number" | "status" | "started_at"> & {
+      driver_id?: string | null;
+    }
+  >;
+  const busyTrip = opts?.anyOpenTripBlocks
+    ? rows[0] ?? null
+    : rows.find((row) => {
+        const status = String(row.status ?? "")
+          .trim()
+          .toLowerCase();
+        const isAcceptedStatus =
+          status === "in_progress" ||
+          status === "in_transit" ||
+          status === "picked_up" ||
+          status === "at_drop";
+        return isAcceptedStatus || row.started_at != null;
+      }) ?? null;
+
+  return {
+    error: null,
+    result: {
+      isBusy: busyTrip != null,
+      driverId: (busyTrip?.driver_id as string | null) ?? null,
+      ongoingTripId: busyTrip?.id ?? null,
+      ongoingTripLabel: busyTrip ? getTripIdentifierLabel(busyTrip) : null,
     },
   };
 }
@@ -881,6 +1033,16 @@ export async function createTrip(
   const creatorUserId =
     normalizeNullableUuid(data.created_by_user_id) ??
     normalizeNullableUuid(userId);
+  const normalizedSupplierId = normalizeNullableUuid(data.supplier_id);
+  const normalizedDriverId = normalizeNullableUuid(data.driver_id);
+  const normalizedVehicleId = normalizeNullableUuid(data.vehicle_id);
+  const inferredTripPayoutMode =
+    data.trip_payout_mode ??
+    (normalizedDriverId || normalizedVehicleId
+      ? "asset"
+      : normalizedSupplierId
+        ? "market"
+        : "asset");
 
   // Sequential trip trigger writes user_counters(user_id) with FK -> public.users(id).
   // Ensure referenced users exist to avoid 400/409 on environments with stricter FK checks.
@@ -937,13 +1099,11 @@ export async function createTrip(
     pickup_date: data.pickup_date ?? null,
     load_tons: loadTons,
     advance_paid: advancePaid,
-    supplier_id: normalizeNullableUuid(data.supplier_id),
+    supplier_id: normalizedSupplierId,
     // Not all DBs have trips.supplier_name; resolve name via supplier_id + suppliers / views.
-    trip_payout_mode:
-      data.trip_payout_mode ??
-      (normalizeNullableUuid(data.supplier_id) ? "market" : "asset"),
-    driver_id: normalizeNullableUuid(data.driver_id),
-    vehicle_id: normalizeNullableUuid(data.vehicle_id),
+    trip_payout_mode: inferredTripPayoutMode,
+    driver_id: normalizedDriverId,
+    vehicle_id: normalizedVehicleId,
     vehicle_display_number: (data.vehicle_display_number ?? "").trim() || null,
   };
   let { data: row, error } = await supabase()
@@ -1280,11 +1440,31 @@ export async function assignTripDriverByPhone(
   phone: string,
   options?: UpdateTripAssignmentOptions,
 ): Promise<{ error: Error | null; trip: TripRow | null }> {
+  const normalized = (phone ?? "").trim().replace(/\s+/g, "");
+  if (!normalized) {
+    return { error: new Error("Phone is required"), trip: null };
+  }
+  const { error: availabilityError, result: availability } =
+    await getDriverAvailabilityByPhoneGlobal(normalized, {
+      excludeTripId: tripId,
+      anyOpenTripBlocks: true,
+      requireAuthoritativeRpc: true,
+    });
+  if (availabilityError) return { error: availabilityError, trip: null };
+  if (availability.isBusy) {
+    return {
+      error: new Error(
+        `Driver is already assigned to ${availability.ongoingTripLabel ?? "another ongoing trip"}. Complete or unassign that trip first.`,
+      ),
+      trip: null,
+    };
+  }
+
   const { ensureDriverRowByPhone } =
     await import("@/features/drivers/services/drivers.service");
   const { error: driverError, driver } = await ensureDriverRowByPhone(
     orgId,
-    phone,
+    normalized,
     undefined,
     {
       trackingOnly: options?.trackingOnly ?? false,
@@ -1315,8 +1495,10 @@ export async function assignAggregateTripDriverByPhone(
     return { error: new Error("Phone is required"), trip: null };
   }
   const { error: availabilityError, result: availability } =
-    await getDriverAvailabilityByPhone(driverOrgId, normalized, {
+    await getDriverAvailabilityByPhoneGlobal(normalized, {
       excludeTripId: tripId,
+      anyOpenTripBlocks: true,
+      requireAuthoritativeRpc: true,
     });
   if (availabilityError) return { error: availabilityError, trip: null };
   if (availability.isBusy) {
@@ -1424,6 +1606,120 @@ export interface UpdateTripStatusData {
 
 const COMPLETED_STATUS_SET = new Set(["completed", "delivered", "done"]);
 
+function resolveTripPayoutModeForCompletion(
+  trip:
+    | Pick<TripRow, "trip_payout_mode" | "supplier_id" | "driver_id" | "vehicle_id">
+    | null
+    | undefined,
+): "market" | "asset" {
+  const raw = String(trip?.trip_payout_mode ?? "")
+    .trim()
+    .toLowerCase();
+  if (raw === "market" || raw === "asset") return raw;
+  const hasAssignedFleet =
+    String(trip?.driver_id ?? "").trim().length > 0 ||
+    String(trip?.vehicle_id ?? "").trim().length > 0;
+  if (hasAssignedFleet) return "asset";
+  return String(trip?.supplier_id ?? "").trim() ? "market" : "asset";
+}
+
+async function ensureAssetCompletionAutoEntries(
+  trip: TripRow | null | undefined,
+): Promise<void> {
+  if (!trip?.id || !trip.organization_id) return;
+  if (resolveTripPayoutModeForCompletion(trip) !== "asset") return;
+
+  const existingRes = await supabase()
+    .from("transactions")
+    .select("id, contact_type, amount_in, amount_out")
+    .eq("organization_id", trip.organization_id)
+    .eq("trip_id", trip.id);
+
+  if (existingRes.error) {
+    console.warn("[trip completion] failed to inspect existing entries", {
+      tripId: trip.id,
+      organizationId: trip.organization_id,
+      message: existingRes.error.message,
+    });
+    return;
+  }
+
+  const existing = (existingRes.data ??
+    []) as Array<{
+    id: string;
+    contact_type: string | null;
+    amount_in: number | null;
+    amount_out: number | null;
+  }>;
+  const hasClientIn = existing.some(
+    (r) =>
+      String(r.contact_type ?? "").toLowerCase() === "client" &&
+      Number(r.amount_in ?? 0) > 0,
+  );
+  const hasDriverOut = existing.some(
+    (r) =>
+      String(r.contact_type ?? "").toLowerCase() === "driver" &&
+      Number(r.amount_out ?? 0) > 0,
+  );
+
+  const transactionDate =
+    String(trip.completed_at ?? "").slice(0, 10) ||
+    new Date().toISOString().slice(0, 10);
+  const clientAmount = Math.max(0, Number(trip.client_price ?? 0) || 0);
+  const driverTargetAmount = Math.max(
+    0,
+    Number(trip.driver_commission ?? 0) || Number(trip.supplier_rate ?? 0) || 0,
+  );
+
+  const pendingInserts: Array<Record<string, unknown>> = [];
+  if (!hasClientIn && clientAmount > 0) {
+    pendingInserts.push({
+      organization_id: trip.organization_id,
+      trip_id: trip.id,
+      party_name: String(trip.client_name ?? "").trim() || "Client",
+      description: "TRIP REVENUE AUTO | Mode: System",
+      amount_in: clientAmount,
+      amount_out: 0,
+      transaction_date: transactionDate,
+      contact_id: trip.client_id ?? null,
+      contact_type: "client",
+      ledger_entity_type: "CLIENT",
+      ledger_flow_type: "receivable",
+      ledger_category: "TRIP_REVENUE",
+    });
+  }
+  if (!hasDriverOut && driverTargetAmount > 0 && String(trip.driver_id ?? "").trim()) {
+    pendingInserts.push({
+      organization_id: trip.organization_id,
+      trip_id: trip.id,
+      party_name: String(trip.driver_display_name ?? "").trim() || "Driver",
+      description: "DRIVER COMMISSION AUTO | Mode: System",
+      amount_in: 0,
+      amount_out: driverTargetAmount,
+      transaction_date: transactionDate,
+      contact_id: trip.driver_id,
+      contact_type: "driver",
+      ledger_entity_type: "DRIVER",
+      ledger_flow_type: "payable",
+      ledger_category: "DRIVER_COMMISSION",
+    });
+  }
+
+  if (pendingInserts.length === 0) return;
+
+  const { error: insertError } = await supabase()
+    .from("transactions")
+    .insert(pendingInserts);
+  if (insertError) {
+    console.warn("[trip completion] failed to auto-create asset entries", {
+      tripId: trip.id,
+      organizationId: trip.organization_id,
+      message: insertError.message,
+      count: pendingInserts.length,
+    });
+  }
+}
+
 async function validateSupplierLinkForCompletion(
   tripId: string,
 ): Promise<{ error: Error | null }> {
@@ -1493,6 +1789,24 @@ export async function updateTripStatus(
     const validation = await validateSupplierLinkForCompletion(tripId);
     if (validation.error) return { error: validation.error, trip: null };
   }
+  let wasAlreadyCompleted = false;
+  if (COMPLETED_STATUS_SET.has(status)) {
+    const before = await supabase()
+      .from("trips")
+      .select("status, completed_at")
+      .eq("id", tripId)
+      .maybeSingle();
+    if (!before.error && before.data) {
+      const beforeStatus = String((before.data as { status?: string | null }).status ?? "")
+        .trim()
+        .toLowerCase();
+      const beforeCompletedAt = String(
+        (before.data as { completed_at?: string | null }).completed_at ?? "",
+      ).trim();
+      wasAlreadyCompleted =
+        COMPLETED_STATUS_SET.has(beforeStatus) || beforeCompletedAt.length > 0;
+    }
+  }
   const updates: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
     status,
@@ -1516,7 +1830,11 @@ export async function updateTripStatus(
       trip: null,
     };
   }
-  return { error: null, trip: row as TripRow };
+  const updatedTrip = row as TripRow;
+  if (COMPLETED_STATUS_SET.has(status) && !wasAlreadyCompleted) {
+    await ensureAssetCompletionAutoEntries(updatedTrip);
+  }
+  return { error: null, trip: updatedTrip };
 }
 
 export interface TripDriverOnlineState {
@@ -1581,7 +1899,11 @@ export async function manualAdvanceTrip(
     p_idempotency_key: params.idempotencyKey,
   });
   if (error) return { error: new Error(error.message), trip: null };
-  return { error: null, trip: (data ?? null) as TripRow | null };
+  const trip = (data ?? null) as TripRow | null;
+  if (params.action === "complete" && trip) {
+    await ensureAssetCompletionAutoEntries(trip);
+  }
+  return { error: null, trip };
 }
 
 /**
@@ -1691,17 +2013,7 @@ export async function getActiveDriverIds(orgId: string): Promise<Set<string>> {
     };
     const id = r.driver_id;
     if (!id) continue;
-    const status = String(r.status ?? "")
-      .trim()
-      .toLowerCase();
-    const isAcceptedStatus =
-      status === "in_progress" ||
-      status === "in_transit" ||
-      status === "picked_up" ||
-      status === "at_drop";
-    if (isAcceptedStatus || r.started_at != null) {
-      ids.add(id);
-    }
+    ids.add(id);
   }
   return ids;
 }

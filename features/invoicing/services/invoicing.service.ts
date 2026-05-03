@@ -272,9 +272,14 @@ export async function fetchPodReconciliationSummary(
   }
 }
 
+interface InvoicePayload {
+  invoiceNo?: string;
+  [key: string]: unknown;
+}
+
 export async function executeInvoiceCreation(
   internalIds: string[],
-  payload?: any,
+  payload?: InvoicePayload,
 ): Promise<{ error: Error | null }> {
   try {
     const sanitizedIds = Array.from(new Set(internalIds.filter(Boolean)));
@@ -332,12 +337,15 @@ export async function executeInvoiceCreation(
     if (error) throw error;
 
     for (const id of sanitizedIds) {
-      await supabase().rpc("log_activity", {
+      const { error: logError } = await supabase().rpc("log_activity", {
         p_action: "INVOICE_GENERATED",
         p_entity_type: "trip",
         p_entity_id: id,
         p_details: { invoice_no: invoiceNo, payload },
       });
+      if (logError) {
+        console.warn("[invoicing] log_activity RPC failed for trip", id, logError.message);
+      }
     }
 
     return { error: null };

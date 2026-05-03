@@ -9,6 +9,7 @@ import {
   isLoadBasedTrip,
 } from "@/features/trips/visibility/tripVisibility";
 import type { VehicleRow } from "@/features/vehicles/services/vehicles.service";
+import { resolveTripLedgerTripType } from "@/features/finance/utils/tripLedgerPayoutMode.util";
 import { useTransactionsQuery } from "@/lib/queries";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -329,7 +330,7 @@ export function useFinanceLedger({
       if (!r.trip_id) return true;
       const trip = tripById.get(r.trip_id);
       if (!trip) return true;
-      const isAggregate = !!trip.supplier_id;
+      const isAggregate = resolveTripLedgerTripType(trip) === "market";
       return sourceSupplyFilter === "aggregate" ? isAggregate : !isAggregate;
     });
   }, [filteredLedger, sourceSupplyFilter, tripById]);

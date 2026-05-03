@@ -16,7 +16,7 @@ import {
     type SupplierRow,
 } from "@/features/suppliers/services/suppliers.service";
 import {
-  getDriverAvailabilityByPhone,
+  getDriverAvailabilityByPhoneGlobal,
   getTripsByOrganization,
 } from "@/features/trips/services/trips.service";
 import {
@@ -381,33 +381,34 @@ export function AddTripFormFields({
       }
       searchExistingDriversByPhone(normalized).then(
         async ({ error: err, matches }) => {
-          if (err || !matches.length) {
-            setters.setDriverPhoneName(null);
-            setters.setDriverPhoneConfirmed(false);
-            setters.setDriverPhoneTripConflict(false, null);
-            return;
-          }
-          const nextName = matches[0].full_name?.trim() || null;
+          const nextName =
+            !err && matches.length > 0
+              ? matches[0].full_name?.trim() || null
+              : null;
           setters.setDriverPhoneName(nextName);
           if (nextName) {
             setters.setAggregateDriverName(nextName);
-          }
-          if (nextName && nextName !== lastDriverPhoneNameRef.current) {
+            if (nextName !== lastDriverPhoneNameRef.current) {
+              setters.setDriverPhoneConfirmed(false);
+            }
+          } else {
+            // No profile match: still keep assignment unconfirmed and let
+            // global busy check decide availability.
             setters.setDriverPhoneConfirmed(false);
           }
           lastDriverPhoneNameRef.current = nextName;
 
-          if (!organizationId) {
-            setters.setDriverPhoneTripConflict(false, null);
-            return;
-          }
-          const { error: avErr, result } = await getDriverAvailabilityByPhone(
-            organizationId,
-            normalized,
-            { anyOpenTripBlocks: true },
-          );
+          // Always run global busy check for a valid phone, even when profile lookup
+          // returns no name. This is the assignment authority for aggregate flow.
+          const { error: avErr, result } =
+            await getDriverAvailabilityByPhoneGlobal(normalized, {
+              anyOpenTripBlocks: true,
+              requireAuthoritativeRpc: true,
+            });
           if (avErr) {
-            setters.setDriverPhoneTripConflict(false, null);
+            setters.setDriverPhoneTripConflict(true, "Busy check unavailable");
+            setters.setDriverPhoneConfirmed(false);
+            setters.setDriverPhoneName(null);
             return;
           }
           setters.setDriverPhoneTripConflict(
@@ -416,6 +417,10 @@ export function AddTripFormFields({
           );
           if (result.isBusy) {
             setters.setDriverPhoneConfirmed(false);
+            // Busy drivers should never appear as assignable in aggregate flow.
+            setters.setDriverPhoneName(null);
+            setters.setAggregateDriverName("");
+            lastDriverPhoneNameRef.current = null;
           }
         },
       );
@@ -1865,39 +1870,38 @@ export function AddTripFormFields({
                         </View>
                       </View>
                     </View>
-                    {state.driverPhoneName ? (
-                      state.driverPhoneTripConflict ? (
-                        <View
-                          style={[
-                            styles.driverConfirmCard,
-                            styles.driverConfirmCardError,
-                          ]}
-                          accessibilityRole="alert"
-                        >
-                          <View style={{ flex: 1, minWidth: 0 }}>
-                            <Text
-                              style={[
-                                styles.driverConfirmMain,
-                                { color: Theme.destructive },
-                              ]}
-                              numberOfLines={2}
-                            >
-                              {state.driverPhoneName?.trim()
-                                ? `${state.driverPhoneName.trim()} is already on a trip`
-                                : "This driver is already on a trip"}
-                            </Text>
-                            <Text style={styles.driverConfirmSub}>
-                              {state.driverPhoneTripConflictLabel
-                                ? `Open trip: ${state.driverPhoneTripConflictLabel}. Use another number or finish that trip first.`
-                                : "Assign a different phone number or complete their current trip first."}
-                            </Text>
-                          </View>
-                          <AlertCircle
-                            size={20}
-                            color={Theme.destructive}
-                          />
+                    {state.driverPhoneTripConflict ? (
+                      <View
+                        style={[
+                          styles.driverConfirmCard,
+                          styles.driverConfirmCardError,
+                        ]}
+                        accessibilityRole="alert"
+                      >
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text
+                            style={[
+                              styles.driverConfirmMain,
+                              { color: Theme.destructive },
+                            ]}
+                            numberOfLines={2}
+                          >
+                            {state.driverPhoneName?.trim()
+                              ? `${state.driverPhoneName.trim()} is already on a trip`
+                              : "This driver is already on a trip"}
+                          </Text>
+                          <Text style={styles.driverConfirmSub}>
+                            {state.driverPhoneTripConflictLabel
+                              ? `Open trip: ${state.driverPhoneTripConflictLabel}. Use another number or finish that trip first.`
+                              : "Driver is Busy / On Trip. Use a different number or complete the current trip first."}
+                          </Text>
                         </View>
-                      ) : (
+                        <AlertCircle
+                          size={20}
+                          color={Theme.destructive}
+                        />
+                      </View>
+                    ) : state.driverPhoneName ? (
                         <TouchableOpacity
                           onPress={() => {
                             const nextConfirmed = !state.driverPhoneConfirmed;
@@ -1949,7 +1953,6 @@ export function AddTripFormFields({
                             }
                           />
                         </TouchableOpacity>
-                      )
                     ) : null}
                   </>
                 ) : (
