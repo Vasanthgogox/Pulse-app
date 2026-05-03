@@ -680,6 +680,20 @@ export default function TripDetailScreen({
     trip.organization_id != null &&
     trip.organization_id === currentOrganization.id;
   const isPartnerSettlementView = trip.indent_id != null && !isTripOwner;
+  const payoutModeLc = String(trip.trip_payout_mode ?? "").trim().toLowerCase();
+  /**
+   * "Record supplier payout" is for **market / aggregate supply** (dispatcher pays an external supplier).
+   * Integrated load **asset execution** (partner org is the supplier of record, roster / own fleet) must not
+   * show this — those rows still often carry `supplier_id`, which wrongly made `resolveTripLedgerTripType`
+   * infer `market` when `trip_payout_mode` was unset.
+   */
+  const showRecordSupplierPayoutCta =
+    payoutModeLc !== "asset" &&
+    entryContext !== "supplier" &&
+    !isPartnerSettlementView &&
+    (payoutModeLc === "market" || isTripOwner) &&
+    resolveTripLedgerTripType(trip) === "market" &&
+    !!(trip.supplier_id ?? "").trim();
   const customerSales = Number(trip.client_price ?? 0);
   const supplierCost = Number(trip.supplier_rate ?? 0);
   const sales = isPartnerSettlementView ? supplierCost : customerSales;
@@ -952,13 +966,10 @@ export default function TripDetailScreen({
     return s.replace(/_/g, " ").toUpperCase();
   })();
   const payoutModeLabel = (() => {
-    const raw = String(trip.trip_payout_mode ?? "")
-      .trim()
-      .toLowerCase();
-    if (!raw) return "—";
-    if (raw === "asset") return "Asset";
-    if (raw === "market") return "Market";
-    return raw.replace(/_/g, " ");
+    if (!payoutModeLc) return "—";
+    if (payoutModeLc === "asset") return "Asset";
+    if (payoutModeLc === "market") return "Market";
+    return payoutModeLc.replace(/_/g, " ");
   })();
   const paymentStatusLabel = (() => {
     const raw = String(trip.payment_status ?? "")
@@ -1108,8 +1119,7 @@ export default function TripDetailScreen({
           ? `Suggested cash-in: ${formatINR(receivableAfterAdjustments)} vs adjusted sale`
           : "Link a client on the trip to pre-fill customer receipt"}
       </Text>
-      {resolveTripLedgerTripType(trip) === "market" &&
-      (trip.supplier_id ?? "").trim() ? (
+      {showRecordSupplierPayoutCta ? (
         <TouchableOpacity
           style={[
             neoStyles.capturePaymentBtn,
