@@ -8,24 +8,29 @@ import {
 } from "react-native";
 import {
   AlertTriangle,
-  ArrowRight,
   CheckCircle,
-  CreditCard,
+  ChevronRight,
   Truck,
   MapPin,
-  Package,
   XCircle,
   Navigation,
   Clock,
 } from "lucide-react-native";
+import { CHAT_ACCENT, CHAT_ACCENT_SOFT } from "@/features/chat/chatTheme";
+import { formatChatPartyName } from "@/features/chat/utils/partyDisplay";
 import Theme from "@/constants/Theme";
+import {
+  partyAvatarBackgroundColor,
+  partyAvatarInitialsTextColor,
+  partyInitialsFromName,
+} from "@/lib/partyAvatarDisplay";
 import type { LedgerEventMetadata, TripMessageRow } from "../types/chat.types";
 
 // ── System event card (trip status changes) ───────────────────────────────────
 
 const STATUS_ICON_MAP: Record<string, { Icon: React.ComponentType<any>; color: string; bg: string }> = {
-  assigned:    { Icon: Truck,         color: "#3b82f6", bg: "#eff6ff" },
-  in_progress: { Icon: Navigation,    color: "#8b5cf6", bg: "#f5f3ff" },
+  assigned:    { Icon: Truck,         color: CHAT_ACCENT, bg: CHAT_ACCENT_SOFT },
+  in_progress: { Icon: Navigation,    color: CHAT_ACCENT, bg: CHAT_ACCENT_SOFT },
   picked_up:   { Icon: MapPin,        color: "#f59e0b", bg: "#fffbeb" },
   in_transit:  { Icon: Truck,         color: "#06b6d4", bg: "#ecfeff" },
   at_drop:     { Icon: MapPin,        color: "#10b981", bg: "#ecfdf5" },
@@ -142,6 +147,20 @@ function splitOrgLine(orgLine: string): { from: string; to: string } {
   return { from: trimmed || "—", to: "" };
 }
 
+function ledgerDateUpper(iso: string): string {
+  try {
+    return new Date(iso)
+      .toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
+      .toUpperCase();
+  } catch {
+    return "";
+  }
+}
+
 export function ChatLedgerEventCard({
   message,
   currentOrgId,
@@ -185,171 +204,107 @@ export function ChatLedgerEventCard({
   const orgLine = resolvedLedgerOrgLine(meta, message.content, conversationPartyName);
   const { from: fromParty, to: toParty } = splitOrgLine(orgLine);
 
-  const flowHeadline = flow === "in" ? "Payment received" : "Payment sent";
+  const titleParty = flow === "in" ? fromParty : toParty;
+  const titleDisplay = formatChatPartyName(titleParty);
+  const namedOther = [fromParty, toParty].find((p) => formatChatPartyName(p));
+  const avatarSeedName = titleDisplay ? titleParty : namedOther || "Payment";
+  const avatarBg = partyAvatarBackgroundColor(avatarSeedName);
+  const avatarFg = partyAvatarInitialsTextColor(avatarBg);
+  const dateUpper = ledgerDateUpper(message.created_at);
+  const metaMid = [paymentModeLabel, meta.category].filter(Boolean).join(" · ") || "—";
+  const routeLine = `${fromParty.toUpperCase()} → ${toParty.toUpperCase()}`;
+
   const isCredit = flow === "in";
-  const palette = isCredit
-    ? {
-        kicker: "#059669",
-        headline: "#0f172a",
-        amount: "#047857",
-        badgeBg: "#ecfdf5",
-        badgeText: "#047857",
-        badgeBorder: "#d1fae5",
-        iconBg: "#ecfdf5",
-        iconColor: "#059669",
-        iconBorder: "#d1fae5",
-        pathBg: "#f8fafc",
-        pathBorder: "#e2e8f0",
-        pathLabel: "#94a3b8",
-        pathName: "#0f172a",
-        track: "#e2e8f0",
-        fill: "#10b981",
-        bar: "#10b981",
-        systemBadge: "SYSTEM_CREDITED",
-        tripTag: "TRIP_CREDIT",
-      }
-    : {
-        kicker: "#e11d48",
-        headline: "#0f172a",
-        amount: "#e11d48",
-        badgeBg: "#fff1f2",
-        badgeText: "#be123c",
-        badgeBorder: "#fecdd3",
-        iconBg: "#fff1f2",
-        iconColor: "#e11d48",
-        iconBorder: "#fecdd3",
-        pathBg: "#f8fafc",
-        pathBorder: "#e2e8f0",
-        pathLabel: "#94a3b8",
-        pathName: "#0f172a",
-        track: "#e2e8f0",
-        fill: "#f43f5e",
-        bar: "#f43f5e",
-        systemBadge: "SYSTEM_DEBITED",
-        tripTag: "TRIP_PAYMENT",
-      };
+  const amountColor = isCredit ? "#047857" : "#be123c";
 
   return (
-    <View style={s.payOuter}>
-      <View style={s.payCard}>
-        <View style={s.payBody}>
-          <View style={s.payHeaderRow}>
-            <View style={s.payHeaderLeft}>
-              <View
-                style={[
-                  s.payIconNode,
-                  {
-                    backgroundColor: palette.iconBg,
-                    borderColor: palette.iconBorder,
-                  },
-                ]}
-              >
-                <CreditCard size={24} color={palette.iconColor} strokeWidth={2.2} />
-              </View>
-              <View style={s.payHeaderTitles}>
-                <Text style={[s.payKicker, { color: palette.kicker }]}>{palette.tripTag}</Text>
-                <Text style={[s.payHeadline, { color: palette.headline }]} numberOfLines={2}>
-                  {flowHeadline}
-                </Text>
-              </View>
-            </View>
-            <View style={s.payHeaderRight}>
-              <Text style={[s.payAmount, { color: palette.amount }]} numberOfLines={1}>
-                {flowPrefix}
-                {amountLabel}
-              </Text>
-              <View
-                style={[
-                  s.paySystemBadge,
-                  { backgroundColor: palette.badgeBg, borderColor: palette.badgeBorder },
-                ]}
-              >
-                <Text style={[s.paySystemBadgeText, { color: palette.badgeText }]}>{palette.systemBadge}</Text>
-              </View>
-            </View>
+    <View style={s.ledgerWrap}>
+      <View style={s.ledgerCard}>
+        <View style={[s.ledgerAvatarWrap, s.ledgerAvatarWrapAlign]}>
+          <View style={[s.ledgerAvatar, { backgroundColor: avatarBg }]}>
+            <Text style={[s.ledgerAvatarInitials, { color: avatarFg }]}>
+              {partyInitialsFromName(avatarSeedName)}
+            </Text>
           </View>
+          <View
+            style={[
+              s.ledgerAvatarDot,
+              { backgroundColor: isDisputed ? "#f59e0b" : "#22c55e" },
+            ]}
+          />
+        </View>
 
-          <View style={[s.payPathWrap, { backgroundColor: palette.pathBg, borderColor: palette.pathBorder }]}>
-            <View style={s.payPathCol}>
-              <Text style={[s.payPathLabel, { color: palette.pathLabel }]}>SOURCE_NODE</Text>
-              <Text style={[s.payPathName, { color: palette.pathName }]} numberOfLines={2}>
-                {fromParty}
-              </Text>
-            </View>
-            <View style={s.payPathCenter}>
-              <View style={[s.payProgressTrack, { backgroundColor: palette.track }]}>
-                <View style={[s.payProgressFill, { backgroundColor: palette.fill }]} />
-              </View>
-              <ArrowRight size={18} color="#94a3b8" />
-            </View>
-            <View style={[s.payPathCol, s.payPathColEnd]}>
-              <Text style={[s.payPathLabel, s.payPathLabelEnd, { color: palette.pathLabel }]}>TARGET_NODE</Text>
-              <Text
-                style={[s.payPathName, s.payPathNameEnd, { color: palette.pathName }]}
-                numberOfLines={2}
-              >
-                {toParty || "—"}
-              </Text>
-            </View>
-          </View>
-
-          <View style={s.payMetaRow}>
-            <View style={s.payModePill}>
-              <Text style={s.payModePillText}>{paymentModeLabel}</Text>
-            </View>
-            <View style={s.payMetaRight}>
-              {meta.reference_number ? (
-                <Text style={s.payRefInline} numberOfLines={1}>
-                  #{meta.reference_number}
-                </Text>
-              ) : null}
-              <Text style={s.payTime}>{displayTime}</Text>
-            </View>
-          </View>
-
-          {meta.notes ? (
-            <Text style={s.payNotes} numberOfLines={3}>
-              {meta.notes}
+        <View style={s.ledgerBody}>
+          {titleDisplay ? (
+            <Text style={s.ledgerTitle} numberOfLines={1}>
+              {titleDisplay}
             </Text>
           ) : null}
-
-          {isAcknowledged ? (
-            <View style={s.payStatus}>
-              <CheckCircle size={12} color="#059669" />
-              <Text style={[s.payStatusText, { color: "#047857" }]}>Added to book</Text>
-            </View>
-          ) : isDisputed ? (
-            <View style={s.payStatus}>
-              <AlertTriangle size={12} color="#d97706" />
-              <Text style={[s.payStatusText, { color: "#b45309" }]}>Dispute raised</Text>
-            </View>
-          ) : !readOnly && isReceiver && !isSender ? (
-            <View style={s.payActions}>
-              <TouchableOpacity
-                style={s.addToBookBtn}
-                onPress={() => onAddToBook(message)}
-                disabled={addingToBook}
-                activeOpacity={0.8}
-              >
-                {addingToBook ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={s.addToBookText}>Add to book</Text>
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={s.disputeBtn}
-                onPress={() => onDispute(message)}
-                disabled={addingToBook}
-                activeOpacity={0.8}
-              >
-                <Text style={s.disputeText}>Dispute</Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
+          <Text style={s.ledgerMeta} numberOfLines={1}>
+            {dateUpper}
+            {" · "}
+            {metaMid}
+          </Text>
+          <Text style={s.ledgerRoute} numberOfLines={1}>
+            {routeLine}
+          </Text>
         </View>
-        <View style={[s.paySecurityBar, { backgroundColor: palette.bar }]} />
+
+        <View style={s.ledgerRight}>
+          <Text style={[s.ledgerAmount, { color: amountColor }]} numberOfLines={1}>
+            {flowPrefix}
+            {amountLabel}
+          </Text>
+          <Text style={s.ledgerTimeRight} numberOfLines={1}>
+            {displayTime}
+          </Text>
+        </View>
+
+        <View style={s.ledgerChevronWrap}>
+          <ChevronRight size={14} color="#cbd5e1" />
+        </View>
       </View>
+
+      {meta.notes ? (
+        <Text style={s.ledgerNotesBelow} numberOfLines={2}>
+          {meta.notes}
+        </Text>
+      ) : null}
+
+      {isAcknowledged ? (
+        <View style={s.ledgerFooterStatus}>
+          <CheckCircle size={11} color="#059669" />
+          <Text style={s.ledgerFooterStatusText}>Added to book</Text>
+        </View>
+      ) : isDisputed ? (
+        <View style={s.ledgerFooterStatus}>
+          <AlertTriangle size={11} color="#d97706" />
+          <Text style={[s.ledgerFooterStatusText, { color: "#b45309" }]}>Dispute raised</Text>
+        </View>
+      ) : !readOnly && isReceiver && !isSender ? (
+        <View style={s.ledgerActions}>
+          <TouchableOpacity
+            style={s.ledgerAddBtn}
+            onPress={() => onAddToBook(message)}
+            disabled={addingToBook}
+            activeOpacity={0.8}
+          >
+            {addingToBook ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={s.ledgerAddBtnText}>Add to book</Text>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={s.ledgerDisputeBtn}
+            onPress={() => onDispute(message)}
+            disabled={addingToBook}
+            activeOpacity={0.8}
+          >
+            <Text style={s.ledgerDisputeBtnText}>Dispute</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -396,261 +351,178 @@ const s = StyleSheet.create({
     letterSpacing: 0.4,
   },
 
-  // Ledger / trip payment card — high-contrast “protocol finance” layout
-  payOuter: {
-    marginVertical: 8,
-    maxWidth: "88%",
-    width: "88%",
+  // Ledger row — same footprint as system `eventCard` (compact list tile)
+  ledgerWrap: {
     alignSelf: "center",
+    maxWidth: "85%",
+    marginVertical: 4,
   },
-  payCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 24,
-    borderWidth: 2,
-    borderColor: "#0f172a",
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 6,
-  },
-  payBody: {
-    paddingHorizontal: 14,
-    paddingTop: 16,
-    paddingBottom: 14,
-    gap: 12,
-  },
-  payHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  payHeaderLeft: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-    minWidth: 0,
-  },
-  payIconNode: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
-    borderWidth: 2,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-  payHeaderTitles: {
-    flex: 1,
-    minWidth: 0,
-  },
-  payKicker: {
-    fontSize: 9,
-    fontWeight: "900",
-    textTransform: "uppercase",
-    letterSpacing: 1.4,
-    marginBottom: 4,
-    fontStyle: "italic",
-  },
-  payHeadline: {
-    fontSize: 20,
-    fontWeight: "900",
-    textTransform: "uppercase",
-    fontStyle: "italic",
-    letterSpacing: -0.6,
-    lineHeight: 22,
-  },
-  payHeaderRight: {
-    alignItems: "flex-end",
-    justifyContent: "center",
-    flexShrink: 0,
-    maxWidth: "40%",
-  },
-  payAmount: {
-    fontSize: 19,
-    fontWeight: "900",
-    fontStyle: "italic",
-    letterSpacing: -0.6,
-    fontVariant: ["tabular-nums"],
-    textAlign: "right",
-  },
-  paySystemBadge: {
-    marginTop: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-    borderWidth: 2,
-  },
-  paySystemBadgeText: {
-    fontSize: 9,
-    fontWeight: "900",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    fontStyle: "italic",
-  },
-  payPathWrap: {
+  ledgerCard: {
     flexDirection: "row",
     alignItems: "stretch",
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    gap: 12,
+    backgroundColor: "#ffffff",
     borderRadius: 18,
-    borderWidth: 2,
+    borderWidth: 1,
+    borderColor: "#e8ecf1",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.045,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
-  payPathCol: {
+  ledgerAvatarWrap: {
+    width: 34,
+    height: 34,
+    position: "relative",
+    flexShrink: 0,
+  },
+  ledgerAvatarWrapAlign: {
+    alignSelf: "center",
+  },
+  ledgerAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  ledgerAvatarInitials: {
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  ledgerAvatarDot: {
+    position: "absolute",
+    right: -1,
+    bottom: -1,
+    width: 11,
+    height: 11,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: "#ffffff",
+  },
+  ledgerBody: {
     flex: 1,
     minWidth: 0,
+    gap: 3,
     justifyContent: "center",
+    paddingVertical: 1,
   },
-  payPathColEnd: {
-    alignItems: "flex-end",
+  ledgerTitle: {
+    fontSize: 11,
+    fontWeight: "300",
+    fontStyle: "italic",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.2,
   },
-  payPathLabel: {
+  ledgerMeta: {
     fontSize: 9,
-    fontWeight: "900",
-    textTransform: "uppercase",
-    letterSpacing: 1.2,
-    marginBottom: 6,
-    fontStyle: "italic",
+    fontWeight: "500",
+    color: "#64748b",
+    letterSpacing: 0.02,
   },
-  payPathLabelEnd: {
-    textAlign: "right",
-    width: "100%",
-  },
-  payPathName: {
-    fontSize: 14,
-    fontWeight: "900",
-    textTransform: "uppercase",
+  ledgerRoute: {
+    fontSize: 8,
+    fontWeight: "400",
+    color: "#94a3b8",
     fontStyle: "italic",
+    letterSpacing: 0.15,
+  },
+  ledgerRight: {
+    alignSelf: "stretch",
+    justifyContent: "center",
+    alignItems: "flex-end",
+    flexShrink: 0,
+    gap: 3,
+    paddingLeft: 12,
+    marginLeft: 2,
+    borderLeftWidth: 1,
+    borderLeftColor: "#f1f5f9",
+    minWidth: 86,
+    maxWidth: "36%",
+  },
+  ledgerAmount: {
+    fontSize: 13,
+    fontWeight: "800",
+    fontVariant: ["tabular-nums"],
     letterSpacing: -0.35,
     lineHeight: 17,
   },
-  payPathNameEnd: {
-    textAlign: "right",
-    width: "100%",
-  },
-  payPathCenter: {
-    width: 36,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    flexShrink: 0,
-    alignSelf: "stretch",
-  },
-  payProgressTrack: {
-    width: 36,
-    height: 6,
-    borderRadius: 3,
-    overflow: "hidden",
-  },
-  payProgressFill: {
-    width: "66%",
-    height: "100%",
-    borderRadius: 4,
-  },
-  payMetaRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    gap: 8,
-    flexWrap: "wrap",
-    marginTop: 2,
-  },
-  payModePill: {
-    backgroundColor: "#f1f5f9",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-  },
-  payModePillText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#334155",
-    textTransform: "capitalize",
-  },
-  payMetaRight: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    gap: 6,
-    flexShrink: 1,
-    justifyContent: "flex-end",
-    minWidth: 0,
-  },
-  payRefInline: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: "#94a3b8",
-    flexShrink: 1,
-  },
-  payNotes: {
-    fontSize: 11,
-    color: "#64748b",
-    lineHeight: 15,
+  ledgerTimeRight: {
+    fontSize: 8,
     fontWeight: "600",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    opacity: 0.95,
   },
-  payActions: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 4,
+  ledgerChevronWrap: {
+    justifyContent: "center",
+    alignSelf: "center",
+    paddingLeft: 4,
+    marginLeft: 2,
   },
-  payStatus: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: "#f8fafc",
-    borderRadius: 12,
-    alignSelf: "flex-start",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-  },
-  payStatusText: {
-    fontSize: 11,
-    fontWeight: "800",
-  },
-  payTime: {
+  ledgerNotesBelow: {
+    marginTop: 6,
     fontSize: 10,
     color: "#64748b",
+    lineHeight: 14,
+    fontWeight: "600",
+    paddingHorizontal: 2,
+  },
+  ledgerFooterStatus: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: "#f8fafc",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    alignSelf: "flex-start",
+  },
+  ledgerFooterStatusText: {
+    fontSize: 10,
     fontWeight: "800",
-    letterSpacing: 0.2,
+    color: "#047857",
   },
-  paySecurityBar: {
-    height: 10,
-    width: "100%",
-    opacity: 0.85,
+  ledgerActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 8,
   },
-  addToBookBtn: {
+  ledgerAddBtn: {
     flex: 1,
-    backgroundColor: Theme.primary,
-    borderRadius: 14,
-    paddingVertical: 10,
+    backgroundColor: CHAT_ACCENT,
+    borderRadius: 12,
+    paddingVertical: 8,
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 36,
+    minHeight: 34,
   },
-  addToBookText: {
+  ledgerAddBtnText: {
     fontSize: 11,
     fontWeight: "700",
     color: "#fff",
   },
-  disputeBtn: {
+  ledgerDisputeBtn: {
     flex: 1,
     backgroundColor: "#fff",
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 2,
     borderColor: "#fbbf24",
-    paddingVertical: 10,
+    paddingVertical: 8,
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 36,
+    minHeight: 34,
   },
-  disputeText: {
+  ledgerDisputeBtnText: {
     fontSize: 11,
     fontWeight: "700",
     color: "#b45309",

@@ -1,6 +1,14 @@
 export type ConversationPartyType = "client" | "supplier" | "driver";
 export type MessageSenderRole = "dispatcher" | "client" | "supplier" | "driver" | "system";
-export type MessageType = "text" | "update" | "question" | "challenge" | "system" | "ledger_event" | "document_share";
+export type MessageType =
+  | "text"
+  | "update"
+  | "question"
+  | "challenge"
+  | "system"
+  | "ledger_event"
+  | "document_share"
+  | "feedback_request";
 
 // ── Ledger event metadata ─────────────────────────────────────────────────────
 
@@ -32,6 +40,25 @@ export interface DocumentShareMetadata {
   entity_id: string;
 }
 
+/** In-chat debrief card after trip completion (`message_type = feedback_request`). */
+export interface FeedbackRequestMetadata {
+  feedback_version?: number;
+  rated_party_type: "client" | "supplier" | "driver";
+  rated_id: string;
+  rated_display_name?: string;
+  /** Set after successful submit (merged into row). */
+  submitted_at?: string;
+  submitted_score?: number;
+  submitted_tags?: string[];
+}
+
+export type TripMessageMetadata =
+  | LedgerEventMetadata
+  | DocumentShareMetadata
+  | FeedbackRequestMetadata
+  | Record<string, unknown>
+  | null;
+
 // ── Trip conversation ─────────────────────────────────────────────────────────
 
 export interface TripConversationRow {
@@ -59,7 +86,7 @@ export interface TripMessageRow {
   sender_name: string;
   content: string;
   message_type: MessageType;
-  metadata?: LedgerEventMetadata | DocumentShareMetadata | null;
+  metadata?: TripMessageMetadata;
   is_read: boolean;
   read_at: string | null;
   created_at: string;
@@ -69,6 +96,12 @@ export interface TripConversation extends TripConversationRow {
   trip_number: string;
   display_trip_id?: string | null;
   trip_status?: string | null;
+  /** From `trips.driver_id` embed — used for hub "UNASSIGNED" when no driver on trip. */
+  trip_driver_id?: string | null;
+  /** From `trips.supplier_id` embed — aggregate / integrated trips only. */
+  trip_supplier_id?: string | null;
+  /** From `trips.created_at` embed — trip date for hub / detail chrome. */
+  trip_created_at?: string | null;
   pickup_area: string;
   drop_location: string;
   messages: TripMessageRow[];

@@ -17,6 +17,7 @@ import {
   resolveChatDocumentStorageUrl,
   tryChatDocumentBlobObjectUrl,
 } from "../utils/resolveChatDocumentUrl.util";
+import { CHAT_ACCENT, CHAT_ACCENT_SOFT } from "@/features/chat/chatTheme";
 
 const IMAGE_EXT_RE =
   /\.(jpe?g|png|gif|webp|heic|heif|bmp|tif|tiff)(\?|#|$)/i;
@@ -200,8 +201,8 @@ export function DocumentShareCard({ message, isOwn }: DocumentShareCardProps) {
   return (
     <View style={[s.card, isOwn ? s.cardOwn : s.cardOther]}>
       <View style={s.header}>
-        <View style={[s.iconWrap, { backgroundColor: isOwn ? "rgba(255,255,255,0.18)" : "#eff6ff" }]}>
-          <FileText size={16} color={isOwn ? "#fff" : "#3b82f6"} />
+        <View style={[s.iconWrap, { backgroundColor: isOwn ? "rgba(255,255,255,0.18)" : CHAT_ACCENT_SOFT }]}>
+          <FileText size={16} color={isOwn ? "#fff" : CHAT_ACCENT} />
         </View>
         <View style={s.info}>
           <Text style={[s.docType, isOwn && s.textOwn]} numberOfLines={1}>
@@ -241,10 +242,10 @@ export function DocumentShareCard({ message, isOwn }: DocumentShareCardProps) {
         activeOpacity={0.8}
       >
         {opening || resolving ? (
-          <ActivityIndicator size="small" color={isOwn ? "#5b5ef4" : "#fff"} />
+          <ActivityIndicator size="small" color={isOwn ? CHAT_ACCENT : "#fff"} />
         ) : (
           <>
-            <ExternalLink size={12} color={isOwn ? "#5b5ef4" : "#fff"} />
+            <ExternalLink size={12} color={isOwn ? CHAT_ACCENT : "#fff"} />
             <Text style={[s.openText, isOwn ? s.openTextOwn : s.openTextOther]}>
               {hasAnyUri ? "Open / download" : "View document"}
             </Text>
@@ -271,10 +272,10 @@ const s = StyleSheet.create({
     elevation: 1,
   },
   cardOwn: {
-    backgroundColor: "#5b5ef4",
+    backgroundColor: CHAT_ACCENT,
     borderColor: "transparent",
     alignSelf: "flex-end",
-    shadowColor: "#5b5ef4",
+    shadowColor: CHAT_ACCENT,
   },
   cardOther: {
     backgroundColor: "#fff",
@@ -349,7 +350,7 @@ const s = StyleSheet.create({
   openBtnOwn: { backgroundColor: "#fff" },
   openBtnOther: { backgroundColor: "#3b82f6" },
   openText: { fontSize: 12, fontWeight: "700" },
-  openTextOwn: { color: "#5b5ef4" },
+  openTextOwn: { color: CHAT_ACCENT },
   openTextOther: { color: "#fff" },
   time: {
     fontSize: 9,

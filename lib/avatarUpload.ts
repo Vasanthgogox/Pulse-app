@@ -131,6 +131,75 @@ export async function pickAndUploadAvatar(userId: string): Promise<PickAndUpload
   }
 }
 
+/**
+ * Pick and upload an organization logo. Stores at orgs/{orgId}/logo-{timestamp}.jpg.
+ * Returns storage path; caller should call updateOrganizationLogo(orgId, path).
+ */
+export async function pickAndUploadOrgLogo(orgId: string): Promise<PickAndUploadAvatarResult> {
+  try {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      return { path: null, previewUri: null, error: new Error('Permission to access photos is required') };
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 1,
+      base64: true,
+    });
+    if (result.canceled || !result.assets?.[0]) {
+      return { path: null, previewUri: null, error: null };
+    }
+    const asset = result.assets[0];
+    let uri = asset.uri;
+    try {
+      const manipulated = await ImageManipulator.manipulateAsync(
+        uri,
+        [{ resize: { width: MAX_SIZE, height: MAX_SIZE } }],
+        { compress: QUALITY, format: ImageManipulator.SaveFormat.JPEG }
+      );
+      uri = manipulated.uri;
+    } catch {
+      // keep original if resize fails
+    }
+    const path = `orgs/${orgId}/logo-${Date.now()}.jpg`;
+    let uploadBytes: ArrayBuffer | Uint8Array | null = null;
+    const base64 = typeof asset.base64 === 'string' ? asset.base64.trim() : '';
+    if (base64) {
+      uploadBytes = base64ToUint8Array(base64);
+    } else {
+      const file = new File(uri);
+      uploadBytes = await file.arrayBuffer();
+    }
+    if (!uploadBytes || uploadBytes.byteLength === 0) {
+      return { path: null, previewUri: null, error: new Error('Could not read image file') };
+    }
+    const { error } = await supabase().storage.from(AVATAR_BUCKET).upload(path, uploadBytes, {
+      contentType: 'image/jpeg',
+      upsert: false,
+    });
+    if (error) {
+      return { path: null, previewUri: null, error: new Error(error.message || 'Upload failed') };
+    }
+    return { path, previewUri: uri, error: null };
+  } catch (e) {
+    return { path: null, previewUri: null, error: e instanceof Error ? e : new Error('Failed to upload org logo') };
+  }
+}
+
+/** Save the organization logo storage path to the organizations table. */
+export async function updateOrganizationLogo(
+  orgId: string,
+  logoPath: string | null,
+): Promise<{ error: Error | null }> {
+  const { error } = await supabase()
+    .from('organizations')
+    .update({ logo_url: logoPath })
+    .eq('id', orgId);
+  return { error: error ? new Error(error.message) : null };
+}
+
 /** Image file extensions supported for avatar object discovery. */
 const AVATAR_IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp"];
 

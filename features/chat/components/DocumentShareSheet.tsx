@@ -9,7 +9,7 @@ import {
   View,
 } from "react-native";
 import { FileText, X } from "lucide-react-native";
-import Theme from "@/constants/Theme";
+import { CHAT_ACCENT } from "@/features/chat/chatTheme";
 import { getShareableDocumentsForTrip } from "../services/chat.service";
 
 interface ShareableDoc {
@@ -76,7 +76,7 @@ export function DocumentShareSheet({
 
           {loading ? (
             <View style={s.center}>
-              <ActivityIndicator color={Theme.primary} />
+              <ActivityIndicator color={CHAT_ACCENT} />
             </View>
           ) : docs.length === 0 ? (
             <View style={s.center}>
@@ -99,7 +99,7 @@ export function DocumentShareSheet({
                   activeOpacity={0.75}
                 >
                   <View style={s.docIcon}>
-                    <FileText size={16} color={Theme.primary} />
+                    <FileText size={16} color={CHAT_ACCENT} />
                   </View>
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={s.docType}>{item.entity_type.toUpperCase()}</Text>
@@ -198,7 +198,7 @@ const s = StyleSheet.create({
   docType: {
     fontSize: 9,
     fontWeight: "800",
-    color: Theme.primary,
+    color: CHAT_ACCENT,
     letterSpacing: 0.9,
     textTransform: "uppercase",
     marginBottom: 2,
@@ -211,7 +211,7 @@ const s = StyleSheet.create({
   shareHint: {
     fontSize: 11,
     fontWeight: "700",
-    color: Theme.primary,
+    color: CHAT_ACCENT,
     flexShrink: 0,
   },
 });

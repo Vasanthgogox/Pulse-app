@@ -2,9 +2,7 @@
  * Trips hub — compact card grid and audit-style table for the main Trips tab.
  * Styling aligns with fleet hub / reference; data bindings mirror TripExpandableCard.
  */
-import { getAvatarUriForSeed } from "@/constants/DriverLevels";
 import Theme from "@/constants/Theme";
-import { getUser2DAvatarUriForSeed } from "@/constants/UserAvatars";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import {
     adjustedCost,
@@ -23,16 +21,11 @@ import {
     formatLedgerDate,
     formatLedgerDateTime,
 } from "@/lib/format";
-import {
-    isBlankOrPlaceholderPartyName,
-    partyAvatarHasRenderableOutput,
-    resolvePartyDisplayUri,
-} from "@/lib/partyAvatarDisplay";
+import { partyAvatarHasRenderableOutput } from "@/lib/partyAvatarDisplay";
 import type { LinkedOrgDisplay } from "@/lib/useLinkedOrgProfileMap";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-    Image,
     LayoutAnimation,
     Modal,
     Platform,
@@ -58,6 +51,7 @@ import Animated, {
     withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { PartyAvatar } from "@/components/PartyAvatar";
 import { getTripDisplayNumber, type TripRow } from "../services/trips.service";
 
 if (
@@ -366,87 +360,7 @@ export function summarizeTripLedgerForHub(entries: LedgerRow[]): {
 
 const HUB_TABLE_AVATAR = 26;
 
-type HubPartyAvatarSize = "default" | "compact";
-
-/** Hub card / table: linked org → contact photo → seed (DiceBear); drivers use driver preset seeds. */
-function HubPartyAvatar({
-  avatarUrl,
-  avatarSeed,
-  fallbackSeed,
-  entityType = "client",
-  partyLabel,
-  organizationImageUrl,
-  organizationAvatarSeed,
-  size = "default",
-}: {
-  avatarUrl: string | null | undefined;
-  avatarSeed: string | null | undefined;
-  fallbackSeed: string;
-  entityType?: "client" | "supplier" | "driver";
-  /** When empty or placeholder-only, no synthetic DiceBear avatar is shown (unless driver with fallbackSeed). */
-  partyLabel: string;
-  organizationImageUrl?: string | null;
-  organizationAvatarSeed?: string | null;
-  size?: HubPartyAvatarSize;
-}) {
-  const ringStyle =
-    size === "compact" ? styles.hubTableAvatarRing : styles.hubPartyAvatarRing;
-  const imgStyle =
-    size === "compact" ? styles.hubTableAvatarImg : styles.hubPartyAvatarImg;
-  const resolved =
-    resolvePartyDisplayUri({
-      organizationImageUrl,
-      organizationAvatarSeed,
-      avatarUrl,
-      avatarSeed,
-      entityType,
-    }) ?? null;
-  if (resolved) {
-    return (
-      <View style={ringStyle}>
-        <Image
-          source={{ uri: resolved }}
-          style={imgStyle}
-          resizeMode="cover"
-          accessibilityIgnoresInvertColors
-        />
-      </View>
-    );
-  }
-  const seedKey = (fallbackSeed ?? "").trim() || partyLabel.trim();
-  if (isBlankOrPlaceholderPartyName(partyLabel)) {
-    if (entityType === "driver" && seedKey) {
-      const displayUri = getAvatarUriForSeed(seedKey || "driver");
-      return (
-        <View style={ringStyle}>
-          <Image
-            source={{ uri: displayUri }}
-            style={imgStyle}
-            resizeMode="cover"
-            accessibilityIgnoresInvertColors
-          />
-        </View>
-      );
-    }
-    return null;
-  }
-  const displayUri =
-    entityType === "driver"
-      ? getAvatarUriForSeed(seedKey || "driver")
-      : getUser2DAvatarUriForSeed(seedKey || "party");
-  return (
-    <View style={ringStyle}>
-      <Image
-        source={{ uri: displayUri }}
-        style={imgStyle}
-        resizeMode="cover"
-        accessibilityIgnoresInvertColors
-      />
-    </View>
-  );
-}
-
-function linkedOrgAvatarFields(
+export function linkedOrgAvatarFields(
   linkedOrgId: string | null | undefined,
   linkedMap: Record<string, LinkedOrgDisplay> | undefined,
 ): { organizationImageUrl?: string | null; organizationAvatarSeed?: string | null } {
@@ -473,6 +387,11 @@ export type TripsHubTripCardProps = {
   supplierAvatarUrl?: string | null;
   supplierAvatarSeed?: string | null;
   supplierAvatarFallbackSeed?: string;
+  /** Linked org profile (RPC) — same resolution as finance / network `PartyAvatar`. */
+  clientOrganizationImageUrl?: string | null;
+  clientOrganizationAvatarSeed?: string | null;
+  supplierOrganizationImageUrl?: string | null;
+  supplierOrganizationAvatarSeed?: string | null;
   cardDate: string;
   stageLabel: string;
   onPress: () => void;
@@ -505,6 +424,10 @@ export function TripsHubTripCard({
   supplierAvatarUrl,
   supplierAvatarSeed,
   supplierAvatarFallbackSeed,
+  clientOrganizationImageUrl,
+  clientOrganizationAvatarSeed,
+  supplierOrganizationImageUrl,
+  supplierOrganizationAvatarSeed,
   cardDate: _cardDate,
   stageLabel,
   onPress,
@@ -678,16 +601,23 @@ export function TripsHubTripCard({
           {showSupplierParty ? (
             <View style={styles.fleetPartyRow}>
               <View style={[styles.fleetPartyCol, styles.fleetPartyColWithAvatar]}>
-                <View style={styles.fleetPartyAvatarRow}>
-                  <HubPartyAvatar
-                    avatarUrl={clientAvatarUrl}
-                    avatarSeed={clientAvatarSeed}
-                    fallbackSeed={clientFb}
-                    partyLabel={displayClientName}
-                  />
-                  <View style={styles.fleetPartyTextStack}>
-                    <Text style={styles.fleetPartyLabel}>{tr("tripsHubColClient")}</Text>
-                    <Text style={styles.fleetPartyName} numberOfLines={1}>
+                <View style={styles.fleetPartyStack}>
+                  <Text style={styles.fleetPartyLabel}>{tr("tripsHubColClient")}</Text>
+                  <View style={styles.fleetPartyNameAvatarRow}>
+                    <PartyAvatar
+                      name={displayClientName.trim() || "—"}
+                      initialsColorSeed={clientFb}
+                      organizationImageUrl={clientOrganizationImageUrl}
+                      organizationAvatarSeed={clientOrganizationAvatarSeed}
+                      avatarUrl={clientAvatarUrl}
+                      avatarSeed={clientAvatarSeed}
+                      entityType="client"
+                      size={34}
+                    />
+                    <Text
+                      style={[styles.fleetPartyName, styles.fleetPartyNameBesideAvatar]}
+                      numberOfLines={1}
+                    >
                       {displayClientName}
                     </Text>
                   </View>
@@ -700,44 +630,55 @@ export function TripsHubTripCard({
                   styles.fleetPartyColWithAvatar,
                 ]}
               >
-                <View style={[styles.fleetPartyAvatarRow, styles.fleetPartyAvatarRowEnd]}>
-                  <HubPartyAvatar
-                    avatarUrl={supplierAvatarUrl}
-                    avatarSeed={supplierAvatarSeed}
-                    fallbackSeed={supplierFb}
-                    entityType="supplier"
-                    partyLabel={supplierNameResolved}
-                  />
-                  <View style={styles.fleetPartyTextStackEnd}>
-                    <Text style={[styles.fleetPartyLabel, styles.fleetPartyLabelAlignEnd]}>
-                      {tr("tripsHubSupplierShort")}
-                    </Text>
+                <View style={[styles.fleetPartyStack, styles.fleetPartyStackEnd]}>
+                  <Text style={[styles.fleetPartyLabel, styles.fleetPartyLabelAlignEnd]}>
+                    {tr("tripsHubSupplierShort")}
+                  </Text>
+                  <View style={styles.fleetPartyNameAvatarRowEnd}>
                     <Text
                       style={[
                         supplierNameResolved
                           ? styles.fleetPartyName
                           : styles.fleetPartySub,
-                        styles.fleetPartySubAlignEnd,
+                        styles.fleetPartyNameBesideAvatar,
+                        styles.fleetPartyNameBesideAvatarEnd,
                       ]}
                       numberOfLines={1}
                     >
                       {supplierLine}
                     </Text>
+                    <PartyAvatar
+                      name={supplierNameResolved.trim() || supplierLine.trim() || "—"}
+                      initialsColorSeed={supplierFb}
+                      organizationImageUrl={supplierOrganizationImageUrl}
+                      organizationAvatarSeed={supplierOrganizationAvatarSeed}
+                      avatarUrl={supplierAvatarUrl}
+                      avatarSeed={supplierAvatarSeed}
+                      entityType="supplier"
+                      size={34}
+                    />
                   </View>
                 </View>
               </View>
             </View>
           ) : (
-            <View style={styles.fleetPartyAvatarRow}>
-              <HubPartyAvatar
-                avatarUrl={clientAvatarUrl}
-                avatarSeed={clientAvatarSeed}
-                fallbackSeed={clientFb}
-                partyLabel={displayClientName}
-              />
-              <View style={styles.fleetPartyTextStack}>
-                <Text style={styles.fleetPartyLabel}>{tr("tripsHubColClient")}</Text>
-                <Text style={styles.fleetPartyName} numberOfLines={1}>
+            <View style={styles.fleetPartyStack}>
+              <Text style={styles.fleetPartyLabel}>{tr("tripsHubColClient")}</Text>
+              <View style={styles.fleetPartyNameAvatarRow}>
+                <PartyAvatar
+                  name={displayClientName.trim() || "—"}
+                  initialsColorSeed={clientFb}
+                  organizationImageUrl={clientOrganizationImageUrl}
+                  organizationAvatarSeed={clientOrganizationAvatarSeed}
+                  avatarUrl={clientAvatarUrl}
+                  avatarSeed={clientAvatarSeed}
+                  entityType="client"
+                  size={34}
+                />
+                <Text
+                  style={[styles.fleetPartyName, styles.fleetPartyNameBesideAvatar]}
+                  numberOfLines={1}
+                >
                   {displayClientName}
                 </Text>
               </View>
@@ -1416,14 +1357,27 @@ export function TripsHubTableView({
                   </Text>
                 </View>
                 <View style={styles.manifestTelemetryOperatorRow}>
-                  <HubPartyAvatar
-                    size="compact"
-                    entityType="driver"
-                    avatarUrl={meta?.driverAvatarUrl}
-                    avatarSeed={meta?.driverAvatarSeed}
-                    fallbackSeed={driverFb}
-                    partyLabel={(t.driver_display_name ?? "").trim()}
-                  />
+                  {t.driver_id ? (
+                    <PartyAvatar
+                      name={
+                        (t.driver_display_name ?? "").trim() ||
+                        tr("unassigned")
+                      }
+                      initialsColorSeed={driverFb}
+                      avatarUrl={meta?.driverAvatarUrl}
+                      avatarSeed={meta?.driverAvatarSeed}
+                      entityType="driver"
+                      size={HUB_TABLE_AVATAR}
+                    />
+                  ) : (
+                    <View style={styles.manifestDriverAvatarPlaceholder}>
+                      <FontAwesome
+                        name="user"
+                        size={11}
+                        color={Theme.textMuted}
+                      />
+                    </View>
+                  )}
                   <View style={styles.manifestOperatorTextCol}>
                     <Text style={styles.manifestOperatorName} numberOfLines={1}>
                       {(t.driver_display_name ?? "—").trim().toUpperCase() || "—"}
@@ -1481,17 +1435,21 @@ export function TripsHubTableView({
                       <View style={[styles.manifestSettlementChipOrb, styles.manifestSettlementChipOrbRecvB]} />
                       {clientRecvRenderable ? (
                         <View style={styles.manifestSettlementAvatarRingRecv}>
-                          <HubPartyAvatar
-                            size="compact"
-                            entityType="client"
-                            avatarUrl={meta?.clientAvatarUrl}
-                            avatarSeed={meta?.clientAvatarSeed}
-                            fallbackSeed={
+                          <PartyAvatar
+                            name={clientRecvLabel}
+                            initialsColorSeed={
                               meta?.clientFallbackSeed ?? `client-trip:${t.id}`
                             }
-                            partyLabel={clientRecvLabel}
-                            organizationImageUrl={clientOrgFields.organizationImageUrl}
-                            organizationAvatarSeed={clientOrgFields.organizationAvatarSeed}
+                            entityType="client"
+                            organizationImageUrl={
+                              clientOrgFields.organizationImageUrl
+                            }
+                            organizationAvatarSeed={
+                              clientOrgFields.organizationAvatarSeed
+                            }
+                            avatarUrl={meta?.clientAvatarUrl}
+                            avatarSeed={meta?.clientAvatarSeed}
+                            size={HUB_TABLE_AVATAR}
                           />
                         </View>
                       ) : (
@@ -1585,19 +1543,25 @@ export function TripsHubTableView({
                       <View style={[styles.manifestSettlementChipOrb, styles.manifestSettlementChipOrbPayB]} />
                       {hasSupplierLink && supplierPayRenderable && showSupplierParty ? (
                         <View style={styles.manifestSettlementAvatarRingPay}>
-                          <HubPartyAvatar
-                            size="compact"
+                          <PartyAvatar
+                            name={
+                              supplierPayLabel.trim() ||
+                              tr("tripsHubAwaitingData")
+                            }
+                            initialsColorSeed={
+                              meta?.supplierFallbackSeed ??
+                              `supplier-trip:${t.id}`
+                            }
                             entityType="supplier"
+                            organizationImageUrl={
+                              supplierOrgFields.organizationImageUrl
+                            }
+                            organizationAvatarSeed={
+                              supplierOrgFields.organizationAvatarSeed
+                            }
                             avatarUrl={meta?.supplierAvatarUrl}
                             avatarSeed={meta?.supplierAvatarSeed}
-                            fallbackSeed={
-                              meta?.supplierFallbackSeed ?? `supplier-trip:${t.id}`
-                            }
-                            partyLabel={
-                              supplierPayLabel || tr("tripsHubAwaitingData")
-                            }
-                            organizationImageUrl={supplierOrgFields.organizationImageUrl}
-                            organizationAvatarSeed={supplierOrgFields.organizationAvatarSeed}
+                            size={HUB_TABLE_AVATAR}
                           />
                         </View>
                       ) : (
@@ -2409,32 +2373,36 @@ const styles = StyleSheet.create({
   },
   fleetPartySubAlignEnd: { textAlign: "right", alignSelf: "stretch" },
   fleetPartyLabelAlignEnd: { textAlign: "right", alignSelf: "stretch" },
-  hubPartyAvatarRing: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    overflow: "hidden",
-    backgroundColor: Theme.screenBackground,
-    borderWidth: 1.5,
-    borderColor: Theme.borderLight,
+  fleetPartyStack: {
+    flex: 1,
+    minWidth: 0,
   },
-  hubPartyAvatarImg: {
-    width: 34,
-    height: 34,
+  fleetPartyStackEnd: {
+    alignItems: "flex-end",
+    width: "100%",
   },
-  hubTableAvatarRing: {
-    width: HUB_TABLE_AVATAR,
-    height: HUB_TABLE_AVATAR,
-    borderRadius: HUB_TABLE_AVATAR / 2,
-    overflow: "hidden",
-    backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    flexShrink: 0,
+  fleetPartyNameAvatarRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 2,
+    width: "100%",
   },
-  hubTableAvatarImg: {
-    width: HUB_TABLE_AVATAR,
-    height: HUB_TABLE_AVATAR,
+  fleetPartyNameAvatarRowEnd: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 8,
+    marginTop: 2,
+    width: "100%",
+  },
+  fleetPartyNameBesideAvatar: {
+    marginTop: 0,
+    flex: 1,
+    minWidth: 0,
+  },
+  fleetPartyNameBesideAvatarEnd: {
+    textAlign: "right",
   },
   manifestOperatorTextCol: {
     flex: 1,
@@ -2447,6 +2415,17 @@ const styles = StyleSheet.create({
     gap: 6,
     width: "100%",
     minWidth: 0,
+  },
+  manifestDriverAvatarPlaceholder: {
+    width: HUB_TABLE_AVATAR,
+    height: HUB_TABLE_AVATAR,
+    borderRadius: HUB_TABLE_AVATAR / 2,
+    backgroundColor: Theme.surface,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
   },
   manifestIdentityBadges: {
     marginTop: 2,
@@ -2477,25 +2456,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.35,
     textTransform: "uppercase",
     color: Theme.textPrimaryDark,
-  },
-  fleetPartyAvatarRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    flex: 1,
-    minWidth: 0,
-  },
-  fleetPartyAvatarRowEnd: {
-    justifyContent: "flex-end",
-  },
-  fleetPartyTextStack: {
-    flex: 1,
-    minWidth: 0,
-  },
-  fleetPartyTextStackEnd: {
-    flex: 1,
-    minWidth: 0,
-    alignItems: "flex-end",
   },
   fleetPartyColWithAvatar: {
     minWidth: 0,
@@ -2895,7 +2855,7 @@ const styles = StyleSheet.create({
   },
   manifestSettlementHeaderRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
     width: "100%",
@@ -2923,6 +2883,8 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     borderWidth: 1,
     borderColor: Theme.borderLight,
+    alignItems: "center",
+    justifyContent: "center",
   },
   manifestSettlementIconChipPay: {
     backgroundColor: Theme.surface,
@@ -2933,6 +2895,8 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     borderWidth: 1,
     borderColor: Theme.borderLight,
+    alignItems: "center",
+    justifyContent: "center",
   },
   /** Abstract chip background orbs (inspired by network cards). */
   manifestSettlementChipOrb: {

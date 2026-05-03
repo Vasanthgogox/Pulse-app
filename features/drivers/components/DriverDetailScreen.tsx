@@ -36,7 +36,12 @@ import {
     getTripsWhereOrgIsSupplier,
     type TripRow,
 } from "@/features/trips/services/trips.service";
-import { getSignedAvatarUrl } from "@/lib/avatarUpload";
+import {
+  AVATAR_BUCKET,
+  extractPathFromStorageUrl,
+  getSignedAvatarUrl,
+  LEGACY_AVATAR_BUCKET,
+} from "@/lib/avatarUpload";
 import {
     canAccessFinance,
     getCapabilitiesFromProfile,
@@ -518,8 +523,18 @@ export default function DriverDetailScreen({
       if (!mounted) return;
 
       if (avatarUrl.startsWith("http://") || avatarUrl.startsWith("https://")) {
-        setProfileAvatarUri(avatarUrl);
-        return;
+        const ref = extractPathFromStorageUrl(avatarUrl);
+        if (ref && (ref.bucket === AVATAR_BUCKET || ref.bucket === LEGACY_AVATAR_BUCKET)) {
+          const signed = await getSignedAvatarUrl(ref.path);
+          if (!mounted) return;
+          if (signed) {
+            setProfileAvatarUri(signed);
+            return;
+          }
+        } else {
+          if (mounted) setProfileAvatarUri(avatarUrl);
+          return;
+        }
       }
 
       if (avatarUrl) {
