@@ -78,7 +78,6 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -87,52 +86,47 @@ const LEDGER_SLATE = "#0f172a";
 const LEDGER_PROTOCOL_ICON = "#a5b4fc";
 const LEDGER_LUCIDE_STROKE = 2.2;
 
-/**
- * Smooths viewport width used for ledger breakpoints. On web, `useWindowDimensions` can
- * oscillate by a few pixels when scrollbars appear, flipping stack vs split layout repeatedly.
- */
-function useStableLayoutWidth(rawWidth: number): number {
-  const [stable, setStable] = useState(() => Math.round(rawWidth));
-  useEffect(() => {
-    const id = requestAnimationFrame(() => {
-      setStable((prev) => {
-        const next = Math.round(rawWidth);
-        if (Math.abs(next - prev) < 24) return prev;
-        return next;
-      });
-    });
-    return () => cancelAnimationFrame(id);
-  }, [rawWidth]);
-  return stable;
-}
-
-/** Original split/stack boundary (680). Hysteresis band avoids scrollbar layout thrash on web. */
-const LEDGER_STACK_TRIP_BAND_CENTER = 680;
-const LEDGER_STACK_TRIP_BAND_HYST = 48;
+/** Full-page ledger: stack trip band vs split columns below this width. */
+const LEDGER_STACK_TRIP_BAND_BREAKPOINT = 680;
 
 /**
- * Stack vs split for the trip band (~680px), with hysteresis on **raw** window width.
- * Uses raw width so layout mode stays in sync when scrollbars resize the viewport; pairing this
- * with `useStableLayoutWidth` alone could desync and still flicker. Dead zone prevents flip-flop.
+ * Viewport width for ledger layout math. Do **not** drive this from `useWindowDimensions` inside
+ * `useEffect([width])`: on web the value can fluctuate every frame (scrollbar/subpixel), causing
+ * `Maximum update depth exceeded`. Web uses debounced `resize`; native uses `Dimensions` change.
  */
-function useStableStackTripBand(rawWidth: number): boolean {
-  const [stacked, setStacked] = useState(
-    () => Math.round(rawWidth) < LEDGER_STACK_TRIP_BAND_CENTER,
+function useLedgerViewportWidth(): number {
+  const [winW, setWinW] = useState(() =>
+    Math.max(0, Math.round(Dimensions.get("window").width)),
   );
+
   useEffect(() => {
-    const id = requestAnimationFrame(() => {
-      const w = Math.round(rawWidth);
-      const splitAt = LEDGER_STACK_TRIP_BAND_CENTER + LEDGER_STACK_TRIP_BAND_HYST;
-      const stackAt = LEDGER_STACK_TRIP_BAND_CENTER - LEDGER_STACK_TRIP_BAND_HYST;
-      setStacked((prev) => {
-        if (w >= splitAt) return false;
-        if (w < stackAt) return true;
-        return prev;
-      });
+    const commit = (raw: number) => {
+      const next = Math.max(0, Math.round(Number.isFinite(raw) ? raw : 0));
+      setWinW((prev) => (prev === next ? prev : next));
+    };
+
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      commit(window.innerWidth);
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      const onResize = () => {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => commit(window.innerWidth), 120);
+      };
+      window.addEventListener("resize", onResize);
+      return () => {
+        window.removeEventListener("resize", onResize);
+        clearTimeout(timeout);
+      };
+    }
+
+    commit(Dimensions.get("window").width);
+    const sub = Dimensions.addEventListener("change", ({ window }) => {
+      commit(window.width);
     });
-    return () => cancelAnimationFrame(id);
-  }, [rawWidth]);
-  return stacked;
+    return () => sub.remove();
+  }, []);
+
+  return winW;
 }
 
 /** Colour Lucide icons for ledger payment mode tiles (full-page grid). */
@@ -722,12 +716,12 @@ export function AddTransactionModal({
   driverOffersByDriverId = null,
 }: AddTransactionModalProps) {
   const insets = useSafeAreaInsets();
-  const { width: winWRaw } = useWindowDimensions();
-  const winW = useStableLayoutWidth(winWRaw);
-  const stackTripFinancialBand = useStableStackTripBand(winWRaw);
+  const winW = useLedgerViewportWidth();
+  const stackTripFinancialBand = winW < LEDGER_STACK_TRIP_BAND_BREAKPOINT;
   const isLedgerWide = winW >= 900;
   /** Full-page ledger horizontal padding — tighter on phones so all cards stay readable. */
-  const ledgerFullPagePadH = winW < 420 ? 14 : stackTripFinancialBand ? 16 : 20;
+  const ledgerFullPagePadH =
+    winW < 420 ? 14 : winW < LEDGER_STACK_TRIP_BAND_BREAKPOINT ? 16 : 20;
   const safeClients = clients ?? [];
   const safeSuppliers = suppliers ?? [];
   const safeDrivers = drivers ?? [];
