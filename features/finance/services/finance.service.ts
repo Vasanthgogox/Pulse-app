@@ -8,9 +8,16 @@
  * Service-layer validation: amount cap, date format, string length.
  */
 import { getAvatarUriForSeed } from "@/constants/DriverLevels";
+import { getDriverProfileDisplay } from "@/features/drivers/services/drivers.service";
 import { postLedgerEventToChat } from "@/features/chat/services/chatLedgerBridge.service";
 import { interpretLedgerRowStructured } from "@/features/finance/ledger/ledgerEntryModel";
-import { resolveAvatarPublicUrl } from "@/lib/avatarUpload";
+import {
+  AVATAR_BUCKET,
+  extractPathFromStorageUrl,
+  getSignedAvatarUrl,
+  LEGACY_AVATAR_BUCKET,
+  resolveAvatarPublicUrl,
+} from "@/lib/avatarUpload";
 import { LEDGER_PAGE_SIZE, type PageOpts } from "@/lib/pagination";
 import { supabase } from "@/lib/supabase";
 import { notifyTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
@@ -72,6 +79,38 @@ function isLedgerTripIdRejectedError(
   return false;
 }
 
+/**
+ * Resolve avatar_url (path or full URL) + avatar_seed to a single display URI.
+ * Supabase storage URLs and paths use signed URLs for the private avatar bucket.
+ */
+async function resolveDriverAvatarFromProfileFields(
+  avatarUrlRaw: string | null | undefined,
+  avatarSeedRaw: string | null | undefined,
+): Promise<string | null> {
+  const raw = (avatarUrlRaw ?? "").trim();
+  const seed = (avatarSeedRaw ?? "").trim();
+
+  if (raw) {
+    if (raw.startsWith("http://") || raw.startsWith("https://")) {
+      const ref = extractPathFromStorageUrl(raw);
+      if (ref && (ref.bucket === AVATAR_BUCKET || ref.bucket === LEGACY_AVATAR_BUCKET)) {
+        const signed = await getSignedAvatarUrl(ref.path);
+        if (signed) return signed;
+      } else {
+        return raw;
+      }
+    } else {
+      const signed = await getSignedAvatarUrl(raw);
+      if (signed) return signed;
+      const publicUrl = resolveAvatarPublicUrl(raw);
+      if (publicUrl) return publicUrl;
+    }
+  }
+
+  if (seed) return getAvatarUriForSeed(seed);
+  return null;
+}
+
 export async function getProfileImage(
   contactId: string | null | undefined,
   contactType: "client" | "supplier" | "driver" | null | undefined,
@@ -81,32 +120,11 @@ export async function getProfileImage(
   // Only drivers have a user_id → profiles link; clients/suppliers have no direct profile connection.
   if (contactType !== "driver") return null;
 
-  // Step 1: get user_id from the driver record
-  const { data: driverData, error: driverError } = await supabase()
-    .from("drivers")
-    .select("user_id")
-    .eq("id", contactId)
-    .maybeSingle();
+  // Use SECURITY DEFINER RPC — direct `profiles` select is blocked for other users by RLS.
+  const { profile, error } = await getDriverProfileDisplay(String(contactId).trim());
+  if (error || !profile) return null;
 
-  if (driverError || !driverData?.user_id) return null;
-
-  // Step 2: get avatar_url + avatar_seed from profiles
-  const { data: profileData, error: profileError } = await supabase()
-    .from("profiles")
-    .select("avatar_url, avatar_seed")
-    .eq("id", driverData.user_id)
-    .maybeSingle();
-
-  if (profileError || !profileData) return null;
-
-  // Public bucket — resolve synchronously, no signed URL round-trip needed
-  const publicUrl = resolveAvatarPublicUrl(profileData.avatar_url);
-  if (publicUrl) return publicUrl;
-
-  // Fall back to preset avatar from seed
-  const seed = (profileData.avatar_seed ?? "").trim();
-  if (!seed) return null;
-  return getAvatarUriForSeed(seed);
+  return resolveDriverAvatarFromProfileFields(profile.avatarUrl, profile.avatarSeed);
 }
 
 export interface LedgerRow {

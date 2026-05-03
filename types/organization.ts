@@ -2,6 +2,8 @@
 export interface CurrentOrganization {
   id: string;
   name: string;
+  /** Organization branding logo (storage path or http URL). Priority: logo_url → owner avatar → initials. */
+  logo_url?: string | null;
   operatingModel?: 'ASSET_BASED' | 'NON_ASSET' | 'HYBRID';
   sourcingStrategy?: string;
   marketplaceEnabled?: boolean;
