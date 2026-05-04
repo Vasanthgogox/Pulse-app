@@ -26,7 +26,7 @@ import {
     useSuppliersQuery,
     useTripsQuery,
 } from "@/lib/queries";
-import { uniqueRealtimeChannelTopic } from "@/lib/realtimeTopic";
+import { subscribeSharedPostgresChanges } from "@/lib/realtimeRegistry";
 import { getInitials } from "@/lib/stringUtils";
 import { supabase } from "@/lib/supabase";
 import { useQuery } from "@tanstack/react-query";
@@ -510,18 +510,11 @@ export function ConnectionsView({
 
   useEffect(() => {
     if (!orgId) return;
-    const channel = supabase()
-      .channel(uniqueRealtimeChannelTopic(`network-ratings-${orgId}`))
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "ratings" },
-        () => setRatingsVersion((version) => version + 1),
-      )
-      .subscribe();
-
-    return () => {
-      supabase().removeChannel(channel);
-    };
+    return subscribeSharedPostgresChanges(
+      `network-ratings:org:${orgId}`,
+      [{ event: "*", schema: "public", table: "ratings" }],
+      () => setRatingsVersion((version) => version + 1)
+    );
   }, [orgId]);
 
   useEffect(() => {

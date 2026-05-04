@@ -2,8 +2,7 @@
  * Supabase Realtime subscriptions for trips. Call onInvalidate when data changes (refetch once).
  */
 import { useEffect, useRef } from 'react';
-import { supabase } from '@/lib/supabase';
-import { uniqueRealtimeChannelTopic } from '@/lib/realtimeTopic';
+import { subscribeSharedPostgresChanges } from '@/lib/realtimeRegistry';
 
 /** Subscribe to trips for an organization; call onInvalidate when any change. */
 export function useRealtimeTrips(organizationId: string | null, onInvalidate: () => void) {
@@ -12,24 +11,20 @@ export function useRealtimeTrips(organizationId: string | null, onInvalidate: ()
 
   useEffect(() => {
     if (!organizationId) return;
-    const channel = supabase()
-      .channel(uniqueRealtimeChannelTopic(`trips:org:${organizationId}`))
-      .on(
-        'postgres_changes',
+    return subscribeSharedPostgresChanges(
+      `trips:org:${organizationId}`,
+      [
         {
           event: '*',
           schema: 'public',
           table: 'trips',
           filter: `organization_id=eq.${organizationId}`,
         },
-        () => {
-          onInvalidateRef.current();
-        }
-      )
-      .subscribe();
-    return () => {
-      supabase().removeChannel(channel);
-    };
+      ],
+      () => {
+        onInvalidateRef.current();
+      }
+    );
   }, [organizationId]);
 }
 
@@ -40,23 +35,19 @@ export function useRealtimeTrip(tripId: string | null, onInvalidate: () => void)
 
   useEffect(() => {
     if (!tripId) return;
-    const channel = supabase()
-      .channel(uniqueRealtimeChannelTopic(`trip:${tripId}`))
-      .on(
-        'postgres_changes',
+    return subscribeSharedPostgresChanges(
+      `trip:${tripId}`,
+      [
         {
           event: '*',
           schema: 'public',
           table: 'trips',
           filter: `id=eq.${tripId}`,
         },
-        () => {
-          onInvalidateRef.current();
-        }
-      )
-      .subscribe();
-    return () => {
-      supabase().removeChannel(channel);
-    };
+      ],
+      () => {
+        onInvalidateRef.current();
+      }
+    );
   }, [tripId]);
 }

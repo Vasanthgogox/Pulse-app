@@ -31,6 +31,7 @@ import {
     getVehiclesByOrganization,
     type VehicleRow,
 } from "@/features/vehicles/services/vehicles.service";
+import { assignmentShellStyles } from "@/features/trips/styles/assignmentShellShared";
 import {
     formatIndianVehicleNumber,
     formatIndianVehicleNumberInput,
@@ -1363,10 +1364,10 @@ export function TripAssignmentBlock({
         transparent={Platform.OS === "web"}
         onRequestClose={closeAssignModal}
       >
-        <View style={styles.webModalBackdrop}>
+        <View style={assignmentShellStyles.webModalBackdrop}>
           <View
             style={[
-              styles.assignModalWrap,
+              assignmentShellStyles.assignModalWrapSlate,
               styles.assignModalWrapWide,
               { paddingTop: insets.top },
             ]}
@@ -1809,8 +1810,13 @@ export function TripAssignmentBlock({
           setPhoneAssignOtpReveal(null);
         }}
       >
-        <View style={styles.webModalBackdrop}>
-          <View style={styles.assignModalWrap}>
+        <View style={assignmentShellStyles.webModalBackdrop}>
+          <View
+            style={[
+              assignmentShellStyles.assignModalWrapSlate,
+              { paddingTop: insets.top },
+            ]}
+          >
             <View style={styles.assignModalHeader}>
               <View style={styles.assignModalHeaderText}>
                 <Text style={styles.assignModalTitle}>
@@ -2457,24 +2463,7 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     marginBottom: 8,
   },
-  // Premium assignment picker modal
-  assignModalWrap: {
-    flex: Platform.OS === "web" ? 0 : 1,
-    flexDirection: "column",
-    backgroundColor: "#f8fafc",
-    borderRadius: Platform.OS === "web" ? 14 : 0,
-    overflow: "hidden",
-    ...Platform.select({
-      web: {
-        width: "100%",
-        maxWidth: 760,
-        maxHeight: "86%",
-        minHeight: 420,
-        borderWidth: 1,
-        borderColor: Theme.borderLight,
-      } as any,
-    }),
-  },
+  // Premium assignment picker modal (shell: assignmentShellStyles.assignModalWrapSlate)
   assignModalWrapWide: Platform.select({
     web: {
       maxWidth: 1120,
@@ -2485,18 +2474,6 @@ const styles = StyleSheet.create({
     } as any,
     default: {},
   }),
-  webModalBackdrop: {
-    flex: 1,
-    backgroundColor:
-      Platform.OS === "web" ? "rgba(2,6,23,0.58)" : Theme.surfaceGray,
-    padding: Platform.OS === "web" ? 18 : 0,
-    ...Platform.select({
-      web: {
-        justifyContent: "center",
-        alignItems: "center",
-      } as any,
-    }),
-  },
   assignModalHeader: {
     flexDirection: "row",
     alignItems: "center",
