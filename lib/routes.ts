@@ -38,6 +38,8 @@ export const ROUTES = {
 
   // Full-screen flows (root-level stack)
   ADD_TRIP:       '/add-trip'       as const,
+  /** Modal: same add-client UX as Create Trip (PartyRegistrationPortal on web). */
+  ADD_CLIENT:     '/(modals)/add-client' as const,
   CREATE_INDENT:  '/create-indent'  as const,
   LOAD_BOARD:     '/load-board'     as const,
   /** Load Center + share indent to Pulse (story); use when Network is story-only. */
