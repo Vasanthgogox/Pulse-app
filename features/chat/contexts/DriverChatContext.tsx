@@ -63,6 +63,7 @@ export function DriverChatProvider({ children }: { children: ReactNode }) {
   const [conversations, setConversations] = useState<TripConversation[]>([]);
   const conversationsRef = useRef(conversations);
   conversationsRef.current = conversations;
+  const loadConversationsRef = useRef<() => Promise<TripConversation[]>>(async () => []);
   const [isLoading, setIsLoading] = useState(false);
 
   // Resolve driver record IDs from current user
@@ -110,6 +111,7 @@ export function DriverChatProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     }
   }, [driverIds]);
+  loadConversationsRef.current = loadConversations;
 
   useEffect(() => {
     void loadConversations();
@@ -181,7 +183,7 @@ export function DriverChatProvider({ children }: { children: ReactNode }) {
           const newMsg = payload.new as TripMessageRow;
           const known = conversationsRef.current.some((c) => c.id === newMsg.conversation_id);
           if (!known) {
-            void loadConversations();
+            void loadConversationsRef.current();
             return;
           }
           setConversations((prev) =>
@@ -208,7 +210,7 @@ export function DriverChatProvider({ children }: { children: ReactNode }) {
     return () => {
       supabase().removeChannel(channel);
     };
-  }, [driverIds, uid, loadConversations]);
+  }, [driverIds, uid]);
 
   const sendMessage = useCallback(
     async (conversationId: string, organizationId: string, content: string) => {

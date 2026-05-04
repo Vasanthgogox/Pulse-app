@@ -19,6 +19,7 @@ export function useTripsWhereOrgIsClientQuery(orgId: string | null) {
       return res.trips;
     },
     enabled: !!orgId,
+    staleTime: 300_000,
   });
 }
 
@@ -32,6 +33,7 @@ export function useTripsWhereOrgIsSupplierQuery(orgId: string | null) {
       return res.trips;
     },
     enabled: !!orgId,
+    staleTime: 300_000,
   });
 }
 

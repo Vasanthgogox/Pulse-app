@@ -117,6 +117,7 @@ export function TripChatProvider({ children }: { children: ReactNode }) {
   const [conversations, setConversations] = useState<TripConversation[]>([]);
   const conversationsRef = useRef(conversations);
   conversationsRef.current = conversations;
+  const loadConversationsRef = useRef<() => Promise<void>>(async () => {});
   const [isLoading, setIsLoading] = useState(false);
 
   const loadConversations = useCallback(async () => {
@@ -131,6 +132,7 @@ export function TripChatProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     }
   }, [organizationId]);
+  loadConversationsRef.current = loadConversations;
 
   // Initial load
   useEffect(() => {
@@ -170,7 +172,7 @@ export function TripChatProvider({ children }: { children: ReactNode }) {
           setConversations((prev) => {
             const hasConv = prev.some((c) => c.id === newMsg.conversation_id);
             if (!hasConv) {
-              void loadConversations();
+              void loadConversationsRef.current();
               return prev;
             }
             return prev.map((conv) => {
@@ -203,7 +205,7 @@ export function TripChatProvider({ children }: { children: ReactNode }) {
     return () => {
       supabase().removeChannel(channel);
     };
-  }, [organizationId, loadConversations]);
+  }, [organizationId]);
 
   const sendMessage = useCallback(
     async (conversationId: string, content: string, messageType: MessageType = "text") => {

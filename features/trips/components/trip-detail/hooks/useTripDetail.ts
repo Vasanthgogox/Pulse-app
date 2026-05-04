@@ -303,6 +303,8 @@ export function useTripDetail({
   const refetchTransactionsRef = useRef<() => void>(() => {});
   const podModalRefetchDoneRef = useRef(false);
   const loadCompletedForIdRef = useRef<string | null>(null);
+  const supplierFallbackLastFetchAtRef = useRef<number>(0);
+  const SUPPLIER_FALLBACK_MIN_INTERVAL_MS = 60_000;
   const supplierRetryForTripIdRef = useRef<string | null>(null);
   const tripRef = useRef<TripRow | null>(null);
   tripRef.current = trip;
@@ -751,6 +753,11 @@ export function useTripDetail({
         if (res.trip) return;
         const orgId = currentOrganization?.id;
         if (!orgId) return;
+        const now = Date.now();
+        if (now - supplierFallbackLastFetchAtRef.current < SUPPLIER_FALLBACK_MIN_INTERVAL_MS) {
+          return;
+        }
+        supplierFallbackLastFetchAtRef.current = now;
         const supplierRes = await getTripsWhereOrgIsSupplier(orgId);
         if (supplierRes.error) return;
         const found = supplierRes.trips.find((t) => t.id === tripId);
@@ -1253,7 +1260,7 @@ export function useTripDetail({
       status === "at_drop";
     if (!isActiveJourney || trip.completed_at) return;
 
-    const intervalMs = 3000;
+    const intervalMs = 15_000;
     const timer = setInterval(() => {
       isRefreshingRef.current = true;
       load();
