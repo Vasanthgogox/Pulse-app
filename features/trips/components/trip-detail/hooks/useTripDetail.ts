@@ -303,6 +303,8 @@ export function useTripDetail({
   const refetchTransactionsRef = useRef<() => void>(() => {});
   const podModalRefetchDoneRef = useRef(false);
   const loadCompletedForIdRef = useRef<string | null>(null);
+  const supplierFallbackLastFetchAtRef = useRef<number>(0);
+  const SUPPLIER_FALLBACK_MIN_INTERVAL_MS = 60_000;
   const supplierRetryForTripIdRef = useRef<string | null>(null);
   const tripRef = useRef<TripRow | null>(null);
   tripRef.current = trip;
@@ -564,22 +566,15 @@ export function useTripDetail({
     secondaryTransactionsData,
   ]);
 
-  const tripLedgerEntries = useMemo(() => {
-    const direct = getTripLedgerEntries(transactions, trip?.id);
-    if (direct.length > 0) return direct;
-    if (!transactions?.length || !trip) return direct;
-
-    // Fallback for legacy/mislinked rows: include entries whose description metadata
-    // references this trip number (e.g. [[QMETA:{"trip_number":"TRP007",...}]]).
-    const tripLabel = getTripDisplayNumber(trip).trim().toLowerCase();
-    if (!tripLabel) return direct;
-    const qmetaNeedle = `"trip_number":"${tripLabel}"`;
-    return transactions.filter((tx) => {
-      const description = String(tx.description ?? "").toLowerCase();
-      if (description.includes(qmetaNeedle)) return true;
-      return String(tx.trip_number ?? "").trim().toLowerCase() === tripLabel;
-    });
-  }, [transactions, trip]);
+  const tripLedgerEntries = useMemo(
+    () =>
+      getTripLedgerEntries(
+        transactions,
+        trip?.id,
+        trip ? getTripDisplayNumber(trip) : undefined,
+      ),
+    [transactions, trip],
+  );
 
   const { data: tripSubcontracts = [] } = useTripSubcontractsQuery(
     currentOrganization?.id ?? null,
@@ -758,6 +753,11 @@ export function useTripDetail({
         if (res.trip) return;
         const orgId = currentOrganization?.id;
         if (!orgId) return;
+        const now = Date.now();
+        if (now - supplierFallbackLastFetchAtRef.current < SUPPLIER_FALLBACK_MIN_INTERVAL_MS) {
+          return;
+        }
+        supplierFallbackLastFetchAtRef.current = now;
         const supplierRes = await getTripsWhereOrgIsSupplier(orgId);
         if (supplierRes.error) return;
         const found = supplierRes.trips.find((t) => t.id === tripId);
@@ -1247,26 +1247,6 @@ export function useTripDetail({
     refetchTransactionsRef.current();
   }, [load, loadAdjustments, loadAssignmentAudit, loadTripDocuments]);
 
-  // Fallback polling for active journeys (covers cases where browser realtime channel is delayed).
-  useEffect(() => {
-    if (!tripId || !trip) return;
-    const status = String(trip.status ?? "").toLowerCase();
-    const isActiveJourney =
-      status === "assigned" ||
-      status === "in_progress" ||
-      status === "in_transit" ||
-      status === "pickup" ||
-      status === "picked_up" ||
-      status === "at_drop";
-    if (!isActiveJourney || trip.completed_at) return;
-
-    const intervalMs = 3000;
-    const timer = setInterval(() => {
-      isRefreshingRef.current = true;
-      load();
-    }, intervalMs);
-    return () => clearInterval(timer);
-  }, [tripId, trip?.id, trip?.status, trip?.completed_at, load]);
 
   /** Immediate refresh after assignment/reassignment actions. */
   const handleAssignmentUpdated = useCallback(() => {
@@ -1630,8 +1610,9 @@ export function useTripDetail({
       reason: string;
     }) => {
       if (!trip?.id) return;
+      // Row must pass trip org check + RLS; prefer trip owner over UI org context.
       const orgId =
-        currentOrganization?.id ?? trip.organization_id ?? null;
+        trip.organization_id?.trim() || currentOrganization?.id || null;
       const missionRaw =
         trip.display_trip_id != null &&
         String(trip.display_trip_id).trim() !== ""
@@ -1960,31 +1941,6 @@ export function useTripDetail({
     if (!trip?.id || !effectiveDriverIdForLocation) return;
     void fetchDriverLocationFromDb();
   }, [trip?.updated_at, trip?.status_revision, trip?.status, effectiveDriverIdForLocation, fetchDriverLocationFromDb, trip?.id]);
-
-  useEffect(() => {
-    if (!trip?.id || !effectiveDriverIdForLocation) return;
-    if (isTripCompleted(trip)) return;
-    const status = String(trip.status ?? "").toLowerCase();
-    const isTrackable =
-      status === "assigned" ||
-      status === "in_progress" ||
-      status === "in_transit" ||
-      status === "pickup" ||
-      status === "picked_up" ||
-      status === "at_drop";
-    if (!isTrackable) return;
-    const timer = setInterval(() => {
-      void fetchDriverLocationFromDb();
-    }, 15000);
-    return () => clearInterval(timer);
-  }, [
-    trip?.id,
-    trip?.status,
-    trip?.completed_at,
-    effectiveDriverIdForLocation,
-    fetchDriverLocationFromDb,
-    trip,
-  ]);
 
   // Counterparty entries
   useEffect(() => {

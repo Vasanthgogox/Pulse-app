@@ -62,6 +62,7 @@ export function aggregateSuppliers(
   const supplierIdByNameKey: Record<string, string> = {};
   const normalizedIdToRawId: Record<string, string> = {};
   const supplierIdByLinkedOrgId = buildUniqueLinkedOrgIdMap(suppliers);
+  const tripPartyByRef: Record<string, { supplier_id?: string | null; driver_id?: string | null }> = {};
 
   for (let i = 0; i < suppliers.length; i++) {
     const s = suppliers[i];
@@ -94,6 +95,11 @@ export function aggregateSuppliers(
     if (!sid) continue;
     dueFromTrips[sid] = (dueFromTrips[sid] ?? 0) + rate;
     sourced[sid] = (sourced[sid] ?? 0) + 1;
+    const tripIdRef = normId((t as { id?: string | null }).id);
+    const tripNoRef = normId((t as { trip_number?: string | null }).trip_number);
+    const payload = { supplier_id: sid, driver_id: t.driver_id ?? null };
+    if (tripIdRef) tripPartyByRef[tripIdRef] = payload;
+    if (tripNoRef) tripPartyByRef[tripNoRef] = payload;
   }
 
   // O(tripsWhereOrgIsClient): attribute "trips where we are client" to integrated supplier by linked_organization_id.
@@ -115,6 +121,11 @@ export function aggregateSuppliers(
         : baseAmt;
     dueFromTrips[sid] = (dueFromTrips[sid] ?? 0) + amount;
     sourced[sid] = (sourced[sid] ?? 0) + 1;
+    const tripIdRef = normId((t as { id?: string | null }).id);
+    const tripNoRef = normId((t as { trip_number?: string | null }).trip_number);
+    const payload = { supplier_id: sid, driver_id: t.driver_id ?? null };
+    if (tripIdRef) tripPartyByRef[tripIdRef] = payload;
+    if (tripNoRef) tripPartyByRef[tripNoRef] = payload;
   }
 
   // O(transactions): paid from ledger (contact_type=supplier + contact_id, or tripPartyMap fallback).
@@ -133,8 +144,13 @@ export function aggregateSuppliers(
       // contact_id may be the partner org's supplier uuid; fall through to tripPartyMap
     }
 
-    if (tripPartyMap && tx.trip_id && tripPartyMap[tx.trip_id]) {
-      const fallback = tripPartyMap[tx.trip_id]!;
+    const txTripIdRef = normId(tx.trip_id);
+    const txTripNoRef = normId((tx as { trip_number?: string | null }).trip_number);
+    const fallback =
+      (tripPartyMap && tx.trip_id && tripPartyMap[tx.trip_id]) ||
+      (txTripIdRef ? tripPartyByRef[txTripIdRef] : undefined) ||
+      (txTripNoRef ? tripPartyByRef[txTripNoRef] : undefined);
+    if (fallback) {
       const sid = fallback.supplier_id ?? fallback.driver_id ?? null;
       if (sid && supplierIds.has(sid)) {
         paidFromLedger[sid] = (paidFromLedger[sid] ?? 0) + amtOut;

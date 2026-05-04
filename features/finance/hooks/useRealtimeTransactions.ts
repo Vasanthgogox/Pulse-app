@@ -2,8 +2,7 @@
  * Supabase Realtime subscriptions for transactions (ledger). Call onInvalidate when data changes (refetch once).
  */
 import { useEffect, useRef } from 'react';
-import { supabase } from '@/lib/supabase';
-import { uniqueRealtimeChannelTopic } from '@/lib/realtimeTopic';
+import { subscribeSharedPostgresChanges } from '@/lib/realtimeRegistry';
 
 /** Subscribe to transactions for an organization; call onInvalidate when any change (refetch once). */
 export function useRealtimeTransactions(organizationId: string | null, onInvalidate: () => void) {
@@ -12,23 +11,19 @@ export function useRealtimeTransactions(organizationId: string | null, onInvalid
 
   useEffect(() => {
     if (!organizationId) return;
-    const channel = supabase()
-      .channel(uniqueRealtimeChannelTopic(`transactions:${organizationId}`))
-      .on(
-        'postgres_changes',
+    return subscribeSharedPostgresChanges(
+      `transactions:org:${organizationId}`,
+      [
         {
           event: '*',
           schema: 'public',
           table: 'transactions',
           filter: `organization_id=eq.${organizationId}`,
         },
-        () => {
-          onInvalidateRef.current();
-        }
-      )
-      .subscribe();
-    return () => {
-      supabase().removeChannel(channel);
-    };
+      ],
+      () => {
+        onInvalidateRef.current();
+      }
+    );
   }, [organizationId]);
 }

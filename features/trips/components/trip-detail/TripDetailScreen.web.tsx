@@ -3,22 +3,26 @@
  * "Tracking" tab (default): TripInfo + Assignment + Timeline + Map + LR Docs
  * "Finance" tab: Expenses + Finance Overview + Receivables
  */
-import { PartyAvatar } from "@/components/PartyAvatar";
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
+import { PartyAvatar } from "@/components/PartyAvatar";
 import { ThemedAlertModal } from "@/components/ThemedAlertModal";
 import { Theme } from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { useTripChat } from "@/features/chat/contexts/TripChatContext";
+import { pushTripLedgerQuickEntry } from "@/features/finance/ledger/tripLedgerEntryChooser";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
+import { resolveTripLedgerTripType } from "@/features/finance/utils/tripLedgerPayoutMode.util";
 import { TripRatingsBlock } from "@/features/ratings/components/TripRatingsBlock";
 import { isAggregateTrip } from "@/lib/driverUtils";
-import { useTripChat } from "@/features/chat/contexts/TripChatContext";
-import { notifyTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
 import { formatINR, formatIndianVehicleNumber } from "@/lib/format";
+import { supabase } from "@/lib/supabase";
+import { notifyTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
+import { getOptimalRoute } from "@/services/routingService";
 import Feather from "@expo/vector-icons/Feather";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { MessageSquare } from "lucide-react-native";
 import { useRouter } from "expo-router";
+import { MessageSquare } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
@@ -49,14 +53,16 @@ import {
     type TripAdjustmentType,
 } from "../../services/tripAdjustments";
 import { regenerateTripOtp } from "../../services/tripOtp.service";
-import { getTripDisplayNumber, updateTripStatus, type TripRow } from "../../services/trips.service";
-import { supabase } from "@/lib/supabase";
+import {
+    getTripDisplayNumber,
+    updateTripStatus,
+    type TripRow,
+} from "../../services/trips.service";
 import { AggregateTripOtpPanel } from "../AggregateTripOtpPanel";
 import { TripAssignmentBlock } from "../TripAssignmentBlock";
 import { TripAdjustmentModal } from "./TripAdjustmentModal";
 import { TripDetailFinanceView } from "./TripDetailFinanceView";
 import type { TripDetailScreenProps } from "./TripDetailScreen.types";
-import { getOptimalRoute } from "@/services/routingService";
 import { TripMap } from "./TripMap.web";
 import { useTripDetail } from "./hooks/useTripDetail";
 import { type ExpenseRow } from "./sections/ExpensesTable";
@@ -141,16 +147,23 @@ function provisionLineMetaLabel(adj: TripAdjustment): string {
   return adj.impact === "plus" ? "COST · ADD-ON" : "COST · DEDUCTION";
 }
 
-function protocolSupplierChipAdjustment(chip: (typeof FINANCE_PROTOCOL_CHIPS)[number]): {
+function protocolSupplierChipAdjustment(
+  chip: (typeof FINANCE_PROTOCOL_CHIPS)[number],
+): {
   type: TripAdjustmentType;
   impact: TripAdjustmentImpact;
   reasonSeed: string;
 } {
-  if (chip === "Loading") return { type: "cost", impact: "plus", reasonSeed: "Loading Charges" };
-  if (chip === "Unloading") return { type: "cost", impact: "plus", reasonSeed: "Unloading Charges" };
-  if (chip === "Detention") return { type: "cost", impact: "plus", reasonSeed: "Detention" };
-  if (chip === "Damage") return { type: "cost", impact: "plus", reasonSeed: "Damages / Missing" };
-  if (chip === "Toll") return { type: "cost", impact: "plus", reasonSeed: "Pass Debit" };
+  if (chip === "Loading")
+    return { type: "cost", impact: "plus", reasonSeed: "Loading Charges" };
+  if (chip === "Unloading")
+    return { type: "cost", impact: "plus", reasonSeed: "Unloading Charges" };
+  if (chip === "Detention")
+    return { type: "cost", impact: "plus", reasonSeed: "Detention" };
+  if (chip === "Damage")
+    return { type: "cost", impact: "plus", reasonSeed: "Damages / Missing" };
+  if (chip === "Toll")
+    return { type: "cost", impact: "plus", reasonSeed: "Pass Debit" };
   return { type: "cost", impact: "plus", reasonSeed: "Other" };
 }
 
@@ -250,23 +263,26 @@ export default function TripDetailScreen({
   const { t } = useLanguage();
   const { width: screenWidth } = useWindowDimensions();
   const [activeTab, setActiveTab] = useState<Tab>("trip");
-  const [financeSubTab, setFinanceSubTab] = useState<"summary" | "transactions">(
-    "summary",
-  );
+  const [financeSubTab, setFinanceSubTab] = useState<
+    "summary" | "transactions"
+  >("summary");
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedLog, setExpandedLog] = useState<number | null>(null);
   const [showFinanceProvisionPanel, setShowFinanceProvisionPanel] = useState<
     "client" | "supplier" | null
   >(null);
-  const [provisionConfirm, setProvisionConfirm] = useState<
-    { mode: "delete" | "edit"; adjustment: TripAdjustment } | null
-  >(null);
-  const [editingProvisionAdjustmentId, setEditingProvisionAdjustmentId] = useState<string | null>(
-    null,
-  );
-  const [showInlineAdjustmentForm, setShowInlineAdjustmentForm] = useState(false);
-  const [inlineAdjType, setInlineAdjType] = useState<TripAdjustmentType>("revenue");
-  const [inlineAdjImpact, setInlineAdjImpact] = useState<TripAdjustmentImpact>("plus");
+  const [provisionConfirm, setProvisionConfirm] = useState<{
+    mode: "delete" | "edit";
+    adjustment: TripAdjustment;
+  } | null>(null);
+  const [editingProvisionAdjustmentId, setEditingProvisionAdjustmentId] =
+    useState<string | null>(null);
+  const [showInlineAdjustmentForm, setShowInlineAdjustmentForm] =
+    useState(false);
+  const [inlineAdjType, setInlineAdjType] =
+    useState<TripAdjustmentType>("revenue");
+  const [inlineAdjImpact, setInlineAdjImpact] =
+    useState<TripAdjustmentImpact>("plus");
   const [inlineAdjAmount, setInlineAdjAmount] = useState("");
   const [inlineAdjReason, setInlineAdjReason] = useState("");
   const [inlineAdjOtherReason, setInlineAdjOtherReason] = useState("");
@@ -285,7 +301,8 @@ export default function TripDetailScreen({
   const isMobile = screenWidth < 640;
   const isTablet = screenWidth >= 640 && screenWidth < 1024;
   const isDesktop = screenWidth >= 1024;
-  const desktopTab: "tracking" | "finance" = activeTab === "finance" ? "finance" : "tracking";
+  const desktopTab: "tracking" | "finance" =
+    activeTab === "finance" ? "finance" : "tracking";
   const hPad = isMobile ? 12 : isTablet ? 16 : 24;
   const mapHeight = isMobile ? 220 : isTablet ? 380 : 600;
 
@@ -327,9 +344,17 @@ export default function TripDetailScreen({
         ts: String(Date.now()),
       },
     });
-  }, [detail.trip, detail.driverName, initiateDriverConversationForTrip, router, t]);
+  }, [
+    detail.trip,
+    detail.driverName,
+    initiateDriverConversationForTrip,
+    router,
+    t,
+  ]);
 
-  const [mapRouteDistanceKm, setMapRouteDistanceKm] = useState<string | null>(null);
+  const [mapRouteDistanceKm, setMapRouteDistanceKm] = useState<string | null>(
+    null,
+  );
   const [simConfirmStep, setSimConfirmStep] = useState<{
     label: string;
     targetStatus: string;
@@ -378,7 +403,9 @@ export default function TripDetailScreen({
       const n = typeof raw === "number" ? raw : parseFloat(String(raw));
       if (Number.isFinite(n) && n >= 0) {
         const s =
-          Math.abs(n - Math.round(n)) < 1e-9 ? String(Math.round(n)) : n.toFixed(1);
+          Math.abs(n - Math.round(n)) < 1e-9
+            ? String(Math.round(n))
+            : n.toFixed(1);
         return `${s} km`;
       }
     }
@@ -387,8 +414,7 @@ export default function TripDetailScreen({
     const o = detail.trackingMapOriginCoordinate;
     const d = detail.trackingMapDestinationCoordinate;
     const crow = o && d ? haversineKmBetween(o, d) : null;
-    if (crow != null)
-      return `≈ ${(crow * 1.3).toFixed(1)} km`;
+    if (crow != null) return `≈ ${(crow * 1.3).toFixed(1)} km`;
     const inferredOrigin = inferCoordsFromLocationName(tr.pickup_area);
     const inferredDestination = inferCoordsFromLocationName(tr.drop_location);
     const inferredKm =
@@ -405,7 +431,10 @@ export default function TripDetailScreen({
   ]);
 
   const timelineDistanceKm =
-    resolvedDistanceLabel?.replace(/^≈\s*/, "").replace(/\s*km$/i, "").trim() || undefined;
+    resolvedDistanceLabel
+      ?.replace(/^≈\s*/, "")
+      .replace(/\s*km$/i, "")
+      .trim() || undefined;
 
   // Parse simulation log entries stored in trip.notes.
   // Format: [BISIM|status|timestamp|lat|lng|userName]
@@ -500,13 +529,19 @@ export default function TripDetailScreen({
     const url = `https://www.google.com/maps/dir/${o.latitude},${o.longitude}/${d.latitude},${d.longitude}`;
     void Linking.openURL(url);
   };
-  const inlineReasonOptions = getInlineReasonOptions(inlineAdjType, inlineAdjImpact);
+  const inlineReasonOptions = getInlineReasonOptions(
+    inlineAdjType,
+    inlineAdjImpact,
+  );
   const inlineFinalReason =
     inlineAdjReason === "Other"
       ? inlineAdjOtherReason.trim() || "Other"
       : inlineAdjReason.trim();
-  const inlineAmountNum = Math.round(parseFloat(inlineAdjAmount.replace(/,/g, "")) || 0);
-  const canSaveInlineAdjustment = inlineAmountNum > 0 && inlineFinalReason.length > 0;
+  const inlineAmountNum = Math.round(
+    parseFloat(inlineAdjAmount.replace(/,/g, "")) || 0,
+  );
+  const canSaveInlineAdjustment =
+    inlineAmountNum > 0 && inlineFinalReason.length > 0;
 
   const openInlineAdjustmentForm = (preset?: {
     type: TripAdjustmentType;
@@ -518,7 +553,10 @@ export default function TripDetailScreen({
       setInlineAdjType(preset.type);
       setInlineAdjImpact(preset.impact);
       const seed = (preset.reasonSeed ?? "").trim();
-      const opts = preset.type === "revenue" ? REVENUE_REASON_OPTIONS : COST_REASON_OPTIONS;
+      const opts =
+        preset.type === "revenue"
+          ? REVENUE_REASON_OPTIONS
+          : COST_REASON_OPTIONS;
       if (seed && (opts as readonly string[]).includes(seed)) {
         setInlineAdjReason(seed);
         setInlineAdjOtherReason("");
@@ -545,7 +583,8 @@ export default function TripDetailScreen({
     setInlineAdjType(adj.type);
     setInlineAdjImpact(adj.impact);
     setInlineAdjAmount(adj.amount > 0 ? String(adj.amount) : "");
-    const opts = adj.type === "revenue" ? REVENUE_REASON_OPTIONS : COST_REASON_OPTIONS;
+    const opts =
+      adj.type === "revenue" ? REVENUE_REASON_OPTIONS : COST_REASON_OPTIONS;
     const r = (adj.reason ?? "").trim();
     if (r && (opts as readonly string[]).includes(r)) {
       setInlineAdjReason(r);
@@ -563,7 +602,9 @@ export default function TripDetailScreen({
   const saveInlineAdjustment = async () => {
     if (!canSaveInlineAdjustment) return;
     if (editingProvisionAdjustmentId) {
-      const existing = detail.adjustments.find((a) => a.id === editingProvisionAdjustmentId);
+      const existing = detail.adjustments.find(
+        (a) => a.id === editingProvisionAdjustmentId,
+      );
       if (existing && isAdjustmentVoided(existing)) return;
       await detail.handleUpdateAdjustment(editingProvisionAdjustmentId, {
         type: inlineAdjType,
@@ -639,6 +680,20 @@ export default function TripDetailScreen({
     trip.organization_id != null &&
     trip.organization_id === currentOrganization.id;
   const isPartnerSettlementView = trip.indent_id != null && !isTripOwner;
+  const payoutModeLc = String(trip.trip_payout_mode ?? "").trim().toLowerCase();
+  /**
+   * "Record supplier payout" is for **market / aggregate supply** (dispatcher pays an external supplier).
+   * Integrated load **asset execution** (partner org is the supplier of record, roster / own fleet) must not
+   * show this — those rows still often carry `supplier_id`, which wrongly made `resolveTripLedgerTripType`
+   * infer `market` when `trip_payout_mode` was unset.
+   */
+  const showRecordSupplierPayoutCta =
+    payoutModeLc !== "asset" &&
+    entryContext !== "supplier" &&
+    !isPartnerSettlementView &&
+    (payoutModeLc === "market" || isTripOwner) &&
+    resolveTripLedgerTripType(trip) === "market" &&
+    !!(trip.supplier_id ?? "").trim();
   const customerSales = Number(trip.client_price ?? 0);
   const supplierCost = Number(trip.supplier_rate ?? 0);
   const sales = isPartnerSettlementView ? supplierCost : customerSales;
@@ -719,24 +774,32 @@ export default function TripDetailScreen({
   const originSplit = splitLocationPrimarySecondary(trip.pickup_area);
   const destinationSplit = splitLocationPrimarySecondary(trip.drop_location);
   const originStateLabel =
-    originSplit.secondary || String(tripExtra.pickup_state ?? "").trim() || "Origin Node";
+    originSplit.secondary ||
+    String(tripExtra.pickup_state ?? "").trim() ||
+    "Origin Node";
   const destinationStateLabel =
-    destinationSplit.secondary || String(tripExtra.drop_state ?? "").trim() || "Destination Node";
+    destinationSplit.secondary ||
+    String(tripExtra.drop_state ?? "").trim() ||
+    "Destination Node";
   const allocatedDriverName =
     detail.driverName?.trim() ||
     String(tripExtra.driver_name ?? "").trim() ||
     "Unassigned";
   const allocatedVehicleLabel =
-    (detail.displayVehicleFromInput?.trim() ||
-      detail.vehicleLabel?.trim() ||
-      String(trip.vehicle_display_number ?? "").trim() ||
-      String(tripExtra.vehicle_number ?? "").trim() ||
-      "Pending");
+    detail.displayVehicleFromInput?.trim() ||
+    detail.vehicleLabel?.trim() ||
+    String(trip.vehicle_display_number ?? "").trim() ||
+    String(tripExtra.vehicle_number ?? "").trim() ||
+    "Pending";
   const awaitingDataLabel = t("tripsHubAwaitingData");
   const clientNameForParty =
-    detail.displayClientName?.trim() || String(trip.client_name ?? "").trim() || awaitingDataLabel;
+    detail.displayClientName?.trim() ||
+    String(trip.client_name ?? "").trim() ||
+    awaitingDataLabel;
   const supplierNameForParty =
-    detail.partnerName?.trim() || String(tripExtra.supplier_name ?? "").trim() || awaitingDataLabel;
+    detail.partnerName?.trim() ||
+    String(tripExtra.supplier_name ?? "").trim() ||
+    awaitingDataLabel;
   const clientNameCard = clientNameForParty.toUpperCase();
   const supplierName = supplierNameForParty.toUpperCase();
   const isIntegratedTrip = Boolean(trip.indent_id);
@@ -744,7 +807,11 @@ export default function TripDetailScreen({
   // Determine current step index (0=Assigned, 1=Pickup, 2=In-Transit, 3=Delivered)
   const currentStepIndex = (() => {
     const s = String(trip.status ?? "").toLowerCase();
-    if (["completed", "delivered", "done", "at_drop"].includes(s) || !!trip.completed_at) return 3;
+    if (
+      ["completed", "delivered", "done", "at_drop"].includes(s) ||
+      !!trip.completed_at
+    )
+      return 3;
     if (s === "in_transit") return 2;
     if (["in_progress", "picked_up", "pickup"].includes(s)) return 1;
     return 0;
@@ -759,13 +826,39 @@ export default function TripDetailScreen({
     const driverLocLabel = detail.driverLocationAddress?.trim() || null;
     const now = new Date().toISOString();
     if (["draft", "assigned"].includes(s))
-      return { label: "Driver arrived at pickup", targetStatus: "in_progress", started_at: now, driverLat, driverLng, driverLocLabel };
+      return {
+        label: "Driver arrived at pickup",
+        targetStatus: "in_progress",
+        started_at: now,
+        driverLat,
+        driverLng,
+        driverLocLabel,
+      };
     if (["in_progress", "picked_up"].includes(s))
-      return { label: "Package collected — in transit", targetStatus: "in_transit", driverLat, driverLng, driverLocLabel };
+      return {
+        label: "Package collected — in transit",
+        targetStatus: "in_transit",
+        driverLat,
+        driverLng,
+        driverLocLabel,
+      };
     if (s === "in_transit")
-      return { label: "Driver arrived at drop-off", targetStatus: "at_drop", driverLat, driverLng, driverLocLabel };
+      return {
+        label: "Driver arrived at drop-off",
+        targetStatus: "at_drop",
+        driverLat,
+        driverLng,
+        driverLocLabel,
+      };
     if (s === "at_drop")
-      return { label: "Trip delivered & completed", targetStatus: "completed", completed_at: now, driverLat, driverLng, driverLocLabel };
+      return {
+        label: "Trip delivered & completed",
+        targetStatus: "completed",
+        completed_at: now,
+        driverLat,
+        driverLng,
+        driverLocLabel,
+      };
     return null;
   })();
 
@@ -775,14 +868,24 @@ export default function TripDetailScreen({
     setSimulating(true);
     setSimError(null);
     try {
-      const updateData: { status: string; started_at?: string; completed_at?: string } = {
+      const updateData: {
+        status: string;
+        started_at?: string;
+        completed_at?: string;
+      } = {
         status: simConfirmStep.targetStatus,
       };
-      if (simConfirmStep.started_at) updateData.started_at = simConfirmStep.started_at;
-      if (simConfirmStep.completed_at) updateData.completed_at = simConfirmStep.completed_at;
+      if (simConfirmStep.started_at)
+        updateData.started_at = simConfirmStep.started_at;
+      if (simConfirmStep.completed_at)
+        updateData.completed_at = simConfirmStep.completed_at;
 
       const { error } = await updateTripStatus(trip.id, updateData);
-      if (error) { setSimError(error.message); setSimulating(false); return; }
+      if (error) {
+        setSimError(error.message);
+        setSimulating(false);
+        return;
+      }
 
       // DB trigger posts Trip System lines to `trip_messages`; refetch in-app trip chat
       // (realtime may be unavailable). Same pattern as ledger → chat bridge.
@@ -793,7 +896,9 @@ export default function TripDetailScreen({
       const existingNotes = trip.notes?.trim() || "";
       await supabase()
         .from("trips")
-        .update({ notes: existingNotes ? `${existingNotes}\n${simEntry}` : simEntry })
+        .update({
+          notes: existingNotes ? `${existingNotes}\n${simEntry}` : simEntry,
+        })
         .eq("id", trip.id);
 
       setSimConfirmStep(null);
@@ -809,30 +914,51 @@ export default function TripDetailScreen({
     {
       status: "Assigned",
       location: trip.pickup_area?.trim() || "Origin hub",
-      time: trip.pickup_date ? new Date(trip.pickup_date).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "—",
+      time: trip.pickup_date
+        ? new Date(trip.pickup_date).toLocaleTimeString("en-IN", {
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : "—",
       details: "Trip assigned and prepared for dispatch.",
     },
     {
       status: "Pickup",
       location: trip.pickup_area?.trim() || "Pickup point",
-      time: trip.started_at ? new Date(trip.started_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "—",
+      time: trip.started_at
+        ? new Date(trip.started_at).toLocaleTimeString("en-IN", {
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : "—",
       details: "Pickup verification completed and movement initiated.",
     },
     {
       status: "In-Transit",
       location: "Route in progress",
-      time: trip.started_at ? new Date(trip.started_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "—",
+      time: trip.started_at
+        ? new Date(trip.started_at).toLocaleTimeString("en-IN", {
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : "—",
       details: "Vehicle moving towards destination through planned route.",
     },
     {
       status: "Delivered",
       location: trip.drop_location?.trim() || "Destination",
-      time: trip.completed_at ? new Date(trip.completed_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "—",
+      time: trip.completed_at
+        ? new Date(trip.completed_at).toLocaleTimeString("en-IN", {
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : "—",
       details: "Delivery completed and settlement flow closed.",
     },
   ];
   const isTripCompleted =
-    String(trip.status ?? "").toLowerCase() === "completed" || !!trip.completed_at;
+    String(trip.status ?? "").toLowerCase() === "completed" ||
+    !!trip.completed_at;
   const hasAnyAssignment =
     !!trip.driver_id ||
     !!trip.vehicle_id ||
@@ -844,14 +970,15 @@ export default function TripDetailScreen({
     return s.replace(/_/g, " ").toUpperCase();
   })();
   const payoutModeLabel = (() => {
-    const raw = String(trip.trip_payout_mode ?? "").trim().toLowerCase();
-    if (!raw) return "—";
-    if (raw === "asset") return "Asset";
-    if (raw === "market") return "Market";
-    return raw.replace(/_/g, " ");
+    if (!payoutModeLc) return "—";
+    if (payoutModeLc === "asset") return "Asset";
+    if (payoutModeLc === "market") return "Market";
+    return payoutModeLc.replace(/_/g, " ");
   })();
   const paymentStatusLabel = (() => {
-    const raw = String(trip.payment_status ?? "").trim().toLowerCase();
+    const raw = String(trip.payment_status ?? "")
+      .trim()
+      .toLowerCase();
     if (!raw) return "—";
     return raw.replace(/_/g, " ");
   })();
@@ -872,7 +999,8 @@ export default function TripDetailScreen({
     : "—";
 
   const driverRatingLabel =
-    detail.driverRatingAvg != null && Number.isFinite(Number(detail.driverRatingAvg))
+    detail.driverRatingAvg != null &&
+    Number.isFinite(Number(detail.driverRatingAvg))
       ? Number(detail.driverRatingAvg).toFixed(1)
       : "—";
   const vehicleTypeLabel =
@@ -896,84 +1024,147 @@ export default function TripDetailScreen({
     (a) => a.type === "cost" && !isAdjustmentVoided(a),
   ).length;
   const selectedProvisionAdjustments = detail.adjustments.filter((adj) =>
-    showFinanceProvisionPanel === "client" ? adj.type === "revenue" : adj.type === "cost",
+    showFinanceProvisionPanel === "client"
+      ? adj.type === "revenue"
+      : adj.type === "cost",
   );
   const provisionSummaryRows = [
     { label: "Base Sale", value: formatINR(sales), tone: "sale" as const },
-    { label: "Sale Adjusted", value: formatINR(adjSales), tone: "sale" as const },
+    {
+      label: "Sale Adjusted",
+      value: formatINR(adjSales),
+      tone: "sale" as const,
+    },
     { label: "Base Cost", value: formatINR(cost), tone: "cost" as const },
-    { label: "Cost Adjusted", value: formatINR(adjCost), tone: "cost" as const },
+    {
+      label: "Cost Adjusted",
+      value: formatINR(adjCost),
+      tone: "cost" as const,
+    },
   ];
 
-  const revenueProvisionAdjustments = detail.adjustments.filter((a) => a.type === "revenue");
-  const costProvisionAdjustments = detail.adjustments.filter((a) => a.type === "cost");
+  const revenueProvisionAdjustments = detail.adjustments.filter(
+    (a) => a.type === "revenue",
+  );
+  const costProvisionAdjustments = detail.adjustments.filter(
+    (a) => a.type === "cost",
+  );
 
   const financeAdjustmentSummaryCardEl = (
-      <View style={neoStyles.adjustmentSummaryCard}>
-        <View style={neoStyles.adjustmentSummaryHeader}>
-          <Text style={neoStyles.adjustmentSummaryTitle}>Adjustment summary</Text>
-          <View style={neoStyles.adjustmentSummaryBadge}>
-            <Text style={neoStyles.adjustmentSummaryBadgeText}>{detail.adjustments.length}</Text>
-          </View>
+    <View style={neoStyles.adjustmentSummaryCard}>
+      <View style={neoStyles.adjustmentSummaryHeader}>
+        <Text style={neoStyles.adjustmentSummaryTitle}>Adjustment summary</Text>
+        <View style={neoStyles.adjustmentSummaryBadge}>
+          <Text style={neoStyles.adjustmentSummaryBadgeText}>
+            {detail.adjustments.length}
+          </Text>
         </View>
-        <Text style={neoStyles.adjustmentSummaryHint}>Totals after sale & cost provisions</Text>
-        <View style={neoStyles.adjustmentSummaryRows}>
-          <View style={neoStyles.adjustmentSummaryStat}>
-            <Text style={neoStyles.adjustmentSummaryStatLabel}>Total adjusted sale</Text>
-            <Text style={neoStyles.adjustmentSummaryStatValueSale}>{formatINR(adjSales)}</Text>
-            <Text style={neoStyles.adjustmentSummaryStatMeta}>
-              Base {formatINR(sales)} · Net delta {revenueSideDelta >= 0 ? "+" : "−"}
-              {formatINR(Math.abs(revenueSideDelta))} · {revenueAdjLineCount} line
-              {revenueAdjLineCount === 1 ? "" : "s"}
-            </Text>
-          </View>
-          <View style={neoStyles.adjustmentSummaryDivider} />
-          <View style={neoStyles.adjustmentSummaryStat}>
-            <Text style={neoStyles.adjustmentSummaryStatLabel}>Total adjusted cost</Text>
-            <Text style={neoStyles.adjustmentSummaryStatValueCost}>{formatINR(adjCost)}</Text>
-            <Text style={neoStyles.adjustmentSummaryStatMeta}>
-              Base {formatINR(cost)} · Net delta {costSideDelta >= 0 ? "+" : "−"}
-              {formatINR(Math.abs(costSideDelta))} · {costAdjLineCount} line
-              {costAdjLineCount === 1 ? "" : "s"}
-            </Text>
-          </View>
+      </View>
+      <Text style={neoStyles.adjustmentSummaryHint}>
+        Totals after sale & cost provisions
+      </Text>
+      <View style={neoStyles.adjustmentSummaryRows}>
+        <View style={neoStyles.adjustmentSummaryStat}>
+          <Text style={neoStyles.adjustmentSummaryStatLabel}>
+            Total adjusted sale
+          </Text>
+          <Text style={neoStyles.adjustmentSummaryStatValueSale}>
+            {formatINR(adjSales)}
+          </Text>
+          <Text style={neoStyles.adjustmentSummaryStatMeta}>
+            Base {formatINR(sales)} · Net delta{" "}
+            {revenueSideDelta >= 0 ? "+" : "−"}
+            {formatINR(Math.abs(revenueSideDelta))} · {revenueAdjLineCount} line
+            {revenueAdjLineCount === 1 ? "" : "s"}
+          </Text>
         </View>
+        <View style={neoStyles.adjustmentSummaryDivider} />
+        <View style={neoStyles.adjustmentSummaryStat}>
+          <Text style={neoStyles.adjustmentSummaryStatLabel}>
+            Total adjusted cost
+          </Text>
+          <Text style={neoStyles.adjustmentSummaryStatValueCost}>
+            {formatINR(adjCost)}
+          </Text>
+          <Text style={neoStyles.adjustmentSummaryStatMeta}>
+            Base {formatINR(cost)} · Net delta {costSideDelta >= 0 ? "+" : "−"}
+            {formatINR(Math.abs(costSideDelta))} · {costAdjLineCount} line
+            {costAdjLineCount === 1 ? "" : "s"}
+          </Text>
+        </View>
+      </View>
+      <TouchableOpacity
+        style={neoStyles.capturePaymentBtn}
+        onPress={() => {
+          const dueHint = Math.max(0, Math.round(receivableAfterAdjustments));
+          pushTripLedgerQuickEntry(
+            {
+              trip,
+              router,
+              displayClientName: detail.displayClientName ?? null,
+              clientIdFromContext: clientIdFromContext ?? null,
+              clientNameFromContext: clientNameFromContext ?? null,
+              partnerName: detail.partnerName ?? null,
+              driverDisplayName: detail.driverName ?? null,
+              ledgerSyncExtraParams: {
+                dueAmountIn: String(dueHint),
+              },
+            },
+            "client",
+          );
+        }}
+        activeOpacity={0.88}
+      >
+        <Feather name="credit-card" size={16} color="#fff" />
+        <Text style={neoStyles.capturePaymentBtnText}>Capture payment</Text>
+      </TouchableOpacity>
+      <Text style={neoStyles.capturePaymentHint}>
+        {(clientIdFromContext ?? trip.client_id)
+          ? `Suggested cash-in: ${formatINR(receivableAfterAdjustments)} vs adjusted sale`
+          : "Link a client on the trip to pre-fill customer receipt"}
+      </Text>
+      {showRecordSupplierPayoutCta ? (
         <TouchableOpacity
-          style={neoStyles.capturePaymentBtn}
+          style={[
+            neoStyles.capturePaymentBtn,
+            { marginTop: 10, backgroundColor: "#0f172a" },
+          ]}
           onPress={() => {
-            const tripNum = getTripDisplayNumber(trip);
-            const dueHint = Math.max(0, Math.round(receivableAfterAdjustments));
-            const q = new URLSearchParams({
-              tripId: trip.id,
-              tripNumber: tripNum,
-              defaultType: "in",
-              dueAmountIn: String(dueHint),
-              partyContext: "customers",
-              partyName: clientNameForParty,
-            });
-            if (trip.client_id) {
-              q.set("partyId", trip.client_id);
-              q.set("entityType", "CLIENT");
-              q.set("entityId", trip.client_id);
-            }
-            router.push(`/(modals)/ledger-sync?${q.toString()}` as never);
+            const dueOut = Math.max(0, Math.round(supplierDue));
+            pushTripLedgerQuickEntry(
+              {
+                trip,
+                router,
+                displayClientName: detail.displayClientName ?? null,
+                clientIdFromContext: clientIdFromContext ?? null,
+                clientNameFromContext: clientNameFromContext ?? null,
+                partnerName: detail.partnerName ?? null,
+                driverDisplayName: detail.driverName ?? null,
+                ledgerSyncExtraParams: {
+                  dueAmountOut: dueOut > 0 ? String(dueOut) : undefined,
+                },
+              },
+              "supplier",
+            );
           }}
           activeOpacity={0.88}
         >
-          <Feather name="credit-card" size={16} color="#fff" />
-          <Text style={neoStyles.capturePaymentBtnText}>Capture payment</Text>
+          <Feather name="arrow-up-right" size={16} color="#fff" />
+          <Text style={neoStyles.capturePaymentBtnText}>
+            Record supplier payout
+          </Text>
         </TouchableOpacity>
-        <Text style={neoStyles.capturePaymentHint}>
-          {`Suggested cash-in: ${formatINR(receivableAfterAdjustments)} vs adjusted sale`}
-        </Text>
-      </View>
+      ) : null}
+    </View>
   );
 
   /** Shared mobile + desktop: net yield, sale/cost columns with adjustment line items, voyage expense row. */
   const financeManifestSummaryBlock = (
     <View style={[styles.refSettleCard, styles.refFinanceManifestHero]}>
       <Text style={styles.refSettleLabel}>Net Manifest Yield</Text>
-      <Text style={styles.refManifestNetHuge}>{formatINR(netManifestYield)}</Text>
+      <Text style={styles.refManifestNetHuge}>
+        {formatINR(netManifestYield)}
+      </Text>
       <Text style={styles.refSettleHint}>
         After adjusted revenue, adjusted supplier cost, and voyage spend
       </Text>
@@ -995,11 +1186,18 @@ export default function TripDetailScreen({
         </View>
       </View>
 
-      <View style={[styles.refManifestHeroSplit, isDesktop && styles.refManifestHeroSplitDesktop]}>
+      <View
+        style={[
+          styles.refManifestHeroSplit,
+          isDesktop && styles.refManifestHeroSplitDesktop,
+        ]}
+      >
         <View style={styles.refManifestCol}>
           <View style={styles.refManifestColHead}>
             <View style={styles.refManifestColHeadLeft}>
-              <View style={[styles.refManifestDot, styles.refManifestDotSales]} />
+              <View
+                style={[styles.refManifestDot, styles.refManifestDotSales]}
+              />
               <Text style={styles.refManifestColTitle}>Adjusted sales</Text>
             </View>
             <TouchableOpacity
@@ -1010,9 +1208,15 @@ export default function TripDetailScreen({
               <FontAwesome name="plus" size={10} color="#4f46e5" />
             </TouchableOpacity>
           </View>
-          <Text style={[styles.refManifestColAmount, styles.refManifestSalesAmt]}>{formatINR(adjSales)}</Text>
+          <Text
+            style={[styles.refManifestColAmount, styles.refManifestSalesAmt]}
+          >
+            {formatINR(adjSales)}
+          </Text>
           <View style={styles.refManifestMicroBox}>
-            <Text style={styles.refManifestMicroLine}>Base · {formatINR(sales)}</Text>
+            <Text style={styles.refManifestMicroLine}>
+              Base · {formatINR(sales)}
+            </Text>
             <Text style={styles.refManifestMicroAdjSales}>
               Adj · {revenueSideDelta >= 0 ? "+" : "−"}
               {formatINR(Math.abs(revenueSideDelta))}
@@ -1025,7 +1229,10 @@ export default function TripDetailScreen({
                 return (
                   <View key={adj.id} style={neoStyles.financeRailBreakdownRow}>
                     <View
-                      style={[neoStyles.financeRailBreakdownDot, neoStyles.financeRailBreakdownDotSale]}
+                      style={[
+                        neoStyles.financeRailBreakdownDot,
+                        neoStyles.financeRailBreakdownDotSale,
+                      ]}
                     />
                     <View style={neoStyles.financeRailBreakdownMid}>
                       <Text
@@ -1037,9 +1244,14 @@ export default function TripDetailScreen({
                       >
                         {(adj.reason ?? "").trim() || "—"}
                       </Text>
-                      <Text style={neoStyles.financeRailBreakdownMeta}>{provisionLineMetaLabel(adj)}</Text>
+                      <Text style={neoStyles.financeRailBreakdownMeta}>
+                        {provisionLineMetaLabel(adj)}
+                      </Text>
                       {voided ? (
-                        <Text style={neoStyles.financeRailBreakdownVoidNote} numberOfLines={3}>
+                        <Text
+                          style={neoStyles.financeRailBreakdownVoidNote}
+                          numberOfLines={3}
+                        >
                           Voided: {(adj.void_reason ?? "").trim() || "—"}
                         </Text>
                       ) : null}
@@ -1067,19 +1279,33 @@ export default function TripDetailScreen({
           <View style={styles.refManifestColHead}>
             <TouchableOpacity
               onPress={() => setShowFinanceProvisionPanel("supplier")}
-              style={[styles.refManifestMiniPlus, styles.refManifestMiniPlusMuted]}
+              style={[
+                styles.refManifestMiniPlus,
+                styles.refManifestMiniPlusMuted,
+              ]}
               activeOpacity={0.85}
             >
               <FontAwesome name="plus" size={10} color="#e11d48" />
             </TouchableOpacity>
             <View style={styles.refManifestColHeadRight}>
               <Text style={styles.refManifestColTitle}>Adjusted cost</Text>
-              <View style={[styles.refManifestDot, styles.refManifestDotCost]} />
+              <View
+                style={[styles.refManifestDot, styles.refManifestDotCost]}
+              />
             </View>
           </View>
-          <Text style={[styles.refManifestColAmount, styles.refManifestCostAmt]}>{formatINR(adjCost)}</Text>
+          <Text
+            style={[styles.refManifestColAmount, styles.refManifestCostAmt]}
+          >
+            {formatINR(adjCost)}
+          </Text>
           <View style={styles.refManifestMicroBox}>
-            <Text style={[styles.refManifestMicroLine, styles.refManifestMicroRight]}>
+            <Text
+              style={[
+                styles.refManifestMicroLine,
+                styles.refManifestMicroRight,
+              ]}
+            >
               Base · {formatINR(cost)}
             </Text>
             <Text style={styles.refManifestMicroAdjCost}>
@@ -1094,7 +1320,10 @@ export default function TripDetailScreen({
                 return (
                   <View key={adj.id} style={neoStyles.financeRailBreakdownRow}>
                     <View
-                      style={[neoStyles.financeRailBreakdownDot, neoStyles.financeRailBreakdownDotCost]}
+                      style={[
+                        neoStyles.financeRailBreakdownDot,
+                        neoStyles.financeRailBreakdownDotCost,
+                      ]}
                     />
                     <View style={neoStyles.financeRailBreakdownMid}>
                       <Text
@@ -1106,9 +1335,14 @@ export default function TripDetailScreen({
                       >
                         {(adj.reason ?? "").trim() || "—"}
                       </Text>
-                      <Text style={neoStyles.financeRailBreakdownMeta}>{provisionLineMetaLabel(adj)}</Text>
+                      <Text style={neoStyles.financeRailBreakdownMeta}>
+                        {provisionLineMetaLabel(adj)}
+                      </Text>
                       {voided ? (
-                        <Text style={neoStyles.financeRailBreakdownVoidNote} numberOfLines={3}>
+                        <Text
+                          style={neoStyles.financeRailBreakdownVoidNote}
+                          numberOfLines={3}
+                        >
                           Voided: {(adj.void_reason ?? "").trim() || "—"}
                         </Text>
                       ) : null}
@@ -1133,7 +1367,9 @@ export default function TripDetailScreen({
 
       <View style={styles.refSettleExpenseRow}>
         <Text style={styles.refSettleExpenseLabel}>Petty / voyage expense</Text>
-        <Text style={styles.refSettleExpenseVal}>{formatINR(totalExpenses)}</Text>
+        <Text style={styles.refSettleExpenseVal}>
+          {formatINR(totalExpenses)}
+        </Text>
       </View>
     </View>
   );
@@ -1173,7 +1409,9 @@ export default function TripDetailScreen({
   };
 
   const openTripDocumentsFlow = () => {
-    router.push(`/log-incoming-pods?tripId=${encodeURIComponent(trip.id)}` as never);
+    router.push(
+      `/log-incoming-pods?tripId=${encodeURIComponent(trip.id)}` as never,
+    );
   };
 
   const handleDocOpen = (doc: (typeof detail.computedTripDocs)[number]) => {
@@ -1183,7 +1421,7 @@ export default function TripDetailScreen({
       return;
     }
     if (canUploadTripDocs) {
-        openTripDocumentsFlow();
+      openTripDocumentsFlow();
       return;
     }
     if (doc.id === "vehicle-documents" && trip.vehicle_id) {
@@ -1209,7 +1447,13 @@ export default function TripDetailScreen({
   })();
 
   const handleResendOtp = async () => {
-    if (!trip?.id || otpResending || !canGenerateAggregateOtp || otpLockedByTripProgress) return;
+    if (
+      !trip?.id ||
+      otpResending ||
+      !canGenerateAggregateOtp ||
+      otpLockedByTripProgress
+    )
+      return;
     setOtpResending(true);
     try {
       await regenerateTripOtp(trip.id);
@@ -1220,41 +1464,64 @@ export default function TripDetailScreen({
   };
 
   // ── Dashboard: computed values ─────────────────────────────────────────────
-  const statusLower = (trip.status ?? '').toLowerCase();
+  const statusLower = (trip.status ?? "").toLowerCase();
   const statusLabel =
-    statusLower.includes('in_transit') || statusLower.includes('transit') ? 'In Transit'
-    : statusLower.includes('in_progress') ? 'In Progress'
-    : statusLower.includes('complet') || statusLower.includes('deliver') || statusLower === 'done' ? 'Completed'
-    : statusLower === 'assigned' && !hasAnyAssignment ? 'Unassigned'
-    : statusLower === 'assigned' ? 'Assigned'
-    : statusLower === 'pending' ? 'Pending'
-    : trip.status ?? 'Pending';
+    statusLower.includes("in_transit") || statusLower.includes("transit")
+      ? "In Transit"
+      : statusLower.includes("in_progress")
+        ? "In Progress"
+        : statusLower.includes("complet") ||
+            statusLower.includes("deliver") ||
+            statusLower === "done"
+          ? "Completed"
+          : statusLower === "assigned" && !hasAnyAssignment
+            ? "Unassigned"
+            : statusLower === "assigned"
+              ? "Assigned"
+              : statusLower === "pending"
+                ? "Pending"
+                : (trip.status ?? "Pending");
   const statusColor =
-    statusLabel === 'In Transit' || statusLabel === 'In Progress' ? '#22c55e'
-    : statusLabel === 'Completed' ? '#60a5fa'
-    : '#f59e0b';
+    statusLabel === "In Transit" || statusLabel === "In Progress"
+      ? "#22c55e"
+      : statusLabel === "Completed"
+        ? "#60a5fa"
+        : "#f59e0b";
   const pickupStr = trip.pickup_date
-    ? new Date(trip.pickup_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
-    : '—';
+    ? new Date(trip.pickup_date).toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "—";
 
   const fmtAuditDate = (iso: string | null | undefined) => {
-    if (!iso) return '—';
+    if (!iso) return "—";
     try {
-      return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-    } catch { return iso.slice(0, 16).replace('T', ' '); }
+      return new Date(iso).toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return iso.slice(0, 16).replace("T", " ");
+    }
   };
   const fmtTimelineTime = (iso: string | null | undefined) => {
-    if (!iso) return '—';
+    if (!iso) return "—";
     try {
       return new Date(iso)
-        .toLocaleTimeString('en-IN', {
-          hour: 'numeric',
-          minute: '2-digit',
+        .toLocaleTimeString("en-IN", {
+          hour: "numeric",
+          minute: "2-digit",
           hour12: true,
         })
         .toLowerCase();
     } catch {
-      return '—';
+      return "—";
     }
   };
   const timelineRows = detail.driverActivityTimelineRows ?? [];
@@ -1262,7 +1529,6 @@ export default function TripDetailScreen({
   void additionalIncome;
   void deductions;
   void pending;
-  void supplierDue;
   void hasDest;
   void mapCenter;
   void isIntegratedTrip;
@@ -1273,7 +1539,13 @@ export default function TripDetailScreen({
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       {/* ── Navigation bar ──────────────────────────────────────────────────── */}
-      <View style={[styles.navBar, { paddingHorizontal: hPad }, !isDesktop && styles.navBarMobile]}>
+      <View
+        style={[
+          styles.navBar,
+          { paddingHorizontal: hPad },
+          !isDesktop && styles.navBarMobile,
+        ]}
+      >
         {isDesktop ? (
           <>
             <View style={neoStyles.manifestNavLeft}>
@@ -1286,21 +1558,31 @@ export default function TripDetailScreen({
               </TouchableOpacity>
               <View style={neoStyles.manifestNavDivider} />
               <View>
-                <Text style={neoStyles.manifestNavKicker}>Manifest Management</Text>
+                <Text style={neoStyles.manifestNavKicker}>
+                  Manifest Management
+                </Text>
                 <View style={neoStyles.manifestNavTitleRow}>
                   <Text style={neoStyles.manifestNavTripId} numberOfLines={1}>
-                  {getTripDisplayNumber(trip)}
-                </Text>
+                    {getTripDisplayNumber(trip)}
+                  </Text>
                   <View style={neoStyles.manifestStatusBadge}>
                     <Text style={neoStyles.manifestStatusBadgeText}>
-                      {statusLabel === "Completed" ? "DEPLOYED" : statusLabel.toUpperCase()}
+                      {statusLabel === "Completed"
+                        ? "DEPLOYED"
+                        : statusLabel.toUpperCase()}
                     </Text>
                   </View>
+                </View>
               </View>
             </View>
-            </View>
             <View style={neoStyles.manifestNavActions}>
-              <TouchableOpacity style={neoStyles.auditBtn} activeOpacity={0.85}>
+              <TouchableOpacity
+                style={neoStyles.auditBtn}
+                activeOpacity={0.85}
+                onPress={() => router.push(`/trip-ledger/${trip.id}` as never)}
+                accessibilityRole="button"
+                accessibilityLabel="Open trip ledger"
+              >
                 <Feather name="clock" size={16} color="#94a3b8" />
                 <Text style={neoStyles.auditBtnText}>Audit Log</Text>
               </TouchableOpacity>
@@ -1311,25 +1593,42 @@ export default function TripDetailScreen({
                 accessibilityRole="button"
                 accessibilityLabel={t("tripChatNeedsDriverTitle")}
               >
-                <MessageSquare size={18} color={Theme.driverEmerald} strokeWidth={2.2} />
+                <MessageSquare
+                  size={18}
+                  color={Theme.driverEmerald}
+                  strokeWidth={2.2}
+                />
               </TouchableOpacity>
-              <TouchableOpacity style={neoStyles.manifestShareBtn} activeOpacity={0.85}>
+              <TouchableOpacity
+                style={neoStyles.manifestShareBtn}
+                activeOpacity={0.85}
+              >
                 <Feather name="share-2" size={18} color="#94a3b8" />
               </TouchableOpacity>
             </View>
           </>
         ) : (
           <>
-            <TouchableOpacity onPress={onBack} style={styles.navCircleBtn} activeOpacity={0.85}>
+            <TouchableOpacity
+              onPress={onBack}
+              style={styles.navCircleBtn}
+              activeOpacity={0.85}
+            >
               <FontAwesome name="chevron-left" size={18} color="#0f172a" />
             </TouchableOpacity>
             <View style={styles.navMobileCenter}>
               <Text style={styles.navMobileKicker}>Trip history</Text>
               <View style={styles.navMobileTripRow}>
-                <Text style={styles.navMobileTripId}>{getTripDisplayNumber(trip)}</Text>
+                <Text style={styles.navMobileTripId}>
+                  {getTripDisplayNumber(trip)}
+                </Text>
                 <View style={styles.navMobilePulseRow}>
-                  <View style={[styles.navMobileDot, styles.navMobileDotEmerald]} />
-                  <View style={[styles.navMobileDot, styles.navMobileDotIndigo]} />
+                  <View
+                    style={[styles.navMobileDot, styles.navMobileDotEmerald]}
+                  />
+                  <View
+                    style={[styles.navMobileDot, styles.navMobileDotIndigo]}
+                  />
                 </View>
               </View>
             </View>
@@ -1341,11 +1640,18 @@ export default function TripDetailScreen({
                 accessibilityRole="button"
                 accessibilityLabel={t("tripChatNeedsDriverTitle")}
               >
-                <MessageSquare size={17} color={Theme.driverEmerald} strokeWidth={2.2} />
+                <MessageSquare
+                  size={17}
+                  color={Theme.driverEmerald}
+                  strokeWidth={2.2}
+                />
               </TouchableOpacity>
-            <TouchableOpacity style={styles.navCircleBtn} activeOpacity={0.85}>
-              <FontAwesome name="share-alt" size={16} color="#0f172a" />
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.navCircleBtn}
+                activeOpacity={0.85}
+              >
+                <FontAwesome name="share-alt" size={16} color="#0f172a" />
+              </TouchableOpacity>
             </View>
           </>
         )}
@@ -1374,7 +1680,10 @@ export default function TripDetailScreen({
       {/* ── Scrollable content ────────────────────────────────────────────────── */}
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, { padding: isDesktop ? 8 : isMobile ? 16 : 22 }]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { padding: isDesktop ? 8 : isMobile ? 16 : 22 },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -1395,49 +1704,95 @@ export default function TripDetailScreen({
                       entityType="client"
                       size={26}
                       organizationImageUrl={
-                        detail.clientPartyAvatarFields?.organizationImageUrl ?? undefined
+                        detail.clientPartyAvatarFields?.organizationImageUrl ??
+                        undefined
                       }
                       organizationAvatarSeed={
-                        detail.clientPartyAvatarFields?.organizationAvatarSeed ?? undefined
+                        detail.clientPartyAvatarFields
+                          ?.organizationAvatarSeed ?? undefined
                       }
-                      avatarUrl={detail.clientPartyAvatarFields?.avatarUrl ?? undefined}
-                      avatarSeed={detail.clientPartyAvatarFields?.avatarSeed ?? undefined}
+                      avatarUrl={
+                        detail.clientPartyAvatarFields?.avatarUrl ?? undefined
+                      }
+                      avatarSeed={
+                        detail.clientPartyAvatarFields?.avatarSeed ?? undefined
+                      }
                     />
                   </View>
                   <View>
                     <Text style={styles.refHeroBridgeLabel}>CLIENT</Text>
-                    <Text style={styles.refHeroBridgeValue} numberOfLines={1}>{clientNameCard}</Text>
+                    <Text style={styles.refHeroBridgeValue} numberOfLines={1}>
+                      {clientNameCard}
+                    </Text>
                   </View>
                 </View>
                 <FontAwesome name="exchange" size={12} color="#64748b" />
-                <View style={[styles.refHeroBridgeCol, styles.refHeroBridgeColRight]}>
+                <View
+                  style={[
+                    styles.refHeroBridgeCol,
+                    styles.refHeroBridgeColRight,
+                  ]}
+                >
                   <View>
-                    <Text style={[styles.refHeroBridgeLabel, styles.refHeroBridgeLabelRight]}>SUPPLIER</Text>
-                    <Text style={styles.refHeroBridgeValue} numberOfLines={1}>{supplierName}</Text>
+                    <Text
+                      style={[
+                        styles.refHeroBridgeLabel,
+                        styles.refHeroBridgeLabelRight,
+                      ]}
+                    >
+                      SUPPLIER
+                    </Text>
+                    <Text style={styles.refHeroBridgeValue} numberOfLines={1}>
+                      {supplierName}
+                    </Text>
                   </View>
-                  <View style={[styles.refHeroBridgeIconWrap, styles.refHeroBridgeIconWrapRose]}>
+                  <View
+                    style={[
+                      styles.refHeroBridgeIconWrap,
+                      styles.refHeroBridgeIconWrapRose,
+                    ]}
+                  >
                     <PartyAvatar
                       name={supplierNameForParty}
                       entityType="supplier"
                       size={26}
                       organizationImageUrl={
-                        detail.supplierPartyAvatarFields?.organizationImageUrl ?? undefined
+                        detail.supplierPartyAvatarFields
+                          ?.organizationImageUrl ?? undefined
                       }
                       organizationAvatarSeed={
-                        detail.supplierPartyAvatarFields?.organizationAvatarSeed ?? undefined
+                        detail.supplierPartyAvatarFields
+                          ?.organizationAvatarSeed ?? undefined
                       }
-                      avatarUrl={detail.supplierPartyAvatarFields?.avatarUrl ?? undefined}
-                      avatarSeed={detail.supplierPartyAvatarFields?.avatarSeed ?? undefined}
+                      avatarUrl={
+                        detail.supplierPartyAvatarFields?.avatarUrl ?? undefined
+                      }
+                      avatarSeed={
+                        detail.supplierPartyAvatarFields?.avatarSeed ??
+                        undefined
+                      }
                     />
                   </View>
                 </View>
               </View>
               <View style={styles.refHeroRouteRow}>
-                <View style={[styles.refHeroRouteCol, styles.refHeroRouteColJustify]}>
-                  <Text style={[styles.refHeroCity, isMobile && styles.refHeroCityMobile]}>
+                <View
+                  style={[
+                    styles.refHeroRouteCol,
+                    styles.refHeroRouteColJustify,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.refHeroCity,
+                      isMobile && styles.refHeroCityMobile,
+                    ]}
+                  >
                     {originSplit.primary.toUpperCase()}
                   </Text>
-                  <Text style={styles.refHeroState}>{originStateLabel.toUpperCase()}</Text>
+                  <Text style={styles.refHeroState}>
+                    {originStateLabel.toUpperCase()}
+                  </Text>
                 </View>
                 <View style={styles.refHeroConnectorWrap}>
                 <View style={styles.refHeroToRow}>
@@ -1457,7 +1812,9 @@ export default function TripDetailScreen({
                       styles.refHeroCity,
                       isMobile && styles.refHeroCityMobile,
                       isMobile && styles.refHeroCityMobileDest,
-                      Platform.OS === "web" && isMobile && styles.refHeroCityWebDest,
+                      Platform.OS === "web" &&
+                        isMobile &&
+                        styles.refHeroCityWebDest,
                       styles.refHeroCityRight,
                     ]}
                     numberOfLines={1}
@@ -1490,7 +1847,9 @@ export default function TripDetailScreen({
                   </View>
                 </View>
                 <View style={styles.refHeroMetaDivider} />
-                <View style={[styles.refHeroMetaItem, styles.refHeroMetaItemRight]}>
+                <View
+                  style={[styles.refHeroMetaItem, styles.refHeroMetaItemRight]}
+                >
                   <View>
                     <Text style={styles.refHeroMetaLabel}>ETE manifest</Text>
                     <Text style={styles.refHeroMetaValue}>{durationLabel}</Text>
@@ -1517,15 +1876,24 @@ export default function TripDetailScreen({
                   </TouchableOpacity>
                 </View>
                 <View style={styles.refAssetBody}>
-                <Text style={styles.refAssetLabel}>Authorized Pilot</Text>
-                <Text style={styles.refAssetValue} numberOfLines={1}>{allocatedDriverName}</Text>
-                <Text style={styles.refAssetSubtle}>{driverRatingLabel} rank</Text>
+                  <Text style={styles.refAssetLabel}>Authorized Pilot</Text>
+                  <Text style={styles.refAssetValue} numberOfLines={1}>
+                    {allocatedDriverName}
+                  </Text>
+                  <Text style={styles.refAssetSubtle}>
+                    {driverRatingLabel} rank
+                  </Text>
                 </View>
               </View>
 
               <View style={styles.refAssetCard}>
                 <View style={styles.refAssetHead}>
-                  <View style={[styles.refAssetIconWrap, styles.refAssetIconWrapDark]}>
+                  <View
+                    style={[
+                      styles.refAssetIconWrap,
+                      styles.refAssetIconWrapDark,
+                    ]}
+                  >
                     <Feather name="truck" size={14} color="#fff" />
                   </View>
                   <TouchableOpacity
@@ -1537,37 +1905,83 @@ export default function TripDetailScreen({
                   </TouchableOpacity>
                 </View>
                 <View style={styles.refAssetBody}>
-                <Text style={styles.refAssetLabel}>Vehicle Asset</Text>
-                <Text style={styles.refAssetValue} numberOfLines={1}>{allocatedVehicleLabel}</Text>
-                <Text style={styles.refAssetSubtle}>{vehicleTypeLabel} · {vehicleCapacityLabel}</Text>
+                  <Text style={styles.refAssetLabel}>Vehicle Asset</Text>
+                  <Text style={styles.refAssetValue} numberOfLines={1}>
+                    {allocatedVehicleLabel}
+                  </Text>
+                  <Text style={styles.refAssetSubtle}>
+                    {vehicleTypeLabel} · {vehicleCapacityLabel}
+                  </Text>
                 </View>
               </View>
             </View>
 
             <View style={styles.refTabShell}>
               <TouchableOpacity
-                style={[styles.refTabBtn, activeTab === "trip" && styles.refTabBtnActive]}
+                style={[
+                  styles.refTabBtn,
+                  activeTab === "trip" && styles.refTabBtnActive,
+                ]}
                 onPress={() => setActiveTab("trip")}
                 activeOpacity={0.85}
               >
-                <Feather name="activity" size={12} color={activeTab === "trip" ? "#818cf8" : "#94a3b8"} />
-                <Text style={[styles.refTabBtnText, activeTab === "trip" && styles.refTabBtnTextActive]}>Journey</Text>
+                <Feather
+                  name="activity"
+                  size={12}
+                  color={activeTab === "trip" ? "#818cf8" : "#94a3b8"}
+                />
+                <Text
+                  style={[
+                    styles.refTabBtnText,
+                    activeTab === "trip" && styles.refTabBtnTextActive,
+                  ]}
+                >
+                  Journey
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.refTabBtn, activeTab === "finance" && styles.refTabBtnActive]}
+                style={[
+                  styles.refTabBtn,
+                  activeTab === "finance" && styles.refTabBtnActive,
+                ]}
                 onPress={() => setActiveTab("finance")}
                 activeOpacity={0.85}
               >
-                <Feather name="credit-card" size={12} color={activeTab === "finance" ? "#818cf8" : "#94a3b8"} />
-                <Text style={[styles.refTabBtnText, activeTab === "finance" && styles.refTabBtnTextActive]}>Finance</Text>
+                <Feather
+                  name="credit-card"
+                  size={12}
+                  color={activeTab === "finance" ? "#818cf8" : "#94a3b8"}
+                />
+                <Text
+                  style={[
+                    styles.refTabBtnText,
+                    activeTab === "finance" && styles.refTabBtnTextActive,
+                  ]}
+                >
+                  Finance
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.refTabBtn, activeTab === "docs" && styles.refTabBtnActive]}
+                style={[
+                  styles.refTabBtn,
+                  activeTab === "docs" && styles.refTabBtnActive,
+                ]}
                 onPress={() => setActiveTab("docs")}
                 activeOpacity={0.85}
               >
-                <Feather name="shield" size={12} color={activeTab === "docs" ? "#818cf8" : "#94a3b8"} />
-                <Text style={[styles.refTabBtnText, activeTab === "docs" && styles.refTabBtnTextActive]}>Vault</Text>
+                <Feather
+                  name="shield"
+                  size={12}
+                  color={activeTab === "docs" ? "#818cf8" : "#94a3b8"}
+                />
+                <Text
+                  style={[
+                    styles.refTabBtnText,
+                    activeTab === "docs" && styles.refTabBtnTextActive,
+                  ]}
+                >
+                  Vault
+                </Text>
               </TouchableOpacity>
             </View>
 
@@ -1578,11 +1992,21 @@ export default function TripDetailScreen({
                     const expanded = expandedLog === index;
                     const isLast = index === journeyLogs.length - 1;
                     return (
-                      <View key={`${log.status}-${index}`} style={styles.refTimelineItemWrap}>
-                        {!isLast ? <View style={styles.refTimelineConnector} /> : null}
+                      <View
+                        key={`${log.status}-${index}`}
+                        style={styles.refTimelineItemWrap}
+                      >
+                        {!isLast ? (
+                          <View style={styles.refTimelineConnector} />
+                        ) : null}
                         <TouchableOpacity
-                          style={[styles.refTimelineItem, expanded && styles.refTimelineItemExpanded]}
-                          onPress={() => setExpandedLog(expanded ? null : index)}
+                          style={[
+                            styles.refTimelineItem,
+                            expanded && styles.refTimelineItemExpanded,
+                          ]}
+                          onPress={() =>
+                            setExpandedLog(expanded ? null : index)
+                          }
                           activeOpacity={0.9}
                         >
                           <View style={styles.refTimelineDotIcon}>
@@ -1590,14 +2014,30 @@ export default function TripDetailScreen({
                           </View>
                           <View style={styles.refTimelineBody}>
                             <View style={styles.refTimelineTop}>
-                              <Text style={styles.refTimelineStatus}>{log.status}</Text>
+                              <Text style={styles.refTimelineStatus}>
+                                {log.status}
+                              </Text>
                               <View style={styles.refTimelineTopRight}>
-                                <Text style={styles.refTimelineTime}>{log.time}</Text>
-                                <FontAwesome name={expanded ? "chevron-up" : "chevron-down"} size={11} color="#94a3b8" />
+                                <Text style={styles.refTimelineTime}>
+                                  {log.time}
+                                </Text>
+                                <FontAwesome
+                                  name={
+                                    expanded ? "chevron-up" : "chevron-down"
+                                  }
+                                  size={11}
+                                  color="#94a3b8"
+                                />
                               </View>
                             </View>
-                            <Text style={styles.refTimelineLocation}>{log.location}</Text>
-                            {expanded ? <Text style={styles.refTimelineDetails}>{log.details}</Text> : null}
+                            <Text style={styles.refTimelineLocation}>
+                              {log.location}
+                            </Text>
+                            {expanded ? (
+                              <Text style={styles.refTimelineDetails}>
+                                {log.details}
+                              </Text>
+                            ) : null}
                           </View>
                         </TouchableOpacity>
                       </View>
@@ -1608,10 +2048,14 @@ export default function TripDetailScreen({
                 <View style={styles.refDeliveredCard}>
                   <View>
                     <Text style={styles.refDeliveredLabel}>
-                      {isTripCompleted ? "Final Audit Status" : "Current Status"}
+                      {isTripCompleted
+                        ? "Final Audit Status"
+                        : "Current Status"}
                     </Text>
                     <Text style={styles.refDeliveredValue}>
-                      {isTripCompleted ? "DELIVERED SUCCESSFULLY" : currentStatusLabel}
+                      {isTripCompleted
+                        ? "DELIVERED SUCCESSFULLY"
+                        : currentStatusLabel}
                     </Text>
                   </View>
                   <View style={styles.refDeliveredIconWrap}>
@@ -1630,7 +2074,9 @@ export default function TripDetailScreen({
                     partnerName={detail.partnerName}
                     driverName={detail.driverName}
                     driverAvatarUri={detail.driverAvatarUri}
-                    clientName={detail.displayClientName ?? trip.client_name ?? null}
+                    clientName={
+                      detail.displayClientName ?? trip.client_name ?? null
+                    }
                     paymentCaptured={paymentCaptured}
                     layoutVariant="registry"
                   />
@@ -1647,12 +2093,15 @@ export default function TripDetailScreen({
                     <Text
                       style={[
                         styles.refFinanceSubBtnText,
-                        financeSubTab === "summary" && styles.refFinanceSubBtnTextActive,
+                        financeSubTab === "summary" &&
+                          styles.refFinanceSubBtnTextActive,
                       ]}
                     >
                       Summary
                     </Text>
-                    {financeSubTab === "summary" ? <View style={styles.refFinanceSubLine} /> : null}
+                    {financeSubTab === "summary" ? (
+                      <View style={styles.refFinanceSubLine} />
+                    ) : null}
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.refFinanceSubBtn}
@@ -1662,12 +2111,15 @@ export default function TripDetailScreen({
                     <Text
                       style={[
                         styles.refFinanceSubBtnText,
-                        financeSubTab === "transactions" && styles.refFinanceSubBtnTextActive,
+                        financeSubTab === "transactions" &&
+                          styles.refFinanceSubBtnTextActive,
                       ]}
                     >
                       Transactions
                     </Text>
-                    {financeSubTab === "transactions" ? <View style={styles.refFinanceSubLine} /> : null}
+                    {financeSubTab === "transactions" ? (
+                      <View style={styles.refFinanceSubLine} />
+                    ) : null}
                   </TouchableOpacity>
                 </View>
 
@@ -1680,7 +2132,11 @@ export default function TripDetailScreen({
                       <View style={styles.refProvisionWrap}>
                         <View style={styles.refProvisionHeader}>
                           <Text style={styles.refProvisionTitle}>
-                            Provision CN/DN ({showFinanceProvisionPanel === "client" ? "Client" : "Supplier"})
+                            Provision CN/DN (
+                            {showFinanceProvisionPanel === "client"
+                              ? "Client"
+                              : "Supplier"}
+                            )
                           </Text>
                           <TouchableOpacity
                             onPress={() => setShowFinanceProvisionPanel(null)}
@@ -1694,11 +2150,17 @@ export default function TripDetailScreen({
 
                         <View style={styles.refProvisionDnRow}>
                           <TouchableOpacity
-                            style={[styles.refProvisionDnBtn, styles.refProvisionCnBtn]}
+                            style={[
+                              styles.refProvisionDnBtn,
+                              styles.refProvisionCnBtn,
+                            ]}
                             onPress={() => {
                               if (!showFinanceProvisionPanel) return;
                               openInlineAdjustmentForm({
-                                type: showFinanceProvisionPanel === "client" ? "revenue" : "cost",
+                                type:
+                                  showFinanceProvisionPanel === "client"
+                                    ? "revenue"
+                                    : "cost",
                                 impact: "minus",
                                 reasonSeed: "Other",
                               });
@@ -1706,14 +2168,22 @@ export default function TripDetailScreen({
                             activeOpacity={0.88}
                           >
                             <Feather name="plus" size={22} color="#a5b4fc" />
-                            <Text style={styles.refProvisionDnLabel}>Credit (CN)</Text>
+                            <Text style={styles.refProvisionDnLabel}>
+                              Credit (CN)
+                            </Text>
                           </TouchableOpacity>
                           <TouchableOpacity
-                            style={[styles.refProvisionDnBtn, styles.refProvisionDnBtnDebit]}
+                            style={[
+                              styles.refProvisionDnBtn,
+                              styles.refProvisionDnBtnDebit,
+                            ]}
                             onPress={() => {
                               if (!showFinanceProvisionPanel) return;
                               openInlineAdjustmentForm({
-                                type: showFinanceProvisionPanel === "client" ? "revenue" : "cost",
+                                type:
+                                  showFinanceProvisionPanel === "client"
+                                    ? "revenue"
+                                    : "cost",
                                 impact: "plus",
                                 reasonSeed: "Other",
                               });
@@ -1721,7 +2191,9 @@ export default function TripDetailScreen({
                             activeOpacity={0.88}
                           >
                             <Feather name="minus" size={22} color="#fca5a5" />
-                            <Text style={styles.refProvisionDnLabel}>Debit (DN)</Text>
+                            <Text style={styles.refProvisionDnLabel}>
+                              Debit (DN)
+                            </Text>
                           </TouchableOpacity>
                         </View>
 
@@ -1729,8 +2201,12 @@ export default function TripDetailScreen({
                           <View style={styles.refInlineAdjustWrap}>
                             <View style={styles.refInlineAdjustHead}>
                               <View>
-                                <Text style={styles.refInlineAdjustTitle}>Add Adjustment</Text>
-                                <Text style={styles.refInlineAdjustSub}>modify trip amounts</Text>
+                                <Text style={styles.refInlineAdjustTitle}>
+                                  Add Adjustment
+                                </Text>
+                                <Text style={styles.refInlineAdjustSub}>
+                                  modify trip amounts
+                                </Text>
                                 <View
                                   style={[
                                     styles.refInlineModeBadge,
@@ -1750,21 +2226,29 @@ export default function TripDetailScreen({
                               </View>
                               <TouchableOpacity
                                 style={styles.refInlineAdjustClose}
-                                onPress={() => setShowInlineAdjustmentForm(false)}
+                                onPress={() =>
+                                  setShowInlineAdjustmentForm(false)
+                                }
                                 activeOpacity={0.85}
                               >
                                 <Feather name="x" size={16} color="#475569" />
                               </TouchableOpacity>
                             </View>
 
-                            <Text style={styles.refInlineAdjustLabel}>Adjustment Type</Text>
+                            <Text style={styles.refInlineAdjustLabel}>
+                              Adjustment Type
+                            </Text>
                             <Text style={styles.refInlineAdjustLockedMeta}>
                               {`${inlineAdjType === "revenue" ? "Revenue (Sale)" : "Cost (Supplier)"} · ${
-                                inlineAdjImpact === "plus" ? "Debit (DN)" : "Credit (CN)"
+                                inlineAdjImpact === "plus"
+                                  ? "Debit (DN)"
+                                  : "Credit (CN)"
                               }`}
                             </Text>
 
-                            <Text style={styles.refInlineAdjustLabel}>Amount</Text>
+                            <Text style={styles.refInlineAdjustLabel}>
+                              Amount
+                            </Text>
                             <View style={styles.refInlineAmountRow}>
                               <Text style={styles.refInlineCurrency}>₹</Text>
                               <TextInput
@@ -1778,14 +2262,17 @@ export default function TripDetailScreen({
                               />
                             </View>
 
-                            <Text style={styles.refInlineAdjustLabel}>Reason</Text>
+                            <Text style={styles.refInlineAdjustLabel}>
+                              Reason
+                            </Text>
                             <View style={styles.refInlineReasonWrap}>
                               {inlineReasonOptions.map((r) => (
                                 <TouchableOpacity
                                   key={r}
                                   style={[
                                     styles.refInlineReasonChip,
-                                    inlineAdjReason === r && styles.refInlineReasonChipActive,
+                                    inlineAdjReason === r &&
+                                      styles.refInlineReasonChipActive,
                                   ]}
                                   onPress={() => setInlineAdjReason(r)}
                                   activeOpacity={0.82}
@@ -1793,7 +2280,8 @@ export default function TripDetailScreen({
                                   <Text
                                     style={[
                                       styles.refInlineReasonChipTxt,
-                                      inlineAdjReason === r && styles.refInlineReasonChipTxtActive,
+                                      inlineAdjReason === r &&
+                                        styles.refInlineReasonChipTxtActive,
                                     ]}
                                   >
                                     {r}
@@ -1816,13 +2304,16 @@ export default function TripDetailScreen({
                             <TouchableOpacity
                               style={[
                                 styles.refInlineSaveBtn,
-                                !canSaveInlineAdjustment && styles.refInlineSaveBtnDisabled,
+                                !canSaveInlineAdjustment &&
+                                  styles.refInlineSaveBtnDisabled,
                               ]}
                               onPress={() => void saveInlineAdjustment()}
                               disabled={!canSaveInlineAdjustment}
                               activeOpacity={0.86}
                             >
-                              <Text style={styles.refInlineSaveBtnTxt}>Save Adjustment</Text>
+                              <Text style={styles.refInlineSaveBtnTxt}>
+                                Save Adjustment
+                              </Text>
                             </TouchableOpacity>
                           </View>
                         ) : null}
@@ -1847,17 +2338,23 @@ export default function TripDetailScreen({
                           <View
                             style={[
                               styles.refTxnIconWrap,
-                              row.isIn ? styles.refTxnIconIn : styles.refTxnIconOut,
+                              row.isIn
+                                ? styles.refTxnIconIn
+                                : styles.refTxnIconOut,
                             ]}
                           >
                             <Feather
-                              name={row.isIn ? "arrow-down-left" : "arrow-up-right"}
+                              name={
+                                row.isIn ? "arrow-down-left" : "arrow-up-right"
+                              }
                               size={16}
                               color={row.isIn ? "#10b981" : "#f43f5e"}
                             />
                           </View>
                           <View style={styles.refTxnTextWrap}>
-                            <Text style={styles.refTxnLabel}>{ledgerHistoryTitle(row.tx, row.isIn)}</Text>
+                            <Text style={styles.refTxnLabel}>
+                              {ledgerHistoryTitle(row.tx, row.isIn)}
+                            </Text>
                             <Text style={styles.refTxnMeta}>
                               {formatLedgerDate(row.tx.transaction_date)} ·{" "}
                               {row.tx.payment_mode || "Wallet"}
@@ -1867,7 +2364,9 @@ export default function TripDetailScreen({
                         <Text
                           style={[
                             styles.refTxnAmount,
-                            row.isIn ? styles.refTxnAmountIn : styles.refTxnAmountOut,
+                            row.isIn
+                              ? styles.refTxnAmountIn
+                              : styles.refTxnAmountOut,
                           ]}
                         >
                           {formatINR(row.amount)}
@@ -1885,7 +2384,9 @@ export default function TripDetailScreen({
                   </View>
                   <View>
                     <Text style={styles.refVaultTitle}>Asset Vault</Text>
-                    <Text style={styles.refVaultSub}>Operational Compliance Registry</Text>
+                    <Text style={styles.refVaultSub}>
+                      Operational Compliance Registry
+                    </Text>
                   </View>
                 </View>
                 <View style={styles.refVaultGrid}>
@@ -1899,18 +2400,31 @@ export default function TripDetailScreen({
                     return (
                       <View key={doc.id} style={styles.refVaultCard}>
                         <Feather
-                          name={tone === "critical" ? "alert-triangle" : "file-text"}
+                          name={
+                            tone === "critical" ? "alert-triangle" : "file-text"
+                          }
                           size={18}
                           color={tone === "critical" ? "#fb7185" : "#94a3b8"}
                         />
-                        <Text style={styles.refVaultCardTitle} numberOfLines={2}>{doc.label}</Text>
-                        <Text style={styles.refVaultCardStatus}>{doc.status}</Text>
+                        <Text
+                          style={styles.refVaultCardTitle}
+                          numberOfLines={2}
+                        >
+                          {doc.label}
+                        </Text>
+                        <Text style={styles.refVaultCardStatus}>
+                          {doc.status}
+                        </Text>
                         <TouchableOpacity
                           style={styles.refVaultViewBtn}
                           onPress={() => void handleDocOpen(doc)}
                           activeOpacity={0.85}
                         >
-                          <Feather name="external-link" size={12} color="#64748b" />
+                          <Feather
+                            name="external-link"
+                            size={12}
+                            color="#64748b"
+                          />
                           <Text style={styles.refVaultViewText}>View</Text>
                         </TouchableOpacity>
                       </View>
@@ -1935,13 +2449,20 @@ export default function TripDetailScreen({
                         entityType="client"
                         size={34}
                         organizationImageUrl={
-                          detail.clientPartyAvatarFields?.organizationImageUrl ?? undefined
+                          detail.clientPartyAvatarFields
+                            ?.organizationImageUrl ?? undefined
                         }
                         organizationAvatarSeed={
-                          detail.clientPartyAvatarFields?.organizationAvatarSeed ?? undefined
+                          detail.clientPartyAvatarFields
+                            ?.organizationAvatarSeed ?? undefined
                         }
-                        avatarUrl={detail.clientPartyAvatarFields?.avatarUrl ?? undefined}
-                        avatarSeed={detail.clientPartyAvatarFields?.avatarSeed ?? undefined}
+                        avatarUrl={
+                          detail.clientPartyAvatarFields?.avatarUrl ?? undefined
+                        }
+                        avatarSeed={
+                          detail.clientPartyAvatarFields?.avatarSeed ??
+                          undefined
+                        }
                       />
                       <View style={neoStyles.heroPartyText}>
                         <Text style={neoStyles.heroKicker}>CLIENT</Text>
@@ -1953,9 +2474,15 @@ export default function TripDetailScreen({
                     <View style={neoStyles.swapIcon}>
                       <FontAwesome name="exchange" size={11} color="#64748b" />
                     </View>
-                    <View style={[neoStyles.heroParty, neoStyles.heroPartyRight]}>
+                    <View
+                      style={[neoStyles.heroParty, neoStyles.heroPartyRight]}
+                    >
                       <View style={neoStyles.heroPartyTextRight}>
-                        <Text style={[neoStyles.heroKicker, neoStyles.alignRight]}>SUPPLIER</Text>
+                        <Text
+                          style={[neoStyles.heroKicker, neoStyles.alignRight]}
+                        >
+                          SUPPLIER
+                        </Text>
                         <Text style={neoStyles.heroPartyName} numberOfLines={1}>
                           {supplierName}
                         </Text>
@@ -1965,13 +2492,21 @@ export default function TripDetailScreen({
                         entityType="supplier"
                         size={34}
                         organizationImageUrl={
-                          detail.supplierPartyAvatarFields?.organizationImageUrl ?? undefined
+                          detail.supplierPartyAvatarFields
+                            ?.organizationImageUrl ?? undefined
                         }
                         organizationAvatarSeed={
-                          detail.supplierPartyAvatarFields?.organizationAvatarSeed ?? undefined
+                          detail.supplierPartyAvatarFields
+                            ?.organizationAvatarSeed ?? undefined
                         }
-                        avatarUrl={detail.supplierPartyAvatarFields?.avatarUrl ?? undefined}
-                        avatarSeed={detail.supplierPartyAvatarFields?.avatarSeed ?? undefined}
+                        avatarUrl={
+                          detail.supplierPartyAvatarFields?.avatarUrl ??
+                          undefined
+                        }
+                        avatarSeed={
+                          detail.supplierPartyAvatarFields?.avatarSeed ??
+                          undefined
+                        }
                       />
                     </View>
                   </View>
@@ -1992,11 +2527,21 @@ export default function TripDetailScreen({
                       </View>
                       <View style={neoStyles.routeVectorLine} />
                     </View>
-                    <View style={[neoStyles.routeHeroSide, neoStyles.routeHeroSideRight]}>
-                      <Text style={[neoStyles.routeHeroCity, neoStyles.alignRight]} numberOfLines={2}>
+                    <View
+                      style={[
+                        neoStyles.routeHeroSide,
+                        neoStyles.routeHeroSideRight,
+                      ]}
+                    >
+                      <Text
+                        style={[neoStyles.routeHeroCity, neoStyles.alignRight]}
+                        numberOfLines={2}
+                      >
                         {destinationSplit.primary.toUpperCase()}
                       </Text>
-                      <Text style={[neoStyles.routeHeroSub, neoStyles.alignRight]}>
+                      <Text
+                        style={[neoStyles.routeHeroSub, neoStyles.alignRight]}
+                      >
                         {destinationStateLabel.toUpperCase()}
                       </Text>
                     </View>
@@ -2004,20 +2549,33 @@ export default function TripDetailScreen({
 
                   <View style={neoStyles.heroMetrics}>
                     <View style={neoStyles.heroMetric}>
-                      <Text style={neoStyles.heroMetricLabel}>Manifest Range</Text>
+                      <Text style={neoStyles.heroMetricLabel}>
+                        Manifest Range
+                      </Text>
                       <Text style={neoStyles.heroMetricValue}>
-                        {resolvedDistanceLabel ? resolvedDistanceLabel.replace(/\s*km$/i, " KM") : "—"}
+                        {resolvedDistanceLabel
+                          ? resolvedDistanceLabel.replace(/\s*km$/i, " KM")
+                          : "—"}
                       </Text>
                     </View>
                     <View style={neoStyles.heroMetricDivider} />
                     <View style={neoStyles.heroMetric}>
-                      <Text style={neoStyles.heroMetricLabel}>ETE Manifest</Text>
-                      <Text style={neoStyles.heroMetricValue}>{durationLabel}</Text>
+                      <Text style={neoStyles.heroMetricLabel}>
+                        ETE Manifest
+                      </Text>
+                      <Text style={neoStyles.heroMetricValue}>
+                        {durationLabel}
+                      </Text>
                     </View>
                     <View style={neoStyles.heroMetricDivider} />
                     <View style={neoStyles.heroMetric}>
                       <Text style={neoStyles.heroMetricLabel}>Status</Text>
-                      <Text style={[neoStyles.heroMetricValue, { color: statusColor }]}>
+                      <Text
+                        style={[
+                          neoStyles.heroMetricValue,
+                          { color: statusColor },
+                        ]}
+                      >
                         {statusLabel.toUpperCase()}
                       </Text>
                     </View>
@@ -2026,15 +2584,30 @@ export default function TripDetailScreen({
 
                 <View style={neoStyles.tabShell}>
                   {[
-                    { id: "trip" as const, label: "Journey Log", icon: "activity" as const },
-                    { id: "finance" as const, label: "Finance Hub", icon: "credit-card" as const },
-                    { id: "docs" as const, label: "Asset Vault", icon: "shield" as const },
+                    {
+                      id: "trip" as const,
+                      label: "Journey Log",
+                      icon: "activity" as const,
+                    },
+                    {
+                      id: "finance" as const,
+                      label: "Finance Hub",
+                      icon: "credit-card" as const,
+                    },
+                    {
+                      id: "docs" as const,
+                      label: "Asset Vault",
+                      icon: "shield" as const,
+                    },
                   ].map((tab) => {
                     const active = activeTab === tab.id;
                     return (
                       <TouchableOpacity
                         key={tab.id}
-                        style={[neoStyles.neoTab, active && neoStyles.neoTabActive]}
+                        style={[
+                          neoStyles.neoTab,
+                          active && neoStyles.neoTabActive,
+                        ]}
                         onPress={() => setActiveTab(tab.id)}
                         activeOpacity={0.86}
                       >
@@ -2043,7 +2616,12 @@ export default function TripDetailScreen({
                           size={15}
                           color={active ? "#818cf8" : "#94a3b8"}
                         />
-                        <Text style={[neoStyles.neoTabText, active && neoStyles.neoTabTextActive]}>
+                        <Text
+                          style={[
+                            neoStyles.neoTabText,
+                            active && neoStyles.neoTabTextActive,
+                          ]}
+                        >
                           {tab.label}
                         </Text>
                       </TouchableOpacity>
@@ -2056,7 +2634,9 @@ export default function TripDetailScreen({
                     <View style={neoStyles.timelineCard}>
                       <View style={neoStyles.cardTitleRow}>
                         <Feather name="activity" size={16} color="#4f46e5" />
-                        <Text style={neoStyles.cardTitleDark}>Manifest Pulse</Text>
+                        <Text style={neoStyles.cardTitleDark}>
+                          Manifest Pulse
+                        </Text>
                         {nextSimulateStep && currentStepIndex < 3 ? (
                           <TouchableOpacity
                             style={neoStyles.simBtn}
@@ -2072,7 +2652,8 @@ export default function TripDetailScreen({
                         const expanded = expandedLog === index;
                         const isLast = index === journeyLogs.length - 1;
                         const isReached = index <= currentStepIndex;
-                        const isCurrent = index === currentStepIndex && currentStepIndex < 3;
+                        const isCurrent =
+                          index === currentStepIndex && currentStepIndex < 3;
                         // Find simulation log entries for this step
                         const stepStatusMap: Record<number, string[]> = {
                           1: ["in_progress", "picked_up"],
@@ -2083,41 +2664,92 @@ export default function TripDetailScreen({
                           (stepStatusMap[index] ?? []).includes(e.status),
                         );
                         return (
-                          <View key={`${log.status}-${index}`} style={neoStyles.timelineItemWrap}>
+                          <View
+                            key={`${log.status}-${index}`}
+                            style={neoStyles.timelineItemWrap}
+                          >
                             {!isLast ? (
-                              <View style={[neoStyles.timelineConnector, isReached && { backgroundColor: "#4f46e5" }]} />
+                              <View
+                                style={[
+                                  neoStyles.timelineConnector,
+                                  isReached && { backgroundColor: "#4f46e5" },
+                                ]}
+                              />
                             ) : null}
                             <TouchableOpacity
-                              style={[neoStyles.timelineItem, expanded && neoStyles.timelineItemActive]}
-                              onPress={() => setExpandedLog(expanded ? null : index)}
+                              style={[
+                                neoStyles.timelineItem,
+                                expanded && neoStyles.timelineItemActive,
+                              ]}
+                              onPress={() =>
+                                setExpandedLog(expanded ? null : index)
+                              }
                               activeOpacity={0.9}
                             >
-                              <View style={[neoStyles.timelineDot, isReached && { backgroundColor: "#10b981" }, isCurrent && { backgroundColor: "#4f46e5" }]}>
-                                <FontAwesome name={isCurrent ? "circle" : "check"} size={isCurrent ? 6 : 10} color="#fff" />
+                              <View
+                                style={[
+                                  neoStyles.timelineDot,
+                                  isReached && { backgroundColor: "#10b981" },
+                                  isCurrent && { backgroundColor: "#4f46e5" },
+                                ]}
+                              >
+                                <FontAwesome
+                                  name={isCurrent ? "circle" : "check"}
+                                  size={isCurrent ? 6 : 10}
+                                  color="#fff"
+                                />
                               </View>
                               <View style={neoStyles.timelineBody}>
                                 <View style={neoStyles.timelineTop}>
-                                  <Text style={[neoStyles.timelineStatus, !isReached && { opacity: 0.4 }]}>{log.status}</Text>
-                                  <Text style={neoStyles.timelineTime}>{log.time}</Text>
+                                  <Text
+                                    style={[
+                                      neoStyles.timelineStatus,
+                                      !isReached && { opacity: 0.4 },
+                                    ]}
+                                  >
+                                    {log.status}
+                                  </Text>
+                                  <Text style={neoStyles.timelineTime}>
+                                    {log.time}
+                                  </Text>
                                 </View>
-                                <Text style={[neoStyles.timelineLocation, !isReached && { opacity: 0.4 }]} numberOfLines={1}>
+                                <Text
+                                  style={[
+                                    neoStyles.timelineLocation,
+                                    !isReached && { opacity: 0.4 },
+                                  ]}
+                                  numberOfLines={1}
+                                >
                                   {log.location}
                                 </Text>
                                 {expanded ? (
-                                  <Text style={neoStyles.timelineDetails}>{log.details}</Text>
+                                  <Text style={neoStyles.timelineDetails}>
+                                    {log.details}
+                                  </Text>
                                 ) : null}
                                 {/* Business simulation log badges */}
                                 {stepSimLogs.map((sim, si) => (
                                   <View key={si} style={neoStyles.simLogBadge}>
-                                    <Feather name="zap" size={10} color="#f59e0b" />
+                                    <Feather
+                                      name="zap"
+                                      size={10}
+                                      color="#f59e0b"
+                                    />
                                     <View style={{ flex: 1, minWidth: 0 }}>
                                       <Text style={neoStyles.simLogBadgeText}>
                                         Business simulated · {sim.userName}
                                       </Text>
                                       {sim.timestamp ? (
                                         <Text style={neoStyles.simLogBadgeTime}>
-                                          {new Date(sim.timestamp).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
-                                          {sim.lat && sim.lng ? `  ·  ${sim.lat.toFixed(4)}°N, ${sim.lng.toFixed(4)}°E` : ""}
+                                          {new Date(
+                                            sim.timestamp,
+                                          ).toLocaleTimeString("en-IN", {
+                                            hour: "2-digit",
+                                            minute: "2-digit",
+                                          })}
+                                          {sim.lat && sim.lng
+                                            ? `  ·  ${sim.lat.toFixed(4)}°N, ${sim.lng.toFixed(4)}°E`
+                                            : ""}
                                         </Text>
                                       ) : null}
                                     </View>
@@ -2132,56 +2764,94 @@ export default function TripDetailScreen({
 
                     {/* Business Simulate Confirmation Modal */}
                     {simConfirmStep ? (
-                      <Modal transparent animationType="fade" visible onRequestClose={() => setSimConfirmStep(null)}>
+                      <Modal
+                        transparent
+                        animationType="fade"
+                        visible
+                        onRequestClose={() => setSimConfirmStep(null)}
+                      >
                         <View style={neoStyles.simModalBackdrop}>
                           <View style={neoStyles.simModal}>
                             <View style={neoStyles.simModalHeader}>
                               <Feather name="zap" size={18} color="#f59e0b" />
-                              <Text style={neoStyles.simModalTitle}>Simulate Stage</Text>
+                              <Text style={neoStyles.simModalTitle}>
+                                Simulate Stage
+                              </Text>
                             </View>
-                            <Text style={neoStyles.simModalAction}>{simConfirmStep.label}</Text>
+                            <Text style={neoStyles.simModalAction}>
+                              {simConfirmStep.label}
+                            </Text>
                             <View style={neoStyles.simModalDivider} />
                             {simConfirmStep.driverLat != null ? (
                               <View style={neoStyles.simModalLocRow}>
-                                <Feather name="map-pin" size={13} color="#10b981" />
+                                <Feather
+                                  name="map-pin"
+                                  size={13}
+                                  color="#10b981"
+                                />
                                 <View style={{ flex: 1, minWidth: 0 }}>
-                                  <Text style={neoStyles.simModalLocLabel}>Driver location</Text>
-                                  <Text style={neoStyles.simModalLocValue} numberOfLines={2}>
+                                  <Text style={neoStyles.simModalLocLabel}>
+                                    Driver location
+                                  </Text>
+                                  <Text
+                                    style={neoStyles.simModalLocValue}
+                                    numberOfLines={2}
+                                  >
                                     {simConfirmStep.driverLocLabel ||
                                       `${simConfirmStep.driverLat.toFixed(5)}°N, ${simConfirmStep.driverLng?.toFixed(5) ?? "—"}°E`}
                                   </Text>
                                   <Text style={neoStyles.simModalLocCoords}>
-                                    {simConfirmStep.driverLat.toFixed(5)}°N  {simConfirmStep.driverLng?.toFixed(5) ?? "—"}°E
+                                    {simConfirmStep.driverLat.toFixed(5)}°N{" "}
+                                    {simConfirmStep.driverLng?.toFixed(5) ??
+                                      "—"}
+                                    °E
                                   </Text>
                                 </View>
                               </View>
                             ) : (
-                              <Text style={neoStyles.simModalNoLoc}>No driver GPS data available</Text>
+                              <Text style={neoStyles.simModalNoLoc}>
+                                No driver GPS data available
+                              </Text>
                             )}
                             {simError ? (
-                              <Text style={neoStyles.simModalError}>{simError}</Text>
+                              <Text style={neoStyles.simModalError}>
+                                {simError}
+                              </Text>
                             ) : null}
                             <View style={neoStyles.simModalBtns}>
                               <TouchableOpacity
                                 style={neoStyles.simModalCancel}
-                                onPress={() => { setSimConfirmStep(null); setSimError(null); }}
+                                onPress={() => {
+                                  setSimConfirmStep(null);
+                                  setSimError(null);
+                                }}
                                 activeOpacity={0.8}
                               >
-                                <Text style={neoStyles.simModalCancelText}>Cancel</Text>
+                                <Text style={neoStyles.simModalCancelText}>
+                                  Cancel
+                                </Text>
                               </TouchableOpacity>
                               <TouchableOpacity
-                                style={[neoStyles.simModalConfirm, simulating && { opacity: 0.6 }]}
+                                style={[
+                                  neoStyles.simModalConfirm,
+                                  simulating && { opacity: 0.6 },
+                                ]}
                                 onPress={handleConfirmSimulate}
                                 disabled={simulating}
                                 activeOpacity={0.85}
                               >
                                 {simulating ? (
-                                  <ActivityIndicator size="small" color="#fff" />
+                                  <ActivityIndicator
+                                    size="small"
+                                    color="#fff"
+                                  />
                                 ) : (
                                   <Feather name="zap" size={14} color="#fff" />
                                 )}
                                 <Text style={neoStyles.simModalConfirmText}>
-                                  {simulating ? "Simulating…" : "Confirm Simulate"}
+                                  {simulating
+                                    ? "Simulating…"
+                                    : "Confirm Simulate"}
                                 </Text>
                               </TouchableOpacity>
                             </View>
@@ -2194,9 +2864,15 @@ export default function TripDetailScreen({
                       <View style={neoStyles.radarMapLayer}>
                         <TripMap
                           source={(trip.pickup_area ?? "").trim() || undefined}
-                          destination={(trip.drop_location ?? "").trim() || undefined}
-                          sourceCoords={detail.trackingMapOriginCoordinate ?? undefined}
-                          destCoords={detail.trackingMapDestinationCoordinate ?? undefined}
+                          destination={
+                            (trip.drop_location ?? "").trim() || undefined
+                          }
+                          sourceCoords={
+                            detail.trackingMapOriginCoordinate ?? undefined
+                          }
+                          destCoords={
+                            detail.trackingMapDestinationCoordinate ?? undefined
+                          }
                           truckLocation={detail.driverLocation ?? undefined}
                           truckStatus={
                             detail.driverLocation
@@ -2204,8 +2880,11 @@ export default function TripDetailScreen({
                                   truckNo: allocatedVehicleLabel,
                                   speed: 0,
                                   ignitionStatus: false,
-                                  location: detail.driverLocationAddress?.trim() || undefined,
-                                  lastUpdated: detail.driverLocation.recorded_at,
+                                  location:
+                                    detail.driverLocationAddress?.trim() ||
+                                    undefined,
+                                  lastUpdated:
+                                    detail.driverLocation.recorded_at,
                                 }
                               : null
                           }
@@ -2221,24 +2900,38 @@ export default function TripDetailScreen({
                         >
                           <Feather name="compass" size={18} color="#fff" />
                         </TouchableOpacity>
-                        <TouchableOpacity style={neoStyles.radarControl} activeOpacity={0.85}>
+                        <TouchableOpacity
+                          style={neoStyles.radarControl}
+                          activeOpacity={0.85}
+                        >
                           <Feather name="layers" size={18} color="#fff" />
                         </TouchableOpacity>
                       </View>
                       <View style={neoStyles.radarLive}>
                         <View style={neoStyles.radarLiveDot} />
-                        <Text style={neoStyles.radarLiveText}>Live Telemetry</Text>
+                        <Text style={neoStyles.radarLiveText}>
+                          Live Telemetry
+                        </Text>
                       </View>
                       <View style={neoStyles.radarBottom}>
                         <View style={neoStyles.radarBottomLeft}>
-                          <Text style={neoStyles.radarMetaLabel}>Active Node</Text>
-                          <Text style={neoStyles.radarMetaValue} numberOfLines={2}>
+                          <Text style={neoStyles.radarMetaLabel}>
+                            Active Node
+                          </Text>
+                          <Text
+                            style={neoStyles.radarMetaValue}
+                            numberOfLines={2}
+                          >
                             {detail.driverLocationAddress?.trim() ||
-                              (detail.driverLocation ? "Live driver location" : statusLabel)}
+                              (detail.driverLocation
+                                ? "Live driver location"
+                                : statusLabel)}
                           </Text>
                         </View>
                         <View style={neoStyles.radarBottomRight}>
-                          <Text style={neoStyles.radarMetaLabel}>Distance / ETA</Text>
+                          <Text style={neoStyles.radarMetaLabel}>
+                            Distance / ETA
+                          </Text>
                           <Text style={neoStyles.radarSpeed}>
                             {resolvedDistanceLabel ?? "Calculating"}{" "}
                             <Text style={neoStyles.radarSpeedUnit}>
@@ -2261,10 +2954,17 @@ export default function TripDetailScreen({
                             onPress={() => setFinanceSubTab(sub)}
                             activeOpacity={0.86}
                           >
-                            <Text style={[neoStyles.financeSubTabText, active && neoStyles.financeSubTabTextActive]}>
+                            <Text
+                              style={[
+                                neoStyles.financeSubTabText,
+                                active && neoStyles.financeSubTabTextActive,
+                              ]}
+                            >
                               {sub}
                             </Text>
-                            {active ? <View style={neoStyles.financeSubLine} /> : null}
+                            {active ? (
+                              <View style={neoStyles.financeSubLine} />
+                            ) : null}
                           </TouchableOpacity>
                         );
                       })}
@@ -2281,16 +2981,32 @@ export default function TripDetailScreen({
                           <View style={neoStyles.financeSummaryPaneRight}>
                             <View style={neoStyles.financeLedgerPreviewCard}>
                               <View style={neoStyles.financeLedgerPreviewHead}>
-                                <Text style={neoStyles.financeLedgerPreviewTitle}>Ledger snapshot</Text>
+                                <Text
+                                  style={neoStyles.financeLedgerPreviewTitle}
+                                >
+                                  Ledger snapshot
+                                </Text>
                                 <TouchableOpacity
                                   style={neoStyles.financeLedgerPreviewLink}
-                                  onPress={() => setFinanceSubTab("transactions")}
+                                  onPress={() =>
+                                    setFinanceSubTab("transactions")
+                                  }
                                   activeOpacity={0.85}
                                   accessibilityRole="button"
                                   accessibilityLabel="View full transaction list"
                                 >
-                                  <Text style={neoStyles.financeLedgerPreviewLinkText}>View all</Text>
-                                  <Feather name="chevron-right" size={14} color="#4f46e5" />
+                                  <Text
+                                    style={
+                                      neoStyles.financeLedgerPreviewLinkText
+                                    }
+                                  >
+                                    View all
+                                  </Text>
+                                  <Feather
+                                    name="chevron-right"
+                                    size={14}
+                                    color="#4f46e5"
+                                  />
                                 </TouchableOpacity>
                               </View>
                               <Text style={neoStyles.financeLedgerPreviewSub}>
@@ -2302,17 +3018,25 @@ export default function TripDetailScreen({
                               </Text>
                               <ScrollView
                                 style={neoStyles.financeLedgerPreviewScroll}
-                                contentContainerStyle={neoStyles.financeLedgerPreviewScrollContent}
+                                contentContainerStyle={
+                                  neoStyles.financeLedgerPreviewScrollContent
+                                }
                                 nestedScrollEnabled
                                 showsVerticalScrollIndicator={false}
                               >
                                 {financeHistoryRows.length === 0 ? (
-                                  <Text style={neoStyles.financeLedgerPreviewEmpty}>
-                                    Trip ledger entries appear here when you record receipts or payouts.
+                                  <Text
+                                    style={neoStyles.financeLedgerPreviewEmpty}
+                                  >
+                                    Trip ledger entries appear here when you
+                                    record receipts or payouts.
                                   </Text>
                                 ) : (
                                   financeHistoryRows.slice(0, 8).map((row) => (
-                                    <View key={row.key} style={neoStyles.financePreviewTxnRow}>
+                                    <View
+                                      key={row.key}
+                                      style={neoStyles.financePreviewTxnRow}
+                                    >
                                       <View
                                         style={[
                                           neoStyles.financePreviewTxnIcon,
@@ -2322,18 +3046,38 @@ export default function TripDetailScreen({
                                         ]}
                                       >
                                         <Feather
-                                          name={row.isIn ? "arrow-down-left" : "arrow-up-right"}
+                                          name={
+                                            row.isIn
+                                              ? "arrow-down-left"
+                                              : "arrow-up-right"
+                                          }
                                           size={14}
-                                          color={row.isIn ? "#10b981" : "#f43f5e"}
+                                          color={
+                                            row.isIn ? "#10b981" : "#f43f5e"
+                                          }
                                         />
                                       </View>
-                                      <View style={neoStyles.financePreviewTxnMid}>
-                                        <Text style={neoStyles.financePreviewTxnTitle} numberOfLines={1}>
+                                      <View
+                                        style={neoStyles.financePreviewTxnMid}
+                                      >
+                                        <Text
+                                          style={
+                                            neoStyles.financePreviewTxnTitle
+                                          }
+                                          numberOfLines={1}
+                                        >
                                           {ledgerHistoryTitle(row.tx, row.isIn)}
                                         </Text>
-                                        <Text style={neoStyles.financePreviewTxnMeta} numberOfLines={1}>
-                                          {formatLedgerDate(row.tx.transaction_date)} ·{" "}
-                                          {row.tx.payment_mode || "Wallet"}
+                                        <Text
+                                          style={
+                                            neoStyles.financePreviewTxnMeta
+                                          }
+                                          numberOfLines={1}
+                                        >
+                                          {formatLedgerDate(
+                                            row.tx.transaction_date,
+                                          )}{" "}
+                                          · {row.tx.payment_mode || "Wallet"}
                                         </Text>
                                       </View>
                                       <Text
@@ -2358,7 +3102,9 @@ export default function TripDetailScreen({
                           <View style={neoStyles.provisionPanel}>
                             <View style={neoStyles.provisionHeader}>
                               <View>
-                                <Text style={neoStyles.provisionTitle}>Provision Adjustments</Text>
+                                <Text style={neoStyles.provisionTitle}>
+                                  Provision Adjustments
+                                </Text>
                                 <Text style={neoStyles.provisionSub}>
                                   {showFinanceProvisionPanel === "client"
                                     ? "Client sale adjustment"
@@ -2366,7 +3112,9 @@ export default function TripDetailScreen({
                                 </Text>
                               </View>
                               <TouchableOpacity
-                                onPress={() => setShowFinanceProvisionPanel(null)}
+                                onPress={() =>
+                                  setShowFinanceProvisionPanel(null)
+                                }
                                 style={neoStyles.provisionClose}
                                 activeOpacity={0.85}
                               >
@@ -2382,12 +3130,18 @@ export default function TripDetailScreen({
                                     openInlineAdjustmentForm(
                                       showFinanceProvisionPanel === "supplier"
                                         ? protocolSupplierChipAdjustment(chip)
-                                        : { type: "revenue", impact: "plus", reasonSeed: chip },
+                                        : {
+                                            type: "revenue",
+                                            impact: "plus",
+                                            reasonSeed: chip,
+                                          },
                                     )
                                   }
                                   activeOpacity={0.86}
                                 >
-                                  <Text style={neoStyles.provisionChipText}>{chip}</Text>
+                                  <Text style={neoStyles.provisionChipText}>
+                                    {chip}
+                                  </Text>
                                 </TouchableOpacity>
                               ))}
                             </View>
@@ -2395,25 +3149,39 @@ export default function TripDetailScreen({
                               <View style={neoStyles.provisionForm}>
                                 <View style={neoStyles.provisionFormHead}>
                                   <View>
-                                    <Text style={neoStyles.provisionFormTitle}>Add Adjustment</Text>
+                                    <Text style={neoStyles.provisionFormTitle}>
+                                      Add Adjustment
+                                    </Text>
                                     <Text style={neoStyles.provisionFormMeta}>
                                       {`${inlineAdjType === "revenue" ? "Sale / revenue" : "Supplier cost"} · ${
-                                        inlineAdjImpact === "plus" ? "Debit add-on" : "Credit deduction"
+                                        inlineAdjImpact === "plus"
+                                          ? "Debit add-on"
+                                          : "Credit deduction"
                                       }`}
                                     </Text>
                                   </View>
                                   <TouchableOpacity
                                     style={neoStyles.provisionFormClose}
-                                    onPress={() => setShowInlineAdjustmentForm(false)}
+                                    onPress={() =>
+                                      setShowInlineAdjustmentForm(false)
+                                    }
                                     activeOpacity={0.85}
                                   >
-                                    <Feather name="x" size={14} color="#475569" />
+                                    <Feather
+                                      name="x"
+                                      size={14}
+                                      color="#475569"
+                                    />
                                   </TouchableOpacity>
                                 </View>
 
-                                <Text style={neoStyles.provisionInputLabel}>Amount</Text>
+                                <Text style={neoStyles.provisionInputLabel}>
+                                  Amount
+                                </Text>
                                 <View style={neoStyles.provisionAmountRow}>
-                                  <Text style={neoStyles.provisionCurrency}>₹</Text>
+                                  <Text style={neoStyles.provisionCurrency}>
+                                    ₹
+                                  </Text>
                                   <TextInput
                                     value={inlineAdjAmount}
                                     onChangeText={setInlineAdjAmount}
@@ -2425,14 +3193,17 @@ export default function TripDetailScreen({
                                   />
                                 </View>
 
-                                <Text style={neoStyles.provisionInputLabel}>Reason</Text>
+                                <Text style={neoStyles.provisionInputLabel}>
+                                  Reason
+                                </Text>
                                 <View style={neoStyles.provisionReasonWrap}>
                                   {inlineReasonOptions.map((reason) => (
                                     <TouchableOpacity
                                       key={reason}
                                       style={[
                                         neoStyles.provisionReasonChip,
-                                        inlineAdjReason === reason && neoStyles.provisionReasonChipActive,
+                                        inlineAdjReason === reason &&
+                                          neoStyles.provisionReasonChipActive,
                                       ]}
                                       onPress={() => setInlineAdjReason(reason)}
                                       activeOpacity={0.82}
@@ -2440,7 +3211,8 @@ export default function TripDetailScreen({
                                       <Text
                                         style={[
                                           neoStyles.provisionReasonText,
-                                          inlineAdjReason === reason && neoStyles.provisionReasonTextActive,
+                                          inlineAdjReason === reason &&
+                                            neoStyles.provisionReasonTextActive,
                                         ]}
                                       >
                                         {reason}
@@ -2463,13 +3235,16 @@ export default function TripDetailScreen({
                                 <TouchableOpacity
                                   style={[
                                     neoStyles.provisionSaveBtn,
-                                    !canSaveInlineAdjustment && neoStyles.provisionSaveBtnDisabled,
+                                    !canSaveInlineAdjustment &&
+                                      neoStyles.provisionSaveBtnDisabled,
                                   ]}
                                   onPress={() => void saveInlineAdjustment()}
                                   disabled={!canSaveInlineAdjustment}
                                   activeOpacity={0.86}
                                 >
-                                  <Text style={neoStyles.provisionSaveText}>Save Adjustment</Text>
+                                  <Text style={neoStyles.provisionSaveText}>
+                                    Save Adjustment
+                                  </Text>
                                 </TouchableOpacity>
                               </View>
                             ) : null}
@@ -2479,24 +3254,47 @@ export default function TripDetailScreen({
                     ) : (
                       <View style={neoStyles.txnList}>
                         {filteredFinanceRows.length === 0 ? (
-                          <Text style={neoStyles.emptyText}>No transaction rows found</Text>
+                          <Text style={neoStyles.emptyText}>
+                            No transaction rows found
+                          </Text>
                         ) : (
                           filteredFinanceRows.map((row) => (
                             <View key={row.key} style={neoStyles.txnRow}>
-                              <View style={[neoStyles.txnIcon, row.isIn ? neoStyles.txnIconIn : neoStyles.txnIconOut]}>
+                              <View
+                                style={[
+                                  neoStyles.txnIcon,
+                                  row.isIn
+                                    ? neoStyles.txnIconIn
+                                    : neoStyles.txnIconOut,
+                                ]}
+                              >
                                 <Feather
-                                  name={row.isIn ? "arrow-down-left" : "arrow-up-right"}
+                                  name={
+                                    row.isIn
+                                      ? "arrow-down-left"
+                                      : "arrow-up-right"
+                                  }
                                   size={20}
                                   color={row.isIn ? "#10b981" : "#f43f5e"}
                                 />
                               </View>
                               <View style={neoStyles.txnInfo}>
-                                <Text style={neoStyles.txnTitle}>{ledgerHistoryTitle(row.tx, row.isIn)}</Text>
+                                <Text style={neoStyles.txnTitle}>
+                                  {ledgerHistoryTitle(row.tx, row.isIn)}
+                                </Text>
                                 <Text style={neoStyles.txnMeta}>
-                                  {formatLedgerDate(row.tx.transaction_date)} · {row.tx.payment_mode || "Wallet"}
+                                  {formatLedgerDate(row.tx.transaction_date)} ·{" "}
+                                  {row.tx.payment_mode || "Wallet"}
                                 </Text>
                               </View>
-                              <Text style={[neoStyles.txnAmount, row.isIn ? neoStyles.txnAmountIn : neoStyles.txnAmountOut]}>
+                              <Text
+                                style={[
+                                  neoStyles.txnAmount,
+                                  row.isIn
+                                    ? neoStyles.txnAmountIn
+                                    : neoStyles.txnAmountOut,
+                                ]}
+                              >
                                 {formatINR(row.amount)}
                               </Text>
                             </View>
@@ -2510,9 +3308,15 @@ export default function TripDetailScreen({
                     {vaultDocs.map((doc) => (
                       <View key={doc.id} style={neoStyles.vaultCard}>
                         <Feather
-                          name={doc.status === "Pending" ? "upload-cloud" : "file-text"}
+                          name={
+                            doc.status === "Pending"
+                              ? "upload-cloud"
+                              : "file-text"
+                          }
                           size={34}
-                          color={doc.status === "Pending" ? "#cbd5e1" : "#94a3b8"}
+                          color={
+                            doc.status === "Pending" ? "#cbd5e1" : "#94a3b8"
+                          }
                         />
                         <Text style={neoStyles.vaultTitle} numberOfLines={2}>
                           {doc.label}
@@ -2522,7 +3326,8 @@ export default function TripDetailScreen({
                           onPress={() => void handleDocOpen(doc)}
                           style={[
                             neoStyles.vaultBtn,
-                            doc.status === "Pending" && neoStyles.vaultBtnUpload,
+                            doc.status === "Pending" &&
+                              neoStyles.vaultBtnUpload,
                           ]}
                           activeOpacity={0.85}
                         >
@@ -2550,7 +3355,9 @@ export default function TripDetailScreen({
                   <View style={neoStyles.sideSection}>
                     <View style={neoStyles.sideHeading}>
                       <Feather name="activity" size={14} color="#cbd5e1" />
-                      <Text style={neoStyles.sideHeadingText}>Manifest Assets</Text>
+                      <Text style={neoStyles.sideHeadingText}>
+                        Manifest Assets
+                      </Text>
                     </View>
                     <View style={neoStyles.assetCard}>
                       <View style={neoStyles.assetLeft}>
@@ -2559,7 +3366,9 @@ export default function TripDetailScreen({
                         </View>
                         <View>
                           <Text style={neoStyles.assetLabel}>Pilot Node</Text>
-                          <Text style={neoStyles.assetValue} numberOfLines={1}>{allocatedDriverName}</Text>
+                          <Text style={neoStyles.assetValue} numberOfLines={1}>
+                            {allocatedDriverName}
+                          </Text>
                         </View>
                       </View>
                       <TouchableOpacity
@@ -2572,12 +3381,18 @@ export default function TripDetailScreen({
                     </View>
                     <View style={neoStyles.assetCard}>
                       <View style={neoStyles.assetLeft}>
-                        <View style={[neoStyles.assetIcon, neoStyles.assetIconDark]}>
+                        <View
+                          style={[neoStyles.assetIcon, neoStyles.assetIconDark]}
+                        >
                           <Feather name="truck" size={18} color="#fff" />
                         </View>
                         <View>
-                          <Text style={neoStyles.assetLabel}>Vehicle Asset</Text>
-                          <Text style={neoStyles.assetValue} numberOfLines={1}>{allocatedVehicleLabel}</Text>
+                          <Text style={neoStyles.assetLabel}>
+                            Vehicle Asset
+                          </Text>
+                          <Text style={neoStyles.assetValue} numberOfLines={1}>
+                            {allocatedVehicleLabel}
+                          </Text>
                         </View>
                       </View>
                       <TouchableOpacity
@@ -2598,7 +3413,9 @@ export default function TripDetailScreen({
                     partnerName={detail.partnerName}
                     driverName={detail.driverName}
                     driverAvatarUri={detail.driverAvatarUri}
-                    clientName={detail.displayClientName ?? trip.client_name ?? null}
+                    clientName={
+                      detail.displayClientName ?? trip.client_name ?? null
+                    }
                     paymentCaptured={detail.tripLedgerEntries.some(
                       (row) =>
                         row.contact_type === "client" &&
@@ -2619,46 +3436,78 @@ export default function TripDetailScreen({
             <View style={dStyles.heroCard}>
               <View style={dStyles.heroLeft}>
                 <View style={dStyles.heroTitleRow}>
-                  <Text style={dStyles.heroTripId}>{getTripDisplayNumber(trip)}</Text>
-                  <View style={[dStyles.statusBadge, { borderColor: statusColor }]}>
-                    <View style={[dStyles.statusDot, { backgroundColor: statusColor }]} />
-                    <Text style={[dStyles.statusText, { color: statusColor }]}>{statusLabel.toUpperCase()}</Text>
+                  <Text style={dStyles.heroTripId}>
+                    {getTripDisplayNumber(trip)}
+                  </Text>
+                  <View
+                    style={[dStyles.statusBadge, { borderColor: statusColor }]}
+                  >
+                    <View
+                      style={[
+                        dStyles.statusDot,
+                        { backgroundColor: statusColor },
+                      ]}
+                    />
+                    <Text style={[dStyles.statusText, { color: statusColor }]}>
+                      {statusLabel.toUpperCase()}
+                    </Text>
                   </View>
                 </View>
                 <View style={dStyles.routeRow}>
                   <View style={dStyles.routeStop}>
                     <Text style={dStyles.routeLabel}>ORIGIN</Text>
-                    <Text style={dStyles.routeCity} numberOfLines={1}>{trip.pickup_area || '—'}</Text>
+                    <Text style={dStyles.routeCity} numberOfLines={1}>
+                      {trip.pickup_area || "—"}
+                    </Text>
                     <Text style={dStyles.routeDate}>{pickupStr}</Text>
                   </View>
                   <View style={dStyles.routeDivider}>
                     <View style={dStyles.routeLine} />
-                    <FontAwesome name="truck" size={16} color="rgba(100,116,139,0.65)" />
+                    <FontAwesome
+                      name="truck"
+                      size={16}
+                      color="rgba(100,116,139,0.65)"
+                    />
                     <View style={dStyles.routeLine} />
                   </View>
                   <View style={dStyles.routeStop}>
                     <Text style={dStyles.routeLabel}>DESTINATION</Text>
-                    <Text style={dStyles.routeCity} numberOfLines={1}>{trip.drop_location || '—'}</Text>
-                    {trip.estimated_duration ? <Text style={dStyles.routeDate}>EST: {trip.estimated_duration}</Text> : null}
+                    <Text style={dStyles.routeCity} numberOfLines={1}>
+                      {trip.drop_location || "—"}
+                    </Text>
+                    {trip.estimated_duration ? (
+                      <Text style={dStyles.routeDate}>
+                        EST: {trip.estimated_duration}
+                      </Text>
+                    ) : null}
                   </View>
                 </View>
               </View>
               <View style={dStyles.heroStats}>
                 <View style={dStyles.statBox}>
                   <Text style={dStyles.statLabel}>DISTANCE</Text>
-                  <Text style={dStyles.statValue}>{resolvedDistanceLabel ?? "—"}</Text>
+                  <Text style={dStyles.statValue}>
+                    {resolvedDistanceLabel ?? "—"}
+                  </Text>
                 </View>
                 <View style={dStyles.statDivider} />
                 <View style={dStyles.statBox}>
                   <Text style={dStyles.statLabel}>STATUS</Text>
-                  <Text style={[dStyles.statValue, { fontSize: 14 }]}>{statusLabel}</Text>
+                  <Text style={[dStyles.statValue, { fontSize: 14 }]}>
+                    {statusLabel}
+                  </Text>
                 </View>
               </View>
             </View>
 
             <View style={[dStyles.card, dStyles.snapshotCard]}>
               <View style={dStyles.cardHeader}>
-                <FontAwesome name="database" size={14} color="#60a5fa" style={{ marginRight: 8 }} />
+                <FontAwesome
+                  name="database"
+                  size={14}
+                  color="#60a5fa"
+                  style={{ marginRight: 8 }}
+                />
                 <Text style={dStyles.cardTitle}>Trip Data Snapshot</Text>
               </View>
               <View style={dStyles.snapshotGrid}>
@@ -2678,7 +3527,9 @@ export default function TripDetailScreen({
                 ) : null}
                 <View style={dStyles.snapshotCell}>
                   <Text style={dStyles.snapshotLabel}>Payment Status</Text>
-                  <Text style={dStyles.snapshotValue}>{paymentStatusLabel}</Text>
+                  <Text style={dStyles.snapshotValue}>
+                    {paymentStatusLabel}
+                  </Text>
                 </View>
                 <View style={dStyles.snapshotCell}>
                   <Text style={dStyles.snapshotLabel}>Amount Paid</Text>
@@ -2699,7 +3550,9 @@ export default function TripDetailScreen({
                 <View style={dStyles.snapshotCell}>
                   <Text style={dStyles.snapshotLabel}>Estimated Duration</Text>
                   <Text style={dStyles.snapshotValue}>
-                    {trip.estimated_duration ? String(trip.estimated_duration) : "—"}
+                    {trip.estimated_duration
+                      ? String(trip.estimated_duration)
+                      : "—"}
                   </Text>
                 </View>
               </View>
@@ -2709,21 +3562,35 @@ export default function TripDetailScreen({
             <View style={dStyles.row}>
               <View style={[dStyles.card, dStyles.mapCol]}>
                 <View style={dStyles.cardHeader}>
-                  <FontAwesome name="map" size={14} color="#60a5fa" style={{ marginRight: 8 }} />
+                  <FontAwesome
+                    name="map"
+                    size={14}
+                    color="#60a5fa"
+                    style={{ marginRight: 8 }}
+                  />
                   <Text style={dStyles.cardTitle}>Live Tracking</Text>
-                  {detail.trackingMapOriginCoordinate && detail.trackingMapDestinationCoordinate && (
-                    <TouchableOpacity style={dStyles.openMapsBtn} onPress={openTripDirectionsInMaps} activeOpacity={0.8}>
-                      <Feather name="navigation" size={12} color="#60a5fa" />
-                      <Text style={dStyles.openMapsBtnText}>Open Maps</Text>
-                    </TouchableOpacity>
-                  )}
+                  {detail.trackingMapOriginCoordinate &&
+                    detail.trackingMapDestinationCoordinate && (
+                      <TouchableOpacity
+                        style={dStyles.openMapsBtn}
+                        onPress={openTripDirectionsInMaps}
+                        activeOpacity={0.8}
+                      >
+                        <Feather name="navigation" size={12} color="#60a5fa" />
+                        <Text style={dStyles.openMapsBtnText}>Open Maps</Text>
+                      </TouchableOpacity>
+                    )}
                 </View>
                 <View style={dStyles.telemetryWrap}>
                   <TripMap
                     source={(trip.pickup_area ?? "").trim() || undefined}
                     destination={(trip.drop_location ?? "").trim() || undefined}
-                    sourceCoords={detail.trackingMapOriginCoordinate ?? undefined}
-                    destCoords={detail.trackingMapDestinationCoordinate ?? undefined}
+                    sourceCoords={
+                      detail.trackingMapOriginCoordinate ?? undefined
+                    }
+                    destCoords={
+                      detail.trackingMapDestinationCoordinate ?? undefined
+                    }
                     truckLocation={detail.driverLocation ?? undefined}
                     height={mapHeight}
                     onDistanceCalculated={setMapRouteDistanceKm}
@@ -2738,45 +3605,75 @@ export default function TripDetailScreen({
                   </View>
                   <Text style={dStyles.timelineHeaderTitle}>TRIP TIMELINE</Text>
                 </View>
-                <ScrollView style={dStyles.auditScroll} showsVerticalScrollIndicator={false} nestedScrollEnabled>
+                <ScrollView
+                  style={dStyles.auditScroll}
+                  showsVerticalScrollIndicator={false}
+                  nestedScrollEnabled
+                >
                   {timelineRows.length === 0 ? (
                     <Text style={dStyles.emptyText}>No activity yet</Text>
-                  ) : timelineRows.map((item, idx) => {
+                  ) : (
+                    timelineRows.map((item, idx) => {
                       const isLast = idx === timelineRows.length - 1;
-                      if (item.kind === 'status') {
+                      if (item.kind === "status") {
                         const tripFullyCompleted =
-                          statusLabel === 'Completed' ||
-                          statusLower.includes('complet') ||
-                          statusLower.includes('deliver') ||
-                          statusLower === 'done';
+                          statusLabel === "Completed" ||
+                          statusLower.includes("complet") ||
+                          statusLower.includes("deliver") ||
+                          statusLower === "done";
                         const markGreen =
                           tripFullyCompleted ||
-                          item.status_context === 'completed' ||
-                          item.status_context === 'in_transit';
-                        const iconTone =
-                          markGreen
-                            ? '#059669'
-                            : 'rgba(15,23,42,0.35)';
+                          item.status_context === "completed" ||
+                          item.status_context === "in_transit";
+                        const iconTone = markGreen
+                          ? "#059669"
+                          : "rgba(15,23,42,0.35)";
                         return (
-                          <View key={item.id} style={[dStyles.auditItem, isLast && dStyles.auditItemLast]}>
+                          <View
+                            key={item.id}
+                            style={[
+                              dStyles.auditItem,
+                              isLast && dStyles.auditItemLast,
+                            ]}
+                          >
                             <View style={dStyles.auditTrackCol}>
                               <View
                                 style={[
                                   dStyles.auditTimelineDot,
-                                  { borderColor: iconTone, backgroundColor: markGreen ? '#ecfdf5' : '#f8fafc' },
+                                  {
+                                    borderColor: iconTone,
+                                    backgroundColor: markGreen
+                                      ? "#ecfdf5"
+                                      : "#f8fafc",
+                                  },
                                 ]}
                               >
-                                <View style={[dStyles.auditTimelineDotInner, { backgroundColor: iconTone }]} />
+                                <View
+                                  style={[
+                                    dStyles.auditTimelineDotInner,
+                                    { backgroundColor: iconTone },
+                                  ]}
+                                />
                               </View>
-                              {!isLast ? <View style={dStyles.auditTimelineLine} /> : null}
+                              {!isLast ? (
+                                <View style={dStyles.auditTimelineLine} />
+                              ) : null}
                             </View>
                             <View style={dStyles.auditContentRow}>
                               <View style={dStyles.auditBody}>
-                                <Text style={dStyles.auditTitle}>{item.status_label}</Text>
+                                <Text style={dStyles.auditTitle}>
+                                  {item.status_label}
+                                </Text>
                               </View>
                               <View style={dStyles.auditMeta}>
-                                <Text style={dStyles.auditTime}>{fmtTimelineTime(item.changed_at)}</Text>
-                                <FontAwesome name="angle-down" size={12} color="rgba(15,23,42,0.35)" />
+                                <Text style={dStyles.auditTime}>
+                                  {fmtTimelineTime(item.changed_at)}
+                                </Text>
+                                <FontAwesome
+                                  name="angle-down"
+                                  size={12}
+                                  color="rgba(15,23,42,0.35)"
+                                />
                               </View>
                             </View>
                           </View>
@@ -2785,37 +3682,54 @@ export default function TripDetailScreen({
 
                       const row = item.row;
                       const dName = row.driver_id_new
-                        ? (detail.assignmentDriverNames[row.driver_id_new] ?? null)
+                        ? (detail.assignmentDriverNames[row.driver_id_new] ??
+                          null)
                         : null;
                       const vLabel = row.vehicle_id_new
-                        ? (detail.assignmentVehicleLabels[row.vehicle_id_new] ?? null)
+                        ? (detail.assignmentVehicleLabels[row.vehicle_id_new] ??
+                          null)
                         : null;
 
                       return (
-                        <View key={row.id} style={[dStyles.auditItem, isLast && dStyles.auditItemLast]}>
+                        <View
+                          key={row.id}
+                          style={[
+                            dStyles.auditItem,
+                            isLast && dStyles.auditItemLast,
+                          ]}
+                        >
                           <View style={dStyles.auditTrackCol}>
                             <View style={dStyles.auditTimelineDot}>
                               <View style={dStyles.auditTimelineDotInner} />
                             </View>
-                            {!isLast ? <View style={dStyles.auditTimelineLine} /> : null}
+                            {!isLast ? (
+                              <View style={dStyles.auditTimelineLine} />
+                            ) : null}
                           </View>
                           <View style={dStyles.auditContentRow}>
                             <View style={dStyles.auditBody}>
-                                <Text style={dStyles.auditTitle}>Assigned</Text>
+                              <Text style={dStyles.auditTitle}>Assigned</Text>
                               <Text style={dStyles.auditDetail}>
-                                {(dName || vLabel)
-                                  ? [dName, vLabel].filter(Boolean).join(' · ')
-                                    : (trip.pickup_area || 'Driver assigned')}
+                                {dName || vLabel
+                                  ? [dName, vLabel].filter(Boolean).join(" · ")
+                                  : trip.pickup_area || "Driver assigned"}
                               </Text>
                             </View>
                             <View style={dStyles.auditMeta}>
-                              <Text style={dStyles.auditTime}>{fmtTimelineTime(row.changed_at)}</Text>
-                              <FontAwesome name="angle-down" size={12} color="rgba(15,23,42,0.35)" />
+                              <Text style={dStyles.auditTime}>
+                                {fmtTimelineTime(row.changed_at)}
+                              </Text>
+                              <FontAwesome
+                                name="angle-down"
+                                size={12}
+                                color="rgba(15,23,42,0.35)"
+                              />
                             </View>
                           </View>
                         </View>
                       );
-                    })}
+                    })
+                  )}
                 </ScrollView>
               </View>
             </View>
@@ -2832,29 +3746,45 @@ export default function TripDetailScreen({
                         activeOpacity={0.85}
                         onPress={() => setShowAssignmentManager(true)}
                       >
-                        <Text style={dStyles.reassignInlineBtnText}>Reassign</Text>
+                        <Text style={dStyles.reassignInlineBtnText}>
+                          Reassign
+                        </Text>
                       </TouchableOpacity>
                     ) : null}
                   </View>
                   <View style={dStyles.driverRow}>
                     {detail.driverAvatarUri ? (
-                      <Image source={{ uri: detail.driverAvatarUri as string }} style={dStyles.driverAvatar} />
+                      <Image
+                        source={{ uri: detail.driverAvatarUri as string }}
+                        style={dStyles.driverAvatar}
+                      />
                     ) : (
                       <View style={dStyles.driverAvatarFallback}>
-                        <FontAwesome name="user" size={20} color={Theme.textSecondary} />
+                        <FontAwesome
+                          name="user"
+                          size={20}
+                          color={Theme.textSecondary}
+                        />
                       </View>
                     )}
                     <View style={{ flex: 1 }}>
-                      <Text style={dStyles.driverName}>{detail.driverName || '—'}</Text>
+                      <Text style={dStyles.driverName}>
+                        {detail.driverName || "—"}
+                      </Text>
                       {detail.driverRatingAvg != null && (
-                        <Text style={dStyles.driverRating}>★ {Number(detail.driverRatingAvg).toFixed(1)}</Text>
+                        <Text style={dStyles.driverRating}>
+                          ★ {Number(detail.driverRatingAvg).toFixed(1)}
+                        </Text>
                       )}
                     </View>
                     {trip.started_at ? (
                       <View style={dStyles.statBoxSm}>
                         <Text style={dStyles.statLabelSm}>STARTED</Text>
                         <Text style={dStyles.statValueSm}>
-                          {new Date(String(trip.started_at)).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                          {new Date(String(trip.started_at)).toLocaleTimeString(
+                            "en-IN",
+                            { hour: "2-digit", minute: "2-digit" },
+                          )}
                         </Text>
                       </View>
                     ) : null}
@@ -2870,19 +3800,29 @@ export default function TripDetailScreen({
                         activeOpacity={0.85}
                         onPress={() => setShowAssignmentManager(true)}
                       >
-                        <Text style={dStyles.reassignInlineBtnText}>Reassign</Text>
+                        <Text style={dStyles.reassignInlineBtnText}>
+                          Reassign
+                        </Text>
                       </TouchableOpacity>
                     ) : null}
                   </View>
                   <View style={dStyles.vehicleRow}>
                     <View style={dStyles.vehicleIconWrap}>
-                      <FontAwesome name="truck" size={20} color={Theme.textSecondary} />
+                      <FontAwesome
+                        name="truck"
+                        size={20}
+                        color={Theme.textSecondary}
+                      />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={dStyles.vehicleName}>
-                        {detail.vehicleLabel || detail.displayVehicleFromInput || '—'}
+                        {detail.vehicleLabel ||
+                          detail.displayVehicleFromInput ||
+                          "—"}
                       </Text>
-                      {trip.load_type ? <Text style={dStyles.vehicleSub}>{trip.load_type}</Text> : null}
+                      {trip.load_type ? (
+                        <Text style={dStyles.vehicleSub}>{trip.load_type}</Text>
+                      ) : null}
                     </View>
                   </View>
                 </View>
@@ -2890,23 +3830,58 @@ export default function TripDetailScreen({
 
               <View style={[dStyles.card, dStyles.docsCol]}>
                 <View style={dStyles.cardHeader}>
-                  <FontAwesome name="file-text-o" size={14} color="#60a5fa" style={{ marginRight: 8 }} />
+                  <FontAwesome
+                    name="file-text-o"
+                    size={14}
+                    color="#60a5fa"
+                    style={{ marginRight: 8 }}
+                  />
                   <Text style={dStyles.cardTitle}>Required Documents</Text>
                   <View style={dStyles.docsBadge}>
                     <Text style={dStyles.docsBadgeText}>
-                      {detail.computedTripDocs.filter(d => d.status === 'Uploaded').length}/{detail.computedTripDocs.length} VERIFIED
+                      {
+                        detail.computedTripDocs.filter(
+                          (d) => d.status === "Uploaded",
+                        ).length
+                      }
+                      /{detail.computedTripDocs.length} VERIFIED
                     </Text>
                   </View>
                 </View>
                 {detail.computedTripDocs.map((doc) => (
-                  <TouchableOpacity key={doc.id} style={dStyles.docRow} onPress={() => handleDocOpen(doc)} activeOpacity={0.75}>
+                  <TouchableOpacity
+                    key={doc.id}
+                    style={dStyles.docRow}
+                    onPress={() => handleDocOpen(doc)}
+                    activeOpacity={0.75}
+                  >
                     <View style={dStyles.docIconWrap}>
-                      <FontAwesome name="file-o" size={14} color={Theme.textMuted} />
+                      <FontAwesome
+                        name="file-o"
+                        size={14}
+                        color={Theme.textMuted}
+                      />
                     </View>
-                    <Text style={dStyles.docLabel} numberOfLines={1}>{doc.label}</Text>
-                    <View style={[dStyles.docStatusPill, doc.status === 'Uploaded' ? dStyles.docStatusVerified : dStyles.docStatusPending]}>
-                      <Text style={[dStyles.docStatusText, doc.status === 'Uploaded' ? dStyles.docStatusTextVerified : dStyles.docStatusTextPending]}>
-                        {doc.status === 'Uploaded' ? 'VERIFIED' : 'PENDING'}
+                    <Text style={dStyles.docLabel} numberOfLines={1}>
+                      {doc.label}
+                    </Text>
+                    <View
+                      style={[
+                        dStyles.docStatusPill,
+                        doc.status === "Uploaded"
+                          ? dStyles.docStatusVerified
+                          : dStyles.docStatusPending,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          dStyles.docStatusText,
+                          doc.status === "Uploaded"
+                            ? dStyles.docStatusTextVerified
+                            : dStyles.docStatusTextPending,
+                        ]}
+                      >
+                        {doc.status === "Uploaded" ? "VERIFIED" : "PENDING"}
                       </Text>
                     </View>
                   </TouchableOpacity>
@@ -2915,154 +3890,190 @@ export default function TripDetailScreen({
             </View>
 
             {/* Placeholder for dead code path below — preserve existing view refs */}
-            {false && <View style={styles.workspaceRow}>
-              <View style={styles.workspaceLeftCol}>
-                <View style={styles.voyageCard}>
-                  <View style={styles.sectionKickerRow}>
-                    <View style={styles.sectionKickerBar} />
-                    <Text style={styles.sectionKicker}>Voyage Manifest</Text>
-                  </View>
-                  <View style={styles.routeLineWrap}>
-                    <View style={styles.routeDotsCol}>
-                      <View style={[styles.routeDot, styles.routeDotStart]} />
-                      <View style={styles.routeDashedLine} />
-                      <View style={[styles.routeDot, styles.routeDotEnd]} />
+            {false && (
+              <View style={styles.workspaceRow}>
+                <View style={styles.workspaceLeftCol}>
+                  <View style={styles.voyageCard}>
+                    <View style={styles.sectionKickerRow}>
+                      <View style={styles.sectionKickerBar} />
+                      <Text style={styles.sectionKicker}>Voyage Manifest</Text>
                     </View>
-                    <View style={styles.routeTextCol}>
-                      <Text style={styles.routePlace}>{trip.pickup_area || "Pickup"}</Text>
-                      <Text style={styles.routePlace}>{trip.drop_location || "Destination"}</Text>
-                    </View>
-                  </View>
-                  <View style={styles.voyageMetaGrid}>
-                    <View style={styles.voyageMetaCell}>
-                      <Text style={styles.voyageMetaLabel}>Client</Text>
-                      <Text style={styles.voyageMetaValue}>{detail.displayClientName || "—"}</Text>
-                    </View>
-                    <View style={styles.voyageMetaCell}>
-                      <Text style={styles.voyageMetaLabel}>Material</Text>
-                      <Text style={styles.voyageMetaValue}>{trip.load_type || "General Load"}</Text>
-                    </View>
-                  </View>
-                </View>
-
-                <View style={styles.operatorCard}>
-                  <View style={styles.operatorBadge}>
-                    <FontAwesome name="user" size={16} color="#64748b" />
-                    <View>
-                      <Text style={styles.operatorLabel}>Operator</Text>
-                      <Text style={styles.operatorValue}>{detail.driverName || "Unassigned"}</Text>
-                    </View>
-                  </View>
-                  <Text style={styles.operatorSub}>
-                    {detail.vehicleLabel || detail.displayVehicleFromInput || "Vehicle pending assignment"}
-                  </Text>
-                </View>
-
-
-                {trip.organization_id ? (
-                  <TripAssignmentBlock
-                    trip={trip}
-                    organizationId={currentOrganization?.id ?? ""}
-                    canAssign={detail.canAssign}
-                    onUpdated={detail.handleAssignmentUpdated}
-                    partnerName={detail.partnerName}
-                    driverName={detail.driverName}
-                    vehicleLabel={
-                      isAggregate
-                        ? detail.displayVehicleFromInput.trim() ||
-                          detail.vehicleLabel ||
-                          null
-                        : detail.vehicleLabel
-                    }
-                    driverAvatarUri={detail.driverAvatarUri}
-                    showAssignByPhone={detail.showAssignByPhone}
-                    assignmentSource={detail.assignmentSource}
-                    currentUserId={detail.currentUserId}
-                    previousDriverName={detail.previousDriverName}
-                    latestReassignmentSummary={detail.latestReassignmentSummary}
-                    driverAssignOrgId={
-                      isAggregate ? (currentOrganization?.id ?? null) : null
-                    }
-                    onVehicleDisplayChange={(value) => {
-                      const normalized = formatIndianVehicleNumber(value ?? "");
-                      detail.setDisplayVehicleFromInput(normalized);
-                    }}
-                    inlineSection={
-                      isAggregate ? (
-                        <AggregateTripOtpPanel
-                          variant="inline"
-                          tripNumber={getTripDisplayNumber(trip)}
-                          aggregateOtpState={aggregateOtpState}
-                          canGenerateAggregateOtp={canGenerateAggregateOtp}
-                          otpLockedByTripProgress={otpLockedByTripProgress}
-                          tripOtp={detail.tripOtp}
-                          onResendOtp={handleResendOtp}
-                          otpResending={otpResending}
-                        />
-                      ) : null
-                    }
-                  />
-                ) : null}
-
-                <View style={styles.lrGrow}>
-                  <LRDocumentsSection
-                    presentation="gallery"
-                    docs={detail.computedTripDocs.map((d) => {
-                      const openable =
-                        d.status !== "Pending" ||
-                        !!d.storagePath ||
-                        d.id === "vehicle-documents";
-                      return {
-                        id: d.id,
-                        label: d.label,
-                        type: d.type,
-                        status: d.status === "Verified" ? "Uploaded" : d.status,
-                        onView: openable ? () => detail.setSelectedDoc(d) : undefined,
-                      };
-                    })}
-                    onUpdateLR={openTripDocumentsFlow}
-                    onAddDocument={openTripDocumentsFlow}
-                  />
-                </View>
-              </View>
-
-              <View style={styles.workspaceRightCol}>
-                <TripStatusTimeline
-                  variant="journey"
-                  trip={trip}
-                  stageTimestamps={stageTimestamps}
-                  stageLocations={stageLocations}
-                  lastUpdatedAt={trip.updated_at}
-                  canAdvance={detail.canAssign}
-                  distanceKm={timelineDistanceKm}
-                  driverSummaryText={driverSummaryText}
-                  onOpenMaps={
-                    detail.trackingMapOriginCoordinate &&
-                    detail.trackingMapDestinationCoordinate
-                      ? openTripDirectionsInMaps
-                      : undefined
-                  }
-                  mapPreview={
-                    <View style={styles.telemetryWrap}>
-                      <TripMap
-                        source={(trip.pickup_area ?? "").trim() || undefined}
-                        destination={(trip.drop_location ?? "").trim() || undefined}
-                        sourceCoords={detail.trackingMapOriginCoordinate ?? undefined}
-                        destCoords={detail.trackingMapDestinationCoordinate ?? undefined}
-                        truckLocation={detail.driverLocation ?? undefined}
-                        height={520}
-                        onDistanceCalculated={setMapRouteDistanceKm}
-                      />
-                      <View style={styles.telemetryOverlay}>
-                        <FontAwesome name="compass" size={20} color="#60a5fa" />
-                        <Text style={styles.telemetryTitle}>Telemetry Link Secured</Text>
-                        <Text style={styles.telemetrySub}>Protocol v4.2 synchronized live</Text>
+                    <View style={styles.routeLineWrap}>
+                      <View style={styles.routeDotsCol}>
+                        <View style={[styles.routeDot, styles.routeDotStart]} />
+                        <View style={styles.routeDashedLine} />
+                        <View style={[styles.routeDot, styles.routeDotEnd]} />
+                      </View>
+                      <View style={styles.routeTextCol}>
+                        <Text style={styles.routePlace}>
+                          {trip.pickup_area || "Pickup"}
+                        </Text>
+                        <Text style={styles.routePlace}>
+                          {trip.drop_location || "Destination"}
+                        </Text>
                       </View>
                     </View>
-                  }
-                />
+                    <View style={styles.voyageMetaGrid}>
+                      <View style={styles.voyageMetaCell}>
+                        <Text style={styles.voyageMetaLabel}>Client</Text>
+                        <Text style={styles.voyageMetaValue}>
+                          {detail.displayClientName || "—"}
+                        </Text>
+                      </View>
+                      <View style={styles.voyageMetaCell}>
+                        <Text style={styles.voyageMetaLabel}>Material</Text>
+                        <Text style={styles.voyageMetaValue}>
+                          {trip.load_type || "General Load"}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  <View style={styles.operatorCard}>
+                    <View style={styles.operatorBadge}>
+                      <FontAwesome name="user" size={16} color="#64748b" />
+                      <View>
+                        <Text style={styles.operatorLabel}>Operator</Text>
+                        <Text style={styles.operatorValue}>
+                          {detail.driverName || "Unassigned"}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={styles.operatorSub}>
+                      {detail.vehicleLabel ||
+                        detail.displayVehicleFromInput ||
+                        "Vehicle pending assignment"}
+                    </Text>
+                  </View>
+
+                  {trip.organization_id ? (
+                    <TripAssignmentBlock
+                      trip={trip}
+                      organizationId={currentOrganization?.id ?? ""}
+                      canAssign={detail.canAssign}
+                      onUpdated={detail.handleAssignmentUpdated}
+                      partnerName={detail.partnerName}
+                      driverName={detail.driverName}
+                      vehicleLabel={
+                        isAggregate
+                          ? detail.displayVehicleFromInput.trim() ||
+                            detail.vehicleLabel ||
+                            null
+                          : detail.vehicleLabel
+                      }
+                      driverAvatarUri={detail.driverAvatarUri}
+                      showAssignByPhone={detail.showAssignByPhone}
+                      assignmentSource={detail.assignmentSource}
+                      currentUserId={detail.currentUserId}
+                      previousDriverName={detail.previousDriverName}
+                      latestReassignmentSummary={
+                        detail.latestReassignmentSummary
+                      }
+                      driverAssignOrgId={
+                        isAggregate
+                          ? (currentOrganization?.id ?? null)
+                          : null
+                      }
+                      onVehicleDisplayChange={(value) => {
+                        const normalized = formatIndianVehicleNumber(
+                          value ?? "",
+                        );
+                        detail.setDisplayVehicleFromInput(normalized);
+                      }}
+                      inlineSection={
+                        isAggregate ? (
+                          <AggregateTripOtpPanel
+                            variant="inline"
+                            tripNumber={getTripDisplayNumber(trip)}
+                            aggregateOtpState={aggregateOtpState}
+                            canGenerateAggregateOtp={canGenerateAggregateOtp}
+                            otpLockedByTripProgress={otpLockedByTripProgress}
+                            tripOtp={detail.tripOtp}
+                            onResendOtp={handleResendOtp}
+                            otpResending={otpResending}
+                          />
+                        ) : null
+                      }
+                    />
+                  ) : null}
+
+                  <View style={styles.lrGrow}>
+                    <LRDocumentsSection
+                      presentation="gallery"
+                      docs={detail.computedTripDocs.map((d) => {
+                        const openable =
+                          d.status !== "Pending" ||
+                          !!d.storagePath ||
+                          d.id === "vehicle-documents";
+                        return {
+                          id: d.id,
+                          label: d.label,
+                          type: d.type,
+                          status:
+                            d.status === "Verified" ? "Uploaded" : d.status,
+                          onView: openable
+                            ? () => detail.setSelectedDoc(d)
+                            : undefined,
+                        };
+                      })}
+                      onUpdateLR={openTripDocumentsFlow}
+                      onAddDocument={openTripDocumentsFlow}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.workspaceRightCol}>
+                  <TripStatusTimeline
+                    variant="journey"
+                    trip={trip}
+                    stageTimestamps={stageTimestamps}
+                    stageLocations={stageLocations}
+                    lastUpdatedAt={trip.updated_at}
+                    canAdvance={detail.canAssign}
+                    distanceKm={timelineDistanceKm}
+                    driverSummaryText={driverSummaryText}
+                    onOpenMaps={
+                      detail.trackingMapOriginCoordinate &&
+                      detail.trackingMapDestinationCoordinate
+                        ? openTripDirectionsInMaps
+                        : undefined
+                    }
+                    mapPreview={
+                      <View style={styles.telemetryWrap}>
+                        <TripMap
+                          source={(trip.pickup_area ?? "").trim() || undefined}
+                          destination={
+                            (trip.drop_location ?? "").trim() || undefined
+                          }
+                          sourceCoords={
+                            detail.trackingMapOriginCoordinate ?? undefined
+                          }
+                          destCoords={
+                            detail.trackingMapDestinationCoordinate ?? undefined
+                          }
+                          truckLocation={detail.driverLocation ?? undefined}
+                          height={520}
+                          onDistanceCalculated={setMapRouteDistanceKm}
+                        />
+                        <View style={styles.telemetryOverlay}>
+                          <FontAwesome
+                            name="compass"
+                            size={20}
+                            color="#60a5fa"
+                          />
+                          <Text style={styles.telemetryTitle}>
+                            Telemetry Link Secured
+                          </Text>
+                          <Text style={styles.telemetrySub}>
+                            Protocol v4.2 synchronized live
+                          </Text>
+                        </View>
+                      </View>
+                    }
+                  />
+                </View>
               </View>
-            </View>}
+            )}
 
             {/* Feedback / Ratings section */}
             {currentOrganization?.id && (
@@ -3114,7 +4125,9 @@ export default function TripDetailScreen({
             driverRating={detail.driverRatingAvg}
             vehicleLabel={
               isAggregate
-                ? ((detail.displayVehicleFromInput.trim() || detail.vehicleLabel) ?? null)
+                ? ((detail.displayVehicleFromInput.trim() ||
+                    detail.vehicleLabel) ??
+                  null)
                 : detail.vehicleLabel
             }
             onSaveAdjustment={detail.handleSaveAdjustment}
@@ -3133,7 +4146,9 @@ export default function TripDetailScreen({
                   driverName={detail.driverName}
                   vehicleLabel={
                     isAggregate
-                      ? detail.displayVehicleFromInput.trim() || detail.vehicleLabel || null
+                      ? detail.displayVehicleFromInput.trim() ||
+                        detail.vehicleLabel ||
+                        null
                       : detail.vehicleLabel
                   }
                   driverAvatarUri={detail.driverAvatarUri}
@@ -3190,7 +4205,9 @@ export default function TripDetailScreen({
             <View style={neoStyles.provisionPanel}>
               <View style={neoStyles.provisionHeader}>
                 <View>
-                  <Text style={neoStyles.provisionTitle}>Provision Adjustments</Text>
+                  <Text style={neoStyles.provisionTitle}>
+                    Provision Adjustments
+                  </Text>
                   <Text style={neoStyles.provisionSub}>
                     {showFinanceProvisionPanel === "client"
                       ? "Client sale adjustment"
@@ -3204,31 +4221,40 @@ export default function TripDetailScreen({
                 >
                   <Feather name="x" size={18} color="#fff" />
                 </TouchableOpacity>
-                  </View>
+              </View>
 
               <View style={neoStyles.provisionSummaryGrid}>
                 {provisionSummaryRows.map((row) => (
                   <View key={row.label} style={neoStyles.provisionSummaryCard}>
-                    <Text style={neoStyles.provisionSummaryLabel}>{row.label}</Text>
+                    <Text style={neoStyles.provisionSummaryLabel}>
+                      {row.label}
+                    </Text>
                     <Text
                       style={[
                         neoStyles.provisionSummaryValue,
-                        row.tone === "cost" && neoStyles.provisionSummaryValueCost,
+                        row.tone === "cost" &&
+                          neoStyles.provisionSummaryValueCost,
                       ]}
                     >
                       {row.value}
-                  </Text>
+                    </Text>
                   </View>
                 ))}
                 </View>
 
               <View style={neoStyles.provisionCnDnRow}>
                 <TouchableOpacity
-                  style={[neoStyles.provisionCnDnBtn, neoStyles.provisionCnDnBtnCredit]}
+                  style={[
+                    neoStyles.provisionCnDnBtn,
+                    neoStyles.provisionCnDnBtnCredit,
+                  ]}
                   onPress={() => {
                     if (!showFinanceProvisionPanel) return;
                     openInlineAdjustmentForm({
-                      type: showFinanceProvisionPanel === "client" ? "revenue" : "cost",
+                      type:
+                        showFinanceProvisionPanel === "client"
+                          ? "revenue"
+                          : "cost",
                       impact: "minus",
                       reasonSeed: "Other",
                     });
@@ -3239,11 +4265,17 @@ export default function TripDetailScreen({
                   <Text style={neoStyles.provisionCnDnLabel}>Credit (CN)</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[neoStyles.provisionCnDnBtn, neoStyles.provisionCnDnBtnDebit]}
+                  style={[
+                    neoStyles.provisionCnDnBtn,
+                    neoStyles.provisionCnDnBtnDebit,
+                  ]}
                   onPress={() => {
                     if (!showFinanceProvisionPanel) return;
                     openInlineAdjustmentForm({
-                      type: showFinanceProvisionPanel === "client" ? "revenue" : "cost",
+                      type:
+                        showFinanceProvisionPanel === "client"
+                          ? "revenue"
+                          : "cost",
                       impact: "plus",
                       reasonSeed: "Other",
                     });
@@ -3264,7 +4296,11 @@ export default function TripDetailScreen({
                       openInlineAdjustmentForm(
                         showFinanceProvisionPanel === "supplier"
                           ? protocolSupplierChipAdjustment(chip)
-                          : { type: "revenue", impact: "plus", reasonSeed: chip },
+                          : {
+                              type: "revenue",
+                              impact: "plus",
+                              reasonSeed: chip,
+                            },
                       )
                     }
                     activeOpacity={0.86}
@@ -3272,22 +4308,26 @@ export default function TripDetailScreen({
                     <Text style={neoStyles.provisionChipText}>{chip}</Text>
                   </TouchableOpacity>
                 ))}
-                </View>
+              </View>
 
               {showInlineAdjustmentForm ? (
                 <View style={neoStyles.provisionForm}>
                   <View style={neoStyles.provisionFormHead}>
                     <View>
                       <Text style={neoStyles.provisionFormTitle}>
-                        {editingProvisionAdjustmentId ? "Edit adjustment" : "Add adjustment"}
+                        {editingProvisionAdjustmentId
+                          ? "Edit adjustment"
+                          : "Add adjustment"}
                       </Text>
                       <Text style={neoStyles.provisionFormMeta}>
                         {`${inlineAdjType === "revenue" ? "Sale / revenue" : "Supplier cost"} · ${
-                          inlineAdjImpact === "plus" ? "Debit note (DN)" : "Credit note (CN)"
+                          inlineAdjImpact === "plus"
+                            ? "Debit note (DN)"
+                            : "Credit note (CN)"
                         }`}
-                    </Text>
-                  </View>
-                  <TouchableOpacity
+                      </Text>
+                    </View>
+                    <TouchableOpacity
                       style={neoStyles.provisionFormClose}
                       onPress={() => {
                         setShowInlineAdjustmentForm(false);
@@ -3296,8 +4336,8 @@ export default function TripDetailScreen({
                       activeOpacity={0.85}
                     >
                       <Feather name="x" size={14} color="#475569" />
-                  </TouchableOpacity>
-                </View>
+                    </TouchableOpacity>
+                  </View>
 
                   <Text style={neoStyles.provisionInputLabel}>Amount</Text>
                   <View style={neoStyles.provisionAmountRow}>
@@ -3316,11 +4356,12 @@ export default function TripDetailScreen({
                   <Text style={neoStyles.provisionInputLabel}>Reason</Text>
                   <View style={neoStyles.provisionReasonWrap}>
                     {inlineReasonOptions.map((reason) => (
-                  <TouchableOpacity
+                      <TouchableOpacity
                         key={reason}
                         style={[
                           neoStyles.provisionReasonChip,
-                          inlineAdjReason === reason && neoStyles.provisionReasonChipActive,
+                          inlineAdjReason === reason &&
+                            neoStyles.provisionReasonChipActive,
                         ]}
                         onPress={() => setInlineAdjReason(reason)}
                         activeOpacity={0.82}
@@ -3328,12 +4369,13 @@ export default function TripDetailScreen({
                         <Text
                           style={[
                             neoStyles.provisionReasonText,
-                            inlineAdjReason === reason && neoStyles.provisionReasonTextActive,
+                            inlineAdjReason === reason &&
+                              neoStyles.provisionReasonTextActive,
                           ]}
                         >
                           {reason}
-                    </Text>
-                  </TouchableOpacity>
+                        </Text>
+                      </TouchableOpacity>
                     ))}
                   </View>
 
@@ -3351,24 +4393,31 @@ export default function TripDetailScreen({
                   <TouchableOpacity
                     style={[
                       neoStyles.provisionSaveBtn,
-                      !canSaveInlineAdjustment && neoStyles.provisionSaveBtnDisabled,
+                      !canSaveInlineAdjustment &&
+                        neoStyles.provisionSaveBtnDisabled,
                     ]}
                     onPress={() => void saveInlineAdjustment()}
                     disabled={!canSaveInlineAdjustment}
                     activeOpacity={0.86}
                   >
                     <Text style={neoStyles.provisionSaveText}>
-                      {editingProvisionAdjustmentId ? "Save changes" : "Save adjustment"}
+                      {editingProvisionAdjustmentId
+                        ? "Save changes"
+                        : "Save adjustment"}
                     </Text>
                   </TouchableOpacity>
                 </View>
               ) : null}
 
               <View style={neoStyles.provisionAppliedList}>
-                <Text style={neoStyles.provisionAppliedTitle}>Added adjustments</Text>
+                <Text style={neoStyles.provisionAppliedTitle}>
+                  Added adjustments
+                </Text>
                 {selectedProvisionAdjustments.length === 0 ? (
                   <Text style={neoStyles.provisionAppliedEmpty}>
-                    No {showFinanceProvisionPanel === "client" ? "sale" : "cost"} adjustment added yet.
+                    No{" "}
+                    {showFinanceProvisionPanel === "client" ? "sale" : "cost"}{" "}
+                    adjustment added yet.
                   </Text>
                 ) : (
                   selectedProvisionAdjustments.map((adj) => {
@@ -3377,16 +4426,24 @@ export default function TripDetailScreen({
                       <View key={adj.id} style={neoStyles.provisionAppliedRow}>
                         <View style={neoStyles.provisionAppliedInfo}>
                           <Text
-                            style={[neoStyles.provisionAppliedReason, voided && neoStyles.financeRailBreakdownStruck]}
+                            style={[
+                              neoStyles.provisionAppliedReason,
+                              voided && neoStyles.financeRailBreakdownStruck,
+                            ]}
                             numberOfLines={voided ? 2 : 1}
                           >
                             {adj.reason || "Adjustment"}
                           </Text>
                           <Text style={neoStyles.provisionAppliedMeta}>
-                            {adj.impact === "plus" ? "Debit note (DN)" : "Credit note (CN)"}
+                            {adj.impact === "plus"
+                              ? "Debit note (DN)"
+                              : "Credit note (CN)"}
                           </Text>
                           {voided ? (
-                            <Text style={neoStyles.financeRailBreakdownVoidNote} numberOfLines={3}>
+                            <Text
+                              style={neoStyles.financeRailBreakdownVoidNote}
+                              numberOfLines={3}
+                            >
                               Voided: {(adj.void_reason ?? "").trim() || "—"}
                             </Text>
                           ) : null}
@@ -3404,22 +4461,38 @@ export default function TripDetailScreen({
                           <View style={neoStyles.provisionAppliedActions}>
                             <TouchableOpacity
                               style={neoStyles.provisionAppliedEdit}
-                              onPress={() => setProvisionConfirm({ mode: "edit", adjustment: adj })}
+                              onPress={() =>
+                                setProvisionConfirm({
+                                  mode: "edit",
+                                  adjustment: adj,
+                                })
+                              }
                               activeOpacity={0.82}
                               accessibilityLabel="Edit adjustment"
                             >
-                              <Feather name="edit-2" size={12} color="#94a3b8" />
+                              <Feather
+                                name="edit-2"
+                                size={12}
+                                color="#94a3b8"
+                              />
                             </TouchableOpacity>
                             <TouchableOpacity
                               style={neoStyles.provisionAppliedRemove}
                               onPress={() => {
                                 setProvisionVoidReason("");
-                                setProvisionConfirm({ mode: "delete", adjustment: adj });
+                                setProvisionConfirm({
+                                  mode: "delete",
+                                  adjustment: adj,
+                                });
                               }}
                               activeOpacity={0.82}
                               accessibilityLabel="Void adjustment"
                             >
-                              <Feather name="trash-2" size={12} color="#94a3b8" />
+                              <Feather
+                                name="trash-2"
+                                size={12}
+                                color="#94a3b8"
+                              />
                             </TouchableOpacity>
             </View>
                         ) : null}
@@ -3452,28 +4525,40 @@ export default function TripDetailScreen({
           />
           <View style={neoStyles.provisionConfirmCard} pointerEvents="box-none">
             <Text style={neoStyles.provisionConfirmTitle}>
-              {provisionConfirm?.mode === "delete" ? "Void adjustment?" : "Edit adjustment?"}
+              {provisionConfirm?.mode === "delete"
+                ? "Void adjustment?"
+                : "Edit adjustment?"}
             </Text>
             {provisionConfirm ? (
               <>
                 <View style={neoStyles.provisionConfirmBlock}>
                   <Text style={neoStyles.provisionConfirmLine}>
-                    {provisionConfirm.adjustment.type === "revenue" ? "Client sale" : "Supplier cost"} ·{" "}
+                    {provisionConfirm.adjustment.type === "revenue"
+                      ? "Client sale"
+                      : "Supplier cost"}{" "}
+                    ·{" "}
                     {provisionConfirm.adjustment.impact === "plus"
                       ? "Debit note (DN)"
                       : "Credit note (CN)"}
                   </Text>
                   <Text style={neoStyles.provisionConfirmLine}>
-                    Amount: {provisionConfirm.adjustment.impact === "plus" ? "+" : "−"}
+                    Amount:{" "}
+                    {provisionConfirm.adjustment.impact === "plus" ? "+" : "−"}
                     {formatINR(provisionConfirm.adjustment.amount)}
                   </Text>
-                  <Text style={neoStyles.provisionConfirmLine} numberOfLines={3}>
-                    Reason: {(provisionConfirm.adjustment.reason ?? "").trim() || "—"}
+                  <Text
+                    style={neoStyles.provisionConfirmLine}
+                    numberOfLines={3}
+                  >
+                    Reason:{" "}
+                    {(provisionConfirm.adjustment.reason ?? "").trim() || "—"}
                   </Text>
                 </View>
                 {provisionConfirm.mode === "delete" ? (
                   <>
-                    <Text style={neoStyles.provisionVoidReasonLabel}>Reason for voiding</Text>
+                    <Text style={neoStyles.provisionVoidReasonLabel}>
+                      Reason for voiding
+                    </Text>
                     <TextInput
                       value={provisionVoidReason}
                       onChangeText={setProvisionVoidReason}
@@ -3513,14 +4598,18 @@ export default function TripDetailScreen({
                     neoStyles.provisionConfirmDangerDisabled,
                 ]}
                 disabled={
-                  provisionConfirm?.mode === "delete" && !String(provisionVoidReason ?? "").trim()
+                  provisionConfirm?.mode === "delete" &&
+                  !String(provisionVoidReason ?? "").trim()
                 }
                 onPress={() => {
                   if (!provisionConfirm) return;
                   if (provisionConfirm.mode === "delete") {
                     const r = String(provisionVoidReason ?? "").trim();
                     if (!r) return;
-                    void detail.handleVoidAdjustment(provisionConfirm.adjustment.id, r);
+                    void detail.handleVoidAdjustment(
+                      provisionConfirm.adjustment.id,
+                      r,
+                    );
                     setProvisionConfirm(null);
                     setProvisionVoidReason("");
                   } else {
@@ -3532,7 +4621,9 @@ export default function TripDetailScreen({
                 activeOpacity={0.88}
               >
                 <Text style={neoStyles.provisionConfirmOkText}>
-                  {provisionConfirm?.mode === "delete" ? "Void line" : "Continue"}
+                  {provisionConfirm?.mode === "delete"
+                    ? "Void line"
+                    : "Continue"}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -3648,7 +4739,7 @@ export default function TripDetailScreen({
                 <Text style={styles.docModalTitle} numberOfLines={2}>
                   {detail.isVehicleGalleryDoc
                     ? "Vehicle documents"
-                    : detail.selectedDoc?.label ?? "Document"}
+                    : (detail.selectedDoc?.label ?? "Document")}
                 </Text>
                 <Text style={styles.docModalSubtitle} numberOfLines={1}>
                   {detail.isVehicleGalleryDoc && detail.activeVehiclePreviewDoc
@@ -3670,7 +4761,9 @@ export default function TripDetailScreen({
                   {detail.activeVehiclePreviewDoc?.storagePath ? (
                     (() => {
                       const vDoc = detail.activeVehiclePreviewDoc;
-                      const url = vDoc ? detail.vehiclePreviewUrls[vDoc.id] : null;
+                      const url = vDoc
+                        ? detail.vehiclePreviewUrls[vDoc.id]
+                        : null;
                       const isPdf = vDoc?.type === "PDF";
                       if (url && !isPdf) {
                         return (
@@ -3683,7 +4776,11 @@ export default function TripDetailScreen({
                       }
                       return (
                         <>
-                          <FontAwesome name="file-pdf-o" size={48} color={Theme.primary} />
+                          <FontAwesome
+                            name="file-pdf-o"
+                            size={48}
+                            color={Theme.primary}
+                          />
                           <Text style={styles.docModalHint}>
                             {url
                               ? "PDF preview may be limited in the browser."
@@ -3695,7 +4792,9 @@ export default function TripDetailScreen({
                   ) : (
                     <>
                       <FontAwesome name="file-o" size={48} color="#94a3b8" />
-                      <Text style={styles.docModalHint}>No vehicle document on file yet.</Text>
+                      <Text style={styles.docModalHint}>
+                        No vehicle document on file yet.
+                      </Text>
                     </>
                   )}
                 </View>
@@ -3707,8 +4806,14 @@ export default function TripDetailScreen({
                 />
               ) : detail.docPreviewError ? (
                 <View style={styles.docModalCenter}>
-                  <FontAwesome name="exclamation-triangle" size={40} color="#94a3b8" />
-                  <Text style={styles.docModalHint}>Could not load this document.</Text>
+                  <FontAwesome
+                    name="exclamation-triangle"
+                    size={40}
+                    color="#94a3b8"
+                  />
+                  <Text style={styles.docModalHint}>
+                    Could not load this document.
+                  </Text>
                 </View>
               ) : (
                 <View style={styles.docModalCenter}>
@@ -3782,47 +4887,106 @@ function LedgerCard({
       {/* Sale / Received / Due */}
       <View style={[ldStyles.statRow, compact && { flexWrap: "wrap", gap: 8 }]}>
         <View style={ldStyles.statGroup}>
-          <Text style={ldStyles.statLabel} numberOfLines={1}>Sale</Text>
-          <Text numberOfLines={1} adjustsFontSizeToFit style={[ldStyles.statValue, compact && { fontSize: 13 }]}>{formatINR(sales)}</Text>
+          <Text style={ldStyles.statLabel} numberOfLines={1}>
+            Sale
+          </Text>
+          <Text
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            style={[ldStyles.statValue, compact && { fontSize: 13 }]}
+          >
+            {formatINR(sales)}
+          </Text>
         </View>
         <View style={ldStyles.statDivider} />
         <View style={ldStyles.statGroup}>
           <View style={ldStyles.statLabelRow}>
             <View style={ldStyles.greenDot} />
-            <Text style={[ldStyles.statLabel, ldStyles.statLabelGreen]} numberOfLines={1}>
+            <Text
+              style={[ldStyles.statLabel, ldStyles.statLabelGreen]}
+              numberOfLines={1}
+            >
               Received
             </Text>
           </View>
-          <Text numberOfLines={1} adjustsFontSizeToFit style={[ldStyles.statValue, ldStyles.statValueGreen, compact && { fontSize: 13 }]}>
+          <Text
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            style={[
+              ldStyles.statValue,
+              ldStyles.statValueGreen,
+              compact && { fontSize: 13 },
+            ]}
+          >
             {formatINR(received)}
           </Text>
         </View>
         <View style={ldStyles.statDivider} />
         <View style={ldStyles.statGroup}>
-          <Text style={ldStyles.statLabel} numberOfLines={1}>Due</Text>
-          <Text numberOfLines={1} adjustsFontSizeToFit style={[ldStyles.statValue, compact && { fontSize: 13 }]}>{formatINR(pending)}</Text>
+          <Text style={ldStyles.statLabel} numberOfLines={1}>
+            Due
+          </Text>
+          <Text
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            style={[ldStyles.statValue, compact && { fontSize: 13 }]}
+          >
+            {formatINR(pending)}
+          </Text>
         </View>
       </View>
 
       {/* Asset Expenses / Paid / Payable */}
       <View style={[ldStyles.statRow, compact && { flexWrap: "wrap", gap: 8 }]}>
         <View style={ldStyles.statGroup}>
-          <Text style={ldStyles.statLabel} numberOfLines={1}>Asset Exp.</Text>
-          <Text numberOfLines={1} adjustsFontSizeToFit style={[ldStyles.statValue, compact && { fontSize: 13 }]}>{formatINR(totalExpenses)}</Text>
+          <Text style={ldStyles.statLabel} numberOfLines={1}>
+            Asset Exp.
+          </Text>
+          <Text
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            style={[ldStyles.statValue, compact && { fontSize: 13 }]}
+          >
+            {formatINR(totalExpenses)}
+          </Text>
         </View>
         <View style={ldStyles.statDivider} />
         <View style={ldStyles.statGroup}>
-          <Text style={[ldStyles.statLabel, ldStyles.statLabelRed]} numberOfLines={1}>Paid</Text>
-          <Text numberOfLines={1} adjustsFontSizeToFit style={[ldStyles.statValue, ldStyles.statValueRed, compact && { fontSize: 13 }]}>
+          <Text
+            style={[ldStyles.statLabel, ldStyles.statLabelRed]}
+            numberOfLines={1}
+          >
+            Paid
+          </Text>
+          <Text
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            style={[
+              ldStyles.statValue,
+              ldStyles.statValueRed,
+              compact && { fontSize: 13 },
+            ]}
+          >
             {formatINR(supplierPaid)}
           </Text>
         </View>
         <View style={ldStyles.statDivider} />
         <View style={ldStyles.statGroup}>
-          <Text style={[ldStyles.statLabel, ldStyles.statLabelOrange]} numberOfLines={1}>
+          <Text
+            style={[ldStyles.statLabel, ldStyles.statLabelOrange]}
+            numberOfLines={1}
+          >
             Payable
           </Text>
-          <Text numberOfLines={1} adjustsFontSizeToFit style={[ldStyles.statValue, ldStyles.statValueOrange, compact && { fontSize: 13 }]}>
+          <Text
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            style={[
+              ldStyles.statValue,
+              ldStyles.statValueOrange,
+              compact && { fontSize: 13 },
+            ]}
+          >
             {formatINR(supplierDue)}
           </Text>
         </View>
@@ -4129,7 +5293,12 @@ function TabButton({
 }) {
   return (
     <TouchableOpacity
-      style={[styles.tabBtn, compact && styles.tabBtnCompact, active && styles.tabBtnActive, compact && active && styles.tabBtnActiveCompact]}
+      style={[
+        styles.tabBtn,
+        compact && styles.tabBtnCompact,
+        active && styles.tabBtnActive,
+        compact && active && styles.tabBtnActiveCompact,
+      ]}
       onPress={onPress}
       activeOpacity={0.8}
     >
@@ -4140,7 +5309,14 @@ function TabButton({
           color={active ? "#2563eb" : "#6b7280"}
         />
       ) : null}
-      <Text style={[styles.tabBtnText, compact && styles.tabBtnTextCompact, active && styles.tabBtnTextActive, compact && active && styles.tabBtnTextActiveCompact]}>
+      <Text
+        style={[
+          styles.tabBtnText,
+          compact && styles.tabBtnTextCompact,
+          active && styles.tabBtnTextActive,
+          compact && active && styles.tabBtnTextActiveCompact,
+        ]}
+      >
         {label}
       </Text>
       {compact && active ? <View style={styles.tabUnderlineCompact} /> : null}
@@ -4204,14 +5380,14 @@ const DS_MUTED = Theme.textSecondary;
 
 const dStyles = StyleSheet.create({
   heroCard: {
-    flexDirection: 'row',
+    flexDirection: "row",
     backgroundColor: DS_CARD,
     borderRadius: 24,
     borderWidth: 1,
     borderColor: DS_BORDER,
     padding: 20,
     marginBottom: 16,
-    flexWrap: 'wrap',
+    flexWrap: "wrap",
     gap: 16,
     shadowColor: Theme.shadow,
     shadowOffset: { width: 0, height: 6 },
@@ -4220,11 +5396,23 @@ const dStyles = StyleSheet.create({
     elevation: 4,
   },
   heroLeft: { flex: 1, minWidth: 260 },
-  heroTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' },
-  heroTripId: { fontSize: 28, fontWeight: '900', color: DS_TEXT, letterSpacing: -0.8, fontStyle: 'italic' },
+  heroTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 16,
+    flexWrap: "wrap",
+  },
+  heroTripId: {
+    fontSize: 28,
+    fontWeight: "900",
+    color: DS_TEXT,
+    letterSpacing: -0.8,
+    fontStyle: "italic",
+  },
   statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -4233,34 +5421,65 @@ const dStyles = StyleSheet.create({
     backgroundColor: Theme.surfaceGray,
   },
   statusDot: { width: 7, height: 7, borderRadius: 4 },
-  statusText: { fontSize: 10, fontWeight: '900', letterSpacing: 1 },
-  routeRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10 },
+  statusText: { fontSize: 10, fontWeight: "900", letterSpacing: 1 },
+  routeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 10,
+  },
   routeStop: { flex: 1, minWidth: 100 },
-  routeLabel: { fontSize: 9, fontWeight: '800', color: Theme.textMuted, letterSpacing: 1.2, marginBottom: 4, textTransform: 'uppercase' },
-  routeCity: { fontSize: 18, fontWeight: '800', color: DS_TEXT },
+  routeLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    letterSpacing: 1.2,
+    marginBottom: 4,
+    textTransform: "uppercase",
+  },
+  routeCity: { fontSize: 18, fontWeight: "800", color: DS_TEXT },
   routeDate: { fontSize: 12, color: DS_MUTED, marginTop: 4 },
-  routeDivider: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  routeDivider: { flexDirection: "row", alignItems: "center", gap: 6 },
   routeLine: { height: 1, width: 32, backgroundColor: Theme.borderLight },
   heroStats: {
-    flexDirection: 'row',
+    flexDirection: "row",
     backgroundColor: Theme.surfaceGray,
     borderRadius: 18,
     borderWidth: 1,
     borderColor: DS_BORDER,
     paddingVertical: 16,
     paddingHorizontal: 18,
-    alignItems: 'center',
-    alignSelf: 'center',
+    alignItems: "center",
+    alignSelf: "center",
     minWidth: 200,
   },
-  statBox: { flex: 1, alignItems: 'center' },
-  statLabel: { fontSize: 9, fontWeight: '800', color: Theme.textMuted, letterSpacing: 1.2, marginBottom: 6, textTransform: 'uppercase' },
-  statValue: { fontSize: 22, fontWeight: '800', color: DS_TEXT },
-  statDivider: { width: 1, height: 36, backgroundColor: DS_BORDER, marginHorizontal: 8 },
-  statBoxSm: { alignItems: 'flex-end' },
-  statLabelSm: { fontSize: 9, fontWeight: '800', color: Theme.textMuted, letterSpacing: 1.1, marginBottom: 4, textTransform: 'uppercase' },
-  statValueSm: { fontSize: 14, fontWeight: '700', color: DS_TEXT },
-  row: { flexDirection: 'row', gap: 16, marginBottom: 16, flexWrap: 'wrap' },
+  statBox: { flex: 1, alignItems: "center" },
+  statLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    letterSpacing: 1.2,
+    marginBottom: 6,
+    textTransform: "uppercase",
+  },
+  statValue: { fontSize: 22, fontWeight: "800", color: DS_TEXT },
+  statDivider: {
+    width: 1,
+    height: 36,
+    backgroundColor: DS_BORDER,
+    marginHorizontal: 8,
+  },
+  statBoxSm: { alignItems: "flex-end" },
+  statLabelSm: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    letterSpacing: 1.1,
+    marginBottom: 4,
+    textTransform: "uppercase",
+  },
+  statValueSm: { fontSize: 14, fontWeight: "700", color: DS_TEXT },
+  row: { flexDirection: "row", gap: 16, marginBottom: 16, flexWrap: "wrap" },
   card: {
     backgroundColor: DS_CARD,
     borderRadius: 22,
@@ -4274,11 +5493,11 @@ const dStyles = StyleSheet.create({
     elevation: 3,
   },
   snapshotCard: { marginBottom: 16 },
-  snapshotGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  snapshotGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   snapshotCell: {
-    width: '32%',
+    width: "32%",
     minWidth: 170,
-    backgroundColor: 'rgba(15,23,42,0.03)',
+    backgroundColor: "rgba(15,23,42,0.03)",
     borderWidth: 1,
     borderColor: DS_BORDER,
     borderRadius: 10,
@@ -4287,24 +5506,30 @@ const dStyles = StyleSheet.create({
   },
   snapshotLabel: {
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: "700",
     color: DS_MUTED,
     letterSpacing: 0.5,
     marginBottom: 4,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
   },
   snapshotValue: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: "700",
     color: DS_TEXT,
   },
   mapCol: { flex: 3, minWidth: 300 },
   auditCol: { flex: 2, minWidth: 260 },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
-  cardTitle: { fontSize: 13, fontWeight: '800', color: DS_TEXT, flex: 1, letterSpacing: 0.3 },
+  cardHeader: { flexDirection: "row", alignItems: "center", marginBottom: 14 },
+  cardTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: DS_TEXT,
+    flex: 1,
+    letterSpacing: 0.3,
+  },
   openMapsBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 5,
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -4313,10 +5538,23 @@ const dStyles = StyleSheet.create({
     borderColor: Theme.borderLight,
     backgroundColor: Theme.surfaceGray,
   },
-  openMapsBtnText: { fontSize: 10, fontWeight: '800', color: Theme.textSecondary, letterSpacing: 0.4, textTransform: 'uppercase' },
+  openMapsBtnText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textSecondary,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
   telemetryWrap: { borderRadius: 10 },
-  telemetryBar: { flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: Theme.surfaceGray, borderTopWidth: 1, borderTopColor: DS_BORDER },
-  telemetryTitle: { fontSize: 12, fontWeight: '700', color: DS_TEXT },
+  telemetryBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    backgroundColor: Theme.surfaceGray,
+    borderTopWidth: 1,
+    borderTopColor: DS_BORDER,
+  },
+  telemetryTitle: { fontSize: 12, fontWeight: "700", color: DS_TEXT },
   telemetrySub: { fontSize: 10, color: Theme.textMuted, marginTop: 1 },
   timelineHeaderIcon: {
     width: 18,
@@ -4325,60 +5563,100 @@ const dStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: DS_BORDER,
     backgroundColor: Theme.surfaceGray,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     marginRight: 8,
   },
   timelineHeaderTitle: {
     fontSize: 11,
-    fontWeight: '800',
+    fontWeight: "800",
     color: Theme.textMuted,
     letterSpacing: 1.1,
   },
   auditScroll: { maxHeight: 360, paddingRight: 2 },
-  auditItem: { flexDirection: 'row', gap: 12, paddingBottom: 12, marginBottom: 8, borderBottomWidth: 1, borderBottomColor: 'rgba(15,23,42,0.06)' },
+  auditItem: {
+    flexDirection: "row",
+    gap: 12,
+    paddingBottom: 12,
+    marginBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(15,23,42,0.06)",
+  },
   auditItemLast: { marginBottom: 0, paddingBottom: 0 },
-  auditTrackCol: { width: 18, alignItems: 'center', flexShrink: 0 },
+  auditTrackCol: { width: 18, alignItems: "center", flexShrink: 0 },
   auditTimelineDot: {
     width: 14,
     height: 14,
     borderRadius: 7,
     borderWidth: 2,
-    borderColor: '#059669',
-    backgroundColor: '#ecfdf5',
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: "#059669",
+    backgroundColor: "#ecfdf5",
+    alignItems: "center",
+    justifyContent: "center",
     marginTop: 2,
   },
   auditTimelineDotInner: {
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#059669',
+    backgroundColor: "#059669",
   },
   auditTimelineLine: {
     width: 2,
     flex: 1,
-    backgroundColor: 'rgba(5,150,105,0.28)',
+    backgroundColor: "rgba(5,150,105,0.28)",
     marginTop: 4,
     minHeight: 18,
   },
-  auditContentRow: { flex: 1, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
+  auditContentRow: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
   auditBody: { flex: 1, minWidth: 0 },
-  auditTitle: { fontSize: 14, fontWeight: '700', color: DS_TEXT, marginBottom: 1 },
+  auditTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: DS_TEXT,
+    marginBottom: 1,
+  },
   auditDetail: { fontSize: 11, color: DS_MUTED },
-  auditMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 1 },
-  auditTime: { fontSize: 10, color: 'rgba(15,23,42,0.42)', fontWeight: '600', minWidth: 56, textAlign: 'right' },
-  emptyText: { fontSize: 13, color: DS_MUTED, textAlign: 'center', paddingVertical: 32 },
+  auditMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingTop: 1,
+  },
+  auditTime: {
+    fontSize: 10,
+    color: "rgba(15,23,42,0.42)",
+    fontWeight: "600",
+    minWidth: 56,
+    textAlign: "right",
+  },
+  emptyText: {
+    fontSize: 13,
+    color: DS_MUTED,
+    textAlign: "center",
+    paddingVertical: 32,
+  },
   bottomLeft: { flex: 2, minWidth: 220, gap: 12 },
   docsCol: { flex: 3, minWidth: 280 },
-  cardMicroLabel: { fontSize: 9, fontWeight: '700', color: DS_MUTED, letterSpacing: 1.2, marginBottom: 14 },
-  driverRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  cardMicroLabel: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: DS_MUTED,
+    letterSpacing: 1.2,
+    marginBottom: 14,
+  },
+  driverRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   driverAvatar: { width: 44, height: 44, borderRadius: 22 },
   cardHeaderRowInline: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     gap: 8,
   },
   reassignInlineBtn: {
@@ -4391,9 +5669,9 @@ const dStyles = StyleSheet.create({
   },
   reassignInlineBtnText: {
     fontSize: 9,
-    fontWeight: '800',
+    fontWeight: "800",
     color: Theme.textSecondary,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
     letterSpacing: 0.6,
   },
   driverAvatarFallback: {
@@ -4403,12 +5681,12 @@ const dStyles = StyleSheet.create({
     backgroundColor: Theme.surfaceGray,
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
-  driverName: { fontSize: 15, fontWeight: '700', color: DS_TEXT },
-  driverRating: { fontSize: 12, color: '#f59e0b', marginTop: 3 },
-  vehicleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  driverName: { fontSize: 15, fontWeight: "700", color: DS_TEXT },
+  driverRating: { fontSize: 12, color: "#f59e0b", marginTop: 3 },
+  vehicleRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   vehicleIconWrap: {
     width: 44,
     height: 44,
@@ -4416,22 +5694,53 @@ const dStyles = StyleSheet.create({
     backgroundColor: Theme.surfaceGray,
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
-  vehicleName: { fontSize: 15, fontWeight: '700', color: DS_TEXT },
+  vehicleName: { fontSize: 15, fontWeight: "700", color: DS_TEXT },
   vehicleSub: { fontSize: 12, color: DS_MUTED, marginTop: 3 },
-  docRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: 'rgba(15,23,42,0.06)' },
-  docIconWrap: { width: 22, alignItems: 'center' },
-  docLabel: { flex: 1, fontSize: 13, color: DS_TEXT, fontWeight: '500' },
-  docStatusPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, borderWidth: 1 },
-  docStatusVerified: { backgroundColor: 'rgba(34,197,94,0.1)', borderColor: 'rgba(34,197,94,0.28)' },
-  docStatusPending: { backgroundColor: 'rgba(245,158,11,0.1)', borderColor: 'rgba(245,158,11,0.28)' },
-  docStatusText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
-  docStatusTextVerified: { color: '#22c55e' },
-  docStatusTextPending: { color: '#f59e0b' },
-  docsBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: Theme.surfaceGray, borderWidth: 1, borderColor: DS_BORDER },
-  docsBadgeText: { fontSize: 9, fontWeight: '800', color: Theme.textMuted, letterSpacing: 0.8, textTransform: 'uppercase' },
+  docRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 13,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(15,23,42,0.06)",
+  },
+  docIconWrap: { width: 22, alignItems: "center" },
+  docLabel: { flex: 1, fontSize: 13, color: DS_TEXT, fontWeight: "500" },
+  docStatusPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  docStatusVerified: {
+    backgroundColor: "rgba(34,197,94,0.1)",
+    borderColor: "rgba(34,197,94,0.28)",
+  },
+  docStatusPending: {
+    backgroundColor: "rgba(245,158,11,0.1)",
+    borderColor: "rgba(245,158,11,0.28)",
+  },
+  docStatusText: { fontSize: 10, fontWeight: "700", letterSpacing: 0.5 },
+  docStatusTextVerified: { color: "#22c55e" },
+  docStatusTextPending: { color: "#f59e0b" },
+  docsBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 1,
+    borderColor: DS_BORDER,
+  },
+  docsBadgeText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
 });
 
 const neoStyles = StyleSheet.create({
@@ -6283,7 +7592,10 @@ const neoStyles = StyleSheet.create({
     gap: 12,
     zIndex: 2,
     ...(Platform.OS === "web"
-      ? ({ boxShadow: "0 24px 48px rgba(0,0,0,0.45)" } as Record<string, unknown>)
+      ? ({ boxShadow: "0 24px 48px rgba(0,0,0,0.45)" } as Record<
+          string,
+          unknown
+        >)
       : {}),
   },
   provisionConfirmTitle: {
@@ -7209,13 +8521,48 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     width: "100%",
   },
-  refHeroToRow: { flexDirection: "row", alignItems: "center", gap: 8, marginVertical: 4 },
-  refHeroToDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Theme.positive },
-  refHeroToLine: { width: 1, height: 14, backgroundColor: "rgba(16,185,129,0.5)" },
-  refHeroToText: { fontSize: 10, fontWeight: "900", letterSpacing: 1.2, color: Theme.positive },
-  refHeroDivider: { marginTop: 4, marginBottom: 12, height: 1, backgroundColor: "rgba(255,255,255,0.12)" },
-  refHeroMetaRow: { flexDirection: "row", gap: 20, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.12)" },
-  refHeroMetaItem: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1 },
+  refHeroToRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginVertical: 4,
+  },
+  refHeroToDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Theme.positive,
+  },
+  refHeroToLine: {
+    width: 1,
+    height: 14,
+    backgroundColor: "rgba(16,185,129,0.5)",
+  },
+  refHeroToText: {
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+    color: Theme.positive,
+  },
+  refHeroDivider: {
+    marginTop: 4,
+    marginBottom: 12,
+    height: 1,
+    backgroundColor: "rgba(255,255,255,0.12)",
+  },
+  refHeroMetaRow: {
+    flexDirection: "row",
+    gap: 20,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.12)",
+  },
+  refHeroMetaItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
   refHeroMetaLabel: {
     fontSize: 9,
     fontWeight: "800",
@@ -7223,7 +8570,13 @@ const styles = StyleSheet.create({
     letterSpacing: 2.2,
     color: "#94a3b8",
   },
-  refHeroMetaValue: { fontSize: 11, fontWeight: "800", color: "#ffffff", marginTop: 1, letterSpacing: 0.4 },
+  refHeroMetaValue: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#ffffff",
+    marginTop: 1,
+    letterSpacing: 0.4,
+  },
   refHeroAssignedRow: {
     marginTop: 12,
     paddingTop: 10,
@@ -7389,7 +8742,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  refTimelineHeaderRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 4, marginBottom: 4 },
+  refTimelineHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 4,
+    marginBottom: 4,
+  },
   refTimelineHeaderIcon: {
     width: 20,
     height: 20,
@@ -7405,8 +8764,18 @@ const styles = StyleSheet.create({
     borderColor: "#e6edf5",
     padding: 16,
   },
-  refKickerRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
-  refKickerBar: { width: 4, height: 16, borderRadius: 2, backgroundColor: "#2563eb" },
+  refKickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 12,
+  },
+  refKickerBar: {
+    width: 4,
+    height: 16,
+    borderRadius: 2,
+    backgroundColor: "#2563eb",
+  },
   refKickerText: {
     fontSize: 10,
     fontWeight: "800",
@@ -7419,7 +8788,13 @@ const styles = StyleSheet.create({
   refDot: { width: 7, height: 7, borderRadius: 4 },
   refDotStart: { backgroundColor: "#10b981" },
   refDotEnd: { backgroundColor: "#ef4444" },
-  refDotLine: { width: 1.5, flex: 1, minHeight: 16, marginVertical: 4, backgroundColor: "#e2e8f0" },
+  refDotLine: {
+    width: 1.5,
+    flex: 1,
+    minHeight: 16,
+    marginVertical: 4,
+    backgroundColor: "#e2e8f0",
+  },
   refRouteTextCol: { flex: 1, gap: 8 },
   refRoutePlace: { fontSize: 15, fontWeight: "700", color: "#0f172a" },
   refMetaGrid: {
@@ -7430,8 +8805,19 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   refMetaCell: { flex: 1, minWidth: 0 },
-  refMetaLabel: { fontSize: 10, fontWeight: "700", color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.8 },
-  refMetaValue: { marginTop: 2, fontSize: 13, fontWeight: "700", color: "#1e293b" },
+  refMetaLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  refMetaValue: {
+    marginTop: 2,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#1e293b",
+  },
   refOperatorCard: {
     backgroundColor: "#fff",
     borderRadius: 22,
@@ -7450,9 +8836,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
-  refOperatorLabel: { fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, color: "#94a3b8" },
+  refOperatorLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    color: "#94a3b8",
+  },
   refOperatorValue: { fontSize: 14, fontWeight: "700", color: "#0f172a" },
-  refOperatorSub: { marginTop: 9, fontSize: 12, fontWeight: "500", color: "#64748b" },
+  refOperatorSub: {
+    marginTop: 9,
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#64748b",
+  },
   refAssignCard: {
     backgroundColor: "#fff",
     borderRadius: 22,
@@ -7461,7 +8858,12 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 8,
   },
-  refAssignTitle: { fontSize: 14, fontWeight: "700", color: "#0f172a", marginBottom: 2 },
+  refAssignTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0f172a",
+    marginBottom: 2,
+  },
   refAssignRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -7471,8 +8873,19 @@ const styles = StyleSheet.create({
     paddingTop: 10,
   },
   refAssignTxtWrap: { flex: 1, minWidth: 0 },
-  refAssignLabel: { fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, color: "#94a3b8" },
-  refAssignValue: { marginTop: 1, fontSize: 14, fontWeight: "700", color: "#0f172a" },
+  refAssignLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    color: "#94a3b8",
+  },
+  refAssignValue: {
+    marginTop: 1,
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0f172a",
+  },
   refAssignFoot: {
     marginTop: 8,
     paddingTop: 10,
@@ -7484,8 +8897,19 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   refAssignFootText: { flex: 1, minWidth: 0, fontSize: 11, color: "#6b7280" },
-  refOtpBtn: { backgroundColor: "#0f172a", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
-  refOtpBtnText: { color: "#fff", fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
+  refOtpBtn: {
+    backgroundColor: "#0f172a",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  refOtpBtnText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
   refDocCard: {
     backgroundColor: "#fff",
     borderRadius: 22,
@@ -7502,7 +8926,13 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 8,
   },
-  refTimelineTitle: { fontSize: 11, fontWeight: "900", textTransform: "uppercase", letterSpacing: 2, color: "#0f172a" },
+  refTimelineTitle: {
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 2,
+    color: "#0f172a",
+  },
   refTimelineCard: {
     backgroundColor: "#fff",
     borderRadius: 38,
@@ -7538,14 +8968,42 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 3,
   },
-  refTimelineDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#10b981", marginTop: 5 },
+  refTimelineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#10b981",
+    marginTop: 5,
+  },
   refTimelineBody: { flex: 1, minWidth: 0 },
-  refTimelineTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  refTimelineTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
   refTimelineTopRight: { flexDirection: "row", alignItems: "center", gap: 6 },
-  refTimelineStatus: { fontSize: 12, fontWeight: "900", color: "#0f172a", textTransform: "uppercase", letterSpacing: 1.1 },
+  refTimelineStatus: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#0f172a",
+    textTransform: "uppercase",
+    letterSpacing: 1.1,
+  },
   refTimelineTime: { fontSize: 10, fontWeight: "700", color: "#94a3b8" },
-  refTimelineLocation: { marginTop: 3, fontSize: 11, color: "#64748b", fontWeight: "700" },
-  refTimelineDetails: { marginTop: 8, fontSize: 10, color: "#475569", lineHeight: 15, fontStyle: "italic" },
+  refTimelineLocation: {
+    marginTop: 3,
+    fontSize: 11,
+    color: "#64748b",
+    fontWeight: "700",
+  },
+  refTimelineDetails: {
+    marginTop: 8,
+    fontSize: 10,
+    color: "#475569",
+    lineHeight: 15,
+    fontStyle: "italic",
+  },
   refAssignInlineRow: {
     marginTop: 2,
     borderRadius: 18,
@@ -7668,8 +9126,21 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     gap: 6,
   },
-  refManifestColHeadLeft: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1, minWidth: 0 },
-  refManifestColHeadRight: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1, minWidth: 0, justifyContent: "flex-end" },
+  refManifestColHeadLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flex: 1,
+    minWidth: 0,
+  },
+  refManifestColHeadRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "flex-end",
+  },
   refManifestColTitle: {
     fontSize: 9,
     fontWeight: "900",
@@ -7693,7 +9164,11 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
   },
   refManifestSalesAmt: { color: "#16a34a" },
-  refManifestCostAmt: { color: "#e11d48", textAlign: "right", alignSelf: "stretch" },
+  refManifestCostAmt: {
+    color: "#e11d48",
+    textAlign: "right",
+    alignSelf: "stretch",
+  },
   refManifestMicroBox: {
     marginTop: 12,
     borderRadius: 12,
@@ -7704,8 +9179,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     gap: 4,
   },
-  refManifestMicroLine: { fontSize: 8, fontWeight: "700", color: "#94a3b8", textTransform: "uppercase" },
-  refManifestMicroRight: { alignSelf: "flex-end", textAlign: "right", width: "100%" },
+  refManifestMicroLine: {
+    fontSize: 8,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+  },
+  refManifestMicroRight: {
+    alignSelf: "flex-end",
+    textAlign: "right",
+    width: "100%",
+  },
   refManifestMicroAdjSales: {
     marginTop: 4,
     fontSize: 8,
@@ -8043,8 +9527,19 @@ const styles = StyleSheet.create({
     borderColor: "rgba(244,63,94,0.12)",
     backgroundColor: "rgba(254,242,242,0.45)",
   },
-  refManifestBandRowInner: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1, minWidth: 0 },
-  refManifestBandReason: { flex: 1, fontSize: 12, fontWeight: "900", color: "#1e293b" },
+  refManifestBandRowInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+    minWidth: 0,
+  },
+  refManifestBandReason: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#1e293b",
+  },
   refManifestBandAmtIn: {
     fontSize: 13,
     fontWeight: "900",
@@ -8065,8 +9560,20 @@ const styles = StyleSheet.create({
     padding: 22,
     alignItems: "center",
   },
-  refSettleLabel: { fontSize: 10, fontWeight: "800", letterSpacing: 1.6, textTransform: "uppercase", color: "#94a3b8" },
-  refSettleValue: { marginTop: 6, fontSize: 40, fontWeight: "900", color: "#0f172a", letterSpacing: -0.8 },
+  refSettleLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1.6,
+    textTransform: "uppercase",
+    color: "#94a3b8",
+  },
+  refSettleValue: {
+    marginTop: 6,
+    fontSize: 40,
+    fontWeight: "900",
+    color: "#0f172a",
+    letterSpacing: -0.8,
+  },
   refSettleHint: {
     marginTop: 4,
     paddingHorizontal: 8,
@@ -9945,7 +11452,12 @@ const elStyles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 999,
   },
-  badgeText: { fontSize: 10, fontWeight: "800", color: Theme.textSecondary, letterSpacing: 0.5 },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textSecondary,
+    letterSpacing: 0.5,
+  },
   headerRight: {
     flexDirection: "row",
     alignItems: "center",
@@ -9966,7 +11478,13 @@ const elStyles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 999,
   },
-  addBtnText: { fontSize: 10, fontWeight: "800", color: Theme.textOnDark, letterSpacing: 0.5, textTransform: "uppercase" },
+  addBtnText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textOnDark,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
   empty: {
     alignItems: "center",
     justifyContent: "center",

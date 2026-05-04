@@ -103,12 +103,18 @@ function getPhoneInlineError(national: string): string | null {
 }
 
 /** Step 2 valid: name, email (required and valid), password valid. */
-function isStep2Valid(callsign: string, email: string, pwd: string): boolean {
+function isStep2Valid(
+  callsign: string,
+  email: string,
+  pwd: string,
+  confirmPwd: string,
+): boolean {
   const name = callsign.trim();
   if (name.length < NAME_MIN_LENGTH || name.length > NAME_MAX_LENGTH) return false;
   if (!email.trim()) return false;
   if (validateEmail(email) !== null) return false;
   if (validatePassword(pwd) !== null) return false;
+  if (pwd !== confirmPwd) return false;
   return true;
 }
 
@@ -127,6 +133,7 @@ export default function DriverSignUpScreen() {
   const [callsign, setCallsign] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [avatarSeed, setAvatarSeed] = useState(ALL_PRESET_AVATARS[0].seed);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -315,6 +322,10 @@ export default function DriverSignUpScreen() {
     const pwdErr = validatePassword(password);
     if (pwdErr) {
       Alert.alert('Invalid', pwdErr);
+      return;
+    }
+    if (password !== confirmPassword) {
+      Alert.alert('Invalid', 'Passwords do not match.');
       return;
     }
     goToPage(3);
@@ -618,10 +629,43 @@ export default function DriverSignUpScreen() {
                 </TouchableOpacity>
               </View>
             </View>
+            <View style={styles.inputGroup}>
+              <Text style={styles.fieldLabel}>Confirm password</Text>
+              <View style={[styles.inputWrap, styles.passwordRow]}>
+                <TextInput
+                  style={styles.inputPassword}
+                  placeholder="Re-enter password"
+                  placeholderTextColor={LIGHT.placeholder}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  maxLength={VALIDATION.PASSWORD_MAX_LENGTH}
+                  secureTextEntry={!showPassword}
+                  autoCorrect={false}
+                  spellCheck={false}
+                  autoComplete="off"
+                  editable={!loading}
+                  cursorColor={LIGHT.text}
+                  selectionColor="rgba(15,23,42,0.2)"
+                />
+                <TouchableOpacity
+                  onPress={() => setShowPassword((v) => !v)}
+                  style={styles.eyeButton}
+                  hitSlop={12}
+                  accessible
+                  accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  <FontAwesome
+                    name={showPassword ? 'eye-slash' : 'eye'}
+                    size={22}
+                    color={LIGHT.textMuted}
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
             <TouchableOpacity
-              style={[styles.primaryBtn, (!isStep2Valid(callsign, email, password) || loading) && styles.primaryBtnDisabled]}
+              style={[styles.primaryBtn, (!isStep2Valid(callsign, email, password, confirmPassword) || loading) && styles.primaryBtnDisabled]}
               onPress={confirmRegistry}
-              disabled={!isStep2Valid(callsign, email, password) || loading}
+              disabled={!isStep2Valid(callsign, email, password, confirmPassword) || loading}
               activeOpacity={0.8}
             >
               <Text style={styles.primaryBtnText}>Next</Text>

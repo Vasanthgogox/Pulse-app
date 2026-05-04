@@ -1,0 +1,95 @@
+import type { RealtimeChannel } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabase";
+
+type RealtimeListener = () => void;
+
+type PostgresChangeSpec = {
+  event: "*" | "INSERT" | "UPDATE" | "DELETE";
+  schema: string;
+  table: string;
+  filter?: string;
+};
+
+type RegistryEntry = {
+  channel: RealtimeChannel;
+  refs: number;
+  specsSignature: string;
+  listeners: Set<RealtimeListener>;
+};
+
+const registry = new Map<string, RegistryEntry>();
+
+function specsSignature(specs: PostgresChangeSpec[]): string {
+  return JSON.stringify(
+    specs.map((spec) => ({
+      event: spec.event,
+      schema: spec.schema,
+      table: spec.table,
+      filter: spec.filter ?? "",
+    }))
+  );
+}
+
+function emitToListeners(key: string) {
+  const entry = registry.get(key);
+  if (!entry) return;
+  for (const listener of entry.listeners) {
+    try {
+      listener();
+    } catch (err) {
+      console.warn("[realtime] shared listener failed:", err);
+    }
+  }
+}
+
+function createSharedChannel(key: string, specs: PostgresChangeSpec[]): RealtimeChannel {
+  let channel = supabase().channel(`shared:${key}`);
+  for (const spec of specs) {
+    channel = channel.on("postgres_changes", spec, () => emitToListeners(key));
+  }
+  return channel.subscribe();
+}
+
+/**
+ * Ref-counted shared realtime channel by key.
+ * Guarantees one channel per key globally and fan-outs events to all listeners.
+ */
+export function subscribeSharedPostgresChanges(
+  key: string,
+  specs: PostgresChangeSpec[],
+  listener: RealtimeListener
+): () => void {
+  const signature = specsSignature(specs);
+  let entry = registry.get(key);
+
+  if (!entry) {
+    entry = {
+      channel: createSharedChannel(key, specs),
+      refs: 0,
+      specsSignature: signature,
+      listeners: new Set<RealtimeListener>(),
+    };
+    registry.set(key, entry);
+  } else if (entry.specsSignature !== signature) {
+    console.warn(
+      `[realtime] shared key "${key}" reused with different specs; keeping existing channel`
+    );
+  }
+
+  entry.refs += 1;
+  entry.listeners.add(listener);
+
+  return () => {
+    const current = registry.get(key);
+    if (!current) return;
+    current.listeners.delete(listener);
+    current.refs = Math.max(0, current.refs - 1);
+    if (current.refs === 0) {
+      void supabase().removeChannel(current.channel).catch((err: unknown) => {
+        console.warn("[realtime] remove shared channel failed:", err);
+      });
+      registry.delete(key);
+    }
+  };
+}
+

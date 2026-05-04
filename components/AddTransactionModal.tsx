@@ -56,7 +56,14 @@ import {
 } from "lucide-react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Alert,
   Dimensions,
@@ -71,7 +78,6 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -79,6 +85,49 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 const LEDGER_SLATE = "#0f172a";
 const LEDGER_PROTOCOL_ICON = "#a5b4fc";
 const LEDGER_LUCIDE_STROKE = 2.2;
+
+/** Full-page ledger: stack trip band vs split columns below this width. */
+const LEDGER_STACK_TRIP_BAND_BREAKPOINT = 680;
+
+/**
+ * Viewport width for ledger layout math. Do **not** drive this from `useWindowDimensions` inside
+ * `useEffect([width])`: on web the value can fluctuate every frame (scrollbar/subpixel), causing
+ * `Maximum update depth exceeded`. Web uses debounced `resize`; native uses `Dimensions` change.
+ */
+function useLedgerViewportWidth(): number {
+  const [winW, setWinW] = useState(() =>
+    Math.max(0, Math.round(Dimensions.get("window").width)),
+  );
+
+  useEffect(() => {
+    const commit = (raw: number) => {
+      const next = Math.max(0, Math.round(Number.isFinite(raw) ? raw : 0));
+      setWinW((prev) => (prev === next ? prev : next));
+    };
+
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      commit(window.innerWidth);
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      const onResize = () => {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => commit(window.innerWidth), 120);
+      };
+      window.addEventListener("resize", onResize);
+      return () => {
+        window.removeEventListener("resize", onResize);
+        clearTimeout(timeout);
+      };
+    }
+
+    commit(Dimensions.get("window").width);
+    const sub = Dimensions.addEventListener("change", ({ window }) => {
+      commit(window.width);
+    });
+    return () => sub.remove();
+  }, []);
+
+  return winW;
+}
 
 /** Colour Lucide icons for ledger payment mode tiles (full-page grid). */
 function ledgerPaymentModeLucide(modeId: string, size = 20) {
@@ -667,10 +716,12 @@ export function AddTransactionModal({
   driverOffersByDriverId = null,
 }: AddTransactionModalProps) {
   const insets = useSafeAreaInsets();
-  const { width: winW } = useWindowDimensions();
+  const winW = useLedgerViewportWidth();
+  const stackTripFinancialBand = winW < LEDGER_STACK_TRIP_BAND_BREAKPOINT;
   const isLedgerWide = winW >= 900;
   /** Full-page ledger horizontal padding — tighter on phones so all cards stay readable. */
-  const ledgerFullPagePadH = winW < 420 ? 14 : winW < 680 ? 16 : 20;
+  const ledgerFullPagePadH =
+    winW < 420 ? 14 : winW < LEDGER_STACK_TRIP_BAND_BREAKPOINT ? 16 : 20;
   const safeClients = clients ?? [];
   const safeSuppliers = suppliers ?? [];
   const safeDrivers = drivers ?? [];
@@ -715,6 +766,7 @@ export function AddTransactionModal({
   const [paymentModeExpanded, setPaymentModeExpanded] = useState(true);
   const [paymentTypeExpanded, setPaymentTypeExpanded] = useState(true);
   const [tripSearch, setTripSearch] = useState("");
+  const deferredTripSearch = useDeferredValue(tripSearch);
   /** Mission trip list filters (full-page ledger). */
   const [missionTripFilterDue, setMissionTripFilterDue] = useState<
     "all" | "has_due" | "no_due"
@@ -744,7 +796,8 @@ export function AddTransactionModal({
   const scrollRef = useRef<ScrollView>(null);
 
   const isEditMode = Boolean(initialEntry?.id);
-  const isPartyLocked = lockedPartyId != null && lockedPartyName != null;
+  /** Lock from route/entity when id is anchored; display name may resolve a tick later (avoids layout flip). */
+  const isPartyLocked = lockedPartyId != null;
   const effectivePartyId = isPartyLocked ? lockedPartyId : partyId;
 
   /** Today as short label for tag (e.g. "11 Mar"). */
@@ -887,9 +940,12 @@ export function AddTransactionModal({
     type,
   ]);
 
+  /** Web: avoid useDeferredValue here — concurrent follow-up renders were visibly tearing the trip list. */
+  const missionTripSearchQuery =
+    Platform.OS === "web" ? tripSearch : deferredTripSearch;
   const missionTrips = useMemo(() => {
     const base = ledgerMissionTripsBase;
-    const q = tripSearch.trim().toLowerCase();
+    const q = missionTripSearchQuery.trim().toLowerCase();
     if (!q) return base;
     return base.filter((t) => {
       const hay = [
@@ -904,7 +960,7 @@ export function AddTransactionModal({
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [ledgerMissionTripsBase, tripSearch]);
+  }, [ledgerMissionTripsBase, missionTripSearchQuery]);
 
   useEffect(() => {
     setSmartTagHighlight(null);
@@ -1490,7 +1546,7 @@ export function AddTransactionModal({
       : null;
 
   const resolvedLockedPartyName = (() => {
-    if (!isPartyLocked) return null;
+    if (!lockedPartyId) return null;
     const raw = (lockedPartyName ?? "").trim();
     const lower = raw.toLowerCase();
     const isGeneric =
@@ -2071,8 +2127,11 @@ export function AddTransactionModal({
       if (type === "out" && cashOutPayeeName?.trim())
         return cashOutPayeeName.trim();
       if (tripLocked && lockedPartyName) return lockedPartyName;
-      if (isPartyLocked && type === "in" && lockedPartyName)
-        return lockedPartyName;
+      if (isPartyLocked && type === "in") {
+        const label =
+          (lockedPartyName ?? "").trim() || (resolvedLockedPartyName ?? "").trim();
+        if (label) return label;
+      }
       if (isDriverSalaryParty && driverIdForSalary) {
         const dn = safeDrivers.find((d) => d.id === driverIdForSalary)?.name?.trim();
         return dn ? `Driver salary · ${dn}` : "Driver salary";
@@ -2132,6 +2191,7 @@ export function AddTransactionModal({
     cashOutPayeeName,
     tripLocked,
     lockedPartyName,
+    resolvedLockedPartyName,
     isPartyLocked,
     isDriverSalaryParty,
     driverIdForSalary,
@@ -2603,15 +2663,10 @@ export function AddTransactionModal({
     const LEDGER_PROTOCOL_ICON_SM = 12;
     /** Stack synchronization + date vertically on very narrow widths. */
     const LEDGER_MOBILE_STACK_BREAKPOINT = 430;
-    /** Below this, trip picker + payment band stack (phones + tablets portrait). */
-    const LEDGER_STACK_TRIP_BAND_BREAKPOINT = 680;
     /** Stacked trip band only: allow side-by-side sync cards on wider phones/tablets. */
     const LEDGER_SYNC_HERO_PAIR_WIDE_MIN = 820;
 
     const ledgerProtocolSplitWrapPad = 12 * 2;
-
-    /** On phones / small tablets, stack trip band (mission | mode+payment) vertically. */
-    const stackTripFinancialBand = winW < LEDGER_STACK_TRIP_BAND_BREAKPOINT;
 
     const ledgerNarrowPhone = winW < LEDGER_MOBILE_STACK_BREAKPOINT;
 
@@ -3261,6 +3316,7 @@ export function AddTransactionModal({
             nestedScrollEnabled
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator
+            removeClippedSubviews={false}
           >
             <View style={styles.missionTripBlock}>
               <TouchableOpacity
@@ -3709,7 +3765,7 @@ export function AddTransactionModal({
           <View
             style={[
               styles.panelScrollInner,
-              fullPage && winW < 680 && styles.panelScrollInnerLedgerNarrow,
+              fullPage && stackTripFinancialBand && styles.panelScrollInnerLedgerNarrow,
             ]}
           >
             {fullPage ? (

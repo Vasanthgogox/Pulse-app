@@ -81,6 +81,8 @@ export interface AddTripFormState {
   driverPhoneTripConflict: boolean;
   /** Trip label from availability check (e.g. display trip id) when `driverPhoneTripConflict`. */
   driverPhoneTripConflictLabel: string | null;
+  /** Non-busy error from global availability check (RPC/network/RLS). */
+  driverPhoneAvailabilityError: string | null;
   /** Aggregate only: optional vehicle as text (stored in trip notes). */
   aggregateVehicleText: string;
 }

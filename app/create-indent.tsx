@@ -10,12 +10,7 @@ import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import {
-    AddClientModal,
-    createClient,
-    getClientsByOrganization,
-    type ClientRow,
-} from "@/features/clients";
+import { getClientsByOrganization, type ClientRow } from "@/features/clients";
 import { createIndent, type CreateIndentInput } from "@/features/indents";
 import { LOAD_TYPES } from "@/features/indents/constants";
 import {
@@ -51,7 +46,7 @@ import { getOptimalRoute } from "@/services/routingService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import {
     ArrowRight,
@@ -223,7 +218,6 @@ export default function CreateIndentScreen() {
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [clientsLoading, setClientsLoading] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showAddClientModal, setShowAddClientModal] = useState(false);
   /** Match Create Trip: full client list vs compact selected card. */
   const [clientListExpanded, setClientListExpanded] = useState(true);
   const [pickupLat, setPickupLat] = useState<number | null>(null);
@@ -400,6 +394,25 @@ export default function CreateIndentScreen() {
     setAlertState({ visible: true, title, message: message ?? "" });
   }, []);
 
+  /** Same as Create Trip: modal route + PartyRegistrationPortal (web) / phone + invite (native). */
+  const openAddClientFlow = useCallback(() => {
+    if (!orgId) {
+      showDialog(
+        "Organization required",
+        "Load an organization to add a client.",
+      );
+      return;
+    }
+    const returnTo =
+      routeDraftId != null
+        ? `${ROUTES.CREATE_INDENT}?draftId=${encodeURIComponent(routeDraftId)}`
+        : ROUTES.CREATE_INDENT;
+    router.push({
+      pathname: ROUTES.ADD_CLIENT,
+      params: { returnTo },
+    });
+  }, [orgId, routeDraftId, router, showDialog]);
+
   const confirmDialog = useCallback(
     (
       title: string,
@@ -419,14 +432,26 @@ export default function CreateIndentScreen() {
     [],
   );
 
-  useEffect(() => {
-    if (!orgId) return;
-    setClientsLoading(true);
-    getClientsByOrganization(orgId).then(({ clients: list }) => {
-      setClients(list ?? []);
-      setClientsLoading(false);
-    });
-  }, [orgId]);
+  useFocusEffect(
+    useCallback(() => {
+      if (!orgId) {
+        setClients([]);
+        setClientsLoading(false);
+        return;
+      }
+      let cancelled = false;
+      setClientsLoading(true);
+      getClientsByOrganization(orgId).then(({ clients: list }) => {
+        if (!cancelled) {
+          setClients(list ?? []);
+          setClientsLoading(false);
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, [orgId]),
+  );
 
   // Only hydrate when an explicit draftId is provided in the route.
   // Opening /create-indent directly should always start with a fresh form.
@@ -1282,7 +1307,7 @@ export default function CreateIndentScreen() {
                               : null,
                             webPointer,
                           ]}
-                          onPress={() => setShowAddClientModal(true)}
+                          onPress={openAddClientFlow}
                           activeOpacity={0.85}
                         >
                           <PlusCircle size={14} color={Theme.iconPrimary} />
@@ -1531,49 +1556,6 @@ export default function CreateIndentScreen() {
                   ) : null}
                 </View>
 
-                {orgId ? (
-                  <Modal
-                    visible={showAddClientModal}
-                    animationType="slide"
-                    presentationStyle="fullScreen"
-                    onRequestClose={() => setShowAddClientModal(false)}
-                  >
-                    <AddClientModal
-                      onClose={() => setShowAddClientModal(false)}
-                      onComplete={async (data) => {
-                        const { error, client } = await createClient(orgId, {
-                          contact_person: data.contactPerson,
-                          phone: data.phone,
-                          organization_name: data.organizationName || undefined,
-                        });
-                        if (error) {
-                          showDialog("Could not add client", error.message);
-                          throw error;
-                        }
-                        if (client) {
-                          const clientName =
-                            client.name ?? client.contact_person ?? "";
-                          if (!clientName.trim()) {
-                            showDialog(
-                              "Invalid Client",
-                              "Added client has no name. Please ensure client has a valid name or contact person.",
-                            );
-                            return;
-                          }
-                          update({
-                            client_id: client.id,
-                            client_name: clientName,
-                          });
-                          setClients((prev) => [...prev, client]);
-                          setClientListExpanded(false);
-                          focusField(clientPriceInputRef);
-                        }
-                      }}
-                      organizationId={orgId}
-                      noOrganizationMessage={null}
-                    />
-                  </Modal>
-                ) : null}
               </View>
 
               {/* 03 Load */}

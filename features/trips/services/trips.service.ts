@@ -669,16 +669,11 @@ export async function getDriverAvailabilityByPhoneGlobal(
         },
       };
     }
-  } else if (opts?.requireAuthoritativeRpc) {
-    return {
-      error: new Error(rpcCheck.error.message),
-      result: {
-        isBusy: true,
-        driverId: null,
-        ongoingTripId: null,
-        ongoingTripLabel: null,
-      },
-    };
+  } else if (opts?.requireAuthoritativeRpc && __DEV__) {
+    console.warn(
+      "[trips] get_driver_phone_active_trip RPC failed; using fallback availability check:",
+      rpcCheck.error.message,
+    );
   }
 
   const normalized = (phone ?? "").trim().replace(/\s+/g, "");
@@ -701,7 +696,11 @@ export async function getDriverAvailabilityByPhoneGlobal(
     .not("phone", "is", null);
   if (driverError) {
     return {
-      error: new Error(driverError.message),
+      error: new Error(
+        opts?.requireAuthoritativeRpc
+          ? `Availability check failed (RPC + fallback): ${rpcCheck.error?.message ?? "RPC error"}; ${driverError.message}`
+          : driverError.message,
+      ),
       result: {
         isBusy: false,
         driverId: null,
@@ -739,7 +738,11 @@ export async function getDriverAvailabilityByPhoneGlobal(
   const { data: tripRows, error: tripError } = await q;
   if (tripError) {
     return {
-      error: new Error(tripError.message),
+      error: new Error(
+        opts?.requireAuthoritativeRpc
+          ? `Availability check failed (RPC + fallback): ${rpcCheck.error?.message ?? "RPC error"}; ${tripError.message}`
+          : tripError.message,
+      ),
       result: {
         isBusy: false,
         driverId: null,
