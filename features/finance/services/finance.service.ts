@@ -363,6 +363,7 @@ async function resolveTripContextForLedgerWrite(params: {
   }
 
   if (!tripById) {
+    // Cross-org / restricted RLS: trip row may be unreadable; map by indent or trip_number in this org when possible.
     const mappedByIndent = await resolveLocalTripByIndent(requestedIndentId);
     if (mappedByIndent.tripId) return mappedByIndent;
     const mappedByNumber = await resolveLocalTripByNumber(requestedTripNumber);
@@ -400,6 +401,7 @@ async function resolveTripContextForLedgerWrite(params: {
 
   const candidateTripNumber =
     requestedTripNumber || String(row.trip_number ?? "").trim();
+
   const mappedByIndent = await resolveLocalTripByIndent(requestedIndentId);
   if (mappedByIndent.tripId) {
     return {
@@ -407,6 +409,7 @@ async function resolveTripContextForLedgerWrite(params: {
       tripNumber: mappedByIndent.tripNumber ?? (candidateTripNumber || null),
     };
   }
+
   if (!candidateTripNumber) {
     return {
       // Cross-org trips can still be the intended anchor for shared-ledger entries.

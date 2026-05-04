@@ -117,27 +117,52 @@ export default function LedgerSyncScreen() {
     /** Suggested payable for Cash OUT amount placeholder. */
     dueAmountOut?: string;
   }>();
-  const params = {
-    entryId: typeof raw.entryId === "string" ? raw.entryId : undefined,
-    partyContext: typeof raw.partyContext === "string" ? raw.partyContext : undefined,
-    partyId: typeof raw.partyId === "string" ? raw.partyId : undefined,
-    partyName: typeof raw.partyName === "string" ? raw.partyName : undefined,
-    entityType: typeof raw.entityType === "string" ? raw.entityType : undefined,
-    entityId: typeof raw.entityId === "string" ? raw.entityId : undefined,
-    tripId: typeof raw.tripId === "string" ? raw.tripId : undefined,
-    tripNumber: typeof raw.tripNumber === "string" ? raw.tripNumber : undefined,
-    defaultType: typeof raw.defaultType === "string" && (raw.defaultType === "in" || raw.defaultType === "out") ? raw.defaultType : undefined,
-    returnTo: typeof raw.returnTo === "string" ? raw.returnTo : undefined,
-    salaryAmount: typeof raw.salaryAmount === "string" ? raw.salaryAmount : undefined,
-    defaultDriverPaymentType:
-      typeof raw.defaultDriverPaymentType === "string" &&
-      ["advance", "settlement", "salary", "bonus", "deduction", "reimbursement", "adjustment"].includes(raw.defaultDriverPaymentType)
-        ? raw.defaultDriverPaymentType
-        : undefined,
-    salaryRequestId: typeof raw.salaryRequestId === "string" ? raw.salaryRequestId : undefined,
-    dueAmountIn: typeof raw.dueAmountIn === "string" ? raw.dueAmountIn : undefined,
-    dueAmountOut: typeof raw.dueAmountOut === "string" ? raw.dueAmountOut : undefined,
-  };
+  /** Stable object when query values unchanged — avoids downstream memo churn from new object identity each render. */
+  const params = useMemo(
+    () => ({
+      entryId: typeof raw.entryId === "string" ? raw.entryId : undefined,
+      partyContext: typeof raw.partyContext === "string" ? raw.partyContext : undefined,
+      partyId: typeof raw.partyId === "string" ? raw.partyId : undefined,
+      partyName: typeof raw.partyName === "string" ? raw.partyName : undefined,
+      entityType: typeof raw.entityType === "string" ? raw.entityType : undefined,
+      entityId: typeof raw.entityId === "string" ? raw.entityId : undefined,
+      tripId: typeof raw.tripId === "string" ? raw.tripId : undefined,
+      tripNumber: typeof raw.tripNumber === "string" ? raw.tripNumber : undefined,
+      defaultType:
+        typeof raw.defaultType === "string" && (raw.defaultType === "in" || raw.defaultType === "out")
+          ? raw.defaultType
+          : undefined,
+      returnTo: typeof raw.returnTo === "string" ? raw.returnTo : undefined,
+      salaryAmount: typeof raw.salaryAmount === "string" ? raw.salaryAmount : undefined,
+      defaultDriverPaymentType:
+        typeof raw.defaultDriverPaymentType === "string" &&
+        ["advance", "settlement", "salary", "bonus", "deduction", "reimbursement", "adjustment"].includes(
+          raw.defaultDriverPaymentType,
+        )
+          ? raw.defaultDriverPaymentType
+          : undefined,
+      salaryRequestId: typeof raw.salaryRequestId === "string" ? raw.salaryRequestId : undefined,
+      dueAmountIn: typeof raw.dueAmountIn === "string" ? raw.dueAmountIn : undefined,
+      dueAmountOut: typeof raw.dueAmountOut === "string" ? raw.dueAmountOut : undefined,
+    }),
+    [
+      raw.entryId,
+      raw.partyContext,
+      raw.partyId,
+      raw.partyName,
+      raw.entityType,
+      raw.entityId,
+      raw.tripId,
+      raw.tripNumber,
+      raw.defaultType,
+      raw.returnTo,
+      raw.salaryAmount,
+      raw.defaultDriverPaymentType,
+      raw.salaryRequestId,
+      raw.dueAmountIn,
+      raw.dueAmountOut,
+    ],
+  );
 
   const parseDueQueryAmount = (s: string | undefined): number | null => {
     if (s == null || s.trim() === "") return null;
@@ -191,9 +216,11 @@ export default function LedgerSyncScreen() {
   const [editingEntry, setEditingEntry] = useState<LedgerRow | null>(null);
   /** When we're in vehicle add-entry flow, keep vehicle id so we always fall back to vehicle detail on save/close. */
   const vehicleIdForFallbackRef = React.useRef<string | null>(null);
-  if (params.entityType === "VEHICLE" && params.entityId) {
-    vehicleIdForFallbackRef.current = params.entityId;
-  }
+  useEffect(() => {
+    if (params.entityType === "VEHICLE" && params.entityId) {
+      vehicleIdForFallbackRef.current = params.entityId;
+    }
+  }, [params.entityType, params.entityId]);
 
   const orgId = currentOrganization?.id ?? null;
   const queryClient = useQueryClient();
@@ -397,22 +424,30 @@ export default function LedgerSyncScreen() {
     uniqueLinkedSupplierIdByOrgId,
   ]);
 
-  const clientPartyOptions: PartyOption[] = clients.map((c) => ({
-    id: c.id,
-    name: c.name ?? c.contact_person ?? t("client"),
-    avatar_url: c.avatar_url ?? null,
-    avatar_seed: c.avatar_seed ?? null,
-    linked_organization_id: c.linked_organization_id ?? null,
-    is_integrated: c.is_integrated === true,
-  }));
-  const supplierPartyOptions: PartyOption[] = suppliers.map((s) => ({
-    id: s.id,
-    name: getSupplierDisplayName(s, t("supplier")),
-    avatar_url: s.avatar_url ?? null,
-    avatar_seed: s.avatar_seed ?? null,
-    linked_organization_id: s.linked_organization_id ?? null,
-    supplier_type: s.supplier_type ?? null,
-  }));
+  const clientPartyOptions: PartyOption[] = useMemo(
+    () =>
+      clients.map((c) => ({
+        id: c.id,
+        name: c.name ?? c.contact_person ?? t("client"),
+        avatar_url: c.avatar_url ?? null,
+        avatar_seed: c.avatar_seed ?? null,
+        linked_organization_id: c.linked_organization_id ?? null,
+        is_integrated: c.is_integrated === true,
+      })),
+    [clients, t],
+  );
+  const supplierPartyOptions: PartyOption[] = useMemo(
+    () =>
+      suppliers.map((s) => ({
+        id: s.id,
+        name: getSupplierDisplayName(s, t("supplier")),
+        avatar_url: s.avatar_url ?? null,
+        avatar_seed: s.avatar_seed ?? null,
+        linked_organization_id: s.linked_organization_id ?? null,
+        supplier_type: s.supplier_type ?? null,
+      })),
+    [suppliers, t],
+  );
 
   /** For VEHICLE entity: trip options for AddVehicleEntryModal (with driver_id for auto-fill). */
   const vehicleTripOptions: VehicleEntryTripOption[] = useMemo(
@@ -625,6 +660,29 @@ export default function LedgerSyncScreen() {
           if (fromSupplierName) {
             resolvedPartyName = fromSupplierName;
           }
+        }
+      }
+
+      // For integrated/cross-org supplier payouts, ensure contact_id is mapped to
+      // the local supplier id in this org, even when a foreign supplier id is present.
+      if (data.type === "out" && resolvedContactType === "supplier") {
+        const isCrossOrgTripForOut =
+          !!linkedTrip?.organization_id &&
+          !!orgId &&
+          linkedTrip.organization_id !== orgId;
+        const mappedLocalSupplierIdFromTripOrg =
+          isCrossOrgTripForOut && linkedTrip?.organization_id
+            ? uniqueLinkedSupplierIdByOrgId.get(linkedTrip.organization_id) ?? null
+            : null;
+        const currentResolvedSupplierExistsLocally =
+          !!resolvedContactId &&
+          suppliers.some((s) => s.id === resolvedContactId);
+        if (
+          mappedLocalSupplierIdFromTripOrg &&
+          !currentResolvedSupplierExistsLocally
+        ) {
+          resolvedContactId = mappedLocalSupplierIdFromTripOrg;
+          resolvedContactType = "supplier";
         }
       }
 
@@ -944,6 +1002,35 @@ export default function LedgerSyncScreen() {
     params.partyName,
   ]);
 
+  /** Do not infer supplier as default party when capturing customer cash-in (`partyContext=customers`). */
+  const defaultPartyIdForModal = useMemo(() => {
+    const pid = (params.partyId ?? "").trim();
+    if (pid) return params.partyId;
+    const ctx = params.partyContext;
+    if (ctx === "suppliers") {
+      return inferredSupplierFromTrip.id ?? undefined;
+    }
+    if (!ctx || ctx === "all") {
+      return inferredSupplierFromTrip.id ?? undefined;
+    }
+    return undefined;
+  }, [params.partyId, params.partyContext, inferredSupplierFromTrip.id]);
+
+  /**
+   * Lock trip + hide party row only when the counterparty is already known (entity or party id).
+   * Otherwise (e.g. capture payment with no `client_id`) user must pick the customer while the trip stays pre-selected.
+   */
+  const tripLedgerLocked = useMemo(
+    () =>
+      Boolean(params.tripId) &&
+      (Boolean((params.partyId ?? "").trim()) ||
+        (Boolean((params.entityId ?? "").trim()) &&
+          ["CLIENT", "SUPPLIER", "DRIVER"].includes(
+            String(params.entityType ?? "").toUpperCase(),
+          ))),
+    [params.tripId, params.partyId, params.entityId, params.entityType],
+  );
+
   if (loading || !orgId) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -1022,12 +1109,16 @@ export default function LedgerSyncScreen() {
         linkedSupplierIdByOrgId={uniqueLinkedSupplierIdByOrgId}
         viewerOrgId={orgId}
         partyContext={partyContext}
-        defaultPartyId={params.partyId ?? inferredSupplierFromTrip.id ?? undefined}
+        defaultPartyId={defaultPartyIdForModal}
         defaultPartyName={resolvedModalPartyName ?? undefined}
         lockedPartyId={
-          params.entityType === "CLIENT" || params.entityType === "SUPPLIER" || params.entityType === "DRIVER"
-            ? (params.entityId ?? params.partyId ?? inferredSupplierFromTrip.id ?? undefined)
-            : undefined
+          params.entityType === "CLIENT"
+            ? (params.entityId ?? params.partyId ?? undefined)
+            : params.entityType === "SUPPLIER"
+              ? (params.entityId ?? params.partyId ?? inferredSupplierFromTrip.id ?? undefined)
+              : params.entityType === "DRIVER"
+                ? (params.entityId ?? params.partyId ?? undefined)
+                : undefined
         }
         lockedPartyName={
           params.entityType === "CLIENT" || params.entityType === "SUPPLIER" || params.entityType === "DRIVER"
@@ -1058,7 +1149,7 @@ export default function LedgerSyncScreen() {
             | undefined
         }
         defaultTripId={params.tripId ?? undefined}
-        tripLocked={params.tripId != null}
+        tripLocked={tripLedgerLocked}
         lockedTripDisplay={params.tripNumber ?? undefined}
         requireTripForSupplierOut
         dueAmountIn={effectiveDueAmountIn}

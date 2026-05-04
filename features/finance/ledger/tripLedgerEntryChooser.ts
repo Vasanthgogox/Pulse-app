@@ -6,7 +6,7 @@
  * **asset** trips (own fleet) → client + vehicle + driver only (never supplier + driver together).
  */
 import { resolveTripLedgerTripType } from "@/features/finance/utils/tripLedgerPayoutMode.util";
-import { Alert } from "react-native";
+import { Alert, Platform } from "react-native";
 import type { Router } from "expo-router";
 import {
   getTripDisplayNumber,
@@ -27,6 +27,15 @@ export interface TripLedgerChooserLabels {
   missingSupplier: string;
   missingVehicle: string;
   missingDriver: string;
+}
+
+function alertUser(title: string, message?: string): void {
+  if (Platform.OS === "web") {
+    window.alert(message ? `${title}\n\n${message}` : title);
+    return;
+  }
+  if (message != null) Alert.alert(title, message);
+  else Alert.alert(title);
 }
 
 const DEFAULT_LABELS: TripLedgerChooserLabels = {
@@ -93,14 +102,14 @@ export function pushTripLedgerQuickEntry(
 
   const mode = resolveTripLedgerTripType(trip);
   if (tag === "supplier" && mode !== "market") {
-    Alert.alert(
+    alertUser(
       L.addTransaction,
       "Supplier payout applies to marketplace (partner) trips only. This trip is asset / own fleet.",
     );
     return;
   }
   if ((tag === "driver" || tag === "vehicle") && mode !== "asset") {
-    Alert.alert(
+    alertUser(
       L.addTransaction,
       "Driver and vehicle payouts apply to asset (own fleet) trips only. This trip uses a supplier partner.",
     );
@@ -112,22 +121,34 @@ export function pushTripLedgerQuickEntry(
 
   if (tag === "client") {
     const cid = (clientIdFromContext ?? trip.client_id ?? "").trim();
-    if (!cid) {
-      Alert.alert(L.addTransaction, L.missingClient);
+    const partyNameHint =
+      (clientNameFromContext ?? displayClientName ?? trip.client_name ?? "").trim() || "Client";
+    if (cid) {
+      pushLedgerSync(
+        router,
+        {
+          ...base,
+          defaultType: "in",
+          partyContext: "customers",
+          partyId: cid,
+          partyName: partyNameHint,
+          entityType: "CLIENT",
+          entityId: cid,
+        },
+        ledgerSyncExtraParams,
+      );
       return;
     }
-    const partyName =
-      (clientNameFromContext ?? displayClientName ?? trip.client_name ?? "").trim() || "Client";
+    // No linked client on the trip: open ledger-sync with trip preset so user can pick the customer (native Alert is easy to miss on web).
     pushLedgerSync(
       router,
       {
         ...base,
         defaultType: "in",
         partyContext: "customers",
-        partyId: cid,
-        partyName,
-        entityType: "CLIENT",
-        entityId: cid,
+        ...(partyNameHint && partyNameHint !== "Client"
+          ? { partyName: partyNameHint }
+          : {}),
       },
       ledgerSyncExtraParams,
     );
@@ -137,7 +158,7 @@ export function pushTripLedgerQuickEntry(
   if (tag === "supplier") {
     const sid = (trip.supplier_id ?? "").trim();
     if (!sid) {
-      Alert.alert(L.addTransaction, L.missingSupplier);
+      alertUser(L.addTransaction, L.missingSupplier);
       return;
     }
     const partyName = (partnerName ?? trip.supplier_name ?? "").trim() || "—";
@@ -160,7 +181,7 @@ export function pushTripLedgerQuickEntry(
   if (tag === "vehicle") {
     const vid = (trip.vehicle_id ?? "").trim();
     if (!vid) {
-      Alert.alert(L.addTransaction, L.missingVehicle);
+      alertUser(L.addTransaction, L.missingVehicle);
       return;
     }
     pushLedgerSync(
@@ -178,7 +199,7 @@ export function pushTripLedgerQuickEntry(
 
   const did = (trip.driver_id ?? "").trim();
   if (!did) {
-    Alert.alert(L.addTransaction, L.missingDriver);
+    alertUser(L.addTransaction, L.missingDriver);
     return;
   }
   const partyName = (driverDisplayName ?? trip.driver_display_name ?? "").trim() || "Driver";
