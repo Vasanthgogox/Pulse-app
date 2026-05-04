@@ -1903,20 +1903,26 @@ export function TripRatingsBlock({
                   let error: { message: string } | null = null;
                   let usedSchemaFallback = false;
 
-                  const ratingOrgId =
+                  // Client rows / name→id resolution live under the trip owner's org.
+                  const tripOwnerOrgForClientResolution =
                     trip.organization_id?.trim() ?? effectiveOrganizationId ?? '';
+                  // Ratings RLS: INSERT must use an org the current user belongs to (see ratings policies).
+                  const ratingsRowOrganizationId = effectiveOrganizationId;
                   let ratedClientId = trip.client_id?.trim() ?? null;
-                  if (!ratedClientId && ratingOrgId) {
-                    ratedClientId = await resolveRatedClientIdForTrip(trip, ratingOrgId);
+                  if (!ratedClientId && tripOwnerOrgForClientResolution) {
+                    ratedClientId = await resolveRatedClientIdForTrip(
+                      trip,
+                      tripOwnerOrgForClientResolution,
+                    );
                   }
 
-                  if (ratingOrgId && ratedClientId) {
+                  if (ratingsRowOrganizationId && ratedClientId) {
                     const { rater_type, rater_id } = resolveClientRatingRater(
                       trip,
                       effectiveOrganizationId,
                       isClientViewer,
                     );
-                    const submitRes = await createRating(ratingOrgId, {
+                    const submitRes = await createRating(ratingsRowOrganizationId, {
                       trip_id: trip.id,
                       rater_type,
                       rater_id,

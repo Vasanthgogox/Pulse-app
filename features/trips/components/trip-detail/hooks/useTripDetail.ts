@@ -1623,8 +1623,9 @@ export function useTripDetail({
       reason: string;
     }) => {
       if (!trip?.id) return;
+      // Row must pass trip org check + RLS; prefer trip owner over UI org context.
       const orgId =
-        currentOrganization?.id ?? trip.organization_id ?? null;
+        trip.organization_id?.trim() || currentOrganization?.id || null;
       const missionRaw =
         trip.display_trip_id != null &&
         String(trip.display_trip_id).trim() !== ""

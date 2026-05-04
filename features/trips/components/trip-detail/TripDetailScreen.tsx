@@ -2783,7 +2783,7 @@ export default function TripDetailScreen({
       if (!trip?.id) return;
       const tripId = trip.id;
       const orgId =
-        currentOrganization?.id ?? trip.organization_id ?? null;
+        trip.organization_id?.trim() || currentOrganization?.id || null;
       const missionRaw =
         trip.display_trip_id != null &&
         String(trip.display_trip_id).trim() !== ""
