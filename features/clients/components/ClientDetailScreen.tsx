@@ -17,29 +17,22 @@ import {
     getTransactionsByOrganization,
     LedgerReportModal,
     SharedLedgerContent,
-    type LedgerRow
+    type LedgerRow,
 } from "@/features/finance";
 import { LedgerTransactionListView } from "@/features/finance/components/LedgerTransactionListView";
 import { TreasuryDetailLayout } from "@/features/finance/components/TreasuryDetailLayout";
 import { ledgerDayMatchesPeriod } from "@/features/finance/lib/filterLedgerByPeriod";
+import {
+    getTripSubcontracts,
+    type TripSubcontractRow,
+} from "@/features/finance/services/tripSubcontracts.service";
 import type { FinancePeriodFilter } from "@/features/finance/types";
 import { allocateAmountsToLargestDueTrips } from "@/features/finance/utils/allocateToLargestDue";
 import { averageScore, getRatingsForClient } from "@/features/ratings";
-import { subscribeSharedPostgresChanges } from "@/lib/realtimeRegistry";
-import { supabase } from "@/lib/supabase";
 import {
     getSuppliersByOrganization,
     type SupplierRow,
 } from "@/features/suppliers/services/suppliers.service";
-import {
-    getWarehousesByClient,
-    type ClientWarehouse,
-} from "../services/clientWarehouses.service";
-import {
-    getContractsByClient,
-    type ClientContract,
-} from "../services/clientContracts.service";
-import { ClientProfileModal } from "./ClientProfileModal";
 import { adjustedRevenue } from "@/features/trips/services/tripAdjustments";
 import {
     getTripDisplayNumber,
@@ -59,6 +52,7 @@ import {
 import { tripDayIso } from "@/lib/dateRangePresets";
 import { formatINR, formatLedgerDate } from "@/lib/format";
 import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
+import { subscribeSharedPostgresChanges } from "@/lib/realtimeRegistry";
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
@@ -83,6 +77,10 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
+    getContractsByClient,
+    type ClientContract,
+} from "../services/clientContracts.service";
+import {
     getClientDetails,
     getClientsByOrganization,
     getLinkedOrgProfile,
@@ -90,6 +88,10 @@ import {
     type ClientRow,
     type UpdateClientData,
 } from "../services/clients.service";
+import {
+    getWarehousesByClient,
+    type ClientWarehouse,
+} from "../services/clientWarehouses.service";
 
 /** UUID-shaped strings are not valid human supplier names (avoid showing raw ids). */
 function isUuidLikeString(value: string | null | undefined): boolean {
@@ -263,6 +265,9 @@ export default function ClientDetailScreen({
   );
   /** Supplier rows for resolving aggregate `supplier_id` → display name in trip table. */
   const [suppliers, setSuppliers] = useState<SupplierRow[]>([]);
+  const [tripSubcontractByTripId, setTripSubcontractByTripId] = useState<
+    Record<string, TripSubcontractRow>
+  >({});
   const [drivers, setDrivers] = useState<DriverRow[]>([]);
   /** Load-based partner org (trip.organization_id) → name from `get_connection_partner_display`. */
   const [partnerOrgNamesByOrgId, setPartnerOrgNamesByOrgId] = useState<
@@ -318,8 +323,12 @@ export default function ClientDetailScreen({
   const [isInApp, setIsInApp] = useState(false);
   const [sendingInvitation, setSendingInvitation] = useState(false);
   const [clientRatingAvg, setClientRatingAvg] = useState<number | null>(null);
-  const [profileWarehouses, setProfileWarehouses] = useState<ClientWarehouse[]>([]);
-  const [profileContracts, setProfileContracts] = useState<ClientContract[]>([]);
+  const [profileWarehouses, setProfileWarehouses] = useState<ClientWarehouse[]>(
+    [],
+  );
+  const [profileContracts, setProfileContracts] = useState<ClientContract[]>(
+    [],
+  );
   const initialLoadDoneRef = useRef(false);
   const heroDecorProgress = useRef(new Animated.Value(0)).current;
 
@@ -345,7 +354,7 @@ export default function ClientDetailScreen({
         getRatingsForClient(clientId).then(({ ratings: rows }) => {
           setClientRatingAvg(averageScore(rows));
         });
-      }
+      },
     );
   }, [clientId]);
 
@@ -448,8 +457,12 @@ export default function ClientDetailScreen({
           } else {
             setClient(clientRes.client ?? null);
           }
-          setProfileWarehouses(warehousesRes.error ? [] : (warehousesRes.warehouses ?? []));
-          setProfileContracts(contractsRes.error ? [] : (contractsRes.contracts ?? []));
+          setProfileWarehouses(
+            warehousesRes.error ? [] : (warehousesRes.warehouses ?? []),
+          );
+          setProfileContracts(
+            contractsRes.error ? [] : (contractsRes.contracts ?? []),
+          );
           const ownerTrips = tripsRes.error ? [] : (tripsRes.trips ?? []);
           const supplierTrips = supplierTripsRes.error
             ? []
@@ -653,13 +666,116 @@ export default function ClientDetailScreen({
       ) {
         return partnerOrgNamesByOrgId[oid];
       }
+      if (
+        client?.is_integrated === true &&
+        client.linked_organization_id &&
+        isLoadBasedTrip(trip) &&
+        trip.organization_id === client.linked_organization_id
+      ) {
+        return (
+          partnerOrgNamesByOrgId[client.linked_organization_id] ||
+          (client.name ?? "").trim() ||
+          (client.contact_person ?? "").trim() ||
+          "Aggregate Supplier"
+        );
+      }
       return "Aggregate Supplier";
     },
     [
+      client?.contact_person,
+      client?.is_integrated,
+      client?.linked_organization_id,
+      client?.name,
       supplierDisplayById,
       supplierPartyNameByTripId,
       partnerOrgNamesByOrgId,
       currentOrganization?.id,
+    ],
+  );
+
+  useEffect(() => {
+    if (!currentOrganization?.id) {
+      setTripSubcontractByTripId({});
+      return;
+    }
+    const tripIds = trips.map((t) => t.id).filter(Boolean);
+    if (tripIds.length === 0) {
+      setTripSubcontractByTripId({});
+      return;
+    }
+    let cancelled = false;
+    void getTripSubcontracts({
+      viewerOrgId: currentOrganization.id,
+      tripIds,
+    }).then((res) => {
+      if (cancelled) return;
+      if (res.error) {
+        setTripSubcontractByTripId({});
+        return;
+      }
+      const next: Record<string, TripSubcontractRow> = {};
+      for (const row of res.rows ?? []) {
+        if (!row?.trip_id) continue;
+        next[String(row.trip_id)] = row;
+      }
+      setTripSubcontractByTripId(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentOrganization?.id, trips]);
+
+  const getTripCostForClientView = useCallback(
+    (trip: TripRow, expenseCaptured: number): number => {
+      const subcontract = tripSubcontractByTripId[trip.id];
+      if (subcontract && Number(subcontract.rate ?? 0) > 0) {
+        return Number(subcontract.rate ?? 0);
+      }
+      const supplierRate = Number(trip.supplier_rate ?? 0);
+      return supplierRate > 0 ? supplierRate : expenseCaptured;
+    },
+    [tripSubcontractByTripId],
+  );
+
+  const resolveSupplierDisplayForClientTrip = useCallback(
+    (
+      trip: TripRow,
+      billToClientName: string,
+    ): { title: string; sameAsClient: boolean } => {
+      const subcontract = tripSubcontractByTripId[trip.id];
+      if (subcontract?.supplier_id) {
+        const sid = String(subcontract.supplier_id).trim().toLowerCase();
+        const subcontractSupplierName =
+          (supplierDisplayById.get(sid) ?? "").trim() ||
+          (
+            supplierById.get(sid)?.name ??
+            supplierById.get(sid)?.company_name ??
+            supplierById.get(sid)?.contact_person ??
+            ""
+          ).trim();
+        if (subcontractSupplierName) {
+          // For integrated aggregate trips, prefer explicit sub-supplier identity.
+          return { title: subcontractSupplierName, sameAsClient: false };
+        }
+      }
+      const hasSupplierRef =
+        !!trip.supplier_id ||
+        (!!trip.supplier_name && !isUuidLikeString(trip.supplier_name));
+      const isAggregateTrip = hasSupplierRef || isLoadBasedTrip(trip);
+      const supplierName = isAggregateTrip
+        ? aggregateSupplierLabel(trip)
+        : "Asset / Own Vehicle";
+      return clientDetailSupplierColumnTitle(
+        trip,
+        supplierName,
+        billToClientName,
+      );
+    },
+    [
+      aggregateSupplierLabel,
+      supplierById,
+      supplierDisplayById,
+      tripSubcontractByTripId,
     ],
   );
 
@@ -1161,20 +1277,15 @@ export default function ClientDetailScreen({
         lastTxnDate: null,
       };
       const expenseCaptured = tripExpenseById[key] ?? 0;
-      const supplierRate = Number(row.trip.supplier_rate ?? 0);
       const hasSupplierRef =
         !!row.trip.supplier_id ||
         (!!row.trip.supplier_name && !isUuidLikeString(row.trip.supplier_name));
       const isAggregateTrip = hasSupplierRef || isLoadBasedTrip(row.trip);
-      const supplierName = isAggregateTrip
-        ? aggregateSupplierLabel(row.trip)
-        : "Asset / Own Vehicle";
-      const { title: supplierForReport } = clientDetailSupplierColumnTitle(
+      const { title: supplierForReport } = resolveSupplierDisplayForClientTrip(
         row.trip,
-        supplierName,
         billTo,
       );
-      const cost = supplierRate > 0 ? supplierRate : expenseCaptured;
+      const cost = getTripCostForClientView(row.trip, expenseCaptured);
       const pnl = row.sales - cost;
       const margin =
         row.sales > 0 ? `${((pnl / row.sales) * 100).toFixed(1)}%` : "0.0%";
@@ -1216,9 +1327,11 @@ export default function ClientDetailScreen({
     client?.name,
     detailSubTab,
     missionRows,
+    resolveSupplierDisplayForClientTrip,
     t,
     tripTransactionMetaById,
     tripExpenseById,
+    getTripCostForClientView,
   ]);
 
   if (loading) {
@@ -1244,11 +1357,16 @@ export default function ClientDetailScreen({
   const paid = sales - totalPendingConsolidated;
   const due = totalPendingConsolidated;
   const tripsHandled = missionRows.length;
-  const isIntegrated = Boolean(client.is_integrated || client.linked_organization_id);
+  const isIntegrated = Boolean(
+    client.is_integrated || client.linked_organization_id,
+  );
   const isInAppNotIntegrated = !isIntegrated && isInApp;
   const isNotInApp = !isIntegrated && !isInApp;
   const clientRating = clientRatingAvg ?? null;
-  const ratingFilledStars = clientRating != null ? Math.max(0, Math.min(5, Math.round(clientRating))) : 0;
+  const ratingFilledStars =
+    clientRating != null
+      ? Math.max(0, Math.min(5, Math.round(clientRating)))
+      : 0;
   const statusTitle = isIntegrated
     ? "Integrated"
     : isInAppNotIntegrated
@@ -1453,7 +1571,10 @@ export default function ClientDetailScreen({
               <View style={ecc.dossierHeader}>
                 <View style={styles.profilePreviewTopMetaRow}>
                   <View style={styles.profilePreviewTopAction}>
-                    <Text style={styles.profilePreviewTopActionText} numberOfLines={1}>
+                    <Text
+                      style={styles.profilePreviewTopActionText}
+                      numberOfLines={1}
+                    >
                       {tripsHandled}
                     </Text>
                   </View>
@@ -1464,12 +1585,19 @@ export default function ClientDetailScreen({
                           key={`client-star-header-${idx}`}
                           name={idx < ratingFilledStars ? "star" : "star-o"}
                           size={13}
-                          color={idx < ratingFilledStars ? "#fbbf24" : Theme.borderMedium}
+                          color={
+                            idx < ratingFilledStars
+                              ? "#fbbf24"
+                              : Theme.borderMedium
+                          }
                         />
                       ))}
                     </View>
                     <View style={styles.profilePreviewRatingBadge}>
-                      <Text style={styles.profilePreviewRatingBadgeText} numberOfLines={1}>
+                      <Text
+                        style={styles.profilePreviewRatingBadgeText}
+                        numberOfLines={1}
+                      >
                         {clientRating != null ? clientRating.toFixed(1) : "—"}
                       </Text>
                     </View>
@@ -1499,31 +1627,47 @@ export default function ClientDetailScreen({
               >
                 <View style={ecc.dossierAvatarWrap}>
                   {profileAvatarUri ? (
-                    <Image source={{ uri: profileAvatarUri }} style={ecc.dossierAvatarImage} />
+                    <Image
+                      source={{ uri: profileAvatarUri }}
+                      style={ecc.dossierAvatarImage}
+                    />
                   ) : (
-                    <FontAwesome name="building" size={24} color={Theme.textOnPrimary} />
+                    <FontAwesome
+                      name="building"
+                      size={24}
+                      color={Theme.textOnPrimary}
+                    />
                   )}
                   <View style={ecc.dossierAvatarBadge}>
-                    <FontAwesome name="bolt" size={10} color={Theme.textOnPrimary} />
+                    <FontAwesome
+                      name="bolt"
+                      size={10}
+                      color={Theme.textOnPrimary}
+                    />
                   </View>
                 </View>
                 <Text style={ecc.dossierName} numberOfLines={1}>
                   {clientName}
                 </Text>
                 <Text style={ecc.dossierSub} numberOfLines={1}>
-                  {(client.contact_person ?? "No contact").trim() || "No contact"}
+                  {(client.contact_person ?? "No contact").trim() ||
+                    "No contact"}
                 </Text>
                 <View style={ecc.dossierBadgeRow}>
                   <View style={[ecc.dossierBadge, ecc.dossierBadgeBlue]}>
                     <Text style={ecc.dossierBadgeText}>CLIENT</Text>
                   </View>
                   <View style={[ecc.dossierBadge, ecc.dossierBadgeDark]}>
-                    <Text style={[ecc.dossierBadgeText, ecc.dossierBadgeTextDark]}>
+                    <Text
+                      style={[ecc.dossierBadgeText, ecc.dossierBadgeTextDark]}
+                    >
                       {statusTitle}
                     </Text>
                   </View>
                   <View style={[ecc.dossierBadge, ecc.dossierBadgeMuted]}>
-                    <Text style={[ecc.dossierBadgeText, ecc.dossierBadgeTextMuted]}>
+                    <Text
+                      style={[ecc.dossierBadgeText, ecc.dossierBadgeTextMuted]}
+                    >
                       {isIntegrated ? "SECURED" : "LOCAL"}
                     </Text>
                   </View>
@@ -1532,7 +1676,11 @@ export default function ClientDetailScreen({
               <View style={ecc.dossierContactStack}>
                 <View style={ecc.dossierContactRow}>
                   <View style={ecc.dossierContactIcon}>
-                    <FontAwesome name="envelope-o" size={13} color={Theme.textMuted} />
+                    <FontAwesome
+                      name="envelope-o"
+                      size={13}
+                      color={Theme.textMuted}
+                    />
                   </View>
                   <View style={ecc.dossierContactText}>
                     <Text style={ecc.dossierContactLabel}>Encrypted Mail</Text>
@@ -1540,11 +1688,19 @@ export default function ClientDetailScreen({
                       {(client.email ?? "").trim() || "Not available"}
                     </Text>
                   </View>
-                  <FontAwesome name="lock" size={10} color={Theme.textSection} />
+                  <FontAwesome
+                    name="lock"
+                    size={10}
+                    color={Theme.textSection}
+                  />
                 </View>
                 <View style={ecc.dossierContactRow}>
                   <View style={ecc.dossierContactIcon}>
-                    <FontAwesome name="phone" size={13} color={Theme.textMuted} />
+                    <FontAwesome
+                      name="phone"
+                      size={13}
+                      color={Theme.textMuted}
+                    />
                   </View>
                   <View style={ecc.dossierContactText}>
                     <Text style={ecc.dossierContactLabel}>Secured Line</Text>
@@ -1558,7 +1714,7 @@ export default function ClientDetailScreen({
                 style={[
                   styles.profilePreviewActionBtn,
                   ecc.actionBtnPrimary,
-                  (!canSendRequest && !canInviteToApp) && ecc.actionBtnDisabled,
+                  !canSendRequest && !canInviteToApp && ecc.actionBtnDisabled,
                 ]}
                 onPress={() => {
                   if (canSendRequest) {
@@ -1568,7 +1724,9 @@ export default function ClientDetailScreen({
                   }
                 }}
                 activeOpacity={0.86}
-                disabled={sendingInvitation || (!canSendRequest && !canInviteToApp)}
+                disabled={
+                  sendingInvitation || (!canSendRequest && !canInviteToApp)
+                }
               >
                 <FontAwesome
                   name={canSendRequest ? "send" : "envelope-o"}
@@ -1576,7 +1734,9 @@ export default function ClientDetailScreen({
                   color={Theme.textOnPrimary}
                 />
                 <Text style={styles.profilePreviewActionText}>
-                  {sendingInvitation && canSendRequest ? "Sending..." : profileActionLabel}
+                  {sendingInvitation && canSendRequest
+                    ? "Sending..."
+                    : profileActionLabel}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1787,34 +1947,30 @@ export default function ClientDetailScreen({
                       count: 0,
                       lastTxnDate: null,
                     };
-                    const supplierNameRaw =
-                      row.trip.supplier_name?.trim() ?? "";
-                    const hasSupplierRef =
-                      !!row.trip.supplier_id ||
-                      (!!supplierNameRaw && !isUuidLikeString(supplierNameRaw));
-                    const isAggregateTrip =
-                      hasSupplierRef || isLoadBasedTrip(row.trip);
-                    const supplierName = isAggregateTrip
-                      ? aggregateSupplierLabel(row.trip)
-                      : "Asset / Own Vehicle";
                     const {
                       title: supplierColumnTitle,
                       sameAsClient: supplierColumnSameAsClient,
-                    } = clientDetailSupplierColumnTitle(
+                    } = resolveSupplierDisplayForClientTrip(
                       row.trip,
-                      supplierName,
                       clientName,
                     );
                     const expenseCaptured =
                       tripExpenseById[
                         String(row.trip.id).trim().toLowerCase()
                       ] ?? 0;
-                    const supplierRate = Number(row.trip.supplier_rate ?? 0);
-                    const tripCost =
-                      supplierRate > 0 ? supplierRate : expenseCaptured;
+                    const tripCost = getTripCostForClientView(
+                      row.trip,
+                      expenseCaptured,
+                    );
                     const tripPnl = row.sales - tripCost;
                     const marginPct =
                       row.sales > 0 ? (tripPnl / row.sales) * 100 : 0;
+                    const hasSupplierRef =
+                      !!row.trip.supplier_id ||
+                      (!!row.trip.supplier_name &&
+                        !isUuidLikeString(row.trip.supplier_name));
+                    const isAggregateTrip =
+                      hasSupplierRef || isLoadBasedTrip(row.trip);
                     const tripDateIso =
                       row.trip.pickup_date ?? row.trip.created_at;
                     const supplierAv = supplierPartyAvatarProps(
@@ -1945,7 +2101,7 @@ export default function ClientDetailScreen({
                                         : "Aggregate"}{" "}
                                     · Margin {marginPct.toFixed(1)}%
                                   </Text>
-                                ) : supplierRate <= 0 && expenseCaptured > 0 ? (
+                                ) : tripCost <= 0 && expenseCaptured > 0 ? (
                                   <Text
                                     style={styles.tdPartyHintWebDesktop}
                                     numberOfLines={1}
@@ -2198,8 +2354,9 @@ export default function ClientDetailScreen({
               externalDownloadRequest={sharedLedgerDownloadSignal}
               onRefresh={load}
               initialNotificationAction={
-                (notificationAction as import("@/features/finance/components/SharedLedgerContent").SharedLedgerNotificationAction | undefined) ??
-                null
+                (notificationAction as
+                  | import("@/features/finance/components/SharedLedgerContent").SharedLedgerNotificationAction
+                  | undefined) ?? null
               }
               initialNotificationTripId={notificationTripId ?? null}
               onRequestConnection={() => {

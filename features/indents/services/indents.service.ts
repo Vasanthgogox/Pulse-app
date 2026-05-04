@@ -301,7 +301,32 @@ export async function getVisibleIndentById(
 
   const direct = await getIndentById(raw);
   if (direct.error) return direct;
-  if (direct.indent) return direct;
+  if (direct.indent) {
+    const row = direct.indent;
+    if (
+      orgId &&
+      row.organization_id &&
+      row.organization_id !== orgId &&
+      !(row.creator_organization_name ?? "").trim()
+    ) {
+      const { data: ownerOrg, error: ownerOrgErr } = await supabase()
+        .from("organizations")
+        .select("name")
+        .eq("id", row.organization_id)
+        .maybeSingle();
+      if (ownerOrgErr) {
+        return { error: new Error(ownerOrgErr.message), indent: null };
+      }
+      return {
+        error: null,
+        indent: {
+          ...row,
+          creator_organization_name: (ownerOrg?.name ?? null) as string | null,
+        },
+      };
+    }
+    return direct;
+  }
 
   if (!orgId) return { error: null, indent: null };
 
