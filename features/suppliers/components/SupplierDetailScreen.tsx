@@ -859,7 +859,7 @@ export default function SupplierDetailScreen({
           trip_number: row.missionId,
           party_name: supplierName,
           description:
-            `${row.route} • Contract ${formatINR(row.sales)}`.trim() || "—",
+            `${row.route} • Cost ${formatINR(row.sales)}`.trim() || "—",
           amount_in: row.paid,
           amount_out: row.due,
           transaction_date: row.trip.pickup_date ?? row.trip.created_at ?? "",
@@ -908,8 +908,8 @@ export default function SupplierDetailScreen({
         { key: "trip", label: "Trip" },
         { key: "route", label: "Route" },
         { key: "client", label: "Client" },
-        { key: "contract", label: "Contract", align: "right" as const },
-        { key: "clientRevenue", label: "Client Rev", align: "right" as const },
+        { key: "contract", label: "Cost", align: "right" as const },
+        { key: "clientRevenue", label: "Sales", align: "right" as const },
         { key: "pnl", label: "P&L", align: "right" as const },
         { key: "margin", label: "Margin %", align: "right" as const },
         { key: "paid", label: "Paid", align: "right" as const },
@@ -1125,7 +1125,7 @@ export default function SupplierDetailScreen({
             >
               <View style={styles.scorecardLeft}>
                 <Text style={styles.scorecardLabel}>FINANCIAL OVERVIEW</Text>
-                <Text style={styles.scorecardSalesLabel}>CONTRACT VALUE</Text>
+                <Text style={styles.scorecardSalesLabel}>TOTAL COST</Text>
                 <Text
                   style={[
                     styles.scorecardAmount,
@@ -1400,7 +1400,7 @@ export default function SupplierDetailScreen({
                   <Text
                     style={[styles.th, styles.thRight, styles.thWebDesktop]}
                   >
-                    Client Rev
+                    Sales
                   </Text>
                 </View>
               ) : null}
@@ -1417,7 +1417,7 @@ export default function SupplierDetailScreen({
                     isWebDesktop && styles.thWebDesktop,
                   ]}
                 >
-                  Contract
+                  Cost
                 </Text>
               </View>
               {isWebDesktop ? (
