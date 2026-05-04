@@ -30,6 +30,7 @@ import type { FinancePeriodFilter } from "@/features/finance/types";
 import { allocateAmountsToLargestDueTrips } from "@/features/finance/utils/allocateToLargestDue";
 import { EditSupplierModal } from "@/features/suppliers/components/EditSupplierModal";
 import {
+  getShipperDisplayNamesForSupplierTrips,
   getTripDisplayNumber,
   getTripsByOrganization,
   getTripsWhereOrgIsClient,
@@ -184,6 +185,12 @@ export default function SupplierDetailScreen({
   const [sendingInvitation, setSendingInvitation] = useState(false);
   const [orgDrivers, setOrgDrivers] = useState<DriverRow[]>([]);
   const [clients, setClients] = useState<ClientRow[]>([]);
+  const [shipperNameByTripId, setShipperNameByTripId] = useState<
+    Record<string, string>
+  >({});
+  const [aggregateTripSalesById, setAggregateTripSalesById] = useState<
+    Record<string, number>
+  >({});
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const isWebDesktop = Platform.OS === "web" && windowWidth >= 640;
@@ -322,6 +329,7 @@ export default function SupplierDetailScreen({
     const tripsPromise = getTripsByOrganization(orgId);
     const txPromise = getTransactionsByOrganization(orgId);
     const suppliersPromise = getSuppliersByOrganization(orgId);
+    const shipperNamesPromise = getShipperDisplayNamesForSupplierTrips(orgId);
     const asClientPromise = supplierPromise.then((res) => {
       const sup = res.supplier;
       const linkedOrgId = sup?.linked_organization_id ?? null;
@@ -357,6 +365,7 @@ export default function SupplierDetailScreen({
       subcontractsPromise,
       driversPromise,
       clientsPromise,
+      shipperNamesPromise,
     ])
       .then(
         ([
@@ -368,6 +377,7 @@ export default function SupplierDetailScreen({
           subRes,
           driversRes,
           clientsRes,
+          shipperNamesRes,
         ]) => {
           if (res.error) {
             setError(res.error.message);
@@ -396,6 +406,7 @@ export default function SupplierDetailScreen({
           );
           const seen = new Set(fromOwned.map((t) => t.id));
           const merged: TripRow[] = [...fromOwned];
+          const nextAggregateTripSalesById: Record<string, number> = {};
 
           // Add shared trips where we are the supplier and we subcontracted to THIS supplier
           const { sharedTrips, subcontracts } = subRes;
@@ -407,6 +418,8 @@ export default function SupplierDetailScreen({
             if (sub && sub.supplier_id === supplierId) {
               if (!seen.has(t.id)) {
                 seen.add(t.id);
+                nextAggregateTripSalesById[t.id] =
+                  Number(t.supplier_rate ?? 0) || Number(t.client_price ?? 0);
                 // Overwrite supplier_rate so the UI displays the subcontract rate
                 merged.push({ ...t, supplier_rate: sub.rate });
               }
@@ -433,11 +446,14 @@ export default function SupplierDetailScreen({
                 !seen.has(t.id)
               ) {
                 seen.add(t.id);
+                nextAggregateTripSalesById[t.id] =
+                  Number(t.supplier_rate ?? 0) || Number(t.client_price ?? 0);
                 merged.push(t);
               }
             }
           }
           setTrips(merged);
+          setAggregateTripSalesById(nextAggregateTripSalesById);
           const allTx =
             (txRes.error ? [] : ((txRes.transactions ?? []) as LedgerRow[])) ??
             [];
@@ -453,6 +469,9 @@ export default function SupplierDetailScreen({
           setTransactions(forSupplierTx);
           setOrgDrivers(driversRes?.error ? [] : (driversRes.drivers ?? []));
           setClients(clientsRes.error ? [] : (clientsRes.clients ?? []));
+          setShipperNameByTripId(
+            shipperNamesRes.error ? {} : (shipperNamesRes.shipperNameByTripId ?? {}),
+          );
         },
       )
       .finally(() => {
@@ -462,6 +481,24 @@ export default function SupplierDetailScreen({
         setRefreshing(false);
       });
   }, [supplierId, currentOrganization?.id]);
+
+  const resolveClientDisplayName = useCallback(
+    (trip: TripRow): string => {
+      const shipperName = (shipperNameByTripId[trip.id] ?? "").trim();
+      if (shipperName) return shipperName;
+      const cidKey = (trip.client_id ?? "").trim().toLowerCase();
+      const clientRow = cidKey ? clientById.get(cidKey) : undefined;
+      const rawTripClientName = (trip.client_name ?? "").trim();
+      return (
+        (clientRow?.name ?? "").trim() ||
+        (rawTripClientName && !isUuidLikeString(trip.client_name)
+          ? rawTripClientName
+          : "") ||
+        "—"
+      );
+    },
+    [shipperNameByTripId, clientById],
+  );
 
   useEffect(() => load(), [load]);
   useFocusEffect(
@@ -698,6 +735,25 @@ export default function SupplierDetailScreen({
       };
     });
   }, [tripsForMissionTable, paidByTripId, tripIdToDue, tripFinanceAdjRecord]);
+  const getTripSalesForSupplierView = useCallback(
+    (trip: TripRow): number => {
+      const mappedAggregateSales = aggregateTripSalesById[trip.id];
+      if (mappedAggregateSales != null && mappedAggregateSales > 0) {
+        return mappedAggregateSales;
+      }
+      const isIntegratedAggregateTrip =
+        currentOrganization?.id != null &&
+        isLoadBasedTrip(trip) &&
+        trip.organization_id != null &&
+        trip.organization_id !== currentOrganization.id;
+      if (isIntegratedAggregateTrip) {
+        // For integrated aggregate trips, supplier_rate is the awarded/winning bid.
+        return Number(trip.supplier_rate ?? 0) || Number(trip.client_price ?? 0);
+      }
+      return Number(trip.client_price ?? 0);
+    },
+    [aggregateTripSalesById, currentOrganization?.id],
+  );
   const tripTransactionMetaById = useMemo(() => {
     const byTrip: Record<
       string,
@@ -882,7 +938,7 @@ export default function SupplierDetailScreen({
         count: 0,
         lastTxnDate: null,
       };
-      const clientRevenue = Number(row.trip.client_price ?? 0);
+      const clientRevenue = getTripSalesForSupplierView(row.trip);
       const pnl = clientRevenue - row.sales;
       const margin =
         clientRevenue > 0
@@ -891,8 +947,7 @@ export default function SupplierDetailScreen({
       return {
         trip: row.missionId,
         route: row.route,
-        client:
-          row.trip.client_name?.trim() || row.trip.client_id?.trim() || "—",
+        client: resolveClientDisplayName(row.trip),
         contract: formatINR(row.sales),
         clientRevenue: formatINR(clientRevenue),
         pnl: formatINR(pnl),
@@ -919,7 +974,13 @@ export default function SupplierDetailScreen({
       ],
       rows,
     };
-  }, [detailSubTab, missionRows, tripTransactionMetaById]);
+  }, [
+    detailSubTab,
+    missionRows,
+    tripTransactionMetaById,
+    resolveClientDisplayName,
+    getTripSalesForSupplierView,
+  ]);
 
   if (loading) {
     return (
@@ -1511,23 +1572,10 @@ export default function SupplierDetailScreen({
                       count: 0,
                       lastTxnDate: null,
                     };
-                    const cidKey = (row.trip.client_id ?? "")
-                      .trim()
-                      .toLowerCase();
-                    const clientRow = cidKey
-                      ? clientById.get(cidKey)
-                      : undefined;
-                    const rawTripClientName = (
-                      row.trip.client_name ?? ""
-                    ).trim();
-                    const clientDisplayName =
-                      (clientRow?.name ?? "").trim() ||
-                      (rawTripClientName &&
-                      !isUuidLikeString(row.trip.client_name)
-                        ? rawTripClientName
-                        : "");
-                    const clientNameForUi = clientDisplayName || "—";
-                    const clientRevenue = Number(row.trip.client_price ?? 0);
+                    const cidKey = (row.trip.client_id ?? "").trim().toLowerCase();
+                    const clientRow = cidKey ? clientById.get(cidKey) : undefined;
+                    const clientNameForUi = resolveClientDisplayName(row.trip);
+                    const clientRevenue = getTripSalesForSupplierView(row.trip);
                     const tripPnl = clientRevenue - row.sales;
                     return (
                       <>
