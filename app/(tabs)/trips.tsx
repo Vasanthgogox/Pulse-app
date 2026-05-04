@@ -373,21 +373,12 @@ export default function TripsScreen() {
     queryFn: async () => {
       const ids = activeOpsTripIdsSorted.split(",").filter(Boolean);
       if (ids.length === 0) return new Set<string>();
-      const next = new Set<string>();
-      const chunkSize = 200;
-      for (let i = 0; i < ids.length; i += chunkSize) {
-        const slice = ids.slice(i, i + chunkSize);
-        const { data, error } = await supabase()
-          .from("trip_documents")
-          .select("trip_id")
-          .in("trip_id", slice);
-        if (error) throw error;
-        for (const row of data ?? []) {
-          const tid = (row as { trip_id?: string }).trip_id;
-          if (tid) next.add(tid);
-        }
-      }
-      return next;
+      const { data, error } = await supabase()
+        .from("trip_documents")
+        .select("trip_id")
+        .in("trip_id", ids);
+      if (error) throw error;
+      return new Set((data ?? []).map((r) => (r as { trip_id: string }).trip_id));
     },
   });
 
