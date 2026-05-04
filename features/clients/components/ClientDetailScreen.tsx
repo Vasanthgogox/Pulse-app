@@ -1800,11 +1800,6 @@ export default function ClientDetailScreen({
                 isWebDesktop && styles.tableHeaderWebDesktop,
               ]}
             >
-              {isWebDesktop ? (
-                <View style={styles.clientColWebDesktop}>
-                  <Text style={[styles.th, styles.thWebDesktop]}>Client</Text>
-                </View>
-              ) : null}
               <Text
                 style={[
                   styles.th,
@@ -1992,47 +1987,6 @@ export default function ClientDetailScreen({
                       "—";
                     return (
                       <>
-                        {isWebDesktop && client ? (
-                          <View style={styles.clientColWebDesktop}>
-                            <View style={styles.tdPartyAvatarRow}>
-                              <PartyAvatar
-                                name={clientName}
-                                organizationImageUrl={
-                                  client.linked_organization_id
-                                    ? linkedOrgDisplayMap[
-                                        client.linked_organization_id
-                                      ]?.avatarUrl
-                                    : undefined
-                                }
-                                organizationAvatarSeed={
-                                  client.linked_organization_id
-                                    ? linkedOrgDisplayMap[
-                                        client.linked_organization_id
-                                      ]?.avatarSeed
-                                    : undefined
-                                }
-                                avatarUrl={client.avatar_url}
-                                avatarSeed={client.avatar_seed}
-                                entityType="client"
-                                size={TRIP_TABLE_AVATAR}
-                              />
-                              <View style={styles.tdPartyTextStack}>
-                                <Text
-                                  style={styles.tdPartyWebDesktop}
-                                  numberOfLines={1}
-                                >
-                                  {clientName}
-                                </Text>
-                                <Text
-                                  style={styles.tdPartyHintWebDesktop}
-                                  numberOfLines={1}
-                                >
-                                  {(client.contact_person ?? "").trim() || "—"}
-                                </Text>
-                              </View>
-                            </View>
-                          </View>
-                        ) : null}
                         <View
                           style={[
                             styles.tdMission,
