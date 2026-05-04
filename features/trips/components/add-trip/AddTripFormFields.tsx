@@ -23,6 +23,7 @@ import {
     getVehiclesByOrganization,
     type VehicleRow,
 } from "@/features/vehicles/services/vehicles.service";
+import { assignmentShellStyles } from "@/features/trips/styles/assignmentShellShared";
 import {
     formatIndianVehicleNumber,
     formatIndianVehicleNumberInput,
@@ -1569,15 +1570,25 @@ export function AddTripFormFields({
               </>
             ) : (
               <>
-                <View style={[styles.aggregateSplit, isWide && styles.aggregateSplitWide]}>
+                <View
+                  style={[
+                    styles.aggregateSplit,
+                    allocationWideLayout && styles.aggregateSplitWide,
+                  ]}
+                >
                   <View
                     style={[
                       styles.aggregateLeftPane,
-                      isWide && styles.aggregatePaneWide,
+                      allocationWideLayout && styles.aggregatePaneWide,
                       invalid("partner") && styles.fieldGroupRing,
                     ]}
                   >
-                <View style={styles.sectionLabelRow}>
+                <View
+                  style={[
+                    styles.sectionLabelRow,
+                    !allocationWideLayout && styles.sectionLabelRowFleetStack,
+                  ]}
+                >
                   <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
                     Transport partner *
                   </Text>
@@ -1601,6 +1612,7 @@ export function AddTripFormFields({
                     <TouchableOpacity
                       style={[
                         styles.addClientBtn,
+                        !allocationWideLayout && styles.addClientBtnFleetFullWidth,
                         Platform.OS === "web"
                           ? ({ cursor: "pointer" } as ViewStyle)
                           : null,
@@ -1699,13 +1711,18 @@ export function AddTripFormFields({
                   <View
                     style={[
                       styles.aggregateRightPane,
-                      isWide && styles.aggregatePaneWide,
+                      allocationWideLayout && styles.aggregatePaneWide,
                     ]}
                   >
-
-                <View style={[styles.gridRow, isWide && styles.gridRowWide]}>
+                <View style={assignmentShellStyles.tripAssignSurfaceCard}>
+                <View
+                  style={[
+                    styles.gridRow,
+                    allocationWideLayout && styles.gridRowWide,
+                  ]}
+                >
                   <View style={styles.gridCol}>
-                    <Text style={[styles.label, labelStyle]}>
+                    <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
                       Partner rate (₹) *
                     </Text>
                     <TextInput
@@ -1725,7 +1742,7 @@ export function AddTripFormFields({
                     />
                   </View>
                   <View style={styles.gridCol}>
-                    <Text style={[styles.label, labelStyle]}>
+                    <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
                       Advance paid (₹)
                     </Text>
                     <TextInput
@@ -1754,8 +1771,8 @@ export function AddTripFormFields({
 
                 {!state.assignLater ? (
                   <>
-                    <View style={{ width: "100%", marginTop: 8 }}>
-                      <Text style={[styles.label, labelStyle]}>
+                    <View style={styles.aggregateTrackingFieldBlock}>
+                      <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
                         Driver name (tracking) *
                       </Text>
                       <View style={styles.iconField}>
@@ -1787,11 +1804,12 @@ export function AddTripFormFields({
                     <View
                       style={[
                         styles.gridRow,
-                        isWide && styles.gridRowWide,
+                        styles.gridRowFleet,
+                        allocationWideLayout && styles.gridRowWide,
                       ]}
                     >
                       <View style={styles.gridCol}>
-                        <Text style={[styles.label, labelStyle]}>
+                        <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
                           Driver phone (tracking) *
                         </Text>
                         <View
@@ -1838,7 +1856,7 @@ export function AddTripFormFields({
                         ) : null}
                       </View>
                       <View style={styles.gridCol}>
-                        <Text style={[styles.label, labelStyle]}>
+                        <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
                           Vehicle number *
                         </Text>
                         <View style={styles.iconField}>
@@ -1974,7 +1992,7 @@ export function AddTripFormFields({
                     ) : null}
                   </>
                 ) : (
-                  <View style={styles.assignLaterPartnerHint}>
+                  <View style={[styles.assignLaterPartnerHint, { marginTop: 4 }]}>
                     <Info size={16} color={Theme.textMuted} />
                     <Text style={styles.assignLaterPartnerHintText}>
                       Driver phone and vehicle number are entered on the trip
@@ -1982,6 +2000,7 @@ export function AddTripFormFields({
                     </Text>
                   </View>
                 )}
+                </View>
                   </View>
                 </View>
               </>
@@ -2435,6 +2454,10 @@ const styles = StyleSheet.create({
   /** Only when partner + allocation sit in one row (wide); avoid flex:1 in a column or panes split viewport height. */
   aggregatePaneWide: {
     flex: 1,
+  },
+  aggregateTrackingFieldBlock: {
+    width: "100%",
+    marginTop: 14,
   },
   sectionLabelRow: {
     flexDirection: "row",
