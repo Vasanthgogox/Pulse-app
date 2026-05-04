@@ -860,7 +860,7 @@ function NetworkScreenInner() {
       });
   };
 
-  const handleSendProtocolFromProfile = useCallback(async () => {
+  const handleSendProtocolFromProfile = async () => {
     if (!selectedProfileNode || !orgId) return;
     if (selectedProfileNode.status === "CONNECTED") {
       Alert.alert("Network protocol", "You are already connected with this organization.");
@@ -915,9 +915,9 @@ function NetworkScreenInner() {
       return;
     }
     Alert.alert("Protocol sent", `Request sent to ${selectedProfileNode.name}.`);
-  }, [invalidateNetwork, orgId, receivedQ, selectedProfileNode, sentQ]);
+  };
 
-  const handleOpenDirectMessage = useCallback(async () => {
+  const handleOpenDirectMessage = async () => {
     if (!selectedProfileNode || !orgId) return;
     if (!UUID_REGEX.test(selectedProfileNode.id)) {
       Alert.alert(
@@ -948,7 +948,7 @@ function NetworkScreenInner() {
       const message = error instanceof Error ? error.message : "Could not open conversation.";
       Alert.alert("Direct message", message);
     }
-  }, [orgId, organization?.name, router, selectedProfileNode]);
+  };
 
   const scrollContent = (
     <ScrollView
@@ -1599,15 +1599,17 @@ function NetworkScreenInner() {
                   </View>
 
                   <View style={styles.profileCtaStack}>
-                    <Pressable
-                      style={({ pressed }) => [styles.profilePrimaryBtn, pressed && { opacity: 0.88 }]}
-                      onPress={() => void handleSendProtocolFromProfile()}
-                    >
-                      <UserPlus size={14} color={Theme.textOnPrimary} />
-                      <Text style={styles.profilePrimaryBtnText}>
-                        {selectedProfileNode.status === "REQUEST SENT" ? "Request sent" : "Send protocol"}
-                      </Text>
-                    </Pressable>
+                    {selectedProfileNode.status !== "CONNECTED" ? (
+                      <Pressable
+                        style={({ pressed }) => [styles.profilePrimaryBtn, pressed && { opacity: 0.88 }]}
+                        onPress={() => void handleSendProtocolFromProfile()}
+                      >
+                        <UserPlus size={14} color={Theme.textOnPrimary} />
+                        <Text style={styles.profilePrimaryBtnText}>
+                          {selectedProfileNode.status === "REQUEST SENT" ? "Request sent" : "Send protocol"}
+                        </Text>
+                      </Pressable>
+                    ) : null}
                     <Pressable
                       style={({ pressed }) => [styles.profileSecondaryBtn, pressed && { opacity: 0.88 }]}
                       onPress={() => void handleOpenDirectMessage()}
