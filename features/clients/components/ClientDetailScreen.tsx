@@ -25,7 +25,7 @@ import { ledgerDayMatchesPeriod } from "@/features/finance/lib/filterLedgerByPer
 import type { FinancePeriodFilter } from "@/features/finance/types";
 import { allocateAmountsToLargestDueTrips } from "@/features/finance/utils/allocateToLargestDue";
 import { averageScore, getRatingsForClient } from "@/features/ratings";
-import { uniqueRealtimeChannelTopic } from "@/lib/realtimeTopic";
+import { subscribeSharedPostgresChanges } from "@/lib/realtimeRegistry";
 import { supabase } from "@/lib/supabase";
 import {
     getSuppliersByOrganization,
@@ -331,21 +331,22 @@ export default function ClientDetailScreen({
   // Realtime: refresh client rating avg whenever any rating for this client changes
   useEffect(() => {
     if (!clientId) return;
-    const channel = supabase()
-      .channel(uniqueRealtimeChannelTopic(`client-ratings-${clientId}`))
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "ratings", filter: `rated_id=eq.${clientId}` },
-        () => {
-          getRatingsForClient(clientId).then(({ ratings: rows }) => {
-            setClientRatingAvg(averageScore(rows));
-          });
+    return subscribeSharedPostgresChanges(
+      `client-ratings:${clientId}`,
+      [
+        {
+          event: "*",
+          schema: "public",
+          table: "ratings",
+          filter: `rated_id=eq.${clientId}`,
         },
-      )
-      .subscribe();
-    return () => {
-      void supabase().removeChannel(channel);
-    };
+      ],
+      () => {
+        getRatingsForClient(clientId).then(({ ratings: rows }) => {
+          setClientRatingAvg(averageScore(rows));
+        });
+      }
+    );
   }, [clientId]);
 
   useEffect(() => {

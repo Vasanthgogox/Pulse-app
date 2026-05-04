@@ -46,7 +46,7 @@ import {
     canAccessFinance,
     getCapabilitiesFromProfile,
 } from "@/lib/capabilities";
-import { uniqueRealtimeChannelTopic } from "@/lib/realtimeTopic";
+import { subscribeSharedPostgresChanges } from "@/lib/realtimeRegistry";
 import { supabase } from "@/lib/supabase";
 import {
     formatIndianVehicleNumber,
@@ -565,19 +565,22 @@ export default function DriverDetailScreen({
 
   useEffect(() => {
     if (!driverId) return;
-    const channel = supabase()
-      .channel(uniqueRealtimeChannelTopic(`driver-ratings-${driverId}`))
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "ratings", filter: `rated_id=eq.${driverId}` },
-        () => {
-          getRatingsForDriver(driverId).then(({ ratings: rows }) => {
-            setDriverRatings(rows ?? []);
-          });
+    return subscribeSharedPostgresChanges(
+      `driver-ratings:${driverId}`,
+      [
+        {
+          event: "*",
+          schema: "public",
+          table: "ratings",
+          filter: `rated_id=eq.${driverId}`,
         },
-      )
-      .subscribe();
-    return () => { void supabase().removeChannel(channel); };
+      ],
+      () => {
+        getRatingsForDriver(driverId).then(({ ratings: rows }) => {
+          setDriverRatings(rows ?? []);
+        });
+      }
+    );
   }, [driverId]);
 
   const tripOptions = useMemo(

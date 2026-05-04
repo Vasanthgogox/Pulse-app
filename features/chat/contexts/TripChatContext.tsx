@@ -9,8 +9,7 @@ import React, {
 } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOptionalOrganization } from "@/contexts/OrganizationContext";
-import { uniqueRealtimeChannelTopic } from "@/lib/realtimeTopic";
-import { supabase } from "@/lib/supabase";
+import { subscribeSharedPostgresChanges } from "@/lib/realtimeRegistry";
 import { subscribeTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
 import * as chatService from "../services/chat.service";
 import type {
@@ -157,54 +156,20 @@ export function TripChatProvider({ children }: { children: ReactNode }) {
   // Realtime subscription — react to new messages in this org's conversations
   useEffect(() => {
     if (!organizationId) return;
-
-    const channel = supabase()
-      .channel(uniqueRealtimeChannelTopic(`trip_messages:org:${organizationId}`))
-      .on(
-        "postgres_changes",
+    return subscribeSharedPostgresChanges(
+      `trip_messages:org:${organizationId}`,
+      [
         {
           event: "INSERT",
           schema: "public",
           table: "trip_messages",
+          filter: `organization_id=eq.${organizationId}`,
         },
-        (payload) => {
-          const newMsg = payload.new as TripMessageRow;
-          setConversations((prev) => {
-            const hasConv = prev.some((c) => c.id === newMsg.conversation_id);
-            if (!hasConv) {
-              void loadConversationsRef.current();
-              return prev;
-            }
-            return prev.map((conv) => {
-              if (conv.id !== newMsg.conversation_id) return conv;
-              const alreadyExists = conv.messages.some((m) => m.id === newMsg.id);
-              if (alreadyExists) return conv;
-              const fromParty =
-                newMsg.sender_role === "client" ||
-                newMsg.sender_role === "supplier" ||
-                newMsg.sender_role === "driver";
-              const nextMessages = [...conv.messages, newMsg].sort(
-                (a, b) =>
-                  new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-              );
-              return {
-                ...conv,
-                messages: nextMessages,
-                last_message_at: newMsg.created_at,
-                last_message_preview: newMsg.content.slice(0, 120),
-                unread_dispatcher_count: fromParty
-                  ? conv.unread_dispatcher_count + 1
-                  : conv.unread_dispatcher_count,
-              };
-            });
-          });
-        },
-      )
-      .subscribe();
-
-    return () => {
-      supabase().removeChannel(channel);
-    };
+      ],
+      () => {
+        void loadConversationsRef.current();
+      }
+    );
   }, [organizationId]);
 
   const sendMessage = useCallback(

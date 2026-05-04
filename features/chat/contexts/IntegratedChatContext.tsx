@@ -3,13 +3,13 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { uniqueRealtimeChannelTopic } from "@/lib/realtimeTopic";
-import { supabase } from "@/lib/supabase";
+import { subscribeSharedPostgresChanges } from "@/lib/realtimeRegistry";
 import * as chatService from "../services/chat.service";
 import type { NetworkConversation, NetworkMessageRow, NetworkPartner } from "../types/chat.types";
 
@@ -111,6 +111,7 @@ export function IntegratedChatProvider({ children }: { children: ReactNode }) {
   const [conversations, setConversations] = useState<NetworkConversation[]>([]);
   const [partners, setPartners] = useState<NetworkPartner[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const loadDataRef = useRef<() => Promise<void>>(async () => {});
 
   const loadData = useCallback(async () => {
     if (!orgId) return;
@@ -128,6 +129,7 @@ export function IntegratedChatProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     }
   }, [orgId]);
+  loadDataRef.current = loadData;
 
   useEffect(() => {
     loadData();
@@ -136,35 +138,19 @@ export function IntegratedChatProvider({ children }: { children: ReactNode }) {
   // Realtime: new network messages
   useEffect(() => {
     if (!orgId) return;
-
-    const channel = supabase()
-      .channel(uniqueRealtimeChannelTopic(`network_messages:org:${orgId}`))
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "network_messages" },
-        (payload) => {
-          const newMsg = payload.new as NetworkMessageRow;
-          setConversations((prev) =>
-            prev.map((conv) => {
-              if (conv.id !== newMsg.conversation_id) return conv;
-              if (conv.messages.some((m) => m.id === newMsg.id)) return conv;
-              return {
-                ...conv,
-                messages: [...conv.messages, newMsg],
-                last_message_at: newMsg.created_at,
-                last_message_preview: newMsg.content.slice(0, 120),
-                unread_count:
-                  newMsg.sender_org_id !== orgId ? conv.unread_count + 1 : conv.unread_count,
-              };
-            })
-          );
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase().removeChannel(channel);
-    };
+    return subscribeSharedPostgresChanges(
+      `network_messages:org:${orgId}`,
+      [
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "network_messages",
+        },
+      ],
+      () => {
+        void loadDataRef.current();
+      }
+    );
   }, [orgId]);
 
   const chats: IntegratedChat[] = orgId

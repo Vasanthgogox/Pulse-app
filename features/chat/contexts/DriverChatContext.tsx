@@ -8,8 +8,7 @@ import React, {
   type ReactNode,
 } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { uniqueRealtimeChannelTopic } from "@/lib/realtimeTopic";
-import { supabase } from "@/lib/supabase";
+import { subscribeSharedPostgresChanges } from "@/lib/realtimeRegistry";
 import { notifyTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
 import { getLinkedDriversForCurrentUser } from "@/features/drivers/services/drivers.service";
 import * as tripsService from "@/services/tripsService";
@@ -169,47 +168,19 @@ export function DriverChatProvider({ children }: { children: ReactNode }) {
   // Realtime: merge inserts for known threads; refetch if conversation not loaded yet
   useEffect(() => {
     if (!driverIds.length || !uid) return;
-
-    const channel = supabase()
-      .channel(uniqueRealtimeChannelTopic(`driver_trip_messages:${uid}`))
-      .on(
-        "postgres_changes",
+    return subscribeSharedPostgresChanges(
+      `driver_trip_messages:user:${uid}`,
+      [
         {
           event: "INSERT",
           schema: "public",
           table: "trip_messages",
         },
-        (payload) => {
-          const newMsg = payload.new as TripMessageRow;
-          const known = conversationsRef.current.some((c) => c.id === newMsg.conversation_id);
-          if (!known) {
-            void loadConversationsRef.current();
-            return;
-          }
-          setConversations((prev) =>
-            prev.map((conv) => {
-              if (conv.id !== newMsg.conversation_id) return conv;
-              const alreadyExists = conv.messages.some((m) => m.id === newMsg.id);
-              if (alreadyExists) return conv;
-              const nextMessages = [...conv.messages, newMsg].sort(
-                (a, b) =>
-                  new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-              );
-              return {
-                ...conv,
-                messages: nextMessages,
-                last_message_at: newMsg.created_at,
-                last_message_preview: newMsg.content.slice(0, 120),
-              };
-            })
-          );
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase().removeChannel(channel);
-    };
+      ],
+      () => {
+        void loadConversationsRef.current();
+      }
+    );
   }, [driverIds, uid]);
 
   const sendMessage = useCallback(

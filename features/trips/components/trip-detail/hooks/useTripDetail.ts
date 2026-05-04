@@ -1247,26 +1247,6 @@ export function useTripDetail({
     refetchTransactionsRef.current();
   }, [load, loadAdjustments, loadAssignmentAudit, loadTripDocuments]);
 
-  // Fallback polling for active journeys (covers cases where browser realtime channel is delayed).
-  useEffect(() => {
-    if (!tripId || !trip) return;
-    const status = String(trip.status ?? "").toLowerCase();
-    const isActiveJourney =
-      status === "assigned" ||
-      status === "in_progress" ||
-      status === "in_transit" ||
-      status === "pickup" ||
-      status === "picked_up" ||
-      status === "at_drop";
-    if (!isActiveJourney || trip.completed_at) return;
-
-    const intervalMs = 15_000;
-    const timer = setInterval(() => {
-      isRefreshingRef.current = true;
-      load();
-    }, intervalMs);
-    return () => clearInterval(timer);
-  }, [tripId, trip?.id, trip?.status, trip?.completed_at, load]);
 
   /** Immediate refresh after assignment/reassignment actions. */
   const handleAssignmentUpdated = useCallback(() => {
@@ -1961,31 +1941,6 @@ export function useTripDetail({
     if (!trip?.id || !effectiveDriverIdForLocation) return;
     void fetchDriverLocationFromDb();
   }, [trip?.updated_at, trip?.status_revision, trip?.status, effectiveDriverIdForLocation, fetchDriverLocationFromDb, trip?.id]);
-
-  useEffect(() => {
-    if (!trip?.id || !effectiveDriverIdForLocation) return;
-    if (isTripCompleted(trip)) return;
-    const status = String(trip.status ?? "").toLowerCase();
-    const isTrackable =
-      status === "assigned" ||
-      status === "in_progress" ||
-      status === "in_transit" ||
-      status === "pickup" ||
-      status === "picked_up" ||
-      status === "at_drop";
-    if (!isTrackable) return;
-    const timer = setInterval(() => {
-      void fetchDriverLocationFromDb();
-    }, 15000);
-    return () => clearInterval(timer);
-  }, [
-    trip?.id,
-    trip?.status,
-    trip?.completed_at,
-    effectiveDriverIdForLocation,
-    fetchDriverLocationFromDb,
-    trip,
-  ]);
 
   // Counterparty entries
   useEffect(() => {

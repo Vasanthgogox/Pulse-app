@@ -5,9 +5,8 @@
  */
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase';
 import { queryKeys } from '@/lib/queryKeys';
-import { uniqueRealtimeChannelTopic } from '@/lib/realtimeTopic';
+import { subscribeSharedPostgresChanges } from '@/lib/realtimeRegistry';
 
 /** Subscribe to trips for org; invalidate trips query on any change. */
 export function useRealtimeTripsInvalidation(organizationId: string | null) {
@@ -15,27 +14,21 @@ export function useRealtimeTripsInvalidation(organizationId: string | null) {
 
   useEffect(() => {
     if (!organizationId) return;
-    const channel = supabase()
-      .channel(uniqueRealtimeChannelTopic(`trips:org:${organizationId}`))
-      .on(
-        'postgres_changes',
+    return subscribeSharedPostgresChanges(
+      `trips:org:${organizationId}`,
+      [
         {
           event: '*',
           schema: 'public',
           table: 'trips',
           filter: `organization_id=eq.${organizationId}`,
         },
-        () => {
-          qc.invalidateQueries({ queryKey: queryKeys.trips.all(organizationId) });
-          qc.invalidateQueries({ queryKey: queryKeys.trips.shipperNamesForSupplier(organizationId) });
-        }
-      )
-      .subscribe();
-    return () => {
-      void supabase().removeChannel(channel).catch((err: unknown) => {
-        console.warn('[realtime] removeChannel failed:', err);
-      });
-    };
+      ],
+      () => {
+        qc.invalidateQueries({ queryKey: queryKeys.trips.all(organizationId) });
+        qc.invalidateQueries({ queryKey: queryKeys.trips.shipperNamesForSupplier(organizationId) });
+      }
+    );
   }, [organizationId, qc]);
 }
 
@@ -45,26 +38,20 @@ export function useRealtimeTransactionsInvalidation(organizationId: string | nul
 
   useEffect(() => {
     if (!organizationId) return;
-    const channel = supabase()
-      .channel(uniqueRealtimeChannelTopic(`transactions:${organizationId}`))
-      .on(
-        'postgres_changes',
+    return subscribeSharedPostgresChanges(
+      `transactions:org:${organizationId}`,
+      [
         {
           event: '*',
           schema: 'public',
           table: 'transactions',
           filter: `organization_id=eq.${organizationId}`,
         },
-        () => {
-          qc.invalidateQueries({ queryKey: queryKeys.transactions.all(organizationId) });
-        }
-      )
-      .subscribe();
-    return () => {
-      void supabase().removeChannel(channel).catch((err: unknown) => {
-        console.warn('[realtime] removeChannel failed:', err);
-      });
-    };
+      ],
+      () => {
+        qc.invalidateQueries({ queryKey: queryKeys.transactions.all(organizationId) });
+      }
+    );
   }, [organizationId, qc]);
 }
 
@@ -84,64 +71,41 @@ export function useRealtimeNetworkInvalidation(organizationId: string | null) {
       qc.invalidateQueries({ queryKey: queryKeys.driverInvites.sent(organizationId) });
     };
 
-    const channel = supabase()
-      .channel(uniqueRealtimeChannelTopic(`network:${organizationId}`))
-      .on(
-        'postgres_changes',
+    return subscribeSharedPostgresChanges(
+      `network:org:${organizationId}`,
+      [
         {
           event: '*',
           schema: 'public',
           table: 'clients',
           filter: `organization_id=eq.${organizationId}`,
         },
-        invalidateNetwork
-      )
-      .on(
-        'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'suppliers',
           filter: `organization_id=eq.${organizationId}`,
         },
-        invalidateNetwork
-      )
-      .on(
-        'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'drivers',
           filter: `organization_id=eq.${organizationId}`,
         },
-        invalidateNetwork
-      )
-      .on(
-        'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'connection_requests',
           filter: `or(from_organization_id.eq.${organizationId},to_organization_id.eq.${organizationId})`,
         },
-        invalidateNetwork
-      )
-      .on(
-        'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'driver_invites',
           filter: `from_organization_id=eq.${organizationId}`,
         },
-        invalidateNetwork
-      )
-      .subscribe();
-
-    return () => {
-      void supabase().removeChannel(channel).catch((err: unknown) => {
-        console.warn('[realtime] removeChannel failed:', err);
-      });
-    };
+      ],
+      invalidateNetwork
+    );
   }, [organizationId, qc]);
 }
