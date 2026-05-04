@@ -34,6 +34,10 @@ import {
     setInitialTripForDetail,
     updateTripSupplier,
 } from "@/features/trips";
+import {
+    assignmentShellColors,
+    assignmentShellStyles,
+} from "@/features/trips/styles/assignmentShellShared";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { formatINR, formatMobileNumber } from "@/lib/format";
 import { validatePhone } from "@/lib/phoneValidation";
@@ -57,7 +61,16 @@ import { useQueryClient } from "@tanstack/react-query";
 import * as Clipboard from "expo-clipboard";
 import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
-import { Building2, Package, Share2, Users, X, Zap } from "lucide-react-native";
+import {
+    Building2,
+    ListChecks,
+    Package,
+    Share2,
+    Truck,
+    Users,
+    X,
+    Zap,
+} from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
@@ -287,9 +300,9 @@ export function LoadCenterView({
   const [deployTripIdForOtp, setDeployTripIdForOtp] = useState<string | null>(
     null,
   );
-  const [handshakeStep, setHandshakeStep] = useState<
-    "flow_choice" | "roster" | "ad_hoc_vehicle"
-  >("flow_choice");
+  /** Staff Handshake: mirror Add Trip — assign driver/vehicle on trip detail when on. */
+  const [staffHandshakeAssignLater, setStaffHandshakeAssignLater] =
+    useState(false);
   const [localBidHistoryByIndentId, setLocalBidHistoryByIndentId] = useState<
     Record<string, { amount: number; updatedAt: string }[]>
   >({});
@@ -1162,7 +1175,32 @@ export function LoadCenterView({
       Alert.alert("Cannot deploy", "No accepted quote found for this load.");
       return;
     }
-    const phoneTrimmed = aggregateDriverPhone.trim();
+    const handshakeSubSupplierId = (subcontractSupplierId ?? "").trim();
+    const handshakeSubRateRaw = subcontractRate.trim();
+    const handshakeSubRateNum = Number(handshakeSubRateRaw);
+    if (!handshakeSubSupplierId) {
+      Alert.alert(
+        "Partner required",
+        "Select the associated partner (sub-supplier) for this trip.",
+      );
+      return;
+    }
+    if (
+      handshakeSubRateRaw === "" ||
+      !Number.isFinite(handshakeSubRateNum) ||
+      handshakeSubRateNum < 0
+    ) {
+      Alert.alert(
+        "Partner rate required",
+        "Enter the rate you will pay this partner (₹).",
+      );
+      return;
+    }
+    /** Trip detail will hold driver / vehicle / OTP; never persist ad-hoc fields when deferring. */
+    const deferHandshakeAssignment = staffHandshakeAssignLater;
+    const phoneTrimmed = deferHandshakeAssignment
+      ? ""
+      : aggregateDriverPhone.trim();
     const phoneErr = phoneTrimmed ? validatePhone(phoneTrimmed) : null;
     if (staffHandshakeDeployLockRef.current) {
       return;
@@ -1170,8 +1208,11 @@ export function LoadCenterView({
     staffHandshakeDeployLockRef.current = true;
     try {
       setAssigningTripId(load.id);
-      const vehicleIdForQuote =
-        typeof assignVehicleId === "string" ? assignVehicleId : null;
+      const vehicleIdForQuote = deferHandshakeAssignment
+        ? null
+        : typeof assignVehicleId === "string"
+          ? assignVehicleId
+          : null;
       const { error: assignErr } = await updateDirectQuoteAssignment(
         acceptedQuote.id,
         null,
@@ -1181,7 +1222,9 @@ export function LoadCenterView({
         Alert.alert("Could not assign", assignErr.message);
         return;
       }
-      const regNum = assignVehicleRegistration.trim();
+      const regNum = deferHandshakeAssignment
+        ? ""
+        : assignVehicleRegistration.trim();
       const { error: tripErr, trip } = await acceptAwardedQuote(
         acceptedQuote.id,
         {
@@ -1195,10 +1238,13 @@ export function LoadCenterView({
         );
         return;
       }
-      const subSupplierId = (subcontractSupplierId ?? "").trim();
-      const subRateNum = Number(subcontractRate);
+      const subSupplierId = handshakeSubSupplierId;
+      const subRateNum = handshakeSubRateNum;
       const shouldSaveSubcontract =
-        subSupplierId !== "" && Number.isFinite(subRateNum) && subRateNum >= 0;
+        subSupplierId !== "" &&
+        handshakeSubRateRaw !== "" &&
+        Number.isFinite(subRateNum) &&
+        subRateNum >= 0;
 
       const saveSubcontract = async () => {
         if (!shouldSaveSubcontract) return;
@@ -1237,14 +1283,18 @@ export function LoadCenterView({
       };
 
       // Driver + OTP are optional: require phone only for OTP generation (not for trip creation).
-      if (!phoneTrimmed || phoneErr) {
+      if (deferHandshakeAssignment || !phoneTrimmed || phoneErr) {
         await saveSubcontract();
         await updateIndent(load.id, { status: "completed" });
         invalidateTrips(orgId);
         invalidateIndents(orgId);
         setLoadAction(null);
         setAssigningTripId(null);
-        triggerSuccess("Trip created (OTP not generated)");
+        triggerSuccess(
+          deferHandshakeAssignment
+            ? "Trip created — add driver and vehicle on trip detail when ready."
+            : "Trip created (OTP not generated)",
+        );
         // Do not treat this as an error. OTP can be generated later from Trip Detail
         // after providing a driver phone number.
         return;
@@ -1351,29 +1401,48 @@ export function LoadCenterView({
   );
   const aggregateHasDriverPhone = aggregateDriverPhone.trim().length > 0;
   const aggregateHasVehicleText = assignVehicleRegistration.trim().length > 0;
+  /** Aggregate Staff Handshake: partner + rate are always required before deploy. */
+  const aggregatePartnerHandshakeComplete = useMemo(() => {
+    const sid = (subcontractSupplierId ?? "").trim();
+    const rateRaw = subcontractRate.trim();
+    const rateNum = Number(rateRaw);
+    return (
+      sid.length > 0 &&
+      rateRaw.length > 0 &&
+      Number.isFinite(rateNum) &&
+      rateNum >= 0
+    );
+  }, [subcontractSupplierId, subcontractRate]);
 
-  /** Staff Handshake: back one step or close modal. Used by header BACK and backdrop. */
+  /** Staff Handshake: dismiss OTP preview, or close modal. */
   const handleStaffHandshakeBack = useCallback(() => {
     if (deployOtpCode) {
       setDeployOtpCode(null);
       setDeployOtpExpiresAt(null);
       setDeployTripIdForOtp(null);
-      setHandshakeStep("flow_choice");
       return;
     }
-    if (handshakeStep === "flow_choice") {
-      setLoadAction(null);
-      setDeployOtpCode(null);
-      setDeployOtpExpiresAt(null);
-      setDeployTripIdForOtp(null);
-      setHandshakeStep("flow_choice");
-      return;
-    }
-    if (handshakeStep === "roster" || handshakeStep === "ad_hoc_vehicle") {
-      setHandshakeStep("flow_choice");
-      return;
-    }
-  }, [deployOtpCode, handshakeStep]);
+    setLoadAction(null);
+    setDeployOtpCode(null);
+    setDeployOtpExpiresAt(null);
+    setDeployTripIdForOtp(null);
+    setStaffHandshakeAssignLater(false);
+  }, [deployOtpCode]);
+
+  const resetStaffHandshakeForm = useCallback(() => {
+    setUseAdHocDriver(false);
+    setStaffHandshakeAssignLater(false);
+    setAssignDriverId(null);
+    setAssignVehicleId(undefined);
+    setAssignVehicleRegistration("");
+    setAggregateDriverPhone("");
+    setSubcontractSupplierId(null);
+    setSubcontractRate("");
+    setSubcontractPickerOpen(false);
+    setAggregatePhoneName(null);
+    setAggregatePhoneNotFound(false);
+    setAggregatePhoneInTrip(false);
+  }, []);
 
   /** Keep add-load FAB above the global chat FAB, tab bar, and safe area. */
   const hirePartnerFabBottom =
@@ -1546,7 +1615,7 @@ export function LoadCenterView({
                   setDeployOtpCode(null);
                   setDeployOtpExpiresAt(null);
                   setDeployTripIdForOtp(null);
-                  setHandshakeStep("flow_choice");
+                  setStaffHandshakeAssignLater(false);
                   setLoadAction({ type: "ASSIGN", load });
                 }}
                 activeOpacity={0.9}
@@ -3130,46 +3199,78 @@ export function LoadCenterView({
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Staff Handshake modal: Roster (driver + vehicle from org) or Ad hoc driver (OTP claim). Triggered from Claimed tab (ASSIGN STAFF & DEPLOY). O(n): drivers/vehicles loaded once per org. */}
+      {/* Staff Handshake modal: Roster (driver + vehicle from org) or Ad hoc driver (OTP claim). Triggered from Claimed tab (ASSIGN STAFF & DEPLOY). O(n): drivers/vehicles loaded once per org. Web shell matches TripAssignmentBlock centered modal. */}
       <Modal
         visible={loadAction?.type === "ASSIGN"}
-        animationType="slide"
-        presentationStyle="fullScreen"
+        animationType={Platform.OS === "web" ? "fade" : "slide"}
+        presentationStyle={
+          Platform.OS === "web" ? "overFullScreen" : "fullScreen"
+        }
+        transparent={Platform.OS === "web"}
         onRequestClose={handleStaffHandshakeBack}
       >
-        <View style={[styles.assignModalPage, { paddingTop: insets.top }]}>
-          <View style={styles.assignModalHeader}>
-            <View style={styles.assignModalHeaderText}>
-              <Text style={styles.assignModalTitle}>Staff Handshake</Text>
-              <Text style={styles.assignModalSubtitle}>
-                Network Node Selection
-              </Text>
+        <View
+          style={
+            Platform.OS === "web"
+              ? assignmentShellStyles.webModalBackdrop
+              : [styles.assignModalPage, { paddingTop: insets.top }]
+          }
+        >
+          <View
+            style={
+              Platform.OS === "web"
+                ? [
+                    assignmentShellStyles.webModalCardWhite,
+                    { paddingTop: insets.top },
+                  ]
+                : styles.handshakeNativeInner
+            }
+          >
+            <View style={assignmentShellStyles.modalHero}>
+              <View style={assignmentShellStyles.modalHeroText}>
+                <Text
+                  style={[
+                    assignmentShellStyles.modalTitle,
+                    { fontStyle: "italic", fontWeight: "900" },
+                  ]}
+                >
+                  Staff Handshake
+                </Text>
+                <Text style={assignmentShellStyles.modalSubtitle}>
+                  Network node selection — roster deploy or OTP for the driver.
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  setLoadAction(null);
+                  setDeployOtpCode(null);
+                  setDeployOtpExpiresAt(null);
+                  setDeployTripIdForOtp(null);
+                  setStaffHandshakeAssignLater(false);
+                }}
+                hitSlop={12}
+                style={assignmentShellStyles.modalCloseBtn}
+                accessibilityLabel="Close"
+              >
+                <FontAwesome
+                  name="times"
+                  size={18}
+                  color={assignmentShellColors.subtitle}
+                />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              onPress={() => {
-                setLoadAction(null);
-                setDeployOtpCode(null);
-                setDeployOtpExpiresAt(null);
-                setDeployTripIdForOtp(null);
-                setHandshakeStep("flow_choice");
-              }}
-              hitSlop={12}
-              style={styles.assignModalCloseBtn}
+            {loadAction?.type === "ASSIGN" && (
+            <View
+              style={[styles.assignModalBody, assignmentShellStyles.modalBodyFlex]}
             >
-              <FontAwesome name="times" size={18} color={Theme.textMuted} />
-            </TouchableOpacity>
-          </View>
-          {loadAction?.type === "ASSIGN" && (
-            <View style={styles.assignModalBody}>
               <ScrollView
                 style={styles.assignModalScroll}
                 contentContainerStyle={[
-                  styles.assignModalScrollContent,
+                  assignmentShellStyles.bodyScrollContent,
                   {
-                    paddingBottom:
-                      handshakeStep === "roster" && !deployOtpCode
-                        ? 12
-                        : 24 + insets.bottom,
+                    paddingBottom: !deployOtpCode
+                      ? 110 + insets.bottom
+                      : 24 + insets.bottom,
                   },
                 ]}
                 keyboardShouldPersistTaps="handled"
@@ -3235,7 +3336,7 @@ export function LoadCenterView({
                         setDeployOtpCode(null);
                         setDeployOtpExpiresAt(null);
                         setDeployTripIdForOtp(null);
-                        setHandshakeStep("flow_choice");
+                        setStaffHandshakeAssignLater(false);
                         const isShipper =
                           loadAction?.type === "ASSIGN" &&
                           loadAction.load.organization_id === orgId;
@@ -3254,86 +3355,140 @@ export function LoadCenterView({
                       </Text>
                     </TouchableOpacity>
                   </>
-                ) : handshakeStep === "flow_choice" ? (
-                  /* Step 1: How to assign — Roster (driver + vehicle from org) or Ad hoc driver (OTP). */
+                ) : (
                   <>
-                    <Text style={styles.sourceOfSupplySectionTitle}>
-                      How do you want to assign this load?
-                    </Text>
-                    <View style={styles.sourceRow}>
-                      <TouchableOpacity
-                        style={[styles.sourceOption, styles.sourceOptionFirst]}
-                        onPress={() => {
-                          setUseAdHocDriver(false);
-                          setAssignVehicleRegistration("");
-                          setAggregateDriverPhone("");
-                          setSubcontractSupplierId(null);
-                          setSubcontractRate("");
-                          setSubcontractPickerOpen(false);
-                          setHandshakeStep("roster");
-                        }}
-                        activeOpacity={0.85}
-                      >
-                        <View style={styles.sourceOptionIconWrap}>
-                          <FontAwesome
-                            name="truck"
-                            size={16}
-                            color={Theme.textMuted}
+                    <View style={styles.handshakeSegmentSection}>
+                      <View style={styles.handshakeSegmentPill}>
+                        <TouchableOpacity
+                          style={[
+                            styles.handshakeSegBtn,
+                            !useAdHocDriver && styles.handshakeSegBtnActive,
+                          ]}
+                          onPress={() => {
+                            setUseAdHocDriver(false);
+                            setAssignVehicleRegistration("");
+                            setAggregateDriverPhone("");
+                            setSubcontractSupplierId(null);
+                            setSubcontractRate("");
+                            setSubcontractPickerOpen(false);
+                            setAggregatePhoneName(null);
+                            setAggregatePhoneNotFound(false);
+                            setAggregatePhoneInTrip(false);
+                          }}
+                          activeOpacity={0.88}
+                        >
+                          <Truck
+                            size={14}
+                            color={!useAdHocDriver ? "#ffffff" : "#94a3b8"}
                           />
-                        </View>
-                        <Text style={styles.sourceOptionLabel}>Asset</Text>
-                        <Text style={styles.sourceOptionSubtitle}>
-                          Driver & vehicle from my org
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.sourceOption, styles.sourceOptionLast]}
-                        onPress={() => {
-                          setUseAdHocDriver(true);
-                          setAssignDriverId(null);
-                          setAssignVehicleId(undefined);
-                          setAssignVehicleRegistration("");
-                          setAggregateDriverPhone("");
-                          setSubcontractSupplierId(null);
-                          setSubcontractRate("");
-                          setSubcontractPickerOpen(false);
-                          setHandshakeStep("ad_hoc_vehicle");
-                        }}
-                        activeOpacity={0.85}
-                      >
-                        <View style={styles.sourceOptionIconWrap}>
-                          <FontAwesome
-                            name="handshake-o"
-                            size={16}
-                            color={Theme.textMuted}
+                          <Text
+                            style={[
+                              styles.handshakeSegBtnText,
+                              !useAdHocDriver && styles.handshakeSegBtnTextActive,
+                            ]}
+                          >
+                            Asset
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[
+                            styles.handshakeSegBtn,
+                            useAdHocDriver && styles.handshakeSegBtnActive,
+                          ]}
+                          onPress={() => {
+                            setUseAdHocDriver(true);
+                            setAssignDriverId(null);
+                            setAssignVehicleId(undefined);
+                            setAssignVehicleRegistration("");
+                            setAggregateDriverPhone("");
+                            setSubcontractSupplierId(null);
+                            setSubcontractRate("");
+                            setSubcontractPickerOpen(false);
+                            setAggregatePhoneName(null);
+                            setAggregatePhoneNotFound(false);
+                            setAggregatePhoneInTrip(false);
+                          }}
+                          activeOpacity={0.88}
+                        >
+                          <Building2
+                            size={14}
+                            color={useAdHocDriver ? "#ffffff" : "#94a3b8"}
                           />
-                        </View>
-                        <Text style={styles.sourceOptionLabel}>Aggregate</Text>
-                        <Text style={styles.sourceOptionSubtitle}>
-                          Share OTP for driver to claim
-                        </Text>
-                      </TouchableOpacity>
+                          <Text
+                            style={[
+                              styles.handshakeSegBtnText,
+                              useAdHocDriver && styles.handshakeSegBtnTextActive,
+                            ]}
+                          >
+                            Aggregate
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
-                  </>
-                ) : handshakeStep === "roster" ? (
-                  /* Roster: driver + vehicle, then Authorize Voyage */
-                  <>
-                    <TouchableOpacity
-                      style={styles.wizardBackBtn}
-                      onPress={() => setHandshakeStep("flow_choice")}
-                    >
-                      <FontAwesome
-                        name="arrow-left"
-                        size={14}
-                        color={Theme.primary}
+
+                    <View style={styles.handshakeAssignLaterOuter}>
+                      <View style={styles.handshakeAssignLaterLeft}>
+                        <View style={styles.handshakeAssignLaterIconWrap}>
+                          <ListChecks size={18} color="#64748b" />
+                        </View>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={styles.handshakeAssignLaterTitle}>
+                            Assign later
+                          </Text>
+                          <Text style={styles.handshakeAssignLaterSub}>
+                            {useAdHocDriver
+                              ? "(vehicle & driver phone from trip detail)"
+                              : "(vehicle & driver from trip detail)"}
+                          </Text>
+                        </View>
+                      </View>
+                      <Switch
+                        value={staffHandshakeAssignLater}
+                        onValueChange={(v) => {
+                          setStaffHandshakeAssignLater(v);
+                          if (v) {
+                            setAssignDriverId(null);
+                            setAssignVehicleId(undefined);
+                            setAggregateDriverPhone("");
+                            setAssignVehicleRegistration("");
+                          }
+                        }}
+                        trackColor={{
+                          false: "#e2e8f0",
+                          true: "#0f172a",
+                        }}
+                        thumbColor="#ffffff"
                       />
-                      <Text style={styles.wizardBackText}>Back</Text>
-                    </TouchableOpacity>
-                    <Text style={styles.sourceOfSupplySectionTitle}>Asset</Text>
-                    <Text style={styles.modalHint}>
-                      Assign driver and vehicle from your org, then authorize
-                      voyage.
-                    </Text>
+                    </View>
+
+                    {!useAdHocDriver ? (
+                      (staffHandshakeAssignLater ? (
+                        <Text style={styles.modalHint}>
+                          Assign vehicle and driver on the trip screen before the
+                          trip starts.
+                        </Text>
+                      ) : (
+                        <>
+                          <View style={styles.handshakeWorkflowHead}>
+                            <TouchableOpacity
+                              style={styles.handshakeWorkflowBackBtn}
+                              onPress={resetStaffHandshakeForm}
+                              activeOpacity={0.85}
+                              hitSlop={8}
+                            >
+                              <FontAwesome
+                                name="arrow-left"
+                                size={10}
+                                color={Theme.primary}
+                              />
+                              <Text style={styles.handshakeWorkflowBackText}>
+                                Back
+                              </Text>
+                            </TouchableOpacity>
+                            <Text style={styles.handshakeWorkflowBadge}>
+                              Asset workflow
+                            </Text>
+                          </View>
                     {(() => {
                       const selectedDriver = activeDrivers.find(
                         (d) => String(d.id) === assignDriverId,
@@ -3427,7 +3582,7 @@ export function LoadCenterView({
                                       setDeployOtpCode(null);
                                       setDeployOtpExpiresAt(null);
                                       setDeployTripIdForOtp(null);
-                                      setHandshakeStep("flow_choice");
+                                      setStaffHandshakeAssignLater(false);
                                       setTimeout(
                                         () => {
                                           router.push(
@@ -3532,7 +3687,7 @@ export function LoadCenterView({
                                       setDeployOtpCode(null);
                                       setDeployOtpExpiresAt(null);
                                       setDeployTripIdForOtp(null);
-                                      setHandshakeStep("flow_choice");
+                                      setStaffHandshakeAssignLater(false);
                                       setTimeout(
                                         () => {
                                           router.push(
@@ -3587,229 +3742,239 @@ export function LoadCenterView({
                         </>
                       );
                     })()}
-                  </>
-                ) : (
-                  /* Aggregate — same fields as before; UI aligned with TripAssignmentBlock (trip detail). */
-                  <>
-                    <TouchableOpacity
-                      style={styles.wizardBackBtn}
-                      onPress={() => setHandshakeStep("flow_choice")}
-                    >
-                      <FontAwesome
-                        name="arrow-left"
-                        size={14}
-                        color={Theme.primary}
-                      />
-                      <Text style={styles.wizardBackText}>Back</Text>
-                    </TouchableOpacity>
-                    <Text style={styles.sourceOfSupplySectionTitle}>
-                      Aggregate
-                    </Text>
-                    <Text style={styles.modalHint}>
-                      Assign driver and vehicle for OTP (partner and rate
-                      optional).
-                    </Text>
-
-                    <View style={styles.tripAssignCard}>
-                      <View style={styles.tripAssignCardHeader}>
-                        <Text style={styles.tripAssignCardHeaderTitle}>
-                          Current Node
-                        </Text>
-                        <View
-                          style={[
-                            styles.tripAssignSourceBadge,
-                            styles.tripAssignBadgeUnassigned,
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.tripAssignSourceBadgeText,
-                              styles.tripAssignSourceBadgeTextUnassigned,
-                            ]}
-                          >
-                            Unassigned
-                          </Text>
-                        </View>
-                      </View>
-
-                      <View style={styles.tripAssignRow}>
-                        <View style={styles.tripAssignRowLeft}>
-                          <View
-                            style={[
-                              styles.tripAssignIcon,
-                              aggregateHasDriverPhone
-                                ? styles.tripAssignIconDriverActive
-                                : styles.tripAssignIconInactive,
-                            ]}
-                          >
-                            <FontAwesome
-                              name="user"
-                              size={20}
-                              color={
-                                aggregateHasDriverPhone
-                                  ? Theme.primary
-                                  : Theme.textMuted
-                              }
-                            />
-                          </View>
-                          <View style={styles.tripAssignRowTextCol}>
-                            <Text style={styles.tripAssignRowLabel}>
-                              Driver Node
-                            </Text>
-                            <TextInput
-                              style={styles.tripAssignRowInput}
-                              placeholder="Phone for OTP (optional)"
-                              placeholderTextColor={Theme.textMuted}
-                              value={aggregateDriverPhone}
-                              onChangeText={(t) =>
-                                setAggregateDriverPhone(formatMobileNumber(t))
-                              }
-                              keyboardType="phone-pad"
-                              autoComplete="tel"
-                            />
-                            {aggregatePhoneName ? (
-                              <Text style={styles.phoneModalFound}>
-                                Found: {aggregatePhoneName}
-                              </Text>
-                            ) : aggregatePhoneNotFound ? (
-                              <Text style={styles.phoneModalNotFound}>
-                                No driver found for this number
-                              </Text>
-                            ) : null}
-                            {aggregatePhoneName && aggregatePhoneInTrip ? (
-                              <Text style={styles.phoneModalInTrip}>
-                                Driver is in trip
-                              </Text>
-                            ) : null}
-                          </View>
-                        </View>
-                      </View>
-
-                      <View
-                        style={[styles.tripAssignRow, styles.tripAssignRowLast]}
-                      >
-                        <View style={styles.tripAssignRowLeft}>
-                          <View
-                            style={[
-                              styles.tripAssignIcon,
-                              aggregateHasVehicleText
-                                ? styles.tripAssignIconVehicleActive
-                                : styles.tripAssignIconInactive,
-                            ]}
-                          >
-                            <FontAwesome
-                              name="truck"
-                              size={18}
-                              color={
-                                aggregateHasVehicleText
-                                  ? Theme.textPrimaryDark
-                                  : Theme.textMuted
-                              }
-                            />
-                          </View>
-                          <View style={styles.tripAssignRowTextCol}>
-                            <Text style={styles.tripAssignRowLabel}>
-                              Vehicle Registry
-                            </Text>
-                            <TextInput
-                              style={styles.tripAssignRowInput}
-                              placeholder="Vehicle registration (optional)"
-                              placeholderTextColor={Theme.textMuted}
-                              value={assignVehicleRegistration}
-                              onChangeText={setAssignVehicleRegistration}
-                              editable={true}
-                            />
-                          </View>
-                        </View>
-                      </View>
-
-                      <View style={styles.tripAssignPartnerBlock}>
-                        <Text style={styles.tripAssignPartnerHint}>
-                          Associated partner (optional). Tag your partner for
-                          this trip and enter the rate you will pay.
-                        </Text>
-                        <TouchableOpacity
-                          style={styles.subcontractPickBtn}
-                          onPress={() => setSubcontractPickerOpen(true)}
-                          activeOpacity={0.85}
-                        >
-                          <Text style={styles.subcontractPickLabel}>
-                            Partner
-                          </Text>
-                          <Text
-                            style={styles.subcontractPickValue}
-                            numberOfLines={1}
-                          >
-                            {subcontractSupplierId
-                              ? suppliers.find(
-                                  (s) => s.id === subcontractSupplierId,
-                                )?.company_name ||
-                                suppliers.find(
-                                  (s) => s.id === subcontractSupplierId,
-                                )?.name ||
-                                suppliers.find(
-                                  (s) => s.id === subcontractSupplierId,
-                                )?.contact_person ||
-                                "Selected"
-                              : "Select partner"}
-                          </Text>
-                          <FontAwesome
-                            name="chevron-down"
-                            size={12}
-                            color={Theme.textMuted}
-                            style={{ marginLeft: 10 }}
-                          />
-                        </TouchableOpacity>
-                        <View style={styles.assignInputWrap}>
-                          <TextInput
-                            style={styles.assignVehicleInput}
-                            placeholder="Partner rate (₹)"
-                            placeholderTextColor={Theme.textMuted}
-                            value={subcontractRate}
-                            onChangeText={setSubcontractRate}
-                            keyboardType="decimal-pad"
-                          />
-                        </View>
-                      </View>
-                    </View>
-
-                    {assigningTripId === loadAction.load.id ? (
-                      <View style={styles.loadingWrap}>
-                        <ActivityIndicator size="small" color={Theme.primary} />
-                        <Text style={styles.loadingText}>Creating trip…</Text>
-                      </View>
+                        </>
+                      ))
                     ) : (
-                      <TouchableOpacity
-                        style={[styles.modalSubmit, styles.handshakeBtnModal]}
-                        onPress={() => handleDeployAdHoc(loadAction.load)}
-                        disabled={
-                          assigningTripId === loadAction.load.id ||
-                          (aggregateDriverPhone.trim().length > 0 &&
-                            aggregatePhoneInTrip)
+                      (() => {
+                        const aggregatePartnerBlock = (
+                          <View style={styles.tripAssignPartnerBlock}>
+                            <Text style={styles.tripAssignPartnerHint}>
+                              Associated partner (required). Select your
+                              sub-supplier for this trip and enter the rate you
+                              will pay.
+                            </Text>
+                            <TouchableOpacity
+                              style={styles.subcontractPickBtn}
+                              onPress={() => setSubcontractPickerOpen(true)}
+                              activeOpacity={0.85}
+                            >
+                              <Text style={styles.subcontractPickLabel}>
+                                Partner *
+                              </Text>
+                              <Text
+                                style={styles.subcontractPickValue}
+                                numberOfLines={1}
+                              >
+                                {subcontractSupplierId
+                                  ? suppliers.find(
+                                      (s) => s.id === subcontractSupplierId,
+                                    )?.company_name ||
+                                    suppliers.find(
+                                      (s) => s.id === subcontractSupplierId,
+                                    )?.name ||
+                                    suppliers.find(
+                                      (s) => s.id === subcontractSupplierId,
+                                    )?.contact_person ||
+                                    "Selected"
+                                  : "Select partner"}
+                              </Text>
+                              <FontAwesome
+                                name="chevron-down"
+                                size={12}
+                                color={Theme.textMuted}
+                                style={{ marginLeft: 10 }}
+                              />
+                            </TouchableOpacity>
+                            <View style={styles.assignInputWrap}>
+                              <TextInput
+                                style={styles.assignVehicleInput}
+                                placeholder="Partner rate (₹) *"
+                                placeholderTextColor={Theme.textMuted}
+                                value={subcontractRate}
+                                onChangeText={setSubcontractRate}
+                                keyboardType="decimal-pad"
+                              />
+                            </View>
+                          </View>
+                        );
+
+                        if (staffHandshakeAssignLater) {
+                          return (
+                            <>
+                              <Text style={styles.modalHint}>
+                                Add vehicle number and driver phone on the trip
+                                screen before the trip starts.
+                              </Text>
+                              <View
+                                style={
+                                  assignmentShellStyles.tripAssignSurfaceCard
+                                }
+                              >
+                                {aggregatePartnerBlock}
+                              </View>
+                            </>
+                          );
                         }
-                        activeOpacity={0.9}
-                      >
-                        <FontAwesome
-                          name="share-alt"
-                          size={18}
-                          color={Theme.textOnPrimary}
-                          style={{ marginRight: 8 }}
-                        />
-                        <Text style={styles.modalSubmitText}>
-                          {aggregateDriverPhone.trim().length > 0 &&
-                          aggregatePhoneInTrip
-                            ? "Driver On Trip"
-                            : "Deploy & get OTP"}
-                        </Text>
-                      </TouchableOpacity>
-                    )}
+
+                        return (
+                          <>
+                            <View style={styles.handshakeWorkflowHead}>
+                              <TouchableOpacity
+                                style={styles.handshakeWorkflowBackBtn}
+                                onPress={resetStaffHandshakeForm}
+                                activeOpacity={0.85}
+                                hitSlop={8}
+                              >
+                                <FontAwesome
+                                  name="arrow-left"
+                                  size={10}
+                                  color={Theme.primary}
+                                />
+                                <Text style={styles.handshakeWorkflowBackText}>
+                                  Back
+                                </Text>
+                              </TouchableOpacity>
+                              <Text style={styles.handshakeWorkflowBadge}>
+                                Aggregate workflow
+                              </Text>
+                            </View>
+
+                            <View
+                              style={
+                                assignmentShellStyles.tripAssignSurfaceCard
+                              }
+                            >
+                              <View style={styles.tripAssignCardHeader}>
+                                <Text style={styles.tripAssignCardHeaderTitle}>
+                                  Current Node
+                                </Text>
+                                <View
+                                  style={[
+                                    styles.tripAssignSourceBadge,
+                                    styles.tripAssignBadgeUnassigned,
+                                  ]}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.tripAssignSourceBadgeText,
+                                      styles.tripAssignSourceBadgeTextUnassigned,
+                                    ]}
+                                  >
+                                    Unassigned
+                                  </Text>
+                                </View>
+                              </View>
+
+                              <View style={styles.tripAssignRow}>
+                                <View style={styles.tripAssignRowLeft}>
+                                  <View
+                                    style={[
+                                      styles.tripAssignIcon,
+                                      aggregateHasDriverPhone
+                                        ? styles.tripAssignIconDriverActive
+                                        : styles.tripAssignIconInactive,
+                                    ]}
+                                  >
+                                    <FontAwesome
+                                      name="user"
+                                      size={20}
+                                      color={
+                                        aggregateHasDriverPhone
+                                          ? Theme.primary
+                                          : Theme.textMuted
+                                      }
+                                    />
+                                  </View>
+                                  <View style={styles.tripAssignRowTextCol}>
+                                    <Text style={styles.tripAssignRowLabel}>
+                                      Driver Node
+                                    </Text>
+                                    <TextInput
+                                      style={styles.tripAssignRowInput}
+                                      placeholder="Phone for OTP (optional)"
+                                      placeholderTextColor={Theme.textMuted}
+                                      value={aggregateDriverPhone}
+                                      onChangeText={(t) =>
+                                        setAggregateDriverPhone(
+                                          formatMobileNumber(t),
+                                        )
+                                      }
+                                      keyboardType="phone-pad"
+                                      autoComplete="tel"
+                                    />
+                                    {aggregatePhoneName ? (
+                                      <Text style={styles.phoneModalFound}>
+                                        Found: {aggregatePhoneName}
+                                      </Text>
+                                    ) : aggregatePhoneNotFound ? (
+                                      <Text style={styles.phoneModalNotFound}>
+                                        No driver found for this number
+                                      </Text>
+                                    ) : null}
+                                    {aggregatePhoneName &&
+                                    aggregatePhoneInTrip ? (
+                                      <Text style={styles.phoneModalInTrip}>
+                                        Driver is in trip
+                                      </Text>
+                                    ) : null}
+                                  </View>
+                                </View>
+                              </View>
+
+                              <View
+                                style={[
+                                  styles.tripAssignRow,
+                                  styles.tripAssignRowLast,
+                                ]}
+                              >
+                                <View style={styles.tripAssignRowLeft}>
+                                  <View
+                                    style={[
+                                      styles.tripAssignIcon,
+                                      aggregateHasVehicleText
+                                        ? styles.tripAssignIconVehicleActive
+                                        : styles.tripAssignIconInactive,
+                                    ]}
+                                  >
+                                    <FontAwesome
+                                      name="truck"
+                                      size={18}
+                                      color={
+                                        aggregateHasVehicleText
+                                          ? Theme.textPrimaryDark
+                                          : Theme.textMuted
+                                      }
+                                    />
+                                  </View>
+                                  <View style={styles.tripAssignRowTextCol}>
+                                    <Text style={styles.tripAssignRowLabel}>
+                                      Vehicle Registry
+                                    </Text>
+                                    <TextInput
+                                      style={styles.tripAssignRowInput}
+                                      placeholder="Vehicle registration (optional)"
+                                      placeholderTextColor={Theme.textMuted}
+                                      value={assignVehicleRegistration}
+                                      onChangeText={setAssignVehicleRegistration}
+                                      editable={true}
+                                    />
+                                  </View>
+                                </View>
+                              </View>
+
+                              {aggregatePartnerBlock}
+                            </View>
+                          </>
+                        );
+                      })()
+                  )}
                   </>
                 )}
               </ScrollView>
-              {handshakeStep === "roster" && !deployOtpCode ? (
+              {!deployOtpCode ? (
                 <View
                   style={[
-                    styles.assignHandshakeFooter,
+                    assignmentShellStyles.modalFooterBar,
                     { paddingBottom: Math.max(16, insets.bottom + 8) },
                   ]}
                 >
@@ -3819,14 +3984,44 @@ export function LoadCenterView({
                       <ActivityIndicator size="small" color={Theme.primary} />
                       <Text style={styles.loadingText}>Creating trip…</Text>
                     </View>
-                  ) : loadAction?.type === "ASSIGN" && rosterReady ? (
+                  ) : loadAction?.type === "ASSIGN" &&
+                    !useAdHocDriver &&
+                    staffHandshakeAssignLater ? (
                     <Pressable
                       accessibilityRole="button"
                       disabled={assigningTripId === loadAction.load.id}
                       style={({ pressed }) => [
-                        styles.modalSubmit,
-                        styles.handshakeBtnModal,
-                        pressed && { opacity: 0.88 },
+                        styles.handshakePrimaryCta,
+                        pressed && { opacity: 0.9 },
+                        Platform.OS === "web" &&
+                          ({ cursor: "pointer" } as const),
+                      ]}
+                      onPress={() => {
+                        if (loadAction?.type === "ASSIGN") {
+                          void handleFinalAssignment(loadAction.load);
+                        }
+                      }}
+                    >
+                      <FontAwesome
+                        name="bolt"
+                        size={18}
+                        color={Theme.textOnPrimary}
+                        style={{ marginRight: 8 }}
+                      />
+                      <Text style={styles.handshakePrimaryCtaText}>
+                        Authorize & deploy voyage
+                      </Text>
+                    </Pressable>
+                  ) : loadAction?.type === "ASSIGN" &&
+                    !useAdHocDriver &&
+                    !staffHandshakeAssignLater &&
+                    rosterReady ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={assigningTripId === loadAction.load.id}
+                      style={({ pressed }) => [
+                        styles.handshakePrimaryCta,
+                        pressed && { opacity: 0.9 },
                         Platform.OS === "web" &&
                           ({ cursor: "pointer" } as const),
                       ]}
@@ -3842,17 +4037,89 @@ export function LoadCenterView({
                         color={Theme.textOnPrimary}
                         style={{ marginRight: 8 }}
                       />
-                      <Text style={styles.modalSubmitText}>Assign Trip</Text>
+                      <Text style={styles.handshakePrimaryCtaText}>
+                        Authorize & deploy voyage
+                      </Text>
+                    </Pressable>
+                  ) : loadAction?.type === "ASSIGN" &&
+                    useAdHocDriver &&
+                    !staffHandshakeAssignLater ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={
+                        assigningTripId === loadAction.load.id ||
+                        !aggregatePartnerHandshakeComplete ||
+                        (aggregateDriverPhone.trim().length > 0 &&
+                          aggregatePhoneInTrip)
+                      }
+                      style={({ pressed }) => [
+                        styles.handshakePrimaryCta,
+                        pressed && { opacity: 0.9 },
+                        Platform.OS === "web" &&
+                          ({ cursor: "pointer" } as const),
+                      ]}
+                      onPress={() => {
+                        if (loadAction?.type === "ASSIGN") {
+                          void handleDeployAdHoc(loadAction.load);
+                        }
+                      }}
+                    >
+                      <FontAwesome
+                        name="share-alt"
+                        size={18}
+                        color={Theme.textOnPrimary}
+                        style={{ marginRight: 8 }}
+                      />
+                      <Text style={styles.handshakePrimaryCtaText}>
+                        {aggregateDriverPhone.trim().length > 0 &&
+                        aggregatePhoneInTrip
+                          ? "Driver on trip"
+                          : "Deploy & get OTP"}
+                      </Text>
+                    </Pressable>
+                  ) : loadAction?.type === "ASSIGN" &&
+                    useAdHocDriver &&
+                    staffHandshakeAssignLater ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={
+                        assigningTripId === loadAction.load.id ||
+                        !aggregatePartnerHandshakeComplete
+                      }
+                      style={({ pressed }) => [
+                        styles.handshakePrimaryCta,
+                        pressed && { opacity: 0.9 },
+                        Platform.OS === "web" &&
+                          ({ cursor: "pointer" } as const),
+                      ]}
+                      onPress={() => {
+                        if (loadAction?.type === "ASSIGN") {
+                          void handleDeployAdHoc(loadAction.load);
+                        }
+                      }}
+                    >
+                      <FontAwesome
+                        name="share-alt"
+                        size={18}
+                        color={Theme.textOnPrimary}
+                        style={{ marginRight: 8 }}
+                      />
+                      <Text style={styles.handshakePrimaryCtaText}>
+                        Create trip & assign later
+                      </Text>
                     </Pressable>
                   ) : (
                     <Text style={[styles.modalHint, { marginBottom: 0 }]}>
-                      Select a driver and a vehicle from your org to continue.
+                      {!useAdHocDriver
+                        ? "Select a driver and a vehicle from your org to continue."
+                        : "Enter optional driver phone and vehicle details, or use Assign later."}
                     </Text>
                   )}
                 </View>
               ) : null}
             </View>
           )}
+          </View>
         </View>
       </Modal>
 
@@ -5259,59 +5526,170 @@ const styles = StyleSheet.create({
     letterSpacing: 1.4,
   },
   handshakeBtnModal: { backgroundColor: Theme.textPrimaryDark },
-  sourceOfSupplySectionTitle: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    marginBottom: 10,
+  handshakeSegmentSection: {
+    alignItems: "center",
+    marginBottom: 20,
   },
-  sourceRow: {
+  handshakeSegmentPill: {
     flexDirection: "row",
+    backgroundColor: "#0f172a",
+    borderRadius: 14,
+    padding: 4,
+    gap: 4,
+    ...Platform.select({
+      web: {
+        boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+      } as const,
+      default: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+        elevation: 6,
+      },
+    }),
+  },
+  handshakeSegBtn: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 22,
+    borderRadius: 11,
   },
-  sourceOption: {
-    flex: 1,
+  handshakeSegBtnActive: {
+    backgroundColor: "rgba(255,255,255,0.1)",
+    ...Platform.select({
+      web: {
+        boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.05)",
+      } as const,
+    }),
+  },
+  handshakeSegBtnText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  handshakeSegBtnTextActive: {
+    color: "#ffffff",
+  },
+  handshakeAssignLaterOuter: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 10,
-    gap: 6,
-    borderRadius: 12,
+    justifyContent: "space-between",
+    backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.surface,
-    minHeight: 72,
+    borderColor: "#f1f5f9",
+    borderRadius: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    marginBottom: 20,
+    ...Platform.select({
+      web: {
+        boxShadow: "0 1px 2px rgba(15,23,42,0.06)",
+      } as const,
+      default: {
+        shadowColor: "#0f172a",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 1,
+      },
+    }),
   },
-  sourceOptionFirst: {},
-  sourceOptionLast: {
-    borderRightWidth: 0,
+  handshakeAssignLaterLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    flex: 1,
+    minWidth: 0,
   },
-  sourceOptionIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Theme.surfaceBorder,
+  handshakeAssignLaterIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "#f8fafc",
     alignItems: "center",
     justifyContent: "center",
   },
-  sourceOptionLabel: {
+  handshakeAssignLaterTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#1e293b",
+  },
+  handshakeAssignLaterSub: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: "#94a3b8",
+    marginTop: 2,
+  },
+  handshakeWorkflowHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 14,
+  },
+  handshakeWorkflowBackBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  handshakeWorkflowBackText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.primary,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  handshakeWorkflowBadge: {
+    fontSize: 10,
+    fontWeight: "800",
+    fontStyle: "italic",
+    color: "#0f172a",
+    textTransform: "uppercase",
+    letterSpacing: 2,
+  },
+  handshakePrimaryCta: {
+    width: "100%",
+    minHeight: 52,
+    borderRadius: 18,
+    backgroundColor: "#0f172a",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    ...Platform.select({
+      web: {
+        boxShadow: "0 12px 24px rgba(15,23,42,0.2)",
+        cursor: "pointer",
+      } as const,
+      default: {
+        shadowColor: "#0f172a",
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.2,
+        shadowRadius: 16,
+        elevation: 6,
+      },
+    }),
+  },
+  handshakePrimaryCtaText: {
     fontSize: 11,
     fontWeight: "800",
-    color: Theme.textPrimaryDark,
-    letterSpacing: 1,
+    fontStyle: "italic",
+    color: "#ffffff",
     textTransform: "uppercase",
+    letterSpacing: 2,
   },
-  sourceOptionSubtitle: {
-    fontSize: 9,
-    fontWeight: "600",
-    color: Theme.textMuted,
-    textAlign: "center",
+  handshakeNativeInner: {
+    flex: 1,
+    minHeight: 0,
   },
   assignModalPage: {
     flex: 1,
-    backgroundColor: "#f4f5f7",
+    backgroundColor: Theme.surfaceLight,
     position: "relative",
   },
   assignModalHeader: {
@@ -5350,38 +5728,11 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
   },
-  assignHandshakeFooter: {
-    borderTopWidth: 1,
-    borderTopColor: Theme.borderLight,
-    backgroundColor: Theme.screenBackground,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    zIndex: 2,
-    elevation: 4,
-    shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-  },
   assignModalScrollContent: {
     paddingHorizontal: 20,
     paddingTop: 20,
     width: "100%",
     alignSelf: "stretch",
-  },
-  /** Aggregate deploy — mirrors TripAssignmentBlock card on trip detail */
-  tripAssignCard: {
-    backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
   },
   tripAssignCardHeader: {
     flexDirection: "row",
@@ -5390,7 +5741,7 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
     marginBottom: 10,
     borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
+    borderBottomColor: assignmentShellColors.borderSlate,
   },
   tripAssignCardHeaderTitle: {
     fontSize: 13,
@@ -5422,7 +5773,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
+    borderBottomColor: assignmentShellColors.borderSlate,
   },
   tripAssignRowLast: { borderBottomWidth: 0 },
   tripAssignRowLeft: {
@@ -5441,8 +5792,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   tripAssignIconInactive: {
-    backgroundColor: Theme.surfaceGray,
-    borderColor: Theme.borderLight,
+    backgroundColor: "#f3f4f6",
+    borderColor: assignmentShellColors.borderSlate,
   },
   tripAssignIconDriverActive: {
     backgroundColor: Theme.surfaceGray,
@@ -5666,9 +6017,9 @@ const styles = StyleSheet.create({
   subcontractPickBtn: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: Theme.surfaceGray,
-    borderWidth: 2,
-    borderColor: "transparent",
+    backgroundColor: "#f3f4f6",
+    borderWidth: 1,
+    borderColor: assignmentShellColors.borderSlate,
     borderRadius: 10,
     paddingVertical: 12,
     paddingHorizontal: 16,
@@ -5790,7 +6141,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   assignVehicleInput: {
-    backgroundColor: Theme.surfaceGray,
+    backgroundColor: "#f3f4f6",
     borderRadius: 10,
     paddingVertical: 12,
     paddingHorizontal: 16,
@@ -5803,25 +6154,6 @@ const styles = StyleSheet.create({
         outlineStyle: "none",
       } as any,
     }),
-  },
-  wizardBackBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    alignSelf: "flex-start",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.screenBackground,
-    marginBottom: 14,
-  },
-  wizardBackText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: Theme.primary,
-    textTransform: "uppercase",
   },
   wizardCard: {
     flexDirection: "row",
