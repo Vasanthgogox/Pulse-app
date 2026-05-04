@@ -167,21 +167,31 @@ export async function addTripAdjustment(
   if (ctx?.organizationId) {
     try {
       const mission_key = normalizeMissionKey(ctx.missionKey);
-      const { data, error } = await supabase()
+      const payload = {
+        trip_id: tripId,
+        organization_id: ctx.organizationId,
+        type: adjustment.type,
+        impact: adjustment.impact,
+        amount: adjustment.amount,
+        reason: adjustment.reason,
+        mission_key,
+      };
+      const selectFull =
+        "id, trip_id, organization_id, type, impact, amount, reason, mission_key, created_at, voided_at, void_reason";
+      const selectLegacy =
+        "id, trip_id, organization_id, type, impact, amount, reason, mission_key, created_at";
+      let { data, error } = await supabase()
         .from("trip_finance_adjustments")
-        .insert({
-          trip_id: tripId,
-          organization_id: ctx.organizationId,
-          type: adjustment.type,
-          impact: adjustment.impact,
-          amount: adjustment.amount,
-          reason: adjustment.reason,
-          mission_key,
-        })
-        .select(
-          "id, trip_id, organization_id, type, impact, amount, reason, mission_key, created_at, voided_at, void_reason",
-        )
+        .insert(payload)
+        .select(selectFull)
         .single();
+      if (error && isMissingAdjustmentColumnError(error)) {
+        ({ data, error } = await supabase()
+          .from("trip_finance_adjustments")
+          .insert(payload)
+          .select(selectLegacy)
+          .single());
+      }
       if (!error && data) {
         return rowFromRemote(data as TripFinanceAdjustmentRowDb);
       }

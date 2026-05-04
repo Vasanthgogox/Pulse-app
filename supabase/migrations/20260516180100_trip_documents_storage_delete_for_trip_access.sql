@@ -28,5 +28,4 @@ CREATE POLICY "Trip access can delete trip-documents objects in trip folder"
     )
   );
 
-COMMENT ON POLICY "Trip access can delete trip-documents objects in trip folder" ON storage.objects IS
-  'Driver POD remove: delete files under a trip folder when user is assigned driver or org member; supplements owner-based delete policy.';
+-- COMMENT ON POLICY omitted: requires owner on storage.objects; policy text is documented in this file header.
