@@ -25,12 +25,16 @@ export function resolveAssignerUserId(
   const audit = (auditActorByTripId[String(trip.id)] ?? "").trim();
   const assignedByUserId = String(meta.assigned_by_user_id ?? "").trim();
   const createdByUserId = String(trip.created_by_user_id ?? "").trim();
+  const ownerUserId = String(meta.owner_user_id ?? "").trim();
+  const statusUpdatedBy = String(meta.status_updated_by ?? "").trim();
   const assignedBy = String(meta.assigned_by ?? "").trim();
   const createdBy = String(trip.created_by ?? "").trim();
 
   if (audit) return audit;
   if (assignedByUserId) return assignedByUserId;
   if (createdByUserId) return createdByUserId;
+  if (ownerUserId) return ownerUserId;
+  if (statusUpdatedBy) return statusUpdatedBy;
   if (assignedBy && UUID_V4_RE.test(assignedBy)) return assignedBy;
   if (createdBy && UUID_V4_RE.test(createdBy)) return createdBy;
   return "";
@@ -60,6 +64,7 @@ export type DriverInviteLite = {
 export type AssignerResolutionDeps = {
   assignmentActorByTripId: Record<string, string>;
   assignerNamesByUserId: Record<string, string>;
+  assignerOrgNameByUserId?: Record<string, string>;
   assignerDisplayByTripId: Record<string, string>;
   organizationNamesById: Record<string, string>;
 };
@@ -98,16 +103,19 @@ export function buildAssignerDisplayForTrip(
   const tripAssignedByUserNameCandidates = [
     tripMeta.assigned_by_name,
     tripMeta.assigned_by_user_name,
+    tripMeta.assigned_by,
     tripMeta.created_by_name,
     tripMeta.dispatcher_name,
   ];
   /** Fleet / assigning org — never use client/supplier names (those are cargo parties). */
   const tripAssignedByOrgNameCandidates = [
+    deps.assignerOrgNameByUserId?.[assignerUserId] ?? null,
     deps.organizationNamesById[(trip.organization_id ?? "").trim()] ?? null,
     inviteForTrip?.from_org_name ?? null,
     (tripMeta.organization_name as string | null | undefined) ?? null,
     (tripMeta.org_name as string | null | undefined) ?? null,
     (tripMeta.from_org_name as string | null | undefined) ?? null,
+    (tripMeta.company_name as string | null | undefined) ?? null,
   ];
   const resolvedFromTripFields = tripAssignedByUserNameCandidates
     .map((value) => humanizeAssignerDisplayName(String(value ?? "")))
@@ -126,11 +134,7 @@ export function buildAssignerDisplayForTrip(
   const assignedByOrgName =
     tripAssignedByOrgNameCandidates
       .map((value) => String(value ?? "").trim())
-      .find((value) => value.length > 0) ??
-    ((trip.organization_id ?? "").trim() ===
-    (driverOrganizationId ?? "").trim()
-      ? "Your fleet"
-      : "Assigning fleet");
+      .find((value) => value.length > 0) ?? "Assigning fleet";
 
   const assignerPersonDisplay =
     (assignedByUserName ?? "").trim() || "Fleet dispatcher";

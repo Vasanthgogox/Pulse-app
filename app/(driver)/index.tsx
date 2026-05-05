@@ -477,6 +477,9 @@ export default function DriverRadarScreen() {
   const [assignerNamesByUserId, setAssignerNamesByUserId] = useState<
     Record<string, string>
   >({});
+  const [assignerOrgNameByUserId, setAssignerOrgNameByUserId] = useState<
+    Record<string, string>
+  >({});
   /** Resolved server-side (RPC); drivers cannot read dispatcher profiles via RLS. */
   const [assignerDisplayByTripId, setAssignerDisplayByTripId] = useState<
     Record<string, string>
@@ -1455,6 +1458,7 @@ export default function DriverRadarScreen() {
           {
             assignmentActorByTripId,
             assignerNamesByUserId,
+            assignerOrgNameByUserId,
             assignerDisplayByTripId,
             organizationNamesById,
           },
@@ -1490,6 +1494,7 @@ export default function DriverRadarScreen() {
       driver?.organization_id,
       pendingOtpTripsRequiringOtp,
       assignerNamesByUserId,
+      assignerOrgNameByUserId,
       assignerDisplayByTripId,
       organizationNamesById,
       assignmentActorByTripId,
@@ -1532,8 +1537,7 @@ export default function DriverRadarScreen() {
     const fromList = incomingNotificationsWithMeta.find(
       (item) => item.trip.id === effectiveFirstIncoming.id,
     );
-    if (fromList?.assignerPersonDisplay?.trim())
-      return fromList.assignerPersonDisplay.trim();
+    if (fromList?.assignedByName?.trim()) return fromList.assignedByName.trim();
     return buildAssignerDisplayForTrip(
       effectiveFirstIncoming,
       invites,
@@ -1541,10 +1545,11 @@ export default function DriverRadarScreen() {
       {
         assignmentActorByTripId,
         assignerNamesByUserId,
+        assignerOrgNameByUserId,
         assignerDisplayByTripId,
         organizationNamesById,
       },
-    ).assignerPersonDisplay;
+    ).assignedByName;
   }, [
     effectiveFirstIncoming,
     incomingNotificationsWithMeta,
@@ -1552,6 +1557,7 @@ export default function DriverRadarScreen() {
     driver?.organization_id,
     assignmentActorByTripId,
     assignerNamesByUserId,
+    assignerOrgNameByUserId,
     assignerDisplayByTripId,
     organizationNamesById,
   ]);
@@ -1584,6 +1590,7 @@ export default function DriverRadarScreen() {
       if (trips.length === 0) {
         if (!cancelled) {
           setAssignerNamesByUserId({});
+          setAssignerOrgNameByUserId({});
           setAssignerDisplayByTripId({});
           setOrganizationNamesById({});
         }
@@ -1638,24 +1645,30 @@ export default function DriverRadarScreen() {
       if (userIds.length > 0) {
         const { data, error } = await supabase()
           .from("profiles")
-          .select("id, full_name, email")
+          .select("id, full_name, email, company_name")
           .in("id", userIds);
         if (!cancelled && !error) {
           const byId: Record<string, string> = {};
+          const orgById: Record<string, string> = {};
           for (const row of
             (data ?? []) as Array<{
               id: string;
               full_name?: string | null;
               email?: string | null;
+              company_name?: string | null;
             }>) {
             const fallbackEmailName =
               (row.email ?? "").trim().split("@")[0]?.trim() || "Dispatcher";
             byId[row.id] = (row.full_name ?? "").trim() || fallbackEmailName;
+            const company = (row.company_name ?? "").trim();
+            if (company) orgById[row.id] = company;
           }
           setAssignerNamesByUserId(byId);
+          setAssignerOrgNameByUserId(orgById);
         }
       } else if (!cancelled) {
         setAssignerNamesByUserId({});
+        setAssignerOrgNameByUserId({});
       }
 
       if (organizationIds.length > 0) {
