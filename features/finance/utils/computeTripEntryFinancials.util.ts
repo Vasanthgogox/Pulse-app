@@ -8,6 +8,7 @@
 import { computeDriverCommissionForTrip } from "@/features/finance/aggregation/aggregateDrivers";
 import type { DriverOffer } from "@/features/drivers/services/drivers.service";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
+import { computePartnerIndentFreightCost } from "@/features/finance/utils/partnerIndentFreightCost.util";
 import {
   resolveTripLedgerTripType,
   type TripLedgerTripType,
@@ -30,6 +31,7 @@ export interface TripEntryFinancialInput {
   subcontract_rate?: number | null;
   /** DB column; when null, inferred from supplier_id. */
   trip_payout_mode?: string | null;
+  vehicle_id?: string | null;
 }
 
 /** Display lines for trip ledger preview (rates + ledger allocations on this trip). */
@@ -96,7 +98,7 @@ export function computeTripEntryFinancialSnapshot(
     cost = 0;
   } else if (hasIndent && !isOwner) {
     sales = supplierRate;
-    cost = Number(trip.subcontract_rate ?? 0) || supplierRate;
+    cost = computePartnerIndentFreightCost(trip.subcontract_rate);
   } else {
     sales = clientPrice;
     cost = supplierRate;
@@ -140,7 +142,7 @@ export function computeTripEntryFinancialSnapshot(
     supplier_id: trip.supplier_id ?? null,
     trip_payout_mode: trip.trip_payout_mode ?? null,
     driver_id: trip.driver_id ?? null,
-    vehicle_id: null,
+    vehicle_id: trip.vehicle_id ?? null,
   });
 
   const supplier_payable =

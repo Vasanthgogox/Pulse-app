@@ -10,6 +10,7 @@ import { getDoubleEntryDisplayLabel } from "@/features/finance/accounting/accoun
 import type { TripLedgerQuickTag } from "@/features/finance/ledger/tripLedgerEntryChooser";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import { computeTripEntryFinancialSnapshot } from "@/features/finance/utils/computeTripEntryFinancials.util";
+import { computePartnerIndentFreightCost } from "@/features/finance/utils/partnerIndentFreightCost.util";
 import type { TripAssignmentAuditRow } from "@/features/trips/services/trip-assignment-audit.service";
 import type {
   TripAdjustment,
@@ -1228,10 +1229,10 @@ export function TripDetailFinanceView({
   /** Non-owner + indent: supplier_rate. Otherwise: client_price. */
   const sales =
     trip.indent_id != null && !isTripOwner ? supplierCost : customerSales;
-  /** Owner + indent: cost = supplier_rate. Non-owner + indent: cost = subcontractRate (or 0). Non-indent: supplier_rate. */
+  /** Owner + indent: cost = supplier_rate. Non-owner + indent: asset-style freight cost (see helper). */
   const cost =
     trip.indent_id != null && !isTripOwner
-      ? (subcontractRate ?? supplierCost) // Fallback to supplierCost if no subcontractRate
+      ? computePartnerIndentFreightCost(subcontractRate)
       : supplierCost;
   const isPartnerSettlementView = trip.indent_id != null && !isTripOwner;
   const billingOriginalLabel = isPartnerSettlementView ? "Partner Amount" : "Original Price";
@@ -1291,6 +1292,7 @@ export function TripDetailFinanceView({
           (trip as { is_cross_org_supplier?: boolean | null }).is_cross_org_supplier ?? null,
         subcontract_rate: subcontractRate ?? null,
         trip_payout_mode: trip.trip_payout_mode ?? null,
+        vehicle_id: trip.vehicle_id ?? null,
       },
       tripLedgerEntries,
       viewerOrgId,

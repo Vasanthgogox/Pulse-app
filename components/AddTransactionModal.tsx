@@ -594,6 +594,7 @@ function tripOptionToLedgerFinancialInput(t: TripOption) {
     client_id: t.client_id ?? null,
     supplier_id: t.supplier_id ?? null,
     driver_id: t.driver_id ?? null,
+    vehicle_id: t.vehicle_id ?? null,
     client_price: t.client_price ?? null,
     supplier_rate: t.supplier_rate ?? null,
     driver_commission: t.driver_commission ?? null,

@@ -12,6 +12,7 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import { useTripChat } from "@/features/chat/contexts/TripChatContext";
 import { pushTripLedgerQuickEntry } from "@/features/finance/ledger/tripLedgerEntryChooser";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
+import { computePartnerIndentFreightCost } from "@/features/finance/utils/partnerIndentFreightCost.util";
 import { resolveTripLedgerTripType } from "@/features/finance/utils/tripLedgerPayoutMode.util";
 import { TripRatingsBlock } from "@/features/ratings/components/TripRatingsBlock";
 import { isAggregateTrip } from "@/lib/driverUtils";
@@ -698,7 +699,7 @@ export default function TripDetailScreen({
   const supplierCost = Number(trip.supplier_rate ?? 0);
   const sales = isPartnerSettlementView ? supplierCost : customerSales;
   const cost = isPartnerSettlementView
-    ? (detail.subcontractRate ?? supplierCost)
+    ? computePartnerIndentFreightCost(detail.subcontractRate)
     : supplierCost;
   const baseFreight = sales;
   const totalExpenses = expenseRows.reduce((s, r) => s + r.amount, 0);
