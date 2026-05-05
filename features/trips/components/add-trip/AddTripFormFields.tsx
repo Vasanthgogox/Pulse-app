@@ -367,7 +367,6 @@ export function AddTripFormFields({
       lastDriverPhoneNameRef.current = null;
       setters.setDriverPhoneConfirmed(false);
       setters.setDriverPhoneTripConflict(false, null);
-      setters.setDriverPhoneAvailabilityError(null);
       return;
     }
     if (driverPhoneLookupTimeoutRef.current)
@@ -379,7 +378,6 @@ export function AddTripFormFields({
         setters.setDriverPhoneName(null);
         setters.setDriverPhoneConfirmed(false);
         setters.setDriverPhoneTripConflict(false, null);
-        setters.setDriverPhoneAvailabilityError(null);
         return;
       }
       searchExistingDriversByPhone(normalized).then(
@@ -409,12 +407,11 @@ export function AddTripFormFields({
               requireAuthoritativeRpc: true,
             });
           if (avErr) {
-            setters.setDriverPhoneTripConflict(false, null);
-            setters.setDriverPhoneAvailabilityError("Unable to verify now. Try again in a moment.");
+            setters.setDriverPhoneTripConflict(true, "Busy check unavailable");
             setters.setDriverPhoneConfirmed(false);
+            setters.setDriverPhoneName(null);
             return;
           }
-          setters.setDriverPhoneAvailabilityError(null);
           setters.setDriverPhoneTripConflict(
             result.isBusy,
             result.ongoingTripLabel,
@@ -1921,21 +1918,6 @@ export function AddTripFormFields({
                           size={20}
                           color={Theme.destructive}
                         />
-                      </View>
-                    ) : state.driverPhoneAvailabilityError?.trim() ? (
-                      <View
-                        style={styles.driverConfirmCard}
-                        accessibilityRole="alert"
-                      >
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <Text style={styles.driverConfirmMain} numberOfLines={2}>
-                            Driver availability could not be verified
-                          </Text>
-                          <Text style={styles.driverConfirmSub}>
-                            {state.driverPhoneAvailabilityError.trim()}
-                          </Text>
-                        </View>
-                        <Info size={20} color={Theme.warning} />
                       </View>
                     ) : state.driverPhoneName ? (
                         <TouchableOpacity
