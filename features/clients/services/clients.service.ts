@@ -148,6 +148,32 @@ export async function getLinkedOrgProfile(linkedOrganizationId: string): Promise
   };
 }
 
+type OrgDisplayProfile = { organizationName: string; contactPerson: string; phone: string; avatarUrl?: string; avatarSeed?: string };
+
+/** Batch-fetch display profiles for multiple linked orgs in one RPC call. */
+export async function getLinkedOrgProfilesBatch(
+  linkedOrganizationIds: string[]
+): Promise<Record<string, OrgDisplayProfile>> {
+  if (linkedOrganizationIds.length === 0) return {};
+  const { data, error } = await supabase().rpc('get_connection_partner_display_batch', {
+    p_linked_organization_ids: linkedOrganizationIds,
+  });
+  if (error || data == null || typeof data !== 'object') return {};
+  const raw = data as Record<string, { organizationName?: string; contactPerson?: string; phone?: string; avatarUrl?: string; avatarSeed?: string }>;
+  const result: Record<string, OrgDisplayProfile> = {};
+  for (const [oid, entry] of Object.entries(raw)) {
+    if (!entry) continue;
+    result[oid] = {
+      organizationName: (entry.organizationName ?? '').trim() || 'Connected',
+      contactPerson: (entry.contactPerson ?? '').trim(),
+      phone: (entry.phone ?? '').trim(),
+      avatarUrl: (entry.avatarUrl ?? '').trim(),
+      avatarSeed: (entry.avatarSeed ?? '').trim(),
+    };
+  }
+  return result;
+}
+
 /**
  * Find an active client by name within an organization (trimmed exact match).
  * Used when creating trips so client_id is set and integrated clients can see the trip (RLS).
