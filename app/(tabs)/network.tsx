@@ -22,9 +22,12 @@ import {
 import {
   approveConnectionRequest,
   cancelConnectionRequest,
+  createConnectionRequest,
+  looksLikeConnectionRateLimitError,
   rejectConnectionRequest,
   type ConnectionRequestRow,
 } from "@/services/connectionRequestsService";
+import { getOrCreateNetworkConversation } from "@/features/chat/services/chat.service";
 import {
   useClientsQuery,
   useConnectionRequestsReceivedQuery,
@@ -65,7 +68,6 @@ import { useLocalSearchParams } from "expo-router";
 import {
   ActivityIndicator,
   Alert,
-  Linking,
   Modal,
   Platform,
   Pressable,
@@ -175,6 +177,9 @@ type NetworkProfileNode = {
   mutuals: number;
   phone?: string | null;
 };
+
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /** Org connection request vs driver app invite — both surface under mission protocol. */
 type MissionProtocolListItem =
@@ -855,6 +860,96 @@ function NetworkScreenInner() {
       });
   };
 
+  const handleSendProtocolFromProfile = async () => {
+    if (!selectedProfileNode || !orgId) return;
+    if (selectedProfileNode.status === "CONNECTED") {
+      Alert.alert("Network protocol", "You are already connected with this organization.");
+      return;
+    }
+    if (selectedProfileNode.status === "REQUEST SENT") {
+      Alert.alert("Network protocol", "A connection request is already pending.");
+      return;
+    }
+    if (selectedProfileNode.type === "DRIVER") {
+      Alert.alert("Network protocol", "Driver protocol can be sent from driver invite flows.");
+      return;
+    }
+    if (!UUID_REGEX.test(selectedProfileNode.id)) {
+      Alert.alert(
+        "Network protocol",
+        "This profile is not linked to an organization account yet. Use invite flows to connect first.",
+      );
+      return;
+    }
+
+    const { error, alreadyInvited } = await createConnectionRequest(
+      orgId,
+      selectedProfileNode.id,
+      {
+        requestShipperClient: selectedProfileNode.type === "CLIENT",
+        requestCarrierSupplier: selectedProfileNode.type === "SUPPLIER",
+      },
+    );
+
+    if (error) {
+      if (looksLikeConnectionRateLimitError(error.message)) {
+        Alert.alert("Daily limit reached", "You have reached today's invite limit.");
+        return;
+      }
+      Alert.alert("Could not send protocol", error.message);
+      return;
+    }
+
+    setSelectedProfileNode((prev) =>
+      prev
+        ? {
+            ...prev,
+            status: "REQUEST SENT",
+          }
+        : prev,
+    );
+    await Promise.all([sentQ.refetch(), receivedQ.refetch()]);
+    invalidateNetwork();
+    if (alreadyInvited) {
+      Alert.alert("Protocol status", "A request was already pending for this organization.");
+      return;
+    }
+    Alert.alert("Protocol sent", `Request sent to ${selectedProfileNode.name}.`);
+  };
+
+  const handleOpenDirectMessage = async () => {
+    if (!selectedProfileNode || !orgId) return;
+    if (!UUID_REGEX.test(selectedProfileNode.id)) {
+      Alert.alert(
+        "Direct message",
+        "This profile is not linked to an app organization yet, so chat cannot be opened.",
+      );
+      return;
+    }
+    const orgName = organization?.name?.trim() || "My Organization";
+    try {
+      const conversation = await getOrCreateNetworkConversation({
+        orgId,
+        orgName,
+        partnerOrgId: selectedProfileNode.id,
+        partnerOrgName: selectedProfileNode.name,
+      });
+      setSelectedProfileNode(null);
+      router.push({
+        pathname: "/(modals)/chat",
+        params: {
+          tab: "network",
+          conversationId: conversation.id,
+          openDetail: "1",
+          ts: String(Date.now()),
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not open conversation.";
+      Alert.alert("Direct message", message);
+    }
+  };
+
   const scrollContent = (
     <ScrollView
       style={styles.scroll}
@@ -1504,35 +1599,20 @@ function NetworkScreenInner() {
                   </View>
 
                   <View style={styles.profileCtaStack}>
-                    <Pressable
-                      style={({ pressed }) => [styles.profilePrimaryBtn, pressed && { opacity: 0.88 }]}
-                      onPress={() =>
-                        Alert.alert(
-                          "Network protocol",
-                          selectedProfileNode.status === "CONNECTED"
-                            ? "You are already connected with this organization."
-                            : selectedProfileNode.status === "REQUEST SENT"
-                              ? "A connection request is pending."
-                              : "Use Discover or invite flows from the Network tab to send a connection request.",
-                        )
-                      }
-                    >
-                      <UserPlus size={14} color={Theme.textOnPrimary} />
-                      <Text style={styles.profilePrimaryBtnText}>
-                        {selectedProfileNode.status === "REQUEST SENT" ? "Request sent" : "Send protocol"}
-                      </Text>
-                    </Pressable>
+                    {selectedProfileNode.status !== "CONNECTED" ? (
+                      <Pressable
+                        style={({ pressed }) => [styles.profilePrimaryBtn, pressed && { opacity: 0.88 }]}
+                        onPress={() => void handleSendProtocolFromProfile()}
+                      >
+                        <UserPlus size={14} color={Theme.textOnPrimary} />
+                        <Text style={styles.profilePrimaryBtnText}>
+                          {selectedProfileNode.status === "REQUEST SENT" ? "Request sent" : "Send protocol"}
+                        </Text>
+                      </Pressable>
+                    ) : null}
                     <Pressable
                       style={({ pressed }) => [styles.profileSecondaryBtn, pressed && { opacity: 0.88 }]}
-                      onPress={() => {
-                        const raw = selectedProfileNode.phone?.trim();
-                        if (!raw) {
-                          Alert.alert("Direct message", "No phone number on file for this ally.");
-                          return;
-                        }
-                        const tel = raw.replace(/[^\d+]/g, "");
-                        void Linking.openURL(`tel:${tel}`);
-                      }}
+                      onPress={() => void handleOpenDirectMessage()}
                     >
                       <Mail size={14} color={Theme.textOnPrimary} />
                       <Text style={styles.profileSecondaryBtnText}>Direct message</Text>

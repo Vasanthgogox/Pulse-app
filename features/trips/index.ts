@@ -40,6 +40,7 @@ export {
   getTripsByOrganization,
   getTripsWhereOrgIsClient,
   getTripsWhereOrgIsSupplier,
+  getShipperDisplayNamesForSupplierTrips,
   getTripById,
   getTripByIndentId,
   getTripDisplayNumber,

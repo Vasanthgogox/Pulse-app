@@ -103,7 +103,12 @@ function getPhoneInlineError(national: string): string | null {
 }
 
 /** Step 2 valid: name, email (required and valid), password valid. */
-function isStep2Valid(callsign: string, email: string, pwd: string, confirmPwd: string): boolean {
+function isStep2Valid(
+  callsign: string,
+  email: string,
+  pwd: string,
+  confirmPwd: string,
+): boolean {
   const name = callsign.trim();
   if (name.length < NAME_MIN_LENGTH || name.length > NAME_MAX_LENGTH) return false;
   if (!email.trim()) return false;
