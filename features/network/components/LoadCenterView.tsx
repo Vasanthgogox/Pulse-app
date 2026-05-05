@@ -3252,6 +3252,11 @@ export function LoadCenterView({
                 ? [
                     assignmentShellStyles.webModalCardWhite,
                     { paddingTop: insets.top },
+                    !useAdHocDriver && {
+                      height: "auto",
+                      maxHeight: 620,
+                      minHeight: 420,
+                    },
                   ]
                 : styles.handshakeNativeInner
             }
@@ -3264,7 +3269,7 @@ export function LoadCenterView({
                     { fontStyle: "italic", fontWeight: "900" },
                   ]}
                 >
-                  Staff Handshake
+                  Supply & Allocation
                 </Text>
                 <Text style={assignmentShellStyles.modalSubtitle}>
                   Network node selection — roster deploy or OTP for the driver.
@@ -3388,16 +3393,6 @@ export function LoadCenterView({
                 ) : (
                   <>
                     <View style={styles.handshakeSegmentSection}>
-                      {useAdHocDriver ? (
-                        <View style={styles.supplyAllocHeadRow}>
-                          <View style={styles.supplyAllocStepChip}>
-                            <Text style={styles.supplyAllocStepChipText}>03</Text>
-                          </View>
-                          <Text style={styles.supplyAllocTitle}>
-                            SUPPLY & ALLOCATION
-                          </Text>
-                        </View>
-                      ) : null}
                       <View style={styles.handshakeSegmentPill}>
                         <TouchableOpacity
                           style={[
@@ -3779,20 +3774,7 @@ export function LoadCenterView({
                         const selectedPartner = subcontractSupplierId
                           ? suppliers.find((s) => s.id === subcontractSupplierId)
                           : null;
-                        const selectedPartnerName =
-                          selectedPartner?.company_name ||
-                          selectedPartner?.name ||
-                          selectedPartner?.contact_person ||
-                          null;
-                        const selectedPartnerSub = selectedPartner
-                          ? [selectedPartner.phone, selectedPartner.email]
-                              .filter(Boolean)
-                              .join(" · ")
-                          : "";
-                        const inlinePartners = visiblePartnersForHandshake.slice(
-                          0,
-                          5,
-                        );
+                        const inlinePartners = visiblePartnersForHandshake;
                         const canWideAlign = width >= 980;
 
                         const partnerPane = (
@@ -3835,40 +3817,7 @@ export function LoadCenterView({
                                 </Text>
                               </TouchableOpacity>
                             </View>
-                            {selectedPartnerName ? (
-                              <TouchableOpacity
-                                style={styles.aggregatePartnerCard}
-                                onPress={() => setSubcontractPickerOpen(true)}
-                                activeOpacity={0.85}
-                              >
-                                <View style={styles.aggregatePartnerAvatar}>
-                                  <Text style={styles.aggregatePartnerAvatarText}>
-                                    {selectedPartnerName.slice(0, 2).toUpperCase()}
-                                  </Text>
-                                </View>
-                                <View style={{ flex: 1, minWidth: 0 }}>
-                                  <Text
-                                    style={styles.aggregatePartnerName}
-                                    numberOfLines={1}
-                                  >
-                                    {selectedPartnerName}
-                                  </Text>
-                                  {selectedPartnerSub ? (
-                                    <Text
-                                      style={styles.aggregatePartnerSub}
-                                      numberOfLines={1}
-                                    >
-                                      {selectedPartnerSub}
-                                    </Text>
-                                  ) : null}
-                                </View>
-                                <FontAwesome
-                                  name="circle-thin"
-                                  size={22}
-                                  color={Theme.borderInput}
-                                />
-                              </TouchableOpacity>
-                            ) : inlinePartners.length > 0 ? (
+                            {inlinePartners.length > 0 ? (
                               <View style={styles.aggregatePartnerList}>
                                 {inlinePartners.map((p) => {
                                   const partnerName =
@@ -3879,12 +3828,18 @@ export function LoadCenterView({
                                   const partnerSub = [p.phone, p.email]
                                     .filter(Boolean)
                                     .join(" · ");
+                                  const isSelected = subcontractSupplierId === p.id;
                                   return (
                                     <TouchableOpacity
                                       key={p.id}
-                                      style={styles.aggregatePartnerCard}
+                                      style={[
+                                        styles.aggregatePartnerCard,
+                                        isSelected && styles.aggregatePartnerCardSelected,
+                                      ]}
                                       onPress={() =>
-                                        setSubcontractSupplierId(p.id)
+                                        setSubcontractSupplierId(
+                                          isSelected ? null : p.id,
+                                        )
                                       }
                                       activeOpacity={0.85}
                                     >
@@ -3912,36 +3867,24 @@ export function LoadCenterView({
                                         ) : null}
                                       </View>
                                       <FontAwesome
-                                        name="circle-thin"
+                                        name={
+                                          isSelected ? "check-circle" : "circle-thin"
+                                        }
                                         size={22}
-                                        color={Theme.borderInput}
+                                        color={
+                                          isSelected ? Theme.primary : Theme.borderInput
+                                        }
                                       />
                                     </TouchableOpacity>
                                   );
                                 })}
-                                {visiblePartnersForHandshake.length >
-                                inlinePartners.length ? (
-                                  <TouchableOpacity
-                                    style={styles.aggregateViewMoreBtn}
-                                    onPress={() => setSubcontractPickerOpen(true)}
-                                    activeOpacity={0.85}
-                                  >
-                                    <Text style={styles.aggregateViewMoreText}>
-                                      View all partners
-                                    </Text>
-                                  </TouchableOpacity>
-                                ) : null}
                               </View>
                             ) : (
-                              <TouchableOpacity
-                                style={styles.aggregateViewMoreBtn}
-                                onPress={() => setSubcontractPickerOpen(true)}
-                                activeOpacity={0.85}
-                              >
+                              <View style={styles.aggregateViewMoreBtn}>
                                 <Text style={styles.aggregateViewMoreText}>
                                   No partners yet. Add or select partner
                                 </Text>
-                              </TouchableOpacity>
+                              </View>
                             )}
                           </View>
                         );
@@ -5722,34 +5665,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 20,
   },
-  supplyAllocHeadRow: {
-    width: "100%",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 12,
-  },
-  supplyAllocStepChip: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: Theme.surfaceLight,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  supplyAllocStepChipText: {
-    fontSize: 14,
-    fontWeight: "900",
-    color: Theme.textPrimaryDark,
-    fontStyle: "italic",
-  },
-  supplyAllocTitle: {
-    fontSize: 34,
-    fontWeight: "900",
-    color: Theme.textPrimaryDark,
-    fontStyle: "italic",
-    letterSpacing: -0.5,
-  },
   handshakeSegmentPill: {
     flexDirection: "row",
     backgroundColor: "#0f172a",
@@ -6095,6 +6010,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+  },
+  aggregatePartnerCardSelected: {
+    borderColor: Theme.primary,
+    backgroundColor: Theme.surfaceLight,
   },
   aggregatePartnerAvatar: {
     width: 34,
