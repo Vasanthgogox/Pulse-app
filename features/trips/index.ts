@@ -40,7 +40,7 @@ export {
 } from "./services/tripOtp.service";
 export {
     assignAggregateTripDriverByPhone, assignTripDriverByPhone, createTrip,
-    createTripWithOtp, getDriverAvailabilityByPhone, getShipperDisplayNamesForSupplierTrips,
+    createTripWithOtp, getDriverAvailabilityByPhone, getDriverAvailabilityByPhoneGlobal, getShipperDisplayNamesForSupplierTrips,
     getTripById,
     getTripByIndentId,
     getTripDisplayNumber, getTripsByDriver,
