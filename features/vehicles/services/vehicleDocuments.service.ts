@@ -124,7 +124,7 @@ export async function uploadVehicleDocument(
   orgId: string,
   vehicleId: string,
   docType: keyof VehicleDocuments,
-  file: { arrayBuffer: ArrayBuffer; fileName: string; mimeType: string },
+  file: { arrayBuffer: ArrayBuffer; fileName: string; mimeType: string; blob?: Blob },
 ): Promise<UploadVehicleDocumentResult> {
   const validationError = validateDocumentFile(file);
   if (validationError) return { storagePath: null, error: new Error(validationError) };
@@ -137,7 +137,7 @@ export async function uploadVehicleDocument(
       supabase()
         .storage
         .from(BUCKET)
-        .upload(path, file.arrayBuffer, {
+        .upload(path, file.blob ?? file.arrayBuffer, {
           contentType: file.mimeType || 'image/jpeg',
           upsert: true,
         }),
@@ -178,7 +178,7 @@ export async function uploadAndSaveVehicleDocument(
   orgId: string,
   vehicleId: string,
   docType: keyof VehicleDocuments,
-  file: { arrayBuffer: ArrayBuffer; fileName: string; mimeType: string },
+  file: { arrayBuffer: ArrayBuffer; fileName: string; mimeType: string; blob?: Blob },
   expiryDate: string,
   existingDocuments: VehicleDocuments | null,
 ): Promise<{ documents: VehicleDocuments | null; error: Error | null }> {
@@ -195,19 +195,28 @@ export async function uploadAndSaveVehicleDocument(
   };
 
   // 3. Persist to vehicles.documents
-  const { error: dbError } = await supabase()
+  const { data: savedRow, error: dbError } = await supabase()
     .from('vehicles')
     .update({ documents: updated })
     .eq('organization_id', orgId)
-    .eq('id', vehicleId);
+    .eq('id', vehicleId)
+    .select('id, documents')
+    .maybeSingle();
 
-  if (dbError) {
+  if (dbError || !savedRow) {
     // Rollback: remove the just-uploaded file so we don't leave orphans
     await deleteVehicleDocumentFile(storagePath).catch(() => {});
-    return { documents: null, error: new Error(dbError.message) };
+    return {
+      documents: null,
+      error: new Error(
+        dbError?.message ??
+          'Vehicle document metadata was not saved (row not found or insufficient permission).',
+      ),
+    };
   }
 
-  return { documents: updated, error: null };
+  const persistedDocs = (savedRow.documents ?? {}) as VehicleDocuments;
+  return { documents: persistedDocs, error: null };
 }
 
 /**

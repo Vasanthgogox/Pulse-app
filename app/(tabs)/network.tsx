@@ -260,6 +260,7 @@ function NetworkScreenInner() {
   const [requestActionId, setRequestActionId] = useState<string | null>(null);
   const [discoverInviteCount, setDiscoverInviteCount] = useState(0);
   const [discoverInviteLimit, setDiscoverInviteLimit] = useState(5);
+  const [showProtocolRolePicker, setShowProtocolRolePicker] = useState(false);
 
   useRealtimeNetworkInvalidation(orgId);
   const receivedQ = useConnectionRequestsReceivedQuery(orgId);
@@ -499,6 +500,7 @@ function NetworkScreenInner() {
   useEffect(() => {
     let cancelled = false;
     const nodeOrgId = selectedProfileNode?.id ?? null;
+    setShowProtocolRolePicker(false);
     const isUuid =
       typeof nodeOrgId === "string" &&
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(nodeOrgId);
@@ -882,12 +884,18 @@ function NetworkScreenInner() {
       return;
     }
 
+    setShowProtocolRolePicker(true);
+  };
+
+  const handleSendProtocolWithRole = async (mode: "client" | "supplier") => {
+    if (!selectedProfileNode || !orgId) return;
+    setShowProtocolRolePicker(false);
     const { error, alreadyInvited } = await createConnectionRequest(
       orgId,
       selectedProfileNode.id,
       {
-        requestShipperClient: selectedProfileNode.type === "CLIENT",
-        requestCarrierSupplier: selectedProfileNode.type === "SUPPLIER",
+        requestShipperClient: mode === "client",
+        requestCarrierSupplier: mode === "supplier",
       },
     );
 
@@ -1600,15 +1608,51 @@ function NetworkScreenInner() {
 
                   <View style={styles.profileCtaStack}>
                     {selectedProfileNode.status !== "CONNECTED" ? (
-                      <Pressable
-                        style={({ pressed }) => [styles.profilePrimaryBtn, pressed && { opacity: 0.88 }]}
-                        onPress={() => void handleSendProtocolFromProfile()}
-                      >
-                        <UserPlus size={14} color={Theme.textOnPrimary} />
-                        <Text style={styles.profilePrimaryBtnText}>
-                          {selectedProfileNode.status === "REQUEST SENT" ? "Request sent" : "Send protocol"}
-                        </Text>
-                      </Pressable>
+                      <>
+                        <Pressable
+                          style={({ pressed }) => [styles.profilePrimaryBtn, pressed && { opacity: 0.88 }]}
+                          onPress={() => void handleSendProtocolFromProfile()}
+                        >
+                          <UserPlus size={14} color={Theme.textOnPrimary} />
+                          <Text style={styles.profilePrimaryBtnText}>
+                            {selectedProfileNode.status === "REQUEST SENT" ? "Request sent" : "Send protocol"}
+                          </Text>
+                        </Pressable>
+                        {showProtocolRolePicker ? (
+                          <View style={styles.profileRolePicker}>
+                            <Text style={styles.profileRolePickerTitle}>Add as</Text>
+                            <View style={styles.profileRolePickerActions}>
+                              <Pressable
+                                style={({ pressed }) => [
+                                  styles.profileRolePickerBtn,
+                                  pressed && { opacity: 0.82 },
+                                ]}
+                                onPress={() => void handleSendProtocolWithRole("client")}
+                              >
+                                <Text style={styles.profileRolePickerBtnText}>Client</Text>
+                              </Pressable>
+                              <Pressable
+                                style={({ pressed }) => [
+                                  styles.profileRolePickerBtn,
+                                  pressed && { opacity: 0.82 },
+                                ]}
+                                onPress={() => void handleSendProtocolWithRole("supplier")}
+                              >
+                                <Text style={styles.profileRolePickerBtnText}>Supplier</Text>
+                              </Pressable>
+                              <Pressable
+                                style={({ pressed }) => [
+                                  styles.profileRolePickerCancelBtn,
+                                  pressed && { opacity: 0.7 },
+                                ]}
+                                onPress={() => setShowProtocolRolePicker(false)}
+                              >
+                                <Text style={styles.profileRolePickerCancelText}>Cancel</Text>
+                              </Pressable>
+                            </View>
+                          </View>
+                        ) : null}
+                      </>
                     ) : null}
                     <Pressable
                       style={({ pressed }) => [styles.profileSecondaryBtn, pressed && { opacity: 0.88 }]}
@@ -2545,6 +2589,59 @@ const styles = StyleSheet.create({
     color: Theme.textOnPrimary,
     textTransform: "uppercase",
     letterSpacing: 0.7,
+  },
+  profileRolePicker: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    backgroundColor: Theme.surfaceLight,
+    padding: 10,
+    gap: 8,
+  },
+  profileRolePickerTitle: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  profileRolePickerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  profileRolePickerBtn: {
+    flex: 1,
+    minHeight: 34,
+    borderRadius: 10,
+    backgroundColor: Theme.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 8,
+  },
+  profileRolePickerBtnText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textOnPrimary,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  profileRolePickerCancelBtn: {
+    minHeight: 34,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+    backgroundColor: Theme.screenBackground,
+  },
+  profileRolePickerCancelText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   profileOpsCard: {
     borderRadius: 22,

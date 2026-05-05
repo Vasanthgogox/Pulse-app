@@ -664,11 +664,14 @@ export function TripAssignmentBlock({
   const showSourceBadge = hasAssignment && assignmentSource !== "unassigned";
 
   /**
-   * Aggregate trips: once driver / vehicle are on the trip, do not open assign-by-phone or
-   * fleet pickers from the manifest rows (avoids showing assignment UI when already allocated).
-   * OTP / resend stays available via parent `inlineSection` (e.g. web trip detail).
+   * Aggregate trips: keep driver row interactive so dispatcher can reassign by phone.
+   * (Completed/view-only states are still blocked by `effectiveCanAssign`.)
    */
-  const suppressAggregateDriverAssignTap = showAssignByPhone && hasDriver;
+  const suppressAggregateDriverAssignTap = false;
+  /**
+   * Vehicle row stays locked once set in aggregate flow; vehicle changes should happen
+   * through the same assign-by-phone modal used for driver assignment/reassignment.
+   */
   const suppressAggregateVehicleAssignTap = showAssignByPhone && hasVehicle;
 
   const openDriverPicker = useCallback(() => {

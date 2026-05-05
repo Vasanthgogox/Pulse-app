@@ -215,6 +215,7 @@ function OrgCard({ org, locationFallback, onConnect, onCancel, loading, onOpenPr
     <Animated.View style={[
       styles.card,
       stretchCellHeight && styles.cardStretchEmbedded,
+      stretchCellHeight && styles.cardFixedHeightEmbedded,
       isConnected && styles.cardConnected,
       isRecommended && !isConnected && !isPending && styles.cardRecommended,
       { transform: [{ scale }] },
@@ -250,7 +251,9 @@ function OrgCard({ org, locationFallback, onConnect, onCancel, loading, onOpenPr
             borderStyle={styles.avatarImage}
           />
         </View>
-        <Text style={styles.orgName} numberOfLines={1}>{org.name.toUpperCase()}</Text>
+        <Text style={styles.orgName} numberOfLines={1} ellipsizeMode="tail">
+          {org.name.toUpperCase()}
+        </Text>
         <View style={styles.locationRow}>
           <MapPin
             size={10}
@@ -277,26 +280,24 @@ function OrgCard({ org, locationFallback, onConnect, onCancel, loading, onOpenPr
             {hasMutuals ? `${mutuals} mutual${mutuals === 1 ? "" : "s"}` : "No mutuals"}
           </Text>
         </View>
-        {isRecommended ? (
-          <View style={styles.discoveryMetaChip}>
-            <Text style={styles.discoveryMetaText} numberOfLines={1}>
-              Active lane overlap
-            </Text>
-          </View>
-        ) : null}
+        <View style={[styles.discoveryMetaChip, !isRecommended && styles.discoveryMetaChipGhost]}>
+          <Text style={styles.discoveryMetaText} numberOfLines={1}>
+            Active lane overlap
+          </Text>
+        </View>
       </View>
 
       <View style={styles.cardFooter}>
         {isConnected ? (
           <View style={styles.stateTag}>
             <Check size={13} color={Theme.textPrimaryDark} strokeWidth={2.5} />
-            <Text style={styles.stateTagText}>Connected</Text>
+              <Text style={styles.stateTagText} numberOfLines={1}>Connected</Text>
           </View>
         ) : isPending ? (
           <View style={styles.pendingActionRow}>
             <View style={styles.stateTag}>
               <Clock3 size={13} color={Theme.warning} strokeWidth={2.5} />
-              <Text style={styles.stateTagText}>Request sent</Text>
+              <Text style={styles.stateTagText} numberOfLines={1}>Request sent</Text>
             </View>
             <Pressable
               style={({ pressed }) => [
@@ -329,7 +330,7 @@ function OrgCard({ org, locationFallback, onConnect, onCancel, loading, onOpenPr
             ) : (
               <>
                 <UserPlus size={13} color={Theme.textPrimaryDark} strokeWidth={2.5} />
-                <Text style={styles.connectBtnText}>Send request</Text>
+                <Text style={styles.connectBtnText} numberOfLines={1}>Send request</Text>
               </>
             )}
           </Pressable>
@@ -365,6 +366,7 @@ const DISCOVER_ROWS_MOBILE = 3;
 const EMBEDDED_SCROLL_ITEM_CAP = 40;
 const LIST_STATIC_HORIZONTAL_PAD = 14 * 2;
 const DISCOVER_GRID_GAP_PX = 12;
+const DISCOVER_EMBEDDED_CARD_HEIGHT = 286;
 /** Before `onLayout` reports width, cap provisional outer width so 7-up math stays modest vs narrow columns. */
 const DISCOVER_EMBEDDED_PROVISIONAL_OUTER_CAP = 520;
 
@@ -471,8 +473,6 @@ export function DiscoverView({
    * Do not use embedded list width here: a narrow discover pane on a desktop would wrongly flip to 2-up.
    */
   const isDiscoverDesktopGrid = windowWidth >= DISCOVER_GRID_BREAKPOINT;
-  /** Narrow embedded hub: equal-width columns so the row never exceeds the card (avoids right-edge clipping under `overflow: hidden`). */
-  const useEmbeddedFlexColumns = Boolean(embedded && !isDiscoverDesktopGrid);
   const discoverColumnCount = isDiscoverDesktopGrid
     ? DISCOVER_COLS_DESKTOP
     : DISCOVER_COLS_MOBILE;
@@ -700,16 +700,15 @@ export function DiscoverView({
               style={[
                 styles.discoverGridCell,
                 embedded &&
-                  (useEmbeddedFlexColumns
-                    ? styles.discoverGridCellEmbeddedFlex
-                    : embeddedDiscoverCellWidth != null && {
-                        width: embeddedDiscoverCellWidth,
-                        minWidth: embeddedDiscoverCellWidth,
-                        maxWidth: embeddedDiscoverCellWidth,
-                        flexGrow: 0,
-                        flexShrink: 0,
-                        alignSelf: "flex-start",
-                      }),
+                  embeddedDiscoverCellWidth != null && {
+                    width: embeddedDiscoverCellWidth,
+                    minWidth: embeddedDiscoverCellWidth,
+                    maxWidth: embeddedDiscoverCellWidth,
+                    flexGrow: 0,
+                    flexShrink: 0,
+                    alignSelf: "flex-start",
+                  },
+                embedded && styles.discoverGridCellEmbeddedFixedHeight,
               ]}
             >
               <View style={[styles.discoverGridCardWrap, embedded && styles.discoverGridCardWrapStretch]}>
@@ -1018,6 +1017,11 @@ const styles = StyleSheet.create({
     minWidth: 0,
     alignSelf: "stretch",
   },
+  discoverGridCellEmbeddedFixedHeight: {
+    height: DISCOVER_EMBEDDED_CARD_HEIGHT,
+    minHeight: DISCOVER_EMBEDDED_CARD_HEIGHT,
+    maxHeight: DISCOVER_EMBEDDED_CARD_HEIGHT,
+  },
   discoverGridCardWrap: {
     width: "100%",
     minWidth: 0,
@@ -1041,6 +1045,11 @@ const styles = StyleSheet.create({
   },
   cardStretchEmbedded: {
     flex: 1,
+  },
+  cardFixedHeightEmbedded: {
+    height: DISCOVER_EMBEDDED_CARD_HEIGHT,
+    minHeight: DISCOVER_EMBEDDED_CARD_HEIGHT,
+    maxHeight: DISCOVER_EMBEDDED_CARD_HEIGHT,
   },
   cardConnected: { borderColor: Theme.borderLight },
   cardRecommended: { borderColor: Theme.aggregatePillBorder, borderWidth: 1 },
@@ -1112,6 +1121,7 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     letterSpacing: 0.8,
     color: Theme.textPrimaryDark,
+    includeFontPadding: false,
   },
   coverRatingNode: {
     position: "absolute",
@@ -1139,6 +1149,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontStyle: "italic",
     color: Theme.textPrimaryDark,
+    includeFontPadding: false,
   },
   coverRatingTextEmpty: {
     fontSize: 7,
@@ -1152,7 +1163,8 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   discoveryHeroFlex: {
-    flexGrow: 1,
+    height: 88,
+    maxHeight: 88,
     justifyContent: "flex-start",
   },
   discoveryHeroPress: {
@@ -1187,9 +1199,17 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 8,
     lineHeight: 15,
+    height: 15,
+    maxHeight: 15,
+    width: "100%",
+    paddingHorizontal: 8,
+    includeFontPadding: false,
+    flexShrink: 1,
   },
   locationRow: {
-    minHeight: 14,
+    height: 14,
+    maxHeight: 14,
+    width: "100%",
     marginTop: 3,
     flexDirection: "row",
     alignItems: "center",
@@ -1205,6 +1225,7 @@ const styles = StyleSheet.create({
     color: Theme.textMutedDemo,
     lineHeight: 12,
     textAlign: "center",
+    includeFontPadding: false,
   },
   locationTextEmpty: {
     fontSize: 9,
@@ -1214,10 +1235,11 @@ const styles = StyleSheet.create({
     lineHeight: 12,
     textAlign: "center",
     opacity: 0.85,
+    includeFontPadding: false,
   },
   discoveryMetaStack: {
     width: "100%",
-    minHeight: 52,
+    height: 50,
     paddingHorizontal: 8,
     gap: 6,
     marginTop: 2,
@@ -1237,6 +1259,9 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surface,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
+  },
+  discoveryMetaChipGhost: {
+    opacity: 0,
   },
   discoveryMetaChipStrong: {
     backgroundColor: Theme.textPrimaryDark,
@@ -1352,9 +1377,10 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   connectBtnLoading: { opacity: 0.7 },
-  connectBtnText: { fontSize: 10, fontWeight: '700', fontStyle: "italic", color: Theme.textPrimaryDark, letterSpacing: 0.2 },
+  connectBtnText: { fontSize: 10, fontWeight: '700', fontStyle: "italic", color: Theme.textPrimaryDark, letterSpacing: 0.2, includeFontPadding: false },
   cardFooter: {
-    minHeight: 50,
+    height: 50,
+    maxHeight: 50,
     paddingHorizontal: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
@@ -1383,6 +1409,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontStyle: "italic",
     color: Theme.textPrimaryDark,
+    includeFontPadding: false,
   },
   pendingActionRow: {
     flexDirection: "row",
