@@ -725,16 +725,42 @@ export default function ClientDetailScreen({
     };
   }, [currentOrganization?.id, trips]);
 
+  /**
+   * Freight cost for client mission table / exports. When the Supplier column resolves to
+   * "Own operations" (bill-to equals carrier / self-carriage), do not use `supplier_rate`
+   * as cost — it often mirrors sale on integrated rows; asset-style cost is subcontract,
+   * captured non-supplier outflows, or 0.
+   */
   const getTripCostForClientView = useCallback(
-    (trip: TripRow, expenseCaptured: number): number => {
+    (
+      trip: TripRow,
+      expenseCaptured: number,
+      billToClientName: string,
+    ): number => {
       const subcontract = tripSubcontractByTripId[trip.id];
       if (subcontract && Number(subcontract.rate ?? 0) > 0) {
         return Number(subcontract.rate ?? 0);
       }
+      const hasSupplierRef =
+        !!trip.supplier_id ||
+        (!!trip.supplier_name && !isUuidLikeString(trip.supplier_name));
+      const isAggregateTrip = hasSupplierRef || isLoadBasedTrip(trip);
+      const supplierColumnBase = isAggregateTrip
+        ? aggregateSupplierLabel(trip)
+        : "Asset / Own Vehicle";
+      if (
+        clientDetailSupplierColumnTitle(
+          trip,
+          supplierColumnBase,
+          billToClientName,
+        ).sameAsClient
+      ) {
+        return expenseCaptured > 0 ? expenseCaptured : 0;
+      }
       const supplierRate = Number(trip.supplier_rate ?? 0);
       return supplierRate > 0 ? supplierRate : expenseCaptured;
     },
-    [tripSubcontractByTripId],
+    [tripSubcontractByTripId, aggregateSupplierLabel],
   );
 
   const resolveSupplierDisplayForClientTrip = useCallback(
@@ -1285,7 +1311,7 @@ export default function ClientDetailScreen({
         row.trip,
         billTo,
       );
-      const cost = getTripCostForClientView(row.trip, expenseCaptured);
+      const cost = getTripCostForClientView(row.trip, expenseCaptured, billTo);
       const pnl = row.sales - cost;
       const margin =
         row.sales > 0 ? `${((pnl / row.sales) * 100).toFixed(1)}%` : "0.0%";
@@ -1956,6 +1982,7 @@ export default function ClientDetailScreen({
                     const tripCost = getTripCostForClientView(
                       row.trip,
                       expenseCaptured,
+                      clientName,
                     );
                     const tripPnl = row.sales - tripCost;
                     const marginPct =

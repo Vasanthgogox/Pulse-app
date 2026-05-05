@@ -13,15 +13,15 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
-  getClientsByOrganization,
-  type ClientRow,
+    getClientsByOrganization,
+    type ClientRow,
 } from "@/features/clients/services/clients.service";
 import { getDriversByOrganization, type DriverRow } from "@/features/drivers";
 import {
-  getTransactionsByOrganization,
-  LedgerReportModal,
-  SharedLedgerContent,
-  type LedgerRow,
+    getTransactionsByOrganization,
+    LedgerReportModal,
+    SharedLedgerContent,
+    type LedgerRow,
 } from "@/features/finance";
 import { LedgerTransactionListView } from "@/features/finance/components/LedgerTransactionListView";
 import { ledgerDayMatchesPeriod } from "@/features/finance/lib/filterLedgerByPeriod";
@@ -30,22 +30,22 @@ import type { FinancePeriodFilter } from "@/features/finance/types";
 import { allocateAmountsToLargestDueTrips } from "@/features/finance/utils/allocateToLargestDue";
 import { EditSupplierModal } from "@/features/suppliers/components/EditSupplierModal";
 import {
-  getShipperDisplayNamesForSupplierTrips,
-  getTripDisplayNumber,
-  getTripsByOrganization,
-  getTripsWhereOrgIsClient,
-  getTripsWhereOrgIsSupplier,
-  type TripRow,
+    getShipperDisplayNamesForSupplierTrips,
+    getTripDisplayNumber,
+    getTripsByOrganization,
+    getTripsWhereOrgIsClient,
+    getTripsWhereOrgIsSupplier,
+    type TripRow,
 } from "@/features/trips";
 import { adjustedCost } from "@/features/trips/services/tripAdjustments";
 import {
-  buildUniqueLinkedOrgIdMap,
-  isLoadBasedTrip,
+    buildUniqueLinkedOrgIdMap,
+    isLoadBasedTrip,
 } from "@/features/trips/visibility/tripVisibility";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import {
-  canAccessFinance,
-  getCapabilitiesFromProfile,
+    canAccessFinance,
+    getCapabilitiesFromProfile,
 } from "@/lib/capabilities";
 import { tripDayIso } from "@/lib/dateRangePresets";
 import { formatINR, formatLedgerDate } from "@/lib/format";
@@ -57,29 +57,29 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
-  Animated,
-  Easing,
-  Image,
-  Modal,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  Share,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  useWindowDimensions,
-  View,
+    Alert,
+    Animated,
+    Easing,
+    Image,
+    Modal,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    Share,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  getLinkedOrgProfileForSupplier,
-  getSupplierDetails,
-  getSuppliersByOrganization,
-  updateSupplier,
-  type SupplierRow,
-  type UpdateSupplierData,
+    getLinkedOrgProfileForSupplier,
+    getSupplierDetails,
+    getSuppliersByOrganization,
+    updateSupplier,
+    type SupplierRow,
+    type UpdateSupplierData,
 } from "../services/suppliers.service";
 
 /** Treat DB placeholders or internal ids as empty for display. */
@@ -470,7 +470,9 @@ export default function SupplierDetailScreen({
           setOrgDrivers(driversRes?.error ? [] : (driversRes.drivers ?? []));
           setClients(clientsRes.error ? [] : (clientsRes.clients ?? []));
           setShipperNameByTripId(
-            shipperNamesRes.error ? {} : (shipperNamesRes.shipperNameByTripId ?? {}),
+            shipperNamesRes.error
+              ? {}
+              : (shipperNamesRes.shipperNameByTripId ?? {}),
           );
         },
       )
@@ -748,7 +750,9 @@ export default function SupplierDetailScreen({
         trip.organization_id !== currentOrganization.id;
       if (isIntegratedAggregateTrip) {
         // For integrated aggregate trips, supplier_rate is the awarded/winning bid.
-        return Number(trip.supplier_rate ?? 0) || Number(trip.client_price ?? 0);
+        return (
+          Number(trip.supplier_rate ?? 0) || Number(trip.client_price ?? 0)
+        );
       }
       return Number(trip.client_price ?? 0);
     },
@@ -1237,7 +1241,10 @@ export default function SupplierDetailScreen({
               <View style={ecc.dossierHeader}>
                 <View style={styles.profilePreviewTopMetaRow}>
                   <View style={styles.profilePreviewTopAction}>
-                    <Text style={styles.profilePreviewTopActionText} numberOfLines={1}>
+                    <Text
+                      style={styles.profilePreviewTopActionText}
+                      numberOfLines={1}
+                    >
                       {tripsHandled}
                     </Text>
                   </View>
@@ -1249,13 +1256,18 @@ export default function SupplierDetailScreen({
                           name={idx < ratingFilledStars ? "star" : "star-o"}
                           size={13}
                           color={
-                            idx < ratingFilledStars ? "#fbbf24" : Theme.borderMedium
+                            idx < ratingFilledStars
+                              ? "#fbbf24"
+                              : Theme.borderMedium
                           }
                         />
                       ))}
                     </View>
                     <View style={styles.profilePreviewRatingBadge}>
-                      <Text style={styles.profilePreviewRatingBadgeText} numberOfLines={1}>
+                      <Text
+                        style={styles.profilePreviewRatingBadgeText}
+                        numberOfLines={1}
+                      >
                         {rating.toFixed(1)}
                       </Text>
                     </View>
@@ -1297,7 +1309,11 @@ export default function SupplierDetailScreen({
                     />
                   )}
                   <View style={ecc.dossierAvatarBadge}>
-                    <FontAwesome name="bolt" size={10} color={Theme.textOnPrimary} />
+                    <FontAwesome
+                      name="bolt"
+                      size={10}
+                      color={Theme.textOnPrimary}
+                    />
                   </View>
                 </View>
                 <Text style={ecc.dossierName} numberOfLines={1}>
@@ -1315,12 +1331,16 @@ export default function SupplierDetailScreen({
                     <Text style={ecc.dossierBadgeText}>SUPPLIER</Text>
                   </View>
                   <View style={[ecc.dossierBadge, ecc.dossierBadgeDark]}>
-                    <Text style={[ecc.dossierBadgeText, ecc.dossierBadgeTextDark]}>
+                    <Text
+                      style={[ecc.dossierBadgeText, ecc.dossierBadgeTextDark]}
+                    >
                       {statusTitle}
                     </Text>
                   </View>
                   <View style={[ecc.dossierBadge, ecc.dossierBadgeMuted]}>
-                    <Text style={[ecc.dossierBadgeText, ecc.dossierBadgeTextMuted]}>
+                    <Text
+                      style={[ecc.dossierBadgeText, ecc.dossierBadgeTextMuted]}
+                    >
                       {isIntegrated ? "SECURED" : "LOCAL"}
                     </Text>
                   </View>
@@ -1329,7 +1349,11 @@ export default function SupplierDetailScreen({
               <View style={ecc.dossierContactStack}>
                 <View style={ecc.dossierContactRow}>
                   <View style={ecc.dossierContactIcon}>
-                    <FontAwesome name="envelope-o" size={13} color={Theme.textMuted} />
+                    <FontAwesome
+                      name="envelope-o"
+                      size={13}
+                      color={Theme.textMuted}
+                    />
                   </View>
                   <View style={ecc.dossierContactText}>
                     <Text style={ecc.dossierContactLabel}>Encrypted Mail</Text>
@@ -1337,11 +1361,19 @@ export default function SupplierDetailScreen({
                       {(supplier.email ?? "").trim() || "Not available"}
                     </Text>
                   </View>
-                  <FontAwesome name="lock" size={10} color={Theme.textSection} />
+                  <FontAwesome
+                    name="lock"
+                    size={10}
+                    color={Theme.textSection}
+                  />
                 </View>
                 <View style={ecc.dossierContactRow}>
                   <View style={ecc.dossierContactIcon}>
-                    <FontAwesome name="phone" size={13} color={Theme.textMuted} />
+                    <FontAwesome
+                      name="phone"
+                      size={13}
+                      color={Theme.textMuted}
+                    />
                   </View>
                   <View style={ecc.dossierContactText}>
                     <Text style={ecc.dossierContactLabel}>Secured Line</Text>
@@ -1572,8 +1604,12 @@ export default function SupplierDetailScreen({
                       count: 0,
                       lastTxnDate: null,
                     };
-                    const cidKey = (row.trip.client_id ?? "").trim().toLowerCase();
-                    const clientRow = cidKey ? clientById.get(cidKey) : undefined;
+                    const cidKey = (row.trip.client_id ?? "")
+                      .trim()
+                      .toLowerCase();
+                    const clientRow = cidKey
+                      ? clientById.get(cidKey)
+                      : undefined;
                     const clientNameForUi = resolveClientDisplayName(row.trip);
                     const clientRevenue = getTripSalesForSupplierView(row.trip);
                     const tripPnl = clientRevenue - row.sales;
@@ -1831,8 +1867,9 @@ export default function SupplierDetailScreen({
               externalDownloadRequest={sharedLedgerDownloadSignal}
               onRefresh={load}
               initialNotificationAction={
-                (notificationAction as import("@/features/finance/components/SharedLedgerContent").SharedLedgerNotificationAction | undefined) ??
-                null
+                (notificationAction as
+                  | import("@/features/finance/components/SharedLedgerContent").SharedLedgerNotificationAction
+                  | undefined) ?? null
               }
               initialNotificationTripId={notificationTripId ?? null}
               onRequestConnection={() => {
