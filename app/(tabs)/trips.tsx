@@ -2079,6 +2079,7 @@ export default function TripsScreen() {
                             styles.tripMetricTileShrinkNone,
                             isLargeScreen && styles.tripMetricTileWeb,
                             active && styles.tripMetricBentoActive,
+                            !active && styles.tripMetricBentoInactive,
                           ]}
                           onPress={() => setActiveMetricTab(metricId)}
                           activeOpacity={0.85}
@@ -2086,18 +2087,32 @@ export default function TripsScreen() {
                           accessibilityState={{ selected: active }}
                           accessibilityLabel={`${copy.title}, ${count} trips`}
                         >
-                          <LinearGradient
-                            colors={visual.gradient}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                            style={StyleSheet.absoluteFill}
-                          />
+                          {active ? (
+                            <LinearGradient
+                              colors={visual.gradient}
+                              start={{ x: 0, y: 0 }}
+                              end={{ x: 1, y: 1 }}
+                              style={StyleSheet.absoluteFill}
+                            />
+                          ) : null}
                           <View
                             style={styles.historyMetricWatermarkOrbs}
                             pointerEvents="none"
                           >
-                            <View style={styles.historyWmHeroBlobA} />
-                            <View style={styles.historyWmHeroBlobB} />
+                            <View
+                              style={
+                                active
+                                  ? styles.historyWmHeroBlobA
+                                  : styles.historyWmLightBlobA
+                              }
+                            />
+                            <View
+                              style={
+                                active
+                                  ? styles.historyWmHeroBlobB
+                                  : styles.historyWmLightBlobB
+                              }
+                            />
                           </View>
                           <View style={styles.historyMetricInner}>
                             <View style={styles.metricBentoHeadRow}>
@@ -2106,16 +2121,21 @@ export default function TripsScreen() {
                                   styles.metricBentoValue,
                                   active
                                     ? styles.tripMetricCountActive
-                                    : styles.metricBentoValueOnDark,
+                                    : styles.metricBentoValueOnLight,
                                 ]}
                               >
                                 {count}
                               </Text>
-                              <View style={styles.metricBentoIconWrap}>
+                              <View
+                                style={[
+                                  styles.metricBentoIconWrap,
+                                  !active && styles.metricBentoIconWrapLight,
+                                ]}
+                              >
                                 <FontAwesome
                                   name={visual.icon}
                                   size={11}
-                                  color={visual.accent}
+                                  color={active ? visual.accent : Theme.textSecondary}
                                 />
                               </View>
                             </View>
@@ -2124,7 +2144,7 @@ export default function TripsScreen() {
                                 styles.metricBentoLabel,
                                 active
                                   ? styles.metricBentoLabelOnDarkActive
-                                  : styles.metricBentoLabelOnDark,
+                                  : styles.metricBentoLabelOnLight,
                               ]}
                               numberOfLines={2}
                             >
@@ -2133,7 +2153,9 @@ export default function TripsScreen() {
                             <Text
                               style={[
                                 styles.metricBentoSubtext,
-                                styles.metricBentoSubtextOnDark,
+                                active
+                                  ? styles.metricBentoSubtextOnDark
+                                  : styles.metricBentoSubtextOnLight,
                                 styles.metricCardHintAtBottom,
                               ]}
                               numberOfLines={3}
@@ -2178,6 +2200,7 @@ export default function TripsScreen() {
                             styles.tripMetricTileShrinkNone,
                         isLargeScreen && styles.tripMetricTileWeb,
                             active && styles.tripMetricBentoActive,
+                            !active && styles.tripMetricBentoInactive,
                       ]}
                       onPress={() => setActiveMetricTab(metricId)}
                       activeOpacity={0.85}
@@ -2185,18 +2208,32 @@ export default function TripsScreen() {
                       accessibilityState={{ selected: active }}
                       accessibilityLabel={`${copy.title}, ${count} trips`}
                     >
-                          <LinearGradient
-                            colors={visual.gradient}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                            style={StyleSheet.absoluteFill}
-                          />
+                          {active ? (
+                            <LinearGradient
+                              colors={visual.gradient}
+                              start={{ x: 0, y: 0 }}
+                              end={{ x: 1, y: 1 }}
+                              style={StyleSheet.absoluteFill}
+                            />
+                          ) : null}
                           <View
                             style={styles.historyMetricWatermarkOrbs}
                             pointerEvents="none"
                           >
-                            <View style={styles.historyWmHeroBlobA} />
-                            <View style={styles.historyWmHeroBlobB} />
+                            <View
+                              style={
+                                active
+                                  ? styles.historyWmHeroBlobA
+                                  : styles.historyWmLightBlobA
+                              }
+                            />
+                            <View
+                              style={
+                                active
+                                  ? styles.historyWmHeroBlobB
+                                  : styles.historyWmLightBlobB
+                              }
+                            />
                           </View>
                           <View style={styles.historyMetricInner}>
                             <View style={styles.metricBentoHeadRow}>
@@ -2205,13 +2242,22 @@ export default function TripsScreen() {
                                   styles.metricBentoValue,
                                   active
                                     ? styles.tripMetricCountActive
-                                    : styles.metricBentoValueOnDark,
+                                    : styles.metricBentoValueOnLight,
                                 ]}
                               >
                                 {count}
                               </Text>
-                              <View style={styles.metricBentoIconWrap}>
-                                <FontAwesome name={visual.icon} size={11} color={visual.accent} />
+                              <View
+                                style={[
+                                  styles.metricBentoIconWrap,
+                                  !active && styles.metricBentoIconWrapLight,
+                                ]}
+                              >
+                                <FontAwesome
+                                  name={visual.icon}
+                                  size={11}
+                                  color={active ? visual.accent : Theme.textSecondary}
+                                />
                               </View>
                             </View>
                       <Text
@@ -2219,7 +2265,7 @@ export default function TripsScreen() {
                                 styles.metricBentoLabel,
                                 active
                                   ? styles.metricBentoLabelOnDarkActive
-                                  : styles.metricBentoLabelOnDark,
+                                  : styles.metricBentoLabelOnLight,
                         ]}
                         numberOfLines={2}
                       >
@@ -2228,7 +2274,9 @@ export default function TripsScreen() {
                             <Text
                               style={[
                                 styles.metricBentoSubtext,
-                                styles.metricBentoSubtextOnDark,
+                                active
+                                  ? styles.metricBentoSubtextOnDark
+                                  : styles.metricBentoSubtextOnLight,
                                 styles.metricCardHintAtBottom,
                               ]}
                               numberOfLines={3}
@@ -2273,6 +2321,7 @@ export default function TripsScreen() {
                             styles.tripMetricTileShrinkNone,
                             isLargeScreen && styles.tripMetricTileWeb,
                             active && styles.tripMetricBentoActive,
+                            !active && styles.tripMetricBentoInactive,
                           ]}
                           onPress={() => setActiveMetricTab(metricId)}
                           activeOpacity={0.85}
@@ -2280,18 +2329,32 @@ export default function TripsScreen() {
                           accessibilityState={{ selected: active }}
                           accessibilityLabel={`${copy.title}, ${count} trips`}
                         >
-                          <LinearGradient
-                            colors={visual.gradient}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                            style={StyleSheet.absoluteFill}
-                          />
+                          {active ? (
+                            <LinearGradient
+                              colors={visual.gradient}
+                              start={{ x: 0, y: 0 }}
+                              end={{ x: 1, y: 1 }}
+                              style={StyleSheet.absoluteFill}
+                            />
+                          ) : null}
                           <View
                             style={styles.historyMetricWatermarkOrbs}
                             pointerEvents="none"
                           >
-                            <View style={styles.historyWmHeroBlobA} />
-                            <View style={styles.historyWmHeroBlobB} />
+                            <View
+                              style={
+                                active
+                                  ? styles.historyWmHeroBlobA
+                                  : styles.historyWmLightBlobA
+                              }
+                            />
+                            <View
+                              style={
+                                active
+                                  ? styles.historyWmHeroBlobB
+                                  : styles.historyWmLightBlobB
+                              }
+                            />
                           </View>
                           <View style={styles.historyMetricInner}>
                             <View style={styles.metricBentoHeadRow}>
@@ -2300,13 +2363,22 @@ export default function TripsScreen() {
                                   styles.metricBentoValue,
                                   active
                                     ? styles.tripMetricCountActive
-                                    : styles.metricBentoValueOnDark,
+                                    : styles.metricBentoValueOnLight,
                                 ]}
                               >
                                 {count}
                               </Text>
-                              <View style={styles.metricBentoIconWrap}>
-                                <FontAwesome name={visual.icon} size={11} color={visual.accent} />
+                              <View
+                                style={[
+                                  styles.metricBentoIconWrap,
+                                  !active && styles.metricBentoIconWrapLight,
+                                ]}
+                              >
+                                <FontAwesome
+                                  name={visual.icon}
+                                  size={11}
+                                  color={active ? visual.accent : Theme.textSecondary}
+                                />
                               </View>
                             </View>
                             <Text
@@ -2314,7 +2386,7 @@ export default function TripsScreen() {
                                 styles.metricBentoLabel,
                                 active
                                   ? styles.metricBentoLabelOnDarkActive
-                                  : styles.metricBentoLabelOnDark,
+                                  : styles.metricBentoLabelOnLight,
                               ]}
                               numberOfLines={2}
                             >
@@ -2323,7 +2395,9 @@ export default function TripsScreen() {
                             <Text
                               style={[
                                 styles.metricBentoSubtext,
-                                styles.metricBentoSubtextOnDark,
+                                active
+                                  ? styles.metricBentoSubtextOnDark
+                                  : styles.metricBentoSubtextOnLight,
                                 styles.metricCardHintAtBottom,
                               ]}
                               numberOfLines={3}
@@ -4052,12 +4126,18 @@ const styles = StyleSheet.create({
   },
   tripMetricBentoActive: {
     borderColor: Theme.primary,
+    borderWidth: 2,
     backgroundColor: "transparent",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.22,
-    shadowRadius: 6,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.28,
+    shadowRadius: 12,
+    elevation: 7,
+    transform: [{ translateY: -2 }],
+  },
+  tripMetricBentoInactive: {
+    backgroundColor: Theme.surface,
+    borderColor: "rgba(15,23,42,0.14)",
   },
   tripMetricTileShrinkNone: {
     flexShrink: 0,
@@ -4081,6 +4161,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(148,163,184,0.35)",
     backgroundColor: "rgba(15,23,42,0.45)",
+  },
+  metricBentoIconWrapLight: {
+    borderColor: "rgba(15,23,42,0.18)",
+    backgroundColor: "rgba(15,23,42,0.08)",
   },
   tripMetricTile: {
     width: 188,
@@ -4149,6 +4233,9 @@ const styles = StyleSheet.create({
   metricBentoValueOnDark: {
     color: Theme.textOnDark,
   },
+  metricBentoValueOnLight: {
+    color: Theme.textPrimaryDark,
+  },
   metricBentoLabel: {
     fontSize: 10,
     fontWeight: "800",
@@ -4160,6 +4247,9 @@ const styles = StyleSheet.create({
   },
   metricBentoLabelOnDark: {
     color: "rgba(255,255,255,0.88)",
+  },
+  metricBentoLabelOnLight: {
+    color: Theme.textPrimaryDark,
   },
   metricBentoLabelOnDarkActive: {
     color: "rgba(255,255,255,0.97)",
@@ -4173,6 +4263,9 @@ const styles = StyleSheet.create({
   },
   metricBentoSubtextOnDark: {
     color: "rgba(255,255,255,0.55)",
+  },
+  metricBentoSubtextOnLight: {
+    color: Theme.textSecondary,
   },
   historyMetricWatermarkOrbs: {
     ...StyleSheet.absoluteFillObject,
@@ -4277,7 +4370,7 @@ const styles = StyleSheet.create({
     color: Theme.textOnDark,
   },
   tripMetricCountActive: {
-    color: Theme.primary,
+    color: Theme.textOnDark,
   },
   tripMetricCountHeroActive: {
     color: Theme.textOnDark,
