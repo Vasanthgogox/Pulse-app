@@ -314,6 +314,7 @@ export function LoadCenterView({
     Record<string, { amount: number; updatedAt: string }[]>
   >({});
   const isSingleRowHeader = Platform.OS === "web" && width >= 1200;
+  const isCompactModalLayout = Platform.OS === "web" && width < 920;
 
   const { data: indents = [], isLoading } = useIndentsQuery(orgId);
   const {
@@ -3237,6 +3238,7 @@ export function LoadCenterView({
                 ? [
                     assignmentShellStyles.webModalCardWhite,
                     { paddingTop: insets.top },
+                    isCompactModalLayout && styles.assignWebModalCardCompact,
                     !useAdHocDriver && {
                       height: "auto",
                       maxHeight: 620,
@@ -3288,6 +3290,8 @@ export function LoadCenterView({
                 contentContainerStyle={[
                   assignmentShellStyles.bodyScrollContent,
                   {
+                    paddingHorizontal: isCompactModalLayout ? 12 : 20,
+                    paddingTop: isCompactModalLayout ? 12 : 20,
                     paddingBottom: !deployOtpCode
                       ? 110 + insets.bottom
                       : 24 + insets.bottom,
@@ -3452,7 +3456,12 @@ export function LoadCenterView({
                       </View>
                     </View>
 
-                    <View style={styles.handshakeAssignLaterOuter}>
+                    <View
+                      style={[
+                        styles.handshakeAssignLaterOuter,
+                        isCompactModalLayout && styles.handshakeAssignLaterOuterCompact,
+                      ]}
+                    >
                       <View style={styles.handshakeAssignLaterLeft}>
                         <View style={styles.handshakeAssignLaterIconWrap}>
                           <ListChecks size={18} color="#64748b" />
@@ -3758,7 +3767,8 @@ export function LoadCenterView({
                           ? suppliers.find((s) => s.id === subcontractSupplierId)
                           : null;
                         const inlinePartners = visiblePartnersForHandshake;
-                        const canWideAlign = width >= 760;
+                        const canWideAlign =
+                          Platform.OS === "web" ? width >= 1200 : width >= 900;
 
                         const partnerPane = (
                           <View
@@ -4081,15 +4091,33 @@ export function LoadCenterView({
                                 sub-supplier for this trip and enter the rate you
                                 will pay.
                               </Text>
-                              <View
+                              <ScrollView
                                 style={[
+                                  styles.currentNodeInnerScroll,
+                                  !canWideAlign && styles.currentNodeInnerScrollMobile,
+                                  isCompactModalLayout && styles.currentNodeInnerScrollCompact,
+                                ]}
+                                contentContainerStyle={[
+                                  styles.currentNodeInnerScrollContent,
                                   styles.aggregateSplit,
                                   canWideAlign && styles.aggregateSplitWide,
                                 ]}
+                                nestedScrollEnabled
+                                keyboardShouldPersistTaps="handled"
+                                showsVerticalScrollIndicator={!canWideAlign}
                               >
-                                {partnerPane}
-                                {rateAndTrackingPane}
-                              </View>
+                                {canWideAlign ? (
+                                  <>
+                                    {partnerPane}
+                                    {rateAndTrackingPane}
+                                  </>
+                                ) : (
+                                  <View style={styles.aggregateMobileStack}>
+                                    {partnerPane}
+                                    {rateAndTrackingPane}
+                                  </View>
+                                )}
+                              </ScrollView>
                             </View>
                           </>
                         );
@@ -5619,6 +5647,12 @@ const styles = StyleSheet.create({
       },
     }),
   },
+  handshakeAssignLaterOuterCompact: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    marginBottom: 12,
+  },
   handshakeAssignLaterLeft: {
     flexDirection: "row",
     alignItems: "center",
@@ -5676,6 +5710,13 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     textTransform: "uppercase",
     letterSpacing: 2,
+  },
+  assignWebModalCardCompact: {
+    width: "98%",
+    maxWidth: 760,
+    borderRadius: 14,
+    height: "92vh",
+    maxHeight: "92vh",
   },
   handshakeNativeInner: {
     flex: 1,
@@ -5854,6 +5895,21 @@ const styles = StyleSheet.create({
   aggregateSplit: {
     gap: 12,
   },
+  currentNodeInnerScroll: {
+    width: "100%",
+  },
+  currentNodeInnerScrollMobile: {
+    maxHeight: 440,
+  },
+  currentNodeInnerScrollCompact: {
+    maxHeight: 380,
+  },
+  currentNodeInnerScrollContent: {
+    paddingBottom: 8,
+  },
+  aggregateMobileStack: {
+    gap: 12,
+  },
   aggregateSplitWide: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -5952,6 +6008,7 @@ const styles = StyleSheet.create({
   aggregateGridCol: {
     flex: 1,
     minWidth: 0,
+    width: "100%",
   },
   aggregateInlineFieldLabel: {
     textTransform: "none",
@@ -5960,6 +6017,8 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   aggregatePhoneInputWrap: {
+    width: "100%",
+    alignSelf: "stretch",
     minHeight: 44,
     borderRadius: 10,
     paddingHorizontal: 16,
@@ -5971,6 +6030,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     color: Theme.textMuted,
+    flexShrink: 0,
   },
   aggregatePhoneInput: {
     flex: 1,
