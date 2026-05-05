@@ -583,7 +583,9 @@ export async function getNetworkConversationsByOrg(
     .from("network_conversations")
     .select(`*, network_messages(id, conversation_id, content, sender_org_id, sender_name, sender_user_id, created_at, is_read_by_other, read_at)`)
     .or(`org_a_id.eq.${orgId},org_b_id.eq.${orgId}`)
-    .order("last_message_at", { ascending: false, nullsFirst: false });
+    .order("last_message_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false, referencedTable: "network_messages" })
+    .limit(50, { referencedTable: "network_messages" });
 
   if (error) throw error;
 
@@ -984,7 +986,8 @@ export async function getConversationsByDriverIds(
           .from("trip_messages")
           .select("id, conversation_id, content, sender_role, sender_name, sender_user_id, created_at, is_read, message_type, metadata")
           .in("conversation_id", convIds)
-          .order("created_at", { ascending: true })
+          .order("created_at", { ascending: false })
+          .limit(50 * convIds.length)
       : Promise.resolve(emptyMessagesRes),
   ]);
 

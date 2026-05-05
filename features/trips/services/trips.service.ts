@@ -556,11 +556,13 @@ export async function getDriverAvailabilityByPhone(
   }
 
   const last10 = normalized.replace(/\D/g, "").slice(-10);
+  // Filter by phone suffix in DB (ILIKE '%<last10>') instead of fetching all org drivers.
   const { data: orgDrivers, error: driverError } = await supabase()
     .from("drivers")
     .select("id, phone")
     .eq("organization_id", orgId)
-    .not("phone", "is", null);
+    .ilike("phone", `%${last10}`)
+    .limit(10);
   if (driverError) {
     return {
       error: new Error(driverError.message),
@@ -695,10 +697,14 @@ export async function getDriverAvailabilityByPhoneGlobal(
     };
   }
 
+  // Search by last-10 digits using ILIKE to avoid full table scan on drivers.
+  // Two passes: exact suffix match first, then a broader ILIKE for country-prefix variants.
+  const phonePattern = `%${last10}`;
   const { data: allDrivers, error: driverError } = await supabase()
     .from("drivers")
     .select("id, phone")
-    .not("phone", "is", null);
+    .ilike("phone", phonePattern)
+    .limit(20);
   if (driverError) {
     return {
       error: new Error(driverError.message),
@@ -1999,18 +2005,15 @@ export async function updateTripPayment(
 export async function getActiveDriverIds(orgId: string): Promise<Set<string>> {
   const { data } = await supabase()
     .from("trips")
-    .select("driver_id, status, started_at")
+    .select("driver_id")
     .eq("organization_id", orgId)
     .not("driver_id", "is", null)
-    .not("status", "in", `("${ONGOING_TRIP_TERMINAL_STATUSES.join('","')}")`);
+    .not("status", "in", `("${ONGOING_TRIP_TERMINAL_STATUSES.join('","')}")`)
+    .limit(500);
 
   const ids = new Set<string>();
   for (const row of data ?? []) {
-    const r = row as {
-      driver_id?: string | null;
-      status?: string | null;
-      started_at?: string | null;
-    };
+    const r = row as { driver_id?: string | null };
     const id = r.driver_id;
     if (!id) continue;
     ids.add(id);
