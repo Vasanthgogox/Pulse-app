@@ -103,12 +103,7 @@ function getPhoneInlineError(national: string): string | null {
 }
 
 /** Step 2 valid: name, email (required and valid), password valid. */
-function isStep2Valid(
-  callsign: string,
-  email: string,
-  pwd: string,
-  confirmPwd: string,
-): boolean {
+function isStep2Valid(callsign: string, email: string, pwd: string, confirmPwd: string): boolean {
   const name = callsign.trim();
   if (name.length < NAME_MIN_LENGTH || name.length > NAME_MAX_LENGTH) return false;
   if (!email.trim()) return false;
@@ -137,6 +132,7 @@ export default function DriverSignUpScreen() {
   const [avatarSeed, setAvatarSeed] = useState(ALL_PRESET_AVATARS[0].seed);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [licenseUploaded, setLicenseUploaded] = useState(false);
   const [aadhaarUploaded, setAadhaarUploaded] = useState(false);
   const [panUploaded, setPanUploaded] = useState(false);
@@ -151,7 +147,7 @@ export default function DriverSignUpScreen() {
   } | null>(null);
   const phoneCheckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const otpInputRef = useRef<TextInput>(null);
-  const fieldYRef = useRef({ callsign: 0, email: 0, password: 0 });
+  const fieldYRef = useRef({ callsign: 0, email: 0, password: 0, confirmPassword: 0 });
   const isDesktop = width >= 1024;
   const pageWidth = isDesktop ? Math.min(560, width - 120) : width;
 
@@ -631,15 +627,19 @@ export default function DriverSignUpScreen() {
             </View>
             <View style={styles.inputGroup}>
               <Text style={styles.fieldLabel}>Confirm password</Text>
-              <View style={[styles.inputWrap, styles.passwordRow]}>
+              <View
+                style={[styles.inputWrap, styles.passwordRow]}
+                onLayout={(e) => { fieldYRef.current.confirmPassword = e.nativeEvent.layout.y; }}
+              >
                 <TextInput
                   style={styles.inputPassword}
-                  placeholder="Re-enter password"
+                  placeholder="Re-enter your password"
                   placeholderTextColor={LIGHT.placeholder}
                   value={confirmPassword}
                   onChangeText={setConfirmPassword}
+                  onFocus={() => scrollToField('confirmPassword')}
                   maxLength={VALIDATION.PASSWORD_MAX_LENGTH}
-                  secureTextEntry={!showPassword}
+                  secureTextEntry={!showConfirmPassword}
                   autoCorrect={false}
                   spellCheck={false}
                   autoComplete="off"
@@ -648,14 +648,14 @@ export default function DriverSignUpScreen() {
                   selectionColor="rgba(15,23,42,0.2)"
                 />
                 <TouchableOpacity
-                  onPress={() => setShowPassword((v) => !v)}
+                  onPress={() => setShowConfirmPassword((v) => !v)}
                   style={styles.eyeButton}
                   hitSlop={12}
                   accessible
-                  accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                  accessibilityLabel={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
                 >
                   <FontAwesome
-                    name={showPassword ? 'eye-slash' : 'eye'}
+                    name={showConfirmPassword ? 'eye-slash' : 'eye'}
                     size={22}
                     color={LIGHT.textMuted}
                   />
