@@ -4141,10 +4141,7 @@ export function LoadCenterView({
             style={[
               styles.subcontractPickerModalBody,
               {
-                paddingTop:
-                  Platform.OS === "web"
-                    ? Math.max(insets.top + 72, 72)
-                    : insets.top + 12,
+                paddingTop: Platform.OS === "web" ? 0 : insets.top + 12,
                 paddingBottom: insets.bottom + 12,
                 pointerEvents: "box-none",
               },
@@ -6051,7 +6048,7 @@ const styles = StyleSheet.create({
   },
   subcontractPickerModalBody: {
     flex: 1,
-    justifyContent: "flex-start",
+    justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 8,
   },
