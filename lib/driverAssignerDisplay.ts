@@ -60,6 +60,7 @@ export type DriverInviteLite = {
 export type AssignerResolutionDeps = {
   assignmentActorByTripId: Record<string, string>;
   assignerNamesByUserId: Record<string, string>;
+  assignerOrgNameByUserId?: Record<string, string>;
   assignerDisplayByTripId: Record<string, string>;
   organizationNamesById: Record<string, string>;
 };
@@ -104,10 +105,12 @@ export function buildAssignerDisplayForTrip(
   /** Fleet / assigning org — never use client/supplier names (those are cargo parties). */
   const tripAssignedByOrgNameCandidates = [
     deps.organizationNamesById[(trip.organization_id ?? "").trim()] ?? null,
+    deps.assignerOrgNameByUserId?.[assignerUserId] ?? null,
     inviteForTrip?.from_org_name ?? null,
     (tripMeta.organization_name as string | null | undefined) ?? null,
     (tripMeta.org_name as string | null | undefined) ?? null,
     (tripMeta.from_org_name as string | null | undefined) ?? null,
+    (tripMeta.company_name as string | null | undefined) ?? null,
   ];
   const resolvedFromTripFields = tripAssignedByUserNameCandidates
     .map((value) => humanizeAssignerDisplayName(String(value ?? "")))

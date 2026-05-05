@@ -13,6 +13,7 @@ import {
 import { getLatestAssignmentAuditByTripIds } from "@/features/trips/services/trip-assignment-audit.service";
 import { useDriverAvatarUri } from "@/lib/avatarUpload";
 import {
+    buildAssignerDisplayForTrip,
     humanizeAssignerDisplayName,
     resolveAssignerUserId,
 } from "@/lib/driverAssignerDisplay";
@@ -454,12 +455,18 @@ export default function DriverTripsScreen() {
   const router = useRouter();
   const { profile } = useAuth();
   const { avatarUri } = useDriverAvatarUri();
-  const [, setDriver] = useState<driversService.DriverRow | null>(null);
+  const [driver, setDriver] = useState<driversService.DriverRow | null>(null);
+  const [invites, setInvites] = useState<
+    Awaited<ReturnType<typeof driversService.getDriverInvitesReceived>>["invites"]
+  >([]);
   const [trips, setTrips] = useState<tripsService.TripRow[]>([]);
   const [assignmentActorByTripId, setAssignmentActorByTripId] = useState<
     Record<string, string>
   >({});
   const [assignerNamesByUserId, setAssignerNamesByUserId] = useState<
+    Record<string, string>
+  >({});
+  const [assignerOrgNameByUserId, setAssignerOrgNameByUserId] = useState<
     Record<string, string>
   >({});
   const [assignerDisplayByTripId, setAssignerDisplayByTripId] = useState<
@@ -605,21 +612,28 @@ export default function DriverTripsScreen() {
       const drivers = (res.drivers ?? []).filter((d) => !d.left_at);
       if (drivers.length > 0) {
         setDriver(drivers[0]);
-        tripsService
-          .getTripsByDriverIds(drivers.map((d) => d.id))
-          .then((tRes) => {
+        Promise.all([
+          tripsService.getTripsByDriverIds(drivers.map((d) => d.id)),
+          driversService.getDriverInvitesReceived(),
+        ])
+          .then(([tRes, invitesRes]) => {
             if (tRes.error && __DEV__) {
               console.warn("[trip-history] getTripsByDriverIds:", tRes.error.message);
             }
+            if (invitesRes.error && __DEV__) {
+              console.warn("[trip-history] getDriverInvitesReceived:", invitesRes.error.message);
+            }
             setTrips(tRes.error ? [] : (tRes.trips ?? []));
+            setInvites(invitesRes.error ? [] : (invitesRes.invites ?? []));
             setLoading(false);
             initialLoadDoneRef.current = true;
             isRefreshingRef.current = false;
             setRefreshing(false);
           })
           .catch((e) => {
-            if (__DEV__) console.warn("[trip-history] getTripsByDriverIds failed:", e);
+            if (__DEV__) console.warn("[trip-history] trips/invites fetch failed:", e);
             setTrips([]);
+            setInvites([]);
             setLoading(false);
             initialLoadDoneRef.current = true;
             isRefreshingRef.current = false;
@@ -627,6 +641,7 @@ export default function DriverTripsScreen() {
           });
       } else {
         setTrips([]);
+        setInvites([]);
         setLoading(false);
         initialLoadDoneRef.current = true;
         isRefreshingRef.current = false;
@@ -686,6 +701,7 @@ export default function DriverTripsScreen() {
       if (tripIds.length === 0) {
         if (!cancelled) {
           setAssignerNamesByUserId({});
+          setAssignerOrgNameByUserId({});
           setAssignerDisplayByTripId({});
         }
         return;
@@ -716,26 +732,34 @@ export default function DriverTripsScreen() {
         ),
       );
       if (userIds.length === 0) {
-        if (!cancelled) setAssignerNamesByUserId({});
+        if (!cancelled) {
+          setAssignerNamesByUserId({});
+          setAssignerOrgNameByUserId({});
+        }
         return;
       }
       const { data, error } = await supabase()
         .from("profiles")
-        .select("id, full_name, email")
+        .select("id, full_name, email, company_name")
         .in("id", userIds);
       if (!cancelled && !error) {
         const byId: Record<string, string> = {};
+        const orgById: Record<string, string> = {};
         for (const row of
           (data ?? []) as Array<{
             id: string;
             full_name?: string | null;
             email?: string | null;
+            company_name?: string | null;
           }>) {
           const fallbackEmailName =
             (row.email ?? "").trim().split("@")[0]?.trim() || "Dispatcher";
           byId[row.id] = (row.full_name ?? "").trim() || fallbackEmailName;
+          const company = (row.company_name ?? "").trim();
+          if (company) orgById[row.id] = company;
         }
         setAssignerNamesByUserId(byId);
+        setAssignerOrgNameByUserId(orgById);
       }
     };
     void loadAssignerSources();
@@ -744,27 +768,46 @@ export default function DriverTripsScreen() {
     };
   }, [trips, assignmentActorByTripId]);
 
+  const organizationNamesById = useMemo(() => {
+    const byId: Record<string, string> = {};
+    for (const inv of invites) {
+      const orgId = String(inv.from_organization_id ?? "").trim();
+      const orgName = String(inv.from_org_name ?? "").trim();
+      if (!orgId || !orgName) continue;
+      byId[orgId] = orgName;
+    }
+    return byId;
+  }, [invites]);
+
   const assignerByTripId = useMemo(() => {
     const byTrip: Record<string, string> = {};
     for (const trip of trips) {
-      const tripMeta = trip as tripsService.TripRow &
-        Record<string, string | number | boolean | null | undefined>;
       const tid = String(trip.id ?? "").trim();
       if (!tid) continue;
-      const fromRpc = normalizeAssignerName(assignerDisplayByTripId[tid] ?? "");
-      const fromTrip =
-        normalizeAssignerName(tripMeta.assigned_by_name) ??
-        normalizeAssignerName(tripMeta.assigned_by_user_name) ??
-        normalizeAssignerName(tripMeta.dispatcher_name) ??
-        normalizeAssignerName(tripMeta.created_by_name);
-      const assignerUserId = resolveAssignerUserId(trip, assignmentActorByTripId).trim();
-      const fromProfiles = normalizeAssignerName(
-        assignerNamesByUserId[assignerUserId] ?? "",
-      );
-      byTrip[tid] = fromRpc ?? fromTrip ?? fromProfiles ?? "Fleet dispatcher";
+      byTrip[tid] = buildAssignerDisplayForTrip(
+        trip,
+        invites,
+        driver?.organization_id ?? null,
+        {
+          assignmentActorByTripId,
+          assignerNamesByUserId,
+          assignerOrgNameByUserId,
+          assignerDisplayByTripId,
+          organizationNamesById,
+        },
+      ).assignedByName;
     }
     return byTrip;
-  }, [trips, assignerDisplayByTripId, assignmentActorByTripId, assignerNamesByUserId]);
+  }, [
+    trips,
+    driver?.organization_id,
+    assignmentActorByTripId,
+    assignerNamesByUserId,
+    assignerOrgNameByUserId,
+    assignerDisplayByTripId,
+    invites,
+    organizationNamesById,
+  ]);
 
   const getEarning = (trip: tripsService.TripRow) => {
     const amount = tripEarningsForDriver(trip);

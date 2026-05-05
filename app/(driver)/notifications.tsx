@@ -122,6 +122,9 @@ export default function DriverNotificationsScreen() {
   const [assignerNamesByUserId, setAssignerNamesByUserId] = useState<
     Record<string, string>
   >({});
+  const [assignerOrgNameByUserId, setAssignerOrgNameByUserId] = useState<
+    Record<string, string>
+  >({});
   const [organizationNamesById, setOrganizationNamesById] = useState<
     Record<string, string>
   >({});
@@ -262,6 +265,7 @@ export default function DriverNotificationsScreen() {
       if (trips.length === 0) {
         if (!cancelled) {
           setAssignerNamesByUserId({});
+          setAssignerOrgNameByUserId({});
           setAssignerDisplayByTripId({});
           setOrganizationNamesById({});
         }
@@ -316,24 +320,30 @@ export default function DriverNotificationsScreen() {
       if (userIds.length > 0) {
         const { data, error } = await supabase()
           .from('profiles')
-          .select('id, full_name, email')
+          .select('id, full_name, email, company_name')
           .in('id', userIds);
         if (!cancelled && !error) {
           const byId: Record<string, string> = {};
+          const orgById: Record<string, string> = {};
           for (const row of
             (data ?? []) as Array<{
               id: string;
               full_name?: string | null;
               email?: string | null;
+              company_name?: string | null;
             }>) {
             const fallbackEmailName =
               (row.email ?? '').trim().split('@')[0]?.trim() || 'Dispatcher';
             byId[row.id] = (row.full_name ?? '').trim() || fallbackEmailName;
+            const company = (row.company_name ?? '').trim();
+            if (company) orgById[row.id] = company;
           }
           setAssignerNamesByUserId(byId);
+          setAssignerOrgNameByUserId(orgById);
         }
       } else if (!cancelled) {
         setAssignerNamesByUserId({});
+        setAssignerOrgNameByUserId({});
       }
 
       if (organizationIds.length > 0) {
@@ -388,10 +398,12 @@ export default function DriverNotificationsScreen() {
         ];
         const tripAssignedByOrgNameCandidates = [
           organizationNamesById[(trip.organization_id ?? '').trim()] ?? null,
+          assignerOrgNameByUserId[assignerUserId] ?? null,
           inviteForTrip?.from_org_name ?? null,
           (tripMeta.organization_name as string | null | undefined) ?? null,
           (tripMeta.org_name as string | null | undefined) ?? null,
           (tripMeta.from_org_name as string | null | undefined) ?? null,
+          (tripMeta.company_name as string | null | undefined) ?? null,
         ];
         const resolvedFromTripFields = tripAssignedByUserNameCandidates
           .map((value) => humanizeAssignerDisplayName(String(value ?? '')))
@@ -450,6 +462,7 @@ export default function DriverNotificationsScreen() {
       driver?.organization_id,
       pendingOtpTripsRequiringOtp,
       assignerNamesByUserId,
+      assignerOrgNameByUserId,
       assignerDisplayByTripId,
       organizationNamesById,
       assignmentActorByTripId,
