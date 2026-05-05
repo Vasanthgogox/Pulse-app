@@ -300,8 +300,6 @@ export function LoadCenterView({
   >(null);
   const [subcontractRate, setSubcontractRate] = useState<string>("");
   const [aggregateAdvancePaid, setAggregateAdvancePaid] = useState<string>("");
-  const [subcontractPickerOpen, setSubcontractPickerOpen] = useState(false);
-  const [showIntegratedPartners, setShowIntegratedPartners] = useState(false);
   const [deployOtpCode, setDeployOtpCode] = useState<string | null>(null);
   const [deployOtpExpiresAt, setDeployOtpExpiresAt] = useState<string | null>(
     null,
@@ -383,19 +381,8 @@ export function LoadCenterView({
       );
   }, [loadAction, localBidHistoryByIndentId]);
 
-  const isIntegratedSupplierRow = useCallback(
-    (s: {
-      supplier_type?: string | null;
-      linked_organization_id?: string | null;
-    }) => {
-      return s.supplier_type === "integrated" && !!s.linked_organization_id;
-    },
-    [],
-  );
-
   const visiblePartnersForHandshake = useMemo(() => {
-    const manual = suppliers.filter((s) => !isIntegratedSupplierRow(s));
-    const base = showIntegratedPartners ? suppliers : manual;
+    const base = suppliers;
     // Never hide the currently selected partner (keeps existing selection stable).
     if (
       subcontractSupplierId &&
@@ -407,9 +394,7 @@ export function LoadCenterView({
     return base;
   }, [
     suppliers,
-    showIntegratedPartners,
     subcontractSupplierId,
-    isIntegratedSupplierRow,
   ]);
 
   const awardModalIndentId =
@@ -3407,7 +3392,6 @@ export function LoadCenterView({
                             setSubcontractSupplierId(null);
                             setSubcontractRate("");
                             setAggregateAdvancePaid("");
-                            setSubcontractPickerOpen(false);
                             aggregateDriverNameManualRef.current = false;
                             setAggregateDriverTrackingName("");
                             setAggregatePhoneName(null);
@@ -3444,7 +3428,6 @@ export function LoadCenterView({
                             setSubcontractSupplierId(null);
                             setSubcontractRate("");
                             setAggregateAdvancePaid("");
-                            setSubcontractPickerOpen(false);
                             aggregateDriverNameManualRef.current = false;
                             setAggregateDriverTrackingName("");
                             setAggregatePhoneName(null);
@@ -4258,114 +4241,6 @@ export function LoadCenterView({
         </View>
       </Modal>
 
-      {/* Partner picker: own Modal so dimmer fully covers Staff Handshake (avoids z-order / bleed-through). */}
-      <Modal
-        visible={!!(subcontractPickerOpen && loadAction?.type === "ASSIGN")}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setSubcontractPickerOpen(false)}
-        statusBarTranslucent
-      >
-        <View style={styles.subcontractPickerModalRoot}>
-          <TouchableOpacity
-            style={StyleSheet.absoluteFillObject}
-            activeOpacity={1}
-            onPress={() => setSubcontractPickerOpen(false)}
-          />
-          <View
-            style={[
-              styles.subcontractPickerModalBody,
-              {
-                paddingTop: Platform.OS === "web" ? 0 : insets.top + 12,
-                paddingBottom: insets.bottom + 12,
-                pointerEvents: "box-none",
-              },
-            ]}
-          >
-            <View style={styles.subcontractPickerCard}>
-              <Text style={styles.subcontractPickerTitle}>SELECT PARTNER</Text>
-              <View style={styles.subcontractPickerToggleRow}>
-                <Text style={styles.subcontractPickerToggleLabel}>
-                  Show integrated suppliers
-                </Text>
-                <Switch
-                  value={showIntegratedPartners}
-                  onValueChange={setShowIntegratedPartners}
-                  trackColor={{
-                    false: Theme.borderInput,
-                    true: Theme.primaryText,
-                  }}
-                  thumbColor={Theme.screenBackground}
-                />
-              </View>
-              <ScrollView
-                style={styles.subcontractPickerScroll}
-                contentContainerStyle={styles.subcontractPickerScrollContent}
-                showsVerticalScrollIndicator
-                keyboardShouldPersistTaps="handled"
-              >
-                {visiblePartnersForHandshake.length === 0 ? (
-                  <Text style={styles.subcontractPickerEmpty}>
-                    No partners yet. Add partners first.
-                  </Text>
-                ) : (
-                  visiblePartnersForHandshake.map((s) => (
-                    <TouchableOpacity
-                      key={s.id}
-                      style={[
-                        styles.subcontractPickerRow,
-                        subcontractSupplierId === s.id &&
-                          styles.subcontractPickerRowActive,
-                      ]}
-                      onPress={() => {
-                        setSubcontractSupplierId(
-                          subcontractSupplierId === s.id ? null : s.id,
-                        );
-                        setSubcontractPickerOpen(false);
-                      }}
-                      activeOpacity={0.75}
-                    >
-                      <Text
-                        style={styles.subcontractPickerText}
-                        numberOfLines={1}
-                      >
-                        {s.company_name || s.name || s.contact_person || "—"}
-                      </Text>
-                      {isIntegratedSupplierRow(s) ? (
-                        <Text
-                          style={styles.subcontractPickerBadge}
-                          numberOfLines={1}
-                        >
-                          INTEGRATED
-                        </Text>
-                      ) : null}
-                      {subcontractSupplierId === s.id ? (
-                        <FontAwesome
-                          name="check"
-                          size={14}
-                          color={Theme.darkGreen}
-                        />
-                      ) : null}
-                    </TouchableOpacity>
-                  ))
-                )}
-              </ScrollView>
-              {subcontractSupplierId ? (
-                <TouchableOpacity
-                  style={styles.subcontractPickerClearBtn}
-                  onPress={() => {
-                    setSubcontractSupplierId(null);
-                    setSubcontractPickerOpen(false);
-                  }}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.subcontractPickerClearText}>Clear</Text>
-                </TouchableOpacity>
-              ) : null}
-            </View>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
