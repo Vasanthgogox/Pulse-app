@@ -8,7 +8,7 @@
  * Service-layer validation: amount cap, date format, string length.
  */
 import { getAvatarUriForSeed } from "@/constants/DriverLevels";
-import { getDriverProfileDisplay } from "@/features/drivers/services/drivers.service";
+import { getDriverProfileDisplay, getDriverProfileDisplayBatch } from "@/features/drivers/services/drivers.service";
 import { postLedgerEventToChat } from "@/features/chat/services/chatLedgerBridge.service";
 import { interpretLedgerRowStructured } from "@/features/finance/ledger/ledgerEntryModel";
 import {
@@ -116,15 +116,26 @@ export async function getProfileImage(
   contactType: "client" | "supplier" | "driver" | null | undefined,
 ): Promise<string | null> {
   if (!contactId || !contactType) return null;
-
-  // Only drivers have a user_id → profiles link; clients/suppliers have no direct profile connection.
   if (contactType !== "driver") return null;
-
-  // Use SECURITY DEFINER RPC — direct `profiles` select is blocked for other users by RLS.
   const { profile, error } = await getDriverProfileDisplay(String(contactId).trim());
   if (error || !profile) return null;
-
   return resolveDriverAvatarFromProfileFields(profile.avatarUrl, profile.avatarSeed);
+}
+
+/** Batch version: fetch avatar URLs for multiple driver IDs in one RPC call. */
+export async function getProfileImageBatch(
+  driverIds: string[],
+): Promise<Record<string, string>> {
+  const ids = driverIds.map((id) => id.trim()).filter(Boolean);
+  if (ids.length === 0) return {};
+
+  const profileMap = await getDriverProfileDisplayBatch(ids);
+  const result: Record<string, string> = {};
+  for (const [driverId, profile] of Object.entries(profileMap)) {
+    const url = await resolveDriverAvatarFromProfileFields(profile.avatarUrl, profile.avatarSeed);
+    if (url) result[driverId] = url;
+  }
+  return result;
 }
 
 export interface LedgerRow {

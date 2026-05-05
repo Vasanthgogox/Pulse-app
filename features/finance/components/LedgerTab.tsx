@@ -18,7 +18,7 @@ import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { getDoubleEntryDisplayLabel } from "../accounting/accountingModel";
 import * as financeService from "../services/finance.service";
-import { getProfileImage } from "../services/finance.service";
+import { getProfileImageBatch } from "../services/finance.service";
 import { resolveAvatarPublicUrl } from "@/lib/avatarUpload";
 import { FinancialRow, type FinancialRowData } from "./FinancialRow";
 import { FinanceEntryDetailScreen } from "./FinanceEntryDetailScreen";
@@ -281,23 +281,18 @@ export function LedgerTab({
   );
 
   useEffect(() => {
-    // Only drivers need async fetching (clients/suppliers resolve from already-fetched rows synchronously).
     const fetchDriverProfileImages = async () => {
-      const newProfileImages: Record<string, string> = {};
-      for (const row of rows) {
-        const contactId = row.contact_id;
-        if (contactId && row.contact_type === 'driver' && !profileImages[contactId] && !driverProfileImageUrls[contactId]) {
-          const imageUrl = await getProfileImage(contactId, 'driver');
-          if (imageUrl) {
-            newProfileImages[contactId] = imageUrl;
-          }
-        }
-      }
-      if (Object.keys(newProfileImages).length > 0) {
-        setProfileImages((prev) => ({ ...prev, ...newProfileImages }));
+      const driverIds = rows
+        .filter((row) => row.contact_type === 'driver' && row.contact_id && !profileImages[row.contact_id] && !driverProfileImageUrls[row.contact_id!])
+        .map((row) => row.contact_id as string);
+
+      if (driverIds.length === 0) return;
+      const fetched = await getProfileImageBatch(driverIds);
+      if (Object.keys(fetched).length > 0) {
+        setProfileImages((prev) => ({ ...prev, ...fetched }));
       }
     };
-    fetchDriverProfileImages();
+    void fetchDriverProfileImages();
   }, [rows, driverProfileImageUrls]);
 
   // Truck-related expense: contact_id/contact_type NULL; entity = vehicle_number (from row or trip) or party_name; LINK = route + vehicle badge only when trip.vehicle_id set. See docs/LEDGER_TRUCK_EXPENSE_AND_TRIP_DISPLAY.md for NULL handling (trip_id null, trip not in map, vehicle_id null).
