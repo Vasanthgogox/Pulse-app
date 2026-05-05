@@ -444,7 +444,7 @@ export async function getOrCreateConversation(params: {
   const { data, error } = await supabase()
     .from("trip_conversations")
     .upsert(payload, { onConflict: "trip_id,party_type" })
-    .select("*")
+    .select("id,organization_id,trip_id,party_type,party_name,client_id,supplier_id,driver_id,last_message_at,last_message_preview,unread_dispatcher_count,created_at,updated_at")
     .single();
 
   if (error) throw error;
@@ -562,7 +562,7 @@ export async function getMessagesByConversation(
 ): Promise<TripMessageRow[]> {
   const { data, error } = await supabase()
     .from("trip_messages")
-    .select("*")
+    .select("id,conversation_id,organization_id,sender_user_id,sender_role,sender_name,content,message_type,metadata,is_read,read_at,created_at")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: false })
     .limit(100);
@@ -616,7 +616,7 @@ export async function getOrCreateNetworkConversation(params: {
 
   const { data: existing } = await supabase()
     .from("network_conversations")
-    .select("*")
+    .select("id,org_a_id,org_b_id,org_a_name,org_b_name,last_message_at,last_message_preview,unread_count_a,unread_count_b,created_at,updated_at")
     .eq("org_a_id", aId)
     .eq("org_b_id", bId)
     .maybeSingle();
@@ -961,7 +961,7 @@ export async function getConversationsByDriverIds(
   // Fallback for environments where embedded select can fail (e.g. RLS recursion / PostgREST 500).
   const { data: convRows, error: convErr } = await supabase()
     .from("trip_conversations")
-    .select("*")
+    .select("id,organization_id,trip_id,party_type,party_name,client_id,supplier_id,driver_id,last_message_at,last_message_preview,unread_dispatcher_count,created_at,updated_at")
     .in("driver_id", driverIds)
     .order("last_message_at", { ascending: false, nullsFirst: false });
   if (convErr) throw primary.error;

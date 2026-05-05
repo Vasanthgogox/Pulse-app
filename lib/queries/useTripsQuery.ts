@@ -101,6 +101,7 @@ export function useAssignmentAuditQuery(tripIds: string[]) {
       return res.byTripId;
     },
     enabled: tripIds.length > 0,
+    staleTime: 5 * 60_000,
   });
 }
 

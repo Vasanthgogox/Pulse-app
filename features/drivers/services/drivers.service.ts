@@ -14,6 +14,11 @@ const DRIVER_COLUMNS = [
   "avatar_url", "avatar_seed",
 ].join(",");
 
+const DRIVER_LEDGER_COLUMNS = [
+  "id", "organization_id", "driver_id", "trip_id", "type",
+  "amount", "currency", "description", "created_at", "created_by",
+].join(",");
+
 export interface CreateDriverServiceData {
   driverSource?: string;
   name: string;
@@ -256,7 +261,7 @@ export async function getLinkedDriverForCurrentUser(
 ): Promise<{ error: Error | null; driver: DriverRow | null }> {
   const { data, error } = await supabase()
     .from("drivers")
-    .select("*")
+    .select(DRIVER_COLUMNS)
     .eq("user_id", userId)
     .maybeSingle();
   if (error) return { error: new Error(error.message), driver: null };
@@ -272,7 +277,7 @@ export async function getLinkedDriversForCurrentUser(
 ): Promise<{ error: Error | null; drivers: DriverRow[] }> {
   const { data, error } = await supabase()
     .from("drivers")
-    .select("*")
+    .select(DRIVER_COLUMNS)
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
     .limit(20);
@@ -701,7 +706,7 @@ export async function inviteDriver(
   // Validation: avoid duplicating driver rows for the same (org,phone).
   const existingDriver = await supabase()
     .from("drivers")
-    .select("*")
+    .select("id,status")
     .eq("organization_id", orgId)
     .eq("phone", phoneNorm)
     .limit(1)
@@ -1407,7 +1412,7 @@ export async function getDriverLedgerByDriver(
 ): Promise<{ error: Error | null; entries: DriverLedgerRow[] }> {
   const { data, error } = await supabase()
     .from("driver_ledger")
-    .select("*")
+    .select(DRIVER_LEDGER_COLUMNS)
     .eq("driver_id", driverId)
     .order("created_at", { ascending: false })
     .limit(200);
@@ -1424,7 +1429,7 @@ export async function getDriverLedgerByDriverIds(
   if (driverIds.length === 0) return { error: null, entries: [] };
   const { data, error } = await supabase()
     .from("driver_ledger")
-    .select("*")
+    .select(DRIVER_LEDGER_COLUMNS)
     .in("driver_id", driverIds)
     .order("created_at", { ascending: false })
     .limit(200);
