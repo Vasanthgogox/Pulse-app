@@ -12,7 +12,6 @@
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import * as Linking from 'expo-linking';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -23,8 +22,10 @@ import {
   Image,
   Modal,
   Platform,
+  Pressable,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -53,7 +54,39 @@ function formatExpiryDate(dateStr: string): string {
 }
 
 function toISODate(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function isValidISODate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [yStr, mStr, dStr] = value.split('-');
+  const y = Number(yStr);
+  const m = Number(mStr);
+  const d = Number(dStr);
+  if (!Number.isInteger(y) || !Number.isInteger(m) || !Number.isInteger(d)) return false;
+  const dt = new Date(y, m - 1, d);
+  return (
+    !isNaN(dt.getTime()) &&
+    dt.getFullYear() === y &&
+    dt.getMonth() === m - 1 &&
+    dt.getDate() === d
+  );
+}
+
+function toDisplayDateFromISO(value: string): string {
+  if (!isValidISODate(value)) return '';
+  const [yyyy, mm, dd] = value.split('-');
+  return `${dd}-${mm}-${yyyy}`;
+}
+
+function toISODateFromDisplay(value: string): string | null {
+  if (!/^\d{2}-\d{2}-\d{4}$/.test(value)) return null;
+  const [dd, mm, yyyy] = value.split('-');
+  const iso = `${yyyy}-${mm}-${dd}`;
+  return isValidISODate(iso) ? iso : null;
 }
 
 function getExpiryState(expiryDate: string | null | undefined): 'valid' | 'expiringSoon' | 'expired' | null {
@@ -79,6 +112,28 @@ function getExpiryLabel(expiryDate: string | null | undefined): string | null {
   return `Valid till ${formatted}`;
 }
 
+/** Image picker URIs on web are blob/data URLs — expo-file-system File is native-only. */
+async function readPickedFileData(uri: string): Promise<{ arrayBuffer: ArrayBuffer; blob?: Blob } | null> {
+  if (Platform.OS === 'web') {
+    try {
+      const res = await fetch(uri);
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      const arrayBuffer = await blob.arrayBuffer();
+      return { arrayBuffer, blob };
+    } catch {
+      return null;
+    }
+  }
+  const { File: ExpoFile } = await import('expo-file-system');
+  try {
+    const arrayBuffer = await new ExpoFile(uri).arrayBuffer();
+    return { arrayBuffer };
+  } catch {
+    return null;
+  }
+}
+
 export interface VehicleDocumentsSectionProps {
   organizationId: string;
   vehicleId: string;
@@ -96,10 +151,13 @@ export function VehicleDocumentsSection({
   const [busyType, setBusyType] = useState<keyof VehicleDocuments | null>(null);
   const [expiryModalType, setExpiryModalType] = useState<keyof VehicleDocuments | null>(null);
   const [pendingExpiry, setPendingExpiry] = useState<string | null>(null);
+  const [pendingExpiryInput, setPendingExpiryInput] = useState('');
+  const [expiryInlineError, setExpiryInlineError] = useState<string | null>(null);
   const [pendingFile, setPendingFile] = useState<{
     arrayBuffer: ArrayBuffer;
     fileName: string;
     mimeType: string;
+    blob?: Blob;
   } | null>(null);
 
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -113,6 +171,7 @@ export function VehicleDocumentsSection({
     arrayBuffer: ArrayBuffer;
     fileName: string;
     mimeType: string;
+    blob?: Blob;
   } | null> => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
@@ -129,16 +188,17 @@ export function VehicleDocumentsSection({
     if (result.canceled || !result.assets?.[0]) return null;
 
     const { uri, fileName, mimeType } = result.assets[0];
-    const arrayBuffer = await new File(uri).arrayBuffer();
-    if (!arrayBuffer?.byteLength) {
+    const fileData = await readPickedFileData(uri);
+    if (!fileData?.arrayBuffer?.byteLength) {
       Alert.alert('Error', 'Could not read image file');
       return null;
     }
 
     const picked = {
-      arrayBuffer,
+      arrayBuffer: fileData.arrayBuffer,
       fileName: fileName ?? `doc-${Date.now()}.jpg`,
       mimeType: mimeType ?? 'image/jpeg',
+      blob: fileData.blob,
     };
 
     const validationError = validateDocumentFile(picked);
@@ -155,17 +215,51 @@ export function VehicleDocumentsSection({
     const file = await pickAndValidateFile();
     if (!file) return;
 
+    setExpiryInlineError(null);
     setPendingFile(file);
-    setPendingExpiry(toISODate(new Date()));
+    const todayIso = toISODate(new Date());
+    setPendingExpiry(todayIso);
+    setPendingExpiryInput(toDisplayDateFromISO(todayIso));
     setExpiryModalType(docType);
   };
 
   const handleExpiryConfirm = async () => {
-    if (!expiryModalType || !pendingFile || !pendingExpiry || busyRef.current) return;
+    if (busyRef.current) {
+      setExpiryInlineError('Upload already in progress. Please wait.');
+      return;
+    }
+    if (!expiryModalType) {
+      setExpiryInlineError('Please re-open upload and try again.');
+      return;
+    }
+    if (!pendingFile) {
+      setExpiryInlineError('Please choose a file again.');
+      return;
+    }
+    const resolvedExpiry =
+      Platform.OS === 'web'
+        ? toISODateFromDisplay(pendingExpiryInput.trim())
+        : pendingExpiry;
+
+    if (!resolvedExpiry || !isValidISODate(resolvedExpiry)) {
+      setExpiryInlineError('Enter expiry date in DD-MM-YYYY format.');
+      Alert.alert('Invalid date', 'Enter expiry date in DD-MM-YYYY format.');
+      return;
+    }
+    const selected = new Date(`${resolvedExpiry}T00:00:00`);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (selected < today) {
+      setExpiryInlineError('Expiry date cannot be in the past.');
+      Alert.alert('Invalid date', 'Expiry date cannot be in the past.');
+      return;
+    }
+    setExpiryInlineError(null);
 
     busyRef.current = true;
     setBusyType(expiryModalType);
     const docType = expiryModalType;
+    let uploadSucceeded = false;
 
     try {
       const { documents: updated, error } = await uploadAndSaveVehicleDocument(
@@ -173,22 +267,32 @@ export function VehicleDocumentsSection({
         vehicleId,
         docType,
         pendingFile,
-        pendingExpiry,
+        resolvedExpiry,
         documents,
       );
 
       if (error || !updated) {
+        setExpiryInlineError(error?.message ?? 'Could not upload document.');
         Alert.alert('Upload failed', error?.message ?? 'Could not upload document');
         return;
       }
 
       onDocumentsUpdated(updated);
+      uploadSucceeded = true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not upload document';
+      setExpiryInlineError(message);
+      Alert.alert('Upload failed', message);
     } finally {
       busyRef.current = false;
       setBusyType(null);
-      setExpiryModalType(null);
-      setPendingFile(null);
-      setPendingExpiry(null);
+      if (uploadSucceeded) {
+        setExpiryModalType(null);
+        setPendingFile(null);
+        setPendingExpiry(null);
+        setPendingExpiryInput('');
+        setExpiryInlineError(null);
+      }
     }
   };
 
@@ -196,6 +300,8 @@ export function VehicleDocumentsSection({
     setExpiryModalType(null);
     setPendingFile(null);
     setPendingExpiry(null);
+    setPendingExpiryInput('');
+    setExpiryInlineError(null);
   };
 
   const handleViewPress = async (doc: DocumentWithExpiry, docType: keyof VehicleDocuments) => {
@@ -363,14 +469,14 @@ export function VehicleDocumentsSection({
       {/* Expiry date picker modal */}
       {expiryModalType && (
         <Modal visible transparent animationType="slide">
-          <TouchableOpacity
-            style={styles.modalBackdrop}
-            activeOpacity={1}
-            onPress={handleExpiryCancel}
-          >
+          <View style={styles.modalBackdrop}>
+            <TouchableOpacity
+              style={styles.modalBackdropTapArea}
+              activeOpacity={1}
+              onPress={handleExpiryCancel}
+            />
             <View
               style={[styles.modalSheet, { paddingBottom: Math.max(32, insets.bottom) }]}
-              onStartShouldSetResponder={() => true}
             >
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>
@@ -382,7 +488,23 @@ export function VehicleDocumentsSection({
               </View>
               <View style={styles.modalBody}>
                 <Text style={styles.modalLabel}>Expiry date</Text>
-                {Platform.OS === 'android' ? (
+                {Platform.OS === 'web' ? (
+                  <TextInput
+                    style={styles.modalDateInput}
+                    value={pendingExpiryInput}
+                    onChangeText={(v) => {
+                      const cleaned = v.replace(/[^\d-]/g, '').slice(0, 10);
+                      setPendingExpiryInput(cleaned);
+                      setPendingExpiry(toISODateFromDisplay(cleaned));
+                      setExpiryInlineError(null);
+                    }}
+                    placeholder="DD-MM-YYYY"
+                    placeholderTextColor={Theme.textMuted}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    maxLength={10}
+                  />
+                ) : Platform.OS === 'android' ? (
                   <DateTimePicker
                     value={pendingExpiry ? new Date(pendingExpiry + 'T12:00:00') : new Date()}
                     mode="date"
@@ -401,21 +523,29 @@ export function VehicleDocumentsSection({
                     onChange={(_, date) => date && setPendingExpiry(toISODate(date))}
                   />
                 )}
+                {expiryInlineError ? (
+                  <Text style={styles.modalErrorText}>{expiryInlineError}</Text>
+                ) : null}
               </View>
-              <TouchableOpacity
-                style={[styles.modalConfirm, busyType ? styles.modalConfirmDisabled : null]}
-                onPress={handleExpiryConfirm}
-                activeOpacity={0.8}
-                disabled={!!busyType}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.modalConfirm,
+                  (busyType || !pendingFile || !expiryModalType) && styles.modalConfirmDisabled,
+                  pressed && !(busyType || !pendingFile || !expiryModalType) && styles.modalConfirmPressed,
+                ]}
+                onPress={() => {
+                  void handleExpiryConfirm();
+                }}
+                disabled={!!busyType || !pendingFile || !expiryModalType}
               >
                 {busyType ? (
                   <ActivityIndicator size="small" color={Theme.textOnPrimary} />
                 ) : (
                   <Text style={styles.modalConfirmText}>Upload & Save</Text>
                 )}
-              </TouchableOpacity>
+              </Pressable>
             </View>
-          </TouchableOpacity>
+          </View>
         </Modal>
       )}
 
@@ -620,6 +750,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'flex-end',
   },
+  modalBackdropTapArea: {
+    flex: 1,
+  },
   modalSheet: {
     backgroundColor: Theme.screenBackground,
     borderTopLeftRadius: 24,
@@ -653,6 +786,22 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
     marginBottom: 12,
   },
+  modalDateInput: {
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: Theme.textPrimaryDark,
+    backgroundColor: Theme.surface,
+  },
+  modalErrorText: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: '600',
+    color: Theme.negative,
+  },
   modalConfirm: {
     backgroundColor: Theme.darkBackground,
     borderRadius: 14,
@@ -662,6 +811,9 @@ const styles = StyleSheet.create({
   },
   modalConfirmDisabled: {
     opacity: 0.6,
+  },
+  modalConfirmPressed: {
+    opacity: 0.85,
   },
   modalConfirmText: {
     fontSize: 14,

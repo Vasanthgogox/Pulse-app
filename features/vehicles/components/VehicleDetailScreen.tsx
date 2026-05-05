@@ -440,7 +440,19 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
           </Text>
           <Text style={styles.headerSubtitle}>VEHICLE FINANCIAL VIEW</Text>
         </View>
-        <View style={styles.headerRight} />
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => setShowProfileModal(true)}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Open vehicle profile"
+        >
+          <FontAwesome
+            name="truck"
+            size={18}
+            color={Theme.textPrimaryDark}
+          />
+        </TouchableOpacity>
       </View>
 
       <ScrollView
