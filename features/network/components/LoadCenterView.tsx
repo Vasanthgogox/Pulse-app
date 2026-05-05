@@ -3758,7 +3758,7 @@ export function LoadCenterView({
                           ? suppliers.find((s) => s.id === subcontractSupplierId)
                           : null;
                         const inlinePartners = visiblePartnersForHandshake;
-                        const canWideAlign = width >= 980;
+                        const canWideAlign = width >= 760;
 
                         const partnerPane = (
                           <View
@@ -3965,7 +3965,12 @@ export function LoadCenterView({
                                   ]}
                                 >
                                   <View style={styles.aggregateGridCol}>
-                                    <Text style={styles.tripAssignRowLabel}>
+                                    <Text
+                                      style={[
+                                        styles.tripAssignRowLabel,
+                                        styles.aggregateInlineFieldLabel,
+                                      ]}
+                                    >
                                       Driver Phone (Tracking) *
                                     </Text>
                                     <View
@@ -3998,7 +4003,12 @@ export function LoadCenterView({
                                     </View>
                                   </View>
                                   <View style={styles.aggregateGridCol}>
-                                    <Text style={styles.tripAssignRowLabel}>
+                                    <Text
+                                      style={[
+                                        styles.tripAssignRowLabel,
+                                        styles.aggregateInlineFieldLabel,
+                                      ]}
+                                    >
                                       Vehicle Number *
                                     </Text>
                                     <TextInput
@@ -5943,10 +5953,16 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
+  aggregateInlineFieldLabel: {
+    textTransform: "none",
+    letterSpacing: 0.2,
+    fontSize: 11,
+    marginBottom: 6,
+  },
   aggregatePhoneInputWrap: {
-    minHeight: 52,
+    minHeight: 44,
     borderRadius: 10,
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -5962,6 +5978,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     color: Theme.textPrimaryDark,
+    paddingVertical: 0,
     ...Platform.select({
       web: {
         outlineStyle: "none",
