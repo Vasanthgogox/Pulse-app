@@ -1260,6 +1260,7 @@ export default function TripsScreen() {
           styles.historyMetricCardShell,
           isLargeScreen && styles.tripMetricTileWeb,
           active && styles.tripMetricBentoActive,
+          !active && styles.tripMetricBentoInactive,
           showsAmount && metric.amount > 0 && styles.historyMetricTileAttention,
         ]}
         onPress={() =>
@@ -1272,17 +1273,23 @@ export default function TripsScreen() {
         accessibilityState={{ selected: active }}
         accessibilityLabel={`${metric.title}, ${metric.count} trips`}
       >
-        <LinearGradient
-          colors={[Theme.darkBackground, "#1e293b"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
+        {active ? (
+          <LinearGradient
+            colors={[Theme.darkBackground, "#1e293b"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+        ) : null}
         <View style={styles.historyMetricWatermarkOrbs} pointerEvents="none">
           {isReceivablePrimary ? (
             <>
-              <View style={styles.historyWmHeroBlobA} />
-              <View style={styles.historyWmHeroBlobB} />
+              <View
+                style={active ? styles.historyWmHeroBlobA : styles.historyWmLightBlobA}
+              />
+              <View
+                style={active ? styles.historyWmHeroBlobB : styles.historyWmLightBlobB}
+              />
             </>
           ) : isPayableDue ? (
             <>
@@ -1321,7 +1328,7 @@ export default function TripsScreen() {
                 styles.metricBentoValue,
                 active
                   ? styles.tripMetricCountActive
-                  : styles.metricBentoValueOnDark,
+                  : styles.metricBentoValueOnLight,
               ]}
             >
               {metric.count}
@@ -1331,7 +1338,9 @@ export default function TripsScreen() {
                   style={[
                   styles.historyMetricAmount,
                   styles.historyMetricAmountBento,
-                  styles.historyMetricAmountOnDark,
+                  active
+                    ? styles.historyMetricAmountOnDark
+                    : styles.historyMetricAmountOnLight,
                   metric.amount > 0 && styles.historyMetricAmountDue,
                 ]}
                 numberOfLines={1}
@@ -1345,7 +1354,7 @@ export default function TripsScreen() {
               styles.metricBentoLabel,
               active
                 ? styles.metricBentoLabelOnDarkActive
-                : styles.metricBentoLabelOnDark,
+                : styles.metricBentoLabelOnLight,
             ]}
             numberOfLines={2}
           >
@@ -1354,7 +1363,9 @@ export default function TripsScreen() {
           <Text
               style={[
               styles.metricBentoSubtext,
-              styles.metricBentoSubtextOnDark,
+              active
+                ? styles.metricBentoSubtextOnDark
+                : styles.metricBentoSubtextOnLight,
               styles.metricCardHintAtBottom,
             ]}
             numberOfLines={3}
@@ -4336,6 +4347,9 @@ const styles = StyleSheet.create({
   },
   historyMetricAmountOnDark: {
     color: "rgba(248, 250, 252, 0.55)",
+  },
+  historyMetricAmountOnLight: {
+    color: Theme.textSecondary,
   },
   historyMetricTopRow: {
     flexDirection: "row",
