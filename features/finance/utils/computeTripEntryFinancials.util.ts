@@ -5,13 +5,13 @@
  * v1 payout model: `trip_type` **market** → supplier payable only (no driver CTAs).
  * **asset** → driver payable (+ vehicle elsewhere); supplier payable hidden.
  */
-import { computeDriverCommissionForTrip } from "@/features/finance/aggregation/aggregateDrivers";
 import type { DriverOffer } from "@/features/drivers/services/drivers.service";
+import { computeDriverCommissionForTrip } from "@/features/finance/aggregation/aggregateDrivers";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import { computePartnerIndentFreightCost } from "@/features/finance/utils/partnerIndentFreightCost.util";
 import {
-  resolveTripLedgerTripType,
-  type TripLedgerTripType,
+    resolveTripLedgerTripType,
+    type TripLedgerTripType,
 } from "@/features/finance/utils/tripLedgerPayoutMode.util";
 
 export interface TripEntryFinancialInput {
@@ -110,10 +110,13 @@ export function computeTripEntryFinancialSnapshot(
   const paidSupplierOnly = entries.reduce((s, tx) => {
     const out = Number(tx.amount_out ?? 0);
     if (out <= 0) return s;
-    if (String(tx.contact_type ?? "").toLowerCase() === "supplier") return s + out;
+    if (String(tx.contact_type ?? "").toLowerCase() === "supplier")
+      return s + out;
     return s;
   }, 0);
-  const supplier_payable_raw = roundCurrency(Math.max(0, cost - paidSupplierOnly));
+  const supplier_payable_raw = roundCurrency(
+    Math.max(0, cost - paidSupplierOnly),
+  );
 
   let driver_payable_raw = 0;
   let driver_to_pay_raw = 0;
@@ -132,10 +135,13 @@ export function computeTripEntryFinancialSnapshot(
     driver_paid_raw = entries.reduce((s, tx) => {
       const out = Number(tx.amount_out ?? 0);
       if (out <= 0) return s;
-      if (String(tx.contact_type ?? "").toLowerCase() === "driver") return s + out;
+      if (String(tx.contact_type ?? "").toLowerCase() === "driver")
+        return s + out;
       return s;
     }, 0);
-    driver_payable_raw = roundCurrency(Math.max(0, driver_to_pay_raw - driver_paid_raw));
+    driver_payable_raw = roundCurrency(
+      Math.max(0, driver_to_pay_raw - driver_paid_raw),
+    );
   }
 
   const trip_type = resolveTripLedgerTripType({
@@ -145,23 +151,18 @@ export function computeTripEntryFinancialSnapshot(
     vehicle_id: trip.vehicle_id ?? null,
   });
 
-  const supplier_payable =
-    trip_type === "market" ? supplier_payable_raw : 0;
+  const supplier_payable = trip_type === "market" ? supplier_payable_raw : 0;
   const driver_payable = trip_type === "asset" ? driver_payable_raw : 0;
 
   const lines: TripPartyFinancialLines = {
     client_sale: roundCurrency(sales),
     client_received: roundCurrency(received),
     client_due: client_receivable,
-    supplier_cost:
-      trip_type === "market" ? roundCurrency(cost) : 0,
-    supplier_paid:
-      trip_type === "market" ? roundCurrency(paidSupplierOnly) : 0,
+    supplier_cost: trip_type === "market" ? roundCurrency(cost) : 0,
+    supplier_paid: trip_type === "market" ? roundCurrency(paidSupplierOnly) : 0,
     supplier_due: supplier_payable,
-    driver_to_pay:
-      trip_type === "asset" ? roundCurrency(driver_to_pay_raw) : 0,
-    driver_paid:
-      trip_type === "asset" ? roundCurrency(driver_paid_raw) : 0,
+    driver_to_pay: trip_type === "asset" ? roundCurrency(driver_to_pay_raw) : 0,
+    driver_paid: trip_type === "asset" ? roundCurrency(driver_paid_raw) : 0,
     driver_due: driver_payable,
   };
 

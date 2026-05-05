@@ -35,6 +35,7 @@ import {
   TRIP_METRIC_ORDER,
   type TripMetricId,
 } from "@/features/trips/utils/tripHubMetrics";
+import { tripNonSupplierOutflowTotal } from "@/features/trips/utils/tripManifestFreightCost";
 import { canAccessTrips, getCapabilitiesFromProfile } from "@/lib/capabilities";
 import { queryKeys } from "@/lib/queryKeys";
 import { shouldShowAggregateTripKindPill } from "@/lib/driverUtils";
@@ -50,6 +51,7 @@ import {
   useSuppliersQuery,
   useTransactionsQuery,
   useTripFinanceAdjustmentsMap,
+  useTripSubcontractsQuery,
   useTripsQuery,
 } from "@/lib/queries";
 import { supabase } from "@/lib/supabase";
@@ -153,6 +155,7 @@ function historyTripDueState(
   ledgerRows: LedgerRow[],
   currentOrganizationId: string | null | undefined,
   adjustments?: TripAdjustment[] | null,
+  subcontractRate?: number | null,
 ): { receivableDue: number; payableDue: number } {
   const ledger = summarizeTripLedgerForHub(ledgerRows);
   const receivableTarget = Math.max(
@@ -160,7 +163,10 @@ function historyTripDueState(
     0,
   );
   const payableTarget = Math.max(
-    tripHubCost(trip, currentOrganizationId, adjustments),
+    tripHubCost(trip, currentOrganizationId, adjustments, {
+      subcontractRate: subcontractRate ?? null,
+      nonSupplierExpenseTotal: tripNonSupplierOutflowTotal(ledgerRows),
+    }),
     0,
   );
   return {
@@ -253,6 +259,19 @@ export default function TripsScreen() {
   const { data: drivers = [] } = useDriversQuery(orgId);
   const linkedOrgByOrganizationId = useLinkedOrgProfileMap(clients, suppliers);
   const tripIds = useMemo(() => trips.map((t) => t.id), [trips]);
+  const { data: hubTripSubcontracts = [] } = useTripSubcontractsQuery(
+    orgId,
+    tripIds,
+  );
+  const hubSubcontractRateByTripId = useMemo(() => {
+    const m = new Map<string, number | null>();
+    for (const row of hubTripSubcontracts) {
+      const tid = String(row.trip_id ?? "").trim();
+      if (!tid) continue;
+      m.set(tid, Number(row.rate ?? 0));
+    }
+    return m;
+  }, [hubTripSubcontracts]);
   const { record: tripFinanceAdjRecord, isLoading: tripFinanceAdjLoading } =
     useTripFinanceAdjustmentsMap(orgId, tripIds);
   /** Until loaded, hub uses raw trip rates (same as trip list before this feature). */
@@ -633,6 +652,7 @@ export default function TripsScreen() {
         transactionsByTripId.get(trip.id) ?? [],
         currentOrganization?.id ?? null,
         adj,
+        hubSubcontractRateByTripId.get(trip.id) ?? null,
       );
       switch (activeHistoryMetricTab) {
         case "due_to_get":
@@ -654,6 +674,7 @@ export default function TripsScreen() {
     showCompletedList,
     transactionsByTripId,
     tripFinanceAdjForHub,
+    hubSubcontractRateByTripId,
   ]);
 
   const tripsTableResetKey = useMemo(
@@ -870,7 +891,13 @@ export default function TripsScreen() {
       const ledger = summarizeTripLedgerForHub(txns);
       const rowAdj = tripFinanceAdjForHubLookup(tripFinanceAdjForHub, trip.id);
       const salesValue = Math.max(tripHubRevenue(trip, orgId, rowAdj), 0);
-      const supplierCost = Math.max(tripHubCost(trip, orgId, rowAdj), 0);
+      const supplierCost = Math.max(
+        tripHubCost(trip, orgId, rowAdj, {
+          subcontractRate: hubSubcontractRateByTripId.get(trip.id) ?? null,
+          nonSupplierExpenseTotal: tripNonSupplierOutflowTotal(txns),
+        }),
+        0,
+      );
       const received = Math.max(ledger.receivedTotal, 0);
       const paid = Math.max(ledger.paidTotal, 0);
       const pendingRecv = Math.max(salesValue - received, 0);
@@ -949,6 +976,7 @@ export default function TripsScreen() {
     transactionsByTripId,
     tripHubPartyMetaByTripId,
     tripFinanceAdjForHub,
+    hubSubcontractRateByTripId,
   ]);
 
   const historyMetricCards = useMemo(() => {
@@ -991,6 +1019,7 @@ export default function TripsScreen() {
         transactionsByTripId.get(trip.id) ?? [],
         currentOrganization?.id ?? null,
         adj,
+        hubSubcontractRateByTripId.get(trip.id) ?? null,
       );
 
       if (receivableDue > 0) {
@@ -1015,6 +1044,7 @@ export default function TripsScreen() {
     showCompletedList,
     transactionsByTripId,
     tripFinanceAdjForHub,
+    hubSubcontractRateByTripId,
   ]);
 
   const mainTabs = useMemo(
@@ -2518,6 +2548,7 @@ export default function TripsScreen() {
                   getStageLabel={getStageLabelForTrip}
                   transactionsByTripId={transactionsByTripId}
                     financeAdjustmentsByTripId={tripFinanceAdjForHub}
+                  subcontractRateByTripId={hubSubcontractRateByTripId}
                   onOpenTripDetails={(trip) =>
                     router.push(`/trip/${trip.id}` as const)
                   }
@@ -2673,6 +2704,7 @@ export default function TripsScreen() {
                 getStageLabel={getStageLabelForTrip}
                 transactionsByTripId={transactionsByTripId}
                 financeAdjustmentsByTripId={tripFinanceAdjForHub}
+                subcontractRateByTripId={hubSubcontractRateByTripId}
                 onOpenTripDetails={(trip) =>
                   router.push(`/trip/${trip.id}` as const)
                 }
@@ -2696,9 +2728,8 @@ export default function TripsScreen() {
                       const stage = getStageLabelForTrip(t);
                       const displayClientName =
                         shipperNameByTripId[t.id] ?? t.client_name ?? "—";
-                      const hubLedger = summarizeTripLedgerForHub(
-                        transactionsByTripId.get(t.id) ?? [],
-                      );
+                      const cardLedgerRows = transactionsByTripId.get(t.id) ?? [];
+                      const hubLedger = summarizeTripLedgerForHub(cardLedgerRows);
                       const party = tripHubPartyMetaByTripId.get(t.id);
                       const clientOrgFields = linkedOrgAvatarFields(
                         party?.clientLinkedOrgId,
@@ -2732,6 +2763,12 @@ export default function TripsScreen() {
                               tripFinanceAdjForHub,
                               t.id,
                             )}
+                            hubCostContext={{
+                              subcontractRate:
+                                hubSubcontractRateByTripId.get(t.id) ?? null,
+                              nonSupplierExpenseTotal:
+                                tripNonSupplierOutflowTotal(cardLedgerRows),
+                            }}
                             displayClientName={displayClientName}
                             displaySupplierName={party?.displaySupplierName ?? ""}
                             clientAvatarUrl={party?.clientAvatarUrl ?? null}

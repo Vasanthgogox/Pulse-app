@@ -13,33 +13,33 @@ import { computeTripEntryFinancialSnapshot } from "@/features/finance/utils/comp
 import { computePartnerIndentFreightCost } from "@/features/finance/utils/partnerIndentFreightCost.util";
 import type { TripAssignmentAuditRow } from "@/features/trips/services/trip-assignment-audit.service";
 import type {
-  TripAdjustment,
-  TripAdjustmentImpact,
-  TripAdjustmentType,
+    TripAdjustment,
+    TripAdjustmentImpact,
+    TripAdjustmentType,
 } from "@/features/trips/services/tripAdjustments";
 import {
-  adjustedCost,
-  adjustedRevenue,
-  COST_REASON_OPTIONS,
-  isAdjustmentVoided,
-  REVENUE_REASON_OPTIONS,
+    adjustedCost,
+    adjustedRevenue,
+    COST_REASON_OPTIONS,
+    isAdjustmentVoided,
+    REVENUE_REASON_OPTIONS,
 } from "@/features/trips/services/tripAdjustments";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Animated,
-  LayoutAnimation,
-  Modal,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  UIManager,
-  View,
+    Animated,
+    LayoutAnimation,
+    Modal,
+    Platform,
+    Pressable,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    UIManager,
+    View,
 } from "react-native";
 
 /** Enable LayoutAnimation on Android (one-time no-op on iOS). */
@@ -82,16 +82,23 @@ const FINANCE_PROTOCOL_CHIPS = [
   "RTO",
 ] as const;
 
-function protocolSupplierChipAdjustment(chip: (typeof FINANCE_PROTOCOL_CHIPS)[number]): {
+function protocolSupplierChipAdjustment(
+  chip: (typeof FINANCE_PROTOCOL_CHIPS)[number],
+): {
   type: TripAdjustmentType;
   impact: TripAdjustmentImpact;
   reasonSeed: string;
 } {
-  if (chip === "Loading") return { type: "cost", impact: "plus", reasonSeed: "Loading Charges" };
-  if (chip === "Unloading") return { type: "cost", impact: "plus", reasonSeed: "Unloading Charges" };
-  if (chip === "Detention") return { type: "cost", impact: "plus", reasonSeed: "Detention" };
-  if (chip === "Damage") return { type: "cost", impact: "plus", reasonSeed: "Damages / Missing" };
-  if (chip === "Toll") return { type: "cost", impact: "plus", reasonSeed: "Pass Debit" };
+  if (chip === "Loading")
+    return { type: "cost", impact: "plus", reasonSeed: "Loading Charges" };
+  if (chip === "Unloading")
+    return { type: "cost", impact: "plus", reasonSeed: "Unloading Charges" };
+  if (chip === "Detention")
+    return { type: "cost", impact: "plus", reasonSeed: "Detention" };
+  if (chip === "Damage")
+    return { type: "cost", impact: "plus", reasonSeed: "Damages / Missing" };
+  if (chip === "Toll")
+    return { type: "cost", impact: "plus", reasonSeed: "Pass Debit" };
   return { type: "cost", impact: "plus", reasonSeed: "Other" };
 }
 
@@ -177,7 +184,10 @@ export interface TripDetailFinanceViewProps {
     reason: string;
   }) => void | Promise<void>;
   /** Soft-void an adjustment (requires reason); parent persists void state. */
-  onRemoveAdjustment?: (adjustmentId: string, voidReason: string) => void | Promise<void>;
+  onRemoveAdjustment?: (
+    adjustmentId: string,
+    voidReason: string,
+  ) => void | Promise<void>;
   /** Assignment / reassignment history for this trip (newest first). */
   assignmentAuditRows?: TripAssignmentAuditRow[];
   /** Resolved driver id → display name for assignment audit rows. */
@@ -275,9 +285,27 @@ export interface TripDocItem {
 }
 
 const DEFAULT_TRIP_DOCS: TripDocItem[] = [
-  { id: "manifest", label: "Trip Manifest", type: "PDF", status: "Pending", category: "trip" },
-  { id: "vehicle-documents", label: "Vehicle Document", type: "DOCS", status: "Pending", category: "vehicle" },
-  { id: "pod", label: "Driver POD", type: "JPG", status: "Pending", category: "driver" },
+  {
+    id: "manifest",
+    label: "Trip Manifest",
+    type: "PDF",
+    status: "Pending",
+    category: "trip",
+  },
+  {
+    id: "vehicle-documents",
+    label: "Vehicle Document",
+    type: "DOCS",
+    status: "Pending",
+    category: "vehicle",
+  },
+  {
+    id: "pod",
+    label: "Driver POD",
+    type: "JPG",
+    status: "Pending",
+    category: "driver",
+  },
 ];
 
 function TripDocsGrid({
@@ -297,7 +325,8 @@ function TripDocsGrid({
       </View>
       <View style={styles.docGrid}>
         {tripDocs.map((doc) => {
-          const isUploaded = doc.status === "Uploaded" || doc.status === "Verified";
+          const isUploaded =
+            doc.status === "Uploaded" || doc.status === "Verified";
           const statusColor =
             doc.status === "Verified"
               ? Theme.darkGreen
@@ -320,7 +349,9 @@ function TripDocsGrid({
               <View
                 style={[
                   styles.docCardIconWrap,
-                  isUploaded ? styles.docCardIconWrapUploaded : styles.docCardIconWrapPending,
+                  isUploaded
+                    ? styles.docCardIconWrapUploaded
+                    : styles.docCardIconWrapPending,
                 ]}
               >
                 <FontAwesome
@@ -336,7 +367,11 @@ function TripDocsGrid({
                 {doc.type}
               </Text>
               <View style={styles.docCardStatus}>
-                <FontAwesome name={statusIcon as any} size={12} color={statusColor} />
+                <FontAwesome
+                  name={statusIcon as any}
+                  size={12}
+                  color={statusColor}
+                />
               </View>
             </TouchableOpacity>
           );
@@ -363,7 +398,9 @@ function formatAssignmentDate(iso: string | null | undefined): string {
 }
 
 /** Uppercase format for Activity Log: "12 MAR 2026 AT 2:07 PM" */
-function formatAssignmentDateActivityMeta(iso: string | null | undefined): string {
+function formatAssignmentDateActivityMeta(
+  iso: string | null | undefined,
+): string {
   const s = formatAssignmentDate(iso);
   if (s === "—") return s;
   return s.toUpperCase().replace(", ", " AT ");
@@ -445,7 +482,7 @@ function MultiPartyReconHero({
     Animated.timing(bodyOpacity, {
       toValue: 1,
       duration: 220,
-      useNativeDriver: Platform.OS !== 'web',
+      useNativeDriver: Platform.OS !== "web",
     }).start();
   }, [safeIdx, bodyOpacity]);
 
@@ -465,8 +502,10 @@ function MultiPartyReconHero({
   const isDriver = party.type === "driver";
   const isOffline = !isDriver && !party.integrated;
   const isAwaiting = !isDriver && party.integrated && !hasEntries;
-  const isMatch = !isDriver && party.integrated && hasEntries && varianceAbs === 0;
-  const hasVariance = !isDriver && party.integrated && hasEntries && varianceAbs > 0;
+  const isMatch =
+    !isDriver && party.integrated && hasEntries && varianceAbs === 0;
+  const hasVariance =
+    !isDriver && party.integrated && hasEntries && varianceAbs > 0;
 
   return (
     <View style={styles.reconHero}>
@@ -484,7 +523,12 @@ function MultiPartyReconHero({
               accessibilityRole="tab"
               accessibilityState={{ selected: active }}
             >
-              <View style={[styles.partyTabIcon, active && styles.partyTabIconActive]}>
+              <View
+                style={[
+                  styles.partyTabIcon,
+                  active && styles.partyTabIconActive,
+                ]}
+              >
                 <FontAwesome
                   name={partyIconName(p.type)}
                   size={12}
@@ -525,227 +569,311 @@ function MultiPartyReconHero({
 
       {/* Hero header for selected party — animated on tab switch for a premium feel */}
       <Animated.View style={{ opacity: bodyOpacity, gap: 14 }}>
-      <View style={styles.reconHeroHeader}>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <View style={styles.reconHeroKickerRow}>
-            <FontAwesome
-              name={
-                isDriver ? "id-badge" : isOffline ? "unlink" : "link"
-              }
-              size={10}
-              color={Theme.textOnDarkMuted}
-            />
-            <Text style={styles.reconHeroKicker}>
-              TRIP LEDGER · {partyRoleLabel(party.type)}
+        <View style={styles.reconHeroHeader}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <View style={styles.reconHeroKickerRow}>
+              <FontAwesome
+                name={isDriver ? "id-badge" : isOffline ? "unlink" : "link"}
+                size={10}
+                color={Theme.textOnDarkMuted}
+              />
+              <Text style={styles.reconHeroKicker}>
+                TRIP LEDGER · {partyRoleLabel(party.type)}
+              </Text>
+            </View>
+            <Text style={styles.reconHeroParty} numberOfLines={1}>
+              {(party.name || partyRoleLabel(party.type)).toUpperCase()}
             </Text>
           </View>
-          <Text style={styles.reconHeroParty} numberOfLines={1}>
-            {(party.name || partyRoleLabel(party.type)).toUpperCase()}
-          </Text>
-        </View>
-        <View
-          style={[
-            styles.reconStatusRow,
-            heroStatusRingStyle(
-              isDriver ? "driver" : isOffline ? "offline" : isAwaiting ? "await" : isMatch ? "match" : "warn",
-            ),
-          ]}
-        >
           <View
             style={[
-              styles.reconStatusDot,
-              statusDotStyleFor(party, { isDriver, isOffline, isAwaiting, isMatch }),
-            ]}
-          />
-          <Text
-            style={[
-              styles.reconStatusText,
-              statusTextStyleFor(party, { isDriver, isOffline, isAwaiting, isMatch }),
-            ]}
-          >
-            {statusLabelFor(party, { isDriver, isOffline, isAwaiting, isMatch })}
-          </Text>
-        </View>
-      </View>
-
-      {/* Dispute status chip — only for integrated client/supplier */}
-      {!isDriver && party.disputeStatus === "OPEN" ? (
-        <View style={styles.reconDisputeChip}>
-          <FontAwesome name="exclamation-circle" size={11} color={"#FCA5A5"} />
-          <Text style={styles.reconDisputeChipText}>
-            {party.disputeDirection === "RECEIVED"
-              ? "DISPUTE RECEIVED · PARTNER REQUESTS REVIEW"
-              : "DISPUTE OPEN · PARTNER NOTIFIED"}
-          </Text>
-        </View>
-      ) : !isDriver && party.disputeStatus === "RESOLVED" ? (
-        <View style={[styles.reconDisputeChip, styles.reconDisputeChipResolved]}>
-          <FontAwesome name="check-circle" size={11} color={Theme.driverEmerald} />
-          <Text
-            style={[
-              styles.reconDisputeChipText,
-              styles.reconDisputeChipTextResolved,
+              styles.reconStatusRow,
+              heroStatusRingStyle(
+                isDriver
+                  ? "driver"
+                  : isOffline
+                    ? "offline"
+                    : isAwaiting
+                      ? "await"
+                      : isMatch
+                        ? "match"
+                        : "warn",
+              ),
             ]}
           >
-            DISPUTE RESOLVED
-          </Text>
-        </View>
-      ) : null}
-
-      {/* Body — state-specific per selected party */}
-      {isDriver ? (
-        <DriverReconBody party={party} />
-      ) : isOffline ? (
-        <View style={styles.reconOfflineBody}>
-          <View style={styles.reconOfflineIcon}>
-            <FontAwesome name="unlink" size={16} color={Theme.textOnDark} />
-          </View>
-          <Text style={styles.reconOfflineTitle}>
-            Compare &amp; verify unavailable
-          </Text>
-          <Text style={styles.reconOfflineBody2}>
-            Opposite-party entry preview is available only for integrated network
-            partners. Invite this party to unlock two-way reconciliation.
-          </Text>
-        </View>
-      ) : isAwaiting ? (
-        <View style={styles.reconAwaitingCard}>
-          <FontAwesome name="clock-o" size={14} color={Theme.textOnDarkMuted} />
-          <Text style={styles.reconAwaitingText}>
-            No opposite-party entry marked yet for this trip.
-          </Text>
-        </View>
-      ) : (
-        <View style={styles.reconGlass}>
-          <View style={styles.reconGlassHeader}>
-            <Text style={styles.reconGlassKicker}>FINANCIAL AUDIT VIEW</Text>
+            <View
+              style={[
+                styles.reconStatusDot,
+                statusDotStyleFor(party, {
+                  isDriver,
+                  isOffline,
+                  isAwaiting,
+                  isMatch,
+                }),
+              ]}
+            />
             <Text
               style={[
-                styles.reconGlassStatus,
-                isMatch ? styles.reconGlassStatusGood : styles.reconGlassStatusWarn,
+                styles.reconStatusText,
+                statusTextStyleFor(party, {
+                  isDriver,
+                  isOffline,
+                  isAwaiting,
+                  isMatch,
+                }),
               ]}
             >
-              {isMatch
-                ? "Verified"
-                : `₹${varianceAbs.toLocaleString("en-IN")} Var`}
+              {statusLabelFor(party, {
+                isDriver,
+                isOffline,
+                isAwaiting,
+                isMatch,
+              })}
             </Text>
           </View>
+        </View>
 
-          {[
-            {
-              key: "partner",
-              label: "Marked by partner",
-              value: party.theirTotal,
-            },
-            {
-              key: "ours",
-              label: party.ourTotalLabel ?? defaultOurLabel(party.type),
-              value: party.ourTotal,
-            },
-          ].map((row) => (
-            <View key={row.key} style={styles.reconLineItem}>
-              <View style={styles.reconLineItemLabelRow}>
-                <Text style={styles.reconLineItemLabel}>
-                  {row.label.toUpperCase()}
-                </Text>
-              </View>
-              <View style={styles.reconLineItemChip}>
-                <Text style={styles.reconLineItemChipValue}>
-                  {formatINR(row.value)}
-                </Text>
-              </View>
-            </View>
-          ))}
-
-          <View style={styles.reconVarianceRow}>
-            <Text style={styles.reconVarianceLabel}>VARIANCE</Text>
+        {/* Dispute status chip — only for integrated client/supplier */}
+        {!isDriver && party.disputeStatus === "OPEN" ? (
+          <View style={styles.reconDisputeChip}>
+            <FontAwesome
+              name="exclamation-circle"
+              size={11}
+              color={"#FCA5A5"}
+            />
+            <Text style={styles.reconDisputeChipText}>
+              {party.disputeDirection === "RECEIVED"
+                ? "DISPUTE RECEIVED · PARTNER REQUESTS REVIEW"
+                : "DISPUTE OPEN · PARTNER NOTIFIED"}
+            </Text>
+          </View>
+        ) : !isDriver && party.disputeStatus === "RESOLVED" ? (
+          <View
+            style={[styles.reconDisputeChip, styles.reconDisputeChipResolved]}
+          >
+            <FontAwesome
+              name="check-circle"
+              size={11}
+              color={Theme.driverEmerald}
+            />
             <Text
               style={[
-                styles.reconVarianceValue,
-                isMatch
-                  ? styles.reconVarianceValueMatch
-                  : styles.reconVarianceValueMismatch,
+                styles.reconDisputeChipText,
+                styles.reconDisputeChipTextResolved,
               ]}
             >
-              {isMatch
-                ? "₹0"
-                : `${party.theirTotal - party.ourTotal > 0 ? "+" : "−"}${formatINR(varianceAbs)}`}
+              DISPUTE RESOLVED
             </Text>
           </View>
+        ) : null}
 
-          <View style={styles.reconCounters}>
-            <View style={styles.reconCounterItem}>
-              <Text style={styles.reconCounterValue}>
-                {reconciliationSummary.matchedCount}
-              </Text>
-              <Text style={styles.reconCounterLabel}>Matched</Text>
+        {/* Body — state-specific per selected party */}
+        {isDriver ? (
+          <DriverReconBody party={party} />
+        ) : isOffline ? (
+          <View style={styles.reconOfflineBody}>
+            <View style={styles.reconOfflineIcon}>
+              <FontAwesome name="unlink" size={16} color={Theme.textOnDark} />
             </View>
-            <View style={styles.reconCounterDivider} />
-            <View style={styles.reconCounterItem}>
-              <Text
-                style={[
-                  styles.reconCounterValue,
-                  styles.reconCounterValueMuted,
-                ]}
-              >
-                {reconciliationSummary.reconciledCount}
-              </Text>
-              <Text style={styles.reconCounterLabel}>Reconciled</Text>
-            </View>
-            <View style={styles.reconCounterDivider} />
-            <View style={styles.reconCounterItem}>
-              <Text
-                style={[
-                  styles.reconCounterValue,
-                  styles.reconCounterValueWarn,
-                ]}
-              >
-                {reconciliationSummary.mismatchCount}
-              </Text>
-              <Text style={styles.reconCounterLabel}>Mismatch</Text>
-            </View>
+            <Text style={styles.reconOfflineTitle}>
+              Compare &amp; verify unavailable
+            </Text>
+            <Text style={styles.reconOfflineBody2}>
+              Opposite-party entry preview is available only for integrated
+              network partners. Invite this party to unlock two-way
+              reconciliation.
+            </Text>
           </View>
-
-          <Text style={styles.reconEntriesHead}>
-            Partner entries · latest{" "}
-            {Math.min((party.counterpartyEntries ?? []).length, 5)} of{" "}
-            {(party.counterpartyEntries ?? []).length}
-          </Text>
-          <View style={styles.reconEntriesList}>
-            {(party.counterpartyEntries ?? []).slice(0, 5).map((row) => (
-              <TouchableOpacity
-                key={row.id}
-                style={styles.reconEntryCard}
-                activeOpacity={0.85}
-                onPress={() => onPreviewCounterpartyEntry(row)}
+        ) : isAwaiting ? (
+          <View style={styles.reconAwaitingCard}>
+            <FontAwesome
+              name="clock-o"
+              size={14}
+              color={Theme.textOnDarkMuted}
+            />
+            <Text style={styles.reconAwaitingText}>
+              No opposite-party entry marked yet for this trip.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.reconGlass}>
+            <View style={styles.reconGlassHeader}>
+              <Text style={styles.reconGlassKicker}>FINANCIAL AUDIT VIEW</Text>
+              <Text
+                style={[
+                  styles.reconGlassStatus,
+                  isMatch
+                    ? styles.reconGlassStatusGood
+                    : styles.reconGlassStatusWarn,
+                ]}
               >
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.reconEntryAmount}>
-                    {formatINR(Number(row.amount ?? 0))}
-                  </Text>
-                  <Text style={styles.reconEntryMeta} numberOfLines={1}>
-                    {formatLedgerDateShort(row.transaction_date)} · Ref{" "}
-                    {row.reference_id ?? "—"}
+                {isMatch
+                  ? "Verified"
+                  : `₹${varianceAbs.toLocaleString("en-IN")} Var`}
+              </Text>
+            </View>
+
+            {[
+              {
+                key: "partner",
+                label: "Marked by partner",
+                value: party.theirTotal,
+              },
+              {
+                key: "ours",
+                label: party.ourTotalLabel ?? defaultOurLabel(party.type),
+                value: party.ourTotal,
+              },
+            ].map((row) => (
+              <View key={row.key} style={styles.reconLineItem}>
+                <View style={styles.reconLineItemLabelRow}>
+                  <Text style={styles.reconLineItemLabel}>
+                    {row.label.toUpperCase()}
                   </Text>
                 </View>
-                <FontAwesome
-                  name="chevron-right"
-                  size={10}
-                  color={Theme.textOnDarkMuted}
-                />
-              </TouchableOpacity>
+                <View style={styles.reconLineItemChip}>
+                  <Text style={styles.reconLineItemChipValue}>
+                    {formatINR(row.value)}
+                  </Text>
+                </View>
+              </View>
             ))}
-          </View>
-        </View>
-      )}
 
-      {/* Inline actions — Accept partner / Raise dispute (client/supplier only, when variance) */}
-      {!isDriver &&
-      hasVariance &&
-      party.disputeStatus !== "OPEN" &&
-      (party.onAcceptPartnerView || party.onRaiseDispute) ? (
-        <View style={styles.reconActionRow}>
-          {party.onAcceptPartnerView ? (
+            <View style={styles.reconVarianceRow}>
+              <Text style={styles.reconVarianceLabel}>VARIANCE</Text>
+              <Text
+                style={[
+                  styles.reconVarianceValue,
+                  isMatch
+                    ? styles.reconVarianceValueMatch
+                    : styles.reconVarianceValueMismatch,
+                ]}
+              >
+                {isMatch
+                  ? "₹0"
+                  : `${party.theirTotal - party.ourTotal > 0 ? "+" : "−"}${formatINR(varianceAbs)}`}
+              </Text>
+            </View>
+
+            <View style={styles.reconCounters}>
+              <View style={styles.reconCounterItem}>
+                <Text style={styles.reconCounterValue}>
+                  {reconciliationSummary.matchedCount}
+                </Text>
+                <Text style={styles.reconCounterLabel}>Matched</Text>
+              </View>
+              <View style={styles.reconCounterDivider} />
+              <View style={styles.reconCounterItem}>
+                <Text
+                  style={[
+                    styles.reconCounterValue,
+                    styles.reconCounterValueMuted,
+                  ]}
+                >
+                  {reconciliationSummary.reconciledCount}
+                </Text>
+                <Text style={styles.reconCounterLabel}>Reconciled</Text>
+              </View>
+              <View style={styles.reconCounterDivider} />
+              <View style={styles.reconCounterItem}>
+                <Text
+                  style={[
+                    styles.reconCounterValue,
+                    styles.reconCounterValueWarn,
+                  ]}
+                >
+                  {reconciliationSummary.mismatchCount}
+                </Text>
+                <Text style={styles.reconCounterLabel}>Mismatch</Text>
+              </View>
+            </View>
+
+            <Text style={styles.reconEntriesHead}>
+              Partner entries · latest{" "}
+              {Math.min((party.counterpartyEntries ?? []).length, 5)} of{" "}
+              {(party.counterpartyEntries ?? []).length}
+            </Text>
+            <View style={styles.reconEntriesList}>
+              {(party.counterpartyEntries ?? []).slice(0, 5).map((row) => (
+                <TouchableOpacity
+                  key={row.id}
+                  style={styles.reconEntryCard}
+                  activeOpacity={0.85}
+                  onPress={() => onPreviewCounterpartyEntry(row)}
+                >
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.reconEntryAmount}>
+                      {formatINR(Number(row.amount ?? 0))}
+                    </Text>
+                    <Text style={styles.reconEntryMeta} numberOfLines={1}>
+                      {formatLedgerDateShort(row.transaction_date)} · Ref{" "}
+                      {row.reference_id ?? "—"}
+                    </Text>
+                  </View>
+                  <FontAwesome
+                    name="chevron-right"
+                    size={10}
+                    color={Theme.textOnDarkMuted}
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Inline actions — Accept partner / Raise dispute (client/supplier only, when variance) */}
+        {!isDriver &&
+        hasVariance &&
+        party.disputeStatus !== "OPEN" &&
+        (party.onAcceptPartnerView || party.onRaiseDispute) ? (
+          <View style={styles.reconActionRow}>
+            {party.onAcceptPartnerView ? (
+              <TouchableOpacity
+                activeOpacity={0.85}
+                disabled={party.actionLoading}
+                onPress={party.onAcceptPartnerView}
+                style={[
+                  styles.reconActionBtn,
+                  styles.reconActionBtnAccept,
+                  party.actionLoading && styles.reconActionBtnDisabled,
+                ]}
+              >
+                <FontAwesome
+                  name="check"
+                  size={11}
+                  color={Theme.textPrimaryDark}
+                />
+                <Text style={styles.reconActionBtnAcceptText}>
+                  PARTNER IS RIGHT
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+            {party.onRaiseDispute ? (
+              <TouchableOpacity
+                activeOpacity={0.85}
+                disabled={party.actionLoading}
+                onPress={party.onRaiseDispute}
+                style={[
+                  styles.reconActionBtn,
+                  styles.reconActionBtnDispute,
+                  party.actionLoading && styles.reconActionBtnDisabled,
+                ]}
+              >
+                <FontAwesome name="exclamation" size={11} color={"#FCA5A5"} />
+                <Text style={styles.reconActionBtnDisputeText}>
+                  RAISE DISPUTE
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        ) : null}
+
+        {/* Inline Accept when dispute received */}
+        {!isDriver &&
+        party.disputeStatus === "OPEN" &&
+        party.disputeDirection === "RECEIVED" &&
+        party.onAcceptPartnerView ? (
+          <View style={styles.reconActionRow}>
             <TouchableOpacity
               activeOpacity={0.85}
               disabled={party.actionLoading}
@@ -756,92 +884,64 @@ function MultiPartyReconHero({
                 party.actionLoading && styles.reconActionBtnDisabled,
               ]}
             >
-              <FontAwesome name="check" size={11} color={Theme.textPrimaryDark} />
+              <FontAwesome
+                name="check"
+                size={11}
+                color={Theme.textPrimaryDark}
+              />
               <Text style={styles.reconActionBtnAcceptText}>
-                PARTNER IS RIGHT
+                ACCEPT & UPDATE BOOK
               </Text>
             </TouchableOpacity>
-          ) : null}
-          {party.onRaiseDispute ? (
+          </View>
+        ) : null}
+
+        {/* Driver-only inline action */}
+        {isDriver && party.onRecordPayment ? (
+          <View style={styles.reconActionRow}>
             <TouchableOpacity
               activeOpacity={0.85}
               disabled={party.actionLoading}
-              onPress={party.onRaiseDispute}
+              onPress={party.onRecordPayment}
               style={[
                 styles.reconActionBtn,
-                styles.reconActionBtnDispute,
+                styles.reconActionBtnAccept,
                 party.actionLoading && styles.reconActionBtnDisabled,
               ]}
             >
-              <FontAwesome name="exclamation" size={11} color={"#FCA5A5"} />
-              <Text style={styles.reconActionBtnDisputeText}>RAISE DISPUTE</Text>
+              <FontAwesome
+                name="plus"
+                size={11}
+                color={Theme.textPrimaryDark}
+              />
+              <Text style={styles.reconActionBtnAcceptText}>
+                RECORD DRIVER PAYMENT
+              </Text>
             </TouchableOpacity>
-          ) : null}
-        </View>
-      ) : null}
+          </View>
+        ) : null}
 
-      {/* Inline Accept when dispute received */}
-      {!isDriver &&
-      party.disputeStatus === "OPEN" &&
-      party.disputeDirection === "RECEIVED" &&
-      party.onAcceptPartnerView ? (
-        <View style={styles.reconActionRow}>
+        {/* CTA: Compare & Verify (client/supplier only) */}
+        {!isDriver && !isOffline && party.onOpenCompareVerify ? (
           <TouchableOpacity
-            activeOpacity={0.85}
-            disabled={party.actionLoading}
-            onPress={party.onAcceptPartnerView}
-            style={[
-              styles.reconActionBtn,
-              styles.reconActionBtnAccept,
-              party.actionLoading && styles.reconActionBtnDisabled,
-            ]}
+            style={styles.reconCtaButton}
+            activeOpacity={0.9}
+            onPress={party.onOpenCompareVerify}
           >
-            <FontAwesome name="check" size={11} color={Theme.textPrimaryDark} />
-            <Text style={styles.reconActionBtnAcceptText}>
-              ACCEPT & UPDATE BOOK
+            <Text style={styles.reconCtaButtonText}>
+              {party.disputeStatus === "OPEN"
+                ? "VIEW IN COMPARE & VERIFY"
+                : hasVariance
+                  ? "BRIDGE VARIANCES"
+                  : "OPEN COMPARE & VERIFY"}
             </Text>
+            <FontAwesome
+              name="chevron-right"
+              size={12}
+              color={Theme.textOnDark}
+            />
           </TouchableOpacity>
-        </View>
-      ) : null}
-
-      {/* Driver-only inline action */}
-      {isDriver && party.onRecordPayment ? (
-        <View style={styles.reconActionRow}>
-          <TouchableOpacity
-            activeOpacity={0.85}
-            disabled={party.actionLoading}
-            onPress={party.onRecordPayment}
-            style={[
-              styles.reconActionBtn,
-              styles.reconActionBtnAccept,
-              party.actionLoading && styles.reconActionBtnDisabled,
-            ]}
-          >
-            <FontAwesome name="plus" size={11} color={Theme.textPrimaryDark} />
-            <Text style={styles.reconActionBtnAcceptText}>
-              RECORD DRIVER PAYMENT
-            </Text>
-          </TouchableOpacity>
-        </View>
-      ) : null}
-
-      {/* CTA: Compare & Verify (client/supplier only) */}
-      {!isDriver && !isOffline && party.onOpenCompareVerify ? (
-        <TouchableOpacity
-          style={styles.reconCtaButton}
-          activeOpacity={0.9}
-          onPress={party.onOpenCompareVerify}
-        >
-          <Text style={styles.reconCtaButtonText}>
-            {party.disputeStatus === "OPEN"
-              ? "VIEW IN COMPARE & VERIFY"
-              : hasVariance
-                ? "BRIDGE VARIANCES"
-                : "OPEN COMPARE & VERIFY"}
-          </Text>
-          <FontAwesome name="chevron-right" size={12} color={Theme.textOnDark} />
-        </TouchableOpacity>
-      ) : null}
+        ) : null}
       </Animated.View>
 
       {/* Trip-wide footer — Received / Pending (unchanged across party tabs) */}
@@ -888,11 +988,7 @@ function DriverReconBody({ party }: { party: ReconciliationPartyInfo }) {
   const paid = party.ourTotal;
   const pending = Math.max(0, expected - paid);
   const pct =
-    expected > 0
-      ? Math.max(0, Math.min(1, paid / expected))
-      : paid > 0
-        ? 1
-        : 0;
+    expected > 0 ? Math.max(0, Math.min(1, paid / expected)) : paid > 0 ? 1 : 0;
   const pctPercent = Math.round(pct * 100);
   const isSettled = expected > 0 ? paid >= expected : paid > 0;
   return (
@@ -986,7 +1082,9 @@ function DriverReconBody({ party }: { party: ReconciliationPartyInfo }) {
   );
 }
 
-function partyIconName(type: ReconciliationPartyType): "user" | "truck" | "id-badge" {
+function partyIconName(
+  type: ReconciliationPartyType,
+): "user" | "truck" | "id-badge" {
   if (type === "supplier") return "truck";
   if (type === "driver") return "id-badge";
   return "user";
@@ -1004,7 +1102,9 @@ function defaultOurLabel(type: ReconciliationPartyType): string {
   return "Paid to driver";
 }
 
-function partyTabBadge(p: ReconciliationPartyInfo): { dotColor: string | null } {
+function partyTabBadge(p: ReconciliationPartyInfo): {
+  dotColor: string | null;
+} {
   if (p.disputeStatus === "OPEN") return { dotColor: "#EF4444" };
   if (p.type === "driver") {
     if (p.expectedAmount != null && p.ourTotal < p.expectedAmount)
@@ -1053,7 +1153,12 @@ function heroStatusRingStyle(
 
 function statusDotStyleFor(
   p: ReconciliationPartyInfo,
-  s: { isDriver: boolean; isOffline: boolean; isAwaiting: boolean; isMatch: boolean },
+  s: {
+    isDriver: boolean;
+    isOffline: boolean;
+    isAwaiting: boolean;
+    isMatch: boolean;
+  },
 ): { backgroundColor: string } {
   if (p.disputeStatus === "OPEN") return { backgroundColor: "#EF4444" };
   if (s.isDriver) {
@@ -1069,7 +1174,12 @@ function statusDotStyleFor(
 
 function statusTextStyleFor(
   p: ReconciliationPartyInfo,
-  s: { isDriver: boolean; isOffline: boolean; isAwaiting: boolean; isMatch: boolean },
+  s: {
+    isDriver: boolean;
+    isOffline: boolean;
+    isAwaiting: boolean;
+    isMatch: boolean;
+  },
 ): { color: string } {
   if (p.disputeStatus === "OPEN") return { color: "#FCA5A5" };
   if (s.isDriver) {
@@ -1085,13 +1195,21 @@ function statusTextStyleFor(
 
 function statusLabelFor(
   p: ReconciliationPartyInfo,
-  s: { isDriver: boolean; isOffline: boolean; isAwaiting: boolean; isMatch: boolean },
+  s: {
+    isDriver: boolean;
+    isOffline: boolean;
+    isAwaiting: boolean;
+    isMatch: boolean;
+  },
 ): string {
   if (p.disputeStatus === "OPEN") {
-    return p.disputeDirection === "RECEIVED" ? "DISPUTE RECEIVED" : "DISPUTE OPEN";
+    return p.disputeDirection === "RECEIVED"
+      ? "DISPUTE RECEIVED"
+      : "DISPUTE OPEN";
   }
   if (s.isDriver) {
-    if (p.expectedAmount != null && p.ourTotal < p.expectedAmount) return "PENDING";
+    if (p.expectedAmount != null && p.ourTotal < p.expectedAmount)
+      return "PENDING";
     return "INTERNAL";
   }
   if (s.isOffline) return "PARTNER OFFLINE";
@@ -1140,26 +1258,32 @@ export function TripDetailFinanceView({
   const { t } = useLanguage();
   const tabsEnabled =
     typeof onTripDetailTabChange === "function" && tripDetailTab != null;
-  const [showFinanceProvisionPanel, setShowFinanceProvisionPanel] = useState(false);
+  const [showFinanceProvisionPanel, setShowFinanceProvisionPanel] =
+    useState(false);
   const [draftType, setDraftType] = useState<TripAdjustmentType>("revenue");
   const [draftImpact, setDraftImpact] = useState<TripAdjustmentImpact>("plus");
   const [draftAmount, setDraftAmount] = useState("");
   const [draftReason, setDraftReason] = useState("");
   const [draftOtherReason, setDraftOtherReason] = useState("");
-  const [voidPromptAdj, setVoidPromptAdj] = useState<TripAdjustment | null>(null);
+  const [voidPromptAdj, setVoidPromptAdj] = useState<TripAdjustment | null>(
+    null,
+  );
   const [voidPromptReason, setVoidPromptReason] = useState("");
   const activeTab: TripDetailTab = tripDetailTab ?? "finance";
   const showTrackingSection = !tabsEnabled || activeTab === "tracking";
   const showFinanceSection = !tabsEnabled || activeTab === "finance";
   const showAssignmentsSection = !tabsEnabled || activeTab === "tracking";
-  const routeStr = `${trip.pickup_area ?? "—"} → ${trip.drop_location ?? "—"}`.trim() || "—";
+  const routeStr =
+    `${trip.pickup_area ?? "—"} → ${trip.drop_location ?? "—"}`.trim() || "—";
   const reasonOptions =
     draftType === "revenue" ? REVENUE_REASON_OPTIONS : COST_REASON_OPTIONS;
   const selectedInlineReason =
     draftReason === "Other"
       ? draftOtherReason.trim() || "Other"
       : draftReason.trim();
-  const inlineAmountNum = Math.round(parseFloat(draftAmount.replace(/,/g, "")) || 0);
+  const inlineAmountNum = Math.round(
+    parseFloat(draftAmount.replace(/,/g, "")) || 0,
+  );
   const canSaveInlineAdjustment =
     inlineAmountNum > 0 && (!!selectedInlineReason || reasonOptions.length > 0);
 
@@ -1176,7 +1300,9 @@ export function TripDetailFinanceView({
         setDraftImpact(preset.impact);
         const seed = (preset.reasonSeed ?? "").trim();
         const options =
-          preset.type === "revenue" ? REVENUE_REASON_OPTIONS : COST_REASON_OPTIONS;
+          preset.type === "revenue"
+            ? REVENUE_REASON_OPTIONS
+            : COST_REASON_OPTIONS;
         if (seed && options.includes(seed as (typeof options)[number])) {
           setDraftReason(seed);
           setDraftOtherReason("");
@@ -1235,9 +1361,15 @@ export function TripDetailFinanceView({
       ? computePartnerIndentFreightCost(subcontractRate)
       : supplierCost;
   const isPartnerSettlementView = trip.indent_id != null && !isTripOwner;
-  const billingOriginalLabel = isPartnerSettlementView ? "Partner Amount" : "Original Price";
-  const billingFinalLabel = isPartnerSettlementView ? "Final Partner Amount" : "Final Price";
-  const billingSectionTitle = isPartnerSettlementView ? "Partner Settlement" : "Customer Billing";
+  const billingOriginalLabel = isPartnerSettlementView
+    ? "Partner Amount"
+    : "Original Price";
+  const billingFinalLabel = isPartnerSettlementView
+    ? "Final Partner Amount"
+    : "Final Price";
+  const billingSectionTitle = isPartnerSettlementView
+    ? "Partner Settlement"
+    : "Customer Billing";
 
   const supplierNameFromLedger = useMemo(() => {
     for (const tx of tripLedgerEntries) {
@@ -1250,8 +1382,7 @@ export function TripDetailFinanceView({
   }, [tripLedgerEntries]);
 
   const supplierDisplayName = useMemo(() => {
-    const fromTrip =
-      (partnerName ?? trip.supplier_name ?? "").trim() || null;
+    const fromTrip = (partnerName ?? trip.supplier_name ?? "").trim() || null;
     if (fromTrip) return fromTrip;
     if (supplierNameFromLedger) return supplierNameFromLedger;
     if (isPartnerSettlementView) {
@@ -1267,8 +1398,14 @@ export function TripDetailFinanceView({
     viewerOrganizationName,
   ]);
 
-  const adjSales = useMemo(() => adjustedRevenue(sales, adjustments), [sales, adjustments]);
-  const adjCost = useMemo(() => adjustedCost(cost, adjustments), [cost, adjustments]);
+  const adjSales = useMemo(
+    () => adjustedRevenue(sales, adjustments),
+    [sales, adjustments],
+  );
+  const adjCost = useMemo(
+    () => adjustedCost(cost, adjustments),
+    [cost, adjustments],
+  );
   const adjMargin = adjSales - adjCost;
 
   const tripFinanceSnapshot = useMemo(() => {
@@ -1289,7 +1426,8 @@ export function TripDetailFinanceView({
         driver_commission: trip.driver_commission,
         distance: trip.distance,
         is_cross_org_supplier:
-          (trip as { is_cross_org_supplier?: boolean | null }).is_cross_org_supplier ?? null,
+          (trip as { is_cross_org_supplier?: boolean | null })
+            .is_cross_org_supplier ?? null,
         subcontract_rate: subcontractRate ?? null,
         trip_payout_mode: trip.trip_payout_mode ?? null,
         vehicle_id: trip.vehicle_id ?? null,
@@ -1308,7 +1446,8 @@ export function TripDetailFinanceView({
 
   /** Paid to supplier: outflows linked to this trip (supplier payments). Due vs adjusted cost. */
   const paidToSupplier = useMemo(
-    () => tripLedgerEntries.reduce((s, tx) => s + Number(tx.amount_out ?? 0), 0),
+    () =>
+      tripLedgerEntries.reduce((s, tx) => s + Number(tx.amount_out ?? 0), 0),
     [tripLedgerEntries],
   );
   const supplierDue = Math.max(0, adjCost - paidToSupplier);
@@ -1361,13 +1500,11 @@ export function TripDetailFinanceView({
       else if (row.reconciliation_status === "reconciled") reconciledCount += 1;
       else if (row.reconciliation_status === "mismatch") mismatchCount += 1;
     }
-    const latest = rows
-      .slice()
-      .sort((a, b) => {
-        const ta = new Date(a.transaction_date ?? a.created_at).getTime();
-        const tb = new Date(b.transaction_date ?? b.created_at).getTime();
-        return tb - ta;
-      })[0];
+    const latest = rows.slice().sort((a, b) => {
+      const ta = new Date(a.transaction_date ?? a.created_at).getTime();
+      const tb = new Date(b.transaction_date ?? b.created_at).getTime();
+      return tb - ta;
+    })[0];
     return {
       hasSignals: true,
       matchedCount,
@@ -1415,7 +1552,7 @@ export function TripDetailFinanceView({
 
   const trackingStep = useMemo(
     () => trackingStepFromStatus(trip.status),
-    [trip.status]
+    [trip.status],
   );
   const statusLabel =
     trip.driver_id == null
@@ -1486,8 +1623,12 @@ export function TripDetailFinanceView({
                 <View style={[styles.manifestDot, styles.manifestDotEnd]} />
               </View>
               <View style={styles.manifestTextCol}>
-                <Text style={styles.manifestPlace}>{toTitleCase(trip.pickup_area)}</Text>
-                <Text style={styles.manifestPlace}>{toTitleCase(trip.drop_location)}</Text>
+                <Text style={styles.manifestPlace}>
+                  {toTitleCase(trip.pickup_area)}
+                </Text>
+                <Text style={styles.manifestPlace}>
+                  {toTitleCase(trip.drop_location)}
+                </Text>
               </View>
             </View>
             <View style={styles.manifestMetaRow}>
@@ -1517,7 +1658,9 @@ export function TripDetailFinanceView({
               </View>
             </View>
             <Text style={styles.operatorSubModern}>
-              {vehicleLabel?.trim() ? vehicleLabel : "Vehicle pending assignment"}
+              {vehicleLabel?.trim()
+                ? vehicleLabel
+                : "Vehicle pending assignment"}
             </Text>
           </View>
 
@@ -1555,7 +1698,9 @@ export function TripDetailFinanceView({
                   style={styles.assignmentActionBtn}
                   activeOpacity={0.85}
                 >
-                  <Text style={styles.assignmentActionBtnText}>Open Tracking</Text>
+                  <Text style={styles.assignmentActionBtnText}>
+                    Open Tracking
+                  </Text>
                 </TouchableOpacity>
               ) : null}
             </View>
@@ -1567,7 +1712,11 @@ export function TripDetailFinanceView({
             onPress={handleTrackingCardPress}
             activeOpacity={0.92}
             accessible
-            accessibilityLabel={isDriverOffline ? "Driver offline - Open tracking" : "Open tracking"}
+            accessibilityLabel={
+              isDriverOffline
+                ? "Driver offline - Open tracking"
+                : "Open tracking"
+            }
             accessibilityRole="button"
           >
             <View style={styles.trackingHeader}>
@@ -1589,14 +1738,24 @@ export function TripDetailFinanceView({
               </View>
               {onOpenTracking ? (
                 <View style={styles.trackingLiveMapBadge}>
-                  <FontAwesome name="location-arrow" size={10} color={Theme.primary} />
+                  <FontAwesome
+                    name="location-arrow"
+                    size={10}
+                    color={Theme.primary}
+                  />
                   <Text style={styles.trackingLiveMapText}>Open Maps</Text>
                 </View>
               ) : null}
             </View>
             <View style={styles.progressRow}>
               {[1, 2, 3, 4].map((step) => (
-                <View key={step} style={[styles.progressSegment, step <= trackingStep && styles.progressSegmentActive]} />
+                <View
+                  key={step}
+                  style={[
+                    styles.progressSegment,
+                    step <= trackingStep && styles.progressSegmentActive,
+                  ]}
+                />
               ))}
             </View>
             <View style={styles.trackingFooter}>
@@ -1645,1105 +1804,1327 @@ export function TripDetailFinanceView({
 
       {/* Unified Trip Finances Card + ledger modal + transactions */}
       {showFinanceSection ? (
-      <>
-      <View style={styles.financeCard}>
-        <View style={styles.financeHeader}>
-          <View>
-            <Text style={styles.financeTitle}>Trip Finances</Text>
-            {(clientName ?? partnerName) && (
-              <View style={styles.financeSubtitleRow}>
-                <Text style={styles.financeSubtitle}>{clientName ?? partnerName}</Text>
-                <View
-                  style={[
-                    styles.partnerIntegrationPill,
-                    counterpartyIntegrated
-                      ? styles.partnerIntegrationPillOn
-                      : styles.partnerIntegrationPillOff,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.partnerIntegrationPillText,
-                      counterpartyIntegrated
-                        ? styles.partnerIntegrationPillTextOn
-                        : styles.partnerIntegrationPillTextOff,
-                    ]}
-                  >
-                    {counterpartyIntegrated ? "Integrated" : "Offline"}
-                  </Text>
-                </View>
-              </View>
-            )}
-          </View>
-          <View style={styles.financeProfitWrap}>
-            <Text style={styles.financeProfitLabel}>Profit</Text>
-            <Text style={styles.financeProfitValue}>{formatINR(adjMargin)}</Text>
-          </View>
-        </View>
-
-        {onTripFinancialLedgerCta && tripFinanceSnapshot ? (
-          <View style={styles.tripFinanceSnapshotWrap}>
-            <TripFinancialCard
-              snapshot={tripFinanceSnapshot}
-              selectedTag={null}
-              onDuePress={(tag) => onTripFinancialLedgerCta(tag)}
-              onAddExpense={
-                tripFinanceSnapshot.trip_type === "asset"
-                  ? () => onTripFinancialLedgerCta("vehicle")
-                  : undefined
-              }
-              variant="stack"
-            />
-          </View>
-        ) : null}
-
-        {/* MULTI-PARTY RECONCILIATION HERO (client + supplier + driver) */}
-        {reconciliationParties && reconciliationParties.length > 0 ? (
-          <MultiPartyReconHero
-            parties={reconciliationParties}
-            receivedFromCustomer={receivedFromCustomer}
-            dueFromCustomer={dueFromCustomer}
-            reconciliationSummary={reconciliationSummary}
-            onPreviewCounterpartyEntry={setSelectedCounterpartyEntry}
-          />
-        ) : null}
-
-        {/* PREMIUM RECONCILIATION HERO — legacy single-counterparty fallback */}
-        {!reconciliationParties || reconciliationParties.length === 0 ? (() => {
-          const varianceAbs = Math.abs(counterpartySummary.varianceVsPaid);
-          const hasVariance =
-            counterpartyIntegrated &&
-            counterpartySummary.hasEntries &&
-            varianceAbs > 0;
-          const isMatch =
-            counterpartyIntegrated &&
-            counterpartySummary.hasEntries &&
-            varianceAbs === 0;
-          const isAwaiting =
-            counterpartyIntegrated && !counterpartySummary.hasEntries;
-          const isOffline = !counterpartyIntegrated;
-          const statusLabel = isOffline
-            ? "PARTNER OFFLINE"
-            : isAwaiting
-              ? "AWAITING SYNC"
-              : isMatch
-                ? "MATCH SECURED"
-                : "REVIEW NEEDED";
-          const statusDotStyle = isOffline
-            ? styles.reconStatusDotOffline
-            : isAwaiting
-              ? styles.reconStatusDotNeutral
-              : isMatch
-                ? styles.reconStatusDotGood
-                : styles.reconStatusDotWarn;
-          const statusTextStyle = isOffline
-            ? styles.reconStatusTextOffline
-            : isAwaiting
-              ? styles.reconStatusTextNeutral
-              : isMatch
-                ? styles.reconStatusTextGood
-                : styles.reconStatusTextWarn;
-          return (
-            <View style={styles.reconHero}>
-              {/* Header */}
-              <View style={styles.reconHeroHeader}>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <View style={styles.reconHeroKickerRow}>
-                    <FontAwesome
-                      name={isOffline ? "unlink" : "link"}
-                      size={10}
-                      color={Theme.textOnDarkMuted}
-                    />
-                    <Text style={styles.reconHeroKicker}>TRIP LEDGER</Text>
-                  </View>
-                  <Text style={styles.reconHeroParty} numberOfLines={1}>
-                    {(clientName ?? partnerName ?? "Reconciliation").toUpperCase()}
-                  </Text>
-                </View>
-                <View style={styles.reconStatusRow}>
-                  <View style={[styles.reconStatusDot, statusDotStyle]} />
-                  <Text style={[styles.reconStatusText, statusTextStyle]}>
-                    {statusLabel}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Dispute status chip — shown when a dispute is OPEN for this trip+partner */}
-              {reconcileState?.disputeStatus === "OPEN" ? (
-                <View style={styles.reconDisputeChip}>
-                  <FontAwesome
-                    name="exclamation-circle"
-                    size={11}
-                    color={"#FCA5A5"}
-                  />
-                  <Text style={styles.reconDisputeChipText}>
-                    {reconcileState.disputeDirection === "RECEIVED"
-                      ? "DISPUTE RECEIVED · PARTNER REQUESTS REVIEW"
-                      : "DISPUTE OPEN · PARTNER NOTIFIED"}
-                  </Text>
-                </View>
-              ) : reconcileState?.disputeStatus === "RESOLVED" ? (
-                <View
-                  style={[
-                    styles.reconDisputeChip,
-                    styles.reconDisputeChipResolved,
-                  ]}
-                >
-                  <FontAwesome
-                    name="check-circle"
-                    size={11}
-                    color={Theme.driverEmerald}
-                  />
-                  <Text
-                    style={[
-                      styles.reconDisputeChipText,
-                      styles.reconDisputeChipTextResolved,
-                    ]}
-                  >
-                    DISPUTE RESOLVED
-                  </Text>
-                </View>
-              ) : null}
-
-              {/* State-specific body */}
-              {isOffline ? (
-                <View style={styles.reconOfflineBody}>
-                  <View style={styles.reconOfflineIcon}>
-                    <FontAwesome name="unlink" size={16} color={Theme.textOnDark} />
-                  </View>
-                  <Text style={styles.reconOfflineTitle}>
-                    Compare &amp; verify unavailable
-                  </Text>
-                  <Text style={styles.reconOfflineBody2}>
-                    Opposite-party entry preview is available only for integrated
-                    network partners. Invite this party to unlock two-way
-                    reconciliation.
-                  </Text>
-                </View>
-              ) : isAwaiting ? (
-                <View style={styles.reconAwaitingCard}>
-                  <FontAwesome
-                    name="clock-o"
-                    size={14}
-                    color={Theme.textOnDarkMuted}
-                  />
-                  <Text style={styles.reconAwaitingText}>
-                    No opposite-party entry marked yet for this trip.
-                  </Text>
-                </View>
-              ) : (
-                <>
-                  {/* Financial audit sub-card */}
-                  <View style={styles.reconGlass}>
-                    <View style={styles.reconGlassHeader}>
-                      <Text style={styles.reconGlassKicker}>
-                        FINANCIAL AUDIT VIEW
-                      </Text>
-                      <Text
-                        style={[
-                          styles.reconGlassStatus,
-                          isMatch
-                            ? styles.reconGlassStatusGood
-                            : styles.reconGlassStatusWarn,
-                        ]}
-                      >
-                        {isMatch
-                          ? "Verified"
-                          : `₹${varianceAbs.toLocaleString("en-IN")} Var`}
-                      </Text>
-                    </View>
-
-                    {/* Rows: Marked by partner vs Your paid total */}
-                    {[
-                      {
-                        key: "partner",
-                        label: "Marked by partner",
-                        value: counterpartySummary.totalMarked,
-                        highlight: false,
-                      },
-                      {
-                        key: "paid",
-                        label: "Your paid total",
-                        value: paidToSupplier,
-                        highlight: false,
-                      },
-                    ].map((row) => (
-                      <View key={row.key} style={styles.reconLineItem}>
-                        <View style={styles.reconLineItemLabelRow}>
-                          <Text style={styles.reconLineItemLabel}>
-                            {row.label.toUpperCase()}
-                          </Text>
-                        </View>
-                        <View style={styles.reconLineItemChip}>
-                          <Text style={styles.reconLineItemChipValue}>
-                            {formatINR(row.value)}
-                          </Text>
-                        </View>
-                      </View>
-                    ))}
-
-                    {/* Variance row */}
-                    <View style={styles.reconVarianceRow}>
-                      <Text style={styles.reconVarianceLabel}>VARIANCE</Text>
-                      <Text
-                        style={[
-                          styles.reconVarianceValue,
-                          isMatch
-                            ? styles.reconVarianceValueMatch
-                            : styles.reconVarianceValueMismatch,
-                        ]}
-                      >
-                        {isMatch
-                          ? "₹0"
-                          : `${counterpartySummary.varianceVsPaid > 0 ? "+" : "−"}${formatINR(varianceAbs)}`}
-                      </Text>
-                    </View>
-
-                    {/* Counters */}
-                    <View style={styles.reconCounters}>
-                      <View style={styles.reconCounterItem}>
-                        <Text style={styles.reconCounterValue}>
-                          {reconciliationSummary.matchedCount}
-                        </Text>
-                        <Text style={styles.reconCounterLabel}>Matched</Text>
-                      </View>
-                      <View style={styles.reconCounterDivider} />
-                      <View style={styles.reconCounterItem}>
-                        <Text
-                          style={[
-                            styles.reconCounterValue,
-                            styles.reconCounterValueMuted,
-                          ]}
-                        >
-                          {reconciliationSummary.reconciledCount}
-                        </Text>
-                        <Text style={styles.reconCounterLabel}>Reconciled</Text>
-                      </View>
-                      <View style={styles.reconCounterDivider} />
-                      <View style={styles.reconCounterItem}>
-                        <Text
-                          style={[
-                            styles.reconCounterValue,
-                            styles.reconCounterValueWarn,
-                          ]}
-                        >
-                          {reconciliationSummary.mismatchCount}
-                        </Text>
-                        <Text style={styles.reconCounterLabel}>Mismatch</Text>
-                      </View>
-                    </View>
-
-                    {/* Entries list */}
-                    <Text style={styles.reconEntriesHead}>
-                      Partner entries · latest {Math.min(counterpartyEntries.length, 5)} of {counterpartyEntries.length}
+        <>
+          <View style={styles.financeCard}>
+            <View style={styles.financeHeader}>
+              <View>
+                <Text style={styles.financeTitle}>Trip Finances</Text>
+                {(clientName ?? partnerName) && (
+                  <View style={styles.financeSubtitleRow}>
+                    <Text style={styles.financeSubtitle}>
+                      {clientName ?? partnerName}
                     </Text>
-                    <View style={styles.reconEntriesList}>
-                      {counterpartyEntries.slice(0, 5).map((row) => (
-                        <TouchableOpacity
-                          key={row.id}
-                          style={styles.reconEntryCard}
-                          activeOpacity={0.85}
-                          onPress={() => setSelectedCounterpartyEntry(row)}
-                        >
-                          <View style={{ flex: 1, minWidth: 0 }}>
-                            <Text style={styles.reconEntryAmount}>
-                              {formatINR(Number(row.amount ?? 0))}
-                            </Text>
-                            <Text style={styles.reconEntryMeta} numberOfLines={1}>
-                              {formatLedgerDateShort(row.transaction_date)} · Ref{" "}
-                              {row.reference_id ?? "—"}
+                    <View
+                      style={[
+                        styles.partnerIntegrationPill,
+                        counterpartyIntegrated
+                          ? styles.partnerIntegrationPillOn
+                          : styles.partnerIntegrationPillOff,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.partnerIntegrationPillText,
+                          counterpartyIntegrated
+                            ? styles.partnerIntegrationPillTextOn
+                            : styles.partnerIntegrationPillTextOff,
+                        ]}
+                      >
+                        {counterpartyIntegrated ? "Integrated" : "Offline"}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+              <View style={styles.financeProfitWrap}>
+                <Text style={styles.financeProfitLabel}>Profit</Text>
+                <Text style={styles.financeProfitValue}>
+                  {formatINR(adjMargin)}
+                </Text>
+              </View>
+            </View>
+
+            {onTripFinancialLedgerCta && tripFinanceSnapshot ? (
+              <View style={styles.tripFinanceSnapshotWrap}>
+                <TripFinancialCard
+                  snapshot={tripFinanceSnapshot}
+                  selectedTag={null}
+                  onDuePress={(tag) => onTripFinancialLedgerCta(tag)}
+                  onAddExpense={
+                    tripFinanceSnapshot.trip_type === "asset"
+                      ? () => onTripFinancialLedgerCta("vehicle")
+                      : undefined
+                  }
+                  variant="stack"
+                />
+              </View>
+            ) : null}
+
+            {/* MULTI-PARTY RECONCILIATION HERO (client + supplier + driver) */}
+            {reconciliationParties && reconciliationParties.length > 0 ? (
+              <MultiPartyReconHero
+                parties={reconciliationParties}
+                receivedFromCustomer={receivedFromCustomer}
+                dueFromCustomer={dueFromCustomer}
+                reconciliationSummary={reconciliationSummary}
+                onPreviewCounterpartyEntry={setSelectedCounterpartyEntry}
+              />
+            ) : null}
+
+            {/* PREMIUM RECONCILIATION HERO — legacy single-counterparty fallback */}
+            {!reconciliationParties || reconciliationParties.length === 0
+              ? (() => {
+                  const varianceAbs = Math.abs(
+                    counterpartySummary.varianceVsPaid,
+                  );
+                  const hasVariance =
+                    counterpartyIntegrated &&
+                    counterpartySummary.hasEntries &&
+                    varianceAbs > 0;
+                  const isMatch =
+                    counterpartyIntegrated &&
+                    counterpartySummary.hasEntries &&
+                    varianceAbs === 0;
+                  const isAwaiting =
+                    counterpartyIntegrated && !counterpartySummary.hasEntries;
+                  const isOffline = !counterpartyIntegrated;
+                  const statusLabel = isOffline
+                    ? "PARTNER OFFLINE"
+                    : isAwaiting
+                      ? "AWAITING SYNC"
+                      : isMatch
+                        ? "MATCH SECURED"
+                        : "REVIEW NEEDED";
+                  const statusDotStyle = isOffline
+                    ? styles.reconStatusDotOffline
+                    : isAwaiting
+                      ? styles.reconStatusDotNeutral
+                      : isMatch
+                        ? styles.reconStatusDotGood
+                        : styles.reconStatusDotWarn;
+                  const statusTextStyle = isOffline
+                    ? styles.reconStatusTextOffline
+                    : isAwaiting
+                      ? styles.reconStatusTextNeutral
+                      : isMatch
+                        ? styles.reconStatusTextGood
+                        : styles.reconStatusTextWarn;
+                  return (
+                    <View style={styles.reconHero}>
+                      {/* Header */}
+                      <View style={styles.reconHeroHeader}>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <View style={styles.reconHeroKickerRow}>
+                            <FontAwesome
+                              name={isOffline ? "unlink" : "link"}
+                              size={10}
+                              color={Theme.textOnDarkMuted}
+                            />
+                            <Text style={styles.reconHeroKicker}>
+                              TRIP LEDGER
                             </Text>
                           </View>
+                          <Text style={styles.reconHeroParty} numberOfLines={1}>
+                            {(
+                              clientName ??
+                              partnerName ??
+                              "Reconciliation"
+                            ).toUpperCase()}
+                          </Text>
+                        </View>
+                        <View style={styles.reconStatusRow}>
+                          <View
+                            style={[styles.reconStatusDot, statusDotStyle]}
+                          />
+                          <Text
+                            style={[styles.reconStatusText, statusTextStyle]}
+                          >
+                            {statusLabel}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {/* Dispute status chip — shown when a dispute is OPEN for this trip+partner */}
+                      {reconcileState?.disputeStatus === "OPEN" ? (
+                        <View style={styles.reconDisputeChip}>
                           <FontAwesome
-                            name="chevron-right"
-                            size={10}
+                            name="exclamation-circle"
+                            size={11}
+                            color={"#FCA5A5"}
+                          />
+                          <Text style={styles.reconDisputeChipText}>
+                            {reconcileState.disputeDirection === "RECEIVED"
+                              ? "DISPUTE RECEIVED · PARTNER REQUESTS REVIEW"
+                              : "DISPUTE OPEN · PARTNER NOTIFIED"}
+                          </Text>
+                        </View>
+                      ) : reconcileState?.disputeStatus === "RESOLVED" ? (
+                        <View
+                          style={[
+                            styles.reconDisputeChip,
+                            styles.reconDisputeChipResolved,
+                          ]}
+                        >
+                          <FontAwesome
+                            name="check-circle"
+                            size={11}
+                            color={Theme.driverEmerald}
+                          />
+                          <Text
+                            style={[
+                              styles.reconDisputeChipText,
+                              styles.reconDisputeChipTextResolved,
+                            ]}
+                          >
+                            DISPUTE RESOLVED
+                          </Text>
+                        </View>
+                      ) : null}
+
+                      {/* State-specific body */}
+                      {isOffline ? (
+                        <View style={styles.reconOfflineBody}>
+                          <View style={styles.reconOfflineIcon}>
+                            <FontAwesome
+                              name="unlink"
+                              size={16}
+                              color={Theme.textOnDark}
+                            />
+                          </View>
+                          <Text style={styles.reconOfflineTitle}>
+                            Compare &amp; verify unavailable
+                          </Text>
+                          <Text style={styles.reconOfflineBody2}>
+                            Opposite-party entry preview is available only for
+                            integrated network partners. Invite this party to
+                            unlock two-way reconciliation.
+                          </Text>
+                        </View>
+                      ) : isAwaiting ? (
+                        <View style={styles.reconAwaitingCard}>
+                          <FontAwesome
+                            name="clock-o"
+                            size={14}
                             color={Theme.textOnDarkMuted}
                           />
+                          <Text style={styles.reconAwaitingText}>
+                            No opposite-party entry marked yet for this trip.
+                          </Text>
+                        </View>
+                      ) : (
+                        <>
+                          {/* Financial audit sub-card */}
+                          <View style={styles.reconGlass}>
+                            <View style={styles.reconGlassHeader}>
+                              <Text style={styles.reconGlassKicker}>
+                                FINANCIAL AUDIT VIEW
+                              </Text>
+                              <Text
+                                style={[
+                                  styles.reconGlassStatus,
+                                  isMatch
+                                    ? styles.reconGlassStatusGood
+                                    : styles.reconGlassStatusWarn,
+                                ]}
+                              >
+                                {isMatch
+                                  ? "Verified"
+                                  : `₹${varianceAbs.toLocaleString("en-IN")} Var`}
+                              </Text>
+                            </View>
+
+                            {/* Rows: Marked by partner vs Your paid total */}
+                            {[
+                              {
+                                key: "partner",
+                                label: "Marked by partner",
+                                value: counterpartySummary.totalMarked,
+                                highlight: false,
+                              },
+                              {
+                                key: "paid",
+                                label: "Your paid total",
+                                value: paidToSupplier,
+                                highlight: false,
+                              },
+                            ].map((row) => (
+                              <View key={row.key} style={styles.reconLineItem}>
+                                <View style={styles.reconLineItemLabelRow}>
+                                  <Text style={styles.reconLineItemLabel}>
+                                    {row.label.toUpperCase()}
+                                  </Text>
+                                </View>
+                                <View style={styles.reconLineItemChip}>
+                                  <Text style={styles.reconLineItemChipValue}>
+                                    {formatINR(row.value)}
+                                  </Text>
+                                </View>
+                              </View>
+                            ))}
+
+                            {/* Variance row */}
+                            <View style={styles.reconVarianceRow}>
+                              <Text style={styles.reconVarianceLabel}>
+                                VARIANCE
+                              </Text>
+                              <Text
+                                style={[
+                                  styles.reconVarianceValue,
+                                  isMatch
+                                    ? styles.reconVarianceValueMatch
+                                    : styles.reconVarianceValueMismatch,
+                                ]}
+                              >
+                                {isMatch
+                                  ? "₹0"
+                                  : `${counterpartySummary.varianceVsPaid > 0 ? "+" : "−"}${formatINR(varianceAbs)}`}
+                              </Text>
+                            </View>
+
+                            {/* Counters */}
+                            <View style={styles.reconCounters}>
+                              <View style={styles.reconCounterItem}>
+                                <Text style={styles.reconCounterValue}>
+                                  {reconciliationSummary.matchedCount}
+                                </Text>
+                                <Text style={styles.reconCounterLabel}>
+                                  Matched
+                                </Text>
+                              </View>
+                              <View style={styles.reconCounterDivider} />
+                              <View style={styles.reconCounterItem}>
+                                <Text
+                                  style={[
+                                    styles.reconCounterValue,
+                                    styles.reconCounterValueMuted,
+                                  ]}
+                                >
+                                  {reconciliationSummary.reconciledCount}
+                                </Text>
+                                <Text style={styles.reconCounterLabel}>
+                                  Reconciled
+                                </Text>
+                              </View>
+                              <View style={styles.reconCounterDivider} />
+                              <View style={styles.reconCounterItem}>
+                                <Text
+                                  style={[
+                                    styles.reconCounterValue,
+                                    styles.reconCounterValueWarn,
+                                  ]}
+                                >
+                                  {reconciliationSummary.mismatchCount}
+                                </Text>
+                                <Text style={styles.reconCounterLabel}>
+                                  Mismatch
+                                </Text>
+                              </View>
+                            </View>
+
+                            {/* Entries list */}
+                            <Text style={styles.reconEntriesHead}>
+                              Partner entries · latest{" "}
+                              {Math.min(counterpartyEntries.length, 5)} of{" "}
+                              {counterpartyEntries.length}
+                            </Text>
+                            <View style={styles.reconEntriesList}>
+                              {counterpartyEntries.slice(0, 5).map((row) => (
+                                <TouchableOpacity
+                                  key={row.id}
+                                  style={styles.reconEntryCard}
+                                  activeOpacity={0.85}
+                                  onPress={() =>
+                                    setSelectedCounterpartyEntry(row)
+                                  }
+                                >
+                                  <View style={{ flex: 1, minWidth: 0 }}>
+                                    <Text style={styles.reconEntryAmount}>
+                                      {formatINR(Number(row.amount ?? 0))}
+                                    </Text>
+                                    <Text
+                                      style={styles.reconEntryMeta}
+                                      numberOfLines={1}
+                                    >
+                                      {formatLedgerDateShort(
+                                        row.transaction_date,
+                                      )}{" "}
+                                      · Ref {row.reference_id ?? "—"}
+                                    </Text>
+                                  </View>
+                                  <FontAwesome
+                                    name="chevron-right"
+                                    size={10}
+                                    color={Theme.textOnDarkMuted}
+                                  />
+                                </TouchableOpacity>
+                              ))}
+                            </View>
+                          </View>
+                        </>
+                      )}
+
+                      {/* Inline variance actions — Accept partner / Raise dispute */}
+                      {!isOffline &&
+                      hasVariance &&
+                      reconcileState?.disputeStatus !== "OPEN" &&
+                      (onAcceptPartnerView || onRaiseDispute) ? (
+                        <View style={styles.reconActionRow}>
+                          {onAcceptPartnerView ? (
+                            <TouchableOpacity
+                              activeOpacity={0.85}
+                              disabled={reconcileState?.actionLoading}
+                              onPress={onAcceptPartnerView}
+                              style={[
+                                styles.reconActionBtn,
+                                styles.reconActionBtnAccept,
+                                reconcileState?.actionLoading &&
+                                  styles.reconActionBtnDisabled,
+                              ]}
+                            >
+                              <FontAwesome
+                                name="check"
+                                size={11}
+                                color={Theme.textPrimaryDark}
+                              />
+                              <Text style={styles.reconActionBtnAcceptText}>
+                                PARTNER IS RIGHT
+                              </Text>
+                            </TouchableOpacity>
+                          ) : null}
+                          {onRaiseDispute ? (
+                            <TouchableOpacity
+                              activeOpacity={0.85}
+                              disabled={reconcileState?.actionLoading}
+                              onPress={onRaiseDispute}
+                              style={[
+                                styles.reconActionBtn,
+                                styles.reconActionBtnDispute,
+                                reconcileState?.actionLoading &&
+                                  styles.reconActionBtnDisabled,
+                              ]}
+                            >
+                              <FontAwesome
+                                name="exclamation"
+                                size={11}
+                                color={"#FCA5A5"}
+                              />
+                              <Text style={styles.reconActionBtnDisputeText}>
+                                RAISE DISPUTE
+                              </Text>
+                            </TouchableOpacity>
+                          ) : null}
+                        </View>
+                      ) : null}
+
+                      {/* When dispute is OPEN and we received it: inline Accept / Decline via Compare flow */}
+                      {!isOffline &&
+                      reconcileState?.disputeStatus === "OPEN" &&
+                      reconcileState?.disputeDirection === "RECEIVED" &&
+                      onAcceptPartnerView ? (
+                        <View style={styles.reconActionRow}>
+                          <TouchableOpacity
+                            activeOpacity={0.85}
+                            disabled={reconcileState?.actionLoading}
+                            onPress={onAcceptPartnerView}
+                            style={[
+                              styles.reconActionBtn,
+                              styles.reconActionBtnAccept,
+                              reconcileState?.actionLoading &&
+                                styles.reconActionBtnDisabled,
+                            ]}
+                          >
+                            <FontAwesome
+                              name="check"
+                              size={11}
+                              color={Theme.textPrimaryDark}
+                            />
+                            <Text style={styles.reconActionBtnAcceptText}>
+                              ACCEPT & UPDATE BOOK
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : null}
+
+                      {/* CTA */}
+                      {!isOffline && onOpenCompareVerify ? (
+                        <TouchableOpacity
+                          style={styles.reconCtaButton}
+                          activeOpacity={0.9}
+                          onPress={onOpenCompareVerify}
+                        >
+                          <Text style={styles.reconCtaButtonText}>
+                            {reconcileState?.disputeStatus === "OPEN"
+                              ? "VIEW IN COMPARE & VERIFY"
+                              : hasVariance
+                                ? "BRIDGE VARIANCES"
+                                : "OPEN COMPARE & VERIFY"}
+                          </Text>
+                          <FontAwesome
+                            name="chevron-right"
+                            size={12}
+                            color={Theme.textOnDark}
+                          />
                         </TouchableOpacity>
-                      ))}
+                      ) : null}
+
+                      {/* Hero footer: Received / Pending (trip-level snapshot) */}
+                      <View style={styles.reconFooterRow}>
+                        <View style={styles.reconFooterCard}>
+                          <View style={styles.reconFooterIconRow}>
+                            <FontAwesome
+                              name="arrow-down"
+                              size={9}
+                              color={Theme.driverEmerald}
+                            />
+                            <Text style={styles.reconFooterLabel}>
+                              RECEIVED
+                            </Text>
+                          </View>
+                          <Text style={styles.reconFooterValue}>
+                            {formatINR(receivedFromCustomer)}
+                          </Text>
+                        </View>
+                        <View style={styles.reconFooterCard}>
+                          <View style={styles.reconFooterIconRow}>
+                            <FontAwesome
+                              name="arrow-up"
+                              size={9}
+                              color={Theme.textOnDarkMuted}
+                            />
+                            <Text style={styles.reconFooterLabel}>PENDING</Text>
+                          </View>
+                          <Text
+                            style={[
+                              styles.reconFooterValue,
+                              dueFromCustomer === 0 &&
+                                styles.reconFooterValueMuted,
+                            ]}
+                          >
+                            {dueFromCustomer === 0
+                              ? "0.00"
+                              : formatINR(dueFromCustomer)}
+                          </Text>
+                        </View>
+                      </View>
                     </View>
-                  </View>
-                </>
+                  );
+                })()
+              : null}
+
+            {/* Customer Billing Section */}
+            <View style={styles.financeSection}>
+              <Text style={styles.financeSectionTitle}>
+                {billingSectionTitle}
+              </Text>
+              <View style={styles.financeRow}>
+                <Text style={styles.financeLabel}>{billingOriginalLabel}</Text>
+                <Text style={styles.financeValue}>{formatINR(sales)}</Text>
+              </View>
+
+              {revenueAdjustments.length > 0 && (
+                <View style={styles.financeAdjustmentsWrap}>
+                  {revenueAdjustments.map((adj) => {
+                    const voided = isAdjustmentVoided(adj);
+                    return (
+                      <View key={adj.id} style={styles.financeAdjRow}>
+                        <View style={styles.financeAdjLeftCol}>
+                          <Text
+                            style={[
+                              styles.financeAdjReason,
+                              voided && styles.financeAdjVoided,
+                            ]}
+                            numberOfLines={voided ? 2 : 1}
+                          >
+                            {adj.impact === "plus" ? "+" : "−"} {adj.reason}
+                          </Text>
+                          {voided ? (
+                            <Text
+                              style={styles.financeAdjVoidNote}
+                              numberOfLines={3}
+                            >
+                              Voided: {(adj.void_reason ?? "").trim() || "—"}
+                            </Text>
+                          ) : null}
+                        </View>
+                        <View style={styles.financeAdjRight}>
+                          <Text
+                            style={[
+                              styles.financeAdjAmount,
+                              voided && styles.financeAdjVoided,
+                              adj.impact === "plus"
+                                ? { color: Theme.darkGreen }
+                                : { color: Theme.teslaRed },
+                            ]}
+                          >
+                            {adj.impact === "plus" ? "+" : "−"}
+                            {formatINR(adj.amount)}
+                          </Text>
+                          {onRemoveAdjustment && !voided ? (
+                            <TouchableOpacity
+                              onPress={() => {
+                                setVoidPromptAdj(adj);
+                                setVoidPromptReason("");
+                              }}
+                              hitSlop={8}
+                              style={styles.financeAdjRemoveBtn}
+                              accessibilityLabel="Void adjustment"
+                            >
+                              <FontAwesome
+                                name="times"
+                                size={14}
+                                color={Theme.textMuted}
+                              />
+                            </TouchableOpacity>
+                          ) : null}
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
               )}
 
-              {/* Inline variance actions — Accept partner / Raise dispute */}
-              {!isOffline &&
-              hasVariance &&
-              reconcileState?.disputeStatus !== "OPEN" &&
-              (onAcceptPartnerView || onRaiseDispute) ? (
-                <View style={styles.reconActionRow}>
-                  {onAcceptPartnerView ? (
-                    <TouchableOpacity
-                      activeOpacity={0.85}
-                      disabled={reconcileState?.actionLoading}
-                      onPress={onAcceptPartnerView}
-                      style={[
-                        styles.reconActionBtn,
-                        styles.reconActionBtnAccept,
-                        reconcileState?.actionLoading &&
-                          styles.reconActionBtnDisabled,
-                      ]}
-                    >
-                      <FontAwesome
-                        name="check"
-                        size={11}
-                        color={Theme.textPrimaryDark}
-                      />
-                      <Text style={styles.reconActionBtnAcceptText}>
-                        PARTNER IS RIGHT
-                      </Text>
-                    </TouchableOpacity>
-                  ) : null}
-                  {onRaiseDispute ? (
-                    <TouchableOpacity
-                      activeOpacity={0.85}
-                      disabled={reconcileState?.actionLoading}
-                      onPress={onRaiseDispute}
-                      style={[
-                        styles.reconActionBtn,
-                        styles.reconActionBtnDispute,
-                        reconcileState?.actionLoading &&
-                          styles.reconActionBtnDisabled,
-                      ]}
-                    >
-                      <FontAwesome
-                        name="exclamation"
-                        size={11}
-                        color={"#FCA5A5"}
-                      />
-                      <Text style={styles.reconActionBtnDisputeText}>
-                        RAISE DISPUTE
-                      </Text>
-                    </TouchableOpacity>
-                  ) : null}
-                </View>
-              ) : null}
+              <View style={styles.financeTotalRow}>
+                <Text style={styles.financeTotalLabel}>
+                  {billingFinalLabel}
+                </Text>
+                <Text style={styles.financeTotalValue}>
+                  {formatINR(adjSales)}
+                </Text>
+              </View>
 
-              {/* When dispute is OPEN and we received it: inline Accept / Decline via Compare flow */}
-              {!isOffline &&
-              reconcileState?.disputeStatus === "OPEN" &&
-              reconcileState?.disputeDirection === "RECEIVED" &&
-              onAcceptPartnerView ? (
-                <View style={styles.reconActionRow}>
-                  <TouchableOpacity
-                    activeOpacity={0.85}
-                    disabled={reconcileState?.actionLoading}
-                    onPress={onAcceptPartnerView}
-                    style={[
-                      styles.reconActionBtn,
-                      styles.reconActionBtnAccept,
-                      reconcileState?.actionLoading &&
-                        styles.reconActionBtnDisabled,
-                    ]}
-                  >
-                    <FontAwesome
-                      name="check"
-                      size={11}
-                      color={Theme.textPrimaryDark}
-                    />
-                    <Text style={styles.reconActionBtnAcceptText}>
-                      ACCEPT & UPDATE BOOK
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              ) : null}
-
-              {/* CTA */}
-              {!isOffline && onOpenCompareVerify ? (
-                <TouchableOpacity
-                  style={styles.reconCtaButton}
-                  activeOpacity={0.9}
-                  onPress={onOpenCompareVerify}
-                >
-                  <Text style={styles.reconCtaButtonText}>
-                    {reconcileState?.disputeStatus === "OPEN"
-                      ? "VIEW IN COMPARE & VERIFY"
-                      : hasVariance
-                        ? "BRIDGE VARIANCES"
-                        : "OPEN COMPARE & VERIFY"}
-                  </Text>
-                  <FontAwesome
-                    name="chevron-right"
-                    size={12}
-                    color={Theme.textOnDark}
-                  />
-                </TouchableOpacity>
-              ) : null}
-
-              {/* Hero footer: Received / Pending (trip-level snapshot) */}
-              <View style={styles.reconFooterRow}>
-                <View style={styles.reconFooterCard}>
-                  <View style={styles.reconFooterIconRow}>
-                    <FontAwesome
-                      name="arrow-down"
-                      size={9}
-                      color={Theme.driverEmerald}
-                    />
-                    <Text style={styles.reconFooterLabel}>RECEIVED</Text>
-                  </View>
-                  <Text style={styles.reconFooterValue}>
+              <View style={styles.financeStatusBox}>
+                <View style={styles.financeStatusCol}>
+                  <Text style={styles.financeStatusLabel}>Received</Text>
+                  <Text style={styles.financeStatusValueGreen}>
                     {formatINR(receivedFromCustomer)}
                   </Text>
                 </View>
-                <View style={styles.reconFooterCard}>
-                  <View style={styles.reconFooterIconRow}>
-                    <FontAwesome
-                      name="arrow-up"
-                      size={9}
-                      color={Theme.textOnDarkMuted}
-                    />
-                    <Text style={styles.reconFooterLabel}>PENDING</Text>
-                  </View>
+                <View style={styles.financeStatusDivider} />
+                <View style={styles.financeStatusColRight}>
+                  <Text style={styles.financeStatusLabel}>
+                    Pending to Collect
+                  </Text>
                   <Text
                     style={[
-                      styles.reconFooterValue,
-                      dueFromCustomer === 0 && styles.reconFooterValueMuted,
+                      styles.financeStatusValue,
+                      dueFromCustomer > 0 && styles.financeStatusValueRed,
                     ]}
                   >
-                    {dueFromCustomer === 0
-                      ? "0.00"
-                      : formatINR(dueFromCustomer)}
+                    {formatINR(dueFromCustomer)}
                   </Text>
                 </View>
               </View>
             </View>
-          );
-        })() : null}
 
-        {/* Customer Billing Section */}
-        <View style={styles.financeSection}>
-          <Text style={styles.financeSectionTitle}>{billingSectionTitle}</Text>
-          <View style={styles.financeRow}>
-            <Text style={styles.financeLabel}>{billingOriginalLabel}</Text>
-            <Text style={styles.financeValue}>{formatINR(sales)}</Text>
-          </View>
-          
-          {revenueAdjustments.length > 0 && (
-            <View style={styles.financeAdjustmentsWrap}>
-              {revenueAdjustments.map((adj) => {
-                const voided = isAdjustmentVoided(adj);
-                return (
-                  <View key={adj.id} style={styles.financeAdjRow}>
-                    <View style={styles.financeAdjLeftCol}>
-                      <Text
-                        style={[styles.financeAdjReason, voided && styles.financeAdjVoided]}
-                        numberOfLines={voided ? 2 : 1}
-                      >
-                        {adj.impact === "plus" ? "+" : "−"} {adj.reason}
-                      </Text>
-                      {voided ? (
-                        <Text style={styles.financeAdjVoidNote} numberOfLines={3}>
-                          Voided: {(adj.void_reason ?? "").trim() || "—"}
-                        </Text>
-                      ) : null}
-                    </View>
-                    <View style={styles.financeAdjRight}>
-                      <Text
-                        style={[
-                          styles.financeAdjAmount,
-                          voided && styles.financeAdjVoided,
-                          adj.impact === "plus" ? { color: Theme.darkGreen } : { color: Theme.teslaRed },
-                        ]}
-                      >
-                        {adj.impact === "plus" ? "+" : "−"}
-                        {formatINR(adj.amount)}
-                      </Text>
-                      {onRemoveAdjustment && !voided ? (
-                        <TouchableOpacity
-                          onPress={() => {
-                            setVoidPromptAdj(adj);
-                            setVoidPromptReason("");
-                          }}
-                          hitSlop={8}
-                          style={styles.financeAdjRemoveBtn}
-                          accessibilityLabel="Void adjustment"
-                        >
-                          <FontAwesome name="times" size={14} color={Theme.textMuted} />
-                        </TouchableOpacity>
-                      ) : null}
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
-          )}
+            <View style={styles.financeSectionDivider} />
 
-          <View style={styles.financeTotalRow}>
-            <Text style={styles.financeTotalLabel}>{billingFinalLabel}</Text>
-            <Text style={styles.financeTotalValue}>{formatINR(adjSales)}</Text>
-          </View>
+            {/* Supplier Payments Section */}
+            <View style={styles.financeSection}>
+              <Text style={styles.financeSectionTitle}>Supplier Payments</Text>
+              {supplierDisplayName ? (
+                <Text style={styles.financeSectionSubtitle}>
+                  {supplierDisplayName}
+                </Text>
+              ) : null}
+              <View style={styles.financeRow}>
+                <Text style={styles.financeLabel}>Original Cost</Text>
+                <Text style={styles.financeValue}>{formatINR(cost)}</Text>
+              </View>
 
-          <View style={styles.financeStatusBox}>
-            <View style={styles.financeStatusCol}>
-              <Text style={styles.financeStatusLabel}>Received</Text>
-              <Text style={styles.financeStatusValueGreen}>{formatINR(receivedFromCustomer)}</Text>
-            </View>
-            <View style={styles.financeStatusDivider} />
-            <View style={styles.financeStatusColRight}>
-              <Text style={styles.financeStatusLabel}>Pending to Collect</Text>
-              <Text style={[styles.financeStatusValue, dueFromCustomer > 0 && styles.financeStatusValueRed]}>
-                {formatINR(dueFromCustomer)}
-              </Text>
-            </View>
-          </View>
-        </View>
+              {costAdjustments.length > 0 && (
+                <View style={styles.financeAdjustmentsWrap}>
+                  {costAdjustments.map((adj) => {
+                    const voided = isAdjustmentVoided(adj);
+                    return (
+                      <View key={adj.id} style={styles.financeAdjRow}>
+                        <View style={styles.financeAdjLeftCol}>
+                          <Text
+                            style={[
+                              styles.financeAdjReason,
+                              voided && styles.financeAdjVoided,
+                            ]}
+                            numberOfLines={voided ? 2 : 1}
+                          >
+                            {adj.impact === "plus" ? "+" : "−"} {adj.reason}
+                          </Text>
+                          {voided ? (
+                            <Text
+                              style={styles.financeAdjVoidNote}
+                              numberOfLines={3}
+                            >
+                              Voided: {(adj.void_reason ?? "").trim() || "—"}
+                            </Text>
+                          ) : null}
+                        </View>
+                        <View style={styles.financeAdjRight}>
+                          <Text
+                            style={[
+                              styles.financeAdjAmount,
+                              voided && styles.financeAdjVoided,
+                              adj.impact === "plus"
+                                ? { color: Theme.darkGreen }
+                                : { color: Theme.teslaRed },
+                            ]}
+                          >
+                            {adj.impact === "plus" ? "+" : "−"}
+                            {formatINR(adj.amount)}
+                          </Text>
+                          {onRemoveAdjustment && !voided ? (
+                            <TouchableOpacity
+                              onPress={() => {
+                                setVoidPromptAdj(adj);
+                                setVoidPromptReason("");
+                              }}
+                              hitSlop={8}
+                              style={styles.financeAdjRemoveBtn}
+                              accessibilityLabel="Void adjustment"
+                            >
+                              <FontAwesome
+                                name="times"
+                                size={14}
+                                color={Theme.textMuted}
+                              />
+                            </TouchableOpacity>
+                          ) : null}
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
 
-        <View style={styles.financeSectionDivider} />
+              <View style={styles.financeTotalRow}>
+                <Text style={styles.financeTotalLabel}>Final Cost</Text>
+                <Text style={styles.financeTotalValue}>
+                  {formatINR(adjCost)}
+                </Text>
+              </View>
 
-        {/* Supplier Payments Section */}
-        <View style={styles.financeSection}>
-          <Text style={styles.financeSectionTitle}>Supplier Payments</Text>
-          {supplierDisplayName ? (
-            <Text style={styles.financeSectionSubtitle}>{supplierDisplayName}</Text>
-          ) : null}
-          <View style={styles.financeRow}>
-            <Text style={styles.financeLabel}>Original Cost</Text>
-            <Text style={styles.financeValue}>{formatINR(cost)}</Text>
-          </View>
-          
-          {costAdjustments.length > 0 && (
-            <View style={styles.financeAdjustmentsWrap}>
-              {costAdjustments.map((adj) => {
-                const voided = isAdjustmentVoided(adj);
-                return (
-                  <View key={adj.id} style={styles.financeAdjRow}>
-                    <View style={styles.financeAdjLeftCol}>
-                      <Text
-                        style={[styles.financeAdjReason, voided && styles.financeAdjVoided]}
-                        numberOfLines={voided ? 2 : 1}
-                      >
-                        {adj.impact === "plus" ? "+" : "−"} {adj.reason}
-                      </Text>
-                      {voided ? (
-                        <Text style={styles.financeAdjVoidNote} numberOfLines={3}>
-                          Voided: {(adj.void_reason ?? "").trim() || "—"}
-                        </Text>
-                      ) : null}
-                    </View>
-                    <View style={styles.financeAdjRight}>
-                      <Text
-                        style={[
-                          styles.financeAdjAmount,
-                          voided && styles.financeAdjVoided,
-                          adj.impact === "plus" ? { color: Theme.darkGreen } : { color: Theme.teslaRed },
-                        ]}
-                      >
-                        {adj.impact === "plus" ? "+" : "−"}
-                        {formatINR(adj.amount)}
-                      </Text>
-                      {onRemoveAdjustment && !voided ? (
-                        <TouchableOpacity
-                          onPress={() => {
-                            setVoidPromptAdj(adj);
-                            setVoidPromptReason("");
-                          }}
-                          hitSlop={8}
-                          style={styles.financeAdjRemoveBtn}
-                          accessibilityLabel="Void adjustment"
-                        >
-                          <FontAwesome name="times" size={14} color={Theme.textMuted} />
-                        </TouchableOpacity>
-                      ) : null}
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
-          )}
-
-          <View style={styles.financeTotalRow}>
-            <Text style={styles.financeTotalLabel}>Final Cost</Text>
-            <Text style={styles.financeTotalValue}>{formatINR(adjCost)}</Text>
-          </View>
-
-          <View style={styles.financeStatusBox}>
-            <View style={styles.financeStatusCol}>
-              <Text style={styles.financeStatusLabel}>Paid</Text>
-              <Text style={styles.financeStatusValueDark}>{formatINR(paidToSupplier)}</Text>
-            </View>
-            <View style={styles.financeStatusDivider} />
-            <View style={styles.financeStatusColRight}>
-              <Text style={styles.financeStatusLabel}>Pending to Pay</Text>
-              <Text style={[styles.financeStatusValue, supplierDue > 0 && styles.financeStatusValueRed]}>
-                {formatINR(supplierDue)}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.provisionWrap}>
-            <TouchableOpacity
-              onPress={() => setShowFinanceProvisionPanel((prev) => !prev)}
-              style={styles.provisionToggleBtn}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.provisionToggleText}>Provision CN/DN (Supplier)</Text>
-              <FontAwesome
-                name={showFinanceProvisionPanel ? "chevron-up" : "chevron-down"}
-                size={12}
-                color={Theme.textPrimaryDark}
-              />
-            </TouchableOpacity>
-
-            {showFinanceProvisionPanel ? (
-              <View style={styles.provisionPanel}>
-                <View style={styles.provisionDnRow}>
-                  <TouchableOpacity
-                    style={[styles.provisionDnBtn, styles.provisionCnBtn]}
-                    onPress={() => {
-                      openInlineAdjustment({
-                        type: "cost",
-                        impact: "minus",
-                        reasonSeed: "Other",
-                      });
-                      setShowFinanceProvisionPanel(false);
-                    }}
-                    activeOpacity={0.88}
+              <View style={styles.financeStatusBox}>
+                <View style={styles.financeStatusCol}>
+                  <Text style={styles.financeStatusLabel}>Paid</Text>
+                  <Text style={styles.financeStatusValueDark}>
+                    {formatINR(paidToSupplier)}
+                  </Text>
+                </View>
+                <View style={styles.financeStatusDivider} />
+                <View style={styles.financeStatusColRight}>
+                  <Text style={styles.financeStatusLabel}>Pending to Pay</Text>
+                  <Text
+                    style={[
+                      styles.financeStatusValue,
+                      supplierDue > 0 && styles.financeStatusValueRed,
+                    ]}
                   >
-                    <Text style={styles.provisionDnLabel}>Credit (CN)</Text>
+                    {formatINR(supplierDue)}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.provisionWrap}>
+                <TouchableOpacity
+                  onPress={() => setShowFinanceProvisionPanel((prev) => !prev)}
+                  style={styles.provisionToggleBtn}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.provisionToggleText}>
+                    Provision CN/DN (Supplier)
+                  </Text>
+                  <FontAwesome
+                    name={
+                      showFinanceProvisionPanel ? "chevron-up" : "chevron-down"
+                    }
+                    size={12}
+                    color={Theme.textPrimaryDark}
+                  />
+                </TouchableOpacity>
+
+                {showFinanceProvisionPanel ? (
+                  <View style={styles.provisionPanel}>
+                    <View style={styles.provisionDnRow}>
+                      <TouchableOpacity
+                        style={[styles.provisionDnBtn, styles.provisionCnBtn]}
+                        onPress={() => {
+                          openInlineAdjustment({
+                            type: "cost",
+                            impact: "minus",
+                            reasonSeed: "Other",
+                          });
+                          setShowFinanceProvisionPanel(false);
+                        }}
+                        activeOpacity={0.88}
+                      >
+                        <Text style={styles.provisionDnLabel}>Credit (CN)</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.provisionDnBtn,
+                          styles.provisionDnBtnDebit,
+                        ]}
+                        onPress={() => {
+                          openInlineAdjustment({
+                            type: "cost",
+                            impact: "plus",
+                            reasonSeed: "Other",
+                          });
+                          setShowFinanceProvisionPanel(false);
+                        }}
+                        activeOpacity={0.88}
+                      >
+                        <Text style={styles.provisionDnLabel}>Debit (DN)</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <Text style={styles.provisionChipsLbl}>
+                      Quick protocol tabs
+                    </Text>
+                    <View style={styles.provisionChipWrap}>
+                      {FINANCE_PROTOCOL_CHIPS.map((chip) => (
+                        <TouchableOpacity
+                          key={chip}
+                          style={styles.provisionChip}
+                          onPress={() => {
+                            const preset = protocolSupplierChipAdjustment(chip);
+                            openInlineAdjustment(preset);
+                            setShowFinanceProvisionPanel(false);
+                          }}
+                          activeOpacity={0.82}
+                        >
+                          <Text style={styles.provisionChipTxt}>{chip}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    <View style={styles.provisionFoot}>
+                      <View>
+                        <Text style={styles.provisionHint}>
+                          Authorization preview
+                        </Text>
+                        <Text style={styles.provisionPulse}>
+                          Provision sync
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        style={styles.provisionConfirm}
+                        onPress={() => {
+                          openInlineAdjustment({
+                            type: "cost",
+                            impact: "plus",
+                          });
+                          setShowFinanceProvisionPanel(false);
+                        }}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={styles.provisionConfirmTxt}>
+                          Full adjustment...
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : null}
+              </View>
+
+              <View style={styles.inlineAdjustmentWrap}>
+                <View style={styles.inlineAdjustmentHeader}>
+                  <View>
+                    <Text style={styles.inlineAdjustmentTitle}>
+                      Add Adjustment
+                    </Text>
+                    <Text style={styles.inlineAdjustmentSubtitle}>
+                      modify trip amounts
+                    </Text>
+                  </View>
+                  <View style={styles.inlineAdjustmentClosePlaceholder} />
+                </View>
+
+                <Text style={styles.inlineLabel}>Adjustment Type</Text>
+                <View style={styles.inlineTypeRow}>
+                  <TouchableOpacity
+                    style={[
+                      styles.inlineTypeBtn,
+                      draftType === "revenue" && styles.inlineTypeBtnActive,
+                    ]}
+                    onPress={() => {
+                      setDraftType("revenue");
+                      setDraftReason("");
+                      setDraftOtherReason("");
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <Text
+                      style={[
+                        styles.inlineTypeBtnText,
+                        draftType === "revenue" &&
+                          styles.inlineTypeBtnTextActive,
+                      ]}
+                    >
+                      Revenue (Sale)
+                    </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.provisionDnBtn, styles.provisionDnBtnDebit]}
+                    style={[
+                      styles.inlineTypeBtn,
+                      draftType === "cost" && styles.inlineTypeBtnActive,
+                    ]}
                     onPress={() => {
-                      openInlineAdjustment({
-                        type: "cost",
-                        impact: "plus",
-                        reasonSeed: "Other",
-                      });
-                      setShowFinanceProvisionPanel(false);
+                      setDraftType("cost");
+                      setDraftReason("");
+                      setDraftOtherReason("");
                     }}
-                    activeOpacity={0.88}
+                    activeOpacity={0.85}
                   >
-                    <Text style={styles.provisionDnLabel}>Debit (DN)</Text>
+                    <Text
+                      style={[
+                        styles.inlineTypeBtnText,
+                        draftType === "cost" && styles.inlineTypeBtnTextActive,
+                      ]}
+                    >
+                      Cost (Supplier)
+                    </Text>
                   </TouchableOpacity>
                 </View>
 
-                <Text style={styles.provisionChipsLbl}>Quick protocol tabs</Text>
-                <View style={styles.provisionChipWrap}>
-                  {FINANCE_PROTOCOL_CHIPS.map((chip) => (
+                <Text style={styles.inlineLabel}>Impact</Text>
+                <View style={styles.inlineTypeRow}>
+                  <TouchableOpacity
+                    style={[
+                      styles.inlineTypeBtn,
+                      styles.inlineImpactPlus,
+                      draftImpact === "plus" && styles.inlineImpactPlusActive,
+                    ]}
+                    onPress={() => setDraftImpact("plus")}
+                    activeOpacity={0.85}
+                  >
+                    <Text
+                      style={[
+                        styles.inlineTypeBtnText,
+                        draftImpact === "plus" &&
+                          styles.inlineTypeBtnTextActive,
+                      ]}
+                    >
+                      Addition
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.inlineTypeBtn,
+                      styles.inlineImpactMinus,
+                      draftImpact === "minus" && styles.inlineImpactMinusActive,
+                    ]}
+                    onPress={() => setDraftImpact("minus")}
+                    activeOpacity={0.85}
+                  >
+                    <Text
+                      style={[
+                        styles.inlineTypeBtnText,
+                        draftImpact === "minus" &&
+                          styles.inlineTypeBtnTextActive,
+                      ]}
+                    >
+                      Deduction
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={styles.inlineLabel}>Amount</Text>
+                <View style={styles.inlineAmountRow}>
+                  <Text style={styles.inlineCurrency}>₹</Text>
+                  <TextInput
+                    style={styles.inlineAmountInput}
+                    value={draftAmount}
+                    onChangeText={setDraftAmount}
+                    placeholder="0"
+                    placeholderTextColor={Theme.textMuted}
+                    keyboardType="numeric"
+                    maxLength={14}
+                  />
+                </View>
+
+                <Text style={styles.inlineLabel}>Reason</Text>
+                <View style={styles.inlineReasonWrap}>
+                  {reasonOptions.map((reason) => (
                     <TouchableOpacity
-                      key={chip}
-                      style={styles.provisionChip}
-                      onPress={() => {
-                        const preset = protocolSupplierChipAdjustment(chip);
-                        openInlineAdjustment(preset);
-                        setShowFinanceProvisionPanel(false);
-                      }}
+                      key={reason}
+                      style={[
+                        styles.inlineReasonChip,
+                        draftReason === reason && styles.inlineReasonChipActive,
+                      ]}
+                      onPress={() => setDraftReason(reason)}
                       activeOpacity={0.82}
                     >
-                      <Text style={styles.provisionChipTxt}>{chip}</Text>
+                      <Text
+                        style={[
+                          styles.inlineReasonChipText,
+                          draftReason === reason &&
+                            styles.inlineReasonChipTextActive,
+                        ]}
+                      >
+                        {reason}
+                      </Text>
                     </TouchableOpacity>
                   ))}
                 </View>
 
-                <View style={styles.provisionFoot}>
-                  <View>
-                    <Text style={styles.provisionHint}>Authorization preview</Text>
-                    <Text style={styles.provisionPulse}>Provision sync</Text>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.provisionConfirm}
-                    onPress={() => {
-                      openInlineAdjustment({
-                        type: "cost",
-                        impact: "plus",
-                      });
-                      setShowFinanceProvisionPanel(false);
-                    }}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.provisionConfirmTxt}>Full adjustment...</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ) : null}
-          </View>
+                {draftReason === "Other" ? (
+                  <TextInput
+                    style={styles.inlineOtherInput}
+                    value={draftOtherReason}
+                    onChangeText={setDraftOtherReason}
+                    placeholder="Describe reason..."
+                    placeholderTextColor={Theme.textMuted}
+                    maxLength={80}
+                  />
+                ) : null}
 
-          <View style={styles.inlineAdjustmentWrap}>
-              <View style={styles.inlineAdjustmentHeader}>
-                <View>
-                  <Text style={styles.inlineAdjustmentTitle}>Add Adjustment</Text>
-                  <Text style={styles.inlineAdjustmentSubtitle}>modify trip amounts</Text>
-                </View>
-                <View style={styles.inlineAdjustmentClosePlaceholder} />
-              </View>
-
-              <Text style={styles.inlineLabel}>Adjustment Type</Text>
-              <View style={styles.inlineTypeRow}>
                 <TouchableOpacity
-                  style={[styles.inlineTypeBtn, draftType === "revenue" && styles.inlineTypeBtnActive]}
-                  onPress={() => {
-                    setDraftType("revenue");
-                    setDraftReason("");
-                    setDraftOtherReason("");
-                  }}
-                  activeOpacity={0.85}
+                  style={[
+                    styles.inlineSaveBtn,
+                    !canSaveInlineAdjustment && styles.inlineSaveBtnDisabled,
+                  ]}
+                  onPress={() => void handleInlineSaveAdjustment()}
+                  disabled={!canSaveInlineAdjustment || !onSaveAdjustment}
+                  activeOpacity={0.88}
                 >
-                  <Text style={[styles.inlineTypeBtnText, draftType === "revenue" && styles.inlineTypeBtnTextActive]}>
-                    Revenue (Sale)
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.inlineTypeBtn, draftType === "cost" && styles.inlineTypeBtnActive]}
-                  onPress={() => {
-                    setDraftType("cost");
-                    setDraftReason("");
-                    setDraftOtherReason("");
-                  }}
-                  activeOpacity={0.85}
-                >
-                  <Text style={[styles.inlineTypeBtnText, draftType === "cost" && styles.inlineTypeBtnTextActive]}>
-                    Cost (Supplier)
-                  </Text>
+                  <Text style={styles.inlineSaveBtnText}>Save Adjustment</Text>
                 </TouchableOpacity>
               </View>
+            </View>
 
-              <Text style={styles.inlineLabel}>Impact</Text>
-              <View style={styles.inlineTypeRow}>
+            {/* Actions & Commissions */}
+            <View style={styles.financeFooter}>
+              {onSaveAdjustment && (
                 <TouchableOpacity
-                  style={[styles.inlineTypeBtn, styles.inlineImpactPlus, draftImpact === "plus" && styles.inlineImpactPlusActive]}
-                  onPress={() => setDraftImpact("plus")}
-                  activeOpacity={0.85}
+                  onPress={() => openInlineAdjustment()}
+                  style={styles.financeAddBtn}
+                  activeOpacity={0.8}
                 >
-                  <Text style={[styles.inlineTypeBtnText, draftImpact === "plus" && styles.inlineTypeBtnTextActive]}>
-                    Addition
-                  </Text>
+                  <FontAwesome
+                    name="plus"
+                    size={12}
+                    color={Theme.primary}
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={styles.financeAddBtnText}>Add Adjustment</Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.inlineTypeBtn, styles.inlineImpactMinus, draftImpact === "minus" && styles.inlineImpactMinusActive]}
-                  onPress={() => setDraftImpact("minus")}
-                  activeOpacity={0.85}
-                >
-                  <Text style={[styles.inlineTypeBtnText, draftImpact === "minus" && styles.inlineTypeBtnTextActive]}>
-                    Deduction
-                  </Text>
-                </TouchableOpacity>
-              </View>
+              )}
 
-              <Text style={styles.inlineLabel}>Amount</Text>
-              <View style={styles.inlineAmountRow}>
-                <Text style={styles.inlineCurrency}>₹</Text>
-                <TextInput
-                  style={styles.inlineAmountInput}
-                  value={draftAmount}
-                  onChangeText={setDraftAmount}
-                  placeholder="0"
-                  placeholderTextColor={Theme.textMuted}
-                  keyboardType="numeric"
-                  maxLength={14}
-                />
-              </View>
-
-              <Text style={styles.inlineLabel}>Reason</Text>
-              <View style={styles.inlineReasonWrap}>
-                {reasonOptions.map((reason) => (
-                  <TouchableOpacity
-                    key={reason}
-                    style={[styles.inlineReasonChip, draftReason === reason && styles.inlineReasonChipActive]}
-                    onPress={() => setDraftReason(reason)}
-                    activeOpacity={0.82}
-                  >
-                    <Text
-                      style={[
-                        styles.inlineReasonChipText,
-                        draftReason === reason && styles.inlineReasonChipTextActive,
-                      ]}
-                    >
-                      {reason}
+              {(supplierCommission > 0 || driverCommission > 0) && (
+                <View style={styles.financeCommissionsWrap}>
+                  {supplierCommission > 0 && (
+                    <Text style={styles.financeCommissionText}>
+                      Supplier Commission: {formatINR(supplierCommission)}
                     </Text>
+                  )}
+                  {driverCommission > 0 && (
+                    <Text style={styles.financeCommissionText}>
+                      Driver Commission: {formatINR(driverCommission)}
+                    </Text>
+                  )}
+                </View>
+              )}
+            </View>
+          </View>
+
+          <Modal
+            visible={selectedCounterpartyEntry != null}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setSelectedCounterpartyEntry(null)}
+          >
+            <View style={styles.entryPreviewOverlay}>
+              <View style={styles.entryPreviewCard}>
+                <View style={styles.entryPreviewHeader}>
+                  <Text style={styles.entryPreviewTitle}>
+                    Partner entry details
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => setSelectedCounterpartyEntry(null)}
+                    style={styles.entryPreviewCloseBtn}
+                    hitSlop={8}
+                  >
+                    <FontAwesome
+                      name="times"
+                      size={16}
+                      color={Theme.textMuted}
+                    />
                   </TouchableOpacity>
-                ))}
-              </View>
-
-              {draftReason === "Other" ? (
-                <TextInput
-                  style={styles.inlineOtherInput}
-                  value={draftOtherReason}
-                  onChangeText={setDraftOtherReason}
-                  placeholder="Describe reason..."
-                  placeholderTextColor={Theme.textMuted}
-                  maxLength={80}
-                />
-              ) : null}
-
-              <TouchableOpacity
-                style={[
-                  styles.inlineSaveBtn,
-                  !canSaveInlineAdjustment && styles.inlineSaveBtnDisabled,
-                ]}
-                onPress={() => void handleInlineSaveAdjustment()}
-                disabled={!canSaveInlineAdjustment || !onSaveAdjustment}
-                activeOpacity={0.88}
-              >
-                <Text style={styles.inlineSaveBtnText}>Save Adjustment</Text>
-              </TouchableOpacity>
-            </View>
-        </View>
-
-        {/* Actions & Commissions */}
-        <View style={styles.financeFooter}>
-          {onSaveAdjustment && (
-            <TouchableOpacity
-              onPress={() => openInlineAdjustment()}
-              style={styles.financeAddBtn}
-              activeOpacity={0.8}
-            >
-              <FontAwesome name="plus" size={12} color={Theme.primary} style={{ marginRight: 6 }} />
-              <Text style={styles.financeAddBtnText}>Add Adjustment</Text>
-            </TouchableOpacity>
-          )}
-          
-          {(supplierCommission > 0 || driverCommission > 0) && (
-            <View style={styles.financeCommissionsWrap}>
-              {supplierCommission > 0 && (
-                <Text style={styles.financeCommissionText}>Supplier Commission: {formatINR(supplierCommission)}</Text>
-              )}
-              {driverCommission > 0 && (
-                <Text style={styles.financeCommissionText}>Driver Commission: {formatINR(driverCommission)}</Text>
-              )}
-            </View>
-          )}
-        </View>
-      </View>
-
-      <Modal
-        visible={selectedCounterpartyEntry != null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setSelectedCounterpartyEntry(null)}
-      >
-        <View style={styles.entryPreviewOverlay}>
-          <View style={styles.entryPreviewCard}>
-            <View style={styles.entryPreviewHeader}>
-              <Text style={styles.entryPreviewTitle}>Partner entry details</Text>
-              <TouchableOpacity
-                onPress={() => setSelectedCounterpartyEntry(null)}
-                style={styles.entryPreviewCloseBtn}
-                hitSlop={8}
-              >
-                <FontAwesome name="times" size={16} color={Theme.textMuted} />
-              </TouchableOpacity>
-            </View>
-            {selectedCounterpartyEntry ? (
-              <View style={styles.entryPreviewBody}>
-                <View style={styles.entryPreviewRow}>
-                  <Text style={styles.entryPreviewLabel}>Amount</Text>
-                  <Text style={styles.entryPreviewValue}>
-                    {formatINR(Number(selectedCounterpartyEntry.amount ?? 0))}
-                  </Text>
                 </View>
-                <View style={styles.entryPreviewRow}>
-                  <Text style={styles.entryPreviewLabel}>Date</Text>
-                  <Text style={styles.entryPreviewValue}>
-                    {formatLedgerDateShort(selectedCounterpartyEntry.transaction_date)}
-                  </Text>
-                </View>
-                <View style={styles.entryPreviewRow}>
-                  <Text style={styles.entryPreviewLabel}>Reference</Text>
-                  <Text style={styles.entryPreviewValue}>
-                    {selectedCounterpartyEntry.reference_id ?? "—"}
-                  </Text>
-                </View>
-                <View style={styles.entryPreviewRow}>
-                  <Text style={styles.entryPreviewLabel}>Partner key</Text>
-                  <Text style={styles.entryPreviewValue}>
-                    {selectedCounterpartyEntry.partnerKey}
-                  </Text>
-                </View>
-                <View style={styles.entryPreviewActions}>
-                  {onOpenCompareVerify ? (
-                    <TouchableOpacity
-                      style={styles.entryPreviewPrimaryBtn}
-                      activeOpacity={0.9}
-                      onPress={() => {
-                        setSelectedCounterpartyEntry(null);
-                        onOpenCompareVerify();
-                      }}
-                    >
-                      <Text style={styles.entryPreviewPrimaryBtnText}>
-                        Verify & Validate
+                {selectedCounterpartyEntry ? (
+                  <View style={styles.entryPreviewBody}>
+                    <View style={styles.entryPreviewRow}>
+                      <Text style={styles.entryPreviewLabel}>Amount</Text>
+                      <Text style={styles.entryPreviewValue}>
+                        {formatINR(
+                          Number(selectedCounterpartyEntry.amount ?? 0),
+                        )}
                       </Text>
-                    </TouchableOpacity>
-                  ) : null}
-                </View>
-              </View>
-            ) : null}
-          </View>
-        </View>
-      </Modal>
-
-      {/* Transaction list */}
-      <Text style={styles.handshakesLabel}>Transaction list</Text>
-      <View style={styles.handshakesWrap}>
-        {tripLedgerEntries.length === 0 ? (
-          <Text style={styles.handshakesEmpty}>No transactions linked to this corridor</Text>
-        ) : (
-          <View style={styles.txList}>
-            {tripLedgerEntries.map((row) => {
-              const dateStr = formatLedgerDateShort(row.transaction_date ?? row.created_at);
-              const typeLabel = getDoubleEntryDisplayLabel(row) ?? row.description ?? row.party_name ?? "—";
-              const party = row.party_name?.trim() || "—";
-              const inAmt = Number(row.amount_in ?? 0);
-              const outAmt = Number(row.amount_out ?? 0);
-              const isIn = inAmt > 0;
-              const amount = isIn ? inAmt : outAmt;
-              return (
-                <View key={row.id} style={styles.txCard}>
-                  <View style={[styles.txCardIcon, isIn ? styles.txCardIconIn : styles.txCardIconOut]}>
-                    <FontAwesome name={isIn ? "arrow-down" : "arrow-up"} size={14} color={isIn ? Theme.darkGreen : Theme.teslaRed} />
-                  </View>
-                  <View style={styles.txCardBody}>
-                    <Text style={styles.txCardTitle} numberOfLines={1}>{typeLabel}</Text>
-                    <Text style={styles.txCardSubtitle} numberOfLines={1}>{dateStr} · {party}</Text>
-                  </View>
-                  <Text style={[styles.txCardAmount, isIn ? styles.txCardAmountIn : styles.txCardAmountOut]}>
-                    {isIn ? "+" : "−"}{formatINR(amount)}
-                  </Text>
-                </View>
-              );
-            })}
-          </View>
-        )}
-      </View>
-      </>
-      ) : null}
-
-      {/* Assignments Registry (Current Node card + Activity Log; aggregate partner/OTP live inside the block) */}
-      {showAssignmentsSection ? (
-      <>
-      <Text style={styles.handshakesLabel}>Assignments Registry</Text>
-      <View style={styles.handshakesWrap}>
-        {assignmentBlock ? (
-          <View style={styles.assignmentBlockWrap}>
-            {assignmentBlock}
-          </View>
-        ) : null}
-        <View style={styles.activityWrap}>
-          <View style={styles.activitySectionHeader}>
-            <FontAwesome name="refresh" size={10} color={Theme.textMuted} />
-            <Text style={styles.handshakesLabel}>Activity Log</Text>
-          </View>
-          {(() => {
-            const hasCurrentAssignment = !!(
-              trip.driver_id ||
-              trip.vehicle_id ||
-              (trip.vehicle_display_number ?? "").trim()
-            );
-            const fallbackRow: TripAssignmentAuditRow | null =
-              assignmentAuditRows.length === 0 && hasCurrentAssignment
-                ? {
-                    id: "fallback",
-                    trip_id: trip.id,
-                    event_type: "assignment",
-                    driver_id_prev: null,
-                    driver_id_new: trip.driver_id ?? null,
-                    vehicle_id_prev: null,
-                    vehicle_id_new: trip.vehicle_id ?? null,
-                    changed_at: trip.created_at ?? trip.updated_at ?? new Date().toISOString(),
-                    changed_by: null,
-                  }
-                : null;
-            const dedupeKey = (row: TripAssignmentAuditRow) =>
-              `${row.changed_at}-${row.event_type}-${row.driver_id_new ?? ""}-${row.vehicle_id_new ?? ""}-${row.changed_by ?? ""}`;
-            const seenKeys = new Set<string>();
-            const dedupedAuditRows = assignmentAuditRows.filter((row) => {
-              const key = dedupeKey(row);
-              if (seenKeys.has(key)) return false;
-              seenKeys.add(key);
-              return true;
-            });
-            const effectiveRows: TripAssignmentAuditRow[] =
-              dedupedAuditRows.length > 0
-                ? dedupedAuditRows
-                : fallbackRow
-                  ? [fallbackRow]
-                  : [];
-
-            if (effectiveRows.length === 0) {
-              return (
-                <Text style={styles.activityEmpty}>
-                  No assignment activity recorded
-                </Text>
-              );
-            }
-
-            return (
-              <View style={styles.activityTimeline}>
-                {effectiveRows.map((row) => {
-                  const eventLabel =
-                    row.event_type === "reassignment" ? "Reassignment" : "Assignment";
-                  const dateStr = formatAssignmentDateActivityMeta(row.changed_at);
-                  const isDriverDeclined =
-                    row.event_type === "reassignment" &&
-                    row.driver_id_prev != null &&
-                    row.driver_id_new == null;
-                  const byLabel = isDriverDeclined
-                    ? ` · ${t("driverRejected")}`
-                    : row.changed_by != null
-                      ? row.changed_by === currentUserId
-                        ? " • BY YOU"
-                        : " • BY DISPATCHER"
-                      : "";
-                  const isFallback = row.id === "fallback";
-                  const driverPrev = !isFallback && row.driver_id_prev
-                    ? (assignmentDriverNames[row.driver_id_prev] ?? row.driver_id_prev)
-                    : null;
-                  const driverNew = row.driver_id_new
-                    ? (assignmentDriverNames[row.driver_id_new] ?? (isFallback ? (driverName ?? null) : row.driver_id_new))
-                    : null;
-                  const vehiclePrev = !isFallback && row.vehicle_id_prev
-                    ? (assignmentVehicleLabels[row.vehicle_id_prev] ?? row.vehicle_id_prev)
-                    : null;
-                  const vehicleNew = row.vehicle_id_new
-                    ? (assignmentVehicleLabels[row.vehicle_id_new] ?? (isFallback ? (vehicleLabel ?? null) : row.vehicle_id_new))
-                    : isFallback && (trip.vehicle_display_number ?? "").trim()
-                      ? (trip.vehicle_display_number ?? "").trim()
-                      : null;
-
-                  const driverLine =
-                    driverPrev != null && driverNew != null
-                      ? `Driver: ${driverPrev} → ${driverNew}`
-                      : driverNew != null
-                        ? `Driver: ${driverNew}`
-                        : driverPrev != null
-                          ? `Driver: ${driverPrev} (rejected)`
-                          : null;
-                  const vehicleLine =
-                    vehiclePrev != null && vehicleNew != null
-                      ? `Vehicle: ${vehiclePrev} → ${vehicleNew}`
-                      : vehicleNew != null
-                        ? `Vehicle: ${vehicleNew}`
-                        : vehiclePrev != null
-                          ? `Vehicle: ${vehiclePrev} (rejected)`
-                          : null;
-
-                  const detail = [driverLine, vehicleLine].filter(Boolean).join("  ·  ");
-
-                  return (
-                    <View key={row.id} style={styles.activityItem}>
-                      <View style={styles.activityDot} />
-                      <View style={styles.activityCard}>
-                        <Text style={styles.activityTitle} numberOfLines={1}>
-                          {eventLabel}
-                        </Text>
-                        <Text style={styles.activityMeta} numberOfLines={1}>
-                          {dateStr}
-                          {byLabel}
-                        </Text>
-                        {detail ? (
-                          <Text style={styles.activityDetail} numberOfLines={2}>
-                            {detail}
+                    </View>
+                    <View style={styles.entryPreviewRow}>
+                      <Text style={styles.entryPreviewLabel}>Date</Text>
+                      <Text style={styles.entryPreviewValue}>
+                        {formatLedgerDateShort(
+                          selectedCounterpartyEntry.transaction_date,
+                        )}
+                      </Text>
+                    </View>
+                    <View style={styles.entryPreviewRow}>
+                      <Text style={styles.entryPreviewLabel}>Reference</Text>
+                      <Text style={styles.entryPreviewValue}>
+                        {selectedCounterpartyEntry.reference_id ?? "—"}
+                      </Text>
+                    </View>
+                    <View style={styles.entryPreviewRow}>
+                      <Text style={styles.entryPreviewLabel}>Partner key</Text>
+                      <Text style={styles.entryPreviewValue}>
+                        {selectedCounterpartyEntry.partnerKey}
+                      </Text>
+                    </View>
+                    <View style={styles.entryPreviewActions}>
+                      {onOpenCompareVerify ? (
+                        <TouchableOpacity
+                          style={styles.entryPreviewPrimaryBtn}
+                          activeOpacity={0.9}
+                          onPress={() => {
+                            setSelectedCounterpartyEntry(null);
+                            onOpenCompareVerify();
+                          }}
+                        >
+                          <Text style={styles.entryPreviewPrimaryBtnText}>
+                            Verify & Validate
                           </Text>
-                        ) : null}
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+          </Modal>
+
+          {/* Transaction list */}
+          <Text style={styles.handshakesLabel}>Transaction list</Text>
+          <View style={styles.handshakesWrap}>
+            {tripLedgerEntries.length === 0 ? (
+              <Text style={styles.handshakesEmpty}>
+                No transactions linked to this corridor
+              </Text>
+            ) : (
+              <View style={styles.txList}>
+                {tripLedgerEntries.map((row) => {
+                  const dateStr = formatLedgerDateShort(
+                    row.transaction_date ?? row.created_at,
+                  );
+                  const typeLabel =
+                    getDoubleEntryDisplayLabel(row) ??
+                    row.description ??
+                    row.party_name ??
+                    "—";
+                  const party = row.party_name?.trim() || "—";
+                  const inAmt = Number(row.amount_in ?? 0);
+                  const outAmt = Number(row.amount_out ?? 0);
+                  const isIn = inAmt > 0;
+                  const amount = isIn ? inAmt : outAmt;
+                  return (
+                    <View key={row.id} style={styles.txCard}>
+                      <View
+                        style={[
+                          styles.txCardIcon,
+                          isIn ? styles.txCardIconIn : styles.txCardIconOut,
+                        ]}
+                      >
+                        <FontAwesome
+                          name={isIn ? "arrow-down" : "arrow-up"}
+                          size={14}
+                          color={isIn ? Theme.darkGreen : Theme.teslaRed}
+                        />
                       </View>
+                      <View style={styles.txCardBody}>
+                        <Text style={styles.txCardTitle} numberOfLines={1}>
+                          {typeLabel}
+                        </Text>
+                        <Text style={styles.txCardSubtitle} numberOfLines={1}>
+                          {dateStr} · {party}
+                        </Text>
+                      </View>
+                      <Text
+                        style={[
+                          styles.txCardAmount,
+                          isIn ? styles.txCardAmountIn : styles.txCardAmountOut,
+                        ]}
+                      >
+                        {isIn ? "+" : "−"}
+                        {formatINR(amount)}
+                      </Text>
                     </View>
                   );
                 })}
               </View>
-            );
-          })()}
-        </View>
-      </View>
-      </>
+            )}
+          </View>
+        </>
+      ) : null}
+
+      {/* Assignments Registry (Current Node card + Activity Log; aggregate partner/OTP live inside the block) */}
+      {showAssignmentsSection ? (
+        <>
+          <Text style={styles.handshakesLabel}>Assignments Registry</Text>
+          <View style={styles.handshakesWrap}>
+            {assignmentBlock ? (
+              <View style={styles.assignmentBlockWrap}>{assignmentBlock}</View>
+            ) : null}
+            <View style={styles.activityWrap}>
+              <View style={styles.activitySectionHeader}>
+                <FontAwesome name="refresh" size={10} color={Theme.textMuted} />
+                <Text style={styles.handshakesLabel}>Activity Log</Text>
+              </View>
+              {(() => {
+                const hasCurrentAssignment = !!(
+                  trip.driver_id ||
+                  trip.vehicle_id ||
+                  (trip.vehicle_display_number ?? "").trim()
+                );
+                const fallbackRow: TripAssignmentAuditRow | null =
+                  assignmentAuditRows.length === 0 && hasCurrentAssignment
+                    ? {
+                        id: "fallback",
+                        trip_id: trip.id,
+                        event_type: "assignment",
+                        driver_id_prev: null,
+                        driver_id_new: trip.driver_id ?? null,
+                        vehicle_id_prev: null,
+                        vehicle_id_new: trip.vehicle_id ?? null,
+                        changed_at:
+                          trip.created_at ??
+                          trip.updated_at ??
+                          new Date().toISOString(),
+                        changed_by: null,
+                      }
+                    : null;
+                const dedupeKey = (row: TripAssignmentAuditRow) =>
+                  `${row.changed_at}-${row.event_type}-${row.driver_id_new ?? ""}-${row.vehicle_id_new ?? ""}-${row.changed_by ?? ""}`;
+                const seenKeys = new Set<string>();
+                const dedupedAuditRows = assignmentAuditRows.filter((row) => {
+                  const key = dedupeKey(row);
+                  if (seenKeys.has(key)) return false;
+                  seenKeys.add(key);
+                  return true;
+                });
+                const effectiveRows: TripAssignmentAuditRow[] =
+                  dedupedAuditRows.length > 0
+                    ? dedupedAuditRows
+                    : fallbackRow
+                      ? [fallbackRow]
+                      : [];
+
+                if (effectiveRows.length === 0) {
+                  return (
+                    <Text style={styles.activityEmpty}>
+                      No assignment activity recorded
+                    </Text>
+                  );
+                }
+
+                return (
+                  <View style={styles.activityTimeline}>
+                    {effectiveRows.map((row) => {
+                      const eventLabel =
+                        row.event_type === "reassignment"
+                          ? "Reassignment"
+                          : "Assignment";
+                      const dateStr = formatAssignmentDateActivityMeta(
+                        row.changed_at,
+                      );
+                      const isDriverDeclined =
+                        row.event_type === "reassignment" &&
+                        row.driver_id_prev != null &&
+                        row.driver_id_new == null;
+                      const byLabel = isDriverDeclined
+                        ? ` · ${t("driverRejected")}`
+                        : row.changed_by != null
+                          ? row.changed_by === currentUserId
+                            ? " • BY YOU"
+                            : " • BY DISPATCHER"
+                          : "";
+                      const isFallback = row.id === "fallback";
+                      const driverPrev =
+                        !isFallback && row.driver_id_prev
+                          ? (assignmentDriverNames[row.driver_id_prev] ??
+                            row.driver_id_prev)
+                          : null;
+                      const driverNew = row.driver_id_new
+                        ? (assignmentDriverNames[row.driver_id_new] ??
+                          (isFallback
+                            ? (driverName ?? null)
+                            : row.driver_id_new))
+                        : null;
+                      const vehiclePrev =
+                        !isFallback && row.vehicle_id_prev
+                          ? (assignmentVehicleLabels[row.vehicle_id_prev] ??
+                            row.vehicle_id_prev)
+                          : null;
+                      const vehicleNew = row.vehicle_id_new
+                        ? (assignmentVehicleLabels[row.vehicle_id_new] ??
+                          (isFallback
+                            ? (vehicleLabel ?? null)
+                            : row.vehicle_id_new))
+                        : isFallback &&
+                            (trip.vehicle_display_number ?? "").trim()
+                          ? (trip.vehicle_display_number ?? "").trim()
+                          : null;
+
+                      const driverLine =
+                        driverPrev != null && driverNew != null
+                          ? `Driver: ${driverPrev} → ${driverNew}`
+                          : driverNew != null
+                            ? `Driver: ${driverNew}`
+                            : driverPrev != null
+                              ? `Driver: ${driverPrev} (rejected)`
+                              : null;
+                      const vehicleLine =
+                        vehiclePrev != null && vehicleNew != null
+                          ? `Vehicle: ${vehiclePrev} → ${vehicleNew}`
+                          : vehicleNew != null
+                            ? `Vehicle: ${vehicleNew}`
+                            : vehiclePrev != null
+                              ? `Vehicle: ${vehiclePrev} (rejected)`
+                              : null;
+
+                      const detail = [driverLine, vehicleLine]
+                        .filter(Boolean)
+                        .join("  ·  ");
+
+                      return (
+                        <View key={row.id} style={styles.activityItem}>
+                          <View style={styles.activityDot} />
+                          <View style={styles.activityCard}>
+                            <Text
+                              style={styles.activityTitle}
+                              numberOfLines={1}
+                            >
+                              {eventLabel}
+                            </Text>
+                            <Text style={styles.activityMeta} numberOfLines={1}>
+                              {dateStr}
+                              {byLabel}
+                            </Text>
+                            {detail ? (
+                              <Text
+                                style={styles.activityDetail}
+                                numberOfLines={2}
+                              >
+                                {detail}
+                              </Text>
+                            ) : null}
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
+                );
+              })()}
+            </View>
+          </View>
+        </>
       ) : null}
 
       <Modal
@@ -2796,7 +3177,8 @@ export function TripDetailFinanceView({
               <TouchableOpacity
                 style={[
                   styles.voidPromptConfirmBtn,
-                  !voidPromptReason.trim() && styles.voidPromptConfirmBtnDisabled,
+                  !voidPromptReason.trim() &&
+                    styles.voidPromptConfirmBtnDisabled,
                 ]}
                 disabled={!voidPromptReason.trim()}
                 onPress={() => {
