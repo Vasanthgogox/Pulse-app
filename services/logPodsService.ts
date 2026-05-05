@@ -269,7 +269,7 @@ export async function fetchCourierPartners(): Promise<{
 }> {
   const { data, error } = await supabase()
     .from("courier_partners")
-    .select("*")
+    .select("label, value, category, active, is_custom")
     .eq("active", true)
     .order("label", { ascending: true });
 
@@ -305,7 +305,7 @@ export async function ensureCustomCourierPartner(
   const value = customCourierName.toLowerCase().replace(/\s+/g, "_");
   const { data: existing, error: existingErr } = await supabase()
     .from("courier_partners")
-    .select("*")
+    .select("label, value, category, active, is_custom")
     .eq("value", value)
     .maybeSingle();
 

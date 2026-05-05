@@ -55,57 +55,49 @@ export function useRealtimeTransactionsInvalidation(organizationId: string | nul
   }, [organizationId, qc]);
 }
 
-/** Subscribe to network-related tables; invalidate network queries on any change. */
+/** Subscribe to network-related tables; each table invalidates only its own query key. */
 export function useRealtimeNetworkInvalidation(organizationId: string | null) {
   const qc = useQueryClient();
 
   useEffect(() => {
     if (!organizationId) return;
 
-    const invalidateNetwork = () => {
-      qc.invalidateQueries({ queryKey: queryKeys.clients.all(organizationId) });
-      qc.invalidateQueries({ queryKey: queryKeys.suppliers.all(organizationId) });
-      qc.invalidateQueries({ queryKey: queryKeys.drivers.all(organizationId) });
-      qc.invalidateQueries({ queryKey: queryKeys.connectionRequests.received(organizationId) });
-      qc.invalidateQueries({ queryKey: queryKeys.connectionRequests.sent(organizationId) });
-      qc.invalidateQueries({ queryKey: queryKeys.driverInvites.sent(organizationId) });
-    };
-
-    return subscribeSharedPostgresChanges(
-      `network:org:${organizationId}`,
-      [
-        {
-          event: '*',
-          schema: 'public',
-          table: 'clients',
-          filter: `organization_id=eq.${organizationId}`,
-        },
-        {
-          event: '*',
-          schema: 'public',
-          table: 'suppliers',
-          filter: `organization_id=eq.${organizationId}`,
-        },
-        {
-          event: '*',
-          schema: 'public',
-          table: 'drivers',
-          filter: `organization_id=eq.${organizationId}`,
-        },
-        {
+    const cleanups = [
+      subscribeSharedPostgresChanges(
+        `clients:org:${organizationId}`,
+        [{ event: '*', schema: 'public', table: 'clients', filter: `organization_id=eq.${organizationId}` }],
+        () => qc.invalidateQueries({ queryKey: queryKeys.clients.all(organizationId) })
+      ),
+      subscribeSharedPostgresChanges(
+        `suppliers:org:${organizationId}`,
+        [{ event: '*', schema: 'public', table: 'suppliers', filter: `organization_id=eq.${organizationId}` }],
+        () => qc.invalidateQueries({ queryKey: queryKeys.suppliers.all(organizationId) })
+      ),
+      subscribeSharedPostgresChanges(
+        `drivers:org:${organizationId}`,
+        [{ event: '*', schema: 'public', table: 'drivers', filter: `organization_id=eq.${organizationId}` }],
+        () => qc.invalidateQueries({ queryKey: queryKeys.drivers.all(organizationId) })
+      ),
+      subscribeSharedPostgresChanges(
+        `connection_requests:org:${organizationId}`,
+        [{
           event: '*',
           schema: 'public',
           table: 'connection_requests',
           filter: `or(from_organization_id.eq.${organizationId},to_organization_id.eq.${organizationId})`,
-        },
-        {
-          event: '*',
-          schema: 'public',
-          table: 'driver_invites',
-          filter: `from_organization_id=eq.${organizationId}`,
-        },
-      ],
-      invalidateNetwork
-    );
+        }],
+        () => {
+          qc.invalidateQueries({ queryKey: queryKeys.connectionRequests.received(organizationId) });
+          qc.invalidateQueries({ queryKey: queryKeys.connectionRequests.sent(organizationId) });
+        }
+      ),
+      subscribeSharedPostgresChanges(
+        `driver_invites:org:${organizationId}`,
+        [{ event: '*', schema: 'public', table: 'driver_invites', filter: `from_organization_id=eq.${organizationId}` }],
+        () => qc.invalidateQueries({ queryKey: queryKeys.driverInvites.sent(organizationId) })
+      ),
+    ];
+
+    return () => cleanups.forEach((c) => c());
   }, [organizationId, qc]);
 }

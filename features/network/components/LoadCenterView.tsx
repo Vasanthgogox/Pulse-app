@@ -4141,14 +4141,14 @@ export function LoadCenterView({
             style={[
               styles.subcontractPickerModalBody,
               {
-                paddingTop: insets.top + 12,
+                paddingTop: Platform.OS === "web" ? 0 : insets.top + 12,
                 paddingBottom: insets.bottom + 12,
                 pointerEvents: "box-none",
               },
             ]}
           >
             <View style={styles.subcontractPickerCard}>
-              <Text style={styles.subcontractPickerTitle}>Select partner</Text>
+              <Text style={styles.subcontractPickerTitle}>SELECT PARTNER</Text>
               <View style={styles.subcontractPickerToggleRow}>
                 <Text style={styles.subcontractPickerToggleLabel}>
                   Show integrated suppliers
@@ -6049,25 +6049,34 @@ const styles = StyleSheet.create({
   subcontractPickerModalBody: {
     flex: 1,
     justifyContent: "center",
-    paddingHorizontal: 20,
+    alignItems: "center",
+    paddingHorizontal: 8,
   },
   subcontractPickerCard: {
     backgroundColor: Theme.screenBackground,
-    borderRadius: 14,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.borderInput,
     overflow: "hidden",
-    maxHeight: 360,
+    maxHeight: 380,
+    alignSelf: "center",
+    width: "100%",
+    ...Platform.select({
+      web: {
+        maxWidth: 760,
+        boxShadow: "0 10px 24px rgba(15,23,42,0.16)",
+      } as const,
+    }),
   },
   subcontractPickerTitle: {
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 10,
+    fontWeight: "900",
     color: Theme.textMutedDemo,
-    letterSpacing: 1,
+    letterSpacing: 0.9,
     textTransform: "uppercase",
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 10,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 8,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
   },
@@ -6075,27 +6084,27 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
-    backgroundColor: Theme.surface,
+    backgroundColor: Theme.screenBackground,
   },
   subcontractPickerToggleLabel: {
     flex: 1,
     paddingRight: 12,
-    fontSize: 13,
-    fontWeight: "600",
-    color: Theme.textPrimary,
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
   },
-  subcontractPickerScroll: { maxHeight: 260 },
+  subcontractPickerScroll: { maxHeight: 248 },
   subcontractPickerScrollContent: { paddingVertical: 6 },
   subcontractPickerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
     minHeight: 44,
@@ -6106,9 +6115,9 @@ const styles = StyleSheet.create({
   subcontractPickerText: {
     flex: 1,
     minWidth: 0,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
-    color: Theme.textPrimary,
+    color: Theme.textPrimaryDark,
     marginRight: 10,
   },
   subcontractPickerBadge: {
@@ -6129,14 +6138,14 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
   },
   subcontractPickerClearBtn: {
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    backgroundColor: Theme.surface,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    backgroundColor: Theme.screenBackground,
   },
   subcontractPickerClearText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "800",
-    color: Theme.teslaRed,
+    color: Theme.negative,
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },

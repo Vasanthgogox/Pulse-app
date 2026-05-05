@@ -194,46 +194,45 @@ export function PodAttachmentModal({
 
         // Group targets by tripId so we only upload once per trip
         const tripIds = Array.from(new Set(targets.map((t) => t.tripId)));
-        
-        let firstUploadPath: string | null = null;
 
-        for (const tripId of tripIds) {
-          const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${ext}`;
-          // Use standard Q-unified-base trip document path: {tripId}/{uuid}.{ext}
-          const filePath = `${tripId}/${fileName}`;
+        // Upload all trips concurrently, then batch-insert metadata in one call
+        const uploads = await Promise.all(
+          tripIds.map(async (tripId) => {
+            const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${ext}`;
+            const filePath = `${tripId}/${fileName}`;
+            const { data, error } = await supabase()
+              .storage.from('trip-documents')
+              .upload(filePath, blob, {
+                cacheControl: '3600',
+                upsert: false,
+                contentType: fileObj.mimeType,
+              });
+            if (error) {
+              setFiles((prev) =>
+                prev.map((f) =>
+                  f.id === fileObj.id ? { ...f, status: 'error', error: error.message, progress: 0 } : f,
+                ),
+              );
+              throw error;
+            }
+            return { tripId, storagePath: data?.path ?? filePath };
+          })
+        );
 
-          const { data, error } = await supabase()
-            .storage.from('trip-documents')
-            .upload(filePath, blob, {
-              cacheControl: '3600',
-              upsert: false,
-              contentType: fileObj.mimeType,
-            });
+        const firstUploadPath = uploads[0]?.storagePath ?? null;
 
-          if (error) {
-            setFiles((prev) =>
-              prev.map((f) =>
-                f.id === fileObj.id ? { ...f, status: 'error', error: error.message, progress: 0 } : f,
-              ),
-            );
-            throw error;
-          }
-          
-          if (!firstUploadPath) {
-            firstUploadPath = data?.path ?? filePath;
-          }
-
-          // Insert into trip_documents so the POD is visible in trip detail (omit if DB not migrated).
-          const { error: metaInsertErr } = await supabase().from('trip_documents').insert({
+        // Single batch insert for all trip_documents rows
+        const { error: metaInsertErr } = await supabase().from('trip_documents').insert(
+          uploads.map(({ tripId, storagePath }) => ({
             trip_id: tripId,
             file_name: fileObj.name,
-            storage_path: data?.path ?? filePath,
+            storage_path: storagePath,
             mime_type: fileObj.mimeType,
             size_bytes: fileObj.size,
-          });
-          if (metaInsertErr && !isTripDocumentsMetaTableUnavailable(metaInsertErr)) {
-            throw metaInsertErr;
-          }
+          }))
+        );
+        if (metaInsertErr && !isTripDocumentsMetaTableUnavailable(metaInsertErr)) {
+          throw metaInsertErr;
         }
 
         setFiles((prev) =>

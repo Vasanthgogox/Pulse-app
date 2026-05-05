@@ -4,6 +4,13 @@
 import { supabase } from '@/lib/supabase';
 import { DEFAULT_PAGE_SIZE, type PageOpts } from '@/lib/pagination';
 
+const CLIENT_COLUMNS = [
+  "id", "organization_id", "name", "contact_person", "phone", "email",
+  "address", "gstin", "pan_number", "status", "created_at", "updated_at",
+  "display_id", "is_integrated", "linked_organization_id",
+  "contact_percent", "avatar_url", "avatar_seed", "owner_full_name",
+].join(",");
+
 export interface ClientRow {
   id: string;
   organization_id: string;
@@ -61,7 +68,7 @@ export async function getClientsByOrganization(
   const base = () =>
     supabase()
       .from('clients')
-      .select('*')
+      .select(CLIENT_COLUMNS)
       .eq('organization_id', orgId)
       .eq('status', 'active')
       .order('name', { ascending: true });
@@ -86,7 +93,7 @@ export async function getClientById(
 ): Promise<{ error: Error | null; client: ClientRow | null }> {
   const { data, error } = await supabase()
     .from('clients')
-    .select('*')
+    .select(CLIENT_COLUMNS)
     .eq('organization_id', orgId)
     .eq('id', clientId)
     .maybeSingle();
@@ -153,7 +160,7 @@ export async function getClientByName(
   if (!normalized) return { error: null, client: null };
   const { data, error } = await supabase()
     .from('clients')
-    .select('*')
+    .select(CLIENT_COLUMNS)
     .eq('organization_id', orgId)
     .eq('status', 'active')
     .eq('name', normalized)
@@ -173,7 +180,7 @@ export async function getClientByPhone(
   if (!normalized) return { error: null, client: null };
   const { data, error } = await supabase()
     .from('clients')
-    .select('*')
+    .select(CLIENT_COLUMNS)
     .eq('organization_id', orgId)
     .eq('status', 'active')
     .eq('phone', normalized)
