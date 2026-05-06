@@ -3,33 +3,126 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
 import Theme from '@/constants/Theme';
-import Layout from '@/constants/Layout';
 import {
   DRIVER_DETAIL_HORIZONTAL_PAD,
   DriverSubScreenHeader,
   driverDetailPageBackground,
 } from '@/components/driver/DriverSubScreenHeader';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
+import * as Linking from 'expo-linking';
+import { useCallback, useEffect, useState } from 'react';
 
+type DocItemKey = 'aadhaar' | 'pan' | 'license';
 type DocItem = {
-  key: string;
+  key: DocItemKey;
   label: string;
   icon: keyof typeof FontAwesome.glyphMap;
   status: 'not_added' | 'added';
-  onPressTitle: string;
+  path: string | null;
 };
 
 export default function DocumentsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { profile } = useAuth();
   const { theme } = useDriverTheme();
   const isDark = theme === 'dark';
   const colors = useDriverThemeColors();
   const pageBg = driverDetailPageBackground(isDark, colors.background);
+  const [docs, setDocs] = useState<DocItem[]>([
+    { key: 'aadhaar', label: 'Aadhaar', icon: 'id-card', status: 'not_added', path: null },
+    { key: 'pan', label: 'PAN', icon: 'credit-card', status: 'not_added', path: null },
+    { key: 'license', label: 'Driving license', icon: 'car', status: 'not_added', path: null },
+  ]);
+  const uploadedCount = docs.filter((d) => d.status === 'added').length;
 
   const handleBack = () => {
     if (router.canGoBack()) router.back();
     else router.replace('/(driver)/profile');
+  };
+
+  const loadDocuments = useCallback(async () => {
+    if (!profile?.uid) return;
+    try {
+      const {
+        data: { user },
+      } = await supabase().auth.getUser();
+      const metadata =
+        user?.user_metadata &&
+        typeof user.user_metadata === 'object' &&
+        user.user_metadata.driver_documents &&
+        typeof user.user_metadata.driver_documents === 'object'
+          ? (user.user_metadata.driver_documents as Record<string, unknown>)
+          : {};
+
+      const { data: profileRow } = await supabase()
+        .from('profiles')
+        .select('license_photo_url')
+        .eq('id', profile.uid)
+        .maybeSingle();
+      const licensePath =
+        (profileRow as { license_photo_url?: string | null } | null)?.license_photo_url
+        ?? (typeof metadata.license === 'string' ? metadata.license : null);
+
+      const aadhaarPath = typeof metadata.aadhaar === 'string' ? metadata.aadhaar : null;
+      const panPath = typeof metadata.pan === 'string' ? metadata.pan : null;
+
+      setDocs([
+        {
+          key: 'aadhaar',
+          label: 'Aadhaar',
+          icon: 'id-card',
+          path: aadhaarPath,
+          status: (aadhaarPath ?? '').trim() ? 'added' : 'not_added',
+        },
+        {
+          key: 'pan',
+          label: 'PAN',
+          icon: 'credit-card',
+          path: panPath,
+          status: (panPath ?? '').trim() ? 'added' : 'not_added',
+        },
+        {
+          key: 'license',
+          label: 'Driving license',
+          icon: 'car',
+          path: licensePath,
+          status: (licensePath ?? '').trim() ? 'added' : 'not_added',
+        },
+      ]);
+    } catch {
+      // keep default state
+    }
+  }, [profile?.uid]);
+
+  useEffect(() => {
+    void loadDocuments();
+  }, [loadDocuments]);
+
+  const openDocument = async (doc: DocItem) => {
+    if (!doc.path?.trim()) {
+      Alert.alert(doc.label, 'Not uploaded yet. You can upload from driver sign-up or profile flow.');
+      return;
+    }
+    try {
+      if (doc.path.startsWith('http://') || doc.path.startsWith('https://')) {
+        await Linking.openURL(doc.path);
+        return;
+      }
+      const { data, error } = await supabase()
+        .storage
+        .from('driver-documents')
+        .createSignedUrl(doc.path, 60 * 10);
+      if (error || !data?.signedUrl) {
+        Alert.alert('Preview unavailable', error?.message || 'Could not open document.');
+        return;
+      }
+      await Linking.openURL(data.signedUrl);
+    } catch (e) {
+      Alert.alert('Preview unavailable', e instanceof Error ? e.message : 'Could not open document.');
+    }
   };
 
   return (
@@ -49,56 +142,32 @@ export default function DocumentsScreen() {
         <Text style={[styles.sectionSubtitle, { color: colors.textMuted }]}>
           Upload and verify your proof of identity. One place for all driver compliance.
         </Text>
+        <Text style={[styles.sectionSubtitle, { color: colors.textMuted }]}>
+          {uploadedCount}/3 uploaded
+        </Text>
         <Text style={[styles.sectionEyebrow, { color: colors.textMuted }]}>ID & proof</Text>
         <View style={[styles.sectionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <TouchableOpacity
-            style={[styles.docRow, { borderTopWidth: 0 }]}
-            onPress={() => Alert.alert('Aadhaar', 'Document upload will be available here.')}
-            activeOpacity={0.7}
-          >
-            <View style={styles.docRowLeft}>
-              <View style={[styles.docRowIcon, { backgroundColor: colors.emeraldMuted }]}>
-                <FontAwesome name="id-card" size={14} color={colors.emerald} />
+          {docs.map((doc, idx) => (
+            <TouchableOpacity
+              key={doc.key}
+              style={[styles.docRow, idx === 0 ? { borderTopWidth: 0 } : { borderTopColor: colors.border }]}
+              onPress={() => void openDocument(doc)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.docRowLeft}>
+                <View style={[styles.docRowIcon, { backgroundColor: colors.emeraldMuted }]}>
+                  <FontAwesome name={doc.icon} size={14} color={colors.emerald} />
+                </View>
+                <Text style={[styles.docRowLabel, { color: colors.text }]}>{doc.label}</Text>
               </View>
-              <Text style={[styles.docRowLabel, { color: colors.text }]}>Aadhaar</Text>
-            </View>
-            <View style={styles.docRowRight}>
-              <Text style={[styles.docRowStatus, { color: colors.textMuted }]}>Not added</Text>
-              <FontAwesome name="chevron-right" size={12} color={colors.textMuted} />
-            </View>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.docRow, { borderTopColor: colors.border }]}
-            onPress={() => Alert.alert('PAN', 'Document upload will be available here.')}
-            activeOpacity={0.7}
-          >
-            <View style={styles.docRowLeft}>
-              <View style={[styles.docRowIcon, { backgroundColor: colors.emeraldMuted }]}>
-                <FontAwesome name="credit-card" size={14} color={colors.emerald} />
+              <View style={styles.docRowRight}>
+                <Text style={[styles.docRowStatus, { color: colors.textMuted }]}>
+                  {doc.status === 'added' ? 'View' : 'Not added'}
+                </Text>
+                <FontAwesome name="chevron-right" size={12} color={colors.textMuted} />
               </View>
-              <Text style={[styles.docRowLabel, { color: colors.text }]}>PAN</Text>
-            </View>
-            <View style={styles.docRowRight}>
-              <Text style={[styles.docRowStatus, { color: colors.textMuted }]}>Not added</Text>
-              <FontAwesome name="chevron-right" size={12} color={colors.textMuted} />
-            </View>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.docRow, { borderTopColor: colors.border }]}
-            onPress={() => Alert.alert('Driving License', 'Document upload will be available here.')}
-            activeOpacity={0.7}
-          >
-            <View style={styles.docRowLeft}>
-              <View style={[styles.docRowIcon, { backgroundColor: colors.emeraldMuted }]}>
-                <FontAwesome name="car" size={14} color={colors.emerald} />
-              </View>
-              <Text style={[styles.docRowLabel, { color: colors.text }]}>Driving license</Text>
-            </View>
-            <View style={styles.docRowRight}>
-              <Text style={[styles.docRowStatus, { color: colors.textMuted }]}>Not added</Text>
-              <FontAwesome name="chevron-right" size={12} color={colors.textMuted} />
-            </View>
-          </TouchableOpacity>
+            </TouchableOpacity>
+          ))}
         </View>
       </ScrollView>
     </View>
