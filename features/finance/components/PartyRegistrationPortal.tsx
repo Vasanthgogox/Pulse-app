@@ -127,9 +127,73 @@ const DL_FORMAT = /^[A-Z]{2}[0-9]{2}[0-9]{4}[0-9]{7}$/;
 
 const MIN_PHONE_LENGTH_FOR_SEARCH = 8;
 const PHONE_DEBOUNCE_MS = 400;
+const CLIENT_DRAFT_STORAGE_KEY = "party-registration-client-draft-v1";
+const SUPPLIER_DRAFT_STORAGE_KEY = "party-registration-supplier-draft-v1";
+const DRIVER_DRAFT_STORAGE_KEY = "party-registration-driver-draft-v1";
+const VEHICLE_DRAFT_STORAGE_KEY = "party-registration-vehicle-draft-v1";
 
 const READY_TO_SAVE_SUMMARY_COPY =
   "Saved records stay private to your current organization — Finance, trips, and assignments will pick them up automatically.";
+
+interface DriverDraftStorage {
+  organizationId: string | null;
+  name: string;
+  phone: string;
+  license: string;
+  email: string;
+  payableAmount: number | null;
+  commissionPercent: number | null;
+  commissionPerKm: number | null;
+  preferOfflineOnly: boolean;
+}
+
+interface PartyContactDraftStorage {
+  organizationId: string | null;
+  organizationName: string;
+  contactName: string;
+  phoneDigits: string;
+}
+
+interface VehicleDraftStorage {
+  organizationId: string | null;
+  registration: string;
+  category: string;
+  model: string;
+  modelIsOther: boolean;
+  capacity: string;
+  bodyLength: string;
+  bodyLengthIsOther: boolean;
+  axle: string;
+}
+
+function readDraft<T>(storageKey: string): T | null {
+  if (Platform.OS !== "web" || typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(storageKey);
+    if (!raw) return null;
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+function writeDraft<T>(storageKey: string, draft: T) {
+  if (Platform.OS !== "web" || typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(storageKey, JSON.stringify(draft));
+  } catch {
+    // Ignore storage write failures (quota/private mode).
+  }
+}
+
+function clearDraft(storageKey: string) {
+  if (Platform.OS !== "web" || typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(storageKey);
+  } catch {
+    // Ignore storage clear failures.
+  }
+}
 
 function dlError(raw: string): string | null {
   const n = raw.trim().toUpperCase().replace(DL_CLEAN, "");
@@ -312,7 +376,134 @@ function PartyRegistrationPortalInner(
     setPhoneSearchLoading(false);
     setSearchedNoResult(false);
     setDriverRegisteredAtPhone(false);
-  }, [visible, initialKind]);
+    if (initialKind === "client") {
+      const draft = readDraft<PartyContactDraftStorage>(CLIENT_DRAFT_STORAGE_KEY);
+      if (draft && draft.organizationId === (organizationId ?? null)) {
+        setOrgOrCompanyName(draft.organizationName);
+        setContactName(draft.contactName);
+        setPhoneDigits(draft.phoneDigits);
+      }
+    } else if (initialKind === "supplier") {
+      const draft = readDraft<PartyContactDraftStorage>(SUPPLIER_DRAFT_STORAGE_KEY);
+      if (draft && draft.organizationId === (organizationId ?? null)) {
+        setOrgOrCompanyName(draft.organizationName);
+        setContactName(draft.contactName);
+        setPhoneDigits(draft.phoneDigits);
+      }
+    } else if (initialKind === "driver") {
+      const draft = readDraft<DriverDraftStorage>(DRIVER_DRAFT_STORAGE_KEY);
+      if (draft && draft.organizationId === (organizationId ?? null)) {
+        setDriverName(draft.name);
+        setDriverPhone(draft.phone);
+        setDriverDl(draft.license);
+        setDriverEmail(draft.email);
+        setDriverPayableAmount(draft.payableAmount);
+        setDriverCommissionPercent(draft.commissionPercent);
+        setDriverCommissionPerKm(draft.commissionPerKm);
+        setDriverPreferOfflineOnly(draft.preferOfflineOnly);
+      }
+    } else {
+      const draft = readDraft<VehicleDraftStorage>(VEHICLE_DRAFT_STORAGE_KEY);
+      if (draft && draft.organizationId === (organizationId ?? null)) {
+        setVehicleReg(draft.registration);
+        setVehicleCategory(draft.category);
+        setVehicleModel(draft.model);
+        setModelIsOther(draft.modelIsOther);
+        setVehicleCapacity(draft.capacity);
+        setVehicleBodyFt(draft.bodyLength);
+        setBodyLengthIsOther(draft.bodyLengthIsOther);
+        setVehicleAxle(draft.axle);
+      }
+    }
+  }, [visible, initialKind, organizationId]);
+
+  useEffect(() => {
+    if (!visible || kind !== "client") return;
+    writeDraft(CLIENT_DRAFT_STORAGE_KEY, {
+      organizationId: organizationId ?? null,
+      organizationName: orgOrCompanyName,
+      contactName,
+      phoneDigits,
+    } satisfies PartyContactDraftStorage);
+  }, [
+    visible,
+    kind,
+    organizationId,
+    orgOrCompanyName,
+    contactName,
+    phoneDigits,
+  ]);
+
+  useEffect(() => {
+    if (!visible || kind !== "supplier") return;
+    writeDraft(SUPPLIER_DRAFT_STORAGE_KEY, {
+      organizationId: organizationId ?? null,
+      organizationName: orgOrCompanyName,
+      contactName,
+      phoneDigits,
+    } satisfies PartyContactDraftStorage);
+  }, [
+    visible,
+    kind,
+    organizationId,
+    orgOrCompanyName,
+    contactName,
+    phoneDigits,
+  ]);
+
+  useEffect(() => {
+    if (!visible || kind !== "driver") return;
+    writeDraft(DRIVER_DRAFT_STORAGE_KEY, {
+      organizationId: organizationId ?? null,
+      name: driverName,
+      phone: driverPhone,
+      license: driverDl,
+      email: driverEmail,
+      payableAmount: driverPayableAmount,
+      commissionPercent: driverCommissionPercent,
+      commissionPerKm: driverCommissionPerKm,
+      preferOfflineOnly: driverPreferOfflineOnly,
+    });
+  }, [
+    visible,
+    kind,
+    organizationId,
+    driverName,
+    driverPhone,
+    driverDl,
+    driverEmail,
+    driverPayableAmount,
+    driverCommissionPercent,
+    driverCommissionPerKm,
+    driverPreferOfflineOnly,
+  ]);
+
+  useEffect(() => {
+    if (!visible || kind !== "vehicle") return;
+    writeDraft(VEHICLE_DRAFT_STORAGE_KEY, {
+      organizationId: organizationId ?? null,
+      registration: vehicleReg,
+      category: vehicleCategory,
+      model: vehicleModel,
+      modelIsOther,
+      capacity: vehicleCapacity,
+      bodyLength: vehicleBodyFt,
+      bodyLengthIsOther,
+      axle: vehicleAxle,
+    } satisfies VehicleDraftStorage);
+  }, [
+    visible,
+    kind,
+    organizationId,
+    vehicleReg,
+    vehicleCategory,
+    vehicleModel,
+    modelIsOther,
+    vehicleCapacity,
+    vehicleBodyFt,
+    bodyLengthIsOther,
+    vehicleAxle,
+  ]);
 
   // Add Client / Supplier — debounced phone lookup (AddClientModal / AddSupplierModal parity).
   useEffect(() => {
@@ -653,6 +844,7 @@ function PartyRegistrationPortalInner(
         const inviteeIsDrv = inviteeProfileIsDriver(inviteeMatch?.profile_role);
         if (inviteeMatch && onSendInvitation && !inviteeIsDrv) {
           await onSendInvitation(inviteeMatch.organization_id);
+          clearDraft(CLIENT_DRAFT_STORAGE_KEY);
           onClose();
           return;
         }
@@ -661,12 +853,14 @@ function PartyRegistrationPortalInner(
           contactPerson: contactName.trim(),
           phone: pNorm,
         });
+        clearDraft(CLIENT_DRAFT_STORAGE_KEY);
       } else if (kind === "supplier") {
         const pNorm =
           normalizeIndianPhoneForMetadata(phoneDigits) ?? phoneDigits.trim();
         const inviteeIsDrv = inviteeProfileIsDriver(inviteeMatch?.profile_role);
         if (inviteeMatch && onSendSupplierInvitation && !inviteeIsDrv) {
           await onSendSupplierInvitation(inviteeMatch.organization_id);
+          clearDraft(SUPPLIER_DRAFT_STORAGE_KEY);
           onClose();
           return;
         }
@@ -675,6 +869,7 @@ function PartyRegistrationPortalInner(
           companyName: orgOrCompanyName.trim(),
           phone: pNorm,
         });
+        clearDraft(SUPPLIER_DRAFT_STORAGE_KEY);
       } else if (kind === "driver") {
         const dp = buildDriverPayload();
         const pn = normalizeIndianPhoneForMetadata(dp.phone) ?? dp.phone.trim();
@@ -685,10 +880,12 @@ function PartyRegistrationPortalInner(
           !driverPreferOfflineOnly
         ) {
           await onInviteDriver(payload);
+          clearDraft(DRIVER_DRAFT_STORAGE_KEY);
           onClose();
           return;
         }
         await onAddDriver(payload);
+        clearDraft(DRIVER_DRAFT_STORAGE_KEY);
       } else {
         await onAddVehicle(
           vehiclePayloadFromInputs(
@@ -700,6 +897,7 @@ function PartyRegistrationPortalInner(
             vehicleAxle,
           ),
         );
+        clearDraft(VEHICLE_DRAFT_STORAGE_KEY);
       }
       onClose();
     } catch (e: unknown) {

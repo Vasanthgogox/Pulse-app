@@ -14,7 +14,6 @@ import { supabase } from '@/lib/supabase';
 import * as driversService from '@/services/driversService';
 import * as tripsService from '@/services/tripsService';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import {
   Camera,
@@ -252,10 +251,9 @@ export default function DriverProfileScreen() {
   };
 
   const buildDriverInviteUrl = () => {
-    const webBase = process.env.EXPO_PUBLIC_WEB_BASE_URL?.trim().replace(/\/$/, '');
-    if (webBase) return `${webBase}/sign-in`;
-    // Fallback to app deep link when public web base is not configured.
-    return Linking.createURL('/sign-in');
+    const base = 'https://q-web.netlify.app/invite';
+    const ref = profile?.uid;
+    return ref ? `${base}?ref=${ref}` : base;
   };
 
   const handleShareProfile = () => {
@@ -268,11 +266,12 @@ export default function DriverProfileScreen() {
   const handleInviteDrivers = () => {
     const inviteUrl = buildDriverInviteUrl();
     const message =
-      `Join me on Pulse to manage trips, payouts, and network requests.\n\n` +
-      `Open app and log in here: ${inviteUrl}`;
+      `Join me on Q Driver! Manage trips, payouts, and network requests.\n\n` +
+      `Sign up here: ${inviteUrl}`;
     Share.share({
-      title: 'Invite drivers to Q',
+      title: 'Join Q Driver',
       message,
+      url: inviteUrl,
     }).catch(() => {});
   };
 

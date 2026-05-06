@@ -454,8 +454,7 @@ export async function rejectConnectionRequest(requestId: string, receivingOrgId?
 
 /**
  * Withdraw a connection request that you have sent.
- * Sets status to 'cancelled' so it remains visible in the history tab.
- * Only works when status is pending.
+ * Deletes the pending request row (true withdraw).
  */
 export async function cancelConnectionRequest(requestId: string): Promise<{
   error: Error | null;
@@ -463,7 +462,7 @@ export async function cancelConnectionRequest(requestId: string): Promise<{
 }> {
   const { data, error } = await supabase()
     .from('connection_requests')
-    .update({ status: 'cancelled', responded_at: new Date().toISOString() })
+    .delete()
     .eq('id', requestId)
     .eq('status', 'pending')
     .select('id');
@@ -478,7 +477,7 @@ export async function cancelPendingConnectionRequestByOrgPair(
 ): Promise<{ error: Error | null; deleted: boolean }> {
   const { data, error } = await supabase()
     .from('connection_requests')
-    .update({ status: 'cancelled', responded_at: new Date().toISOString() })
+    .delete()
     .eq('from_organization_id', fromOrgId)
     .eq('to_organization_id', toOrgId)
     .eq('status', 'pending')
