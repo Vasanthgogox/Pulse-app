@@ -40,7 +40,8 @@ export async function linkOfflineDriversToNewUsers(
       .select('*')
       .eq('status', 'offline')
       .is('user_id', null)
-      .eq(organizationId ? 'organization_id' : 'organization_id', organizationId || supabase().rpc('get_current_organization_id'));
+      .eq(organizationId ? 'organization_id' : 'organization_id', organizationId || supabase().rpc('get_current_organization_id'))
+      .limit(500);
 
     if (error) {
       return { error: new Error(error.message), results: [] };
@@ -118,7 +119,8 @@ export async function getUnmatchedOfflineDrivers(
     .eq('status', 'offline')
     .is('user_id', null)
     .eq(organizationId ? 'organization_id' : 'organization_id', organizationId || supabase().rpc('get_current_organization_id'))
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(500);
 
   if (error) {
     return { error: new Error(error.message), drivers: [] };

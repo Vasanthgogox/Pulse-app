@@ -790,9 +790,9 @@ export async function getTransactionsByOrganization(
     return { error: null, transactions, hasMore: rows.length > limit };
   }
 
-  let { data, error } = await base(LEDGER_TX_SELECT_WITH_TRIPS);
+  let { data, error } = await base(LEDGER_TX_SELECT_WITH_TRIPS).limit(500);
   if (error && isMissingTripsDisplayTripIdError(error)) {
-    ({ data, error } = await base(LEDGER_TX_SELECT_WITH_TRIPS_LEGACY));
+    ({ data, error } = await base(LEDGER_TX_SELECT_WITH_TRIPS_LEGACY).limit(500));
   }
   if (error) return { error: new Error(error.message), transactions: [] };
 
@@ -814,7 +814,8 @@ export async function getTransactionsByOrganizationAndParty(
     .eq("organization_id", orgId)
     .ilike("party_name", `%${partyName.trim()}%`)
     .order("transaction_date", { ascending: false })
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(500);
 
   if (error && isMissingTripsDisplayTripIdError(error)) {
     ({ data, error } = await supabase()
@@ -823,7 +824,8 @@ export async function getTransactionsByOrganizationAndParty(
       .eq("organization_id", orgId)
       .ilike("party_name", `%${partyName.trim()}%`)
       .order("transaction_date", { ascending: false })
-      .order("created_at", { ascending: false }));
+      .order("created_at", { ascending: false })
+      .limit(500));
   }
 
   if (error) return { error: new Error(error.message), transactions: [] };
@@ -843,7 +845,8 @@ export async function getTransactionsByOrganizationAndContactId(
     .eq("organization_id", orgId)
     .eq("contact_id", contactId)
     .order("transaction_date", { ascending: false })
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(500);
 
   if (error && isMissingTripsDisplayTripIdError(error)) {
     ({ data, error } = await supabase()
@@ -852,7 +855,8 @@ export async function getTransactionsByOrganizationAndContactId(
       .eq("organization_id", orgId)
       .eq("contact_id", contactId)
       .order("transaction_date", { ascending: false })
-      .order("created_at", { ascending: false }));
+      .order("created_at", { ascending: false })
+      .limit(500));
   }
 
   if (error) return { error: new Error(error.message), transactions: [] };
@@ -873,7 +877,8 @@ export async function getTransactionsByOrganizationAndDriver(
     .eq("contact_type", "driver")
     .eq("contact_id", driverId.trim())
     .order("transaction_date", { ascending: false })
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(500);
 
   if (error && isMissingTripsDisplayTripIdError(error)) {
     ({ data, error } = await supabase()
@@ -883,7 +888,8 @@ export async function getTransactionsByOrganizationAndDriver(
       .eq("contact_type", "driver")
       .eq("contact_id", driverId.trim())
       .order("transaction_date", { ascending: false })
-      .order("created_at", { ascending: false }));
+      .order("created_at", { ascending: false })
+      .limit(500));
   }
 
   if (error) return { error: new Error(error.message), transactions: [] };
