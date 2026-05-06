@@ -2,13 +2,15 @@
  * TanStack Query hooks for trips. Cached by orgId; Realtime invalidates on DB change.
  * See docs/PAGINATION_AND_CACHE_ANALYSIS.md.
  */
-import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getTripsByOrganization,
   getTripsWhereOrgIsSupplier,
   getShipperDisplayNamesForSupplierTrips,
+  updateTripStatus,
 } from '@/features/trips/services/trips.service';
 import { queryKeys } from '@/lib/queryKeys';
+import { STALE } from '@/lib/queryClient';
 import { DEFAULT_PAGE_SIZE } from '@/lib/pagination';
 
 /** Merge owner trips + shared supplier-side load trips (dedupe by id), sort by created_at desc. */
@@ -41,6 +43,7 @@ export function useTripsQuery(orgId: string | null) {
       return mergeTripsLists(ownerRes.trips, supplierRes.trips);
     },
     enabled: !!orgId,
+    staleTime: STALE.realtime,
   });
 }
 
@@ -83,6 +86,60 @@ export function useTripDetailQuery(tripId: string | null) {
       return res.trip;
     },
     enabled: !!tripId,
+    staleTime: STALE.realtime,
+  });
+}
+
+/**
+ * Optimistic trip status mutation.
+ * Instantly updates the detail + list caches; rolls back on error.
+ */
+export function useTripStatusMutation(orgId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ tripId, data }: { tripId: string; data: import('@/features/trips/services/trips.service').UpdateTripStatusData }) => {
+      const res = await updateTripStatus(tripId, data);
+      if (res.error) throw res.error;
+      return res.trip;
+    },
+    onMutate: async ({ tripId, data }) => {
+      await qc.cancelQueries({ queryKey: queryKeys.trips.detail(tripId) });
+      if (orgId) await qc.cancelQueries({ queryKey: queryKeys.trips.all(orgId) });
+
+      const prevDetail = qc.getQueryData(queryKeys.trips.detail(tripId));
+      const prevList = orgId ? qc.getQueryData(queryKeys.trips.all(orgId)) : undefined;
+
+      // Optimistically update detail cache
+      qc.setQueryData(queryKeys.trips.detail(tripId), (old: Record<string, unknown> | undefined) =>
+        old ? { ...old, ...data } : old,
+      );
+
+      // Optimistically update list cache
+      if (orgId) {
+        qc.setQueriesData(
+          { queryKey: queryKeys.trips.all(orgId) },
+          (old: unknown) => {
+            if (!Array.isArray(old)) return old;
+            return old.map((t: { id: string }) => (t.id === tripId ? { ...t, ...data } : t));
+          },
+        );
+      }
+
+      return { prevDetail, prevList, tripId, orgId };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (!ctx) return;
+      if (ctx.prevDetail !== undefined) {
+        qc.setQueryData(queryKeys.trips.detail(ctx.tripId), ctx.prevDetail);
+      }
+      if (ctx.orgId && ctx.prevList !== undefined) {
+        qc.setQueryData(queryKeys.trips.all(ctx.orgId), ctx.prevList);
+      }
+    },
+    onSettled: (_data, _err, { tripId }) => {
+      qc.invalidateQueries({ queryKey: queryKeys.trips.detail(tripId) });
+      if (orgId) qc.invalidateQueries({ queryKey: queryKeys.trips.all(orgId) });
+    },
   });
 }
 

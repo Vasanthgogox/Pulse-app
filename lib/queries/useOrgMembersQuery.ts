@@ -7,6 +7,7 @@ import {
   getMyTeamInvites,
 } from '@/features/organization/services/members.service';
 import { queryKeys } from '@/lib/queryKeys';
+import { STALE } from '@/lib/queryClient';
 
 export function useOrgMembersQuery(orgId: string | null) {
   return useQuery({
@@ -17,6 +18,7 @@ export function useOrgMembersQuery(orgId: string | null) {
       return res.members;
     },
     enabled: !!orgId,
+    staleTime: STALE.slow,
   });
 }
 
@@ -28,6 +30,7 @@ export function useMyTeamInvitesQuery() {
       if (res.error) throw res.error;
       return res.invites;
     },
+    staleTime: STALE.moderate,
   });
 }
 

@@ -9,6 +9,7 @@ import {
   type LogPodsTripView,
 } from '@/services/logPodsService';
 import { queryKeys } from '@/lib/queryKeys';
+import { STALE } from '@/lib/queryClient';
 
 export function useLogIncomingPodsTripsQuery(orgId: string | null) {
   return useQuery({
@@ -19,7 +20,7 @@ export function useLogIncomingPodsTripsQuery(orgId: string | null) {
       return trips;
     },
     enabled: !!orgId,
-    staleTime: 300_000,
+    staleTime: STALE.moderate,
   });
 }
 
@@ -31,7 +32,7 @@ export function useCourierPartnersQuery() {
       if (error) throw error;
       return partners;
     },
-    staleTime: 300_000,
+    staleTime: STALE.slow,
   });
 }
 

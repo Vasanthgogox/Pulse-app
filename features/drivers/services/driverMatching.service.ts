@@ -37,7 +37,7 @@ export async function linkOfflineDriversToNewUsers(
     // Step 1: Fetch all offline drivers (O(n) time)
     const { data: offlineDrivers, error } = await supabase()
       .from('drivers')
-      .select('*')
+      .select('id, phone, organization_id, payable_amount, commission_percent, commission_per_km')
       .eq('status', 'offline')
       .is('user_id', null)
       .eq(organizationId ? 'organization_id' : 'organization_id', organizationId || supabase().rpc('get_current_organization_id'))
@@ -48,7 +48,8 @@ export async function linkOfflineDriversToNewUsers(
     }
 
     // Step 2: Build hash map using phone number as key (O(n) time, O(n) space)
-    const offlineDriverMap = new Map<string, DriverRow>();
+    type MatchableDriver = Pick<DriverRow, 'id' | 'phone' | 'organization_id' | 'payable_amount' | 'commission_percent' | 'commission_per_km'>;
+    const offlineDriverMap = new Map<string, MatchableDriver>();
     for (const driver of offlineDrivers || []) {
       if (driver.phone) {
         const normalizedPhone = normalizePhone(driver.phone);

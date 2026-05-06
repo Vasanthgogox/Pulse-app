@@ -46,7 +46,6 @@ import {
     canAccessFinance,
     getCapabilitiesFromProfile,
 } from "@/lib/capabilities";
-import { subscribeSharedPostgresChanges } from "@/lib/realtimeRegistry";
 import { supabase } from "@/lib/supabase";
 import {
     formatIndianVehicleNumber,
@@ -563,25 +562,6 @@ export default function DriverDetailScreen({
     };
   }, [driver?.id, driver?.avatar_url, driver?.avatar_seed]);
 
-  useEffect(() => {
-    if (!driverId) return;
-    return subscribeSharedPostgresChanges(
-      `driver-ratings:${driverId}`,
-      [
-        {
-          event: "*",
-          schema: "public",
-          table: "ratings",
-          filter: `rated_id=eq.${driverId}`,
-        },
-      ],
-      () => {
-        getRatingsForDriver(driverId).then(({ ratings: rows }) => {
-          setDriverRatings(rows ?? []);
-        });
-      }
-    );
-  }, [driverId]);
 
   const tripOptions = useMemo(
     () =>

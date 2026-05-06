@@ -52,7 +52,6 @@ import {
 import { tripDayIso } from "@/lib/dateRangePresets";
 import { formatINR, formatLedgerDate } from "@/lib/format";
 import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
-import { subscribeSharedPostgresChanges } from "@/lib/realtimeRegistry";
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
@@ -337,26 +336,6 @@ export default function ClientDetailScreen({
     setClientRatingAvg(null);
   }, [clientId]);
 
-  // Realtime: refresh client rating avg whenever any rating for this client changes
-  useEffect(() => {
-    if (!clientId) return;
-    return subscribeSharedPostgresChanges(
-      `client-ratings:${clientId}`,
-      [
-        {
-          event: "*",
-          schema: "public",
-          table: "ratings",
-          filter: `rated_id=eq.${clientId}`,
-        },
-      ],
-      () => {
-        getRatingsForClient(clientId).then(({ ratings: rows }) => {
-          setClientRatingAvg(averageScore(rows));
-        });
-      },
-    );
-  }, [clientId]);
 
   useEffect(() => {
     if (autoOpenProfile) setShowProfileModal(true);
