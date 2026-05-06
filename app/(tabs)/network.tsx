@@ -258,6 +258,9 @@ function NetworkScreenInner() {
   });
   const [profileStatsLoading, setProfileStatsLoading] = useState(false);
   const [requestActionId, setRequestActionId] = useState<string | null>(null);
+  const [withdrawnProtocolIds, setWithdrawnProtocolIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [discoverInviteCount, setDiscoverInviteCount] = useState(0);
   const [discoverInviteLimit, setDiscoverInviteLimit] = useState(5);
   const [showProtocolRolePicker, setShowProtocolRolePicker] = useState(false);
@@ -286,8 +289,12 @@ function NetworkScreenInner() {
     [receivedQ.data],
   );
   const sentRequests = useMemo(
-    () => ((sentQ.data ?? []) as ConnectionRequestRow[]).filter((r) => r.status === "pending"),
-    [sentQ.data],
+    () =>
+      ((sentQ.data ?? []) as ConnectionRequestRow[]).filter(
+        (r) =>
+          r.status === "pending" && !withdrawnProtocolIds.has(String(r.id ?? "")),
+      ),
+    [sentQ.data, withdrawnProtocolIds],
   );
   const cancelledRequests = useMemo(() => {
     const fromReceived = ((receivedQ.data ?? []) as ConnectionRequestRow[]).filter(
@@ -307,8 +314,12 @@ function NetworkScreenInner() {
 
   const pendingDriverInvitesSent = useMemo(() => {
     const rows = (driverInvitesSentQ.data ?? []) as DriverInviteSentRow[];
-    return rows.filter((r) => String(r.status ?? "").toLowerCase() === "pending");
-  }, [driverInvitesSentQ.data]);
+    return rows.filter(
+      (r) =>
+        String(r.status ?? "").toLowerCase() === "pending" &&
+        !withdrawnProtocolIds.has(String(r.id ?? "")),
+    );
+  }, [driverInvitesSentQ.data, withdrawnProtocolIds]);
 
   const sentProtocolItems = useMemo((): MissionProtocolListItem[] => {
     const connectionItems: MissionProtocolListItem[] = sentRequests.map((row) => ({
@@ -641,13 +652,41 @@ function NetworkScreenInner() {
     try {
       if (item.kind === "driver_invite") {
         const res = await cancelDriverInvite(item.row.id);
-        if (res.error) return;
+        if (res.error) {
+          Alert.alert("Could not recall invite", res.error.message);
+          return;
+        }
+        if (!res.deleted) {
+          Alert.alert(
+            "Request already changed",
+            "This invite is no longer pending. Refreshing the latest network state.",
+          );
+        }
+        setWithdrawnProtocolIds((prev) => {
+          const next = new Set(prev);
+          next.add(String(item.row.id));
+          return next;
+        });
         await Promise.all([driverInvitesSentQ.refetch(), driversQ.refetch()]);
         invalidateNetwork();
         return;
       }
       const res = await cancelConnectionRequest(item.row.id);
-      if (res.error) return;
+      if (res.error) {
+        Alert.alert("Could not recall request", res.error.message);
+        return;
+      }
+      if (!res.deleted) {
+        Alert.alert(
+          "Request already changed",
+          "This request is no longer pending. Refreshing the latest network state.",
+        );
+      }
+      setWithdrawnProtocolIds((prev) => {
+        const next = new Set(prev);
+        next.add(String(item.row.id));
+        return next;
+      });
       await Promise.all([receivedQ.refetch(), sentQ.refetch()]);
       invalidateNetwork();
     } finally {
@@ -789,7 +828,10 @@ function NetworkScreenInner() {
                       </>
                     ) : requestTab === "sent" ? (
                       <Pressable
-                        onPress={() => void handleRecallProtocolItem(item)}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          void handleRecallProtocolItem(item);
+                        }}
                         disabled={isBusy}
                         style={styles.requestsRecallBtn}
                       >
