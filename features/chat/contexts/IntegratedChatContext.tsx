@@ -120,6 +120,7 @@ export function IntegratedChatProvider({
   const loadDataRef = useRef<() => Promise<void>>(async () => {});
   const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const missingNetConvRefreshAtRef = useRef<Record<string, number>>({});
+  const bootstrappedOrgRef = useRef<string | null>(null);
 
   const loadData = useCallback(async () => {
     if (!orgId) return;
@@ -138,6 +139,14 @@ export function IntegratedChatProvider({
     }
   }, [orgId]);
   loadDataRef.current = loadData;
+
+  // Lightweight bootstrap load (for FAB preview/unread badges even when chat screen is not focused).
+  useEffect(() => {
+    if (!orgId) return;
+    if (bootstrappedOrgRef.current === orgId) return;
+    bootstrappedOrgRef.current = orgId;
+    void loadData();
+  }, [orgId, loadData]);
 
   useEffect(() => {
     if (!isActive) return;

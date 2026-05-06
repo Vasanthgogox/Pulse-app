@@ -127,6 +127,7 @@ export function TripChatProvider({
     async () => null
   );
   const missingConvHydrateAtRef = useRef<Record<string, number>>({});
+  const bootstrappedOrgRef = useRef<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const loadConversations = useCallback(async () => {
@@ -143,7 +144,15 @@ export function TripChatProvider({
   }, [organizationId]);
   loadConversationsRef.current = loadConversations;
 
-  // Initial load
+  // Lightweight bootstrap load (for FAB preview/unread badges even when chat screen is not focused).
+  useEffect(() => {
+    if (!organizationId) return;
+    if (bootstrappedOrgRef.current === organizationId) return;
+    bootstrappedOrgRef.current = organizationId;
+    void loadConversations();
+  }, [organizationId, loadConversations]);
+
+  // Focused-screen load
   useEffect(() => {
     if (!isActive) return;
     loadConversations();
