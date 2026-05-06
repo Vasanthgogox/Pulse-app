@@ -55,6 +55,25 @@ function authProfileToUserProfile(p: authService.AuthProfile): UserProfile {
   };
 }
 
+function areUserProfilesEqual(a: UserProfile | null, b: UserProfile | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return (
+    a.uid === b.uid &&
+    a.email === b.email &&
+    a.displayName === b.displayName &&
+    a.role === b.role &&
+    a.aggregated === b.aggregated &&
+    a.asset === b.asset &&
+    a.full_name === b.full_name &&
+    a.avatar_url === b.avatar_url &&
+    a.avatar_seed === b.avatar_seed &&
+    a.phone === b.phone &&
+    a.company_name === b.company_name &&
+    a.status_text === b.status_text
+  );
+}
+
 function mergeAuthProfiles(
   base: authService.AuthProfile,
   db: authService.AuthProfile | null,
@@ -192,8 +211,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               return;
             }
             const merged = mergeAuthProfiles(auth.profile, dbProfile);
-            setUser(auth.user);
-            setProfile(authProfileToUserProfile(merged));
+            const nextProfile = authProfileToUserProfile(merged);
+            setUser((prev) => (prev?.uid === auth.user.uid ? prev : auth.user));
+            setProfile((prev) => (areUserProfilesEqual(prev, nextProfile) ? prev : nextProfile));
             setRoleVerified(true);
             setSessionExpired(false);
             logAuthRouteDecision("auth_state_signed_in", {
