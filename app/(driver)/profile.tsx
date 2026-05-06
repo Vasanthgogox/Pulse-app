@@ -152,11 +152,22 @@ export default function DriverProfileScreen() {
         .select('license_photo_url')
         .eq('id', profile.uid)
         .maybeSingle();
+      const { data: storageItems } = await supabase()
+        .storage
+        .from('driver-documents')
+        .list(profile.uid, { limit: 100 });
+      const hasStoragePrefix = (prefix: string) =>
+        (storageItems ?? []).some((item) => (item.name ?? '').toLowerCase().startsWith(prefix));
 
       const license = (profileRow as { license_photo_url?: string | null } | null)?.license_photo_url
-        ?? (typeof metadata.license === 'string' ? metadata.license : null);
-      const aadhaar = typeof metadata.aadhaar === 'string' ? metadata.aadhaar : null;
-      const pan = typeof metadata.pan === 'string' ? metadata.pan : null;
+        ?? (typeof metadata.license === 'string' ? metadata.license : null)
+        ?? (hasStoragePrefix('license-') ? 'present' : null);
+      const aadhaar =
+        (typeof metadata.aadhaar === 'string' ? metadata.aadhaar : null)
+        ?? (hasStoragePrefix('aadhaar-') ? 'present' : null);
+      const pan =
+        (typeof metadata.pan === 'string' ? metadata.pan : null)
+        ?? (hasStoragePrefix('pan-') ? 'present' : null);
 
       const uploaded = [license, aadhaar, pan].filter((x) => Boolean((x ?? '').trim())).length;
       setKycUploadedCount(uploaded);

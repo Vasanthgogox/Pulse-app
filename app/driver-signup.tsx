@@ -19,6 +19,7 @@ import { useSafeBack } from '@/lib/useSafeBack';
 import { VALIDATION, validatePassword } from '@/lib/validation';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -81,7 +82,53 @@ type DriverSignupDocAsset = {
   uri: string;
   fileName: string;
   mimeType: string;
+  base64?: string;
 };
+
+function normalizeDocMimeType(rawMime: string | null | undefined): string {
+  const mime = (rawMime ?? '').toLowerCase();
+  if (mime.includes('png')) return 'image/png';
+  if (mime.includes('webp')) return 'image/webp';
+  if (mime.includes('pdf')) return 'application/pdf';
+  return 'image/jpeg';
+}
+
+function base64ToUint8Array(base64: string): Uint8Array {
+  const normalized = base64.replace(/\s/g, '');
+  if (typeof globalThis.atob === 'function') {
+    const binary = globalThis.atob(normalized);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+  }
+  const maybeBuffer = (globalThis as { Buffer?: { from: (value: string, enc: string) => Uint8Array } }).Buffer;
+  if (maybeBuffer?.from) return maybeBuffer.from(normalized, 'base64');
+  throw new Error('Base64 decoding is not available on this device');
+}
+
+async function readDocumentBytes(doc: DriverSignupDocAsset): Promise<ArrayBuffer | Uint8Array> {
+  if (doc.base64 && doc.base64.length > 0) {
+    return base64ToUint8Array(doc.base64);
+  }
+
+  // Web picker commonly returns blob: URLs; fetch() reads these reliably.
+  try {
+    const response = await fetch(doc.uri);
+    if (response.ok) {
+      const bytes = await response.arrayBuffer();
+      if (bytes.byteLength > 0) return bytes;
+    }
+  } catch {
+    // fall through to expo-file-system
+  }
+
+  const file = new File(doc.uri);
+  const bytes = await file.arrayBuffer();
+  if (bytes.byteLength === 0) throw new Error('Could not read selected document');
+  return bytes;
+}
 
 /** Normalize phone: strip spaces, allow optional leading +, then digits only. */
 function normalizePhone(raw: string): string {
@@ -161,6 +208,7 @@ export default function DriverSignUpScreen() {
     aadhaar: null,
     pan: null,
   });
+  const [uploadedDocPaths, setUploadedDocPaths] = useState<Partial<Record<DriverSignupDocKey, string>>>({});
   const [previewDocUri, setPreviewDocUri] = useState<string | null>(null);
   const [phoneExistsCheck, setPhoneExistsCheck] = useState<{
     loading: boolean;
@@ -387,9 +435,11 @@ export default function DriverSignUpScreen() {
         if (uploadResult.error) {
           Alert.alert(
             'Documents saved partially',
-            'Your account is created, but one or more documents could not be uploaded. You can re-upload them from profile documents.',
+            uploadResult.error.message ||
+              'Your account is created, but one or more documents could not be uploaded. You can re-upload them from profile documents.',
           );
         }
+        await supabase().auth.refreshSession();
       }
       goToPage(7);
     } catch (e) {
@@ -453,15 +503,17 @@ export default function DriverSignUpScreen() {
               mediaTypes: ['images'],
               allowsEditing: false,
               quality: 0.9,
+              base64: true,
             })
           : await ImagePicker.launchCameraAsync({
               allowsEditing: false,
               quality: 0.9,
+              base64: true,
             });
       if (result.canceled || !result.assets?.[0]) return;
 
       const asset = result.assets[0];
-      const mimeType = asset.mimeType ?? 'image/jpeg';
+      const mimeType = normalizeDocMimeType(asset.mimeType);
       const fallbackName = `${doc}-${Date.now()}.${mimeType.includes('png') ? 'png' : 'jpg'}`;
       setPendingDocs((prev) => ({
         ...prev,
@@ -469,12 +521,43 @@ export default function DriverSignUpScreen() {
           uri: asset.uri,
           fileName: asset.fileName ?? fallbackName,
           mimeType,
+          base64: typeof asset.base64 === 'string' ? asset.base64.trim() : undefined,
         },
       }));
       markDocumentUploaded(doc, method);
       if (doc === 'license') setLicenseSkipped(false);
       if (doc === 'aadhaar') setAadhaarSkipped(false);
       if (doc === 'pan') setPanSkipped(false);
+
+      const {
+        data: { user: currentUser },
+      } = await supabase().auth.getUser();
+
+      if (!currentUser?.id) {
+        Alert.alert('Selected', `${doc.toUpperCase()} selected. It will upload when you tap Create account.`);
+        return;
+      }
+
+      const immediateDoc: DriverSignupDocAsset = {
+        uri: asset.uri,
+        fileName: asset.fileName ?? fallbackName,
+        mimeType,
+        base64: typeof asset.base64 === 'string' ? asset.base64.trim() : undefined,
+      };
+      const immediateUpload = await uploadSingleDriverDocument(currentUser.id, doc, immediateDoc);
+      if (immediateUpload.error || !immediateUpload.path) {
+        Alert.alert('Selected', `${doc.toUpperCase()} selected. Upload will retry on Create account.`);
+        return;
+      }
+
+      const nextUploaded = { ...uploadedDocPaths, [doc]: immediateUpload.path };
+      setUploadedDocPaths(nextUploaded);
+      const syncResult = await syncDriverDocumentMetadata(currentUser.id, { [doc]: immediateUpload.path });
+      if (syncResult.error) {
+        Alert.alert('Uploaded with warning', `${doc.toUpperCase()} uploaded, but metadata sync failed.`);
+        return;
+      }
+      Alert.alert('Uploaded', `${doc.toUpperCase()} uploaded successfully.`);
     } catch (e) {
       Alert.alert('Upload failed', e instanceof Error ? e.message : 'Unable to pick document');
     }
@@ -485,29 +568,30 @@ export default function DriverSignUpScreen() {
     setPreviewDocUri(uri);
   };
 
-  const uploadDriverDocuments = async (uid: string): Promise<{ error: Error | null }> => {
-    const hasAny =
-      pendingDocs.license != null || pendingDocs.aadhaar != null || pendingDocs.pan != null;
-    if (!hasAny) return { error: null };
+  const uploadSingleDriverDocument = async (
+    uid: string,
+    docType: DriverSignupDocKey,
+    doc: DriverSignupDocAsset,
+  ): Promise<{ path: string | null; error: Error | null }> => {
+    const ext = doc.fileName.split('.').pop()?.toLowerCase() || 'jpg';
+    const path = `${uid}/${docType}-${Date.now()}.${ext}`;
+    const uploadBytes = await readDocumentBytes(doc);
+    const { error } = await supabase()
+      .storage
+      .from('driver-documents')
+      .upload(path, uploadBytes, {
+        contentType: doc.mimeType || 'image/jpeg',
+        upsert: true,
+      });
+    if (error) return { path: null, error: new Error(error.message || `Failed to upload ${docType}`) };
+    return { path, error: null };
+  };
 
-    const uploaded: Partial<Record<DriverSignupDocKey, string>> = {};
-    for (const docType of ['license', 'aadhaar', 'pan'] as const) {
-      const doc = pendingDocs[docType];
-      if (!doc) continue;
-      const ext = doc.fileName.split('.').pop()?.toLowerCase() || 'jpg';
-      const response = await fetch(doc.uri);
-      const arrayBuffer = await response.arrayBuffer();
-      const path = `${uid}/${docType}-${Date.now()}.${ext}`;
-      const { error } = await supabase()
-        .storage
-        .from('driver-documents')
-        .upload(path, arrayBuffer, {
-          contentType: doc.mimeType || 'image/jpeg',
-          upsert: true,
-        });
-      if (error) return { error: new Error(error.message || `Failed to upload ${docType}`) };
-      uploaded[docType] = path;
-    }
+  const syncDriverDocumentMetadata = async (
+    uid: string,
+    uploaded: Partial<Record<DriverSignupDocKey, string>>,
+  ): Promise<{ error: Error | null }> => {
+    if (!uploaded.license && !uploaded.aadhaar && !uploaded.pan) return { error: null };
 
     if (uploaded.license) {
       await supabase()
@@ -516,31 +600,53 @@ export default function DriverSignUpScreen() {
         .eq('id', uid);
     }
 
-    if (uploaded.license || uploaded.aadhaar || uploaded.pan) {
-      const {
-        data: { user: currentUser },
-      } = await supabase().auth.getUser();
-      const existingDocs =
-        currentUser?.user_metadata &&
-        typeof currentUser.user_metadata === 'object' &&
-        currentUser.user_metadata.driver_documents &&
-        typeof currentUser.user_metadata.driver_documents === 'object'
-          ? (currentUser.user_metadata.driver_documents as Record<string, unknown>)
-          : {};
-      const nextDocs = {
-        ...existingDocs,
-        ...(uploaded.license ? { license: uploaded.license } : {}),
-        ...(uploaded.aadhaar ? { aadhaar: uploaded.aadhaar } : {}),
-        ...(uploaded.pan ? { pan: uploaded.pan } : {}),
-      };
-      const { error: metadataError } = await supabase().auth.updateUser({
-        data: { driver_documents: nextDocs },
-      });
-      if (metadataError) {
-        return { error: new Error(metadataError.message || 'Failed to save document metadata') };
+    const {
+      data: { user: currentUser },
+    } = await supabase().auth.getUser();
+    const existingDocs =
+      currentUser?.user_metadata &&
+      typeof currentUser.user_metadata === 'object' &&
+      currentUser.user_metadata.driver_documents &&
+      typeof currentUser.user_metadata.driver_documents === 'object'
+        ? (currentUser.user_metadata.driver_documents as Record<string, unknown>)
+        : {};
+    const nextDocs = {
+      ...existingDocs,
+      ...(uploaded.license ? { license: uploaded.license } : {}),
+      ...(uploaded.aadhaar ? { aadhaar: uploaded.aadhaar } : {}),
+      ...(uploaded.pan ? { pan: uploaded.pan } : {}),
+    };
+    const { error: metadataError } = await supabase().auth.updateUser({
+      data: { driver_documents: nextDocs },
+    });
+    if (metadataError) {
+      return { error: new Error(metadataError.message || 'Failed to save document metadata') };
+    }
+    return { error: null };
+  };
+
+  const uploadDriverDocuments = async (uid: string): Promise<{ error: Error | null }> => {
+    const hasAnyPending =
+      pendingDocs.license != null || pendingDocs.aadhaar != null || pendingDocs.pan != null;
+    const hasAnyUploaded =
+      Boolean(uploadedDocPaths.license) || Boolean(uploadedDocPaths.aadhaar) || Boolean(uploadedDocPaths.pan);
+    if (!hasAnyPending && !hasAnyUploaded) return { error: null };
+
+    const uploaded: Partial<Record<DriverSignupDocKey, string>> = { ...uploadedDocPaths };
+    for (const docType of ['license', 'aadhaar', 'pan'] as const) {
+      if (uploaded[docType]) continue;
+      const doc = pendingDocs[docType];
+      if (!doc) continue;
+      const singleUpload = await uploadSingleDriverDocument(uid, docType, doc);
+      if (singleUpload.error || !singleUpload.path) {
+        return { error: singleUpload.error ?? new Error(`Failed to upload ${docType}`) };
       }
+      uploaded[docType] = singleUpload.path;
     }
 
+    const metadataResult = await syncDriverDocumentMetadata(uid, uploaded);
+    if (metadataResult.error) return { error: metadataResult.error };
+    setUploadedDocPaths(uploaded);
     return { error: null };
   };
 
