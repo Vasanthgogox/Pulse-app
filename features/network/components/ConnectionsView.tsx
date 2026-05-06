@@ -26,7 +26,6 @@ import {
     useSuppliersQuery,
     useTripsQuery,
 } from "@/lib/queries";
-import { subscribeSharedPostgresChanges } from "@/lib/realtimeRegistry";
 import { getInitials } from "@/lib/stringUtils";
 import { supabase } from "@/lib/supabase";
 import { useQuery } from "@tanstack/react-query";
@@ -508,14 +507,6 @@ export function ConnectionsView({
     return map;
   }, [organizationLocationsByNameQ.data]);
 
-  useEffect(() => {
-    if (!orgId) return;
-    return subscribeSharedPostgresChanges(
-      `network-ratings:org:${orgId}`,
-      [{ event: "*", schema: "public", table: "ratings" }],
-      () => setRatingsVersion((version) => version + 1)
-    );
-  }, [orgId]);
 
   useEffect(() => {
     let cancelled = false;
