@@ -12,6 +12,8 @@ import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeCont
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import * as Linking from 'expo-linking';
+import { File } from 'expo-file-system';
+import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useState } from 'react';
 
 type DocItemKey = 'aadhaar' | 'pan' | 'license';
@@ -22,6 +24,50 @@ type DocItem = {
   status: 'not_added' | 'added';
   path: string | null;
 };
+
+function normalizeDocMimeType(rawMime: string | null | undefined): string {
+  const mime = (rawMime ?? '').toLowerCase();
+  if (mime.includes('png')) return 'image/png';
+  if (mime.includes('webp')) return 'image/webp';
+  if (mime.includes('pdf')) return 'application/pdf';
+  return 'image/jpeg';
+}
+
+function base64ToUint8Array(base64: string): Uint8Array {
+  const normalized = base64.replace(/\s/g, '');
+  if (typeof globalThis.atob === 'function') {
+    const binary = globalThis.atob(normalized);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+  }
+  const maybeBuffer = (globalThis as { Buffer?: { from: (value: string, enc: string) => Uint8Array } }).Buffer;
+  if (maybeBuffer?.from) return maybeBuffer.from(normalized, 'base64');
+  throw new Error('Base64 decoding is not available on this device');
+}
+
+async function readAssetBytes(uri: string, base64?: string): Promise<ArrayBuffer | Uint8Array> {
+  if (typeof base64 === 'string' && base64.trim().length > 0) {
+    return base64ToUint8Array(base64.trim());
+  }
+
+  // Web picker commonly returns blob: URLs; fetch() reads these reliably.
+  try {
+    const response = await fetch(uri);
+    if (response.ok) {
+      const bytes = await response.arrayBuffer();
+      if (bytes.byteLength > 0) return bytes;
+    }
+  } catch {
+    // fall through to expo-file-system
+  }
+
+  const bytes = await new File(uri).arrayBuffer();
+  if (bytes.byteLength === 0) throw new Error('Could not read selected document');
+  return bytes;
+}
 
 export default function DocumentsScreen() {
   const insets = useSafeAreaInsets();
@@ -36,6 +82,7 @@ export default function DocumentsScreen() {
     { key: 'pan', label: 'PAN', icon: 'credit-card', status: 'not_added', path: null },
     { key: 'license', label: 'Driving license', icon: 'car', status: 'not_added', path: null },
   ]);
+  const [uploadingDocKey, setUploadingDocKey] = useState<DocItemKey | null>(null);
   const uploadedCount = docs.filter((d) => d.status === 'added').length;
 
   const handleBack = () => {
@@ -68,28 +115,40 @@ export default function DocumentsScreen() {
 
       const aadhaarPath = typeof metadata.aadhaar === 'string' ? metadata.aadhaar : null;
       const panPath = typeof metadata.pan === 'string' ? metadata.pan : null;
+      const { data: storageItems } = await supabase()
+        .storage
+        .from('driver-documents')
+        .list(profile.uid, { limit: 100 });
+      const byPrefix = (prefix: string) =>
+        (storageItems ?? []).find((item) => (item.name ?? '').toLowerCase().startsWith(prefix))?.name ?? null;
+      const aadhaarStorage = byPrefix('aadhaar-');
+      const panStorage = byPrefix('pan-');
+      const licenseStorage = byPrefix('license-');
+      const aadhaarResolved = aadhaarPath || (aadhaarStorage ? `${profile.uid}/${aadhaarStorage}` : null);
+      const panResolved = panPath || (panStorage ? `${profile.uid}/${panStorage}` : null);
+      const licenseResolved = licensePath || (licenseStorage ? `${profile.uid}/${licenseStorage}` : null);
 
       setDocs([
         {
           key: 'aadhaar',
           label: 'Aadhaar',
           icon: 'id-card',
-          path: aadhaarPath,
-          status: (aadhaarPath ?? '').trim() ? 'added' : 'not_added',
+          path: aadhaarResolved,
+          status: (aadhaarResolved ?? '').trim() ? 'added' : 'not_added',
         },
         {
           key: 'pan',
           label: 'PAN',
           icon: 'credit-card',
-          path: panPath,
-          status: (panPath ?? '').trim() ? 'added' : 'not_added',
+          path: panResolved,
+          status: (panResolved ?? '').trim() ? 'added' : 'not_added',
         },
         {
           key: 'license',
           label: 'Driving license',
           icon: 'car',
-          path: licensePath,
-          status: (licensePath ?? '').trim() ? 'added' : 'not_added',
+          path: licenseResolved,
+          status: (licenseResolved ?? '').trim() ? 'added' : 'not_added',
         },
       ]);
     } catch {
@@ -125,6 +184,121 @@ export default function DocumentsScreen() {
     }
   };
 
+  const uploadDocumentFrom = async (doc: DocItem, source: 'gallery' | 'camera') => {
+    if (!profile?.uid || uploadingDocKey) return;
+    setUploadingDocKey(doc.key);
+    try {
+      if (source === 'gallery') {
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!perm.granted) {
+          Alert.alert('Permission required', 'Photo library access is needed to upload this document.');
+          return;
+        }
+      } else {
+        const perm = await ImagePicker.requestCameraPermissionsAsync();
+        if (!perm.granted) {
+          Alert.alert('Permission required', 'Camera access is needed to capture this document.');
+          return;
+        }
+      }
+
+      const result =
+        source === 'gallery'
+          ? await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ['images'],
+              allowsEditing: false,
+              quality: 0.9,
+              base64: true,
+            })
+          : await ImagePicker.launchCameraAsync({
+              allowsEditing: false,
+              quality: 0.9,
+              base64: true,
+            });
+      if (result.canceled || !result.assets?.[0]) return;
+
+      const asset = result.assets[0];
+      const mimeType = normalizeDocMimeType(asset.mimeType);
+      const extByMime =
+        mimeType === 'image/png'
+          ? 'png'
+          : mimeType === 'image/webp'
+            ? 'webp'
+            : mimeType === 'application/pdf'
+              ? 'pdf'
+              : 'jpg';
+      const ext = (asset.fileName?.split('.').pop() || extByMime).toLowerCase();
+      const path = `${profile.uid}/${doc.key}-${Date.now()}.${ext}`;
+      const uploadBytes = await readAssetBytes(asset.uri, typeof asset.base64 === 'string' ? asset.base64 : undefined);
+
+      const { error: uploadError } = await supabase()
+        .storage
+        .from('driver-documents')
+        .upload(path, uploadBytes, {
+          contentType: mimeType,
+          upsert: true,
+        });
+      if (uploadError) {
+        Alert.alert('Upload failed', uploadError.message || `Could not upload ${doc.label}.`);
+        return;
+      }
+
+      if (doc.key === 'license') {
+        await supabase()
+          .from('profiles')
+          .update({ license_photo_url: path })
+          .eq('id', profile.uid);
+      }
+
+      const {
+        data: { user },
+      } = await supabase().auth.getUser();
+      const existingDocs =
+        user?.user_metadata &&
+        typeof user.user_metadata === 'object' &&
+        user.user_metadata.driver_documents &&
+        typeof user.user_metadata.driver_documents === 'object'
+          ? (user.user_metadata.driver_documents as Record<string, unknown>)
+          : {};
+      const nextDocs = { ...existingDocs, [doc.key]: path };
+      const { error: metadataError } = await supabase().auth.updateUser({
+        data: { driver_documents: nextDocs },
+      });
+      if (metadataError) {
+        Alert.alert('Uploaded with warning', 'File uploaded, but metadata sync failed. Refresh and try again.');
+      }
+
+      await loadDocuments();
+      Alert.alert('Uploaded', `${doc.label} uploaded successfully.`);
+    } catch (e) {
+      Alert.alert('Upload failed', e instanceof Error ? e.message : `Could not upload ${doc.label}.`);
+    } finally {
+      setUploadingDocKey(null);
+    }
+  };
+
+  const onDocumentPress = (doc: DocItem) => {
+    if (doc.status === 'added') {
+      void openDocument(doc);
+      return;
+    }
+    Alert.alert(doc.label, 'Upload this document now?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Gallery',
+        onPress: () => {
+          void uploadDocumentFrom(doc, 'gallery');
+        },
+      },
+      {
+        text: 'Camera',
+        onPress: () => {
+          void uploadDocumentFrom(doc, 'camera');
+        },
+      },
+    ]);
+  };
+
   return (
     <View style={[styles.root, { backgroundColor: pageBg }]}>
       <DriverSubScreenHeader title="KYC & documents" onBack={handleBack} />
@@ -151,8 +325,9 @@ export default function DocumentsScreen() {
             <TouchableOpacity
               key={doc.key}
               style={[styles.docRow, idx === 0 ? { borderTopWidth: 0 } : { borderTopColor: colors.border }]}
-              onPress={() => void openDocument(doc)}
+              onPress={() => onDocumentPress(doc)}
               activeOpacity={0.7}
+              disabled={uploadingDocKey != null}
             >
               <View style={styles.docRowLeft}>
                 <View style={[styles.docRowIcon, { backgroundColor: colors.emeraldMuted }]}>
@@ -162,7 +337,11 @@ export default function DocumentsScreen() {
               </View>
               <View style={styles.docRowRight}>
                 <Text style={[styles.docRowStatus, { color: colors.textMuted }]}>
-                  {doc.status === 'added' ? 'View' : 'Not added'}
+                  {uploadingDocKey === doc.key
+                    ? 'Uploading...'
+                    : doc.status === 'added'
+                      ? 'View'
+                      : 'Not added'}
                 </Text>
                 <FontAwesome name="chevron-right" size={12} color={colors.textMuted} />
               </View>
