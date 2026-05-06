@@ -2319,6 +2319,9 @@ export function LoadCenterView({
                   const isPending = quoteStatus === "pending";
                   const isRejected = quoteStatus === "rejected";
                   const isAccepted = quoteStatus === "accepted";
+                  const isDoneOutcome =
+                    statusMatchesFilter(load.status || "", "DONE") ||
+                    indentIdsWithTrip.has(load.id);
                   const vehicleDetail = load.vehicle_type || "—";
                   const weightValue = Number(load.weight);
                   const weightDetail =
@@ -2390,14 +2393,18 @@ export function LoadCenterView({
                     isAccepted,
                   );
                   const metaLine = isAccepted
-                    ? "Awarded — open Claimed to deploy"
+                    ? isDoneOutcome
+                      ? "Completed — open details"
+                      : "Awarded — open Claimed to deploy"
                     : isRejected
                       ? "Quote declined — send a new price"
                       : isPending
                         ? `Your quote ${formatINR(Number(existingQuote?.amount ?? 0))}`
                         : "No quote sent yet";
                   const ctaLabel = isAccepted
-                    ? "View claimed"
+                    ? isDoneOutcome
+                      ? "View details"
+                      : "View claimed"
                     : isPending
                       ? "Update quote"
                       : isRejected
@@ -2557,7 +2564,9 @@ export function LoadCenterView({
                               style={styles.reviewBidsBtn}
                               onPress={
                                 isAccepted
-                                  ? () => setLoadSubTab("AWARDED")
+                                  ? isDoneOutcome
+                                    ? () => onIndentPress(load)
+                                    : () => setLoadSubTab("AWARDED")
                                   : openBidModal
                               }
                               activeOpacity={0.9}
