@@ -13,6 +13,7 @@ import { ROUTES } from '@/lib/routes';
 import * as driversService from '@/services/driversService';
 import * as tripsService from '@/services/tripsService';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import {
   Camera,
@@ -46,6 +47,7 @@ const SLATE_900 = '#0f172a';
 const SLATE_50 = '#f8fafc';
 const AMBER_400 = '#fbbf24';
 const AMBER_500 = '#f59e0b';
+const TEMP_DRIVER_SIGNUP_URL = 'https://example.com/driver-signup';
 
 type ProfileView = 'main' | 'vehicle' | 'levels';
 
@@ -197,9 +199,22 @@ export default function DriverProfileScreen() {
     else router.replace('/(driver)');
   };
 
+  const buildDriverInviteUrl = () => {
+    const webBase = process.env.EXPO_PUBLIC_WEB_BASE_URL?.trim().replace(/\/$/, '');
+    if (webBase) return `${webBase}/driver-signup`;
+    // Fallback is intentionally temporary until a public domain is finalized.
+    return TEMP_DRIVER_SIGNUP_URL || Linking.createURL('/driver-signup');
+  };
+
   const handleShare = () => {
+    const inviteUrl = buildDriverInviteUrl();
+    const message =
+      `${displayName} — Q Driver profile\n\n` +
+      `Join me on Pulse to manage trips, payouts, and network requests.\n\n` +
+      `Sign up here: ${inviteUrl}`;
     Share.share({
-      message: `${displayName} — Q Driver profile`,
+      title: 'Invite drivers to Q',
+      message,
     }).catch(() => {});
   };
 
