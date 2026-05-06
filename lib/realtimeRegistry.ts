@@ -64,6 +64,20 @@ function createSharedChannel(key: string, specs: PostgresChangeSpec[]): Realtime
 }
 
 /**
+ * Emergency teardown: closes every open channel immediately.
+ * Call on explicit sign-out as a belt-and-suspenders safety net.
+ * React's useEffect cleanup handles the normal case; this handles edge cases
+ * where components don't unmount fast enough (e.g. browser unload, force sign-out).
+ */
+export function clearAllRealtimeChannels() {
+  if (__DEV__) console.log(`[realtime] TEARDOWN: closing ${registry.size} channels`);
+  registry.forEach((entry) => {
+    void supabase().removeChannel(entry.channel).catch(() => {});
+  });
+  registry.clear();
+}
+
+/**
  * Ref-counted shared realtime channel by key.
  * Guarantees one channel per key globally and fan-outs events to all listeners.
  */
