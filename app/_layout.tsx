@@ -10,11 +10,13 @@ import {
 } from '@/contexts/DemoTabBarScrollContext';
 import * as authService from '@/features/auth';
 import { isSessionExpiredError } from '@/features/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { makeQueryClient } from '@/lib/queryClient';
 import { hasSupabaseConfig, SUPABASE_CONFIG_MISSING_MESSAGE } from '@/lib/supabase';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { QueryClientProvider } from '@tanstack/react-query';
+import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { useFonts } from 'expo-font';
 import { Stack, usePathname, useRouter, type ErrorBoundaryProps } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -167,6 +169,15 @@ export default function RootLayout() {
     ...FontAwesome.font,
   });
   const queryClient = useMemo(() => makeQueryClient(), []);
+  const persister = useMemo(
+    () =>
+      createAsyncStoragePersister({
+        storage: AsyncStorage,
+        key: 'q-cache-v1',
+        throttleTime: 3000,
+      }),
+    [],
+  );
 
   useEffect(() => {
     if (error) throw error;
@@ -227,7 +238,17 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <GestureHandlerRootView style={styles.ghRoot}>
-        <QueryClientProvider client={queryClient}>
+        <PersistQueryClientProvider
+          client={queryClient}
+          persistOptions={{
+            persister,
+            maxAge: 24 * 60 * 60 * 1000,
+            dehydrateOptions: {
+              shouldDehydrateQuery: (query) =>
+                query.state.status === 'success',
+            },
+          }}
+        >
           <NetworkProvider>
             <LanguageProvider>
               <AuthProvider>
@@ -243,7 +264,7 @@ export default function RootLayout() {
               </AuthProvider>
             </LanguageProvider>
           </NetworkProvider>
-        </QueryClientProvider>
+        </PersistQueryClientProvider>
       </GestureHandlerRootView>
     </SafeAreaProvider>
   );

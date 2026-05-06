@@ -7,6 +7,7 @@ import {
   normTripFinanceAdjustmentKey,
 } from "@/features/trips/services/tripAdjustments";
 import { queryKeys } from "@/lib/queryKeys";
+import { STALE } from "@/lib/queryClient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 
@@ -26,7 +27,7 @@ export function tripFinanceAdjustmentsQueryOptions(
     queryKey: [...queryKeys.tripFinanceAdjustmentsRoot, organizationId ?? "", sortedKey] as const,
     queryFn: () => fetchTripFinanceAdjustmentsByTripIds(filteredIds),
     enabled: !!organizationId && filteredIds.length > 0,
-    staleTime: 60_000,
+    staleTime: STALE.frequent,
   };
 }
 

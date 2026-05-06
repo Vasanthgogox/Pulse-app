@@ -1,7 +1,8 @@
-import type { RealtimeChannel } from "@supabase/supabase-js";
+import type { RealtimeChannel, RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 
-type RealtimeListener = () => void;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type RealtimeListener = (payload: RealtimePostgresChangesPayload<Record<string, any>>) => void;
 
 type PostgresChangeSpec = {
   event: "*" | "INSERT" | "UPDATE" | "DELETE";
@@ -30,12 +31,13 @@ function specsSignature(specs: PostgresChangeSpec[]): string {
   );
 }
 
-function emitToListeners(key: string) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function emitToListeners(key: string, payload: RealtimePostgresChangesPayload<Record<string, any>>) {
   const entry = registry.get(key);
   if (!entry) return;
   for (const listener of entry.listeners) {
     try {
-      listener();
+      listener(payload);
     } catch (err) {
       console.warn("[realtime] shared listener failed:", err);
     }
@@ -45,7 +47,7 @@ function emitToListeners(key: string) {
 function createSharedChannel(key: string, specs: PostgresChangeSpec[]): RealtimeChannel {
   let channel = supabase().channel(`shared:${key}`);
   for (const spec of specs) {
-    channel = channel.on("postgres_changes", spec, () => emitToListeners(key));
+    channel = channel.on("postgres_changes", spec, (payload) => emitToListeners(key, payload));
   }
   return channel.subscribe();
 }

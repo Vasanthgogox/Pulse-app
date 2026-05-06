@@ -7,6 +7,7 @@ import {
   type PostRow,
 } from '@/features/network/services/posts.service';
 import { queryKeys } from '@/lib/queryKeys';
+import { STALE } from '@/lib/queryClient';
 
 export function useNetworkFeedQuery(orgId: string | null) {
   return useQuery({
@@ -17,7 +18,7 @@ export function useNetworkFeedQuery(orgId: string | null) {
       return res.posts;
     },
     enabled: !!orgId,
-    staleTime: 300_000,
+    staleTime: STALE.moderate,
   });
 }
 

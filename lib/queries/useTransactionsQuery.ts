@@ -4,6 +4,7 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getTransactionsByOrganization } from '@/features/finance/services/finance.service';
 import { queryKeys } from '@/lib/queryKeys';
+import { STALE } from '@/lib/queryClient';
 import { LEDGER_PAGE_SIZE } from '@/lib/pagination';
 
 /** Full list (no pagination). Use for aggregation e.g. Trips tab "received by trip". */
@@ -16,6 +17,7 @@ export function useTransactionsQuery(orgId: string | null) {
       return res.transactions;
     },
     enabled: !!orgId,
+    staleTime: STALE.realtime,
   });
 }
 

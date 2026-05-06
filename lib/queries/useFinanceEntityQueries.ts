@@ -9,6 +9,7 @@ import { getIndentsByOrganization } from '@/features/indents/services/indents.se
 import { getAcceptedDirectQuotesByOrg } from '@/features/indents/services/direct-quotes.service';
 import { getTripSubcontracts } from '@/features/finance/services/tripSubcontracts.service';
 import { queryKeys } from '@/lib/queryKeys';
+import { STALE } from '@/lib/queryClient';
 
 export function useTripsWhereOrgIsClientQuery(orgId: string | null) {
   return useQuery({
@@ -19,7 +20,7 @@ export function useTripsWhereOrgIsClientQuery(orgId: string | null) {
       return res.trips;
     },
     enabled: !!orgId,
-    staleTime: 300_000,
+    staleTime: STALE.realtime,
   });
 }
 
@@ -33,7 +34,7 @@ export function useTripsWhereOrgIsSupplierQuery(orgId: string | null) {
       return res.trips;
     },
     enabled: !!orgId,
-    staleTime: 300_000,
+    staleTime: STALE.realtime,
   });
 }
 
@@ -53,6 +54,7 @@ export function useIndentsForFinanceQuery(orgId: string | null) {
       );
     },
     enabled: !!orgId,
+    staleTime: STALE.moderate,
   });
 }
 
@@ -69,6 +71,7 @@ export function useAcceptedDirectQuotesForFinanceQuery(orgId: string | null) {
       return res.quotes ?? [];
     },
     enabled: !!orgId,
+    staleTime: STALE.moderate,
   });
 }
 
@@ -81,6 +84,7 @@ export function useDriverOffersQuery(orgId: string | null) {
       return res.offersByDriverId ?? {};
     },
     enabled: !!orgId,
+    staleTime: STALE.moderate,
   });
 }
 
@@ -93,6 +97,7 @@ export function useSalaryRequestsQuery(orgId: string | null, status?: 'pending' 
       return res.requests ?? [];
     },
     enabled: !!orgId,
+    staleTime: STALE.moderate,
   });
 }
 
@@ -106,5 +111,6 @@ export function useTripSubcontractsQuery(orgId: string | null, tripIds: string[]
       return res.rows ?? [];
     },
     enabled: !!orgId && normalizedTripIds.length > 0,
+    staleTime: STALE.moderate,
   });
 }
