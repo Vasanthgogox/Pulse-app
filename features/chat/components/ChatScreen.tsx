@@ -1096,7 +1096,7 @@ export function ChatScreen() {
         )}
 
         {activeTab === "trips" &&
-          (isLoading ? (
+          (isLoading && conversations.length === 0 ? (
             <View style={{ paddingTop: 40, alignItems: "center" }}>
               <ActivityIndicator color={CHAT_ACCENT} />
             </View>
@@ -1276,7 +1276,7 @@ export function ChatScreen() {
           ))}
 
         {activeTab === "network" &&
-          (netLoading ? (
+          (netLoading && netChats.length === 0 ? (
             <View style={{ paddingTop: 40, alignItems: "center" }}>
               <ActivityIndicator color={CHAT_ACCENT} />
             </View>

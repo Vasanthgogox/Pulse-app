@@ -102,7 +102,13 @@ function toIntegratedChat(conv: NetworkConversation, currentOrgId: string): Inte
 
 // ── Provider ──────────────────────────────────────────────────────────────────
 
-export function IntegratedChatProvider({ children }: { children: ReactNode }) {
+export function IntegratedChatProvider({
+  children,
+  isActive = true,
+}: {
+  children: ReactNode;
+  isActive?: boolean;
+}) {
   const { profile } = useAuth();
   const { currentOrganization } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
@@ -112,6 +118,8 @@ export function IntegratedChatProvider({ children }: { children: ReactNode }) {
   const [partners, setPartners] = useState<NetworkPartner[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const loadDataRef = useRef<() => Promise<void>>(async () => {});
+  const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const missingNetConvRefreshAtRef = useRef<Record<string, number>>({});
 
   const loadData = useCallback(async () => {
     if (!orgId) return;
@@ -132,10 +140,24 @@ export function IntegratedChatProvider({ children }: { children: ReactNode }) {
   loadDataRef.current = loadData;
 
   useEffect(() => {
+    if (!isActive) return;
     loadData();
-  }, [loadData]);
+  }, [isActive, loadData]);
 
-  // Realtime: new network messages
+  const queueRefreshData = useCallback(() => {
+    if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current);
+    refreshDebounceRef.current = setTimeout(() => {
+      void loadDataRef.current();
+    }, 350);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current);
+    };
+  }, []);
+
+  // Lightweight always-on realtime: keep network unread badges fresh when chat screen is hidden.
   useEffect(() => {
     if (!orgId) return;
     return subscribeSharedPostgresChanges(
@@ -147,11 +169,59 @@ export function IntegratedChatProvider({ children }: { children: ReactNode }) {
           table: "network_messages",
         },
       ],
-      () => {
-        void loadDataRef.current();
+      (payload) => {
+        if (isActive) return; // focused screen uses full sync effect below
+        const row = payload.new as Partial<NetworkMessageRow> | null;
+        const conversationId = row?.conversation_id;
+        if (!conversationId) return;
+        if (row?.sender_org_id && row.sender_org_id === orgId) return;
+
+        let found = false;
+        setConversations((prev) =>
+          prev.map((conv) => {
+            if (conv.id !== conversationId) return conv;
+            found = true;
+            return {
+              ...conv,
+              unread_count: (conv.unread_count ?? 0) + 1,
+              last_message_at: row?.created_at ?? conv.last_message_at,
+              last_message_preview:
+                typeof row?.content === "string" && row.content.trim().length > 0
+                  ? row.content.slice(0, 120)
+                  : conv.last_message_preview,
+            };
+          })
+        );
+
+        if (!found) {
+          const now = Date.now();
+          const last = missingNetConvRefreshAtRef.current[conversationId] ?? 0;
+          if (now - last > 10_000) {
+            missingNetConvRefreshAtRef.current[conversationId] = now;
+            queueRefreshData();
+          }
+        }
       }
     );
-  }, [orgId]);
+  }, [orgId, isActive, queueRefreshData]);
+
+  // Realtime: full network sync while chat screen is focused
+  useEffect(() => {
+    if (!isActive || !orgId) return;
+    return subscribeSharedPostgresChanges(
+      `network_messages:org:${orgId}`,
+      [
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "network_messages",
+        },
+      ],
+      () => {
+        queueRefreshData();
+      }
+    );
+  }, [isActive, orgId, queueRefreshData]);
 
   const chats: IntegratedChat[] = orgId
     ? conversations.map((c) => toIntegratedChat(c, orgId))

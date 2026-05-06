@@ -108,7 +108,13 @@ export function useTripChat() {
 
 // ── Provider ──────────────────────────────────────────────────────────────────
 
-export function TripChatProvider({ children }: { children: ReactNode }) {
+export function TripChatProvider({
+  children,
+  isActive = true,
+}: {
+  children: ReactNode;
+  isActive?: boolean;
+}) {
   const { profile } = useAuth();
   const orgCtx = useOptionalOrganization();
   const organizationId = orgCtx?.currentOrganization?.id ?? null;
@@ -117,6 +123,10 @@ export function TripChatProvider({ children }: { children: ReactNode }) {
   const conversationsRef = useRef(conversations);
   conversationsRef.current = conversations;
   const loadConversationsRef = useRef<() => Promise<void>>(async () => {});
+  const hydrateConversationByIdRef = useRef<(conversationId: string) => Promise<TripConversation | null>>(
+    async () => null
+  );
+  const missingConvHydrateAtRef = useRef<Record<string, number>>({});
   const [isLoading, setIsLoading] = useState(false);
 
   const loadConversations = useCallback(async () => {
@@ -135,11 +145,13 @@ export function TripChatProvider({ children }: { children: ReactNode }) {
 
   // Initial load
   useEffect(() => {
+    if (!isActive) return;
     loadConversations();
-  }, [loadConversations]);
+  }, [isActive, loadConversations]);
 
   // Refetch when ledger (or anything) signals new trip chat rows — survives missing realtime publication
   useEffect(() => {
+    if (!isActive) return;
     let debounceTimer: ReturnType<typeof setTimeout> | undefined;
     const unsub = subscribeTripChatMessagesChanged(() => {
       clearTimeout(debounceTimer);
@@ -151,11 +163,62 @@ export function TripChatProvider({ children }: { children: ReactNode }) {
       unsub();
       clearTimeout(debounceTimer);
     };
-  }, [loadConversations]);
+  }, [isActive, loadConversations]);
 
-  // Realtime subscription — react to new messages in this org's conversations
+  // Lightweight always-on realtime: keep unread badges/live indicators fresh even when chat screen is hidden.
   useEffect(() => {
     if (!organizationId) return;
+    return subscribeSharedPostgresChanges(
+      `trip_messages:org:${organizationId}`,
+      [
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "trip_messages",
+          filter: `organization_id=eq.${organizationId}`,
+        },
+      ],
+      (payload) => {
+        if (isActive) return; // focused screen uses the heavy sync effect below
+        const row = payload.new as Partial<TripMessageRow> | null;
+        const conversationId = row?.conversation_id;
+        if (!conversationId) return;
+
+        const selfUid = (profile as { uid?: string } | null)?.uid ?? null;
+        if (selfUid && row?.sender_user_id && row.sender_user_id === selfUid) return;
+
+        let found = false;
+        setConversations((prev) =>
+          prev.map((conv) => {
+            if (conv.id !== conversationId) return conv;
+            found = true;
+            return {
+              ...conv,
+              unread_dispatcher_count: (conv.unread_dispatcher_count ?? 0) + 1,
+              last_message_at: row?.created_at ?? conv.last_message_at,
+              last_message_preview:
+                typeof row?.content === "string" && row.content.trim().length > 0
+                  ? row.content.slice(0, 120)
+                  : conv.last_message_preview,
+            };
+          })
+        );
+
+        if (!found) {
+          const now = Date.now();
+          const last = missingConvHydrateAtRef.current[conversationId] ?? 0;
+          if (now - last > 10_000) {
+            missingConvHydrateAtRef.current[conversationId] = now;
+            void hydrateConversationByIdRef.current(conversationId);
+          }
+        }
+      }
+    );
+  }, [organizationId, isActive, profile]);
+
+  // Focused-screen realtime sync: full refresh while user is actively in chat.
+  useEffect(() => {
+    if (!isActive || !organizationId) return;
     return subscribeSharedPostgresChanges(
       `trip_messages:org:${organizationId}`,
       [
@@ -170,7 +233,7 @@ export function TripChatProvider({ children }: { children: ReactNode }) {
         void loadConversationsRef.current();
       }
     );
-  }, [organizationId]);
+  }, [isActive, organizationId]);
 
   const sendMessage = useCallback(
     async (conversationId: string, content: string, messageType: MessageType = "text") => {
@@ -346,6 +409,7 @@ export function TripChatProvider({ children }: { children: ReactNode }) {
     },
     []
   );
+  hydrateConversationByIdRef.current = hydrateConversationById;
 
   return (
     <TripChatContext.Provider
