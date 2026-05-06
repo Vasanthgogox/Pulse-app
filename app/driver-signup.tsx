@@ -10,7 +10,7 @@ import { ALL_PRESET_AVATARS, getAvatarUriForSeed } from '@/constants/DriverLevel
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useIsOnline } from '@/contexts/NetworkContext';
-import { checkExistingUserByPhone } from '@/features/auth';
+import { checkExistingUserByPhone, setPendingOAuthMetadata } from '@/features/auth';
 import { validateEmail } from '@/lib/emailValidation';
 import { isPhoneValid, validatePhone } from '@/lib/phoneValidation';
 import { formatMobileNumber } from '@/lib/format';
@@ -262,10 +262,12 @@ export default function DriverSignUpScreen() {
     }
     setLoading(true);
     try {
-      const { error } = await signInWithGoogle({
+      const pending = await setPendingOAuthMetadata({
         role: "driver",
         operatingModel: "ASSET_BASED",
       });
+      if (pending.error) throw pending.error;
+      const { error } = await signInWithGoogle(true);
       if (error) throw error;
       router.replace("/");
     } catch (e) {

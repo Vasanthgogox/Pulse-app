@@ -433,6 +433,26 @@ export default function SignUp() {
     if (error) return Alert.alert('Error', error.message);
   };
 
+  /** Google from the welcome / phone step: business user + optional phone if already entered. */
+  const continueWithGoogleFromWelcome = async () => {
+    if (!isOnline) return Alert.alert('No internet', 'Connect to continue.');
+    setGoogleLoading(true);
+    const storedPhone = normalizeIndianPhoneForMetadata(phone);
+    const tenDigits = extractIndianMobileTenDigits(phone);
+    const pending = await setPendingOAuthMetadata({
+      role: 'user',
+      operatingModel: 'HYBRID',
+      ...(storedPhone && tenDigits ? { phone: storedPhone } : {}),
+    });
+    if (pending.error) {
+      setGoogleLoading(false);
+      return Alert.alert('Error', pending.error.message);
+    }
+    const { error } = await signInWithGoogle(true);
+    setGoogleLoading(false);
+    if (error) return Alert.alert('Error', error.message);
+  };
+
   // ─── Render ────────────────────────────────────────────────────────────────
 
   const backLabel = step === 0 ? 'Back' : step === 5 ? '' : 'Previous';
@@ -515,9 +535,28 @@ export default function SignUp() {
                 <TouchableOpacity
                   style={[styles.primaryBtn, (!isPhoneValid(phone) || loading) && styles.primaryBtnDisabled]}
                   onPress={continuePhone}
-                  disabled={!isPhoneValid(phone) || loading}
+                  disabled={!isPhoneValid(phone) || loading || googleLoading}
                 >
                   {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Send OTP</Text>}
+                </TouchableOpacity>
+
+                <View style={styles.altRow}>
+                  <Text style={styles.altText}>or</Text>
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.googleBtn, (loading || googleLoading || !isOnline) && styles.primaryBtnDisabled]}
+                  onPress={continueWithGoogleFromWelcome}
+                  disabled={loading || googleLoading || !isOnline}
+                >
+                  {googleLoading ? (
+                    <ActivityIndicator color={C.text} />
+                  ) : (
+                    <>
+                      <FontAwesome name="google" size={14} color={C.text} />
+                      <Text style={styles.googleBtnText}>Continue with Google</Text>
+                    </>
+                  )}
                 </TouchableOpacity>
 
                 <View style={styles.altRow}>
