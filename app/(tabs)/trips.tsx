@@ -1752,19 +1752,21 @@ export default function TripsScreen() {
                           {tab.label}
                         </Text>
                         {tab.isActive ? (
-                          <View style={styles.tabUnderline} />
+                          // Mobile uses pill-style active state (no underline).
+                          null
                         ) : null}
                       </TouchableOpacity>
                     ))}
-                    <View style={styles.tripsFilterGroupSeparator} />
                     {subTabs.map((tab) => (
                       <TouchableOpacity
                         key={tab.id}
                         style={[
                           styles.tab,
                           styles.tripsMobileTab,
-                          styles.tabSubPill,
-                          tab.isActive && styles.tabSubPillActive,
+                          tab.isActive &&
+                            (isMobileViewport
+                              ? styles.tabActiveMobileDark
+                              : styles.tabActive),
                         ]}
                         onPress={tab.onPress}
                         activeOpacity={0.7}
@@ -1773,8 +1775,14 @@ export default function TripsScreen() {
                       >
                         <Text
                           style={[
-                            styles.tabSubPillText,
-                            tab.isActive && styles.tabSubPillTextActive,
+                            styles.tabText,
+                            isMobileViewport
+                              ? tab.isActive
+                                ? styles.tabTextActiveMobileDark
+                                : styles.tabTextMobileDark
+                              : tab.isActive
+                                ? styles.tabTextActive
+                                : null,
                           ]}
                         >
                           {tab.label}
@@ -2863,8 +2871,13 @@ const styles = StyleSheet.create({
   },
   tripsMobileTab: {
     minWidth: 62,
-    paddingHorizontal: 8,
-    paddingVertical: 9,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    minHeight: 34,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
+    backgroundColor: "rgba(255,255,255,0.05)",
   },
   tripsMobileSubTabText: {
     fontSize: 7,
@@ -2907,13 +2920,20 @@ const styles = StyleSheet.create({
   },
   tabTextActive: { color: Theme.textPrimaryDark },
   tabActiveMobileDark: {
-    backgroundColor: "transparent",
+    backgroundColor: Theme.screenBackground,
+    borderColor: Theme.screenBackground,
   },
   tabTextMobileDark: {
     color: Theme.textOnDarkMuted,
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 1.3,
   },
   tabTextActiveMobileDark: {
-    color: Theme.textOnDark,
+    color: Theme.textPrimaryDark,
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 1.3,
   },
   tabUnderline: {
     position: "absolute",
@@ -2936,7 +2956,9 @@ const styles = StyleSheet.create({
   tripsMobileTabsScrollContent: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: Layout.screenPaddingHorizontal,
+    gap: 8,
+    paddingLeft: 12,
+    paddingRight: 4,
     paddingTop: 8,
     paddingBottom: 6,
     flexGrow: 0,
@@ -3812,35 +3834,35 @@ const styles = StyleSheet.create({
   metricTagRailMobile: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 7,
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   metricTagChipMobile: {
-    minHeight: 36,
+    minHeight: 34,
     flexDirection: "row",
     alignItems: "center",
     gap: 7,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(255,255,255,0.06)",
-    paddingHorizontal: 11,
+    borderColor: "rgba(255,255,255,0.05)",
+    backgroundColor: "rgba(255,255,255,0.05)",
+    paddingHorizontal: 12,
     paddingVertical: 6,
   },
   metricTagChipMobileActive: {
-    backgroundColor: Theme.primary,
-    borderColor: Theme.primary,
+    backgroundColor: Theme.screenBackground,
+    borderColor: Theme.screenBackground,
   },
   metricTagLabelMobile: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "800",
     textTransform: "uppercase",
-    letterSpacing: 0.75,
-    color: "rgba(255,255,255,0.64)",
+    letterSpacing: 1.3,
+    color: Theme.textOnDarkMuted,
   },
   metricTagLabelMobileActive: {
-    color: Theme.textOnDark,
+    color: Theme.textPrimaryDark,
   },
   metricTagCountMobile: {
     width: 24,
@@ -3851,7 +3873,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.10)",
   },
   metricTagCountMobileActive: {
-    backgroundColor: "rgba(255,255,255,0.22)",
+    backgroundColor: "rgba(15,23,42,0.10)",
   },
   metricTagCountTextMobile: {
     fontSize: 9,
@@ -3860,7 +3882,7 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   metricTagCountTextMobileActive: {
-    color: Theme.textOnDark,
+    color: Theme.textPrimaryDark,
   },
   metricTabHintMobile: {
     marginTop: 2,
