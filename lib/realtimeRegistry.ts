@@ -20,6 +20,17 @@ type RegistryEntry = {
 
 const registry = new Map<string, RegistryEntry>();
 
+/** Dev-only: log current active channels to console. */
+function logRegistryState(action: string, key: string) {
+  if (!__DEV__) return;
+  const total = registry.size;
+  const lines: string[] = [];
+  registry.forEach((e, k) => {
+    lines.push(`  [${k}] refs=${e.refs}`);
+  });
+  console.log(`[realtime] ${action}: "${key}" | total=${total}\n${lines.join('\n')}`);
+}
+
 function specsSignature(specs: PostgresChangeSpec[]): string {
   return JSON.stringify(
     specs.map((spec) => ({
@@ -72,10 +83,13 @@ export function subscribeSharedPostgresChanges(
       listeners: new Set<RealtimeListener>(),
     };
     registry.set(key, entry);
+    logRegistryState('OPEN (new channel)', key);
   } else if (entry.specsSignature !== signature) {
     console.warn(
       `[realtime] shared key "${key}" reused with different specs; keeping existing channel`
     );
+  } else {
+    logRegistryState('ATTACH (shared channel)', key);
   }
 
   entry.refs += 1;
@@ -87,10 +101,13 @@ export function subscribeSharedPostgresChanges(
     current.listeners.delete(listener);
     current.refs = Math.max(0, current.refs - 1);
     if (current.refs === 0) {
+      logRegistryState('CLOSE (last ref gone)', key);
       void supabase().removeChannel(current.channel).catch((err: unknown) => {
         console.warn("[realtime] remove shared channel failed:", err);
       });
       registry.delete(key);
+    } else {
+      logRegistryState('DETACH (refs remaining)', key);
     }
   };
 }

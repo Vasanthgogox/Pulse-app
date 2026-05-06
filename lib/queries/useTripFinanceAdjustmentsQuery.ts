@@ -46,16 +46,35 @@ export function useTripFinanceAdjustmentsMap(
 
   const record = useMemo<Record<string, TripAdjustment[]>>(() => {
     const m = q.data;
-    if (!m || m.size === 0) return {};
+    if (!m) return {};
     const rec: Record<string, TripAdjustment[]> = {};
-    for (const [k, v] of m) {
-      if (v.length) rec[k] = v;
+    if (m instanceof Map) {
+      // Normal path: fresh fetch returns a Map
+      m.forEach((v, k) => { if (v.length) rec[k] = v; });
+    } else {
+      // Persisted cache path: JSON serialization converts Map → plain object
+      for (const k of Object.keys(m as Record<string, TripAdjustment[]>)) {
+        const v = (m as Record<string, TripAdjustment[]>)[k];
+        if (Array.isArray(v) && v.length) rec[k] = v;
+      }
     }
     return rec;
   }, [q.data]);
 
+  // Normalise to Map so callers always get a Map (re-wrap if deserialised as plain object)
+  const map = useMemo<Map<string, TripAdjustment[]> | null>(() => {
+    const m = q.data;
+    if (!m) return null;
+    if (m instanceof Map) return m;
+    const restored = new Map<string, TripAdjustment[]>();
+    for (const k of Object.keys(m as Record<string, TripAdjustment[]>)) {
+      restored.set(k, (m as Record<string, TripAdjustment[]>)[k]);
+    }
+    return restored;
+  }, [q.data]);
+
   return {
-    map: q.data ?? null,
+    map,
     record,
     isLoading: q.isPending,
     refetch: q.refetch,
