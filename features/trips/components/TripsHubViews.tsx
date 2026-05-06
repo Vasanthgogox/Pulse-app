@@ -1240,7 +1240,12 @@ export function TripsHubTableView({
               />
             </TouchableOpacity>
           ) : null}
-          <View style={styles.auditSearchWrap}>
+          <View
+            style={[
+              styles.auditSearchWrap,
+              useMobileToolbarLayout && styles.auditSearchWrapMobile,
+            ]}
+          >
             <FontAwesome name="search" size={12} color={Theme.textSecondary} />
             <TextInput
               value={tableQuery}
@@ -2949,6 +2954,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.surfaceBorder,
     backgroundColor: Theme.surface,
+  },
+  auditSearchWrapMobile: {
+    width: "100%",
+    minWidth: 0,
+    maxWidth: "100%",
   },
   auditSearchInput: {
     flex: 1,
