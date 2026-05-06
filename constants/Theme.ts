@@ -30,6 +30,10 @@ export const Theme = {
   overlayFull: "rgba(0,0,0,0.95)",
   /** Modal/dropdown dim backdrop */
   overlayBackdrop: "rgba(0,0,0,0.4)",
+  /** Small alert/confirm modals: top accent + icon inner fill (neutral, not brand blue) */
+  modalNeutralAccent: "#151515",
+  /** Soft wash behind modal icon (neutral) */
+  modalNeutralIconWash: "rgba(0,0,0,0.08)",
   /** Border on dark backgrounds (e.g. sign-in divider) */
   borderOnDark: "rgba(248,250,252,0.12)",
   /** Dark screens (sign-in, error) */

@@ -40,10 +40,10 @@ export function ThemedAlertModal({
       };
     }
     return {
-      accentColor: Theme.primary,
+      accentColor: Theme.modalNeutralAccent,
       iconName: "check-circle",
-      iconColor: Theme.primary,
-      iconBg: Theme.aggregatePillBg,
+      iconColor: Theme.modalNeutralAccent,
+      iconBg: Theme.modalNeutralIconWash,
     };
   }, [variant]);
 
@@ -154,7 +154,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   okButtonPrimary: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.modalNeutralAccent,
   },
   okButtonSecondary: {
     backgroundColor: Theme.surfaceGray,

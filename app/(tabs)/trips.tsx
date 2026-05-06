@@ -62,6 +62,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
     Modal,
     NativeScrollEvent,
@@ -109,6 +110,7 @@ type HistoryTripMetricId =
   | "no_due_to_pay";
 
 const TRIPS_PAGE_BG = "#f4f5f7";
+const TRIPS_LIST_LAYOUT_KEY = "@q-mobile/trips-list-layout";
 
 /** Aligns list + Intake / In motion hub counts with All / Asset / Aggregate (same pill logic as hub cards). */
 function tripMatchesSupplyFilter(
@@ -221,10 +223,31 @@ export default function TripsScreen() {
   const [sortAnchorY, setSortAnchorY] = useState(0);
   const toolbarDateRangeFilter: ToolbarDateFilter =
     dateRangeFilter === "tomorrow" ? "all" : dateRangeFilter;
-  /** Compact/mobile view defaults to cards; wide desktop web defaults to table. */
-  const [listLayout, setListLayout] = useState<TripsListLayout>(() =>
-    Platform.OS === "web" && !isCompactWeb ? "table" : "cards",
-  );
+  /** Default to cards for all users; table remains an explicit user toggle. */
+  const [listLayout, setListLayout] = useState<TripsListLayout>("cards");
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const saved = await AsyncStorage.getItem(TRIPS_LIST_LAYOUT_KEY);
+        if (!isMounted) return;
+        if (saved === "cards" || saved === "table") {
+          setListLayout(saved);
+        }
+      } catch {
+        // Ignore storage read errors and keep default cards layout.
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+  const setListLayoutWithPersistence = useCallback((next: TripsListLayout) => {
+    setListLayout(next);
+    AsyncStorage.setItem(TRIPS_LIST_LAYOUT_KEY, next).catch(() => {
+      // Ignore storage write errors; UI state remains responsive.
+    });
+  }, []);
   useEffect(() => {
     if (isMobileViewport) setListLayout("cards");
   }, [isMobileViewport]);
@@ -1943,7 +1966,9 @@ export default function TripsScreen() {
                               listLayout === "cards" &&
                                 styles.tripsLayoutToggleBtnActive,
                             ]}
-                            onPress={() => setListLayout("cards")}
+                            onPress={() =>
+                              setListLayoutWithPersistence("cards")
+                            }
                             activeOpacity={0.85}
                             accessibilityRole="tab"
                             accessibilityState={{
@@ -1967,7 +1992,9 @@ export default function TripsScreen() {
                               listLayout === "table" &&
                                 styles.tripsLayoutToggleBtnActive,
                             ]}
-                            onPress={() => setListLayout("table")}
+                            onPress={() =>
+                              setListLayoutWithPersistence("table")
+                            }
                             activeOpacity={0.85}
                             accessibilityRole="tab"
                             accessibilityState={{
