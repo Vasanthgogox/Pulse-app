@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Join Q – Driver Network</title>
+  <!-- Open Graph (Facebook, WhatsApp, LinkedIn) -->
+  <meta property="og:title" content="Join me on Q Driver" />
+  <meta property="og:description" content="I'm driving with Q. Join the network – sign up and start earning today." />
+  <meta property="og:image" content="https://q-web.netlify.app/og-invite.png" />
+  <meta property="og:url" content="https://q-web.netlify.app/invite" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Q Driver" />
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Join me on Q Driver" />
+  <meta name="twitter:description" content="I'm driving with Q. Join the network – sign up and start earning today." />
+  <meta name="twitter:image" content="https://q-web.netlify.app/og-invite.png" />
+  <style>
+    body { font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #0f172a; color: white; flex-direction: column; gap: 16px; }
+    a { color: #38bdf8; font-size: 18px; }
+  </style>
+</head>
+<body>
+  <p>Redirecting you to Q Driver...</p>
+  <a href="https://q-web.netlify.app/">Tap here if not redirected</a>
+  <script>
+    // Persist ref param so the main app can read it after redirect
+    try {
+      var ref = new URLSearchParams(window.location.search).get('ref');
+      if (ref) sessionStorage.setItem('q_invite_ref', ref);
+    } catch (_) {}
+    setTimeout(function() { window.location.href = 'https://q-web.netlify.app/'; }, 1500);
+  </script>
+</body>
+</html>

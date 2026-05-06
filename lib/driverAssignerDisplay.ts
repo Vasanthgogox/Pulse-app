@@ -107,7 +107,10 @@ export function buildAssignerDisplayForTrip(
     tripMeta.created_by_name,
     tripMeta.dispatcher_name,
   ];
-  /** Fleet / assigning org — never use client/supplier names (those are cargo parties). */
+  /**
+   * Fleet / assigning org. `inviteForTrip` matches `from_organization_id === trip.organization_id`,
+   * so `from_org_name` is the owning fleet — not the aggregate `supplier_id` party.
+   */
   const tripAssignedByOrgNameCandidates = [
     deps.assignerOrgNameByUserId?.[assignerUserId] ?? null,
     deps.organizationNamesById[(trip.organization_id ?? "").trim()] ?? null,
@@ -134,7 +137,11 @@ export function buildAssignerDisplayForTrip(
   const assignedByOrgName =
     tripAssignedByOrgNameCandidates
       .map((value) => String(value ?? "").trim())
-      .find((value) => value.length > 0) ?? "Assigning fleet";
+      .find((value) => value.length > 0) ??
+    ((trip.organization_id ?? "").trim() ===
+    (driverOrganizationId ?? "").trim()
+      ? "Your fleet"
+      : "Assigning fleet");
 
   const assignerPersonDisplay =
     (assignedByUserName ?? "").trim() || "Fleet dispatcher";
