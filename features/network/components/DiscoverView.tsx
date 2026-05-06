@@ -399,15 +399,6 @@ export function DiscoverView({
 
   const sentQ = useConnectionRequestsSentQuery(orgId);
 
-  // Org IDs we've already sent a pending request to (exclude from discover)
-  const sentOrgIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const r of sentQ.data ?? []) {
-      if (r.status === 'pending') ids.add(r.to_organization_id);
-    }
-    return ids;
-  }, [sentQ.data]);
-
   const todayInviteCount = useMemo(
     () => todayPendingInviteCountFromSent(sentQ.data ?? []),
     [sentQ.data],
@@ -462,9 +453,12 @@ export function DiscoverView({
   const connectableOrgs = useMemo(
     () => scoredOrgs.filter((o) => {
       const status = String(o.connection_status ?? 'none').toLowerCase();
-      return status === 'none' && !sentOrgIds.has(o.id);
+      const role = String(o.profile_role ?? '').toLowerCase();
+      // Show all non-connected users (including pending sent/received requests).
+      // Exclude only connected users and drivers.
+      return status !== 'approved' && role !== 'driver';
     }),
-    [scoredOrgs, sentOrgIds],
+    [scoredOrgs],
   );
   const recommended = connectableOrgs.filter((o) => o.score > 0);
   const rest = connectableOrgs.filter((o) => o.score <= 0);

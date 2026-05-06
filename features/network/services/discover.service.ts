@@ -7,6 +7,8 @@ export interface DiscoverOrg {
   id: string;
   name: string;
   avatar_seed: string | null;
+  /** Optional profile role from RPC, used to hide drivers in Discover. */
+  profile_role?: string | null;
   /** From organizations — RPC discover_organizations returns these for card location. */
   address_line?: string | null;
   city?: string | null;
