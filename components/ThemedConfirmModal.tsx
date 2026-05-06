@@ -67,10 +67,10 @@ export function ThemedConfirmModal({
       };
     }
     return {
-      accentColor: Theme.primary,
+      accentColor: Theme.modalNeutralAccent,
       iconName: "question",
-      iconInnerBg: Theme.primary,
-      iconBg: "rgba(26, 35, 126, 0.08)",
+      iconInnerBg: Theme.modalNeutralAccent,
+      iconBg: Theme.modalNeutralIconWash,
       confirmButtonBg: Theme.buttonMatteBlack,
       iconColor: "#FFFFFF",
     };

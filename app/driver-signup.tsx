@@ -10,7 +10,7 @@ import { ALL_PRESET_AVATARS, getAvatarUriForSeed } from '@/constants/DriverLevel
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useIsOnline } from '@/contexts/NetworkContext';
-import { checkExistingUserByPhone } from '@/features/auth';
+import { checkExistingUserByPhone, setPendingOAuthMetadata } from '@/features/auth';
 import { validateEmail } from '@/lib/emailValidation';
 import { isPhoneValid, validatePhone } from '@/lib/phoneValidation';
 import { formatMobileNumber } from '@/lib/format';
@@ -42,7 +42,7 @@ const DRIVER_AVATAR_STORAGE_KEY = 'driver_avatar_seed';
 
 // Professional wording per step (title + subtitle), no "Step 1/2" labels
 const STEP_CONTENT = [
-  { title: 'Welcome aboard or back', subtitle: 'To sign up or log in, enter your number' },
+  { title: 'Welcome aboard as driver', subtitle: 'To sign up or log in, enter your number' },
   { title: 'Enter 4 digit code', subtitle: 'We sent a code to your number. Enter the code in that message.' },
   { title: 'Finish signing up', subtitle: 'Enter your name, email and password to complete your profile.' },
   { title: 'Driving license', subtitle: 'Upload or capture your driving license to continue.' },
@@ -262,10 +262,12 @@ export default function DriverSignUpScreen() {
     }
     setLoading(true);
     try {
-      const { error } = await signInWithGoogle({
+      const pending = await setPendingOAuthMetadata({
         role: "driver",
         operatingModel: "ASSET_BASED",
       });
+      if (pending.error) throw pending.error;
+      const { error } = await signInWithGoogle(true);
       if (error) throw error;
       router.replace("/");
     } catch (e) {
@@ -426,7 +428,7 @@ export default function DriverSignUpScreen() {
         {/* Step 1: Welcome – India phone only */}
         <View style={[styles.page, { width: pageWidth }]}>
           <View style={styles.pageContent}>
-            <Text style={styles.mainTitle}>{STEP_CONTENT[0].title}</Text>
+            <Text style={[styles.mainTitle, styles.mainTitleWelcome]}>{STEP_CONTENT[0].title}</Text>
             <Text style={styles.subTitle}>{STEP_CONTENT[0].subtitle}</Text>
             <View style={styles.inputGroup}>
               <Text style={styles.fieldLabel}>Phone</Text>
@@ -942,6 +944,11 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
     textAlign: 'center',
     width: '100%',
+  },
+  /** Smaller than `mainTitle` so the welcome line fits without auto-shrink. */
+  mainTitleWelcome: {
+    fontSize: 22,
+    letterSpacing: -0.4,
   },
   subTitle: {
     fontSize: 16,

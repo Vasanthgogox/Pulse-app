@@ -400,22 +400,29 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
   const canAward = statusLower !== 'awarded' && statusLower !== 'completed' && statusLower !== 'deployed';
   const liveBidsCount = isOwner ? quotes.length : myQuote ? 1 : 0;
   const supplierQuoteTitle = myQuote ? 'Your Quote' : 'No Quote Sent Yet';
+  const isIndentCompleted = statusLower === 'completed';
   const supplierQuoteMessage = myQuote
     ? myQuoteStatus === 'accepted'
-      ? 'Your quote is awarded. Continue from Claimed to assign and deploy.'
+      ? isIndentCompleted
+        ? 'This load is completed. You can review the final details on this page.'
+        : 'Your quote is awarded. Continue from Claimed to assign and deploy.'
       : myQuoteStatus === 'rejected'
         ? 'Your quote was not selected for this load.'
         : 'Your quote is submitted. You can update it while this load remains open.'
     : 'Place your bid to participate in this load.';
   const supplierLockedMessage =
     myQuoteStatus === 'accepted'
-      ? 'Bid accepted. Continue from Claimed.'
+      ? isIndentCompleted
+        ? 'Load completed.'
+        : 'Bid accepted. Continue from Claimed.'
       : myQuoteStatus === 'rejected'
         ? 'Bidding closed for this load.'
         : 'Bidding unavailable for current status';
   const supplierFooterStatus =
     myQuoteStatus === 'accepted'
-      ? 'BID AWARDED'
+      ? isIndentCompleted
+        ? 'COMPLETED'
+        : 'BID AWARDED'
       : myQuoteStatus === 'rejected'
         ? 'BID REJECTED'
         : 'BIDDING LOCKED';

@@ -10,6 +10,7 @@ import * as authService from "@/features/auth/services/auth.service";
 import { isFirstLaunchDone, setFirstLaunchDone } from "@/lib/firstLaunch";
 import { getKeepSignedIn, setKeepSignedIn } from "@/lib/keepSignedInPreference";
 import { supabase } from "@/lib/supabase";
+import { clearAllRealtimeChannels } from "@/lib/realtimeRegistry";
 import {
     createContext,
     useContext,
@@ -431,6 +432,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     signOutRequestedRef.current = true;
+    clearAllRealtimeChannels();
     try {
       await authService.signOut();
     } catch (error) {

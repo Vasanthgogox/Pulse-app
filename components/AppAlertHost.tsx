@@ -48,7 +48,7 @@ export function AppAlertHost() {
           accessibilityViewIsModal
         >
           <View style={styles.iconWrap}>
-            <Clock size={28} color={Theme.primary} strokeWidth={2.2} />
+            <Clock size={28} color={Theme.modalNeutralAccent} strokeWidth={2.2} />
           </View>
           <Text style={styles.title}>{title}</Text>
           {message ? (
@@ -102,7 +102,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: 'rgba(26,35,126,0.08)',
+    backgroundColor: Theme.modalNeutralIconWash,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 14,
     borderRadius: 14,
-    backgroundColor: Theme.buttonPrimary,
+    backgroundColor: Theme.modalNeutralAccent,
   },
   buttonPressed: {
     opacity: 0.88,
@@ -137,6 +137,6 @@ const styles = StyleSheet.create({
   buttonLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: Theme.buttonPrimaryText,
+    color: Theme.buttonMatteBlackText,
   },
 });

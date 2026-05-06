@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { recordStoryView, getStoryViews } from '@/features/network/services/story-views.service';
 import { queryKeys } from '@/lib/queryKeys';
+import { STALE } from '@/lib/queryClient';
 
 export function useStoryViewsQuery(postId: string | null, enabled: boolean) {
   return useQuery({
@@ -11,7 +12,7 @@ export function useStoryViewsQuery(postId: string | null, enabled: boolean) {
       return res.views;
     },
     enabled: !!postId && enabled,
-    staleTime: 300_000,
+    staleTime: STALE.moderate,
   });
 }
 

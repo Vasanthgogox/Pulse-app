@@ -585,6 +585,7 @@ export async function getNetworkConversationsByOrg(
     .or(`org_a_id.eq.${orgId},org_b_id.eq.${orgId}`)
     .order("last_message_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false, referencedTable: "network_messages" })
+    .limit(100)
     .limit(50, { referencedTable: "network_messages" });
 
   if (error) throw error;
@@ -864,12 +865,14 @@ export async function getIntegratedPartners(
       .from("suppliers")
       .select("company_name, name, linked_organization_id")
       .eq("organization_id", orgId)
-      .not("linked_organization_id", "is", null),
+      .not("linked_organization_id", "is", null)
+      .limit(500),
     supabase()
       .from("clients")
       .select("name, linked_organization_id")
       .eq("organization_id", orgId)
-      .not("linked_organization_id", "is", null),
+      .not("linked_organization_id", "is", null)
+      .limit(500),
   ]);
 
   const seen = new Set<string>();

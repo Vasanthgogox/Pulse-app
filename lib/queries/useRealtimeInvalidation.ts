@@ -1,14 +1,13 @@
 /**
  * Realtime subscriptions that invalidate TanStack Query cache on DB change.
- * Replaces callback-based useRealtimeTrips/useRealtimeTransactions with query invalidation.
- * See docs/PAGINATION_AND_CACHE_ANALYSIS.md.
+ * Granular invalidation: UPDATE → only the changed row's detail key.
+ *                        INSERT/DELETE → the list key too.
  */
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queryKeys';
 import { subscribeSharedPostgresChanges } from '@/lib/realtimeRegistry';
 
-/** Subscribe to trips for org; invalidate trips query on any change. */
 export function useRealtimeTripsInvalidation(organizationId: string | null) {
   const qc = useQueryClient();
 
@@ -24,15 +23,37 @@ export function useRealtimeTripsInvalidation(organizationId: string | null) {
           filter: `organization_id=eq.${organizationId}`,
         },
       ],
-      () => {
-        qc.invalidateQueries({ queryKey: queryKeys.trips.all(organizationId) });
+      (payload) => {
+        const tripId = (payload.new as { id?: string })?.id ?? (payload.old as { id?: string })?.id;
+
+        // Always invalidate the specific trip detail if we have an id
+        if (tripId) {
+          qc.invalidateQueries({ queryKey: queryKeys.trips.detail(tripId) });
+        }
+
+        // Invalidate list only on INSERT or DELETE (UPDATE just changes the row in-place)
+        if (payload.eventType !== 'UPDATE') {
+          qc.invalidateQueries({ queryKey: queryKeys.trips.all(organizationId) });
+          qc.invalidateQueries({ queryKey: queryKeys.trips.whereOrgIsClient(organizationId) });
+          qc.invalidateQueries({ queryKey: queryKeys.trips.whereOrgIsSupplier(organizationId) });
+        } else {
+          // UPDATE: update the list cache in-place to avoid a full refetch
+          qc.setQueriesData(
+            { queryKey: queryKeys.trips.all(organizationId) },
+            (old: unknown) => {
+              if (!Array.isArray(old) || !tripId) return old;
+              const updated = payload.new as Record<string, unknown>;
+              return old.map((t: { id: string }) => (t.id === tripId ? { ...t, ...updated } : t));
+            },
+          );
+        }
+
         qc.invalidateQueries({ queryKey: queryKeys.trips.shipperNamesForSupplier(organizationId) });
-      }
+      },
     );
   }, [organizationId, qc]);
 }
 
-/** Subscribe to transactions for org; invalidate transactions query on any change. */
 export function useRealtimeTransactionsInvalidation(organizationId: string | null) {
   const qc = useQueryClient();
 
@@ -49,16 +70,15 @@ export function useRealtimeTransactionsInvalidation(organizationId: string | nul
         },
       ],
       () => {
+        // Transactions are aggregated in finance totals — always invalidate all
         qc.invalidateQueries({ queryKey: queryKeys.transactions.all(organizationId) });
-      }
+      },
     );
   }, [organizationId, qc]);
 }
 
 /**
- * Previously subscribed clients/suppliers/drivers/connection_requests/driver_invites to realtime.
- * These tables are slow-changing and all mutations already call invalidateQueries, so realtime
- * was redundant and added ~50% of WAL decoder overhead. Removed; staleTime=60s handles staleness.
- * The hook is kept as a no-op so call sites don't need to change.
+ * No-op: clients/suppliers/drivers are slow-changing; mutations invalidate manually.
+ * Realtime on these tables added ~50% WAL decoder overhead with negligible benefit.
  */
 export function useRealtimeNetworkInvalidation(_organizationId: string | null) {}
