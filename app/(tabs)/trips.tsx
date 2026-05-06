@@ -1699,10 +1699,11 @@ export default function TripsScreen() {
           }
         >
           <View
-            style={[
-              styles.tripsBodyFiltersBleed,
-              isMobileViewport && styles.tripsBodyFiltersBleedMobileDark,
-            ]}
+            style={
+              isMobileViewport
+                ? styles.tripsBodyFiltersMobileInLayout
+                : styles.tripsBodyFiltersBleed
+            }
           >
             <View
               style={[
@@ -1780,94 +1781,6 @@ export default function TripsScreen() {
                         </Text>
                       </TouchableOpacity>
                     ))}
-                  </ScrollView>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    keyboardShouldPersistTaps="handled"
-                    nestedScrollEnabled
-                    contentContainerStyle={styles.tripsToolbarScrollContent}
-                    style={styles.tripsToolbarScroll}
-                  >
-                    {(
-                      [
-                        { id: "all" as const, label: tr("all") },
-                        { id: "today" as const, label: tr("todayTrips") },
-                        {
-                          id: "yesterday" as const,
-                          label: tr("yesterdayTrips"),
-                        },
-                        {
-                          id: "this_week" as const,
-                          label: tr("thisWeekTrips"),
-                        },
-                        {
-                          id: "this_month" as const,
-                          label: tr("thisMonthTrips"),
-                        },
-                      ] as const
-                    ).map(({ id, label }) => (
-                      <TouchableOpacity
-                        key={id}
-                        style={[
-                          styles.tripsBodyDateChip,
-                          styles.tripsMobileDateChip,
-                          dateRangeFilter === id &&
-                            styles.tripsBodyDateChipActive,
-                          isMobileViewport && styles.tripsBodyDateChipMobileDark,
-                          dateRangeFilter === id &&
-                            isMobileViewport &&
-                            styles.tripsBodyDateChipActiveMobileDark,
-                        ]}
-                        onPress={() => {
-                          setDateRangeFilter(id);
-                          setCustomDateFrom(null);
-                          setCustomDateTo(null);
-                        }}
-                        activeOpacity={0.85}
-                      >
-                        <Text
-                          style={[
-                            styles.tripsBodyDateChipText,
-                            dateRangeFilter === id &&
-                              styles.tripsBodyDateChipTextActive,
-                            isMobileViewport &&
-                              styles.tripsBodyDateChipTextMobileDark,
-                            dateRangeFilter === id &&
-                              isMobileViewport &&
-                              styles.tripsBodyDateChipTextActiveMobileDark,
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {label}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                    <TouchableOpacity
-                      style={[
-                        styles.tripsBodyDateRangeIconBtn,
-                        dateRangeFilter === "custom" &&
-                          styles.tripsDateRangeIconBtnActive,
-                        isMobileViewport &&
-                          styles.tripsBodyDateRangeIconBtnMobileDark,
-                      ]}
-                      onPress={() => setShowDateRangePicker(true)}
-                      activeOpacity={0.8}
-                      accessibilityLabel={tr("dateRangeLabel")}
-                      accessibilityRole="button"
-                    >
-                      <FontAwesome
-                        name="calendar"
-                        size={12}
-                        color={
-                          dateRangeFilter === "custom"
-                            ? Theme.textOnDark
-                            : isMobileViewport
-                              ? Theme.textOnDarkMuted
-                              : Theme.textPrimaryDark
-                        }
-                      />
-                    </TouchableOpacity>
                   </ScrollView>
                 </>
               ) : (
@@ -2564,69 +2477,6 @@ export default function TripsScreen() {
             </Text>
           ) : effectiveListLayout === "table" ? (
             <View>
-              <View style={styles.tripsTablePaginationRow}>
-                <Text style={styles.tripsTablePaginationMeta}>
-                  {`Page ${tripsTablePageSafe + 1}/${tripsTableTotalPages} · ${filtered.length}`}
-                </Text>
-                <View style={styles.tripsTablePaginationRight}>
-                  <View style={styles.tripsTablePageSizeWrap}>
-                    {[25, 50].map((n) => (
-                      <TouchableOpacity
-                        key={n}
-                        style={[
-                          styles.tripsTablePageSizePill,
-                          tripsTablePageSize === n &&
-                            styles.tripsTablePageSizePillActive,
-                        ]}
-                        onPress={() => setTripsTablePageSize(n as 25 | 50)}
-                        activeOpacity={0.85}
-                        accessibilityRole="button"
-                        accessibilityState={{
-                          selected: tripsTablePageSize === n,
-                        }}
-                      >
-                        <Text
-                          style={[
-                            styles.tripsTablePageSizeText,
-                            tripsTablePageSize === n &&
-                              styles.tripsTablePageSizeTextActive,
-                          ]}
-                        >
-                          {n}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                  <TouchableOpacity
-                    style={[
-                      styles.tripsTablePageNavBtn,
-                      tripsTablePageSafe <= 0 &&
-                        styles.tripsTablePageNavBtnDisabled,
-                    ]}
-                    onPress={() => setTripsTablePage((p) => Math.max(0, p - 1))}
-                    disabled={tripsTablePageSafe <= 0}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.tripsTablePageNavText}>Prev</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.tripsTablePageNavBtn,
-                      tripsTablePageSafe >= tripsTableTotalPages - 1 &&
-                        styles.tripsTablePageNavBtnDisabled,
-                    ]}
-                    onPress={() =>
-                      setTripsTablePage((p) =>
-                        Math.min(tripsTableTotalPages - 1, p + 1),
-                      )
-                    }
-                    disabled={tripsTablePageSafe >= tripsTableTotalPages - 1}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.tripsTablePageNavText}>Next</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
             <ScrollView
               horizontal
               nestedScrollEnabled
@@ -2738,69 +2588,6 @@ export default function TripsScreen() {
             </View>
           ) : (
             <View>
-              <View style={styles.tripsTablePaginationRow}>
-                <Text style={styles.tripsTablePaginationMeta}>
-                  {`Page ${tripsTablePageSafe + 1}/${tripsTableTotalPages} · ${filtered.length}`}
-                </Text>
-                <View style={styles.tripsTablePaginationRight}>
-                  <View style={styles.tripsTablePageSizeWrap}>
-                    {[25, 50].map((n) => (
-                      <TouchableOpacity
-                        key={n}
-                        style={[
-                          styles.tripsTablePageSizePill,
-                          tripsTablePageSize === n &&
-                            styles.tripsTablePageSizePillActive,
-                        ]}
-                        onPress={() => setTripsTablePageSize(n as 25 | 50)}
-                        activeOpacity={0.85}
-                        accessibilityRole="button"
-                        accessibilityState={{
-                          selected: tripsTablePageSize === n,
-                        }}
-                      >
-                        <Text
-                          style={[
-                            styles.tripsTablePageSizeText,
-                            tripsTablePageSize === n &&
-                              styles.tripsTablePageSizeTextActive,
-                          ]}
-                        >
-                          {n}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                  <TouchableOpacity
-                    style={[
-                      styles.tripsTablePageNavBtn,
-                      tripsTablePageSafe <= 0 &&
-                        styles.tripsTablePageNavBtnDisabled,
-                    ]}
-                    onPress={() => setTripsTablePage((p) => Math.max(0, p - 1))}
-                    disabled={tripsTablePageSafe <= 0}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.tripsTablePageNavText}>Prev</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.tripsTablePageNavBtn,
-                      tripsTablePageSafe >= tripsTableTotalPages - 1 &&
-                        styles.tripsTablePageNavBtnDisabled,
-                    ]}
-                    onPress={() =>
-                      setTripsTablePage((p) =>
-                        Math.min(tripsTableTotalPages - 1, p + 1),
-                      )
-                    }
-                    disabled={tripsTablePageSafe >= tripsTableTotalPages - 1}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.tripsTablePageNavText}>Next</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
               <TripsHubTableView
                 trips={tripsTableVisible}
                 currentOrganizationId={currentOrganization?.id ?? null}
@@ -3713,8 +3500,24 @@ const styles = StyleSheet.create({
       web: { minWidth: 0 },
     }),
   },
+  /** Mobile: keep filter block inside page layout flow (no full-bleed strip). */
+  tripsBodyFiltersMobileInLayout: {
+    marginBottom: 8,
+    paddingTop: 8,
+    paddingBottom: 10,
+    paddingHorizontal: 0,
+    backgroundColor: Theme.darkBackground,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Theme.separatorDark,
+    overflow: "hidden",
+  },
   /** Narrow web / mobile: one continuous dark strip (tabs + date chips + metric rail). */
   tripsBodyFiltersBleedMobileDark: {
+    marginHorizontal: 0,
+    paddingHorizontal: 0,
+    borderRadius: 16,
+    overflow: "hidden",
     backgroundColor: Theme.darkBackground,
     borderBottomColor: Theme.separatorDark,
   },
@@ -3728,13 +3531,13 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   tripsInlineFilterPanelMobileDark: {
-    marginBottom: 6,
-    backgroundColor: "transparent",
-    borderTopWidth: 0,
-    borderBottomWidth: 0,
-    borderColor: "transparent",
-    borderRadius: 0,
-    overflow: "visible",
+    marginBottom: 8,
+    backgroundColor: Theme.darkBackground,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: Theme.separatorDark,
+    borderRadius: 16,
+    overflow: "hidden",
   },
   tripsInlineFilterRowWeb: {
     flexDirection: "row",
