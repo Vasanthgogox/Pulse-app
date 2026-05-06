@@ -95,6 +95,7 @@ export function buildAssignerDisplayForTrip(
     trip,
     deps.assignmentActorByTripId,
   ).trim();
+  const isAggregateTrip = !!String(trip.supplier_id ?? "").trim();
 
   const tripAssignedByUserNameCandidates = [
     tripMeta.assigned_by_name,
@@ -104,9 +105,9 @@ export function buildAssignerDisplayForTrip(
   ];
   /** Fleet / assigning org — never use client/supplier names (those are cargo parties). */
   const tripAssignedByOrgNameCandidates = [
-    deps.organizationNamesById[(trip.organization_id ?? "").trim()] ?? null,
     deps.assignerOrgNameByUserId?.[assignerUserId] ?? null,
-    inviteForTrip?.from_org_name ?? null,
+    deps.organizationNamesById[(trip.organization_id ?? "").trim()] ?? null,
+    ...(isAggregateTrip ? [] : [inviteForTrip?.from_org_name ?? null]),
     (tripMeta.organization_name as string | null | undefined) ?? null,
     (tripMeta.org_name as string | null | undefined) ?? null,
     (tripMeta.from_org_name as string | null | undefined) ?? null,
@@ -130,10 +131,12 @@ export function buildAssignerDisplayForTrip(
     tripAssignedByOrgNameCandidates
       .map((value) => String(value ?? "").trim())
       .find((value) => value.length > 0) ??
-    ((trip.organization_id ?? "").trim() ===
-    (driverOrganizationId ?? "").trim()
-      ? "Your fleet"
-      : "Assigning fleet");
+    (isAggregateTrip
+      ? "Assigning organization"
+      : (trip.organization_id ?? "").trim() ===
+            (driverOrganizationId ?? "").trim()
+        ? "Your fleet"
+        : "Assigning fleet");
 
   const assignerPersonDisplay =
     (assignedByUserName ?? "").trim() || "Fleet dispatcher";

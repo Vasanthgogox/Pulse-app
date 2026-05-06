@@ -233,16 +233,17 @@ export async function acknowledgeLedgerEventMessage(
     .select("id, metadata")
     .eq("conversation_id", conversationId)
     .eq("message_type", "ledger_event")
-    .neq("id", messageId);
+    .neq("id", messageId)
+    .filter("metadata->>transaction_id", "eq", txId);
 
-  for (const mirror of mirrors ?? []) {
-    if ((mirror.metadata as LedgerEventMetadata)?.transaction_id === txId) {
-      await supabase()
+  await Promise.all(
+    (mirrors ?? []).map((mirror) =>
+      supabase()
         .from("trip_messages")
         .update({ metadata: { ...mirror.metadata, acknowledged_at: acknowledgedAt } })
-        .eq("id", mirror.id);
-    }
-  }
+        .eq("id", mirror.id)
+    )
+  );
 }
 
 /**

@@ -397,9 +397,9 @@ export default function DriverNotificationsScreen() {
           tripMeta.dispatcher_name,
         ];
         const tripAssignedByOrgNameCandidates = [
-          organizationNamesById[(trip.organization_id ?? '').trim()] ?? null,
           assignerOrgNameByUserId[assignerUserId] ?? null,
-          inviteForTrip?.from_org_name ?? null,
+          organizationNamesById[(trip.organization_id ?? '').trim()] ?? null,
+          ...(isAggregateTrip(trip) ? [] : [inviteForTrip?.from_org_name ?? null]),
           (tripMeta.organization_name as string | null | undefined) ?? null,
           (tripMeta.org_name as string | null | undefined) ?? null,
           (tripMeta.from_org_name as string | null | undefined) ?? null,
@@ -423,10 +423,12 @@ export default function DriverNotificationsScreen() {
           tripAssignedByOrgNameCandidates
             .map((value) => String(value ?? '').trim())
             .find((value) => value.length > 0) ??
-          ((trip.organization_id ?? '').trim() ===
-          (driver?.organization_id ?? '').trim()
-            ? 'Your fleet'
-            : 'Assigning fleet');
+          (isAggregateTrip(trip)
+            ? 'Assigning organization'
+            : (trip.organization_id ?? '').trim() ===
+                (driver?.organization_id ?? '').trim()
+              ? 'Your fleet'
+              : 'Assigning fleet');
 
         const assignerPersonDisplay =
           (assignedByUserName ?? '').trim() || 'Fleet dispatcher';

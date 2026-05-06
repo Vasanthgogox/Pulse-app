@@ -55,57 +55,10 @@ export function useRealtimeTransactionsInvalidation(organizationId: string | nul
   }, [organizationId, qc]);
 }
 
-/** Subscribe to network-related tables; invalidate network queries on any change. */
-export function useRealtimeNetworkInvalidation(organizationId: string | null) {
-  const qc = useQueryClient();
-
-  useEffect(() => {
-    if (!organizationId) return;
-
-    const invalidateNetwork = () => {
-      qc.invalidateQueries({ queryKey: queryKeys.clients.all(organizationId) });
-      qc.invalidateQueries({ queryKey: queryKeys.suppliers.all(organizationId) });
-      qc.invalidateQueries({ queryKey: queryKeys.drivers.all(organizationId) });
-      qc.invalidateQueries({ queryKey: queryKeys.connectionRequests.received(organizationId) });
-      qc.invalidateQueries({ queryKey: queryKeys.connectionRequests.sent(organizationId) });
-      qc.invalidateQueries({ queryKey: queryKeys.driverInvites.sent(organizationId) });
-    };
-
-    return subscribeSharedPostgresChanges(
-      `network:org:${organizationId}`,
-      [
-        {
-          event: '*',
-          schema: 'public',
-          table: 'clients',
-          filter: `organization_id=eq.${organizationId}`,
-        },
-        {
-          event: '*',
-          schema: 'public',
-          table: 'suppliers',
-          filter: `organization_id=eq.${organizationId}`,
-        },
-        {
-          event: '*',
-          schema: 'public',
-          table: 'drivers',
-          filter: `organization_id=eq.${organizationId}`,
-        },
-        {
-          event: '*',
-          schema: 'public',
-          table: 'connection_requests',
-          filter: `or(from_organization_id.eq.${organizationId},to_organization_id.eq.${organizationId})`,
-        },
-        {
-          event: '*',
-          schema: 'public',
-          table: 'driver_invites',
-          filter: `from_organization_id=eq.${organizationId}`,
-        },
-      ],
-      invalidateNetwork
-    );
-  }, [organizationId, qc]);
-}
+/**
+ * Previously subscribed clients/suppliers/drivers/connection_requests/driver_invites to realtime.
+ * These tables are slow-changing and all mutations already call invalidateQueries, so realtime
+ * was redundant and added ~50% of WAL decoder overhead. Removed; staleTime=60s handles staleness.
+ * The hook is kept as a no-op so call sites don't need to change.
+ */
+export function useRealtimeNetworkInvalidation(_organizationId: string | null) {}

@@ -29,6 +29,13 @@ export interface SupplierRow {
   owner_full_name?: string | null;
 }
 
+const SUPPLIER_COLUMNS = [
+  "id", "organization_id", "name", "contact", "company_name", "contact_person",
+  "phone", "email", "address", "gst_number", "is_active", "is_verified",
+  "created_at", "updated_at", "supplier_type", "linked_organization_id",
+  "avatar_url", "avatar_seed", "owner_full_name",
+].join(",");
+
 export async function getSuppliersByOrganization(
   orgId: string,
   opts?: PageOpts
@@ -60,7 +67,7 @@ export async function getSuppliersByOrganization(
   const base = () =>
     supabase()
       .from('suppliers')
-      .select('*')
+      .select(SUPPLIER_COLUMNS)
       .eq('organization_id', orgId)
       .order('created_at', { ascending: false });
 
@@ -84,7 +91,7 @@ export async function getSupplierById(
 ): Promise<{ error: Error | null; supplier: SupplierRow | null }> {
   const { data, error } = await supabase()
     .from('suppliers')
-    .select('*')
+    .select(SUPPLIER_COLUMNS)
     .eq('organization_id', orgId)
     .eq('id', supplierId)
     .maybeSingle();

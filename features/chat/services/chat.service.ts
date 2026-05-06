@@ -444,7 +444,7 @@ export async function getOrCreateConversation(params: {
   const { data, error } = await supabase()
     .from("trip_conversations")
     .upsert(payload, { onConflict: "trip_id,party_type" })
-    .select("*")
+    .select("id,organization_id,trip_id,party_type,party_name,client_id,supplier_id,driver_id,last_message_at,last_message_preview,unread_dispatcher_count,created_at,updated_at")
     .single();
 
   if (error) throw error;
@@ -459,6 +459,8 @@ export async function sendChatMessage(params: {
   senderName: string;
   senderUserId: string | null;
   messageType?: MessageType;
+  /** Required for `feedback_request` (and other typed system payloads). */
+  metadata?: Record<string, unknown> | null;
 }): Promise<TripMessageRow> {
   const {
     conversationId,
@@ -468,18 +470,31 @@ export async function sendChatMessage(params: {
     senderName,
     senderUserId,
     messageType = "text",
+    metadata = null,
   } = params;
 
   // Preferred path: DB RPC writes source message and mirrors to linked partner org.
+  const rpcPayload: Record<string, unknown> = {
+    p_conversation_id: conversationId,
+    p_content: content,
+    p_sender_role: senderRole,
+    p_sender_name: senderName,
+    p_sender_user_id: senderUserId,
+    p_message_type: messageType,
+  };
+  if (metadata != null) {
+    rpcPayload.p_metadata = metadata;
+  }
   const { data: rpcData, error: rpcError } = await supabase().rpc(
     "send_trip_chat_message",
-    {
-      p_conversation_id: conversationId,
-      p_content: content,
-      p_sender_role: senderRole,
-      p_sender_name: senderName,
-      p_sender_user_id: senderUserId,
-      p_message_type: messageType,
+    rpcPayload as {
+      p_conversation_id: string;
+      p_content: string;
+      p_sender_role: string;
+      p_sender_name: string;
+      p_sender_user_id: string | null;
+      p_message_type: string;
+      p_metadata?: Record<string, unknown> | null;
     },
   );
 
@@ -511,18 +526,21 @@ export async function sendChatMessage(params: {
   if (convMetaErr) throw convMetaErr;
   const messageOrgId = (convMeta?.organization_id as string | undefined) ?? organizationId;
 
+  const insertRow: Record<string, unknown> = {
+    conversation_id: conversationId,
+    organization_id: messageOrgId,
+    sender_user_id: senderUserId,
+    sender_role: senderRole,
+    sender_name: senderName,
+    content,
+    message_type: messageType,
+    is_read: false,
+  };
+  if (metadata != null) insertRow.metadata = metadata;
+
   const { data, error } = await supabase()
     .from("trip_messages")
-    .insert({
-      conversation_id: conversationId,
-      organization_id: messageOrgId,
-      sender_user_id: senderUserId,
-      sender_role: senderRole,
-      sender_name: senderName,
-      content,
-      message_type: messageType,
-      is_read: false,
-    })
+    .insert(insertRow as never)
     .select()
     .single();
 
@@ -544,7 +562,7 @@ export async function getMessagesByConversation(
 ): Promise<TripMessageRow[]> {
   const { data, error } = await supabase()
     .from("trip_messages")
-    .select("*")
+    .select("id,conversation_id,organization_id,sender_user_id,sender_role,sender_name,content,message_type,metadata,is_read,read_at,created_at")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: false })
     .limit(100);
@@ -598,7 +616,7 @@ export async function getOrCreateNetworkConversation(params: {
 
   const { data: existing } = await supabase()
     .from("network_conversations")
-    .select("*")
+    .select("id,org_a_id,org_b_id,org_a_name,org_b_name,last_message_at,last_message_preview,unread_count_a,unread_count_b,created_at,updated_at")
     .eq("org_a_id", aId)
     .eq("org_b_id", bId)
     .maybeSingle();
@@ -698,6 +716,65 @@ export async function persistTripFeedbackMessageMetadataIfRated(params: {
     if (!error) wrote = true;
   }
   if (wrote) notifyTripChatMessagesChanged();
+}
+
+/**
+ * When the DB trigger / `fn_post_trip_feedback_prompt_to_chats` did not create a row for this thread,
+ * insert the same `feedback_request` shape via `send_trip_chat_message` (dispatcher / system).
+ */
+export async function seedTripConversationFeedbackPromptIfMissing(params: {
+  conversationId: string;
+  organizationId: string;
+  partyType: ConversationPartyType;
+  partyName: string;
+  clientId: string | null;
+  supplierId: string | null;
+  driverId: string | null;
+}): Promise<{ created: boolean; error: Error | null }> {
+  const convId = (params.conversationId ?? "").trim();
+  if (!convId) return { created: false, error: null };
+
+  const { data: existing, error: exErr } = await supabase()
+    .from("trip_messages")
+    .select("id")
+    .eq("conversation_id", convId)
+    .eq("message_type", "feedback_request")
+    .limit(1)
+    .maybeSingle();
+  if (exErr) return { created: false, error: new Error(exErr.message) };
+  if (existing?.id) return { created: false, error: null };
+
+  const ratedParty = params.partyType;
+  const ratedId =
+    ratedParty === "client"
+      ? (params.clientId ?? "").trim()
+      : ratedParty === "supplier"
+        ? (params.supplierId ?? "").trim()
+        : (params.driverId ?? "").trim();
+  if (!ratedId) return { created: false, error: null };
+
+  const meta: Record<string, unknown> = {
+    feedback_version: 1,
+    rated_party_type: ratedParty,
+    rated_id: ratedId,
+    rated_display_name: (params.partyName ?? "").trim() || undefined,
+  };
+  const content = "Trip completed — rate this partner to close the mission debrief.";
+  try {
+    await sendChatMessage({
+      conversationId: convId,
+      organizationId: params.organizationId,
+      content,
+      senderRole: "system",
+      senderName: "Trip System",
+      senderUserId: null,
+      messageType: "feedback_request",
+      metadata: meta,
+    });
+    return { created: true, error: null };
+  } catch (e) {
+    return { created: false, error: e instanceof Error ? e : new Error(String(e)) };
+  }
 }
 
 /**
@@ -884,7 +961,7 @@ export async function getConversationsByDriverIds(
   // Fallback for environments where embedded select can fail (e.g. RLS recursion / PostgREST 500).
   const { data: convRows, error: convErr } = await supabase()
     .from("trip_conversations")
-    .select("*")
+    .select("id,organization_id,trip_id,party_type,party_name,client_id,supplier_id,driver_id,last_message_at,last_message_preview,unread_dispatcher_count,created_at,updated_at")
     .in("driver_id", driverIds)
     .order("last_message_at", { ascending: false, nullsFirst: false });
   if (convErr) throw primary.error;

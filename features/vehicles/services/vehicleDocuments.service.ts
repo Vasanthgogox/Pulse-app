@@ -15,6 +15,8 @@ import type { VehicleDocuments, DocumentWithExpiry } from '../utils/vehicleDocum
 const BUCKET = 'vehicle-documents';
 const SIGNED_URL_EXPIRY_SEC = 3600;
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+const STORAGE_RETRY_DELAYS_MS = [250, 800, 1800] as const;
+const SIGNED_URL_CACHE_TTL_MS = (SIGNED_URL_EXPIRY_SEC - 120) * 1000;
 
 const ALLOWED_MIME_TYPES: ReadonlySet<string> = new Set([
   'image/jpeg',
@@ -32,6 +34,43 @@ export interface UploadVehicleDocumentResult {
 
 export interface DeleteVehicleDocumentResult {
   error: Error | null;
+}
+
+type SignedUrlCacheEntry = {
+  url: string;
+  expiresAtMs: number;
+};
+
+const signedUrlCache = new Map<string, SignedUrlCacheEntry>();
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTransientStorageError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes('timeout') ||
+    m.includes('timed out') ||
+    m.includes('connection') ||
+    m.includes('network') ||
+    m.includes('fetch failed') ||
+    m.includes('gateway')
+  );
+}
+
+async function runWithStorageRetry<T>(op: () => Promise<T>, classifyError: (value: T) => string | null): Promise<T> {
+  let lastResult: T | null = null;
+  for (let i = 0; i < STORAGE_RETRY_DELAYS_MS.length + 1; i += 1) {
+    const result = await op();
+    lastResult = result;
+    const errMessage = classifyError(result);
+    if (!errMessage || !isTransientStorageError(errMessage)) return result;
+    if (i < STORAGE_RETRY_DELAYS_MS.length) {
+      await sleep(STORAGE_RETRY_DELAYS_MS[i]);
+    }
+  }
+  return lastResult as T;
 }
 
 /**
@@ -54,11 +93,22 @@ export function validateDocumentFile(file: { arrayBuffer: ArrayBuffer; mimeType:
  */
 export async function getVehicleDocumentViewUrl(storagePath: string): Promise<string | null> {
   if (!storagePath?.trim()) return null;
-  const { data, error } = await supabase()
-    .storage
-    .from(BUCKET)
-    .createSignedUrl(storagePath, SIGNED_URL_EXPIRY_SEC);
+  const cached = signedUrlCache.get(storagePath);
+  if (cached && cached.expiresAtMs > Date.now()) return cached.url;
+
+  const { data, error } = await runWithStorageRetry(
+    () =>
+      supabase()
+        .storage
+        .from(BUCKET)
+        .createSignedUrl(storagePath, SIGNED_URL_EXPIRY_SEC),
+    (result) => result.error?.message ?? null,
+  );
   if (error || !data?.signedUrl) return null;
+  signedUrlCache.set(storagePath, {
+    url: data.signedUrl,
+    expiresAtMs: Date.now() + SIGNED_URL_CACHE_TTL_MS,
+  });
   return data.signedUrl;
 }
 
@@ -74,7 +124,7 @@ export async function uploadVehicleDocument(
   orgId: string,
   vehicleId: string,
   docType: keyof VehicleDocuments,
-  file: { arrayBuffer: ArrayBuffer; fileName: string; mimeType: string },
+  file: { arrayBuffer: ArrayBuffer; fileName: string; mimeType: string; blob?: Blob },
 ): Promise<UploadVehicleDocumentResult> {
   const validationError = validateDocumentFile(file);
   if (validationError) return { storagePath: null, error: new Error(validationError) };
@@ -82,15 +132,20 @@ export async function uploadVehicleDocument(
   const ext = file.fileName.split('.').pop()?.toLowerCase() || 'jpg';
   const path = `${orgId}/${vehicleId}/${docType}.${ext}`;
 
-  const { error } = await supabase()
-    .storage
-    .from(BUCKET)
-    .upload(path, file.arrayBuffer, {
-      contentType: file.mimeType || 'image/jpeg',
-      upsert: true,
-    });
+  const { error } = await runWithStorageRetry(
+    () =>
+      supabase()
+        .storage
+        .from(BUCKET)
+        .upload(path, file.blob ?? file.arrayBuffer, {
+          contentType: file.mimeType || 'image/jpeg',
+          upsert: true,
+        }),
+    (result) => result.error?.message ?? null,
+  );
 
   if (error) return { storagePath: null, error: new Error(error.message) };
+  signedUrlCache.delete(path);
   return { storagePath: path, error: null };
 }
 
@@ -100,11 +155,16 @@ export async function uploadVehicleDocument(
  */
 export async function deleteVehicleDocumentFile(storagePath: string): Promise<DeleteVehicleDocumentResult> {
   if (!storagePath?.trim()) return { error: null };
-  const { error } = await supabase()
-    .storage
-    .from(BUCKET)
-    .remove([storagePath]);
+  const { error } = await runWithStorageRetry(
+    () =>
+      supabase()
+        .storage
+        .from(BUCKET)
+        .remove([storagePath]),
+    (result) => result.error?.message ?? null,
+  );
   if (error) return { error: new Error(error.message) };
+  signedUrlCache.delete(storagePath);
   return { error: null };
 }
 
@@ -118,7 +178,7 @@ export async function uploadAndSaveVehicleDocument(
   orgId: string,
   vehicleId: string,
   docType: keyof VehicleDocuments,
-  file: { arrayBuffer: ArrayBuffer; fileName: string; mimeType: string },
+  file: { arrayBuffer: ArrayBuffer; fileName: string; mimeType: string; blob?: Blob },
   expiryDate: string,
   existingDocuments: VehicleDocuments | null,
 ): Promise<{ documents: VehicleDocuments | null; error: Error | null }> {
@@ -135,19 +195,28 @@ export async function uploadAndSaveVehicleDocument(
   };
 
   // 3. Persist to vehicles.documents
-  const { error: dbError } = await supabase()
+  const { data: savedRow, error: dbError } = await supabase()
     .from('vehicles')
     .update({ documents: updated })
     .eq('organization_id', orgId)
-    .eq('id', vehicleId);
+    .eq('id', vehicleId)
+    .select('id, documents')
+    .maybeSingle();
 
-  if (dbError) {
+  if (dbError || !savedRow) {
     // Rollback: remove the just-uploaded file so we don't leave orphans
     await deleteVehicleDocumentFile(storagePath).catch(() => {});
-    return { documents: null, error: new Error(dbError.message) };
+    return {
+      documents: null,
+      error: new Error(
+        dbError?.message ??
+          'Vehicle document metadata was not saved (row not found or insufficient permission).',
+      ),
+    };
   }
 
-  return { documents: updated, error: null };
+  const persistedDocs = (savedRow.documents ?? {}) as VehicleDocuments;
+  return { documents: persistedDocs, error: null };
 }
 
 /**

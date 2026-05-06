@@ -12,6 +12,7 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import { useTripChat } from "@/features/chat/contexts/TripChatContext";
 import { pushTripLedgerQuickEntry } from "@/features/finance/ledger/tripLedgerEntryChooser";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
+import { computePartnerIndentFreightCost } from "@/features/finance/utils/partnerIndentFreightCost.util";
 import { resolveTripLedgerTripType } from "@/features/finance/utils/tripLedgerPayoutMode.util";
 import { TripRatingsBlock } from "@/features/ratings/components/TripRatingsBlock";
 import { isAggregateTrip } from "@/lib/driverUtils";
@@ -614,12 +615,12 @@ export default function TripDetailScreen({
       });
       setEditingProvisionAdjustmentId(null);
     } else {
-    await detail.handleSaveAdjustment({
-      type: inlineAdjType,
-      impact: inlineAdjImpact,
-      amount: inlineAmountNum,
-      reason: inlineFinalReason,
-    });
+      await detail.handleSaveAdjustment({
+        type: inlineAdjType,
+        impact: inlineAdjImpact,
+        amount: inlineAmountNum,
+        reason: inlineFinalReason,
+      });
     }
     setInlineAdjAmount("");
     setInlineAdjReason("");
@@ -680,7 +681,9 @@ export default function TripDetailScreen({
     trip.organization_id != null &&
     trip.organization_id === currentOrganization.id;
   const isPartnerSettlementView = trip.indent_id != null && !isTripOwner;
-  const payoutModeLc = String(trip.trip_payout_mode ?? "").trim().toLowerCase();
+  const payoutModeLc = String(trip.trip_payout_mode ?? "")
+    .trim()
+    .toLowerCase();
   /**
    * "Record supplier payout" is for **market / aggregate supply** (dispatcher pays an external supplier).
    * Integrated load **asset execution** (partner org is the supplier of record, roster / own fleet) must not
@@ -698,7 +701,7 @@ export default function TripDetailScreen({
   const supplierCost = Number(trip.supplier_rate ?? 0);
   const sales = isPartnerSettlementView ? supplierCost : customerSales;
   const cost = isPartnerSettlementView
-    ? (detail.subcontractRate ?? supplierCost)
+    ? computePartnerIndentFreightCost(detail.subcontractRate)
     : supplierCost;
   const baseFreight = sales;
   const totalExpenses = expenseRows.reduce((s, r) => s + r.amount, 0);
@@ -1016,7 +1019,10 @@ export default function TripDetailScreen({
   const netManifestYield = Math.max(0, adjSales - adjCost - totalExpenses);
   const revenueSideDelta = adjSales - sales;
   const costSideDelta = adjCost - cost;
-  const receivableAfterAdjustments = Math.max(0, adjSales - collectedFromClient);
+  const receivableAfterAdjustments = Math.max(
+    0,
+    adjSales - collectedFromClient,
+  );
   const revenueAdjLineCount = detail.adjustments.filter(
     (a) => a.type === "revenue" && !isAdjustmentVoided(a),
   ).length;
@@ -1172,14 +1178,22 @@ export default function TripDetailScreen({
       <View style={styles.refCollectionsRow}>
         <View style={styles.refCollectionsCard}>
           <Text style={styles.refCollectionsLabel}>Collected</Text>
-          <Text style={[styles.refCollectionsValue, styles.refCollectionsValueIn]}>
+          <Text
+            style={[styles.refCollectionsValue, styles.refCollectionsValueIn]}
+          >
             {formatINR(collectedFromClient)}
           </Text>
-          <Text style={styles.refCollectionsMeta}>From client ledger entries</Text>
+          <Text style={styles.refCollectionsMeta}>
+            From client ledger entries
+          </Text>
         </View>
-        <View style={[styles.refCollectionsCard, styles.refCollectionsCardRight]}>
+        <View
+          style={[styles.refCollectionsCard, styles.refCollectionsCardRight]}
+        >
           <Text style={styles.refCollectionsLabel}>Pending</Text>
-          <Text style={[styles.refCollectionsValue, styles.refCollectionsValueOut]}>
+          <Text
+            style={[styles.refCollectionsValue, styles.refCollectionsValueOut]}
+          >
             {formatINR(receivableAfterAdjustments)}
           </Text>
           <Text style={styles.refCollectionsMeta}>Against adjusted sales</Text>
@@ -1795,10 +1809,10 @@ export default function TripDetailScreen({
                   </Text>
                 </View>
                 <View style={styles.refHeroConnectorWrap}>
-                <View style={styles.refHeroToRow}>
-                  <View style={styles.refHeroToDot} />
-                  <View style={styles.refHeroToLine} />
-                </View>
+                  <View style={styles.refHeroToRow}>
+                    <View style={styles.refHeroToDot} />
+                    <View style={styles.refHeroToLine} />
+                  </View>
                 </View>
                 <View
                   style={[
@@ -3970,9 +3984,7 @@ export default function TripDetailScreen({
                         detail.latestReassignmentSummary
                       }
                       driverAssignOrgId={
-                        isAggregate
-                          ? (currentOrganization?.id ?? null)
-                          : null
+                        isAggregate ? (currentOrganization?.id ?? null) : null
                       }
                       onVehicleDisplayChange={(value) => {
                         const normalized = formatIndianVehicleNumber(
@@ -4240,7 +4252,7 @@ export default function TripDetailScreen({
                     </Text>
                   </View>
                 ))}
-                </View>
+              </View>
 
               <View style={neoStyles.provisionCnDnRow}>
                 <TouchableOpacity
@@ -4447,7 +4459,7 @@ export default function TripDetailScreen({
                               Voided: {(adj.void_reason ?? "").trim() || "—"}
                             </Text>
                           ) : null}
-              </View>
+                        </View>
                         <Text
                           style={[
                             neoStyles.provisionAppliedAmount,
@@ -4494,7 +4506,7 @@ export default function TripDetailScreen({
                                 color="#94a3b8"
                               />
                             </TouchableOpacity>
-            </View>
+                          </View>
                         ) : null}
                       </View>
                     );

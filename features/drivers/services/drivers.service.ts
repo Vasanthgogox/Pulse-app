@@ -6,6 +6,19 @@
 import { DEFAULT_PAGE_SIZE, type PageOpts } from "@/lib/pagination";
 import { supabase } from "@/lib/supabase";
 
+const DRIVER_COLUMNS = [
+  "id", "organization_id", "user_id", "name", "phone", "email",
+  "license_number", "emergency_name", "emergency_contact", "status",
+  "assigned_vehicle_id", "created_at", "updated_at", "left_at",
+  "tracking_only", "payable_amount", "commission_percent", "commission_per_km",
+  "avatar_url", "avatar_seed",
+].join(",");
+
+const DRIVER_LEDGER_COLUMNS = [
+  "id", "organization_id", "driver_id", "trip_id", "type",
+  "amount", "currency", "description", "created_at", "created_by",
+].join(",");
+
 export interface CreateDriverServiceData {
   driverSource?: string;
   name: string;
@@ -88,7 +101,7 @@ export async function getDriversByOrganization(
   const base = () =>
     supabase()
       .from("drivers")
-      .select("*")
+      .select(DRIVER_COLUMNS)
       .eq("organization_id", orgId)
       .order("created_at", { ascending: false });
   if (opts != null) {
@@ -117,7 +130,7 @@ export async function getDriverById(
 ): Promise<{ error: Error | null; driver: DriverRow | null }> {
   const { data, error } = await supabase()
     .from("drivers")
-    .select("*")
+    .select(DRIVER_COLUMNS)
     .eq("organization_id", orgId)
     .eq("id", driverId)
     .maybeSingle();
@@ -248,7 +261,7 @@ export async function getLinkedDriverForCurrentUser(
 ): Promise<{ error: Error | null; driver: DriverRow | null }> {
   const { data, error } = await supabase()
     .from("drivers")
-    .select("*")
+    .select(DRIVER_COLUMNS)
     .eq("user_id", userId)
     .maybeSingle();
   if (error) return { error: new Error(error.message), driver: null };
@@ -264,7 +277,7 @@ export async function getLinkedDriversForCurrentUser(
 ): Promise<{ error: Error | null; drivers: DriverRow[] }> {
   const { data, error } = await supabase()
     .from("drivers")
-    .select("*")
+    .select(DRIVER_COLUMNS)
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
     .limit(20);
@@ -693,7 +706,7 @@ export async function inviteDriver(
   // Validation: avoid duplicating driver rows for the same (org,phone).
   const existingDriver = await supabase()
     .from("drivers")
-    .select("*")
+    .select("id,status")
     .eq("organization_id", orgId)
     .eq("phone", phoneNorm)
     .limit(1)
@@ -774,119 +787,45 @@ export async function ensureDriverRowByPhone(
   // Aggregate trips: prefer existing driver in org with this phone (driver already in app
   // sees the trip immediately). If none, create tracking_only row and they claim via OTP.
   if (options?.trackingOnly === true) {
-    // Reassignment flow: always use an unlinked row so driver must claim via OTP.
+    // Reassignment flow: always return an unlinked row so driver must claim via OTP.
+    // Uses match_driver_by_phone RPC which folds exact + last-10-digit fallback into one SQL predicate.
     if (options.forceUnlinkedForOtp === true) {
-      const wantLast10 = normalized.replace(/\D/g, "").slice(-10);
-      const { data: existingUnlinked, error: findUnlinkedErr } = await supabase()
-        .from("drivers")
-        .select("*")
-        .eq("organization_id", orgId)
-        .eq("phone", normalized)
-        .is("user_id", null)
-        .limit(1)
+      // Step 1: find an already-unlinked driver matching this phone (exact or last-10 fallback)
+      const { data: unlinkedDriver, error: unlinkedErr } = await supabase()
+        .rpc("match_driver_by_phone", { p_org_id: orgId, p_phone: normalized, p_require_unlinked: true })
         .maybeSingle();
-      if (findUnlinkedErr)
-        return { error: new Error(findUnlinkedErr.message), driver: null };
-      if (existingUnlinked)
-        return { error: null, driver: existingUnlinked as DriverRow };
+      if (unlinkedErr) return { error: new Error(unlinkedErr.message), driver: null };
+      if (unlinkedDriver) return { error: null, driver: unlinkedDriver as DriverRow };
 
-      // Fallback: match unlinked row by last 10 digits so 9876543210 reuses +919876543210
-      if (wantLast10.length >= 10) {
-        const { data: orgUnlinked, error: listErr } = await supabase()
-          .from("drivers")
-          .select("id, phone")
-          .eq("organization_id", orgId)
-          .is("user_id", null)
-          .not("phone", "is", null);
-        if (listErr) return { error: new Error(listErr.message), driver: null };
-        const found = (orgUnlinked as { id: string; phone: string | null }[]).find(
-          (d) => d.phone && d.phone.replace(/\D/g, "").slice(-10) === wantLast10,
-        );
-        if (found) {
-          const { data: full, error: fullErr } = await supabase()
-            .from("drivers")
-            .select("*")
-            .eq("id", found.id)
-            .single();
-          if (fullErr) return { error: new Error(fullErr.message), driver: null };
-          if (full) return { error: null, driver: full as DriverRow };
-        }
-      }
-
-      // Existing row with this phone is linked (org allows only one row per phone): unlink it
-      // so we can assign the trip to it and the driver must claim via OTP (avoids duplicate key).
-      let { data: anyByPhone, error: anyErr } = await supabase()
-        .from("drivers")
-        .select("id")
-        .eq("organization_id", orgId)
-        .eq("phone", normalized)
-        .limit(1)
+      // Step 2: find any driver (possibly linked) — unlink it so driver must claim via OTP
+      const { data: anyDriver, error: anyErr } = await supabase()
+        .rpc("match_driver_by_phone", { p_org_id: orgId, p_phone: normalized, p_require_unlinked: false })
         .maybeSingle();
       if (anyErr) return { error: new Error(anyErr.message), driver: null };
-      if (!anyByPhone && wantLast10.length >= 10) {
-        const { data: orgDrivers, error: listErr } = await supabase()
-          .from("drivers")
-          .select("id, phone")
-          .eq("organization_id", orgId)
-          .not("phone", "is", null);
-        if (!listErr && orgDrivers?.length) {
-          const found = (orgDrivers as { id: string; phone: string | null }[]).find(
-            (d) => d.phone && d.phone.replace(/\D/g, "").slice(-10) === wantLast10,
-          );
-          if (found) anyByPhone = { id: found.id };
-        }
-      }
-      if (anyByPhone) {
+      if (anyDriver) {
         const { error: unlinkErr } = await supabase()
           .from("drivers")
           .update({ user_id: null, updated_at: new Date().toISOString() })
-          .eq("id", anyByPhone.id);
+          .eq("id", (anyDriver as DriverRow).id);
         if (unlinkErr) return { error: new Error(unlinkErr.message), driver: null };
-        const { data: full, error: fullErr } = await supabase()
+        const { data: fresh, error: freshErr } = await supabase()
           .from("drivers")
-          .select("*")
-          .eq("id", anyByPhone.id)
+          .select(DRIVER_COLUMNS)
+          .eq("id", (anyDriver as DriverRow).id)
           .single();
-        if (fullErr) return { error: new Error(fullErr.message), driver: null };
-        if (full) return { error: null, driver: full as DriverRow };
+        if (freshErr) return { error: new Error(freshErr.message), driver: null };
+        if (fresh) return { error: null, driver: fresh as DriverRow };
       }
     } else {
-    let { data: existing, error: findError } = await supabase()
-      .from("drivers")
-      .select("*")
-      .eq("organization_id", orgId)
-      .eq("phone", normalized)
-      .limit(1)
-      .maybeSingle();
-    if (findError) return { error: new Error(findError.message), driver: null };
-    if (existing) return { error: null, driver: existing as DriverRow };
-    // Fallback: match by last 10 digits so 9876543210 finds +919876543210
-    const wantLast10 = normalized.replace(/\D/g, "").slice(-10);
-    if (wantLast10.length >= 10) {
-      const { data: orgDrivers, error: listErr } = await supabase()
-        .from("drivers")
-        .select("id, phone")
-        .eq("organization_id", orgId)
-        .not("phone", "is", null);
-      if (!listErr && orgDrivers?.length) {
-        const found = (orgDrivers as { id: string; phone: string | null }[]).find(
-          (d) =>
-            d.phone &&
-            d.phone.replace(/\D/g, "").slice(-10) === wantLast10,
-        );
-        if (found) {
-          const { data: full, error: fullErr } = await supabase()
-            .from("drivers")
-            .select("*")
-            .eq("id", found.id)
-            .single();
-          if (!fullErr && full) return { error: null, driver: full as DriverRow };
-        }
-      }
-    }
+      // trackingOnly=true, forceUnlinkedForOtp=false: prefer any existing driver for this phone
+      const { data: existing, error: findError } = await supabase()
+        .rpc("match_driver_by_phone", { p_org_id: orgId, p_phone: normalized, p_require_unlinked: false })
+        .maybeSingle();
+      if (findError) return { error: new Error(findError.message), driver: null };
+      if (existing) return { error: null, driver: existing as DriverRow };
     }
   } else {
-    const q = supabase().from("drivers").select("*").eq("organization_id", orgId);
+    const q = supabase().from("drivers").select(DRIVER_COLUMNS).eq("organization_id", orgId);
     const orClause = match
       ? `phone.eq.${normalized},user_id.eq.${match.user_id}`
       : `phone.eq.${normalized}`;
@@ -1473,7 +1412,7 @@ export async function getDriverLedgerByDriver(
 ): Promise<{ error: Error | null; entries: DriverLedgerRow[] }> {
   const { data, error } = await supabase()
     .from("driver_ledger")
-    .select("*")
+    .select(DRIVER_LEDGER_COLUMNS)
     .eq("driver_id", driverId)
     .order("created_at", { ascending: false })
     .limit(200);
@@ -1490,7 +1429,7 @@ export async function getDriverLedgerByDriverIds(
   if (driverIds.length === 0) return { error: null, entries: [] };
   const { data, error } = await supabase()
     .from("driver_ledger")
-    .select("*")
+    .select(DRIVER_LEDGER_COLUMNS)
     .in("driver_id", driverIds)
     .order("created_at", { ascending: false })
     .limit(200);

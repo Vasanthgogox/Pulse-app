@@ -228,7 +228,11 @@ export function TripFinanceBlock({
                 onPress={() => onRecordCashIn(trip)}
                 activeOpacity={0.8}
               >
-                <FontAwesome name="arrow-down" size={14} color={Theme.textOnPrimary} />
+                <FontAwesome
+                  name="arrow-down"
+                  size={14}
+                  color={Theme.textOnPrimary}
+                />
                 <Text style={styles.cashActionBtnText}>Record cash in</Text>
               </TouchableOpacity>
             )}
@@ -238,7 +242,11 @@ export function TripFinanceBlock({
                 onPress={() => onAddExpense(trip)}
                 activeOpacity={0.8}
               >
-                <FontAwesome name="minus-circle" size={14} color={Theme.textOnPrimary} />
+                <FontAwesome
+                  name="minus-circle"
+                  size={14}
+                  color={Theme.textOnPrimary}
+                />
                 <Text style={styles.cashActionBtnText}>Add expense</Text>
               </TouchableOpacity>
             )}

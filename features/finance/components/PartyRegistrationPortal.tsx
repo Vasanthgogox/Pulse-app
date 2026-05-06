@@ -1023,7 +1023,7 @@ function PartyRegistrationPortalInner(
                     >
                       <TextInput
                         style={styles.input}
-                        placeholder="Example: MK Logistics Pvt Ltd"
+                        placeholder="e.g. abc company"
                         placeholderTextColor={Theme.textMuted}
                         value={orgOrCompanyName}
                         onChangeText={setOrgOrCompanyName}

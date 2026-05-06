@@ -2,6 +2,7 @@
  * Trips hub — compact card grid and audit-style table for the main Trips tab.
  * Styling aligns with fleet hub / reference; data bindings mirror TripExpandableCard.
  */
+import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from "@/constants/Theme";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import {
@@ -11,11 +12,10 @@ import {
 } from "@/features/trips/services/tripAdjustments";
 import { isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import {
-  isAggregateTrip,
-  shouldShowAggregateTripKindPill,
-  shouldShowIntegratedSubtypePillForHub,
+    isAggregateTrip,
+    shouldShowAggregateTripKindPill,
+    shouldShowIntegratedSubtypePillForHub,
 } from "@/lib/driverUtils";
-import type { TripHubPartyMeta } from "../utils/tripHubPartyMeta";
 import {
     formatINR,
     formatLedgerDate,
@@ -51,8 +51,8 @@ import Animated, {
     withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { PartyAvatar } from "@/components/PartyAvatar";
 import { getTripDisplayNumber, type TripRow } from "../services/trips.service";
+import type { TripHubPartyMeta } from "../utils/tripHubPartyMeta";
 
 if (
   Platform.OS === "android" &&
@@ -85,7 +85,11 @@ function FleetManifestRouteArrow() {
   }));
   return (
     <Animated.View style={[animatedStyle, { paddingHorizontal: 4 }]}>
-      <FontAwesome name="long-arrow-right" size={13} color={Theme.textPrimaryDark} />
+      <FontAwesome
+        name="long-arrow-right"
+        size={13}
+        color={Theme.textPrimaryDark}
+      />
     </Animated.View>
   );
 }
@@ -171,7 +175,8 @@ function missionStatusForTrip(trip: TripRow): string {
   if (s === "in_progress") return "Loading";
   if (s === "in_transit" || s === "in transit") return "In Transit";
   if (s === "at_destination" || s === "at_drop") return "At Destination";
-  if (s === "completed" || s === "delivered" || s === "done") return "Completed";
+  if (s === "completed" || s === "delivered" || s === "done")
+    return "Completed";
   return s
     .split("_")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
@@ -252,9 +257,7 @@ function formatTripPickupCell(iso: string | null | undefined): string {
 }
 
 /** Distance from trip row (km). */
-function formatTripDistanceKm(
-  raw: string | number | null | undefined,
-): string {
+function formatTripDistanceKm(raw: string | number | null | undefined): string {
   if (raw == null || raw === "") return "—";
   const n =
     typeof raw === "string"
@@ -320,22 +323,24 @@ export type TripsHubTableColumnId =
   | "margin"
   | "ledgerMeta";
 
-export const DEFAULT_TRIPS_HUB_TABLE_COLUMNS: Record<TripsHubTableColumnId, boolean> =
-  {
-    party: true,
-    driver: true,
-    vehicle: true,
-    pickupDate: true,
-    distance: false,
-    loadType: false,
-    payment: false,
-    billed: true,
-    cost: true,
-    received: true,
-    due: true,
-    margin: true,
-    ledgerMeta: true,
-  };
+export const DEFAULT_TRIPS_HUB_TABLE_COLUMNS: Record<
+  TripsHubTableColumnId,
+  boolean
+> = {
+  party: true,
+  driver: true,
+  vehicle: true,
+  pickupDate: true,
+  distance: false,
+  loadType: false,
+  payment: false,
+  billed: true,
+  cost: true,
+  received: true,
+  due: true,
+  margin: true,
+  ledgerMeta: true,
+};
 
 /** Ledger rollups for hub card + table (received = sum amount_in on trip). */
 export function summarizeTripLedgerForHub(entries: LedgerRow[]): {
@@ -363,7 +368,10 @@ const HUB_TABLE_AVATAR = 26;
 export function linkedOrgAvatarFields(
   linkedOrgId: string | null | undefined,
   linkedMap: Record<string, LinkedOrgDisplay> | undefined,
-): { organizationImageUrl?: string | null; organizationAvatarSeed?: string | null } {
+): {
+  organizationImageUrl?: string | null;
+  organizationAvatarSeed?: string | null;
+} {
   const id = (linkedOrgId ?? "").trim();
   if (!id || !linkedMap) return {};
   const o = linkedMap[id];
@@ -410,7 +418,10 @@ export type TripsHubTripCardProps = {
    * Supplier linked org + driver flags for the Asset vs Aggregate **pill** only.
    * When omitted, pill matches legacy `supplier_id` semantics.
    */
-  kindPillMeta?: Pick<TripHubPartyMeta, "supplierLinkedOrgId" | "driverTrackingOnly"> | null;
+  kindPillMeta?: Pick<
+    TripHubPartyMeta,
+    "supplierLinkedOrgId" | "driverTrackingOnly"
+  > | null;
 };
 
 export function TripsHubTripCard({
@@ -469,14 +480,15 @@ export function TripsHubTripCard({
 
   const supplierNameResolved = (displaySupplierName ?? "").trim();
   const showSupplierParty =
-    !!supplierNameResolved ||
-    hasSupplierLink ||
-    isLoadBasedTrip(trip);
+    !!supplierNameResolved || hasSupplierLink || isLoadBasedTrip(trip);
   const supplierLine =
-    supplierNameResolved || (showSupplierParty ? tr("tripsHubAwaitingData") : "");
+    supplierNameResolved ||
+    (showSupplierParty ? tr("tripsHubAwaitingData") : "");
   const clientFb =
     (clientAvatarFallbackSeed ?? "").trim() ||
-    (trip.client_id ? `client-entity:${String(trip.client_id).trim()}` : `client-trip:${trip.id}`);
+    (trip.client_id
+      ? `client-entity:${String(trip.client_id).trim()}`
+      : `client-trip:${trip.id}`);
   const supplierFb =
     (supplierAvatarFallbackSeed ?? "").trim() ||
     (trip.supplier_id
@@ -516,11 +528,13 @@ export function TripsHubTripCard({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`${tripNo} ${displayClientName}${
-        showSupplierParty ? `, ${tr("tripsHubSupplierShort")} ${supplierLine}` : ""
+        showSupplierParty
+          ? `, ${tr("tripsHubSupplierShort")} ${supplierLine}`
+          : ""
       }`}
     >
       <View style={styles.fleetCard}>
-        <View style={[styles.fleetOrb, { pointerEvents: 'none' }]} />
+        <View style={[styles.fleetOrb, { pointerEvents: "none" }]} />
         <View style={styles.fleetHead}>
           <View style={styles.fleetHeadLeft}>
             <View style={styles.fleetTruckWrap}>
@@ -542,7 +556,9 @@ export function TripsHubTripCard({
                   <Text style={styles.fleetBadgeBlueText}>{typeLabel}</Text>
                 </View>
                 <View style={styles.fleetBadgeViolet}>
-                  <Text style={styles.fleetBadgeVioletText}>{subTypeLabel}</Text>
+                  <Text style={styles.fleetBadgeVioletText}>
+                    {subTypeLabel}
+                  </Text>
                 </View>
               </View>
               <Text style={styles.fleetTripId}>{tripNo}</Text>
@@ -554,9 +570,7 @@ export function TripsHubTripCard({
                 {stageUpper}
               </Text>
             </View>
-            {aging ? (
-              <Text style={styles.fleetAging}>{aging}</Text>
-            ) : null}
+            {aging ? <Text style={styles.fleetAging}>{aging}</Text> : null}
           </View>
         </View>
 
@@ -578,9 +592,7 @@ export function TripsHubTripCard({
             <Text style={styles.fleetProgHeadMuted}>
               {tr("tripsHubMissionStatus")}
             </Text>
-            <Text style={styles.fleetProgHeadIndigo}>
-              {missionStatus}
-            </Text>
+            <Text style={styles.fleetProgHeadIndigo}>{missionStatus}</Text>
           </View>
           <View style={styles.fleetProgSegmentRow}>
             {[0, 1, 2, 3].map((i) => (
@@ -600,9 +612,13 @@ export function TripsHubTripCard({
         <View style={styles.fleetPartyBlock}>
           {showSupplierParty ? (
             <View style={styles.fleetPartyRow}>
-              <View style={[styles.fleetPartyCol, styles.fleetPartyColWithAvatar]}>
+              <View
+                style={[styles.fleetPartyCol, styles.fleetPartyColWithAvatar]}
+              >
                 <View style={styles.fleetPartyStack}>
-                  <Text style={styles.fleetPartyLabel}>{tr("tripsHubColClient")}</Text>
+                  <Text style={styles.fleetPartyLabel}>
+                    {tr("tripsHubColClient")}
+                  </Text>
                   <View style={styles.fleetPartyNameAvatarRow}>
                     <PartyAvatar
                       name={displayClientName.trim() || "—"}
@@ -615,7 +631,10 @@ export function TripsHubTripCard({
                       size={34}
                     />
                     <Text
-                      style={[styles.fleetPartyName, styles.fleetPartyNameBesideAvatar]}
+                      style={[
+                        styles.fleetPartyName,
+                        styles.fleetPartyNameBesideAvatar,
+                      ]}
                       numberOfLines={1}
                     >
                       {displayClientName}
@@ -630,8 +649,15 @@ export function TripsHubTripCard({
                   styles.fleetPartyColWithAvatar,
                 ]}
               >
-                <View style={[styles.fleetPartyStack, styles.fleetPartyStackEnd]}>
-                  <Text style={[styles.fleetPartyLabel, styles.fleetPartyLabelAlignEnd]}>
+                <View
+                  style={[styles.fleetPartyStack, styles.fleetPartyStackEnd]}
+                >
+                  <Text
+                    style={[
+                      styles.fleetPartyLabel,
+                      styles.fleetPartyLabelAlignEnd,
+                    ]}
+                  >
                     {tr("tripsHubSupplierShort")}
                   </Text>
                   <View style={styles.fleetPartyNameAvatarRowEnd}>
@@ -648,7 +674,11 @@ export function TripsHubTripCard({
                       {supplierLine}
                     </Text>
                     <PartyAvatar
-                      name={supplierNameResolved.trim() || supplierLine.trim() || "—"}
+                      name={
+                        supplierNameResolved.trim() ||
+                        supplierLine.trim() ||
+                        "—"
+                      }
                       initialsColorSeed={supplierFb}
                       organizationImageUrl={supplierOrganizationImageUrl}
                       organizationAvatarSeed={supplierOrganizationAvatarSeed}
@@ -663,7 +693,9 @@ export function TripsHubTripCard({
             </View>
           ) : (
             <View style={styles.fleetPartyStack}>
-              <Text style={styles.fleetPartyLabel}>{tr("tripsHubColClient")}</Text>
+              <Text style={styles.fleetPartyLabel}>
+                {tr("tripsHubColClient")}
+              </Text>
               <View style={styles.fleetPartyNameAvatarRow}>
                 <PartyAvatar
                   name={displayClientName.trim() || "—"}
@@ -676,7 +708,10 @@ export function TripsHubTripCard({
                   size={34}
                 />
                 <Text
-                  style={[styles.fleetPartyName, styles.fleetPartyNameBesideAvatar]}
+                  style={[
+                    styles.fleetPartyName,
+                    styles.fleetPartyNameBesideAvatar,
+                  ]}
                   numberOfLines={1}
                 >
                   {displayClientName}
@@ -686,8 +721,18 @@ export function TripsHubTripCard({
           )}
         </View>
 
-        <View style={[styles.fleetMetricsRow, compactMetricGrid && styles.fleetMetricsRowCompact]}>
-          <View style={[styles.fleetMetricCell, compactMetricGrid && styles.fleetMetricCellCompact]}>
+        <View
+          style={[
+            styles.fleetMetricsRow,
+            compactMetricGrid && styles.fleetMetricsRowCompact,
+          ]}
+        >
+          <View
+            style={[
+              styles.fleetMetricCell,
+              compactMetricGrid && styles.fleetMetricCellCompact,
+            ]}
+          >
             <Text style={styles.fleetMetricLabel} numberOfLines={1}>
               {tr("tripsHubColCost")}
             </Text>
@@ -695,7 +740,12 @@ export function TripsHubTripCard({
               {formatINR(cost)}
             </Text>
           </View>
-          <View style={[styles.fleetMetricCell, compactMetricGrid && styles.fleetMetricCellCompact]}>
+          <View
+            style={[
+              styles.fleetMetricCell,
+              compactMetricGrid && styles.fleetMetricCellCompact,
+            ]}
+          >
             <Text style={styles.fleetMetricLabel} numberOfLines={1}>
               {tr("tripsHubColMargin")}
             </Text>
@@ -706,18 +756,31 @@ export function TripsHubTripCard({
               {marginPct}
             </Text>
           </View>
-          <View style={[styles.fleetMetricCell, compactMetricGrid && styles.fleetMetricCellCompact]}>
+          <View
+            style={[
+              styles.fleetMetricCell,
+              compactMetricGrid && styles.fleetMetricCellCompact,
+            ]}
+          >
             <Text style={styles.fleetMetricLabel} numberOfLines={1}>
               {tr("tripsHubColReceived")}
             </Text>
             <Text style={styles.fleetMetricVal} numberOfLines={1}>
-              {ledgerReceivedTotal != null ? formatINR(ledgerReceivedTotal) : "—"}
+              {ledgerReceivedTotal != null
+                ? formatINR(ledgerReceivedTotal)
+                : "—"}
             </Text>
             <Text style={styles.fleetMetricMeta} numberOfLines={1}>
-              {tr("tripsHubAmountPaidBook")}: {formatINR(Number(trip.amount_paid ?? 0))}
+              {tr("tripsHubAmountPaidBook")}:{" "}
+              {formatINR(Number(trip.amount_paid ?? 0))}
             </Text>
           </View>
-          <View style={[styles.fleetMetricCell, compactMetricGrid && styles.fleetMetricCellCompact]}>
+          <View
+            style={[
+              styles.fleetMetricCell,
+              compactMetricGrid && styles.fleetMetricCellCompact,
+            ]}
+          >
             <Text style={styles.fleetMetricLabel} numberOfLines={1}>
               {tr("tripsHubColDue")}
             </Text>
@@ -725,7 +788,9 @@ export function TripsHubTripCard({
               {formatINR(due)}
             </Text>
             <Text style={styles.fleetMetricMeta} numberOfLines={1}>
-              {ledgerTxnCount != null ? `${ledgerTxnCount} · ${tr("tripsHubColTxns")}` : "—"}
+              {ledgerTxnCount != null
+                ? `${ledgerTxnCount} · ${tr("tripsHubColTxns")}`
+                : "—"}
               {lastLedgerDateLabel ? ` · ${lastLedgerDateLabel}` : ""}
             </Text>
           </View>
@@ -735,7 +800,11 @@ export function TripsHubTripCard({
           <View style={styles.fleetFooterLeft}>
             <View style={styles.fleetTrendWrap}>
               <HubIconPulse>
-                <FontAwesome name="line-chart" size={12} color={Theme.teslaRed} />
+                <FontAwesome
+                  name="line-chart"
+                  size={12}
+                  color={Theme.teslaRed}
+                />
               </HubIconPulse>
             </View>
             <View>
@@ -963,19 +1032,21 @@ export function TripsHubTableView({
   ]);
 
   const sortLabel =
-    sortKey === "recent"
-      ? "Recent"
-      : sortKey === "due_desc"
-        ? "Due"
-        : "Sales";
+    sortKey === "recent" ? "Recent" : sortKey === "due_desc" ? "Due" : "Sales";
 
   const cycleSortKey = () => {
     setSortKey((prev) =>
-      prev === "recent" ? "due_desc" : prev === "due_desc" ? "sales_desc" : "recent",
+      prev === "recent"
+        ? "due_desc"
+        : prev === "due_desc"
+          ? "sales_desc"
+          : "recent",
     );
   };
 
-  const classifyTripFilter = (trip: TripRow): "verified" | "pending" | "attention" => {
+  const classifyTripFilter = (
+    trip: TripRow,
+  ): "verified" | "pending" | "attention" => {
     const entries = transactionsByTripId.get(trip.id) ?? [];
     // Shared-ledger attention signals apply only to load-based trips.
     const hasMismatch =
@@ -1074,7 +1145,11 @@ export function TripsHubTableView({
           >
             <FontAwesome name="sort" size={13} color={Theme.textSecondary} />
             <Text style={styles.auditToolbarText}>Sort: {sortLabel}</Text>
-            <FontAwesome name="chevron-down" size={10} color={Theme.textMuted} />
+            <FontAwesome
+              name="chevron-down"
+              size={10}
+              color={Theme.textMuted}
+            />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.auditToolbarBtn}
@@ -1102,7 +1177,11 @@ export function TripsHubTableView({
                 accessibilityRole="button"
                 accessibilityLabel="Clear table search"
               >
-                <FontAwesome name="times-circle" size={14} color={Theme.textMuted} />
+                <FontAwesome
+                  name="times-circle"
+                  size={14}
+                  color={Theme.textMuted}
+                />
               </Pressable>
             ) : null}
           </View>
@@ -1114,11 +1193,19 @@ export function TripsHubTableView({
           {(Object.keys(cols) as Array<keyof typeof cols>).map((key) => (
             <TouchableOpacity
               key={key}
-              style={[styles.manifestColChip, cols[key] && styles.manifestColChipOn]}
+              style={[
+                styles.manifestColChip,
+                cols[key] && styles.manifestColChipOn,
+              ]}
               onPress={() => toggleTemplateCol(key)}
               activeOpacity={0.85}
             >
-              <Text style={[styles.manifestColChipText, cols[key] && styles.manifestColChipTextOn]}>
+              <Text
+                style={[
+                  styles.manifestColChipText,
+                  cols[key] && styles.manifestColChipTextOn,
+                ]}
+              >
                 {key.toUpperCase()}
               </Text>
             </TouchableOpacity>
@@ -1129,688 +1216,853 @@ export function TripsHubTableView({
       {renderBody ? (
         renderBody(templateTrips)
       ) : (
-      <>
-      <View style={styles.manifestHeaderRow}>
-        <View style={[styles.manifestTh, styles.manifestColIdentity]}>
-          <Text style={styles.manifestThText}>Trip identity</Text>
-        </View>
-        <View style={[styles.manifestTh, styles.manifestColTelemetry, styles.manifestThDivider]}>
-          <Text style={styles.manifestThText}>Telemetry path</Text>
-        </View>
-        <View
-          style={[
-            styles.manifestTh,
-            styles.manifestColEarnings,
-            styles.manifestThDivider,
-            styles.manifestThAlignEnd,
-          ]}
-        >
-          <Text style={[styles.manifestThText, styles.manifestThTextRight]}>
-            Audit ledger
-          </Text>
-        </View>
-        <View
-          style={[
-            styles.manifestTh,
-            styles.manifestColReceivable,
-            styles.manifestThDivider,
-            styles.manifestThAlignEnd,
-          ]}
-        >
-          <Text style={[styles.manifestThText, styles.manifestThTextRight]}>
-            {tr("tripsHubMetricGroupReceivable")}
-          </Text>
-        </View>
-        <View
-          style={[
-            styles.manifestTh,
-            styles.manifestColPayable,
-            styles.manifestThDivider,
-            styles.manifestThAlignEnd,
-          ]}
-        >
-          <Text style={[styles.manifestThText, styles.manifestThTextRight]}>
-            {tr("tripsHubMetricGroupPayable")}
-          </Text>
-        </View>
-        <View style={[styles.manifestTh, styles.manifestColActions, styles.manifestThDivider]}>
-          <Text style={[styles.manifestThText, styles.manifestThTextCenter]}>Health</Text>
-        </View>
-      </View>
-
-      {templateTrips.map((t) => {
-        const entries = transactionsByTripId.get(t.id) ?? [];
-        const rowAdj = tripFinanceAdjForHubLookup(financeAdjustmentsByTripId, t.id);
-        const mySales = tripHubRevenue(t, currentOrganizationId, rowAdj);
-        const cost = tripHubCost(t, currentOrganizationId, rowAdj);
-        const ledgerRoll = summarizeTripLedgerForHub(entries);
-        const hasLedgerMismatch =
-          isLoadBasedTrip(t) &&
-          entries.some((r) => r.reconciliation_status === "mismatch");
-        const hasSalesConflict = hasLedgerMismatch;
-        const meta = partyMetaByTripId?.get(t.id);
-        const hasSupplierLink = isAggregateTrip(t);
-        const showAggregateKindPill = shouldShowAggregateTripKindPill(t, {
-          viewerOrganizationId: currentOrganizationId,
-          supplierLinkedOrganizationId: meta?.supplierLinkedOrgId ?? null,
-          driverTrackingOnly: meta?.driverTrackingOnly,
-        });
-        const showAssetTripIcon = !showAggregateKindPill;
-        const typeLabel = showAssetTripIcon ? tr("tripAsset") : tr("tripAggregate");
-        const subTypeLabel = shouldShowIntegratedSubtypePillForHub(t)
-          ? tr("integrated")
-          : tr("manual");
-        const routeShort = `${t.pickup_area ?? "—"} → ${t.drop_location ?? "—"}`;
-        const routeDisplay = routeShort.toUpperCase();
-        const pnl = tripHubPnl(t, currentOrganizationId, rowAdj);
-        const marginPct = marginPercentLabel(t, currentOrganizationId, rowAdj);
-        const displayClient = (clientNameByTripId?.[t.id] ?? t.client_name ?? "").trim();
-        const supplierLine = (meta?.displaySupplierName ?? "").trim() || "—";
-        const clientOrgFields = linkedOrgAvatarFields(
-          meta?.clientLinkedOrgId,
-          linkedOrgByOrganizationId,
-        );
-        const supplierOrgFields = linkedOrgAvatarFields(
-          meta?.supplierLinkedOrgId,
-          linkedOrgByOrganizationId,
-        );
-        const showSupplierParty =
-          (supplierLine !== "—" && supplierLine.trim() !== "") ||
-          hasSupplierLink ||
-          isLoadBasedTrip(t);
-        const driverFb = t.driver_id
-          ? `driver-entity:${String(t.driver_id).trim()}`
-          : `driver-trip:${t.id}`;
-        /** Payable leg = supplier; show resolved supplier name for column header. */
-        const payablePartyName =
-          supplierLine !== "—"
-            ? supplierLine
-            : showSupplierParty
-              ? tr("tripsHubAwaitingData")
-              : "—";
-        const expanded = expandedIds.has(t.id);
-        const sortedEntries = sortedTripLedger(entries);
-        const filterKind = classifyTripFilter(t);
-        const stageTag = getStageLabel(t).toUpperCase();
-        const receivableTarget = Math.max(mySales, 0);
-        const payableTarget = Math.max(cost, 0);
-        const receivedActual = Math.max(ledgerRoll.receivedTotal, 0);
-        const paidActual = Math.max(ledgerRoll.paidTotal, 0);
-        const pendingReceivable = Math.max(receivableTarget - receivedActual, 0);
-        const pendingPayable = Math.max(payableTarget - paidActual, 0);
-        const recvBarPct =
-          receivableTarget > 0
-            ? Math.min(100, (receivedActual / receivableTarget) * 100)
-            : 0;
-        const payBarPct =
-          payableTarget > 0
-            ? Math.min(100, (paidActual / payableTarget) * 100)
-            : 0;
-        const clientRecvLabel = (displayClient || tr("tripsHubAwaitingData")).trim();
-        const clientRecvRenderable = partyAvatarHasRenderableOutput({
-          name: clientRecvLabel,
-          organizationImageUrl: clientOrgFields.organizationImageUrl,
-          organizationAvatarSeed: clientOrgFields.organizationAvatarSeed,
-          avatarUrl: meta?.clientAvatarUrl,
-          avatarSeed: meta?.clientAvatarSeed,
-          entityType: "client",
-        });
-        const supplierPayLabel =
-          payablePartyName === "—" ? "" : payablePartyName.trim();
-        const supplierPayRenderable = partyAvatarHasRenderableOutput({
-          name: supplierPayLabel || tr("tripsHubAwaitingData"),
-          organizationImageUrl: supplierOrgFields.organizationImageUrl,
-          organizationAvatarSeed: supplierOrgFields.organizationAvatarSeed,
-          avatarUrl: meta?.supplierAvatarUrl,
-          avatarSeed: meta?.supplierAvatarSeed,
-          entityType: "supplier",
-        });
-        const vehicleLine = (t.vehicle_display_number ?? "").trim();
-        const payableKindLabel = !hasSupplierLink
-          ? tr("tripsHubColVehicle")
-          : tr("tripsHubSupplierShort");
-        const payableNameDisplay = !hasSupplierLink
-          ? (vehicleLine || tr("tripsHubAwaitingData"))
-          : payablePartyName === "—"
-            ? "—"
-            : payablePartyName.toUpperCase();
-        const payableStatusLine = !hasSupplierLink
-          ? payableTarget > 0
-            ? `${tr("tripsHubColCost").toUpperCase()} ${formatINR(payableTarget)}`
-            : "NO VEHICLE EXPENSE"
-          : pendingPayable > 0
-            ? `${tr("tripsHubColDue")} ${formatINR(pendingPayable)}`
-            : tr("tripsHubSettlementSettled").toUpperCase();
-
-        return (
-          <View key={t.id} style={styles.auditRowGroup}>
-            <View style={styles.auditTr}>
-              {hasSalesConflict ? <View style={styles.mismatchStripe} /> : null}
-              <Pressable
-                style={({ pressed }) => [
-                  styles.auditTrMain,
-                  rowWebCursor,
-                  pressed && styles.auditTrPressed,
-                ]}
-                onPress={() => toggleExpanded(t.id)}
-                accessibilityRole="button"
-                accessibilityState={{ expanded }}
-                accessibilityLabel={`${getTripDisplayNumber(t)} ${expanded ? tr("tripsHubCollapseRow") : tr("tripsHubExpandRow")}`}
+        <>
+          <View style={styles.manifestHeaderRow}>
+            <View style={[styles.manifestTh, styles.manifestColIdentity]}>
+              <Text style={styles.manifestThText}>Trip identity</Text>
+            </View>
+            <View
+              style={[
+                styles.manifestTh,
+                styles.manifestColTelemetry,
+                styles.manifestThDivider,
+              ]}
+            >
+              <Text style={styles.manifestThText}>Telemetry path</Text>
+            </View>
+            <View
+              style={[
+                styles.manifestTh,
+                styles.manifestColEarnings,
+                styles.manifestThDivider,
+                styles.manifestThAlignEnd,
+              ]}
+            >
+              <Text style={[styles.manifestThText, styles.manifestThTextRight]}>
+                Audit ledger
+              </Text>
+            </View>
+            <View
+              style={[
+                styles.manifestTh,
+                styles.manifestColReceivable,
+                styles.manifestThDivider,
+                styles.manifestThAlignEnd,
+              ]}
+            >
+              <Text style={[styles.manifestThText, styles.manifestThTextRight]}>
+                {tr("tripsHubMetricGroupReceivable")}
+              </Text>
+            </View>
+            <View
+              style={[
+                styles.manifestTh,
+                styles.manifestColPayable,
+                styles.manifestThDivider,
+                styles.manifestThAlignEnd,
+              ]}
+            >
+              <Text style={[styles.manifestThText, styles.manifestThTextRight]}>
+                {tr("tripsHubMetricGroupPayable")}
+              </Text>
+            </View>
+            <View
+              style={[
+                styles.manifestTh,
+                styles.manifestColActions,
+                styles.manifestThDivider,
+              ]}
+            >
+              <Text
+                style={[styles.manifestThText, styles.manifestThTextCenter]}
               >
-              <View style={[styles.manifestTd, styles.manifestColIdentity]}>
-                <View style={styles.manifestIdentityRow}>
-                  <View
-                    style={[
-                      styles.auditTruckWrap,
-                      hasSalesConflict ? styles.auditTruckWrapWarn : styles.auditTruckWrapOk,
-                    ]}
-                  >
-                    <HubIconPulse>
-                      <FontAwesome
-                        name={showAssetTripIcon ? "truck" : "link"}
-                        size={13}
-                        color={
-                          hasSalesConflict
-                            ? Theme.teslaRed
-                            : showAssetTripIcon
-                              ? Theme.textSecondary
-                              : Theme.textMuted
-                        }
-                      />
-                    </HubIconPulse>
-                  </View>
-                  <View style={styles.auditIdentityText}>
-                    <Text style={[styles.auditTripId, styles.auditTripIdEmphasis]} numberOfLines={1}>
-                      {getTripDisplayNumber(t)}
-                    </Text>
-                    <Text style={styles.manifestDateMeta} numberOfLines={1}>
-                      {formatTripPickupCell(t.pickup_date)}
-                    </Text>
-                    <View style={[styles.tableBadgeRowLeft, styles.manifestIdentityBadges]}>
-                      <View style={styles.tableBadgeBlue}>
-                        <Text style={styles.tableBadgeBlueText}>{typeLabel}</Text>
-                      </View>
-                      <View style={styles.tableBadgeViolet}>
-                        <Text style={styles.tableBadgeVioletText}>{subTypeLabel}</Text>
-                      </View>
-                    </View>
-                  </View>
-                </View>
-              </View>
+                Health
+              </Text>
+            </View>
+          </View>
 
-              <View style={[styles.manifestTd, styles.manifestColTelemetry]}>
-                <Text style={styles.manifestRouteOnly} numberOfLines={2}>
-                  {routeDisplay}
-                </Text>
-                <View
-                  style={[
-                    styles.manifestTelemetryStatusTag,
-                    filterKind === "verified"
-                      ? styles.manifestTelemetryStatusTagVerified
-                      : filterKind === "attention"
-                        ? styles.manifestTelemetryStatusTagAttention
-                        : styles.manifestTelemetryStatusTagPending,
-                  ]}
-                >
-                  <Text style={styles.manifestTelemetryStatusTagText} numberOfLines={1}>
-                    {stageTag}
-                  </Text>
-                </View>
-                <View style={styles.manifestTelemetryOperatorRow}>
-                  {t.driver_id ? (
-                    <PartyAvatar
-                      name={
-                        (t.driver_display_name ?? "").trim() ||
-                        tr("unassigned")
-                      }
-                      initialsColorSeed={driverFb}
-                      avatarUrl={meta?.driverAvatarUrl}
-                      avatarSeed={meta?.driverAvatarSeed}
-                      entityType="driver"
-                      size={HUB_TABLE_AVATAR}
-                    />
-                  ) : (
-                    <View style={styles.manifestDriverAvatarPlaceholder}>
-                      <FontAwesome
-                        name="user"
-                        size={11}
-                        color={Theme.textMuted}
-                      />
-                    </View>
-                  )}
-                  <View style={styles.manifestOperatorTextCol}>
-                    <Text style={styles.manifestOperatorName} numberOfLines={1}>
-                      {(t.driver_display_name ?? "—").trim().toUpperCase() || "—"}
-                    </Text>
-                    <Text style={styles.manifestDateMeta} numberOfLines={1}>
-                      {(t.vehicle_display_number ?? "—").trim().toUpperCase() || "—"}
-                    </Text>
-                  </View>
-                </View>
-              </View>
+          {templateTrips.map((t) => {
+            const entries = transactionsByTripId.get(t.id) ?? [];
+            const rowAdj = tripFinanceAdjForHubLookup(
+              financeAdjustmentsByTripId,
+              t.id,
+            );
+            const mySales = tripHubRevenue(t, currentOrganizationId, rowAdj);
+            const cost = tripHubCost(t, currentOrganizationId, rowAdj);
+            const ledgerRoll = summarizeTripLedgerForHub(entries);
+            const hasLedgerMismatch =
+              isLoadBasedTrip(t) &&
+              entries.some((r) => r.reconciliation_status === "mismatch");
+            const hasSalesConflict = hasLedgerMismatch;
+            const meta = partyMetaByTripId?.get(t.id);
+            const hasSupplierLink = isAggregateTrip(t);
+            const showAggregateKindPill = shouldShowAggregateTripKindPill(t, {
+              viewerOrganizationId: currentOrganizationId,
+              supplierLinkedOrganizationId: meta?.supplierLinkedOrgId ?? null,
+              driverTrackingOnly: meta?.driverTrackingOnly,
+            });
+            const showAssetTripIcon = !showAggregateKindPill;
+            const typeLabel = showAssetTripIcon
+              ? tr("tripAsset")
+              : tr("tripAggregate");
+            const subTypeLabel = shouldShowIntegratedSubtypePillForHub(t)
+              ? tr("integrated")
+              : tr("manual");
+            const routeShort = `${t.pickup_area ?? "—"} → ${t.drop_location ?? "—"}`;
+            const routeDisplay = routeShort.toUpperCase();
+            const pnl = tripHubPnl(t, currentOrganizationId, rowAdj);
+            const marginPct = marginPercentLabel(
+              t,
+              currentOrganizationId,
+              rowAdj,
+            );
+            const displayClient = (
+              clientNameByTripId?.[t.id] ??
+              t.client_name ??
+              ""
+            ).trim();
+            const supplierLine =
+              (meta?.displaySupplierName ?? "").trim() || "—";
+            const clientOrgFields = linkedOrgAvatarFields(
+              meta?.clientLinkedOrgId,
+              linkedOrgByOrganizationId,
+            );
+            const supplierOrgFields = linkedOrgAvatarFields(
+              meta?.supplierLinkedOrgId,
+              linkedOrgByOrganizationId,
+            );
+            const showSupplierParty =
+              (supplierLine !== "—" && supplierLine.trim() !== "") ||
+              hasSupplierLink ||
+              isLoadBasedTrip(t);
+            const driverFb = t.driver_id
+              ? `driver-entity:${String(t.driver_id).trim()}`
+              : `driver-trip:${t.id}`;
+            /** Payable leg = supplier; show resolved supplier name for column header. */
+            const payablePartyName =
+              supplierLine !== "—"
+                ? supplierLine
+                : showSupplierParty
+                  ? tr("tripsHubAwaitingData")
+                  : "—";
+            const expanded = expandedIds.has(t.id);
+            const sortedEntries = sortedTripLedger(entries);
+            const filterKind = classifyTripFilter(t);
+            const stageTag = getStageLabel(t).toUpperCase();
+            const receivableTarget = Math.max(mySales, 0);
+            const payableTarget = Math.max(cost, 0);
+            const receivedActual = Math.max(ledgerRoll.receivedTotal, 0);
+            const paidActual = Math.max(ledgerRoll.paidTotal, 0);
+            const pendingReceivable = Math.max(
+              receivableTarget - receivedActual,
+              0,
+            );
+            const pendingPayable = Math.max(payableTarget - paidActual, 0);
+            const recvBarPct =
+              receivableTarget > 0
+                ? Math.min(100, (receivedActual / receivableTarget) * 100)
+                : 0;
+            const payBarPct =
+              payableTarget > 0
+                ? Math.min(100, (paidActual / payableTarget) * 100)
+                : 0;
+            const clientRecvLabel = (
+              displayClient || tr("tripsHubAwaitingData")
+            ).trim();
+            const clientRecvRenderable = partyAvatarHasRenderableOutput({
+              name: clientRecvLabel,
+              organizationImageUrl: clientOrgFields.organizationImageUrl,
+              organizationAvatarSeed: clientOrgFields.organizationAvatarSeed,
+              avatarUrl: meta?.clientAvatarUrl,
+              avatarSeed: meta?.clientAvatarSeed,
+              entityType: "client",
+            });
+            const supplierPayLabel =
+              payablePartyName === "—" ? "" : payablePartyName.trim();
+            const supplierPayRenderable = partyAvatarHasRenderableOutput({
+              name: supplierPayLabel || tr("tripsHubAwaitingData"),
+              organizationImageUrl: supplierOrgFields.organizationImageUrl,
+              organizationAvatarSeed: supplierOrgFields.organizationAvatarSeed,
+              avatarUrl: meta?.supplierAvatarUrl,
+              avatarSeed: meta?.supplierAvatarSeed,
+              entityType: "supplier",
+            });
+            const vehicleLine = (t.vehicle_display_number ?? "").trim();
+            const payableKindLabel = !hasSupplierLink
+              ? tr("tripsHubColVehicle")
+              : tr("tripsHubSupplierShort");
+            const payableNameDisplay = !hasSupplierLink
+              ? vehicleLine || tr("tripsHubAwaitingData")
+              : payablePartyName === "—"
+                ? "—"
+                : payablePartyName.toUpperCase();
+            const payableStatusLine = !hasSupplierLink
+              ? payableTarget > 0
+                ? `${tr("tripsHubColCost").toUpperCase()} ${formatINR(payableTarget)}`
+                : "NO VEHICLE EXPENSE"
+              : pendingPayable > 0
+                ? `${tr("tripsHubColDue")} ${formatINR(pendingPayable)}`
+                : tr("tripsHubSettlementSettled").toUpperCase();
 
-              <View style={[styles.manifestTd, styles.manifestColEarnings, styles.manifestTdRight]}>
-                <Text style={styles.manifestMoneyMain}>{formatINR(mySales)}</Text>
-                <Text style={styles.manifestLedgerSubLine}>
-                  <Text style={styles.manifestLedgerSubLabel}>
-                    {tr("tripsHubColCost").toUpperCase()}{" "}
-                  </Text>
-                  {formatINR(cost)}
-                </Text>
-                <Text style={styles.manifestLedgerSubLine} numberOfLines={1}>
-                  <Text style={styles.manifestLedgerSubLabel}>
-                    {tr("tripsHubMarginSuffix").toUpperCase()}{" "}
-                  </Text>
-                  {formatINR(pnl)} · {marginPct}
-                </Text>
-              </View>
-
-              <View
-                style={[
-                  styles.manifestTd,
-                  styles.manifestColReceivable,
-                  styles.manifestSettlementCell,
-                ]}
-              >
-                <View
-                  style={[
-                    styles.manifestSettlementCard,
-                    compactSettlement && styles.manifestSettlementCardCompact,
-                  ]}
-                >
-                  <View style={styles.manifestSettlementHeaderRow}>
-                    <View style={styles.manifestSettlementHeaderTextCol}>
-                      <Text style={styles.manifestSettlementPartyKindCard}>
-                        {tr("tripsHubColClient")}
-                      </Text>
-                      <Text
-                        style={styles.manifestSettlementPartyNameCard}
-                        numberOfLines={compactSettlement ? 1 : 2}
-                      >
-                        {clientRecvLabel.toUpperCase()}
-                      </Text>
-                    </View>
-                    <View style={styles.manifestSettlementIconChipRecv}>
-                      <View style={[styles.manifestSettlementChipOrb, styles.manifestSettlementChipOrbRecvA]} />
-                      <View style={[styles.manifestSettlementChipOrb, styles.manifestSettlementChipOrbRecvB]} />
-                      {clientRecvRenderable ? (
-                        <View style={styles.manifestSettlementAvatarRingRecv}>
-                          <PartyAvatar
-                            name={clientRecvLabel}
-                            initialsColorSeed={
-                              meta?.clientFallbackSeed ?? `client-trip:${t.id}`
-                            }
-                            entityType="client"
-                            organizationImageUrl={
-                              clientOrgFields.organizationImageUrl
-                            }
-                            organizationAvatarSeed={
-                              clientOrgFields.organizationAvatarSeed
-                            }
-                            avatarUrl={meta?.clientAvatarUrl}
-                            avatarSeed={meta?.clientAvatarSeed}
-                            size={HUB_TABLE_AVATAR}
-                          />
-                        </View>
-                      ) : (
-                        <View
-                          style={[
-                            styles.manifestSettlementAvatarPh,
-                            styles.manifestSettlementPhRecv,
-                          ]}
-                        >
-                          <FontAwesome
-                            name="user"
-                            size={11}
-                            color={Theme.textMuted}
-                          />
-                        </View>
-                      )}
-                    </View>
-                  </View>
-                  {receivableTarget > 0 && !compactSettlement ? (
-                    <View style={styles.manifestSettlementFiscalBarTrack}>
-                      <View
-                        style={[
-                          styles.manifestSettlementFiscalBarFill,
-                          styles.manifestSettlementFiscalBarFillRecv,
-                          { width: `${recvBarPct}%` },
-                        ]}
-                      />
-                    </View>
+            return (
+              <View key={t.id} style={styles.auditRowGroup}>
+                <View style={styles.auditTr}>
+                  {hasSalesConflict ? (
+                    <View style={styles.mismatchStripe} />
                   ) : null}
-                  <Text
-                    style={[
-                      styles.manifestMoneyMain,
-                      styles.manifestMoneyMainInSettlementCard,
-                      compactSettlement && styles.manifestSettlementTargetCompact,
-                      pendingReceivable <= 0 && styles.manifestSettlementAmount,
-                    ]}
-                  >
-                    {formatINR(receivableTarget)}
-                  </Text>
-                  <View style={styles.manifestSettlementDuoRow}>
-                    <Text
-                      style={styles.manifestSettlementDuoLeft}
-                      numberOfLines={1}
-                    >
-                      {tr("tripsHubTableRecvPrefix")}: {formatINR(receivedActual)}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.manifestSettlementDuoRight,
-                        pendingReceivable > 0
-                          ? styles.manifestSettlementDuoRightRecvDue
-                          : styles.manifestSettlementDuoRightOk,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {pendingReceivable > 0
-                        ? `${tr("tripsHubColDue")} ${formatINR(pendingReceivable)}`
-                        : tr("tripsHubSettlementCleared").toUpperCase()}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-
-              <View
-                style={[
-                  styles.manifestTd,
-                  styles.manifestColPayable,
-                  styles.manifestSettlementCell,
-                ]}
-              >
-                <View
-                  style={[
-                    styles.manifestSettlementCard,
-                    compactSettlement && styles.manifestSettlementCardCompact,
-                  ]}
-                >
-                  <View style={styles.manifestSettlementHeaderRow}>
-                    <View style={styles.manifestSettlementHeaderTextCol}>
-                      <Text style={styles.manifestSettlementPartyKindCard}>
-                        {payableKindLabel}
-                      </Text>
-                      <Text
-                        style={styles.manifestSettlementPartyNameCard}
-                        numberOfLines={compactSettlement ? 1 : 2}
-                      >
-                        {payableNameDisplay}
-                      </Text>
-                    </View>
-                    <View style={styles.manifestSettlementIconChipPay}>
-                      <View style={[styles.manifestSettlementChipOrb, styles.manifestSettlementChipOrbPayA]} />
-                      <View style={[styles.manifestSettlementChipOrb, styles.manifestSettlementChipOrbPayB]} />
-                      {hasSupplierLink && supplierPayRenderable && showSupplierParty ? (
-                        <View style={styles.manifestSettlementAvatarRingPay}>
-                          <PartyAvatar
-                            name={
-                              supplierPayLabel.trim() ||
-                              tr("tripsHubAwaitingData")
-                            }
-                            initialsColorSeed={
-                              meta?.supplierFallbackSeed ??
-                              `supplier-trip:${t.id}`
-                            }
-                            entityType="supplier"
-                            organizationImageUrl={
-                              supplierOrgFields.organizationImageUrl
-                            }
-                            organizationAvatarSeed={
-                              supplierOrgFields.organizationAvatarSeed
-                            }
-                            avatarUrl={meta?.supplierAvatarUrl}
-                            avatarSeed={meta?.supplierAvatarSeed}
-                            size={HUB_TABLE_AVATAR}
-                          />
-                        </View>
-                      ) : (
-                        <View
-                          style={[
-                            styles.manifestSettlementAvatarPh,
-                            styles.manifestSettlementPhPay,
-                          ]}
-                        >
-                          <FontAwesome
-                            name="truck"
-                            size={11}
-                            color={Theme.textMuted}
-                          />
-                        </View>
-                      )}
-                    </View>
-                  </View>
-                  {payableTarget > 0 && !compactSettlement ? (
-                    <View style={styles.manifestSettlementFiscalBarTrack}>
-                      <View
-                        style={[
-                          styles.manifestSettlementFiscalBarFill,
-                          styles.manifestSettlementFiscalBarFillPay,
-                          { width: `${payBarPct}%` },
-                        ]}
-                      />
-                    </View>
-                  ) : null}
-                  <Text
-                    style={[
-                      styles.manifestMoneyMain,
-                      styles.manifestMoneyMainInSettlementCard,
-                      compactSettlement && styles.manifestSettlementTargetCompact,
-                      pendingPayable <= 0 && styles.manifestSettlementAmount,
-                    ]}
-                  >
-                    {formatINR(payableTarget)}
-                  </Text>
-                  <View style={styles.manifestSettlementDuoRow}>
-                    <Text
-                      style={styles.manifestSettlementDuoLeft}
-                      numberOfLines={1}
-                    >
-                      {tr("tripsHubTablePayPrefix")}: {formatINR(paidActual)}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.manifestSettlementDuoRight,
-                        pendingPayable > 0
-                          ? styles.manifestSettlementDuoRightPayDue
-                          : styles.manifestSettlementDuoRightOk,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {payableStatusLine}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-              </Pressable>
-
-              <View style={[styles.manifestTd, styles.manifestColActions]}>
-                <View style={styles.auditCellIconRow}>
-                  <View
-                    style={[
-                      styles.manifestHealthDot,
-                      filterKind === "verified"
-                        ? styles.manifestHealthDotGood
-                        : filterKind === "attention"
-                          ? styles.manifestHealthDotBad
-                          : styles.manifestHealthDotWarn,
-                    ]}
-                  />
                   <Pressable
                     style={({ pressed }) => [
-                      styles.auditIconAction,
-                      styles.auditIconActionTxn,
-                      pressed && styles.auditCtaPressed,
+                      styles.auditTrMain,
+                      rowWebCursor,
+                      pressed && styles.auditTrPressed,
                     ]}
                     onPress={() => toggleExpanded(t.id)}
                     accessibilityRole="button"
                     accessibilityState={{ expanded }}
-                    accessibilityLabel={
-                      expanded
-                        ? tr("tripsHubHideTransactions")
-                        : tr("tripsHubShowTransactions")
-                    }
-                    hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                    accessibilityLabel={`${getTripDisplayNumber(t)} ${expanded ? tr("tripsHubCollapseRow") : tr("tripsHubExpandRow")}`}
                   >
-                    <FontAwesome
-                      name={expanded ? "chevron-up" : "list-ul"}
-                      size={8}
-                      color={Theme.textPrimaryDark}
-                    />
-                  </Pressable>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.auditIconAction,
-                      expanded
-                        ? styles.auditIconActionTxnExpanded
-                        : styles.auditIconActionTrip,
-                      pressed && styles.auditCtaPressed,
-                    ]}
-                    onPress={() => onOpenTripDetails(t)}
-                    accessibilityRole="button"
-                    accessibilityLabel={tr("tripsHubViewTripDetails")}
-                    hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-                  >
-                    <FontAwesome
-                      name="external-link"
-                      size={8}
-                      color={Theme.textPrimaryDark}
-                    />
-                  </Pressable>
-                </View>
-              </View>
-            </View>
-
-            {expanded ? (
-              <View style={styles.expandPanel}>
-                {sortedEntries.length === 0 ? (
-                  <Text style={styles.expandEmpty}>{tr("tripsHubNoTransactions")}</Text>
-                ) : (
-                  <>
-                    <View style={styles.txnSectionHead}>
-                      <View style={styles.txnSectionHeadLeft}>
-                        <FontAwesome
-                          name="exchange"
-                          size={12}
-                          color={Theme.primary}
-                        />
-                        <Text style={styles.txnSectionTitle} numberOfLines={2}>
-                          {tr("tripsHubLedgerStripTitle")} ({sortedEntries.length})
-                        </Text>
-                      </View>
-                      <View style={styles.txnSectionHeadRight}>
-                        <View style={styles.txnVerifiedBadge}>
-                          <Text style={styles.txnVerifiedBadgeText}>
-                            {tr("tripsHubTableSync")}
-                          </Text>
-                        </View>
-                        <Pressable
-                          style={({ pressed }) => [
-                            styles.txnStripClose,
-                            pressed && styles.auditCtaPressed,
+                    <View
+                      style={[styles.manifestTd, styles.manifestColIdentity]}
+                    >
+                      <View style={styles.manifestIdentityRow}>
+                        <View
+                          style={[
+                            styles.auditTruckWrap,
+                            hasSalesConflict
+                              ? styles.auditTruckWrapWarn
+                              : styles.auditTruckWrapOk,
                           ]}
-                          onPress={() => toggleExpanded(t.id)}
-                          accessibilityRole="button"
-                          accessibilityLabel={tr("tripsHubLedgerStripClose")}
-                          hitSlop={10}
                         >
-                          <FontAwesome
-                            name="times"
-                            size={12}
-                            color={Theme.textMuted}
-                          />
-                        </Pressable>
+                          <HubIconPulse>
+                            <FontAwesome
+                              name={showAssetTripIcon ? "truck" : "link"}
+                              size={13}
+                              color={
+                                hasSalesConflict
+                                  ? Theme.teslaRed
+                                  : showAssetTripIcon
+                                    ? Theme.textSecondary
+                                    : Theme.textMuted
+                              }
+                            />
+                          </HubIconPulse>
+                        </View>
+                        <View style={styles.auditIdentityText}>
+                          <Text
+                            style={[
+                              styles.auditTripId,
+                              styles.auditTripIdEmphasis,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {getTripDisplayNumber(t)}
+                          </Text>
+                          <Text
+                            style={styles.manifestDateMeta}
+                            numberOfLines={1}
+                          >
+                            {formatTripPickupCell(t.pickup_date)}
+                          </Text>
+                          <View
+                            style={[
+                              styles.tableBadgeRowLeft,
+                              styles.manifestIdentityBadges,
+                            ]}
+                          >
+                            <View style={styles.tableBadgeBlue}>
+                              <Text style={styles.tableBadgeBlueText}>
+                                {typeLabel}
+                              </Text>
+                            </View>
+                            <View style={styles.tableBadgeViolet}>
+                              <Text style={styles.tableBadgeVioletText}>
+                                {subTypeLabel}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
                       </View>
                     </View>
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={styles.txnHorizontalList}
+
+                    <View
+                      style={[styles.manifestTd, styles.manifestColTelemetry]}
                     >
-                      {sortedEntries.map((row) => {
-                        const when = formatLedgerDateTime(
-                          row.transaction_date || row.created_at,
-                        );
-                        const amt = txnAmount(row);
-                        const inFlow = (row.amount_in ?? 0) > 0;
-                        const counterparty =
-                          (row.party_name ?? row.driver_name ?? row.contact_type ?? "Party")
-                            .trim()
-                            .slice(0, 26) || "Party";
-                        return (
-                          <Pressable
-                            key={row.id}
-                            style={[
-                              styles.txnVaultCard,
-                              inFlow ? styles.txnVaultCardIn : styles.txnVaultCardOut,
-                            ]}
-                            onPress={() => setReceiptTx({ trip: t, row })}
-                            accessibilityRole="button"
-                            accessibilityLabel="Open transaction receipt"
+                      <Text style={styles.manifestRouteOnly} numberOfLines={2}>
+                        {routeDisplay}
+                      </Text>
+                      <View
+                        style={[
+                          styles.manifestTelemetryStatusTag,
+                          filterKind === "verified"
+                            ? styles.manifestTelemetryStatusTagVerified
+                            : filterKind === "attention"
+                              ? styles.manifestTelemetryStatusTagAttention
+                              : styles.manifestTelemetryStatusTagPending,
+                        ]}
+                      >
+                        <Text
+                          style={styles.manifestTelemetryStatusTagText}
+                          numberOfLines={1}
+                        >
+                          {stageTag}
+                        </Text>
+                      </View>
+                      <View style={styles.manifestTelemetryOperatorRow}>
+                        {t.driver_id ? (
+                          <PartyAvatar
+                            name={
+                              (t.driver_display_name ?? "").trim() ||
+                              tr("unassigned")
+                            }
+                            initialsColorSeed={driverFb}
+                            avatarUrl={meta?.driverAvatarUrl}
+                            avatarSeed={meta?.driverAvatarSeed}
+                            entityType="driver"
+                            size={HUB_TABLE_AVATAR}
+                          />
+                        ) : (
+                          <View style={styles.manifestDriverAvatarPlaceholder}>
+                            <FontAwesome
+                              name="user"
+                              size={11}
+                              color={Theme.textMuted}
+                            />
+                          </View>
+                        )}
+                        <View style={styles.manifestOperatorTextCol}>
+                          <Text
+                            style={styles.manifestOperatorName}
+                            numberOfLines={1}
                           >
-                            <View style={styles.txnVaultLeft}>
+                            {(t.driver_display_name ?? "—")
+                              .trim()
+                              .toUpperCase() || "—"}
+                          </Text>
+                          <Text
+                            style={styles.manifestDateMeta}
+                            numberOfLines={1}
+                          >
+                            {(t.vehicle_display_number ?? "—")
+                              .trim()
+                              .toUpperCase() || "—"}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+
+                    <View
+                      style={[
+                        styles.manifestTd,
+                        styles.manifestColEarnings,
+                        styles.manifestTdRight,
+                      ]}
+                    >
+                      <Text style={styles.manifestMoneyMain}>
+                        {formatINR(mySales)}
+                      </Text>
+                      <Text style={styles.manifestLedgerSubLine}>
+                        <Text style={styles.manifestLedgerSubLabel}>
+                          {tr("tripsHubColCost").toUpperCase()}{" "}
+                        </Text>
+                        {formatINR(cost)}
+                      </Text>
+                      <Text
+                        style={styles.manifestLedgerSubLine}
+                        numberOfLines={1}
+                      >
+                        <Text style={styles.manifestLedgerSubLabel}>
+                          {tr("tripsHubMarginSuffix").toUpperCase()}{" "}
+                        </Text>
+                        {formatINR(pnl)} · {marginPct}
+                      </Text>
+                    </View>
+
+                    <View
+                      style={[
+                        styles.manifestTd,
+                        styles.manifestColReceivable,
+                        styles.manifestSettlementCell,
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.manifestSettlementCard,
+                          compactSettlement &&
+                            styles.manifestSettlementCardCompact,
+                        ]}
+                      >
+                        <View style={styles.manifestSettlementHeaderRow}>
+                          <View style={styles.manifestSettlementHeaderTextCol}>
+                            <Text
+                              style={styles.manifestSettlementPartyKindCard}
+                            >
+                              {tr("tripsHubColClient")}
+                            </Text>
+                            <Text
+                              style={styles.manifestSettlementPartyNameCard}
+                              numberOfLines={compactSettlement ? 1 : 2}
+                            >
+                              {clientRecvLabel.toUpperCase()}
+                            </Text>
+                          </View>
+                          <View style={styles.manifestSettlementIconChipRecv}>
+                            <View
+                              style={[
+                                styles.manifestSettlementChipOrb,
+                                styles.manifestSettlementChipOrbRecvA,
+                              ]}
+                            />
+                            <View
+                              style={[
+                                styles.manifestSettlementChipOrb,
+                                styles.manifestSettlementChipOrbRecvB,
+                              ]}
+                            />
+                            {clientRecvRenderable ? (
+                              <View
+                                style={styles.manifestSettlementAvatarRingRecv}
+                              >
+                                <PartyAvatar
+                                  name={clientRecvLabel}
+                                  initialsColorSeed={
+                                    meta?.clientFallbackSeed ??
+                                    `client-trip:${t.id}`
+                                  }
+                                  entityType="client"
+                                  organizationImageUrl={
+                                    clientOrgFields.organizationImageUrl
+                                  }
+                                  organizationAvatarSeed={
+                                    clientOrgFields.organizationAvatarSeed
+                                  }
+                                  avatarUrl={meta?.clientAvatarUrl}
+                                  avatarSeed={meta?.clientAvatarSeed}
+                                  size={HUB_TABLE_AVATAR}
+                                />
+                              </View>
+                            ) : (
                               <View
                                 style={[
-                                  styles.txnVaultIcon,
-                                  inFlow ? styles.txnVaultIconIn : styles.txnVaultIconOut,
+                                  styles.manifestSettlementAvatarPh,
+                                  styles.manifestSettlementPhRecv,
                                 ]}
                               >
                                 <FontAwesome
-                                  name={inFlow ? "arrow-down" : "arrow-up"}
-                                  size={14}
-                                  color={inFlow ? Theme.darkGreen : Theme.teslaRed}
+                                  name="user"
+                                  size={11}
+                                  color={Theme.textMuted}
                                 />
                               </View>
-                              <View style={styles.txnLineLeft}>
-                                <View style={styles.txnFlowRow}>
-                                  <Text
-                                    style={[styles.txnFlow, inFlow ? styles.txnFlowIn : styles.txnFlowOut]}
-                                    numberOfLines={1}
-                                  >
-                                    {inFlow ? "RECEIVED" : "PAID"}
-                                  </Text>
-                                  <Text style={styles.txnFlowSep}>/</Text>
-                                  <Text style={styles.txnCounterparty} numberOfLines={1}>
-                                    {counterparty}
-                                  </Text>
-                                </View>
-                                <Text style={styles.txnWhen} numberOfLines={1}>
-                                  {when}
-                                </Text>
-                              </View>
-                            </View>
-                            <View style={styles.txnAmtWrap}>
-                              <Text style={[styles.txnAmt, inFlow ? styles.txnAmtIn : styles.txnAmtOut]}>
-                                {inFlow ? "+" : "-"}
-                                {formatINR(Math.abs(amt))}
-                              </Text>
-                              <Text style={styles.txnReceiptLink}>View Receipt</Text>
-                            </View>
-                          </Pressable>
-                        );
-                      })}
+                            )}
+                          </View>
+                        </View>
+                        {receivableTarget > 0 && !compactSettlement ? (
+                          <View style={styles.manifestSettlementFiscalBarTrack}>
+                            <View
+                              style={[
+                                styles.manifestSettlementFiscalBarFill,
+                                styles.manifestSettlementFiscalBarFillRecv,
+                                { width: `${recvBarPct}%` },
+                              ]}
+                            />
+                          </View>
+                        ) : null}
+                        <Text
+                          style={[
+                            styles.manifestMoneyMain,
+                            styles.manifestMoneyMainInSettlementCard,
+                            compactSettlement &&
+                              styles.manifestSettlementTargetCompact,
+                            pendingReceivable <= 0 &&
+                              styles.manifestSettlementAmount,
+                          ]}
+                        >
+                          {formatINR(receivableTarget)}
+                        </Text>
+                        <View style={styles.manifestSettlementDuoRow}>
+                          <Text
+                            style={styles.manifestSettlementDuoLeft}
+                            numberOfLines={1}
+                          >
+                            {tr("tripsHubTableRecvPrefix")}:{" "}
+                            {formatINR(receivedActual)}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.manifestSettlementDuoRight,
+                              pendingReceivable > 0
+                                ? styles.manifestSettlementDuoRightRecvDue
+                                : styles.manifestSettlementDuoRightOk,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {pendingReceivable > 0
+                              ? `${tr("tripsHubColDue")} ${formatINR(pendingReceivable)}`
+                              : tr("tripsHubSettlementCleared").toUpperCase()}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+
+                    <View
+                      style={[
+                        styles.manifestTd,
+                        styles.manifestColPayable,
+                        styles.manifestSettlementCell,
+                      ]}
+                    >
                       <View
-                        style={styles.txnPostTxnStub}
-                        accessibilityLabel={tr("tripsHubPostTxnSync")}
+                        style={[
+                          styles.manifestSettlementCard,
+                          compactSettlement &&
+                            styles.manifestSettlementCardCompact,
+                        ]}
+                      >
+                        <View style={styles.manifestSettlementHeaderRow}>
+                          <View style={styles.manifestSettlementHeaderTextCol}>
+                            <Text
+                              style={styles.manifestSettlementPartyKindCard}
+                            >
+                              {payableKindLabel}
+                            </Text>
+                            <Text
+                              style={styles.manifestSettlementPartyNameCard}
+                              numberOfLines={compactSettlement ? 1 : 2}
+                            >
+                              {payableNameDisplay}
+                            </Text>
+                          </View>
+                          <View style={styles.manifestSettlementIconChipPay}>
+                            <View
+                              style={[
+                                styles.manifestSettlementChipOrb,
+                                styles.manifestSettlementChipOrbPayA,
+                              ]}
+                            />
+                            <View
+                              style={[
+                                styles.manifestSettlementChipOrb,
+                                styles.manifestSettlementChipOrbPayB,
+                              ]}
+                            />
+                            {hasSupplierLink &&
+                            supplierPayRenderable &&
+                            showSupplierParty ? (
+                              <View
+                                style={styles.manifestSettlementAvatarRingPay}
+                              >
+                                <PartyAvatar
+                                  name={
+                                    supplierPayLabel.trim() ||
+                                    tr("tripsHubAwaitingData")
+                                  }
+                                  initialsColorSeed={
+                                    meta?.supplierFallbackSeed ??
+                                    `supplier-trip:${t.id}`
+                                  }
+                                  entityType="supplier"
+                                  organizationImageUrl={
+                                    supplierOrgFields.organizationImageUrl
+                                  }
+                                  organizationAvatarSeed={
+                                    supplierOrgFields.organizationAvatarSeed
+                                  }
+                                  avatarUrl={meta?.supplierAvatarUrl}
+                                  avatarSeed={meta?.supplierAvatarSeed}
+                                  size={HUB_TABLE_AVATAR}
+                                />
+                              </View>
+                            ) : (
+                              <View
+                                style={[
+                                  styles.manifestSettlementAvatarPh,
+                                  styles.manifestSettlementPhPay,
+                                ]}
+                              >
+                                <FontAwesome
+                                  name="truck"
+                                  size={11}
+                                  color={Theme.textMuted}
+                                />
+                              </View>
+                            )}
+                          </View>
+                        </View>
+                        {payableTarget > 0 && !compactSettlement ? (
+                          <View style={styles.manifestSettlementFiscalBarTrack}>
+                            <View
+                              style={[
+                                styles.manifestSettlementFiscalBarFill,
+                                styles.manifestSettlementFiscalBarFillPay,
+                                { width: `${payBarPct}%` },
+                              ]}
+                            />
+                          </View>
+                        ) : null}
+                        <Text
+                          style={[
+                            styles.manifestMoneyMain,
+                            styles.manifestMoneyMainInSettlementCard,
+                            compactSettlement &&
+                              styles.manifestSettlementTargetCompact,
+                            pendingPayable <= 0 &&
+                              styles.manifestSettlementAmount,
+                          ]}
+                        >
+                          {formatINR(payableTarget)}
+                        </Text>
+                        <View style={styles.manifestSettlementDuoRow}>
+                          <Text
+                            style={styles.manifestSettlementDuoLeft}
+                            numberOfLines={1}
+                          >
+                            {tr("tripsHubTablePayPrefix")}:{" "}
+                            {formatINR(paidActual)}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.manifestSettlementDuoRight,
+                              pendingPayable > 0
+                                ? styles.manifestSettlementDuoRightPayDue
+                                : styles.manifestSettlementDuoRightOk,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {payableStatusLine}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  </Pressable>
+
+                  <View style={[styles.manifestTd, styles.manifestColActions]}>
+                    <View style={styles.auditCellIconRow}>
+                      <View
+                        style={[
+                          styles.manifestHealthDot,
+                          filterKind === "verified"
+                            ? styles.manifestHealthDotGood
+                            : filterKind === "attention"
+                              ? styles.manifestHealthDotBad
+                              : styles.manifestHealthDotWarn,
+                        ]}
+                      />
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.auditIconAction,
+                          styles.auditIconActionTxn,
+                          pressed && styles.auditCtaPressed,
+                        ]}
+                        onPress={() => toggleExpanded(t.id)}
+                        accessibilityRole="button"
+                        accessibilityState={{ expanded }}
+                        accessibilityLabel={
+                          expanded
+                            ? tr("tripsHubHideTransactions")
+                            : tr("tripsHubShowTransactions")
+                        }
+                        hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                       >
                         <FontAwesome
-                          name="plus-circle"
-                          size={20}
-                          color={Theme.textSection}
+                          name={expanded ? "chevron-up" : "list-ul"}
+                          size={8}
+                          color={Theme.textPrimaryDark}
                         />
-                        <Text style={styles.txnPostTxnStubText}>
-                          {tr("tripsHubPostTxnSync")}
-                        </Text>
-                      </View>
-                    </ScrollView>
-                  </>
-                )}
+                      </Pressable>
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.auditIconAction,
+                          expanded
+                            ? styles.auditIconActionTxnExpanded
+                            : styles.auditIconActionTrip,
+                          pressed && styles.auditCtaPressed,
+                        ]}
+                        onPress={() => onOpenTripDetails(t)}
+                        accessibilityRole="button"
+                        accessibilityLabel={tr("tripsHubViewTripDetails")}
+                        hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                      >
+                        <FontAwesome
+                          name="external-link"
+                          size={8}
+                          color={Theme.textPrimaryDark}
+                        />
+                      </Pressable>
+                    </View>
+                  </View>
+                </View>
+
+                {expanded ? (
+                  <View style={styles.expandPanel}>
+                    {sortedEntries.length === 0 ? (
+                      <Text style={styles.expandEmpty}>
+                        {tr("tripsHubNoTransactions")}
+                      </Text>
+                    ) : (
+                      <>
+                        <View style={styles.txnSectionHead}>
+                          <View style={styles.txnSectionHeadLeft}>
+                            <FontAwesome
+                              name="exchange"
+                              size={12}
+                              color={Theme.primary}
+                            />
+                            <Text
+                              style={styles.txnSectionTitle}
+                              numberOfLines={2}
+                            >
+                              {tr("tripsHubLedgerStripTitle")} (
+                              {sortedEntries.length})
+                            </Text>
+                          </View>
+                          <View style={styles.txnSectionHeadRight}>
+                            <View style={styles.txnVerifiedBadge}>
+                              <Text style={styles.txnVerifiedBadgeText}>
+                                {tr("tripsHubTableSync")}
+                              </Text>
+                            </View>
+                            <Pressable
+                              style={({ pressed }) => [
+                                styles.txnStripClose,
+                                pressed && styles.auditCtaPressed,
+                              ]}
+                              onPress={() => toggleExpanded(t.id)}
+                              accessibilityRole="button"
+                              accessibilityLabel={tr(
+                                "tripsHubLedgerStripClose",
+                              )}
+                              hitSlop={10}
+                            >
+                              <FontAwesome
+                                name="times"
+                                size={12}
+                                color={Theme.textMuted}
+                              />
+                            </Pressable>
+                          </View>
+                        </View>
+                        <ScrollView
+                          horizontal
+                          showsHorizontalScrollIndicator={false}
+                          contentContainerStyle={styles.txnHorizontalList}
+                        >
+                          {sortedEntries.map((row) => {
+                            const when = formatLedgerDateTime(
+                              row.transaction_date || row.created_at,
+                            );
+                            const amt = txnAmount(row);
+                            const inFlow = (row.amount_in ?? 0) > 0;
+                            const counterparty =
+                              (
+                                row.party_name ??
+                                row.driver_name ??
+                                row.contact_type ??
+                                "Party"
+                              )
+                                .trim()
+                                .slice(0, 26) || "Party";
+                            return (
+                              <Pressable
+                                key={row.id}
+                                style={[
+                                  styles.txnVaultCard,
+                                  inFlow
+                                    ? styles.txnVaultCardIn
+                                    : styles.txnVaultCardOut,
+                                ]}
+                                onPress={() => setReceiptTx({ trip: t, row })}
+                                accessibilityRole="button"
+                                accessibilityLabel="Open transaction receipt"
+                              >
+                                <View style={styles.txnVaultLeft}>
+                                  <View
+                                    style={[
+                                      styles.txnVaultIcon,
+                                      inFlow
+                                        ? styles.txnVaultIconIn
+                                        : styles.txnVaultIconOut,
+                                    ]}
+                                  >
+                                    <FontAwesome
+                                      name={inFlow ? "arrow-down" : "arrow-up"}
+                                      size={14}
+                                      color={
+                                        inFlow
+                                          ? Theme.darkGreen
+                                          : Theme.teslaRed
+                                      }
+                                    />
+                                  </View>
+                                  <View style={styles.txnLineLeft}>
+                                    <View style={styles.txnFlowRow}>
+                                      <Text
+                                        style={[
+                                          styles.txnFlow,
+                                          inFlow
+                                            ? styles.txnFlowIn
+                                            : styles.txnFlowOut,
+                                        ]}
+                                        numberOfLines={1}
+                                      >
+                                        {inFlow ? "RECEIVED" : "PAID"}
+                                      </Text>
+                                      <Text style={styles.txnFlowSep}>/</Text>
+                                      <Text
+                                        style={styles.txnCounterparty}
+                                        numberOfLines={1}
+                                      >
+                                        {counterparty}
+                                      </Text>
+                                    </View>
+                                    <Text
+                                      style={styles.txnWhen}
+                                      numberOfLines={1}
+                                    >
+                                      {when}
+                                    </Text>
+                                  </View>
+                                </View>
+                                <View style={styles.txnAmtWrap}>
+                                  <Text
+                                    style={[
+                                      styles.txnAmt,
+                                      inFlow
+                                        ? styles.txnAmtIn
+                                        : styles.txnAmtOut,
+                                    ]}
+                                  >
+                                    {inFlow ? "+" : "-"}
+                                    {formatINR(Math.abs(amt))}
+                                  </Text>
+                                  <Text style={styles.txnReceiptLink}>
+                                    View Receipt
+                                  </Text>
+                                </View>
+                              </Pressable>
+                            );
+                          })}
+                          <View
+                            style={styles.txnPostTxnStub}
+                            accessibilityLabel={tr("tripsHubPostTxnSync")}
+                          >
+                            <FontAwesome
+                              name="plus-circle"
+                              size={20}
+                              color={Theme.textSection}
+                            />
+                            <Text style={styles.txnPostTxnStubText}>
+                              {tr("tripsHubPostTxnSync")}
+                            </Text>
+                          </View>
+                        </ScrollView>
+                      </>
+                    )}
+                  </View>
+                ) : null}
               </View>
-            ) : null}
-          </View>
-        );
-      })}
-      </>
+            );
+          })}
+        </>
       )}
 
       <View style={styles.auditFooter}>
@@ -1819,8 +2071,12 @@ export function TripsHubTableView({
             <FontAwesome name="line-chart" size={16} color={Theme.positive} />
           </View>
           <View>
-            <Text style={styles.auditFooterTitle}>{tr("tripsHubFleetConfidence")}</Text>
-            <Text style={styles.auditFooterSub}>{tr("tripsHubNetworkMirror")}</Text>
+            <Text style={styles.auditFooterTitle}>
+              {tr("tripsHubFleetConfidence")}
+            </Text>
+            <Text style={styles.auditFooterSub}>
+              {tr("tripsHubNetworkMirror")}
+            </Text>
           </View>
         </View>
         <TouchableOpacity
@@ -1832,8 +2088,14 @@ export function TripsHubTableView({
           disabled={!onExportLedger}
           activeOpacity={0.85}
         >
-          <Text style={styles.auditExportBtnText}>{tr("tripsHubExportLedger")}</Text>
-          <FontAwesome name="cloud-download" size={14} color={Theme.textOnPrimary} />
+          <Text style={styles.auditExportBtnText}>
+            {tr("tripsHubExportLedger")}
+          </Text>
+          <FontAwesome
+            name="cloud-download"
+            size={14}
+            color={Theme.textOnPrimary}
+          />
         </TouchableOpacity>
       </View>
 
@@ -1860,116 +2122,145 @@ export function TripsHubTableView({
               {(() => {
                 const receiptTrip = receiptTx.trip;
                 const txRow = receiptTx.row;
-                const txAmount = Number(txRow?.amount_in ?? txRow?.amount_out ?? 0);
+                const txAmount = Number(
+                  txRow?.amount_in ?? txRow?.amount_out ?? 0,
+                );
                 const txDate = formatLedgerDateTime(
-                  txRow?.transaction_date || txRow?.created_at || receiptTrip.pickup_date,
+                  txRow?.transaction_date ||
+                    txRow?.created_at ||
+                    receiptTrip.pickup_date,
                 );
                 const txMode = (txRow?.payment_mode ?? "Bank").trim() || "Bank";
                 const settledTo =
-                  (txRow?.party_name ?? clientNameByTripId?.[receiptTrip.id] ?? receiptTrip.client_name ?? "—")
-                    .trim() || "—";
+                  (
+                    txRow?.party_name ??
+                    clientNameByTripId?.[receiptTrip.id] ??
+                    receiptTrip.client_name ??
+                    "—"
+                  ).trim() || "—";
                 const txRef = (txRow?.payment_reference ?? "—").trim() || "—";
                 return (
                   <>
-              <View style={styles.receiptHead}>
-                <View style={styles.receiptHeadLeft}>
-                  <Text style={styles.receiptParty} numberOfLines={1}>
-                    {(
-                      clientNameByTripId?.[receiptTrip.id] ??
-                      receiptTrip.client_name ??
-                      "—"
-                    )
-                      .trim()
-                      .toUpperCase()}
-                  </Text>
-                  <Text style={styles.receiptSub}>
-                    {getTripDisplayNumber(receiptTrip)} •{" "}
-                    {formatTripPickupCell(receiptTrip.pickup_date).toUpperCase()}
-                  </Text>
-                </View>
-                <Text style={styles.receiptAmount}>
-                  {txAmount >= 0 ? "+" : "-"}
-                  {formatINR(Math.abs(txAmount))}
-                </Text>
-              </View>
+                    <View style={styles.receiptHead}>
+                      <View style={styles.receiptHeadLeft}>
+                        <Text style={styles.receiptParty} numberOfLines={1}>
+                          {(
+                            clientNameByTripId?.[receiptTrip.id] ??
+                            receiptTrip.client_name ??
+                            "—"
+                          )
+                            .trim()
+                            .toUpperCase()}
+                        </Text>
+                        <Text style={styles.receiptSub}>
+                          {getTripDisplayNumber(receiptTrip)} •{" "}
+                          {formatTripPickupCell(
+                            receiptTrip.pickup_date,
+                          ).toUpperCase()}
+                        </Text>
+                      </View>
+                      <Text style={styles.receiptAmount}>
+                        {txAmount >= 0 ? "+" : "-"}
+                        {formatINR(Math.abs(txAmount))}
+                      </Text>
+                    </View>
 
-              <View style={styles.receiptCenter}>
-                <View style={styles.receiptSuccessDot}>
-                  <FontAwesome name="check" size={22} color={Theme.driverEmerald} />
-                </View>
-                <Text style={styles.receiptSuccessLabel}>SETTLEMENT RECEIVED</Text>
-                <Text style={styles.receiptCenterAmount}>
-                  {formatINR(Math.abs(txAmount))}
-                </Text>
-              </View>
+                    <View style={styles.receiptCenter}>
+                      <View style={styles.receiptSuccessDot}>
+                        <FontAwesome
+                          name="check"
+                          size={22}
+                          color={Theme.driverEmerald}
+                        />
+                      </View>
+                      <Text style={styles.receiptSuccessLabel}>
+                        SETTLEMENT RECEIVED
+                      </Text>
+                      <Text style={styles.receiptCenterAmount}>
+                        {formatINR(Math.abs(txAmount))}
+                      </Text>
+                    </View>
 
-              <View style={styles.receiptMetaList}>
-                <View style={styles.receiptMetaRow}>
-                  <Text style={styles.receiptMetaLabel}>Transaction ID</Text>
-                  <Text style={styles.receiptMetaValue}>{txRow?.id ?? receiptTrip.id}</Text>
-                </View>
-                <View style={styles.receiptMetaRow}>
-                  <Text style={styles.receiptMetaLabel}>UTR / Reference</Text>
-                  <Text style={styles.receiptMetaValue}>{txRef}</Text>
-                </View>
-                <View style={styles.receiptMetaRow}>
-                  <Text style={styles.receiptMetaLabel}>Payment Mode</Text>
-                  <Text style={styles.receiptMetaValue}>{txMode}</Text>
-                </View>
-                <View style={styles.receiptMetaRow}>
-                  <Text style={styles.receiptMetaLabel}>Captured At</Text>
-                  <Text style={styles.receiptMetaValue}>{txDate}</Text>
-                </View>
-                <View style={styles.receiptMetaRow}>
-                  <Text style={styles.receiptMetaLabel}>Reference</Text>
-                  <Text style={styles.receiptMetaValue}>
-                    {getTripDisplayNumber(receiptTrip)}
-                  </Text>
-                </View>
-                <View style={styles.receiptMetaRow}>
-                  <Text style={styles.receiptMetaLabel}>Settled To</Text>
-                  <Text style={styles.receiptMetaValue}>{settledTo}</Text>
-                </View>
-                <View style={styles.receiptMetaRow}>
-                  <Text style={styles.receiptMetaLabel}>Route</Text>
-                  <Text style={styles.receiptMetaValue}>
-                    {(receiptTrip.pickup_area ?? "—").trim()} →{" "}
-                    {(receiptTrip.drop_location ?? "—").trim()}
-                  </Text>
-                </View>
-              </View>
+                    <View style={styles.receiptMetaList}>
+                      <View style={styles.receiptMetaRow}>
+                        <Text style={styles.receiptMetaLabel}>
+                          Transaction ID
+                        </Text>
+                        <Text style={styles.receiptMetaValue}>
+                          {txRow?.id ?? receiptTrip.id}
+                        </Text>
+                      </View>
+                      <View style={styles.receiptMetaRow}>
+                        <Text style={styles.receiptMetaLabel}>
+                          UTR / Reference
+                        </Text>
+                        <Text style={styles.receiptMetaValue}>{txRef}</Text>
+                      </View>
+                      <View style={styles.receiptMetaRow}>
+                        <Text style={styles.receiptMetaLabel}>
+                          Payment Mode
+                        </Text>
+                        <Text style={styles.receiptMetaValue}>{txMode}</Text>
+                      </View>
+                      <View style={styles.receiptMetaRow}>
+                        <Text style={styles.receiptMetaLabel}>Captured At</Text>
+                        <Text style={styles.receiptMetaValue}>{txDate}</Text>
+                      </View>
+                      <View style={styles.receiptMetaRow}>
+                        <Text style={styles.receiptMetaLabel}>Reference</Text>
+                        <Text style={styles.receiptMetaValue}>
+                          {getTripDisplayNumber(receiptTrip)}
+                        </Text>
+                      </View>
+                      <View style={styles.receiptMetaRow}>
+                        <Text style={styles.receiptMetaLabel}>Settled To</Text>
+                        <Text style={styles.receiptMetaValue}>{settledTo}</Text>
+                      </View>
+                      <View style={styles.receiptMetaRow}>
+                        <Text style={styles.receiptMetaLabel}>Route</Text>
+                        <Text style={styles.receiptMetaValue}>
+                          {(receiptTrip.pickup_area ?? "—").trim()} →{" "}
+                          {(receiptTrip.drop_location ?? "—").trim()}
+                        </Text>
+                      </View>
+                    </View>
 
-              <View style={styles.receiptActions}>
-                <TouchableOpacity
-                  style={[styles.receiptBtn, styles.receiptBtnSecondary]}
-                  onPress={() => {
-                    setReceiptTx(null);
-                    onOpenTripDetails(receiptTrip);
-                  }}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.receiptBtnSecondaryText}>VIEW TRIP DETAIL</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.receiptBtn, styles.receiptBtnPrimary]}
-                  onPress={async () => {
-                    setReceiptTx(null);
-                    try {
-                      const routeLabel = `${(receiptTrip.pickup_area ?? "—").trim()} -> ${(receiptTrip.drop_location ?? "—").trim()}`;
-                      const receiptTextPayload = [
-                        "Settlement Receipt",
-                        `Trip: ${getTripDisplayNumber(receiptTrip)}`,
-                        `Amount: ${formatINR(Math.abs(txAmount))}`,
-                        `Date: ${txDate}`,
-                        `Transaction ID: ${txRow?.id ?? receiptTrip.id}`,
-                        `UTR / Reference: ${txRef}`,
-                        `Payment Mode: ${txMode}`,
-                        `Settled To: ${settledTo}`,
-                        `Route: ${routeLabel}`,
-                      ].join("\n");
+                    <View style={styles.receiptActions}>
+                      <TouchableOpacity
+                        style={[styles.receiptBtn, styles.receiptBtnSecondary]}
+                        onPress={() => {
+                          setReceiptTx(null);
+                          onOpenTripDetails(receiptTrip);
+                        }}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={styles.receiptBtnSecondaryText}>
+                          VIEW TRIP DETAIL
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.receiptBtn, styles.receiptBtnPrimary]}
+                        onPress={async () => {
+                          setReceiptTx(null);
+                          try {
+                            const routeLabel = `${(receiptTrip.pickup_area ?? "—").trim()} -> ${(receiptTrip.drop_location ?? "—").trim()}`;
+                            const receiptTextPayload = [
+                              "Settlement Receipt",
+                              `Trip: ${getTripDisplayNumber(receiptTrip)}`,
+                              `Amount: ${formatINR(Math.abs(txAmount))}`,
+                              `Date: ${txDate}`,
+                              `Transaction ID: ${txRow?.id ?? receiptTrip.id}`,
+                              `UTR / Reference: ${txRef}`,
+                              `Payment Mode: ${txMode}`,
+                              `Settled To: ${settledTo}`,
+                              `Route: ${routeLabel}`,
+                            ].join("\n");
 
-                      if (Platform.OS === "web" && typeof window !== "undefined") {
-                        const html = `
+                            if (
+                              Platform.OS === "web" &&
+                              typeof window !== "undefined"
+                            ) {
+                              const html = `
 <!doctype html>
 <html>
   <head>
@@ -1999,43 +2290,57 @@ export function TripsHubTableView({
     </table>
   </body>
 </html>`;
-                        const previewWindow = window.open("", "_blank");
-                        if (previewWindow) {
-                          previewWindow.document.open();
-                          previewWindow.document.write(html);
-                          previewWindow.document.close();
-                          previewWindow.focus();
-                          previewWindow.print();
-                        } else {
-                          await Share.share({ message: receiptTextPayload });
-                        }
-                      } else {
-                        await Share.share({ message: receiptTextPayload });
-                      }
-                    } catch {
-                      // no-op
-                    }
-                  }}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.receiptBtnPrimaryText}>PDF PREVIEW</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.receiptBtn, styles.receiptBtnSecondary, styles.receiptBtnShare]}
-                  onPress={async () => {
-                    try {
-                      await Share.share({
-                        message: `Settlement ${formatINR(Math.abs(txAmount))}\nReference: ${getTripDisplayNumber(receiptTrip)}`,
-                      });
-                    } catch {
-                      // no-op
-                    }
-                  }}
-                  activeOpacity={0.85}
-                >
-                  <FontAwesome name="share-alt" size={12} color={Theme.textSecondary} />
-                </TouchableOpacity>
-              </View>
+                              const previewWindow = window.open("", "_blank");
+                              if (previewWindow) {
+                                previewWindow.document.open();
+                                previewWindow.document.write(html);
+                                previewWindow.document.close();
+                                previewWindow.focus();
+                                previewWindow.print();
+                              } else {
+                                await Share.share({
+                                  message: receiptTextPayload,
+                                });
+                              }
+                            } else {
+                              await Share.share({
+                                message: receiptTextPayload,
+                              });
+                            }
+                          } catch {
+                            // no-op
+                          }
+                        }}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={styles.receiptBtnPrimaryText}>
+                          PDF PREVIEW
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.receiptBtn,
+                          styles.receiptBtnSecondary,
+                          styles.receiptBtnShare,
+                        ]}
+                        onPress={async () => {
+                          try {
+                            await Share.share({
+                              message: `Settlement ${formatINR(Math.abs(txAmount))}\nReference: ${getTripDisplayNumber(receiptTrip)}`,
+                            });
+                          } catch {
+                            // no-op
+                          }
+                        }}
+                        activeOpacity={0.85}
+                      >
+                        <FontAwesome
+                          name="share-alt"
+                          size={12}
+                          color={Theme.textSecondary}
+                        />
+                      </TouchableOpacity>
+                    </View>
                   </>
                 );
               })()}
@@ -2063,8 +2368,12 @@ export function TripsHubTableView({
               { paddingBottom: Math.max(insets.bottom, 12) + 12 },
             ]}
           >
-            <Text style={styles.colPickerTitle}>{tr("tripsHubColumnPickerTitle")}</Text>
-            <Text style={styles.colPickerHint}>{tr("tripsHubColumnPickerHint")}</Text>
+            <Text style={styles.colPickerTitle}>
+              {tr("tripsHubColumnPickerTitle")}
+            </Text>
+            <Text style={styles.colPickerHint}>
+              {tr("tripsHubColumnPickerHint")}
+            </Text>
             <ScrollView
               style={styles.colPickerScroll}
               keyboardShouldPersistTaps="handled"
@@ -2072,7 +2381,9 @@ export function TripsHubTableView({
             >
               {HUB_COLUMN_ORDER.map((id) => (
                 <View key={id} style={styles.colPickerRow}>
-                  <Text style={styles.colPickerRowLabel}>{tr(HUB_COLUMN_LABEL[id])}</Text>
+                  <Text style={styles.colPickerRowLabel}>
+                    {tr(HUB_COLUMN_LABEL[id])}
+                  </Text>
                   <Switch
                     value={visibleCols[id]}
                     onValueChange={(v) => setCol(id, v)}
@@ -2092,7 +2403,9 @@ export function TripsHubTableView({
               onPress={() => setColumnPickerOpen(false)}
               activeOpacity={0.85}
             >
-              <Text style={styles.colPickerDoneText}>{tr("tripsHubColumnPickerDone")}</Text>
+              <Text style={styles.colPickerDoneText}>
+                {tr("tripsHubColumnPickerDone")}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -2135,7 +2448,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     zIndex: 1,
   },
-  fleetHeadLeft: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1 },
+  fleetHeadLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
   fleetTruckWrap: {
     width: 44,
     height: 44,
@@ -2147,7 +2465,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   fleetHeadText: { flex: 1, minWidth: 0 },
-  fleetBadgeRow: { flexDirection: "row", flexWrap: "wrap", gap: 4, marginBottom: 3 },
+  fleetBadgeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4,
+    marginBottom: 3,
+  },
   fleetBadgeBlue: {
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -2288,7 +2611,7 @@ const styles = StyleSheet.create({
   },
   fleetProgSegment: {
     flex: 1,
-    height: 5 ,
+    height: 5,
     borderRadius: 5,
   },
   fleetProgSegmentFilled: {
@@ -3145,7 +3468,13 @@ const styles = StyleSheet.create({
     justifyContent: "flex-start",
     alignItems: "center",
   },
-  auditColIdentity: { flex: 1.25, minWidth: 200, flexDirection: "row", alignItems: "center", gap: 10 },
+  auditColIdentity: {
+    flex: 1.25,
+    minWidth: 200,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
   auditColStatusType: {
     flex: 0.85,
     minWidth: 128,
@@ -3807,7 +4136,12 @@ const styles = StyleSheet.create({
     borderTopColor: Theme.borderLight,
     gap: 12,
   },
-  auditFooterLeft: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
+  auditFooterLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+  },
   auditFooterIcon: {
     padding: 10,
     borderRadius: 12,
