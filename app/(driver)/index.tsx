@@ -1416,6 +1416,22 @@ export default function DriverRadarScreen() {
     return { position: idx + 1, total: list.length };
   }, [visibleAssignableIncomingTripsFcfs, effectiveFirstIncoming?.id]);
 
+  /** Invite rows carry fleet names; fills gaps when `organizations` is empty under driver RLS. */
+  const organizationNamesFromInvites = useMemo(() => {
+    const byId: Record<string, string> = {};
+    for (const inv of invites) {
+      const oid = String(inv.from_organization_id ?? "").trim();
+      const oname = String(inv.from_org_name ?? "").trim();
+      if (oid && oname) byId[oid] = oname;
+    }
+    return byId;
+  }, [invites]);
+
+  const mergedOrganizationNamesById = useMemo(
+    () => ({ ...organizationNamesFromInvites, ...organizationNamesById }),
+    [organizationNamesFromInvites, organizationNamesById],
+  );
+
   // Use driver's accepted offer (commission % or per km) for this org so commission matches control screen
   const acceptedInviteForOrg =
     effectiveFirstIncoming &&
@@ -1460,7 +1476,7 @@ export default function DriverRadarScreen() {
             assignerNamesByUserId,
             assignerOrgNameByUserId,
             assignerDisplayByTripId,
-            organizationNamesById,
+            organizationNamesById: mergedOrganizationNamesById,
           },
         );
         const requiresOtp =
@@ -1496,7 +1512,7 @@ export default function DriverRadarScreen() {
       assignerNamesByUserId,
       assignerOrgNameByUserId,
       assignerDisplayByTripId,
-      organizationNamesById,
+      mergedOrganizationNamesById,
       assignmentActorByTripId,
     ],
   );
@@ -1547,7 +1563,7 @@ export default function DriverRadarScreen() {
         assignerNamesByUserId,
         assignerOrgNameByUserId,
         assignerDisplayByTripId,
-        organizationNamesById,
+        organizationNamesById: mergedOrganizationNamesById,
       },
     ).assignedByName;
   }, [
@@ -1559,7 +1575,7 @@ export default function DriverRadarScreen() {
     assignerNamesByUserId,
     assignerOrgNameByUserId,
     assignerDisplayByTripId,
-    organizationNamesById,
+    mergedOrganizationNamesById,
   ]);
   useEffect(() => {
     if (activeMission) return;

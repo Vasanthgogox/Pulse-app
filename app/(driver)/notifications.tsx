@@ -14,6 +14,10 @@ import { computeDriverCommissionForTrip } from '@/features/finance/aggregation/a
 import { getPendingOtpTrips } from '@/features/trips';
 import { getLatestAssignmentAuditByTripIds } from '@/features/trips/services/trip-assignment-audit.service';
 import {
+    buildAssignerDisplayForTrip,
+    resolveAssignerUserId,
+} from '@/lib/driverAssignerDisplay';
+import {
     DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY,
     DRIVER_POST_MISSION_PENDING_SNAPSHOT_KEY,
 } from '@/lib/driverDashboardFlags';
@@ -50,50 +54,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const DRIVER_ACCEPTED_TRIP_ID_KEY = 'driver_accepted_trip_id';
 const DRIVER_NOTIFICATION_FOCUS_TRIP_KEY = 'driver_notification_focus_trip_id';
-
-const UUID_V4_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-function looksLikeUuidFragment(s: string): boolean {
-  const t = String(s ?? '').trim();
-  if (!t) return false;
-  if (UUID_V4_RE.test(t)) return true;
-  if (/^[0-9a-f]{6,12}$/i.test(t)) return true;
-  return false;
-}
-
-function resolveAssignerUserId(
-  trip: tripsService.TripRow,
-  auditActorByTripId: Record<string, string>,
-): string {
-  const meta = trip as tripsService.TripRow &
-    Record<string, string | number | boolean | null | undefined>;
-  const audit = (auditActorByTripId[String(trip.id)] ?? '').trim();
-  const assignedByUserId = String(meta.assigned_by_user_id ?? '').trim();
-  const createdByUserId = String(trip.created_by_user_id ?? '').trim();
-  const assignedBy = String(meta.assigned_by ?? '').trim();
-  const createdBy = String(trip.created_by ?? '').trim();
-
-  if (audit) return audit;
-  if (assignedByUserId) return assignedByUserId;
-  if (createdByUserId) return createdByUserId;
-  if (assignedBy && UUID_V4_RE.test(assignedBy)) return assignedBy;
-  if (createdBy && UUID_V4_RE.test(createdBy)) return createdBy;
-  return '';
-}
-
-function humanizeAssignerDisplayName(raw: string | null | undefined): string {
-  const t = String(raw ?? '').trim();
-  if (!t) return '';
-  if (looksLikeUuidFragment(t)) return '';
-  const lower = t.toLowerCase();
-  if (lower === 'partner') return '';
-  if (/^user\s+/i.test(t)) {
-    const rest = t.replace(/^user\s+/i, '').trim();
-    if (looksLikeUuidFragment(rest) || /^[0-9a-f-]{6,}$/i.test(rest)) return '';
-  }
-  return t;
-}
 
 export default function DriverNotificationsScreen() {
   const insets = useSafeAreaInsets();
@@ -369,6 +329,21 @@ export default function DriverNotificationsScreen() {
     };
   }, [mergedIncomingTrips, assignmentActorByTripId]);
 
+  const organizationNamesFromInvites = useMemo(() => {
+    const byId: Record<string, string> = {};
+    for (const inv of invites) {
+      const oid = String(inv.from_organization_id ?? '').trim();
+      const oname = String(inv.from_org_name ?? '').trim();
+      if (oid && oname) byId[oid] = oname;
+    }
+    return byId;
+  }, [invites]);
+
+  const mergedOrganizationNamesById = useMemo(
+    () => ({ ...organizationNamesFromInvites, ...organizationNamesById }),
+    [organizationNamesFromInvites, organizationNamesById],
+  );
+
   const pendingOtpTripsRequiringOtp = useMemo(
     () => pendingOtpTrips.filter((t) => !isRosterTrip(t)),
     [pendingOtpTrips],
@@ -377,61 +352,19 @@ export default function DriverNotificationsScreen() {
   const rowsWithMeta = useMemo(
     () =>
       mergedIncomingTrips.map((trip) => {
-        const tripMeta = trip as tripsService.TripRow &
-          Record<string, string | number | boolean | null | undefined>;
-        const inviteForTrip =
-          invites.find(
-            (i) =>
-              (i.from_organization_id ?? '').trim() ===
-              (trip.organization_id ?? '').trim(),
-          ) ?? null;
-        const assignerUserId = resolveAssignerUserId(
-          trip,
-          assignmentActorByTripId,
-        ).trim();
-
-        const tripAssignedByUserNameCandidates = [
-          tripMeta.assigned_by_name,
-          tripMeta.assigned_by_user_name,
-          tripMeta.created_by_name,
-          tripMeta.dispatcher_name,
-        ];
-        const tripAssignedByOrgNameCandidates = [
-          assignerOrgNameByUserId[assignerUserId] ?? null,
-          organizationNamesById[(trip.organization_id ?? '').trim()] ?? null,
-          ...(isAggregateTrip(trip) ? [] : [inviteForTrip?.from_org_name ?? null]),
-          (tripMeta.organization_name as string | null | undefined) ?? null,
-          (tripMeta.org_name as string | null | undefined) ?? null,
-          (tripMeta.from_org_name as string | null | undefined) ?? null,
-          (tripMeta.company_name as string | null | undefined) ?? null,
-        ];
-        const resolvedFromTripFields = tripAssignedByUserNameCandidates
-          .map((value) => humanizeAssignerDisplayName(String(value ?? '')))
-          .find((value) => value.length > 0);
-        const resolvedFromProfiles = humanizeAssignerDisplayName(
-          assignerNamesByUserId[assignerUserId] ?? '',
-        );
-        const fromRpc = humanizeAssignerDisplayName(
-          assignerDisplayByTripId[String(trip.id)] ?? '',
-        );
-        const assignedByUserName =
-          (fromRpc.length > 0 ? fromRpc : null) ??
-          resolvedFromTripFields ??
-          (resolvedFromProfiles.length > 0 ? resolvedFromProfiles : null);
-
-        const assignedByOrgName =
-          tripAssignedByOrgNameCandidates
-            .map((value) => String(value ?? '').trim())
-            .find((value) => value.length > 0) ??
-          (isAggregateTrip(trip)
-            ? 'Assigning organization'
-            : (trip.organization_id ?? '').trim() ===
-                (driver?.organization_id ?? '').trim()
-              ? 'Your fleet'
-              : 'Assigning fleet');
-
-        const assignerPersonDisplay =
-          (assignedByUserName ?? '').trim() || 'Fleet dispatcher';
+        const { assignedByOrgName, assignerPersonDisplay } =
+          buildAssignerDisplayForTrip(
+            trip,
+            invites,
+            driver?.organization_id,
+            {
+              assignmentActorByTripId,
+              assignerNamesByUserId,
+              assignerOrgNameByUserId,
+              assignerDisplayByTripId,
+              organizationNamesById: mergedOrganizationNamesById,
+            },
+          );
 
         const requiresOtp =
           !isRosterTrip(trip) &&
@@ -466,7 +399,7 @@ export default function DriverNotificationsScreen() {
       assignerNamesByUserId,
       assignerOrgNameByUserId,
       assignerDisplayByTripId,
-      organizationNamesById,
+      mergedOrganizationNamesById,
       assignmentActorByTripId,
     ],
   );
