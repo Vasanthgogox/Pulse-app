@@ -72,7 +72,7 @@ import { useFinanceLedger } from "../hooks/useFinanceLedger";
 import { useFinanceTransactionSubmit } from "../hooks/useFinanceTransactionSubmit";
 import type { LedgerRow } from "../services/finance.service";
 import {
-    getProfileImage,
+    getProfileImageBatch,
     updateLedgerEntry,
 } from "../services/finance.service";
 import type { FinanceSubTab } from "../types";
@@ -337,20 +337,14 @@ export function FinanceScreen() {
       }
 
       if (pending.size === 0) return;
-      const entries = Array.from(pending.values());
-      const resolved = await Promise.all(
-        entries.map(async ({ id, type }) => {
-          const uri = await getProfileImage(id, type);
-          return uri ? ([id, uri] as const) : null;
-        }),
-      );
+      const driverIds = Array.from(pending.values())
+        .filter(({ type }) => type === "driver")
+        .map(({ id }) => id);
+
+      if (driverIds.length === 0) return;
+      const next = await getProfileImageBatch(driverIds);
 
       if (cancelled) return;
-      const next: Record<string, string> = {};
-      for (const row of resolved) {
-        if (!row) continue;
-        next[row[0]] = row[1];
-      }
       if (Object.keys(next).length > 0) {
         setProfileImages((prev) => ({ ...prev, ...next }));
       }

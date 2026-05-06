@@ -81,7 +81,7 @@ import { DocumentShareSheet } from "./DocumentShareSheet";
 import type { ConversationPartyType, LedgerEventMetadata, TripMessageRow } from "../types/chat.types";
 import { useAuth } from "@/contexts/AuthContext";
 import { PartyAvatar } from "@/components/PartyAvatar";
-import { getProfileImage } from "@/features/finance/services/finance.service";
+import { getProfileImageBatch } from "@/features/finance/services/finance.service";
 import {
   isTerminalTripStatus,
   isTripFeedbackEligibleStatus,
@@ -349,18 +349,9 @@ export function ChatScreen() {
     ];
     if (driverIds.length === 0) return;
     let cancelled = false;
-    void Promise.all(
-      driverIds.map(async (id) => {
-        const uri = await getProfileImage(id, "driver");
-        return [id, uri] as const;
-      }),
-    ).then((pairs) => {
+    void getProfileImageBatch(driverIds).then((uriMap) => {
       if (cancelled) return;
-      setDriverAvatarMap((prev) => {
-        const next = { ...prev };
-        for (const [id, uri] of pairs) next[id] = uri;
-        return next;
-      });
+      setDriverAvatarMap((prev) => ({ ...prev, ...uriMap }));
     });
     return () => { cancelled = true; };
   }, [conversations]);

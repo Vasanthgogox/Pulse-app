@@ -999,6 +999,32 @@ export async function getDriverProfileDisplay(driverId: string): Promise<{
   };
 }
 
+/** Batch fetch display profiles for multiple drivers in one RPC call. */
+export async function getDriverProfileDisplayBatch(
+  driverIds: string[],
+): Promise<Record<string, { fullName: string; avatarUrl?: string; avatarSeed?: string }>> {
+  const ids = driverIds.map((id) => id.trim()).filter(Boolean);
+  if (ids.length === 0) return {};
+
+  const { data, error } = await supabase().rpc("get_driver_profile_display_batch", {
+    p_driver_ids: ids,
+  });
+  if (error || !data || typeof data !== "object") return {};
+
+  const result: Record<string, { fullName: string; avatarUrl?: string; avatarSeed?: string }> = {};
+  for (const [driverId, raw] of Object.entries(data as Record<string, unknown>)) {
+    if (raw && typeof raw === "object") {
+      const r = raw as { fullName?: string; avatarUrl?: string; avatarSeed?: string };
+      result[driverId] = {
+        fullName: (r.fullName ?? "").trim(),
+        avatarUrl: (r.avatarUrl ?? "").trim(),
+        avatarSeed: (r.avatarSeed ?? "").trim(),
+      };
+    }
+  }
+  return result;
+}
+
 /**
  * Read latest invite terms for a specific org + user from driver_invites (any status).
  * Used by owner profile re-invite flow to reuse previously entered compensation values.

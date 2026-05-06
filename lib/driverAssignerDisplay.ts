@@ -25,12 +25,16 @@ export function resolveAssignerUserId(
   const audit = (auditActorByTripId[String(trip.id)] ?? "").trim();
   const assignedByUserId = String(meta.assigned_by_user_id ?? "").trim();
   const createdByUserId = String(trip.created_by_user_id ?? "").trim();
+  const ownerUserId = String(meta.owner_user_id ?? "").trim();
+  const statusUpdatedBy = String(meta.status_updated_by ?? "").trim();
   const assignedBy = String(meta.assigned_by ?? "").trim();
   const createdBy = String(trip.created_by ?? "").trim();
 
   if (audit) return audit;
   if (assignedByUserId) return assignedByUserId;
   if (createdByUserId) return createdByUserId;
+  if (ownerUserId) return ownerUserId;
+  if (statusUpdatedBy) return statusUpdatedBy;
   if (assignedBy && UUID_V4_RE.test(assignedBy)) return assignedBy;
   if (createdBy && UUID_V4_RE.test(createdBy)) return createdBy;
   return "";
@@ -100,6 +104,7 @@ export function buildAssignerDisplayForTrip(
   const tripAssignedByUserNameCandidates = [
     tripMeta.assigned_by_name,
     tripMeta.assigned_by_user_name,
+    tripMeta.assigned_by,
     tripMeta.created_by_name,
     tripMeta.dispatcher_name,
   ];
