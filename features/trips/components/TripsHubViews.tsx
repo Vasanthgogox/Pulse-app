@@ -933,6 +933,7 @@ export function TripsHubTableView({
   const { width: layoutWidth } = useWindowDimensions();
   /** Narrow viewports: shorter settlement cards (no bar, tighter padding, single-line name). */
   const compactSettlement = layoutWidth > 0 && layoutWidth < 520;
+  const useMobileToolbarLayout = compactSettlement;
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const [visibleCols, setVisibleCols] = useState<
     Record<TripsHubTableColumnId, boolean>
@@ -942,18 +943,10 @@ export function TripsHubTableView({
   const [sortKey, setSortKey] = useState<"recent" | "due_desc" | "sales_desc">(
     "recent",
   );
-  const [showColSettings, setShowColSettings] = useState(false);
   const [receiptTx, setReceiptTx] = useState<{
     trip: TripRow;
     row: LedgerRow | null;
   } | null>(null);
-  const [cols, setCols] = useState({
-    telemetry: true,
-    earnings: true,
-    supplier: true,
-    driver: true,
-    audit: true,
-  });
 
   const toggleExpanded = (tripId: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -1068,99 +1061,185 @@ export function TripsHubTableView({
     return displayedTrips;
   }, [displayedTrips]);
 
-  const toggleTemplateCol = (key: keyof typeof cols) => {
-    setCols((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
   return (
     <View style={styles.auditTableWrap}>
       <View style={styles.auditToolbar}>
         <Text style={styles.auditToolbarCount}>
           Showing {templateTrips.length} of {trips.length} trips
         </Text>
-        <View style={styles.auditToolbarControls}>
+        <View
+          style={[
+            styles.auditToolbarControls,
+            useMobileToolbarLayout && styles.auditToolbarControlsMobile,
+          ]}
+        >
           {onDateRangeFilterChange ? (
-            <View style={styles.auditDatePresetRow}>
-              {(
-                [
-                  { id: "all" as const, label: "ALL" },
-                  { id: "today" as const, label: "TODAY" },
-                  { id: "yesterday" as const, label: "YESTERDAY" },
-                  { id: "this_week" as const, label: "THIS WEEK" },
-                  { id: "this_month" as const, label: "THIS MONTH" },
-                ] as const
-              ).map(({ id, label }) => (
+            useMobileToolbarLayout ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={[
+                  styles.auditDatePresetRow,
+                  styles.auditDatePresetRowMobile,
+                ]}
+                style={[
+                  styles.auditDatePresetScroll,
+                  styles.auditDatePresetScrollMobile,
+                ]}
+              >
+                {(
+                  [
+                    { id: "all" as const, label: "ALL" },
+                    { id: "today" as const, label: "TODAY" },
+                    { id: "yesterday" as const, label: "YESTERDAY" },
+                    { id: "this_week" as const, label: "THIS WEEK" },
+                    { id: "this_month" as const, label: "THIS MONTH" },
+                  ] as const
+                ).map(({ id, label }) => (
+                  <TouchableOpacity
+                    key={id}
+                    style={[
+                      styles.auditDateChip,
+                      dateRangeFilter === id && styles.auditDateChipActive,
+                    ]}
+                    onPress={() => onDateRangeFilterChange(id)}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: dateRangeFilter === id }}
+                  >
+                    <Text
+                      style={[
+                        styles.auditDateChipText,
+                        dateRangeFilter === id &&
+                          styles.auditDateChipTextActive,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+                {onOpenDateRangePicker ? (
+                  <TouchableOpacity
+                    style={[
+                      styles.auditDateIconBtn,
+                      dateRangeFilter === "custom" &&
+                        styles.auditDateChipActive,
+                    ]}
+                    onPress={onOpenDateRangePicker}
+                    activeOpacity={0.8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open custom date range"
+                  >
+                    <FontAwesome
+                      name="calendar"
+                      size={12}
+                      color={
+                        dateRangeFilter === "custom"
+                          ? Theme.textPrimaryDark
+                          : Theme.textMuted
+                      }
+                    />
+                  </TouchableOpacity>
+                ) : null}
                 <TouchableOpacity
-                  key={id}
-                  style={[
-                    styles.auditDateChip,
-                    dateRangeFilter === id && styles.auditDateChipActive,
-                  ]}
-                  onPress={() => onDateRangeFilterChange(id)}
+                  style={styles.auditToolbarBtn}
+                  onPress={cycleSortKey}
                   activeOpacity={0.85}
                   accessibilityRole="button"
-                  accessibilityState={{ selected: dateRangeFilter === id }}
-                >
-                  <Text
-                    style={[
-                      styles.auditDateChipText,
-                      dateRangeFilter === id && styles.auditDateChipTextActive,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-              {onOpenDateRangePicker ? (
-                <TouchableOpacity
-                  style={[
-                    styles.auditDateIconBtn,
-                    dateRangeFilter === "custom" && styles.auditDateChipActive,
-                  ]}
-                  onPress={onOpenDateRangePicker}
-                  activeOpacity={0.8}
-                  accessibilityRole="button"
-                  accessibilityLabel="Open custom date range"
+                  accessibilityLabel="Cycle table sort"
                 >
                   <FontAwesome
-                    name="calendar"
-                    size={12}
-                    color={
-                      dateRangeFilter === "custom"
-                        ? Theme.textPrimaryDark
-                        : Theme.textMuted
-                    }
+                    name="sort"
+                    size={13}
+                    color={Theme.textSecondary}
+                  />
+                  <Text style={styles.auditToolbarText}>Sort: {sortLabel}</Text>
+                  <FontAwesome
+                    name="chevron-down"
+                    size={10}
+                    color={Theme.textMuted}
                   />
                 </TouchableOpacity>
-              ) : null}
-            </View>
+              </ScrollView>
+            ) : (
+              <View style={styles.auditDatePresetRow}>
+                {(
+                  [
+                    { id: "all" as const, label: "ALL" },
+                    { id: "today" as const, label: "TODAY" },
+                    { id: "yesterday" as const, label: "YESTERDAY" },
+                    { id: "this_week" as const, label: "THIS WEEK" },
+                    { id: "this_month" as const, label: "THIS MONTH" },
+                  ] as const
+                ).map(({ id, label }) => (
+                  <TouchableOpacity
+                    key={id}
+                    style={[
+                      styles.auditDateChip,
+                      dateRangeFilter === id && styles.auditDateChipActive,
+                    ]}
+                    onPress={() => onDateRangeFilterChange(id)}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: dateRangeFilter === id }}
+                  >
+                    <Text
+                      style={[
+                        styles.auditDateChipText,
+                        dateRangeFilter === id &&
+                          styles.auditDateChipTextActive,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+                {onOpenDateRangePicker ? (
+                  <TouchableOpacity
+                    style={[
+                      styles.auditDateIconBtn,
+                      dateRangeFilter === "custom" &&
+                        styles.auditDateChipActive,
+                    ]}
+                    onPress={onOpenDateRangePicker}
+                    activeOpacity={0.8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open custom date range"
+                  >
+                    <FontAwesome
+                      name="calendar"
+                      size={12}
+                      color={
+                        dateRangeFilter === "custom"
+                          ? Theme.textPrimaryDark
+                          : Theme.textMuted
+                      }
+                    />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            )
           ) : null}
-          <TouchableOpacity
-            style={styles.auditToolbarBtn}
-            onPress={cycleSortKey}
-            activeOpacity={0.85}
-            accessibilityRole="button"
-            accessibilityLabel="Cycle table sort"
-          >
-            <FontAwesome name="sort" size={13} color={Theme.textSecondary} />
-            <Text style={styles.auditToolbarText}>Sort: {sortLabel}</Text>
-            <FontAwesome
-              name="chevron-down"
-              size={10}
-              color={Theme.textMuted}
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.auditToolbarBtn}
-            onPress={() => setShowColSettings((v) => !v)}
-            activeOpacity={0.85}
-            accessibilityRole="button"
-            accessibilityLabel="Toggle table column settings"
-          >
-            <FontAwesome name="sliders" size={13} color={Theme.textSecondary} />
-            <Text style={styles.auditToolbarText}>Filters</Text>
-          </TouchableOpacity>
+          {!useMobileToolbarLayout ? (
+            <TouchableOpacity
+              style={styles.auditToolbarBtn}
+              onPress={cycleSortKey}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Cycle table sort"
+            >
+              <FontAwesome name="sort" size={13} color={Theme.textSecondary} />
+              <Text style={styles.auditToolbarText}>Sort: {sortLabel}</Text>
+              <FontAwesome
+                name="chevron-down"
+                size={10}
+                color={Theme.textMuted}
+              />
+            </TouchableOpacity>
+          ) : null}
           <View style={styles.auditSearchWrap}>
             <FontAwesome name="search" size={12} color={Theme.textSecondary} />
             <TextInput
@@ -1187,31 +1266,6 @@ export function TripsHubTableView({
           </View>
         </View>
       </View>
-
-      {showColSettings ? (
-        <View style={styles.manifestColPanel}>
-          {(Object.keys(cols) as Array<keyof typeof cols>).map((key) => (
-            <TouchableOpacity
-              key={key}
-              style={[
-                styles.manifestColChip,
-                cols[key] && styles.manifestColChipOn,
-              ]}
-              onPress={() => toggleTemplateCol(key)}
-              activeOpacity={0.85}
-            >
-              <Text
-                style={[
-                  styles.manifestColChipText,
-                  cols[key] && styles.manifestColChipTextOn,
-                ]}
-              >
-                {key.toUpperCase()}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      ) : null}
 
       {renderBody ? (
         renderBody(templateTrips)
@@ -2879,6 +2933,10 @@ const styles = StyleSheet.create({
     gap: 8,
     flexWrap: "wrap",
   },
+  auditToolbarControlsMobile: {
+    width: "100%",
+    minWidth: 0,
+  },
   auditSearchWrap: {
     height: 34,
     minWidth: 260,
@@ -2923,6 +2981,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     flexWrap: "wrap",
+  },
+  auditDatePresetRowMobile: {
+    flexWrap: "nowrap",
+    paddingRight: 2,
+  },
+  auditDatePresetScroll: {
+    minWidth: 0,
+    maxWidth: "100%",
+  },
+  auditDatePresetScrollMobile: {
+    flexGrow: 1,
+    flexShrink: 1,
   },
   auditDateChip: {
     minHeight: 32,
@@ -2990,37 +3060,6 @@ const styles = StyleSheet.create({
   },
   manifestFilterPillTextOn: {
     color: Theme.textOnDark,
-  },
-  manifestColPanel: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingBottom: 8,
-    backgroundColor: Theme.screenBackground,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.surfaceBorder,
-  },
-  manifestColChip: {
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Theme.surfaceBorder,
-    backgroundColor: Theme.surface,
-  },
-  manifestColChipOn: {
-    backgroundColor: Theme.fiscalTabActiveBg,
-    borderColor: Theme.borderMedium,
-  },
-  manifestColChipText: {
-    fontSize: 7,
-    fontWeight: "700",
-    color: Theme.textSecondary,
-    letterSpacing: 0.3,
-  },
-  manifestColChipTextOn: {
-    color: Theme.primary,
   },
   manifestHeaderRow: {
     flexDirection: "row",
