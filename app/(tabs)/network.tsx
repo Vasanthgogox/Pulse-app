@@ -1106,7 +1106,7 @@ function NetworkScreenInner() {
                 >
                   <History
                     size={isDesktopMatrix ? 12 : 13}
-                    color={Theme.textOnDarkMuted}
+                    color={Theme.textSecondary}
                     strokeWidth={2}
                   />
                 </View>
@@ -2022,15 +2022,15 @@ const styles = StyleSheet.create({
     minHeight: 196,
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: Theme.borderOnDark,
-    backgroundColor: Theme.darkBackground,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
     paddingHorizontal: 14,
     paddingVertical: 14,
     gap: 10,
-    shadowColor: "#000",
-    shadowOpacity: 0.35,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 12 },
+    shadowColor: Theme.shadow,
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
     elevation: 2,
   },
   commandSideCardDesktop: {
@@ -2065,9 +2065,9 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: Theme.surface,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
+    borderColor: Theme.borderLight,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2079,7 +2079,7 @@ const styles = StyleSheet.create({
   commandSideKicker: {
     fontSize: 10,
     fontWeight: "800",
-    color: Theme.textOnDark,
+    color: Theme.textPrimaryDark,
     letterSpacing: 1.15,
     textTransform: "uppercase",
   },
@@ -2091,14 +2091,14 @@ const styles = StyleSheet.create({
     marginTop: 3,
     fontSize: 10,
     fontWeight: "500",
-    color: Theme.textOnDarkMuted,
+    color: Theme.textSecondary,
     letterSpacing: 0.15,
   },
   commandSideSubLabelDesktop: {
     marginTop: 2,
     fontSize: 8,
     fontWeight: "500",
-    color: Theme.textOnDarkMuted,
+    color: Theme.textSecondary,
     letterSpacing: 0.12,
   },
   /** No maxHeight on mobile: fixed 220px clipped the last log row while the gray shell still had room below. */
@@ -2127,17 +2127,17 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.07)",
-    backgroundColor: "#151d2a",
-    shadowColor: "#000",
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+    shadowColor: Theme.shadow,
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
   commandLogEntryDesktop: {
     borderRadius: 12,
-    backgroundColor: "#151d2a",
+    backgroundColor: Theme.surface,
   },
   commandLogAccent: {
     width: 3,
@@ -2176,7 +2176,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
     fontSize: 11,
     fontWeight: "700",
-    color: "#f1f5f9",
+    color: Theme.textPrimaryDark,
     letterSpacing: 0.45,
     textTransform: "uppercase",
   },
@@ -2189,14 +2189,14 @@ const styles = StyleSheet.create({
   commandLogWhen: {
     fontSize: 9,
     fontWeight: "600",
-    color: "rgba(203,213,225,0.65)",
+    color: Theme.textSecondary,
     flexShrink: 0,
     paddingTop: 0,
   },
   commandLogWhenDesktop: {
     fontSize: 8,
     fontWeight: "600",
-    color: "rgba(203,213,225,0.68)",
+    color: Theme.textSecondary,
     paddingTop: 0,
   },
   commandLogEntryBottom: {
@@ -2255,18 +2255,18 @@ const styles = StyleSheet.create({
     fontSize: 8,
   },
   commandLogStatusLive: {
-    color: "#a7f3d0",
+    color: Theme.darkGreen,
   },
   commandLogStatusPending: {
-    color: "#fde68a",
+    color: Theme.teslaRed,
   },
   commandLogEmpty: {
     minHeight: 84,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
+    borderColor: Theme.borderLight,
     borderStyle: "dashed",
-    backgroundColor: "rgba(255,255,255,0.04)",
+    backgroundColor: Theme.surface,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 14,
@@ -2276,14 +2276,14 @@ const styles = StyleSheet.create({
   commandLogEmptyText: {
     fontSize: 11,
     fontWeight: "600",
-    color: Theme.textOnDark,
+    color: Theme.textPrimaryDark,
     textAlign: "center",
     letterSpacing: 0.15,
   },
   commandLogEmptyHint: {
     fontSize: 10,
     fontWeight: "500",
-    color: Theme.textOnDarkMuted,
+    color: Theme.textSecondary,
     textAlign: "center",
     lineHeight: 15,
   },
