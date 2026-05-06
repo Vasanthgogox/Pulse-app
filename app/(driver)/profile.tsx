@@ -47,7 +47,6 @@ const SLATE_900 = '#0f172a';
 const SLATE_50 = '#f8fafc';
 const AMBER_400 = '#fbbf24';
 const AMBER_500 = '#f59e0b';
-const TEMP_DRIVER_SIGNUP_URL = 'https://example.com/driver-signup';
 
 type ProfileView = 'main' | 'vehicle' | 'levels';
 
@@ -201,9 +200,9 @@ export default function DriverProfileScreen() {
 
   const buildDriverInviteUrl = () => {
     const webBase = process.env.EXPO_PUBLIC_WEB_BASE_URL?.trim().replace(/\/$/, '');
-    if (webBase) return `${webBase}/driver-signup`;
-    // Fallback is intentionally temporary until a public domain is finalized.
-    return TEMP_DRIVER_SIGNUP_URL || Linking.createURL('/driver-signup');
+    if (webBase) return `${webBase}/sign-in`;
+    // Fallback to app deep link when public web base is not configured.
+    return Linking.createURL('/sign-in');
   };
 
   const handleShare = () => {
@@ -211,7 +210,7 @@ export default function DriverProfileScreen() {
     const message =
       `${displayName} — Q Driver profile\n\n` +
       `Join me on Pulse to manage trips, payouts, and network requests.\n\n` +
-      `Sign up here: ${inviteUrl}`;
+      `Open app and log in here: ${inviteUrl}`;
     Share.share({
       title: 'Invite drivers to Q',
       message,
