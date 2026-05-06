@@ -54,7 +54,13 @@ export function useDriverChat() {
   return ctx;
 }
 
-export function DriverChatProvider({ children }: { children: ReactNode }) {
+export function DriverChatProvider({
+  children,
+  isActive = true,
+}: {
+  children: ReactNode;
+  isActive?: boolean;
+}) {
   const { profile } = useAuth();
   const uid = (profile as any)?.uid ?? null;
 
@@ -63,15 +69,17 @@ export function DriverChatProvider({ children }: { children: ReactNode }) {
   const conversationsRef = useRef(conversations);
   conversationsRef.current = conversations;
   const loadConversationsRef = useRef<() => Promise<TripConversation[]>>(async () => []);
+  const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   // Resolve driver record IDs from current user
   useEffect(() => {
+    if (!isActive) return;
     if (!uid) { setDriverIds([]); return; }
     getLinkedDriversForCurrentUser(uid)
       .then(({ drivers }) => setDriverIds(drivers.map((d) => d.id)))
       .catch(() => setDriverIds([]));
-  }, [uid]);
+  }, [isActive, uid]);
 
   const loadConversations = useCallback(async (): Promise<TripConversation[]> => {
     if (!driverIds.length) {
@@ -113,8 +121,22 @@ export function DriverChatProvider({ children }: { children: ReactNode }) {
   loadConversationsRef.current = loadConversations;
 
   useEffect(() => {
+    if (!isActive) return;
     void loadConversations();
-  }, [loadConversations]);
+  }, [isActive, loadConversations]);
+
+  const queueRefreshConversations = useCallback(() => {
+    if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current);
+    refreshDebounceRef.current = setTimeout(() => {
+      void loadConversationsRef.current();
+    }, 350);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current);
+    };
+  }, []);
 
   const ensureDriverTripConversation = useCallback(
     async (tripId: string): Promise<string | null> => {
@@ -167,7 +189,7 @@ export function DriverChatProvider({ children }: { children: ReactNode }) {
 
   // Realtime: merge inserts for known threads; refetch if conversation not loaded yet
   useEffect(() => {
-    if (!driverIds.length || !uid) return;
+    if (!isActive || !driverIds.length || !uid) return;
     return subscribeSharedPostgresChanges(
       `driver_trip_messages:user:${uid}`,
       [
@@ -178,10 +200,10 @@ export function DriverChatProvider({ children }: { children: ReactNode }) {
         },
       ],
       () => {
-        void loadConversationsRef.current();
+        queueRefreshConversations();
       }
     );
-  }, [driverIds, uid]);
+  }, [isActive, driverIds, uid, queueRefreshConversations]);
 
   const sendMessage = useCallback(
     async (conversationId: string, organizationId: string, content: string) => {

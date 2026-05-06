@@ -13,6 +13,7 @@ import { isSessionExpiredError } from '@/features/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { makeQueryClient } from '@/lib/queryClient';
 import { hasSupabaseConfig, SUPABASE_CONFIG_MISSING_MESSAGE } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
@@ -29,6 +30,7 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 
 import { useColorScheme } from '@/components/useColorScheme';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { useOptionalAuth } from '@/contexts/AuthContext';
 import { LanguageProvider, tGlobal } from '@/contexts/LanguageContext';
 import { NetworkProvider } from '@/contexts/NetworkContext';
 import { OrganizationProvider } from '@/contexts/OrganizationContext';
@@ -254,11 +256,7 @@ export default function RootLayout() {
               <AuthProvider>
                 <OrganizationProvider>
                   <WalletProvider>
-                    <TripChatProvider>
-                      <IntegratedChatProvider>
-                        <RootLayoutNav />
-                      </IntegratedChatProvider>
-                    </TripChatProvider>
+                    <RootLayoutNav />
                   </WalletProvider>
                 </OrganizationProvider>
               </AuthProvider>
@@ -291,34 +289,66 @@ function RootLayoutNav() {
   const colorScheme = useColorScheme();
   const { width } = useWindowDimensions();
   const isDesktopWeb = Platform.OS === 'web' && width >= 1024;
+  const pathname = usePathname();
+  const auth = useOptionalAuth();
+  const isDriverRole = auth?.profile?.role === 'driver';
+  const isDispatcherChatRouteActive =
+    !isDriverRole &&
+    (pathname === ROUTES.TABS.TRIPS ||
+      pathname === ROUTES.TABS.NETWORK ||
+      pathname === '/chat' ||
+      pathname.startsWith('/chat/'));
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <DemoTabBarScrollProvider>
-        <View style={{ flex: 1 }}>
-          <AppAlertHost />
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="welcome" options={{ animation: 'fade' }} />
-            <Stack.Screen name="sign-in" options={{ animation: 'fade' }} />
-            <Stack.Screen name="sign-up" options={{ animation: 'fade' }} />
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="(driver)" />
-            <Stack.Screen name="add-trip" />
-            <Stack.Screen name="network" />
-            <Stack.Screen name="load-board" options={{ presentation: 'fullScreenModal' }} />
-            <Stack.Screen name="create-indent" options={{ presentation: 'fullScreenModal' }} />
-            <Stack.Screen name="log-incoming-pods" options={{ presentation: 'card', animation: 'slide_from_right' }} />
-            <Stack.Screen name="invoicing-execute" options={{ presentation: 'card', animation: 'slide_from_right' }} />
-            <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-            <Stack.Screen name="(modals)" options={{ presentation: 'modal' }} />
-          </Stack>
-          <RootOverlayTabBar />
-          {isDesktopWeb ? <FloatingChatButton /> : null}
-        </View>
+        <TripChatProvider isActive={isDispatcherChatRouteActive}>
+          <IntegratedChatProvider isActive={isDispatcherChatRouteActive}>
+            <View style={{ flex: 1 }}>
+              <AppAlertHost />
+              {__DEV__ ? <RealtimeDebugProbe /> : null}
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="index" />
+                <Stack.Screen name="welcome" options={{ animation: 'fade' }} />
+                <Stack.Screen name="sign-in" options={{ animation: 'fade' }} />
+                <Stack.Screen name="sign-up" options={{ animation: 'fade' }} />
+                <Stack.Screen name="(tabs)" />
+                <Stack.Screen name="(driver)" />
+                <Stack.Screen name="add-trip" />
+                <Stack.Screen name="network" />
+                <Stack.Screen name="load-board" options={{ presentation: 'fullScreenModal' }} />
+                <Stack.Screen name="create-indent" options={{ presentation: 'fullScreenModal' }} />
+                <Stack.Screen name="log-incoming-pods" options={{ presentation: 'card', animation: 'slide_from_right' }} />
+                <Stack.Screen name="invoicing-execute" options={{ presentation: 'card', animation: 'slide_from_right' }} />
+                <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+                <Stack.Screen name="(modals)" options={{ presentation: 'modal' }} />
+              </Stack>
+              <RootOverlayTabBar />
+              {isDesktopWeb ? <FloatingChatButton /> : null}
+            </View>
+          </IntegratedChatProvider>
+        </TripChatProvider>
       </DemoTabBarScrollProvider>
     </ThemeProvider>
   );
+}
+
+function RealtimeDebugProbe() {
+  useEffect(() => {
+    const id = setInterval(() => {
+      const channels = supabase().getChannels();
+      console.log(
+        `[rt-debug ${new Date().toLocaleTimeString()}] channels=${channels.length}`
+      );
+      channels.forEach((channel) => {
+        console.log(' ->', channel.topic, '|', channel.state);
+      });
+    }, 3000);
+
+    return () => clearInterval(id);
+  }, []);
+
+  return null;
 }
 
 function RootOverlayTabBar() {
