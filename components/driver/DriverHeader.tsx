@@ -1,18 +1,19 @@
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import Typography from '@/constants/Typography';
+import { useAuth } from '@/contexts/AuthContext';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
 import React, { useEffect } from 'react';
-import { Image, Platform, StyleProp, StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-native';
+import { Image, Platform, Share, StyleProp, StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-native';
 import Animated, {
-  cancelAnimation,
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withSequence,
-  withTiming,
+    cancelAnimation,
+    Easing,
+    useAnimatedStyle,
+    useSharedValue,
+    withRepeat,
+    withSequence,
+    withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -55,6 +56,7 @@ export function DriverHeader({
 }: Props) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { profile } = useAuth();
 
   const title =
     variant === 'assigned' ? driverName : `Welcome, ${driverName}`;
@@ -81,6 +83,20 @@ export function DriverHeader({
   const onlineRingAnimatedStyle = useAnimatedStyle(() => ({
     opacity: ringPulse.value,
   }));
+
+  const handleInviteDrivers = () => {
+    const base = 'https://q-web.netlify.app/invite';
+    const ref = profile?.uid;
+    const inviteUrl = ref ? `${base}?ref=${ref}` : base;
+    const message =
+      `Join me on Q Driver! Manage trips, payouts, and network requests.\n\n` +
+      `Sign up here: ${inviteUrl}`;
+    Share.share({
+      title: 'Join Q Driver',
+      message,
+      url: inviteUrl,
+    }).catch(() => {});
+  };
 
   return (
     <View
@@ -151,14 +167,14 @@ export function DriverHeader({
 
       <View style={styles.headerRight}>
         <TouchableOpacity
-          onPress={() => router.push('/(driver)')}
+          onPress={handleInviteDrivers}
           style={[
             styles.notificationBtn,
             { backgroundColor: colors.whiteMuted, borderColor: colors.border },
           ]}
           activeOpacity={0.8}
-          accessibilityLabel="Requests"
-          accessibilityHint="View connection requests"
+          accessibilityLabel="Invite drivers"
+          accessibilityHint="Share your invite link"
         >
           <FontAwesome name="user-plus" size={18} color={colors.text} />
         </TouchableOpacity>
