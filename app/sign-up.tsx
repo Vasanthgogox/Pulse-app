@@ -486,7 +486,7 @@ export default function SignUp() {
             {/* ── Page 0: Phone ───────────────────────────────────────────── */}
             <View style={[styles.page, { width: pageWidth }]}>
               <View style={styles.pageInner}>
-                <Text style={styles.pageTitle}>Welcome aboard</Text>
+                <Text style={[styles.pageTitle, styles.pageTitleWelcome]}>Welcome aboard for business</Text>
                 <Text style={styles.pageSub}>Enter your Indian mobile number to get started.</Text>
 
                 <View style={styles.fieldGroup}>
@@ -969,6 +969,8 @@ const styles = StyleSheet.create({
   pageInner: { maxWidth: 360, alignSelf: 'center', width: '100%', paddingBottom: 24 },
 
   pageTitle: { fontSize: 26, fontWeight: '800', color: C.text, marginBottom: 8, letterSpacing: -0.4 },
+  /** Slightly smaller so the full line fits in `pageInner` without scaling or clipping. */
+  pageTitleWelcome: { fontSize: 20, letterSpacing: -0.35 },
   pageSub: { fontSize: 14, color: C.muted, marginBottom: 24, lineHeight: 20 },
   phoneHighlight: { fontWeight: '700', color: C.text },
   orgNameHighlight: { fontWeight: '700', color: C.accent },
