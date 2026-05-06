@@ -490,6 +490,9 @@ export default function DriverRadarScreen() {
   const [assignmentActorByTripId, setAssignmentActorByTripId] = useState<
     Record<string, string>
   >({});
+  const [rpcAssignerUserIdByTripId, setRpcAssignerUserIdByTripId] = useState<
+    Record<string, string>
+  >({});
   const [otpClaimTripId, setOtpClaimTripId] = useState<string | null>(null);
   const [otpValue, setOtpValue] = useState("");
   const [otpSubmitting, setOtpSubmitting] = useState(false);
@@ -1416,6 +1419,26 @@ export default function DriverRadarScreen() {
     return { position: idx + 1, total: list.length };
   }, [visibleAssignableIncomingTripsFcfs, effectiveFirstIncoming?.id]);
 
+  /** Invite rows carry fleet names; fills gaps when `organizations` is empty under driver RLS. */
+  const organizationNamesFromInvites = useMemo(() => {
+    const byId: Record<string, string> = {};
+    for (const inv of invites) {
+      const oid = String(inv.from_organization_id ?? "").trim();
+      const oname = String(inv.from_org_name ?? "").trim();
+      if (oid && oname) byId[oid] = oname;
+    }
+    return byId;
+  }, [invites]);
+
+  const mergedOrganizationNamesById = useMemo(
+    () => ({ ...organizationNamesFromInvites, ...organizationNamesById }),
+    [organizationNamesFromInvites, organizationNamesById],
+  );
+  const effectiveAssignmentActorByTripId = useMemo(
+    () => ({ ...rpcAssignerUserIdByTripId, ...assignmentActorByTripId }),
+    [rpcAssignerUserIdByTripId, assignmentActorByTripId],
+  );
+
   // Use driver's accepted offer (commission % or per km) for this org so commission matches control screen
   const acceptedInviteForOrg =
     effectiveFirstIncoming &&
@@ -1456,11 +1479,11 @@ export default function DriverRadarScreen() {
           invites,
           driver?.organization_id,
           {
-            assignmentActorByTripId,
+            assignmentActorByTripId: effectiveAssignmentActorByTripId,
             assignerNamesByUserId,
             assignerOrgNameByUserId,
             assignerDisplayByTripId,
-            organizationNamesById,
+            organizationNamesById: mergedOrganizationNamesById,
           },
         );
         const requiresOtp =
@@ -1496,8 +1519,8 @@ export default function DriverRadarScreen() {
       assignerNamesByUserId,
       assignerOrgNameByUserId,
       assignerDisplayByTripId,
-      organizationNamesById,
-      assignmentActorByTripId,
+      mergedOrganizationNamesById,
+      effectiveAssignmentActorByTripId,
     ],
   );
   /** Notification picker shows all currently visible incoming trips (including accepted). */
@@ -1543,11 +1566,11 @@ export default function DriverRadarScreen() {
       invites,
       driver?.organization_id,
       {
-        assignmentActorByTripId,
+        assignmentActorByTripId: effectiveAssignmentActorByTripId,
         assignerNamesByUserId,
         assignerOrgNameByUserId,
         assignerDisplayByTripId,
-        organizationNamesById,
+        organizationNamesById: mergedOrganizationNamesById,
       },
     ).assignedByName;
   }, [
@@ -1555,11 +1578,11 @@ export default function DriverRadarScreen() {
     incomingNotificationsWithMeta,
     invites,
     driver?.organization_id,
-    assignmentActorByTripId,
+    effectiveAssignmentActorByTripId,
     assignerNamesByUserId,
     assignerOrgNameByUserId,
     assignerDisplayByTripId,
-    organizationNamesById,
+    mergedOrganizationNamesById,
   ]);
   useEffect(() => {
     if (activeMission) return;
@@ -1604,23 +1627,33 @@ export default function DriverRadarScreen() {
         "get_trip_assigner_displays_for_driver",
         { p_trip_ids: tripIdsForRpc },
       );
+      const rpcAssignerUserIdByTrip: Record<string, string> = {};
       if (!cancelled && !assignerRpcError && Array.isArray(assignerRpcRows)) {
         const byTrip: Record<string, string> = {};
         for (const row of assignerRpcRows as Array<{
           trip_id?: string;
           display_name?: string | null;
+          assigner_user_id?: string | null;
         }>) {
           const tid = row.trip_id != null ? String(row.trip_id) : "";
           const dn = String(row.display_name ?? "").trim();
+          const uid = String(row.assigner_user_id ?? "").trim();
           if (tid && dn) byTrip[tid] = dn;
+          if (tid && uid) rpcAssignerUserIdByTrip[tid] = uid;
         }
         setAssignerDisplayByTripId(byTrip);
+        setRpcAssignerUserIdByTripId(rpcAssignerUserIdByTrip);
       }
 
       const userIds = Array.from(
         new Set(
           trips
-            .map((trip) => resolveAssignerUserId(trip, assignmentActorByTripId))
+            .map((trip) =>
+              resolveAssignerUserId(trip, {
+                ...rpcAssignerUserIdByTrip,
+                ...assignmentActorByTripId,
+              }),
+            )
             .filter((id) => id.length > 0),
         ),
       );
@@ -1662,6 +1695,58 @@ export default function DriverRadarScreen() {
             byId[row.id] = (row.full_name ?? "").trim() || fallbackEmailName;
             const company = (row.company_name ?? "").trim();
             if (company) orgById[row.id] = company;
+          }
+          const { data: ownedOrgs, error: ownedOrgsError } = await supabase()
+            .from("organizations")
+            .select("owner_id, name")
+            .in("owner_id", userIds);
+          if (!ownedOrgsError && Array.isArray(ownedOrgs)) {
+            for (const row of ownedOrgs as Array<{
+              owner_id?: string | null;
+              name?: string | null;
+            }>) {
+              const uid = String(row.owner_id ?? "").trim();
+              if (!uid || orgById[uid]) continue;
+              const oname = String(row.name ?? "").trim();
+              if (oname) orgById[uid] = oname;
+            }
+          }
+          const { data: memberRows, error: memberError } = await supabase()
+            .from("organization_members")
+            .select("user_id, organization_id")
+            .in("user_id", userIds)
+            .eq("status", "active");
+          if (!memberError && Array.isArray(memberRows) && memberRows.length > 0) {
+            const memberOrgIds = Array.from(
+              new Set(
+                memberRows
+                  .map((m) => String(m.organization_id ?? "").trim())
+                  .filter((id) => id.length > 0),
+              ),
+            );
+            if (memberOrgIds.length > 0) {
+              const { data: memberOrgs, error: memberOrgsError } = await supabase()
+                .from("organizations")
+                .select("id, name")
+                .in("id", memberOrgIds);
+              if (!memberOrgsError && Array.isArray(memberOrgs)) {
+                const memberOrgNameById: Record<string, string> = {};
+                for (const row of memberOrgs as Array<{ id: string; name?: string | null }>) {
+                  const name = String(row.name ?? "").trim();
+                  if (name) memberOrgNameById[row.id] = name;
+                }
+                for (const row of memberRows as Array<{
+                  user_id?: string | null;
+                  organization_id?: string | null;
+                }>) {
+                  const uid = String(row.user_id ?? "").trim();
+                  if (!uid || orgById[uid]) continue;
+                  const oid = String(row.organization_id ?? "").trim();
+                  const oname = memberOrgNameById[oid] ?? "";
+                  if (oname) orgById[uid] = oname;
+                }
+              }
+            }
           }
           setAssignerNamesByUserId(byId);
           setAssignerOrgNameByUserId(orgById);
