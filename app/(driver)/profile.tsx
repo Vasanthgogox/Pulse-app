@@ -34,6 +34,7 @@ import {
   Thermometer,
   Trophy,
   Truck,
+  UserPlus,
   Wrench,
 } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -205,10 +206,16 @@ export default function DriverProfileScreen() {
     return Linking.createURL('/sign-in');
   };
 
-  const handleShare = () => {
+  const handleShareProfile = () => {
+    Share.share({
+      message: `${displayName} — Q Driver profile`,
+      title: 'Share profile',
+    }).catch(() => {});
+  };
+
+  const handleInviteDrivers = () => {
     const inviteUrl = buildDriverInviteUrl();
     const message =
-      `${displayName} — Q Driver profile\n\n` +
       `Join me on Pulse to manage trips, payouts, and network requests.\n\n` +
       `Open app and log in here: ${inviteUrl}`;
     Share.share({
@@ -410,9 +417,26 @@ export default function DriverProfileScreen() {
           </Text>
           <View style={styles.liveDot} />
         </View>
-        <TouchableOpacity style={styles.topIconBtn} onPress={handleShare} hitSlop={12}>
-          <Share2 size={20} color={muted} />
-        </TouchableOpacity>
+        <View style={styles.topActions}>
+          <TouchableOpacity
+            style={styles.topIconBtn}
+            onPress={handleInviteDrivers}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Invite drivers"
+          >
+            <UserPlus size={20} color={muted} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.topIconBtn}
+            onPress={handleShareProfile}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Share profile"
+          >
+            <Share2 size={20} color={muted} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -585,6 +609,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
+  topActions: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   topIconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   titleCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   headerName: { fontSize: 15, fontWeight: '700', maxWidth: 220 },
