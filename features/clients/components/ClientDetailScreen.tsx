@@ -1441,6 +1441,21 @@ export default function ClientDetailScreen({
           <Text style={styles.headerSubtitle}>DEEP ENTITY INTEL</Text>
         </View>
         <View style={styles.headerRight}>
+          {!isWebDesktop ? (
+            <TouchableOpacity
+              style={styles.profileBtn}
+              onPress={() => router.push(`/public-profile/client/${clientId}`)}
+              activeOpacity={0.8}
+              accessibilityLabel="Open client profile"
+              accessibilityRole="button"
+            >
+              <FontAwesome
+                name="user-circle-o"
+                size={18}
+                color={Theme.textPrimaryDark}
+              />
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity
             style={styles.downloadBtn}
             onPress={() => {
@@ -2563,6 +2578,14 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 12,
     backgroundColor: Theme.darkBackground,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  profileBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: Theme.surfaceGray,
     alignItems: "center",
     justifyContent: "center",
   },
