@@ -14,10 +14,12 @@ import { checkExistingUserByPhone, setPendingOAuthMetadata } from '@/features/au
 import { validateEmail } from '@/lib/emailValidation';
 import { isPhoneValid, validatePhone } from '@/lib/phoneValidation';
 import { formatMobileNumber } from '@/lib/format';
+import { supabase } from '@/lib/supabase';
 import { useSafeBack } from '@/lib/useSafeBack';
 import { VALIDATION, validatePassword } from '@/lib/validation';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -25,6 +27,7 @@ import {
     Alert,
     Image,
     KeyboardAvoidingView,
+  Modal,
     NativeSyntheticEvent,
     Platform,
     ScrollView,
@@ -73,6 +76,12 @@ const LIGHT = {
 const NAME_MIN_LENGTH = 2;
 const NAME_MAX_LENGTH = 100;
 const EMAIL_MAX_LENGTH = 255;
+type DriverSignupDocKey = 'license' | 'aadhaar' | 'pan';
+type DriverSignupDocAsset = {
+  uri: string;
+  fileName: string;
+  mimeType: string;
+};
 
 /** Normalize phone: strip spaces, allow optional leading +, then digits only. */
 function normalizePhone(raw: string): string {
@@ -141,9 +150,18 @@ export default function DriverSignUpScreen() {
   const [licenseUploaded, setLicenseUploaded] = useState(false);
   const [aadhaarUploaded, setAadhaarUploaded] = useState(false);
   const [panUploaded, setPanUploaded] = useState(false);
+  const [licenseSkipped, setLicenseSkipped] = useState(false);
+  const [aadhaarSkipped, setAadhaarSkipped] = useState(false);
+  const [panSkipped, setPanSkipped] = useState(false);
   const [licenseUploadMethod, setLicenseUploadMethod] = useState<'gallery' | 'camera' | null>(null);
   const [aadhaarUploadMethod, setAadhaarUploadMethod] = useState<'gallery' | 'camera' | null>(null);
   const [panUploadMethod, setPanUploadMethod] = useState<'gallery' | 'camera' | null>(null);
+  const [pendingDocs, setPendingDocs] = useState<Record<DriverSignupDocKey, DriverSignupDocAsset | null>>({
+    license: null,
+    aadhaar: null,
+    pan: null,
+  });
+  const [previewDocUri, setPreviewDocUri] = useState<string | null>(null);
   const [phoneExistsCheck, setPhoneExistsCheck] = useState<{
     loading: boolean;
     exists: boolean;
@@ -361,6 +379,18 @@ export default function DriverSignUpScreen() {
       if (signInResult.error) {
         throw signInResult.error;
       }
+      const {
+        data: { user: signedInUser },
+      } = await supabase().auth.getUser();
+      if (signedInUser?.id) {
+        const uploadResult = await uploadDriverDocuments(signedInUser.id);
+        if (uploadResult.error) {
+          Alert.alert(
+            'Documents saved partially',
+            'Your account is created, but one or more documents could not be uploaded. You can re-upload them from profile documents.',
+          );
+        }
+      }
       goToPage(7);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Sign up failed';
@@ -387,6 +417,131 @@ export default function DriverSignUpScreen() {
     }
     setPanUploaded(true);
     setPanUploadMethod(method);
+  };
+
+  const markDocumentSkipped = (doc: DriverSignupDocKey) => {
+    if (doc === 'license') {
+      setLicenseSkipped(true);
+      return;
+    }
+    if (doc === 'aadhaar') {
+      setAadhaarSkipped(true);
+      return;
+    }
+    setPanSkipped(true);
+  };
+
+  const pickDocument = async (doc: DriverSignupDocKey, method: 'gallery' | 'camera') => {
+    try {
+      if (method === 'gallery') {
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!perm.granted) {
+          Alert.alert('Permission required', 'Photo library access is needed to upload this document.');
+          return;
+        }
+      } else {
+        const perm = await ImagePicker.requestCameraPermissionsAsync();
+        if (!perm.granted) {
+          Alert.alert('Permission required', 'Camera access is needed to capture this document.');
+          return;
+        }
+      }
+
+      const result =
+        method === 'gallery'
+          ? await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ['images'],
+              allowsEditing: false,
+              quality: 0.9,
+            })
+          : await ImagePicker.launchCameraAsync({
+              allowsEditing: false,
+              quality: 0.9,
+            });
+      if (result.canceled || !result.assets?.[0]) return;
+
+      const asset = result.assets[0];
+      const mimeType = asset.mimeType ?? 'image/jpeg';
+      const fallbackName = `${doc}-${Date.now()}.${mimeType.includes('png') ? 'png' : 'jpg'}`;
+      setPendingDocs((prev) => ({
+        ...prev,
+        [doc]: {
+          uri: asset.uri,
+          fileName: asset.fileName ?? fallbackName,
+          mimeType,
+        },
+      }));
+      markDocumentUploaded(doc, method);
+      if (doc === 'license') setLicenseSkipped(false);
+      if (doc === 'aadhaar') setAadhaarSkipped(false);
+      if (doc === 'pan') setPanSkipped(false);
+    } catch (e) {
+      Alert.alert('Upload failed', e instanceof Error ? e.message : 'Unable to pick document');
+    }
+  };
+
+  const openDocumentPreview = async (uri: string | null) => {
+    if (!uri) return;
+    setPreviewDocUri(uri);
+  };
+
+  const uploadDriverDocuments = async (uid: string): Promise<{ error: Error | null }> => {
+    const hasAny =
+      pendingDocs.license != null || pendingDocs.aadhaar != null || pendingDocs.pan != null;
+    if (!hasAny) return { error: null };
+
+    const uploaded: Partial<Record<DriverSignupDocKey, string>> = {};
+    for (const docType of ['license', 'aadhaar', 'pan'] as const) {
+      const doc = pendingDocs[docType];
+      if (!doc) continue;
+      const ext = doc.fileName.split('.').pop()?.toLowerCase() || 'jpg';
+      const response = await fetch(doc.uri);
+      const arrayBuffer = await response.arrayBuffer();
+      const path = `${uid}/${docType}-${Date.now()}.${ext}`;
+      const { error } = await supabase()
+        .storage
+        .from('driver-documents')
+        .upload(path, arrayBuffer, {
+          contentType: doc.mimeType || 'image/jpeg',
+          upsert: true,
+        });
+      if (error) return { error: new Error(error.message || `Failed to upload ${docType}`) };
+      uploaded[docType] = path;
+    }
+
+    if (uploaded.license) {
+      await supabase()
+        .from('profiles')
+        .update({ license_photo_url: uploaded.license })
+        .eq('id', uid);
+    }
+
+    if (uploaded.license || uploaded.aadhaar || uploaded.pan) {
+      const {
+        data: { user: currentUser },
+      } = await supabase().auth.getUser();
+      const existingDocs =
+        currentUser?.user_metadata &&
+        typeof currentUser.user_metadata === 'object' &&
+        currentUser.user_metadata.driver_documents &&
+        typeof currentUser.user_metadata.driver_documents === 'object'
+          ? (currentUser.user_metadata.driver_documents as Record<string, unknown>)
+          : {};
+      const nextDocs = {
+        ...existingDocs,
+        ...(uploaded.license ? { license: uploaded.license } : {}),
+        ...(uploaded.aadhaar ? { aadhaar: uploaded.aadhaar } : {}),
+        ...(uploaded.pan ? { pan: uploaded.pan } : {}),
+      };
+      const { error: metadataError } = await supabase().auth.updateUser({
+        data: { driver_documents: nextDocs },
+      });
+      if (metadataError) {
+        return { error: new Error(metadataError.message || 'Failed to save document metadata') };
+      }
+    }
+
+    return { error: null };
   };
 
   const handleBack = () => {
@@ -688,7 +843,7 @@ export default function DriverSignUpScreen() {
             <View style={styles.docActionsWrap}>
               <TouchableOpacity
                 style={styles.docActionBtn}
-                onPress={() => markDocumentUploaded('license', 'gallery')}
+                onPress={() => void pickDocument('license', 'gallery')}
                 activeOpacity={0.8}
               >
                 <FontAwesome name="image" size={18} color={LIGHT.text} />
@@ -696,7 +851,7 @@ export default function DriverSignUpScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.docActionBtn}
-                onPress={() => markDocumentUploaded('license', 'camera')}
+                onPress={() => void pickDocument('license', 'camera')}
                 activeOpacity={0.8}
               >
                 <FontAwesome name="camera" size={18} color={LIGHT.text} />
@@ -706,16 +861,36 @@ export default function DriverSignUpScreen() {
             <Text style={[styles.docStatus, licenseUploaded ? styles.docStatusDone : styles.docStatusPending]}>
               {licenseUploaded
                 ? `Uploaded${licenseUploadMethod ? ` via ${licenseUploadMethod === 'gallery' ? 'gallery' : 'camera'}` : ''}`
+                : licenseSkipped
+                  ? 'Skipped for now'
                 : 'Not uploaded'}
             </Text>
             <TouchableOpacity
-              style={[styles.primaryBtn, (!licenseUploaded || loading) && styles.primaryBtnDisabled]}
+              style={[
+                styles.primaryBtn,
+                ((!licenseUploaded && !licenseSkipped) || loading) &&
+                  styles.primaryBtnDisabled,
+              ]}
               onPress={() => goToPage(4)}
-              disabled={!licenseUploaded || loading}
+              disabled={(!licenseUploaded && !licenseSkipped) || loading}
               activeOpacity={0.8}
             >
               <Text style={styles.primaryBtnText}>Continue</Text>
             </TouchableOpacity>
+            {pendingDocs.license?.uri ? (
+              <TouchableOpacity
+                style={styles.tryAgainLink}
+                onPress={() => void openDocumentPreview(pendingDocs.license?.uri ?? null)}
+                hitSlop={12}
+              >
+                <Text style={styles.tryAgainText}>View uploaded document</Text>
+              </TouchableOpacity>
+            ) : null}
+            {!licenseUploaded ? (
+              <TouchableOpacity style={styles.tryAgainLink} onPress={() => markDocumentSkipped('license')} hitSlop={12}>
+                <Text style={styles.tryAgainText}>Skip for now</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         </View>
 
@@ -727,7 +902,7 @@ export default function DriverSignUpScreen() {
             <View style={styles.docActionsWrap}>
               <TouchableOpacity
                 style={styles.docActionBtn}
-                onPress={() => markDocumentUploaded('aadhaar', 'gallery')}
+                onPress={() => void pickDocument('aadhaar', 'gallery')}
                 activeOpacity={0.8}
               >
                 <FontAwesome name="image" size={18} color={LIGHT.text} />
@@ -735,7 +910,7 @@ export default function DriverSignUpScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.docActionBtn}
-                onPress={() => markDocumentUploaded('aadhaar', 'camera')}
+                onPress={() => void pickDocument('aadhaar', 'camera')}
                 activeOpacity={0.8}
               >
                 <FontAwesome name="camera" size={18} color={LIGHT.text} />
@@ -745,16 +920,36 @@ export default function DriverSignUpScreen() {
             <Text style={[styles.docStatus, aadhaarUploaded ? styles.docStatusDone : styles.docStatusPending]}>
               {aadhaarUploaded
                 ? `Uploaded${aadhaarUploadMethod ? ` via ${aadhaarUploadMethod === 'gallery' ? 'gallery' : 'camera'}` : ''}`
+                : aadhaarSkipped
+                  ? 'Skipped for now'
                 : 'Not uploaded'}
             </Text>
             <TouchableOpacity
-              style={[styles.primaryBtn, (!aadhaarUploaded || loading) && styles.primaryBtnDisabled]}
+              style={[
+                styles.primaryBtn,
+                ((!aadhaarUploaded && !aadhaarSkipped) || loading) &&
+                  styles.primaryBtnDisabled,
+              ]}
               onPress={() => goToPage(5)}
-              disabled={!aadhaarUploaded || loading}
+              disabled={(!aadhaarUploaded && !aadhaarSkipped) || loading}
               activeOpacity={0.8}
             >
               <Text style={styles.primaryBtnText}>Continue</Text>
             </TouchableOpacity>
+            {pendingDocs.aadhaar?.uri ? (
+              <TouchableOpacity
+                style={styles.tryAgainLink}
+                onPress={() => void openDocumentPreview(pendingDocs.aadhaar?.uri ?? null)}
+                hitSlop={12}
+              >
+                <Text style={styles.tryAgainText}>View uploaded document</Text>
+              </TouchableOpacity>
+            ) : null}
+            {!aadhaarUploaded ? (
+              <TouchableOpacity style={styles.tryAgainLink} onPress={() => markDocumentSkipped('aadhaar')} hitSlop={12}>
+                <Text style={styles.tryAgainText}>Skip for now</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         </View>
 
@@ -766,7 +961,7 @@ export default function DriverSignUpScreen() {
             <View style={styles.docActionsWrap}>
               <TouchableOpacity
                 style={styles.docActionBtn}
-                onPress={() => markDocumentUploaded('pan', 'gallery')}
+                onPress={() => void pickDocument('pan', 'gallery')}
                 activeOpacity={0.8}
               >
                 <FontAwesome name="image" size={18} color={LIGHT.text} />
@@ -774,7 +969,7 @@ export default function DriverSignUpScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.docActionBtn}
-                onPress={() => markDocumentUploaded('pan', 'camera')}
+                onPress={() => void pickDocument('pan', 'camera')}
                 activeOpacity={0.8}
               >
                 <FontAwesome name="camera" size={18} color={LIGHT.text} />
@@ -784,16 +979,36 @@ export default function DriverSignUpScreen() {
             <Text style={[styles.docStatus, panUploaded ? styles.docStatusDone : styles.docStatusPending]}>
               {panUploaded
                 ? `Uploaded${panUploadMethod ? ` via ${panUploadMethod === 'gallery' ? 'gallery' : 'camera'}` : ''}`
+                : panSkipped
+                  ? 'Skipped for now'
                 : 'Not uploaded'}
             </Text>
             <TouchableOpacity
-              style={[styles.primaryBtn, (!panUploaded || loading) && styles.primaryBtnDisabled]}
+              style={[
+                styles.primaryBtn,
+                ((!panUploaded && !panSkipped) || loading) &&
+                  styles.primaryBtnDisabled,
+              ]}
               onPress={() => goToPage(6)}
-              disabled={!panUploaded || loading}
+              disabled={(!panUploaded && !panSkipped) || loading}
               activeOpacity={0.8}
             >
               <Text style={styles.primaryBtnText}>Continue</Text>
             </TouchableOpacity>
+            {pendingDocs.pan?.uri ? (
+              <TouchableOpacity
+                style={styles.tryAgainLink}
+                onPress={() => void openDocumentPreview(pendingDocs.pan?.uri ?? null)}
+                hitSlop={12}
+              >
+                <Text style={styles.tryAgainText}>View uploaded document</Text>
+              </TouchableOpacity>
+            ) : null}
+            {!panUploaded ? (
+              <TouchableOpacity style={styles.tryAgainLink} onPress={() => markDocumentSkipped('pan')} hitSlop={12}>
+                <Text style={styles.tryAgainText}>Skip for now</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         </View>
 
@@ -847,6 +1062,28 @@ export default function DriverSignUpScreen() {
           </View>
         </View>
       </ScrollView>
+
+      <Modal
+        visible={previewDocUri != null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPreviewDocUri(null)}
+      >
+        <View style={styles.previewBackdrop}>
+          <View style={styles.previewCard}>
+            {previewDocUri ? (
+              <Image source={{ uri: previewDocUri }} style={styles.previewImage} resizeMode="contain" />
+            ) : null}
+            <TouchableOpacity
+              style={styles.previewCloseBtn}
+              onPress={() => setPreviewDocUri(null)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.previewCloseText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Step indicator */}
       <View style={[styles.stepIndicator, { paddingBottom: insets.bottom + 8 }]}>
@@ -1249,6 +1486,37 @@ const styles = StyleSheet.create({
     color: LIGHT.accent,
     fontWeight: '800',
     textDecorationLine: 'underline',
+  },
+  previewBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  previewCard: {
+    width: '100%',
+    maxWidth: 420,
+    borderRadius: 14,
+    backgroundColor: '#fff',
+    overflow: 'hidden',
+  },
+  previewImage: {
+    width: '100%',
+    height: 420,
+    backgroundColor: '#f8fafc',
+  },
+  previewCloseBtn: {
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderTopWidth: 1,
+    borderTopColor: LIGHT.border,
+  },
+  previewCloseText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: LIGHT.text,
   },
   stepIndicator: {
     flexDirection: 'row',

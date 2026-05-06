@@ -10,6 +10,7 @@ import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeCont
 import { EditProfileModal } from '@/features/auth/components/EditProfileModal';
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
 import { ROUTES } from '@/lib/routes';
+import { supabase } from '@/lib/supabase';
 import * as driversService from '@/services/driversService';
 import * as tripsService from '@/services/tripsService';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -88,6 +89,7 @@ export default function DriverProfileScreen() {
   const [drivers, setDrivers] = useState<driversService.DriverRow[]>([]);
   const [trips, setTrips] = useState<tripsService.TripRow[]>([]);
   const [loadingTrips, setLoadingTrips] = useState(true);
+  const [kycUploadedCount, setKycUploadedCount] = useState(0);
 
   const displayName =
     profile?.full_name?.trim() ||
@@ -128,9 +130,48 @@ export default function DriverProfileScreen() {
       });
   }, [profile?.uid]);
 
+  const loadKycSummary = useCallback(async () => {
+    if (!profile?.uid) {
+      setKycUploadedCount(0);
+      return;
+    }
+    try {
+      const {
+        data: { user: authUser },
+      } = await supabase().auth.getUser();
+      const metadata =
+        authUser?.user_metadata &&
+        typeof authUser.user_metadata === 'object' &&
+        authUser.user_metadata.driver_documents &&
+        typeof authUser.user_metadata.driver_documents === 'object'
+          ? (authUser.user_metadata.driver_documents as Record<string, unknown>)
+          : {};
+
+      const { data: profileRow } = await supabase()
+        .from('profiles')
+        .select('license_photo_url')
+        .eq('id', profile.uid)
+        .maybeSingle();
+
+      const license = (profileRow as { license_photo_url?: string | null } | null)?.license_photo_url
+        ?? (typeof metadata.license === 'string' ? metadata.license : null);
+      const aadhaar = typeof metadata.aadhaar === 'string' ? metadata.aadhaar : null;
+      const pan = typeof metadata.pan === 'string' ? metadata.pan : null;
+
+      const uploaded = [license, aadhaar, pan].filter((x) => Boolean((x ?? '').trim())).length;
+      setKycUploadedCount(uploaded);
+    } catch {
+      setKycUploadedCount(0);
+    }
+  }, [profile?.uid]);
+
   useEffect(() => {
     loadTrips();
   }, [loadTrips]);
+
+  useEffect(() => {
+    void loadKycSummary();
+  }, [loadKycSummary]);
 
   const tripsCount = useMemo(() => trips.filter((t) => isCompleted(t.status)).length, [trips]);
 
@@ -538,7 +579,7 @@ export default function DriverProfileScreen() {
                       <Text style={[styles.rowEyebrow, { color: muted }]}>KYC & COMPLIANCE</Text>
                       <Text style={[styles.rowTitle, { color: colors.text }]}>Upload & verify documents</Text>
                       <Text style={[styles.rowSub, { color: muted }]} numberOfLines={2}>
-                        Aadhaar, PAN, driving license — same hub as the documents screen
+                        {kycUploadedCount}/3 uploaded · Aadhaar, PAN, driving license
                       </Text>
                     </View>
                   </View>
