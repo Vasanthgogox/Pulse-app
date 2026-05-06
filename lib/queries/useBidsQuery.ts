@@ -1,4 +1,5 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { STALE } from '@/lib/queryClient';
 import {
   getBidsForPost,
   getMyBidForPost,
@@ -26,7 +27,7 @@ export function useBidsForPostQuery(postId: string | null) {
       return res.bids;
     },
     enabled: !!postId,
-    staleTime: 300_000,
+    staleTime: STALE.moderate,
   });
 }
 
@@ -39,7 +40,7 @@ export function useMyBidQuery(postId: string | null, orgId: string | null) {
       return res.bid;
     },
     enabled: !!postId && !!orgId,
-    staleTime: 300_000,
+    staleTime: STALE.moderate,
   });
 }
 

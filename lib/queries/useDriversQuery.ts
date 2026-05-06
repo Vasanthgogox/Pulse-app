@@ -4,6 +4,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDriversByOrganization } from '@/features/drivers/services/drivers.service';
 import { queryKeys } from '@/lib/queryKeys';
+import { STALE } from '@/lib/queryClient';
 
 export function useDriversQuery(orgId: string | null) {
   return useQuery({
@@ -14,6 +15,7 @@ export function useDriversQuery(orgId: string | null) {
       return res.drivers;
     },
     enabled: !!orgId,
+    staleTime: STALE.slow,
   });
 }
 
