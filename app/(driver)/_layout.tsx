@@ -18,7 +18,7 @@ import {
   PlusJakartaSans_800ExtraBold,
   useFonts as usePlusJakartaFonts,
 } from '@expo-google-fonts/plus-jakarta-sans';
-import { Tabs, useRouter } from 'expo-router';
+import { Tabs, usePathname, useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
 
@@ -74,6 +74,8 @@ export default function DriverAppLayout() {
   const { user, profile, roleVerified, loading } = useAuth();
 
   const router = useRouter();
+  const pathname = usePathname();
+  const isDriverChatRouteActive = pathname === '/chat' || pathname.startsWith('/chat/');
 
   const logDriverGate = (event: string, details: Record<string, unknown>) => {
     if (!__DEV__) return;
@@ -128,7 +130,7 @@ export default function DriverAppLayout() {
   return (
     <DriverThemeProvider>
       <DriverAvatarProvider>
-        <DriverChatProvider>
+        <DriverChatProvider isActive={isDriverChatRouteActive}>
           <DriverTabsNavigator />
         </DriverChatProvider>
       </DriverAvatarProvider>
