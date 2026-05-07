@@ -51,3 +51,44 @@ export function useRealtimeTrip(tripId: string | null, onInvalidate: () => void)
     );
   }, [tripId]);
 }
+
+/** Subscribe to driver location inserts for a specific trip (and optional driver fallback). */
+export function useRealtimeDriverLocations(
+  tripId: string | null,
+  driverId: string | null,
+  onInvalidate: () => void,
+) {
+  const onInvalidateRef = useRef(onInvalidate);
+  onInvalidateRef.current = onInvalidate;
+
+  useEffect(() => {
+    if (!tripId && !driverId) return;
+    const specs: Array<{
+      event: '*' | 'INSERT' | 'UPDATE' | 'DELETE';
+      schema: string;
+      table: string;
+      filter?: string;
+    }> = [];
+    if (tripId) {
+      specs.push({
+        event: 'INSERT',
+        schema: 'public',
+        table: 'driver_locations',
+        filter: `trip_id=eq.${tripId}`,
+      });
+    }
+    if (driverId) {
+      specs.push({
+        event: 'INSERT',
+        schema: 'public',
+        table: 'driver_locations',
+        filter: `driver_id=eq.${driverId}`,
+      });
+    }
+
+    const key = `driver_locations:${tripId ?? 'none'}:${driverId ?? 'none'}`;
+    return subscribeSharedPostgresChanges(key, specs, () => {
+      onInvalidateRef.current();
+    });
+  }, [tripId, driverId]);
+}

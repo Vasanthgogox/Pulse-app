@@ -68,7 +68,7 @@ import {
     View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRealtimeTrip } from "../../hooks/useRealtimeTrips";
+import { useRealtimeDriverLocations, useRealtimeTrip } from "../../hooks/useRealtimeTrips";
 import {
     clearInitialTripForDetail,
     getInitialTripForDetail,
@@ -996,8 +996,18 @@ export default function TripDetailScreen({
         const historyByDriver = await driverLocationService.getDriverLocationHistoryByDriverId(driverId);
         if (!historyByDriver.error) effectivePoints = historyByDriver.points;
       }
+      // Keep route rendering stable: drop obvious duplicate points from same/similar fix.
+      const dedupedPoints = effectivePoints.filter((point, idx, arr) => {
+        if (idx === 0) return true;
+        const prev = arr[idx - 1];
+        return !(
+          Math.abs(point.latitude - prev.latitude) < 0.00001 &&
+          Math.abs(point.longitude - prev.longitude) < 0.00001 &&
+          point.recorded_at === prev.recorded_at
+        );
+      });
       setDriverLocation(!latestRes.error ? latestRes.location : null);
-      setTripLocationPoints(effectivePoints);
+      setTripLocationPoints(dedupedPoints);
     } catch {
       setDriverLocation(null);
       setTripLocationPoints([]);
@@ -1006,7 +1016,7 @@ export default function TripDetailScreen({
     }
   }, [trip?.id, effectiveDriverIdForLocation]);
 
-  /** When Live Tracking modal opens, fetch from DB immediately and then poll every 10s. */
+  /** When Live Tracking modal opens, fetch immediately and keep a light fallback poll. */
   useEffect(() => {
     if (!showTrackingModal || !trip?.id) {
       setDriverLocation(null);
@@ -1022,7 +1032,7 @@ export default function TripDetailScreen({
     const interval = setInterval(() => {
       setDriverLocationLoading(true);
       fetchDriverLocationFromDb();
-    }, 10000);
+    }, 30000);
 
     return () => {
       clearInterval(interval);
@@ -1031,6 +1041,16 @@ export default function TripDetailScreen({
       setTripLocationPoints([]);
     };
   }, [showTrackingModal, trip?.id, fetchDriverLocationFromDb]);
+
+  useRealtimeDriverLocations(
+    showTrackingModal ? trip?.id ?? null : null,
+    showTrackingModal ? effectiveDriverIdForLocation : null,
+    () => {
+      if (!showTrackingModal) return;
+      setDriverLocationLoading(true);
+      void fetchDriverLocationFromDb();
+    },
+  );
 
   /** Reverse-geocode driver location so we show address text (same as driver app). */
   useEffect(() => {
