@@ -12,6 +12,7 @@ import * as tripsService from '@/services/tripsService';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
+import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -29,11 +30,17 @@ import {
     View,
 } from 'react-native';
 import { Pressable as HoldPressable } from 'react-native-gesture-handler';
+import { compressImage } from '@/lib/pod/imageCompression';
 
 const HOLD_DURATION_MS = 1500;
 /** So finger drift / parent scroll do not end the hold (sheet / ScrollView). */
 const HOLD_PRESS_RETENTION = 100;
 const DRIVER_ACCEPTED_TRIP_ID_KEY = 'driver_accepted_trip_id';
+const MAX_CHAT_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_POD_IMAGE_BYTES = 10 * 1024 * 1024;
+const IMAGE_MAX_DIMENSION = 1280;
+const CHAT_IMAGE_QUALITY = 0.72;
+const POD_IMAGE_QUALITY = 0.82;
 
 const holdCompleteWebStyle = {
   touchAction: 'none' as 'none' | 'auto' | 'manipulation',
@@ -64,6 +71,54 @@ function progressForStep(step: StepId): number {
   if (step === 'pickup') return 40;
   if (step === 'accepted') return 20;
   return 0;
+}
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const mb = bytes / (1024 * 1024);
+  if (mb >= 1) return `${mb.toFixed(1)} MB`;
+  return `${(bytes / 1024).toFixed(0)} KB`;
+}
+
+function normalizeImageFileName(fileName: string | null | undefined): string {
+  const base = (fileName ?? '').trim();
+  if (!base) return `img-${Date.now()}.jpg`;
+  const noExt = base.replace(/\.[^/.]+$/, '');
+  return `${noExt || `img-${Date.now()}`}.jpg`;
+}
+
+async function readArrayBufferFromUri(uri: string): Promise<ArrayBuffer> {
+  if (Platform.OS === 'web') {
+    const response = await fetch(uri);
+    return response.arrayBuffer();
+  }
+  const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' as const });
+  return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)).buffer;
+}
+
+async function optimizeImageForUpload(
+  uri: string,
+  quality: number,
+): Promise<{ arrayBuffer: ArrayBuffer; mimeType: string }> {
+  if (Platform.OS === 'web') {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    const compressed = await compressImage(blob, IMAGE_MAX_DIMENSION);
+    return {
+      arrayBuffer: await compressed.arrayBuffer(),
+      mimeType: 'image/jpeg',
+    };
+  }
+
+  const manipulated = await ImageManipulator.manipulateAsync(
+    uri,
+    [{ resize: { width: IMAGE_MAX_DIMENSION } }],
+    { compress: quality, format: ImageManipulator.SaveFormat.JPEG },
+  );
+  return {
+    arrayBuffer: await readArrayBufferFromUri(manipulated.uri),
+    mimeType: 'image/jpeg',
+  };
 }
 
 function stageForStep(step: StepId): 1 | 2 | 3 | 4 {
@@ -494,18 +549,17 @@ export function DriverTripFlowCard({
     setStagePhotoUploading(true);
     const uri = result.assets[0].uri;
     const fileName = `stage-${step}-${Date.now()}.jpg`;
-    const mimeType = result.assets[0].mimeType ?? 'image/jpeg';
     try {
-      let arrayBuffer: ArrayBuffer;
-      if (Platform.OS === 'web') {
-        const response = await fetch(uri);
-        arrayBuffer = await response.arrayBuffer();
-      } else {
-        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' as const });
-        arrayBuffer = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)).buffer;
-      }
+      const { arrayBuffer, mimeType } = await optimizeImageForUpload(uri, CHAT_IMAGE_QUALITY);
       if (!arrayBuffer || arrayBuffer.byteLength === 0) {
         setStepError('Could not read image file');
+        setStagePhotoUploading(false);
+        return;
+      }
+      if (arrayBuffer.byteLength > MAX_CHAT_IMAGE_BYTES) {
+        setStepError(
+          `Image too large (${formatBytes(arrayBuffer.byteLength)}). Max allowed is ${formatBytes(MAX_CHAT_IMAGE_BYTES)}.`,
+        );
         setStagePhotoUploading(false);
         return;
       }
@@ -561,17 +615,9 @@ export function DriverTripFlowCard({
     podUploadCancelledRef.current = false;
     setPodUploading(true);
     const uri = result.assets[0].uri;
-    const fileName = result.assets[0].fileName ?? `pod-${Date.now()}.jpg`;
-    const mimeType = result.assets[0].mimeType ?? 'image/jpeg';
+    const fileName = normalizeImageFileName(result.assets[0].fileName ?? `pod-${Date.now()}`);
     try {
-      let arrayBuffer: ArrayBuffer;
-      if (Platform.OS === 'web') {
-        const response = await fetch(uri);
-        arrayBuffer = await response.arrayBuffer();
-      } else {
-        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' as const });
-        arrayBuffer = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)).buffer;
-      }
+      const { arrayBuffer, mimeType } = await optimizeImageForUpload(uri, POD_IMAGE_QUALITY);
 
       if (podUploadCancelledRef.current) {
         return;
@@ -579,6 +625,12 @@ export function DriverTripFlowCard({
 
       if (!arrayBuffer || arrayBuffer.byteLength === 0) {
         setStepError('Could not read image file');
+        return;
+      }
+      if (arrayBuffer.byteLength > MAX_POD_IMAGE_BYTES) {
+        setStepError(
+          `Image too large (${formatBytes(arrayBuffer.byteLength)}). Max allowed is ${formatBytes(MAX_POD_IMAGE_BYTES)}.`,
+        );
         return;
       }
 

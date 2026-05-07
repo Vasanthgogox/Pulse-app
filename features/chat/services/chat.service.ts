@@ -218,8 +218,8 @@ const TRIP_EMBED_FIELDS_LEGACY =
   "trip_number, status, pickup_area, drop_location, driver_id, supplier_id, created_at";
 
 const TRIP_MESSAGES_EMBED = `trip_messages ( id, conversation_id, content, sender_role, sender_name, sender_user_id, created_at, is_read, message_type, metadata )`;
-/** Newest N rows per conversation embed. Keep low — bulk loads (13 convos × limit) cause statement timeouts. */
-const TRIP_MESSAGES_EMBED_RECENT = 50;
+/** Newest N rows per conversation embed. Keep low — bulk loads (13+ convos × limit) can spike CPU/RAM. */
+const TRIP_MESSAGES_EMBED_RECENT = 20;
 
 function tripConversationSelect(tripEmbedFields: string): string {
   return `
