@@ -7,6 +7,7 @@ import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { useTripChat } from "@/features/chat/contexts/TripChatContext";
 import { getClientById } from "@/features/clients/services/clients.service";
 import { getDriverById, getDriverProfileDisplay } from "@/features/drivers/services/drivers.service";
 import {
@@ -26,7 +27,6 @@ import { getVehicleDocumentViewUrl } from "@/features/vehicles/services/vehicleD
 import { getVehicleById } from "@/features/vehicles/services/vehicles.service";
 import type { VehicleDocuments } from "@/features/vehicles/utils/vehicleDocuments.util";
 import { DOCUMENT_EXPIRY_ORDER, DOCUMENT_LABELS } from "@/features/vehicles/utils/vehicleDocuments.util";
-import { useTripChat } from "@/features/chat/contexts/TripChatContext";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { canAssignTrip, getCapabilitiesFromProfile } from "@/lib/capabilities";
 import { isAggregateTrip, shouldShowAggregateTripKindPill } from "@/lib/driverUtils";
@@ -47,12 +47,12 @@ import {
 import * as tripDocumentsService from "@/services/tripDocumentsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
+import { useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import type * as ExpoLocationTypes from "expo-location";
 import { useRouter } from "expo-router";
 import { MessageSquare, ReceiptText } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import {
     ActivityIndicator,
     Alert,
@@ -97,7 +97,6 @@ import {
 import { AggregateTripOtpPanel, type AggregateOtpUiState } from "../AggregateTripOtpPanel";
 import { TripAssignmentBlock, type AssignmentSource } from "../TripAssignmentBlock";
 import { TrackingMapBlock, VehicleTrackingCard } from "./TrackingMapBlock";
-import type { TripDetailScreenProps } from "./TripDetailScreen.types";
 import { TripAdjustmentModal } from "./TripAdjustmentModal";
 import {
     TripDetailFinanceView,
@@ -105,6 +104,7 @@ import {
     type TripDetailTab,
     type TripDocItem,
 } from "./TripDetailFinanceView";
+import type { TripDetailScreenProps } from "./TripDetailScreen.types";
 
 export type { TripDetailScreenProps } from "./TripDetailScreen.types";
 

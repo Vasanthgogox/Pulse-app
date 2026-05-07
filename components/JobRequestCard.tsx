@@ -5,10 +5,10 @@
  */
 import Theme from "@/constants/Theme";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { Pressable } from "react-native-gesture-handler";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Platform,
+  Pressable,
   StyleSheet,
   Text,
   TextInput,
@@ -135,6 +135,7 @@ export function JobRequestCard({
   const [isHolding, setIsHolding] = useState(false);
   const holdTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const holdStartRef = useRef(0);
+  const acceptedOnceRef = useRef(false);
   const otpInputRef = useRef<TextInput | null>(null);
 
   const holdResetKey = useMemo(
@@ -149,6 +150,7 @@ export function JobRequestCard({
     setIsAccepted(false);
     setHoldProgress(0);
     setIsHolding(false);
+    acceptedOnceRef.current = false;
     if (holdTimerRef.current) {
       clearInterval(holdTimerRef.current);
       holdTimerRef.current = null;
@@ -161,8 +163,21 @@ export function JobRequestCard({
     }
   }, [otpMode]);
 
+  const completeAccept = () => {
+    if (acceptedOnceRef.current || disabled) return;
+    acceptedOnceRef.current = true;
+    setIsHolding(false);
+    setHoldProgress(100);
+    setIsAccepted(true);
+    onAccept();
+  };
+
   const startHold = () => {
     if (disabled || isAccepted) return;
+    if (holdTimerRef.current) {
+      clearInterval(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
     setIsHolding(true);
     setHoldProgress(0);
     holdStartRef.current = Date.now();
@@ -173,8 +188,7 @@ export function JobRequestCard({
       if (pct >= 100) {
         if (holdTimerRef.current) clearInterval(holdTimerRef.current);
         holdTimerRef.current = null;
-        setIsAccepted(true);
-        onAccept();
+        completeAccept();
       }
     }, 20);
   };
@@ -505,6 +519,8 @@ export function JobRequestCard({
               <Pressable
                 onPressIn={startHold}
                 onPressOut={cancelHold}
+                onLongPress={completeAccept}
+                delayLongPress={HOLD_DURATION_MS}
                 pressRetentionOffset={HOLD_PRESS_RETENTION}
                 android_ripple={{ color: "transparent" }}
                 style={[

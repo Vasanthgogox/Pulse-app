@@ -1,8 +1,8 @@
 /**
  * Supabase Realtime subscriptions for trips. Call onInvalidate when data changes (refetch once).
  */
-import { useEffect, useRef } from 'react';
 import { subscribeSharedPostgresChanges } from '@/lib/realtimeRegistry';
+import { useEffect, useRef } from 'react';
 
 /** Subscribe to trips for an organization; call onInvalidate when any change. */
 export function useRealtimeTrips(organizationId: string | null, onInvalidate: () => void) {
