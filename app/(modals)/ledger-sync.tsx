@@ -37,7 +37,7 @@ import {
 } from "@/features/vehicles";
 import { updateSalaryRequestStatus } from "@/services/salaryRequestsService";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { formatLedgerDate } from "@/lib/format";
+import { formatLedgerDate, normalizeVehicleNumberForMatch } from "@/lib/format";
 import { queryKeys } from "@/lib/queryKeys";
 import { useSafeBack } from "@/lib/useSafeBack";
 import { ROUTES } from "@/lib/routes";
@@ -48,6 +48,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -371,8 +372,22 @@ export default function LedgerSyncScreen() {
   const filteredTrips = useMemo(() => {
     if (!params.entityType || !params.entityId) return trips;
     switch (params.entityType) {
-      case "VEHICLE":
-        return trips.filter((t) => (t as { vehicle_id?: string | null }).vehicle_id === params.entityId);
+      case "VEHICLE": {
+        const selectedVehicle = vehicles.find((v) => v.id === params.entityId);
+        const normalizedVehicleNumber = normalizeVehicleNumberForMatch(
+          selectedVehicle?.vehicle_number ?? params.partyName ?? "",
+        );
+        return trips.filter((t) => {
+          const byVehicleId =
+            (t as { vehicle_id?: string | null }).vehicle_id === params.entityId;
+          if (byVehicleId) return true;
+          if (!normalizedVehicleNumber) return false;
+          const displayNumber = normalizeVehicleNumberForMatch(
+            (t as { vehicle_display_number?: string | null }).vehicle_display_number ?? "",
+          );
+          return displayNumber === normalizedVehicleNumber;
+        });
+      }
       case "DRIVER":
         return trips.filter((t) => t.driver_id === params.entityId);
       case "CLIENT":
@@ -418,6 +433,8 @@ export default function LedgerSyncScreen() {
     trips,
     params.entityType,
     params.entityId,
+    params.partyName,
+    vehicles,
     suppliers,
     clients,
     uniqueLinkedClientIdByOrgId,
@@ -895,6 +912,18 @@ export default function LedgerSyncScreen() {
     safeBack();
   }, [safeBack]);
 
+  useEffect(() => {
+    if (params.entityType !== "VEHICLE" || !params.entityId) return;
+    const q = new URLSearchParams();
+    q.set("openAddEntry", "1");
+    if (params.tripId) q.set("tripId", params.tripId);
+    const query = q.toString();
+    const target = query ? `/vehicle/${params.entityId}?${query}` : `/vehicle/${params.entityId}`;
+    // Vehicle sync should open from the vehicle financial UI (legacy layout),
+    // then trigger add-entry modal there for consistent UX.
+    router.replace(target as `/vehicle/${string}`);
+  }, [router, params.entityType, params.entityId, params.tripId]);
+
   const partyContext =
     params.partyContext === "customers"
       ? "customers"
@@ -934,12 +963,17 @@ export default function LedgerSyncScreen() {
         null
       );
     }
+    if (params.entityType === "VEHICLE") {
+      const row = vehicles.find((v) => v.id === candidateId);
+      return row?.vehicle_number?.trim() || rawName || null;
+    }
     return rawName || null;
   }, [
     params.partyName,
     params.partyId,
     params.entityId,
     params.entityType,
+    vehicles,
     suppliers,
     clients,
     drivers,
@@ -1051,7 +1085,7 @@ export default function LedgerSyncScreen() {
   const isFromDetail = Boolean(params.entityType && params.entityId);
   const entryContextLabel = isFromDetail ? (resolvedEntityPartyName || t("entry")) : null;
 
-  /** Vehicle add-entry: use AddVehicleEntryModal (no vehicle logic in AddTransactionModal). */
+  /** Vehicle sync is redirected to vehicle financial view and opens add-entry there. */
   if (params.entityType === "VEHICLE" && params.entityId) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -1060,23 +1094,18 @@ export default function LedgerSyncScreen() {
             <FontAwesome name="chevron-left" size={18} color={Theme.textPrimaryDark} />
           </TouchableOpacity>
           <View style={styles.headerTitleWrap}>
-            <Text style={styles.headerTitle}>{t("addEntry")}</Text>
+            <Text style={styles.headerTitle}>{t("ledgerSync")}</Text>
             {entryContextLabel ? (
               <Text style={styles.headerSubtitle} numberOfLines={1}>{entryContextLabel}</Text>
             ) : null}
           </View>
         </View>
-        <AddVehicleEntryModal
-          visible
-          fullPage
-          onClose={handleClose}
-          onSubmit={handleVehicleEntrySubmit}
-          vehicleNumber={vehicleNumber}
-          entryContextLabel={entryContextLabel ?? undefined}
-          trips={vehicleTripOptions}
-          drivers={drivers}
-          initialTripId={params.tripId ?? undefined}
-        />
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={Theme.primary} />
+          <Text style={styles.redirectHint}>
+            {Platform.OS === "web" ? "Opening vehicle financial view..." : "Opening vehicle screen..."}
+          </Text>
+        </View>
       </View>
     );
   }
@@ -1209,5 +1238,11 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+  },
+  redirectHint: {
+    marginTop: 10,
+    color: Theme.textSecondary,
+    fontSize: 12,
+    fontWeight: "500",
   },
 });
