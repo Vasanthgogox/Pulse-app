@@ -20,11 +20,15 @@ import { formatINR, formatIndianVehicleNumber } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
 import { notifyTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
 import { getOptimalRoute } from "@/services/routingService";
+import * as tripDocumentsService from "@/services/tripDocumentsService";
 import Feather from "@expo/vector-icons/Feather";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system";
+import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { MessageSquare } from "lucide-react-native";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -291,6 +295,9 @@ export default function TripDetailScreen({
   const [otpResending, setOtpResending] = useState(false);
   const [provisionVoidReason, setProvisionVoidReason] = useState("");
 
+  const vehicleGalleryScrollRef = useRef<ScrollView | null>(null);
+  const [vehicleGalleryPageWidth, setVehicleGalleryPageWidth] = useState(0);
+
   const closeFinanceProvisionModal = () => {
     setShowFinanceProvisionPanel(null);
     setShowInlineAdjustmentForm(false);
@@ -314,6 +321,35 @@ export default function TripDetailScreen({
     clientNameFromContext,
     onBack,
   });
+
+  const goToVehicleGalleryIndex = useCallback(
+    (nextIndex: number, animated = true) => {
+      const total = detail.vehiclePreviewDocs.length;
+      if (total <= 0) return;
+      const clamped = Math.max(0, Math.min(nextIndex, total - 1));
+      detail.setVehiclePreviewIndex(clamped);
+      if (vehicleGalleryPageWidth > 0) {
+        vehicleGalleryScrollRef.current?.scrollTo({
+          x: clamped * vehicleGalleryPageWidth,
+          animated,
+        });
+      }
+    },
+    [detail, vehicleGalleryPageWidth],
+  );
+
+  useEffect(() => {
+    if (!detail.isVehicleGalleryDoc) return;
+    if (vehicleGalleryPageWidth <= 0) return;
+    vehicleGalleryScrollRef.current?.scrollTo({
+      x: detail.vehiclePreviewIndex * vehicleGalleryPageWidth,
+      animated: false,
+    });
+  }, [
+    detail.isVehicleGalleryDoc,
+    detail.vehiclePreviewIndex,
+    vehicleGalleryPageWidth,
+  ]);
 
   const { initiateDriverConversationForTrip } = useTripChat();
 
@@ -485,6 +521,103 @@ export default function TripDetailScreen({
     }
     return durationLabel !== "—" ? durationLabel : "—";
   }, [detail.trip]);
+
+  // Vault upload hooks — must run before loading/error early returns (Rules of Hooks).
+  const [uploadingDocId, setUploadingDocId] = useState<string | null>(null);
+
+  const readFileAsArrayBuffer = useCallback(
+    async (uri: string): Promise<ArrayBuffer> => {
+      if (Platform.OS === "web") {
+        const response = await fetch(uri);
+        return response.arrayBuffer();
+      }
+      const base64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: "base64" as const,
+      });
+      return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)).buffer;
+    },
+    [],
+  );
+
+  const handleVaultUpload = useCallback(
+    async (doc: (typeof detail.computedTripDocs)[number]) => {
+      const tripIdForUpload = detail.trip?.id;
+      const uploaderId = detail.currentUserId;
+      if (!tripIdForUpload || !uploaderId || uploadingDocId) return;
+
+      const allowPdf = doc.category !== "driver";
+      let uri: string | null = null;
+      let fileName = `${doc.id}-${Date.now()}.jpg`;
+      let mimeType = "image/jpeg";
+
+      try {
+        if (allowPdf) {
+          const res = await DocumentPicker.getDocumentAsync({
+            multiple: false,
+            copyToCacheDirectory: true,
+            type: ["application/pdf", "image/*"],
+          });
+          if (res.canceled || !res.assets?.[0]) return;
+          const asset = res.assets[0];
+          uri = asset.uri;
+          fileName = asset.name || fileName;
+          mimeType = asset.mimeType || "application/pdf";
+        } else {
+          const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (!perm.granted) {
+            Alert.alert(
+              "Permission required",
+              "Photo library access is needed to attach this document.",
+            );
+            return;
+          }
+          const res = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ["images"],
+            allowsEditing: false,
+            quality: 0.9,
+          });
+          if (res.canceled || !res.assets?.[0]) return;
+          const asset = res.assets[0];
+          uri = asset.uri;
+          fileName = asset.fileName ?? fileName;
+          mimeType = asset.mimeType ?? "image/jpeg";
+        }
+
+        if (!uri) return;
+        setUploadingDocId(doc.id);
+        const arrayBuffer = await readFileAsArrayBuffer(uri);
+        if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+          Alert.alert("Upload failed", "Could not read the selected file.");
+          return;
+        }
+
+        const { error } = await tripDocumentsService.uploadTripDocument(
+          tripIdForUpload,
+          uploaderId,
+          { arrayBuffer, fileName, mimeType },
+        );
+        if (error) {
+          Alert.alert("Upload failed", error.message);
+          return;
+        }
+        detail.handleRefresh();
+      } catch (e) {
+        Alert.alert(
+          "Upload failed",
+          e instanceof Error ? e.message : "Something went wrong.",
+        );
+      } finally {
+        setUploadingDocId(null);
+      }
+    },
+    [
+      detail.trip?.id,
+      detail.currentUserId,
+      detail.handleRefresh,
+      uploadingDocId,
+      readFileAsArrayBuffer,
+    ],
+  );
 
   if (detail.loading && !detail.trip) {
     return <CenteredLoadingView message="Loading trip…" />;
@@ -1441,6 +1574,34 @@ export default function TripDetailScreen({
     if (doc.id === "vehicle-documents" && trip.vehicle_id) {
       router.push(`/vehicle/${trip.vehicle_id}` as never);
     }
+  };
+
+  /**
+   * Press handler for the new vault cards. Branches:
+   *  - Already uploaded → open preview (existing behavior).
+   *  - Vehicle Document (pending) → open vehicle profile (vehicle docs aren't trip-scoped).
+   *  - Trip Manifest / Driver POD (pending) → inline file picker → uploadTripDocument.
+   *  - User can't upload (different org) → fall back to existing handleDocOpen.
+   */
+  const handleVaultCardPress = (
+    doc: (typeof detail.computedTripDocs)[number],
+  ) => {
+    const isUploaded = doc.status !== "Pending" || !!doc.storagePath;
+    if (isUploaded) {
+      detail.setSelectedDoc(doc);
+      return;
+    }
+    if (doc.id === "vehicle-documents") {
+      if (trip.vehicle_id) {
+        router.push(`/vehicle/${trip.vehicle_id}` as never);
+      }
+      return;
+    }
+    if (canUploadTripDocs) {
+      void handleVaultUpload(doc);
+      return;
+    }
+    handleDocOpen(doc);
   };
 
   const hasDriverAssigned = !!trip.driver_id;
@@ -2411,6 +2572,19 @@ export default function TripDetailScreen({
                         : doc.status === "Pending"
                           ? "pending"
                           : "ok";
+                    const isUploadingThis = uploadingDocId === doc.id;
+                    const isPending = doc.status === "Pending";
+                    const refBtnLabel = isPending
+                      ? canUploadTripDocs
+                        ? "Upload"
+                        : doc.id === "vehicle-documents" && trip.vehicle_id
+                          ? "Open"
+                          : "Pending"
+                      : "View";
+                    const refBtnIcon =
+                      isPending && canUploadTripDocs
+                        ? "upload"
+                        : "external-link";
                     return (
                       <View key={doc.id} style={styles.refVaultCard}>
                         <Feather
@@ -2431,15 +2605,24 @@ export default function TripDetailScreen({
                         </Text>
                         <TouchableOpacity
                           style={styles.refVaultViewBtn}
-                          onPress={() => void handleDocOpen(doc)}
+                          onPress={() => handleVaultCardPress(doc)}
                           activeOpacity={0.85}
+                          disabled={isUploadingThis}
                         >
-                          <Feather
-                            name="external-link"
-                            size={12}
-                            color="#64748b"
-                          />
-                          <Text style={styles.refVaultViewText}>View</Text>
+                          {isUploadingThis ? (
+                            <ActivityIndicator size="small" color="#64748b" />
+                          ) : (
+                            <>
+                              <Feather
+                                name={refBtnIcon}
+                                size={12}
+                                color="#64748b"
+                              />
+                              <Text style={styles.refVaultViewText}>
+                                {refBtnLabel}
+                              </Text>
+                            </>
+                          )}
                         </TouchableOpacity>
                       </View>
                     );
@@ -3319,47 +3502,64 @@ export default function TripDetailScreen({
                   </View>
                 ) : (
                   <View style={neoStyles.vaultGrid}>
-                    {vaultDocs.map((doc) => (
-                      <View key={doc.id} style={neoStyles.vaultCard}>
-                        <Feather
-                          name={
-                            doc.status === "Pending"
-                              ? "upload-cloud"
-                              : "file-text"
-                          }
-                          size={34}
-                          color={
-                            doc.status === "Pending" ? "#cbd5e1" : "#94a3b8"
-                          }
-                        />
-                        <Text style={neoStyles.vaultTitle} numberOfLines={2}>
-                          {doc.label}
-                        </Text>
-                        <Text style={neoStyles.vaultSub}>{doc.status}</Text>
-                        <TouchableOpacity
-                          onPress={() => void handleDocOpen(doc)}
-                          style={[
-                            neoStyles.vaultBtn,
-                            doc.status === "Pending" &&
-                              neoStyles.vaultBtnUpload,
-                          ]}
-                          activeOpacity={0.85}
-                        >
+                    {vaultDocs.map((doc) => {
+                      const isUploadingThis = uploadingDocId === doc.id;
+                      const isPending = doc.status === "Pending";
+                      const isVehicleDoc = doc.id === "vehicle-documents";
+                      const btnLabel = isPending
+                        ? canUploadTripDocs
+                          ? "Upload"
+                          : isVehicleDoc && trip.vehicle_id
+                            ? "Open"
+                            : "Pending"
+                        : "Preview";
+                      const btnIcon = isPending
+                        ? canUploadTripDocs
+                          ? "upload"
+                          : isVehicleDoc && trip.vehicle_id
+                            ? "external-link"
+                            : "clock"
+                        : "eye";
+                      return (
+                        <View key={doc.id} style={neoStyles.vaultCard}>
                           <Feather
-                            name={doc.status === "Pending" ? "upload" : "eye"}
-                            size={12}
-                            color="#fff"
+                            name={isPending ? "upload-cloud" : "file-text"}
+                            size={34}
+                            color={isPending ? "#cbd5e1" : "#94a3b8"}
                           />
-                          <Text style={neoStyles.vaultBtnText}>
-                            {doc.status === "Pending"
-                              ? canUploadTripDocs
-                                ? "Upload"
-                                : "Pending"
-                              : "Preview"}
+                          <Text style={neoStyles.vaultTitle} numberOfLines={2}>
+                            {doc.label}
                           </Text>
-                        </TouchableOpacity>
-                      </View>
-                    ))}
+                          <Text style={neoStyles.vaultSub}>{doc.status}</Text>
+                          <TouchableOpacity
+                            onPress={() => handleVaultCardPress(doc)}
+                            style={[
+                              neoStyles.vaultBtn,
+                              isPending &&
+                                canUploadTripDocs &&
+                                neoStyles.vaultBtnUpload,
+                            ]}
+                            activeOpacity={0.85}
+                            disabled={isUploadingThis}
+                          >
+                            {isUploadingThis ? (
+                              <ActivityIndicator size="small" color="#fff" />
+                            ) : (
+                              <>
+                                <Feather
+                                  name={btnIcon}
+                                  size={12}
+                                  color="#fff"
+                                />
+                                <Text style={neoStyles.vaultBtnText}>
+                                  {btnLabel}
+                                </Text>
+                              </>
+                            )}
+                          </TouchableOpacity>
+                        </View>
+                      );
+                    })}
                   </View>
                 )}
               </View>
@@ -4769,47 +4969,142 @@ export default function TripDetailScreen({
                   <Text style={styles.docModalHint}>Loading preview…</Text>
                 </View>
               ) : detail.isVehicleGalleryDoc ? (
-                <View style={styles.docModalCenter}>
-                  {detail.activeVehiclePreviewDoc?.storagePath ? (
-                    (() => {
-                      const vDoc = detail.activeVehiclePreviewDoc;
-                      const url = vDoc
-                        ? detail.vehiclePreviewUrls[vDoc.id]
-                        : null;
-                      const isPdf = vDoc?.type === "PDF";
-                      if (url && !isPdf) {
-                        return (
-                          <Image
-                            source={{ uri: url }}
-                            style={styles.docModalImage}
-                            resizeMode="contain"
-                          />
+                detail.vehiclePreviewDocs.length > 0 ? (
+                  <View
+                    style={styles.docGalleryWrap}
+                    onLayout={(event) =>
+                      setVehicleGalleryPageWidth(event.nativeEvent.layout.width)
+                    }
+                  >
+                    <ScrollView
+                      ref={vehicleGalleryScrollRef}
+                      horizontal
+                      pagingEnabled
+                      showsHorizontalScrollIndicator={false}
+                      onMomentumScrollEnd={(event) => {
+                        const pageWidth =
+                          event.nativeEvent.layoutMeasurement.width;
+                        if (pageWidth <= 0) return;
+                        const nextIndex = Math.round(
+                          event.nativeEvent.contentOffset.x / pageWidth,
                         );
-                      }
-                      return (
-                        <>
+                        const clamped = Math.max(
+                          0,
+                          Math.min(
+                            nextIndex,
+                            detail.vehiclePreviewDocs.length - 1,
+                          ),
+                        );
+                        if (clamped !== detail.vehiclePreviewIndex) {
+                          detail.setVehiclePreviewIndex(clamped);
+                        }
+                      }}
+                    >
+                      {detail.vehiclePreviewDocs.map((doc) => {
+                        const url = detail.vehiclePreviewUrls[doc.id] ?? null;
+                        const isPdf = doc.type === "PDF";
+                        const slideStyle = [
+                          styles.docGallerySlide,
+                          vehicleGalleryPageWidth > 0
+                            ? { width: vehicleGalleryPageWidth }
+                            : null,
+                        ];
+                        return (
+                          <View key={doc.id} style={slideStyle}>
+                            {url && !isPdf ? (
+                              <Image
+                                source={{ uri: url }}
+                                style={styles.docModalImage}
+                                resizeMode="contain"
+                              />
+                            ) : (
+                              <View style={styles.docModalCenter}>
+                                <FontAwesome
+                                  name={url ? "file-pdf-o" : "file-o"}
+                                  size={48}
+                                  color={url ? Theme.primary : "#94a3b8"}
+                                />
+                                <Text style={styles.docModalHint}>
+                                  {doc.label}
+                                </Text>
+                                <Text style={styles.docModalHint}>
+                                  {url
+                                    ? "PDF preview may be limited in the browser."
+                                    : doc.storagePath
+                                      ? "Generating secure link…"
+                                      : "No document uploaded yet."}
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+                        );
+                      })}
+                    </ScrollView>
+
+                    {detail.vehiclePreviewDocs.length > 1 ? (
+                      <>
+                        <TouchableOpacity
+                          accessibilityLabel="Previous document"
+                          activeOpacity={0.85}
+                          disabled={detail.vehiclePreviewIndex <= 0}
+                          onPress={() =>
+                            goToVehicleGalleryIndex(
+                              detail.vehiclePreviewIndex - 1,
+                            )
+                          }
+                          style={[
+                            styles.docGalleryNavBtn,
+                            styles.docGalleryNavBtnLeft,
+                            detail.vehiclePreviewIndex <= 0 &&
+                              styles.docGalleryNavBtnDisabled,
+                          ]}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
                           <FontAwesome
-                            name="file-pdf-o"
-                            size={48}
-                            color={Theme.primary}
+                            name="chevron-left"
+                            size={16}
+                            color="#0f172a"
                           />
-                          <Text style={styles.docModalHint}>
-                            {url
-                              ? "PDF preview may be limited in the browser."
-                              : "Generating secure link…"}
-                          </Text>
-                        </>
-                      );
-                    })()
-                  ) : (
-                    <>
-                      <FontAwesome name="file-o" size={48} color="#94a3b8" />
-                      <Text style={styles.docModalHint}>
-                        No vehicle document on file yet.
-                      </Text>
-                    </>
-                  )}
-                </View>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          accessibilityLabel="Next document"
+                          activeOpacity={0.85}
+                          disabled={
+                            detail.vehiclePreviewIndex >=
+                            detail.vehiclePreviewDocs.length - 1
+                          }
+                          onPress={() =>
+                            goToVehicleGalleryIndex(
+                              detail.vehiclePreviewIndex + 1,
+                            )
+                          }
+                          style={[
+                            styles.docGalleryNavBtn,
+                            styles.docGalleryNavBtnRight,
+                            detail.vehiclePreviewIndex >=
+                              detail.vehiclePreviewDocs.length - 1 &&
+                              styles.docGalleryNavBtnDisabled,
+                          ]}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <FontAwesome
+                            name="chevron-right"
+                            size={16}
+                            color="#0f172a"
+                          />
+                        </TouchableOpacity>
+                      </>
+                    ) : null}
+                  </View>
+                ) : (
+                  <View style={styles.docModalCenter}>
+                    <FontAwesome name="file-o" size={48} color="#94a3b8" />
+                    <Text style={styles.docModalHint}>
+                      No vehicle document on file yet.
+                    </Text>
+                  </View>
+                )
               ) : detail.docPreviewUrl ? (
                 <Image
                   source={{ uri: detail.docPreviewUrl }}
@@ -4838,6 +5133,33 @@ export default function TripDetailScreen({
                 </View>
               )}
             </View>
+
+            {detail.isVehicleGalleryDoc &&
+            detail.vehiclePreviewDocs.length > 1 ? (
+              <View style={styles.docGalleryDots}>
+                {detail.vehiclePreviewDocs.map((doc, index) => {
+                  const isActive = index === detail.vehiclePreviewIndex;
+                  return (
+                    <TouchableOpacity
+                      key={doc.id}
+                      accessibilityLabel={`Go to document ${index + 1}`}
+                      onPress={() => goToVehicleGalleryIndex(index)}
+                      activeOpacity={0.85}
+                      hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                    >
+                      <View
+                        style={[
+                          styles.docGalleryDot,
+                          isActive
+                            ? styles.docGalleryDotActive
+                            : styles.docGalleryDotInactive,
+                        ]}
+                      />
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ) : null}
 
             <View style={styles.docModalFooter}>
               <TouchableOpacity
@@ -11224,6 +11546,62 @@ const styles = StyleSheet.create({
     color: "#64748b",
     textAlign: "center",
     paddingHorizontal: 20,
+  },
+  docGalleryWrap: {
+    position: "relative",
+    width: "100%",
+  },
+  docGallerySlide: {
+    minHeight: 280,
+    alignItems: "stretch",
+    justifyContent: "center",
+  },
+  docGalleryNavBtn: {
+    position: "absolute",
+    top: "50%",
+    width: 36,
+    height: 36,
+    marginTop: -18,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.95)",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  docGalleryNavBtnLeft: {
+    left: 8,
+  },
+  docGalleryNavBtnRight: {
+    right: 8,
+  },
+  docGalleryNavBtnDisabled: {
+    opacity: 0.35,
+  },
+  docGalleryDots: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 10,
+    backgroundColor: "#fff",
+  },
+  docGalleryDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 999,
+  },
+  docGalleryDotActive: {
+    width: 18,
+    backgroundColor: Theme.primary,
+  },
+  docGalleryDotInactive: {
+    backgroundColor: "#e2e8f0",
   },
   docModalFooter: {
     paddingHorizontal: 16,

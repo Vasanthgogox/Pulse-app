@@ -402,7 +402,7 @@ export default function TripsScreen() {
     return ids.join(",");
   }, [showCompletedList, tripsByStatus]);
 
-  const { data: tripIdsWithDocuments = new Set<string>() } = useQuery({
+  const { data: tripIdsWithDocumentsRaw } = useQuery({
     queryKey: [
       "q",
       "trips",
@@ -423,6 +423,20 @@ export default function TripsScreen() {
       return new Set((data ?? []).map((r) => (r as { trip_id: string }).trip_id));
     },
   });
+  const tripIdsWithDocuments = useMemo(() => {
+    if (tripIdsWithDocumentsRaw instanceof Set) {
+      return tripIdsWithDocumentsRaw;
+    }
+    if (Array.isArray(tripIdsWithDocumentsRaw)) {
+      return new Set(
+        tripIdsWithDocumentsRaw
+          .filter((value): value is string => typeof value === "string")
+          .map((value) => value.trim())
+          .filter(Boolean),
+      );
+    }
+    return new Set<string>();
+  }, [tripIdsWithDocumentsRaw]);
 
   const tripsForHubMetricCounts = useMemo(
     () =>

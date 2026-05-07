@@ -5,6 +5,7 @@
  * - Indent-based: Client→Supplier, Client→Driver, Supplier→Driver
  */
 import Theme from '@/constants/Theme';
+import { TripFeedbackModal } from '@/components/TripFeedbackModal';
 import {
   getClientById,
   getClientDetails,
@@ -30,7 +31,6 @@ import {
   Alert,
   Easing,
   Image,
-  Modal,
   Platform,
   StyleSheet,
   Text,
@@ -43,7 +43,6 @@ import {
 } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Feather from '@expo/vector-icons/Feather';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { TripRow } from '@/features/trips/services/trips.service';
 import {
   createRating,
@@ -334,7 +333,6 @@ export function TripRatingsBlock({
   layoutVariant = 'default',
 }: TripRatingsBlockProps) {
   const { width } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
   const { currentOrganization } = useOrganization();
   void paymentCaptured;
   const [ratings, setRatings] = useState<RatingRow[]>([]);
@@ -1575,20 +1573,14 @@ export function TripRatingsBlock({
         )}
       </View>
 
-      <Modal visible={flow !== null} transparent animationType="fade" onRequestClose={closeModal}>
-        <View
-          style={[
-            styles.modalOverlay,
-            styles.modalOverlayPulse,
-            { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 },
-          ]}
-        >
-          <Animated.View
-            style={[
-              styles.modalCardPulse,
-              { opacity: modalOpacity, transform: [{ translateY: modalTranslateY }] },
-            ]}
-          >
+      <TripFeedbackModal
+        visible={flow !== null}
+        onRequestClose={closeModal}
+        animatedCardStyle={{
+          opacity: modalOpacity,
+          transform: [{ translateY: modalTranslateY }],
+        }}
+      >
             {submitSuccess ? (
               <Animated.View
                 style={[
@@ -1690,7 +1682,7 @@ export function TripRatingsBlock({
                       >
                         <FontAwesome
                           name={n <= score ? 'star' : 'star-o'}
-                          size={36}
+                          size={32}
                           color={
                             n <= score
                               ? Theme.feedbackModalStarActive
@@ -1797,17 +1789,11 @@ export function TripRatingsBlock({
                 </View>
               </>
             )}
-          </Animated.View>
-        </View>
-      </Modal>
-      <Modal
+      </TripFeedbackModal>
+      <TripFeedbackModal
         visible={showClientFeedbackModal}
-        transparent
-        animationType="fade"
         onRequestClose={() => setShowClientFeedbackModal(false)}
       >
-        <View style={[styles.modalOverlay, { backgroundColor: Theme.feedbackModalBackdrop }]}>
-          <View style={styles.modalCardPulse}>
             <View style={[styles.heroHeaderPulse, { backgroundColor: Theme.primary }]}>
               <TouchableOpacity
                 style={styles.closeButtonPulse}
@@ -1832,7 +1818,7 @@ export function TripRatingsBlock({
                   >
                     <FontAwesome
                       name={n <= clientScore ? 'star' : 'star-o'}
-                      size={34}
+                      size={32}
                       color={n <= clientScore ? Theme.feedbackModalStarActive : Theme.borderMedium}
                     />
                   </TouchableOpacity>
@@ -1845,7 +1831,7 @@ export function TripRatingsBlock({
                     <TouchableOpacity
                       key={tag.id}
                       onPress={() => handleClientTagToggle(tag.id)}
-                      style={[ 
+                      style={[
                         styles.tagChipPulse,
                         styles.clientTagChipPulse,
                         selected ? styles.tagChipPulseActive : styles.tagChipPulseIdle,
@@ -1972,16 +1958,14 @@ export function TripRatingsBlock({
                 {clientSubmitting ? (
                   <ActivityIndicator size="small" color={Theme.textOnPrimary} />
                 ) : (
-                  <> 
+                  <>
                     <Text style={styles.modalSubmitTextPulse}>Submit</Text>
                     <FontAwesome name="check" size={16} color={Theme.textOnPrimary} />
                   </>
                 )}
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
-      </Modal>
+      </TripFeedbackModal>
     </View>
   );
 }
@@ -2778,36 +2762,10 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.4,
   },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-  },
-  modalOverlayPulse: {
-    backgroundColor: Theme.feedbackModalBackdrop,
-  },
-  modalCardPulse: {
-    backgroundColor: Theme.screenBackground,
-    borderRadius: 28,
-    width: '100%',
-    maxWidth: 400,
-    overflow: 'hidden',
-    ...Platform.select({
-      ios: {
-        shadowColor: Theme.shadow,
-        shadowOffset: { width: 0, height: 20 },
-        shadowOpacity: 0.22,
-        shadowRadius: 48,
-      },
-      android: { elevation: 22 },
-      default: {},
-    }),
-  },
   heroHeaderPulse: {
-    paddingHorizontal: 28,
-    paddingTop: 36,
-    paddingBottom: 28,
+    paddingHorizontal: 24,
+    paddingTop: 26,
+    paddingBottom: 20,
     position: 'relative',
     overflow: 'hidden',
   },
@@ -2829,8 +2787,8 @@ const styles = StyleSheet.create({
   },
   closeButtonPulse: {
     position: 'absolute',
-    top: 20,
-    right: 20,
+    top: 16,
+    right: 16,
     width: 44,
     height: 44,
     borderRadius: 16,
@@ -2907,22 +2865,22 @@ const styles = StyleSheet.create({
     color: 'rgba(248, 250, 252, 0.45)',
   },
   modalBodyPulse: {
-    paddingHorizontal: 36,
-    paddingTop: 32,
-    paddingBottom: 36,
+    paddingHorizontal: 28,
+    paddingTop: 18,
+    paddingBottom: 20,
     backgroundColor: Theme.screenBackground,
     alignItems: 'center',
   },
   ratingHeadlinePulse: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '900',
     fontStyle: 'italic',
     color: Theme.textPrimaryDark,
     textAlign: 'center',
     textTransform: 'uppercase',
     letterSpacing: -0.5,
-    marginBottom: 28,
-    lineHeight: 28,
+    marginBottom: 14,
+    lineHeight: 26,
   },
   ratingHeadlineAccent: {
     color: Theme.primary,
@@ -2933,40 +2891,40 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 10,
-    marginBottom: 8,
+    gap: 8,
+    marginBottom: 4,
   },
   starBtnPulse: {
-    paddingVertical: 6,
-    paddingHorizontal: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 2,
   },
   composerSectionPulse: {
     width: '100%',
-    marginTop: 8,
-    gap: 20,
+    marginTop: 4,
+    gap: 12,
     alignItems: 'stretch',
   },
   tagsWrapPulse: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: 10,
+    gap: 8,
   },
   clientTagsWrapPulse: {
     width: '100%',
     justifyContent: 'space-between',
-    rowGap: 10,
+    rowGap: 8,
     columnGap: 0,
   },
   tagChipPulse: {
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderWidth: 1,
   },
   clientTagChipPulse: {
     width: '48%',
-    minHeight: 44,
+    minHeight: 40,
     paddingHorizontal: 8,
     alignItems: 'center',
     justifyContent: 'center',
@@ -3004,20 +2962,20 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
   },
   commentBoxWrapPulse: {
-    marginBottom: 4,
+    marginBottom: 0,
     width: '100%',
   },
   commentInputPulse: {
     borderWidth: 1,
     borderColor: Theme.borderInput,
     backgroundColor: Theme.surface,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     fontSize: 14,
     color: Theme.textPrimaryDark,
-    minHeight: 96,
-    marginBottom: 8,
+    minHeight: 76,
+    marginBottom: 4,
   },
   commentCounterPulse: {
     fontSize: 11,
@@ -3027,9 +2985,9 @@ const styles = StyleSheet.create({
   },
   modalSubmitPulse: {
     backgroundColor: Theme.textPrimaryDark,
-    paddingVertical: 22,
-    paddingHorizontal: 20,
-    borderRadius: 24,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    borderRadius: 14,
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
@@ -3049,12 +3007,12 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     color: Theme.textMuted,
     textAlign: 'center',
-    marginTop: 16,
+    marginTop: 6,
     paddingHorizontal: 12,
   },
   successWrap: {
-    paddingHorizontal: 24,
-    paddingVertical: 36,
+    paddingHorizontal: 22,
+    paddingVertical: 28,
     alignItems: 'center',
   },
   successIconWrap: {
