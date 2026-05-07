@@ -402,27 +402,35 @@ export default function TripsScreen() {
     return ids.join(",");
   }, [showCompletedList, tripsByStatus]);
 
-  const { data: tripIdsWithDocuments = new Set<string>() } = useQuery({
+  /** Persisted React Query cache is JSON — `Set` breaks after hydrate (`.has` missing). Store IDs as array, derive Set in memo. */
+  const { data: tripIdsWithDocumentsRaw } = useQuery({
     queryKey: [
       "q",
       "trips",
       "doc-trip-ids",
+      "v2",
       orgId ?? "",
       activeOpsTripIdsSorted,
     ],
     enabled: !!orgId && activeOpsTripIdsSorted.length > 0,
     staleTime: 60_000,
-    queryFn: async () => {
+    queryFn: async (): Promise<string[]> => {
       const ids = activeOpsTripIdsSorted.split(",").filter(Boolean);
-      if (ids.length === 0) return new Set<string>();
+      if (ids.length === 0) return [];
       const { data, error } = await supabase()
         .from("trip_documents")
         .select("trip_id")
         .in("trip_id", ids);
       if (error) throw error;
-      return new Set((data ?? []).map((r) => (r as { trip_id: string }).trip_id));
+      return (data ?? []).map((r) => (r as { trip_id: string }).trip_id);
     },
   });
+
+  const tripIdsWithDocuments = useMemo(() => {
+    const raw = tripIdsWithDocumentsRaw;
+    if (Array.isArray(raw)) return new Set(raw);
+    return new Set<string>();
+  }, [tripIdsWithDocumentsRaw]);
 
   const tripsForHubMetricCounts = useMemo(
     () =>
