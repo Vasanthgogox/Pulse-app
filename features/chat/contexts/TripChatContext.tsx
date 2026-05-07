@@ -116,6 +116,8 @@ export function TripChatProvider({
   isActive?: boolean;
 }) {
   const { profile } = useAuth();
+  /** Stable primitive — avoid resubscribing realtime when profile object identity churns. */
+  const selfUid = profile?.uid ?? null;
   const orgCtx = useOptionalOrganization();
   const organizationId = orgCtx?.currentOrganization?.id ?? null;
 
@@ -193,7 +195,6 @@ export function TripChatProvider({
         const conversationId = row?.conversation_id;
         if (!conversationId) return;
 
-        const selfUid = (profile as { uid?: string } | null)?.uid ?? null;
         if (selfUid && row?.sender_user_id && row.sender_user_id === selfUid) return;
 
         let found = false;
@@ -223,7 +224,7 @@ export function TripChatProvider({
         }
       }
     );
-  }, [organizationId, isActive, profile]);
+  }, [organizationId, isActive, selfUid]);
 
   // Focused-screen realtime sync: full refresh while user is actively in chat.
   useEffect(() => {

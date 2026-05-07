@@ -299,12 +299,12 @@ export function DriverTripFlowCard({
             entity_id: driverId,
           },
         });
-        void refreshConversations();
+        // INSERT hits trip_messages realtime → DriverChatContext debounced refresh; skip duplicate full refetch here.
       } catch {
         // Upload already succeeded; chat share is best-effort.
       }
     },
-    [ensureDriverTripConversation, localTrip.driver_id, localTrip.id, localTrip.organization_id, profile, refreshConversations],
+    [ensureDriverTripConversation, localTrip.driver_id, localTrip.id, localTrip.organization_id, profile],
   );
 
   const openPodPreview = useCallback(
