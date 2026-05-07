@@ -155,6 +155,25 @@ export async function getLatestDriverLocationForTripOrDriver(
 }
 
 /**
+ * Fetch the most recent N location pings for a trip (newest first). Dev use: last-3 trail.
+ * Requires "Drivers read own locations" RLS policy on driver_locations.
+ */
+export async function getLastNLocationsForTrip(
+  tripId: string,
+  n = 3,
+): Promise<{ error: Error | null; points: { latitude: number; longitude: number; recorded_at: string }[] }> {
+  const { data, error } = await supabase()
+    .from('driver_locations')
+    .select('latitude, longitude, recorded_at')
+    .eq('trip_id', tripId)
+    .order('recorded_at', { ascending: false })
+    .limit(n);
+
+  if (error) return { error: new Error(error.message), points: [] };
+  return { error: null, points: (data ?? []) as { latitude: number; longitude: number; recorded_at: string }[] };
+}
+
+/**
  * Fetch location history for a driver (fallback when trip_id is null on rows).
  */
 export async function getDriverLocationHistoryByDriverId(

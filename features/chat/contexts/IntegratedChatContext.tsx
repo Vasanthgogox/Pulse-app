@@ -145,6 +145,7 @@ export function IntegratedChatProvider({
   isActive?: boolean;
 }) {
   const { profile } = useAuth();
+  const selfUid = profile?.uid ?? null;
   const { currentOrganization } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
   const orgName = currentOrganization?.name ?? "My Organization";
@@ -158,7 +159,7 @@ export function IntegratedChatProvider({
   const bootstrappedOrgRef = useRef<string | null>(null);
 
   const loadData = useCallback(async () => {
-    if (!orgId) return;
+    if (!orgId || !selfUid) return;
     setIsLoading(true);
     try {
       const [convs, pts] = await Promise.all([
@@ -172,21 +173,29 @@ export function IntegratedChatProvider({
     } finally {
       setIsLoading(false);
     }
-  }, [orgId]);
+  }, [orgId, selfUid]);
   loadDataRef.current = loadData;
+
+  useEffect(() => {
+    if (orgId && selfUid) return;
+    setConversations([]);
+    setPartners([]);
+    setIsLoading(false);
+    bootstrappedOrgRef.current = null;
+  }, [orgId, selfUid]);
 
   // Lightweight bootstrap load (for FAB preview/unread badges even when chat screen is not focused).
   useEffect(() => {
-    if (!orgId) return;
+    if (!orgId || !selfUid) return;
     if (bootstrappedOrgRef.current === orgId) return;
     bootstrappedOrgRef.current = orgId;
     void loadData();
-  }, [orgId, loadData]);
+  }, [orgId, selfUid, loadData]);
 
   useEffect(() => {
-    if (!isActive) return;
+    if (!isActive || !selfUid) return;
     loadData();
-  }, [isActive, loadData]);
+  }, [isActive, selfUid, loadData]);
 
   const queueRefreshData = useCallback(() => {
     if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current);
@@ -203,7 +212,7 @@ export function IntegratedChatProvider({
 
   // Lightweight always-on realtime: conversation rows only (org-filtered), not global network_messages WAL.
   useEffect(() => {
-    if (!orgId || isActive) return;
+    if (!orgId || !selfUid || isActive) return;
     return subscribeSharedPostgresChanges(
       `network_conversations:org:${orgId}`,
       networkConversationsOrgSpecs(orgId),
@@ -241,11 +250,11 @@ export function IntegratedChatProvider({
         }
       }
     );
-  }, [orgId, isActive, queueRefreshData]);
+  }, [orgId, selfUid, isActive, queueRefreshData]);
 
   // Focused screen: full sync on conversation insert/update for this org (still org-filtered).
   useEffect(() => {
-    if (!isActive || !orgId) return;
+    if (!isActive || !orgId || !selfUid) return;
     return subscribeSharedPostgresChanges(
       `network_conversations:org:${orgId}`,
       networkConversationsOrgSpecs(orgId),
@@ -253,7 +262,7 @@ export function IntegratedChatProvider({
         queueRefreshData();
       }
     );
-  }, [isActive, orgId, queueRefreshData]);
+  }, [isActive, orgId, selfUid, queueRefreshData]);
 
   const chats: IntegratedChat[] = orgId
     ? conversations.map((c) => toIntegratedChat(c, orgId))

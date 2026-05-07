@@ -133,7 +133,7 @@ export function TripChatProvider({
   const [isLoading, setIsLoading] = useState(false);
 
   const loadConversations = useCallback(async () => {
-    if (!organizationId) return;
+    if (!organizationId || !selfUid) return;
     setIsLoading(true);
     try {
       const data = await chatService.getConversationsByOrganization(organizationId);
@@ -143,26 +143,33 @@ export function TripChatProvider({
     } finally {
       setIsLoading(false);
     }
-  }, [organizationId]);
+  }, [organizationId, selfUid]);
   loadConversationsRef.current = loadConversations;
+
+  useEffect(() => {
+    if (organizationId && selfUid) return;
+    setConversations([]);
+    setIsLoading(false);
+    bootstrappedOrgRef.current = null;
+  }, [organizationId, selfUid]);
 
   // Lightweight bootstrap load (for FAB preview/unread badges even when chat screen is not focused).
   useEffect(() => {
-    if (!organizationId) return;
+    if (!organizationId || !selfUid) return;
     if (bootstrappedOrgRef.current === organizationId) return;
     bootstrappedOrgRef.current = organizationId;
     void loadConversations();
-  }, [organizationId, loadConversations]);
+  }, [organizationId, selfUid, loadConversations]);
 
   // Focused-screen load
   useEffect(() => {
-    if (!isActive) return;
+    if (!isActive || !selfUid) return;
     loadConversations();
-  }, [isActive, loadConversations]);
+  }, [isActive, selfUid, loadConversations]);
 
   // Refetch when ledger (or anything) signals new trip chat rows — survives missing realtime publication
   useEffect(() => {
-    if (!isActive) return;
+    if (!isActive || !selfUid) return;
     let debounceTimer: ReturnType<typeof setTimeout> | undefined;
     const unsub = subscribeTripChatMessagesChanged(() => {
       clearTimeout(debounceTimer);
@@ -174,11 +181,11 @@ export function TripChatProvider({
       unsub();
       clearTimeout(debounceTimer);
     };
-  }, [isActive, loadConversations]);
+  }, [isActive, selfUid, loadConversations]);
 
   // Lightweight always-on realtime: keep unread badges/live indicators fresh even when chat screen is hidden.
   useEffect(() => {
-    if (!organizationId || isActive) return;
+    if (!organizationId || !selfUid || isActive) return;
     return subscribeSharedPostgresChanges(
       `trip_messages:org:${organizationId}`,
       [
@@ -228,7 +235,7 @@ export function TripChatProvider({
 
   // Focused-screen realtime sync: full refresh while user is actively in chat.
   useEffect(() => {
-    if (!isActive || !organizationId) return;
+    if (!isActive || !organizationId || !selfUid) return;
     return subscribeSharedPostgresChanges(
       `trip_messages:org:${organizationId}`,
       [
@@ -243,7 +250,7 @@ export function TripChatProvider({
         void loadConversationsRef.current();
       }
     );
-  }, [isActive, organizationId]);
+  }, [isActive, organizationId, selfUid]);
 
   const sendMessage = useCallback(
     async (conversationId: string, content: string, messageType: MessageType = "text") => {
