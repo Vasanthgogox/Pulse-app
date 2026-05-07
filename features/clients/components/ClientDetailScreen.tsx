@@ -972,13 +972,16 @@ export default function ClientDetailScreen({
       tx.contact_id != null &&
       tx.contact_id === clientId;
 
+    const tripByNormId: Record<string, TripRow> = {};
     // Pass 1a: Init paid/out from trip.amount_paid; attribute tx with trip_id to that trip.
     for (const t of trips) {
       const key = norm(t.id);
+      tripByNormId[key] = t;
       paidByTripId[key] = Number(t.amount_paid ?? 0);
       outByTripId[key] = 0;
     }
     const linkedTxIds = new Set<string>();
+    const manualTripSeedCleared = new Set<string>();
     const unlinkedClientTx: typeof transactions = [];
     for (const tx of transactions) {
       const txTripKey =
@@ -986,6 +989,16 @@ export default function ClientDetailScreen({
           ? norm(tx.trip_id)
           : undefined;
       if (txTripKey !== undefined && isClientLinked(tx)) {
+        // Manual trips sync amount_paid from the same client cash-in ledger entries.
+        // If a linked client tx is present, reset the seeded amount_paid once to avoid double counting.
+        const trip = tripByNormId[txTripKey];
+        const isManualTrip =
+          trip != null &&
+          String(trip.source ?? "").trim().toLowerCase() === "manual";
+        if (isManualTrip && !manualTripSeedCleared.has(txTripKey)) {
+          paidByTripId[txTripKey] = 0;
+          manualTripSeedCleared.add(txTripKey);
+        }
         paidByTripId[txTripKey] =
           (paidByTripId[txTripKey] ?? 0) + Number(tx.amount_in ?? 0);
         outByTripId[txTripKey] =
