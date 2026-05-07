@@ -430,7 +430,7 @@ export function FinanceKanbanTab({
     const vehicleNum = row.vehicle_number ?? (row.trip_id != null ? (getVehicleNumberForTripId?.(row.trip_id) ?? null) : null);
     
     let entityName = getResolvedPartyName(row);
-    if (cat === 'garage' && vehicleNum && entityName === "—") {
+    if (cat === "garage" && vehicleNum) {
       entityName = formatIndianVehicleNumber(vehicleNum);
     }
 
@@ -443,7 +443,7 @@ export function FinanceKanbanTab({
             const rCat = getRowCategory(r);
             const rvNum = r.vehicle_number ?? (r.trip_id != null ? (getVehicleNumberForTripId?.(r.trip_id) ?? null) : null);
             let rParty = getResolvedPartyName(r);
-            if (rCat === 'garage' && rvNum && rParty === "—") {
+            if (rCat === "garage" && rvNum) {
               rParty = formatIndianVehicleNumber(rvNum);
             }
 
@@ -506,7 +506,7 @@ export function FinanceKanbanTab({
     const vehicleNum = row.vehicle_number ?? (row.trip_id != null ? (getVehicleNumberForTripId?.(row.trip_id) ?? null) : null);
     const vehicleStr = vehicleNum ? formatIndianVehicleNumber(vehicleNum) : null;
     let partyName = getResolvedPartyName(row);
-    if (cat === 'garage' && vehicleNum && partyName === "—") {
+    if (cat === "garage" && vehicleNum) {
       partyName = vehicleStr || row.party_name || "—";
     }
     const typeLabel = getDoubleEntryDisplayLabel(row) ?? row.description ?? "GENERAL";
