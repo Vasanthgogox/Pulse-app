@@ -30,11 +30,7 @@ import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntr
 import { getSuppliersByOrganization, type SupplierRow } from "@/features/suppliers";
 import { getTripDisplayNumber, getTripsByOrganization, getTripsWhereOrgIsClient, getTripsWhereOrgIsSupplier, type TripRow } from "@/features/trips";
 import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
-import {
-  AddVehicleEntryModal,
-  getVehiclesByOrganization,
-  type VehicleEntryTripOption,
-} from "@/features/vehicles";
+import { getVehiclesByOrganization } from "@/features/vehicles";
 import { updateSalaryRequestStatus } from "@/services/salaryRequestsService";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { formatLedgerDate, normalizeVehicleNumberForMatch } from "@/lib/format";
@@ -44,11 +40,10 @@ import { ROUTES } from "@/lib/routes";
 import { useQueryClient } from "@tanstack/react-query";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -215,13 +210,6 @@ export default function LedgerSyncScreen() {
   const [transactions, setTransactions] = useState<LedgerRow[] | null>(null);
   const [driverOffers, setDriverOffers] = useState<Record<string, DriverOffer>>({});
   const [editingEntry, setEditingEntry] = useState<LedgerRow | null>(null);
-  /** When we're in vehicle add-entry flow, keep vehicle id so we always fall back to vehicle detail on save/close. */
-  const vehicleIdForFallbackRef = React.useRef<string | null>(null);
-  useEffect(() => {
-    if (params.entityType === "VEHICLE" && params.entityId) {
-      vehicleIdForFallbackRef.current = params.entityId;
-    }
-  }, [params.entityType, params.entityId]);
 
   const orgId = currentOrganization?.id ?? null;
   const queryClient = useQueryClient();
@@ -466,42 +454,12 @@ export default function LedgerSyncScreen() {
     [suppliers, t],
   );
 
-  /** For VEHICLE entity: trip options for AddVehicleEntryModal (with driver_id for auto-fill). */
-  const vehicleTripOptions: VehicleEntryTripOption[] = useMemo(
-    () =>
-      filteredTrips.map((t) => ({
-        id: t.id,
-        trip_number: t.trip_number,
-        route_label: t.route_label ?? null,
-        trip_date: t.trip_date ?? null,
-        driver_id: (t as { driver_id?: string | null }).driver_id ?? null,
-      })),
-    [filteredTrips]
-  );
-
-  const vehicleNumber =
-    params.entityType === "VEHICLE" && params.entityId
-      ? vehicles.find((v) => v.id === params.entityId)?.vehicle_number ?? ""
-      : "";
-
-  const handleVehicleEntrySubmit = useCallback(
-    async (data: Parameters<typeof createLedgerEntry>[1]) => {
-      if (!orgId) return;
-      const { error } = await createLedgerEntry(orgId, data);
-      if (error) {
-        Alert.alert(t("error"), error.message);
-        return;
-      }
-      // Always fall back to vehicle detail page when we're in vehicle add-entry flow.
-      const vehicleId = params.entityId ?? vehicleIdForFallbackRef.current;
-      if (params.entityType === "VEHICLE" && vehicleId) {
-        router.replace(`/vehicle/${vehicleId}`);
-      } else {
-        router.replace(ROUTES.TABS.FINANCE as '/');
-      }
-    },
-    [orgId, router, params.entityType, params.entityId]
-  );
+  /** Vehicle locked when opening from a Vehicle detail page (entityType=VEHICLE). */
+  const lockedVehicleNumber = useMemo(() => {
+    if (params.entityType !== "VEHICLE" || !params.entityId) return null;
+    const fromList = vehicles.find((v) => v.id === params.entityId)?.vehicle_number;
+    return fromList ?? params.partyName ?? null;
+  }, [params.entityType, params.entityId, params.partyName, vehicles]);
 
   /** Map supplier/client id -> linked_organization_id so AddTransactionModal can show trips created by that org (org-as-client or integrated shipper). */
   const supplierLinkedOrgIds = useMemo(() => {
@@ -912,18 +870,6 @@ export default function LedgerSyncScreen() {
     safeBack();
   }, [safeBack]);
 
-  useEffect(() => {
-    if (params.entityType !== "VEHICLE" || !params.entityId) return;
-    const q = new URLSearchParams();
-    q.set("openAddEntry", "1");
-    if (params.tripId) q.set("tripId", params.tripId);
-    const query = q.toString();
-    const target = query ? `/vehicle/${params.entityId}?${query}` : `/vehicle/${params.entityId}`;
-    // Vehicle sync should open from the vehicle financial UI (legacy layout),
-    // then trigger add-entry modal there for consistent UX.
-    router.replace(target as `/vehicle/${string}`);
-  }, [router, params.entityType, params.entityId, params.tripId]);
-
   const partyContext =
     params.partyContext === "customers"
       ? "customers"
@@ -1085,30 +1031,8 @@ export default function LedgerSyncScreen() {
   const isFromDetail = Boolean(params.entityType && params.entityId);
   const entryContextLabel = isFromDetail ? (resolvedEntityPartyName || t("entry")) : null;
 
-  /** Vehicle sync is redirected to vehicle financial view and opens add-entry there. */
-  if (params.entityType === "VEHICLE" && params.entityId) {
-    return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleClose} style={styles.backBtn} hitSlop={8} accessibilityLabel={t("back")}>
-            <FontAwesome name="chevron-left" size={18} color={Theme.textPrimaryDark} />
-          </TouchableOpacity>
-          <View style={styles.headerTitleWrap}>
-            <Text style={styles.headerTitle}>{t("ledgerSync")}</Text>
-            {entryContextLabel ? (
-              <Text style={styles.headerSubtitle} numberOfLines={1}>{entryContextLabel}</Text>
-            ) : null}
-          </View>
-        </View>
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={Theme.primary} />
-          <Text style={styles.redirectHint}>
-            {Platform.OS === "web" ? "Opening vehicle financial view..." : "Opening vehicle screen..."}
-          </Text>
-        </View>
-      </View>
-    );
-  }
+  /** Vehicle sync uses the same full-page AddTransactionModal as drivers/clients/suppliers, with vehicle locked. */
+  const isVehicleEntity = params.entityType === "VEHICLE" && Boolean(params.entityId);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -1154,6 +1078,9 @@ export default function LedgerSyncScreen() {
             ? (resolvedModalPartyName ?? undefined)
             : undefined
         }
+        lockedVehicleId={isVehicleEntity ? (params.entityId ?? null) : null}
+        lockedVehicleNumber={isVehicleEntity ? lockedVehicleNumber : null}
+        hidePartyForCashOut={isVehicleEntity}
         initialEntry={editingEntry}
         entryContextLabel={entryContextLabel ?? undefined}
         lockedAmount={
@@ -1172,10 +1099,12 @@ export default function LedgerSyncScreen() {
             : undefined
         }
         defaultType={
-          (params.defaultType ?? (partyContext === "customers" ? "in" : undefined)) as
-            | "in"
-            | "out"
-            | undefined
+          (params.defaultType ??
+            (partyContext === "customers"
+              ? "in"
+              : isVehicleEntity
+                ? "out"
+                : undefined)) as "in" | "out" | undefined
         }
         defaultTripId={params.tripId ?? undefined}
         tripLocked={tripLedgerLocked}
@@ -1238,11 +1167,5 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-  },
-  redirectHint: {
-    marginTop: 10,
-    color: Theme.textSecondary,
-    fontSize: 12,
-    fontWeight: "500",
   },
 });
