@@ -6,6 +6,7 @@ import type { PartyOption, TripOption, VehicleOption } from "@/components/AddTra
 import {
   AddTransactionModal,
   DRIVER_PAYMENT_TYPES,
+  VEHICLE_CATEGORIES,
   type AddTransactionData,
   type AddTransactionSubmitOptions,
 } from "@/components/AddTransactionModal";
@@ -558,6 +559,10 @@ export default function LedgerSyncScreen() {
         data.type === "out" &&
         data.driverPaymentType &&
         (DRIVER_PAYMENT_TYPES.find((t) => t.type === data.driverPaymentType)?.label ?? data.driverPaymentType);
+      const isVehicleExpenseOut =
+        data.type === "out" &&
+        typeof data.category === "string" &&
+        VEHICLE_CATEGORIES.includes(data.category as (typeof VEHICLE_CATEGORIES)[number]);
 
       // Ensure client cash-in entries are strongly linked so Customers/Client Detail can aggregate them.
       const linkedTrip = data.tripId
@@ -605,7 +610,11 @@ export default function LedgerSyncScreen() {
       }
 
       // Similarly for Cash OUT: if it's an integrated trip we don't own, resolve the correct supplier.
-      if (data.type === "out" && (!resolvedContactId || resolvedContactType === "driver")) {
+      if (
+        data.type === "out" &&
+        !isVehicleExpenseOut &&
+        (!resolvedContactId || resolvedContactType === "driver")
+      ) {
         // If it's a driver payment, we keep it as is. But if it's a generic OUT or we're looking for a supplier:
         if (!resolvedContactId || resolvedContactType !== "driver") {
           const fromTripSupplierId =
@@ -640,7 +649,7 @@ export default function LedgerSyncScreen() {
 
       // For integrated/cross-org supplier payouts, ensure contact_id is mapped to
       // the local supplier id in this org, even when a foreign supplier id is present.
-      if (data.type === "out" && resolvedContactType === "supplier") {
+      if (data.type === "out" && !isVehicleExpenseOut && resolvedContactType === "supplier") {
         const isCrossOrgTripForOut =
           !!linkedTrip?.organization_id &&
           !!orgId &&
@@ -708,8 +717,8 @@ export default function LedgerSyncScreen() {
         amount_in: data.type === "in" ? data.amount : 0,
         amount_out: data.type === "out" ? data.amount : 0,
         transaction_date: transactionDate,
-        contact_id: resolvedContactId,
-        contact_type: resolvedContactType,
+        contact_id: isVehicleExpenseOut ? null : resolvedContactId,
+        contact_type: isVehicleExpenseOut ? null : resolvedContactType,
         indent_id: data.indentId ?? null,
         vehicle_number: data.vehicleNumber ?? null,
         driver_name: resolvedContactType === "driver" ? (data.driverName ?? null) : null,
@@ -751,6 +760,7 @@ export default function LedgerSyncScreen() {
 
       if (
         !options?.entryId &&
+        !isVehicleExpenseOut &&
         data.contactType === "driver" &&
         data.type === "out" &&
         data.driverPaymentType &&

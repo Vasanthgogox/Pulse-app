@@ -1701,9 +1701,20 @@ export function AddTransactionModal({
         safeDrivers.some((d) => d.id === cashOutPayeeId)));
   const isDriverCommissionCategory =
     type === "out" && category === "DRIVER COMMISSION";
+  const isExplicitNonSupplierOutCategory =
+    type === "out" &&
+    category != null &&
+    !(SUPPLIER_CATEGORIES as readonly string[]).includes(
+      category as SupplierCategory,
+    ) &&
+    ((EXPENSE_CATEGORIES as readonly string[]).includes(category) ||
+      VEHICLE_EXPENSE_PARTIES.some(
+        (p) => p.id === category || p.name === category,
+      ));
   const isSupplierPayment =
     type === "out" &&
     !hidePartyForCashOut &&
+    !isExplicitNonSupplierOutCategory &&
     (cashOutPayeeId != null
       ? safeSuppliers.some((s) => s.id === cashOutPayeeId)
       : effectivePartyId != null &&
@@ -2098,13 +2109,10 @@ export function AddTransactionModal({
         setCategory("Trip Payment");
       return;
     }
-    if (type === "out") {
-      if (
-        category !== "SUPPLIER PAYMENT" &&
-        category !== "DRIVER SALARY" &&
-        category !== "DRIVER COMMISSION"
-      )
-        setCategory("SUPPLIER PAYMENT");
+    if (type === "out" && !category) {
+      // Keep user-selected OUT category (including vehicle expense categories).
+      // Only seed a default when nothing is selected yet.
+      setCategory("SUPPLIER PAYMENT");
     }
   }, [
     visible,
@@ -2435,6 +2443,14 @@ export function AddTransactionModal({
         : isUnlinkedMisc
           ? null
           : (contactType ?? undefined);
+    const isVehicleExpenseEntry =
+      type === "out" && (isVehicleExpenseOut || isVehicleExpenseCategory);
+    const normalizedContactIdForSubmit = isVehicleExpenseEntry
+      ? null
+      : (finalContactId ?? undefined);
+    const normalizedContactTypeForSubmit = isVehicleExpenseEntry
+      ? null
+      : (finalContactType ?? undefined);
     const finalDriverPaymentType = isDriverSalaryParty
       ? "salary"
       : isDriverPayment
@@ -2541,13 +2557,13 @@ export function AddTransactionModal({
               ? (effectivePartyId ?? undefined)
               : (normalizedCategory ?? undefined)
             : undefined,
-      driverPaymentType: finalDriverPaymentType,
-      contactId: finalContactId ?? undefined,
-      contactType: finalContactType ?? undefined,
+      driverPaymentType: isVehicleExpenseEntry ? undefined : finalDriverPaymentType,
+      contactId: normalizedContactIdForSubmit ?? undefined,
+      contactType: normalizedContactTypeForSubmit ?? undefined,
       vehicleNumber: selectedVehicleNumber ?? undefined,
       driverName:
-        type === "out" && finalContactType === "driver"
-          ? (safeDrivers.find((d) => d.id === (finalContactId ?? ""))?.name ??
+        type === "out" && normalizedContactTypeForSubmit === "driver"
+          ? (safeDrivers.find((d) => d.id === (normalizedContactIdForSubmit ?? ""))?.name ??
             effectivePartyName ??
             null)
           : undefined,

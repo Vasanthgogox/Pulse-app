@@ -1030,9 +1030,31 @@ export default function TripDetailScreen({
 
       const { error } = await updateTripStatus(trip.id, updateData);
       if (error) {
-        setSimError(error.message);
-        setSimulating(false);
-        return;
+        // Simulation fallback: allow final completion even when strict business validation
+        // (e.g. supplier-link checks) blocks status transition in normal flows.
+        if (simConfirmStep.targetStatus === "completed") {
+          const fallbackUpdate: Record<string, unknown> = {
+            status: "completed",
+            completed_at: simConfirmStep.completed_at ?? new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+          if (simConfirmStep.started_at) {
+            fallbackUpdate.started_at = simConfirmStep.started_at;
+          }
+          const { error: fallbackError } = await supabase()
+            .from("trips")
+            .update(fallbackUpdate)
+            .eq("id", trip.id);
+          if (fallbackError) {
+            setSimError(fallbackError.message);
+            setSimulating(false);
+            return;
+          }
+        } else {
+          setSimError(error.message);
+          setSimulating(false);
+          return;
+        }
       }
 
       // DB trigger posts Trip System lines to `trip_messages`; refetch in-app trip chat
@@ -1107,13 +1129,16 @@ export default function TripDetailScreen({
   const isTripCompleted =
     String(trip.status ?? "").toLowerCase() === "completed" ||
     !!trip.completed_at;
+  const effectiveStatusLower = isTripCompleted
+    ? "completed"
+    : String(trip.status ?? "assigned").toLowerCase();
   const hasAnyAssignment =
     !!trip.driver_id ||
     !!trip.vehicle_id ||
     !!String(trip.driver_display_name ?? "").trim() ||
     !!String(trip.vehicle_display_number ?? "").trim();
   const currentStatusLabel = (() => {
-    const s = String(trip.status ?? "assigned").toLowerCase();
+    const s = effectiveStatusLower;
     if (s === "assigned" && !hasAnyAssignment) return "UNASSIGNED";
     return s.replace(/_/g, " ").toUpperCase();
   })();
@@ -1651,7 +1676,7 @@ export default function TripDetailScreen({
   };
 
   // ── Dashboard: computed values ─────────────────────────────────────────────
-  const statusLower = (trip.status ?? "").toLowerCase();
+  const statusLower = effectiveStatusLower;
   const statusLabel =
     statusLower.includes("in_transit") || statusLower.includes("transit")
       ? "In Transit"
@@ -2846,14 +2871,18 @@ export default function TripDetailScreen({
                         <Text style={neoStyles.cardTitleDark}>
                           Manifest Pulse
                         </Text>
-                        {nextSimulateStep && currentStepIndex < 3 ? (
+                        {nextSimulateStep && !isTripCompleted ? (
                           <TouchableOpacity
                             style={neoStyles.simBtn}
                             onPress={() => setSimConfirmStep(nextSimulateStep)}
                             activeOpacity={0.85}
                           >
                             <Feather name="zap" size={11} color="#f59e0b" />
-                            <Text style={neoStyles.simBtnText}>Simulate</Text>
+                            <Text style={neoStyles.simBtnText}>
+                              {nextSimulateStep.targetStatus === "completed"
+                                ? "Simulate Complete"
+                                : "Simulate"}
+                            </Text>
                           </TouchableOpacity>
                         ) : null}
                       </View>
