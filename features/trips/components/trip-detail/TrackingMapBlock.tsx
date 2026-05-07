@@ -297,7 +297,7 @@ export function TrackingMapBlock({
   tripLocationPoints = [],
   locationAddress,
 }: TrackingMapBlockProps) {
-  const [origin, past1, past2, , destination] = locationLabels;
+  const [origin, past1, past2, currentLabel, destination] = locationLabels;
   const mapRef = useRef<LeafletMapRef | null>(null);
   const [fallbackRoute, setFallbackRoute] = useState<RouteResult | null>(null);
 
@@ -452,12 +452,23 @@ export function TrackingMapBlock({
           }
         : null
     );
+
+    // Always show a distinct live pointer when available.
+    pushMarker(
+      latestCoordinate
+        ? {
+            id: "live",
+            coordinate: latestCoordinate,
+            title: locationAddress?.trim() || currentLabel || "Current location",
+          }
+        : null
+    );
     return nextMarkers;
   }, [
+    currentLabel,
     destination,
     historyCoordinates,
     latestCoordinate,
-    latestLocation,
     locationAddress,
     normalizedDestinationCoordinate,
     normalizedOriginCoordinate,
@@ -501,6 +512,8 @@ export function TrackingMapBlock({
         ? Theme.negative
         : m.id === "destination"
           ? Theme.positive
+          : m.id === "live"
+            ? Theme.primary
           : Theme.primaryLight,
   }));
 

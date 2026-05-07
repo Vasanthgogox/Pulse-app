@@ -280,10 +280,9 @@ async function getExpoLocation(): Promise<typeof ExpoLocation | null> {
   }
 }
 
-/** Location report interval: 10s in dev, 30s in production when driver is on trip. */
-const LOCATION_REPORT_INTERVAL_MS = __DEV__ ? 10 * 1000 : 30 * 1000;
-/** Minimum displacement (metres) before sending another point; skip noisy duplicates. */
-const MIN_DISPLACEMENT_M = 30;
+/** Route checkpoint cadence while trip is moving (fixed 5-minute DB writes). */
+// DEV: reduced to 15s for testing pin trail; restore to 5 * 60 * 1000 before shipping
+const LOCATION_REPORT_INTERVAL_MS = __DEV__ ? 15 * 1000 : 5 * 60 * 1000;
 
 /** Approximate distance in metres between two WGS84 points (Haversine-style). */
 function distanceMeters(
@@ -507,6 +506,10 @@ export default function DriverRadarScreen() {
     latitude: number;
     longitude: number;
   } | null>(null);
+  // DEV: last 3 background-pinned coordinates for the active trip
+  const [recentPinPoints, setRecentPinPoints] = useState<
+    { latitude: number; longitude: number; recorded_at: string }[]
+  >([]);
   // Truck marker position shown on the map; animated independently from raw GPS.
   const [truckPosition, setTruckPosition] = useState<{
     latitude: number;
@@ -998,8 +1001,8 @@ export default function DriverRadarScreen() {
       accuracy: number | null,
       source: driverLocationService.DriverLocationSource,
     ) => {
-      if (!driver?.organization_id) return;
-      await driverLocationService.reportDriverLocation({
+      if (!driver?.organization_id) return false;
+      const { error } = await driverLocationService.reportDriverLocation({
         driverId: driver.id,
         organizationId: driver.organization_id,
         tripId,
@@ -1008,9 +1011,17 @@ export default function DriverRadarScreen() {
         accuracy,
         source,
       });
+      return !error;
     },
     [driver],
   );
+
+  const fetchAndLogRecentPins = useCallback(async (tripId: string) => {
+    const { points } = await driverLocationService.getLastNLocationsForTrip(tripId, 3);
+    // DEV: log last 3 pinned coordinates
+    console.log('[DEV] Last 3 pinned coordinates for trip', tripId, points);
+    setRecentPinPoints(points);
+  }, []);
 
   useEffect(() => {
     if (!isOnline) return;
@@ -1830,20 +1841,24 @@ export default function DriverRadarScreen() {
         > = await expoLocation.getCurrentPositionAsync({});
         const { latitude, longitude } = pos.coords;
         const acc = pos.coords.accuracy ?? null;
-        const last = lastSentLocationRef.current;
-        const shouldSend =
-          !last ||
-          distanceMeters(last.lat, last.lng, latitude, longitude) >=
-            MIN_DISPLACEMENT_M;
-        if (shouldSend) {
-          await reportLocationToDb(
+        const step = deriveDriverGuidanceStep(activeGuidanceTrip);
+        const shouldPersistCheckpoint =
+          step === "accepted" ||
+          step === "pickup" ||
+          step === "transit" ||
+          step === "reached";
+        if (shouldPersistCheckpoint) {
+          const saved = await reportLocationToDb(
             activeGuidanceTrip.id,
             latitude,
             longitude,
             acc,
-            "live",
+            "background",
           );
-          lastSentLocationRef.current = { lat: latitude, lng: longitude };
+          if (saved) {
+            lastSentLocationRef.current = { lat: latitude, lng: longitude };
+            void fetchAndLogRecentPins(activeGuidanceTrip.id);
+          }
         }
         setDriverMapPosition({ latitude, longitude });
 
@@ -1884,7 +1899,16 @@ export default function DriverRadarScreen() {
       clearInterval(id);
       locationIntervalRef.current = null;
     };
-  }, [driver, activeGuidanceTrip, reportLocationToDb]);
+  }, [driver, activeGuidanceTrip, reportLocationToDb, fetchAndLogRecentPins]);
+
+  // DEV: fetch last 3 pinned locations whenever the active trip changes
+  useEffect(() => {
+    if (!activeGuidanceTrip?.id) {
+      setRecentPinPoints([]);
+      return;
+    }
+    void fetchAndLogRecentPins(activeGuidanceTrip.id);
+  }, [activeGuidanceTrip?.id, fetchAndLogRecentPins]);
 
   // Blink/ping for pickup dot and Live badge on the offline "Assigned trip waiting" card (must run after effectiveFirstIncoming is defined)
   const showOfflineAssignedCard = Boolean(
@@ -3244,6 +3268,14 @@ export default function DriverRadarScreen() {
         color: "#f59e0b",
       });
     }
+    // DEV: last 3 pinned location dots
+    recentPinPoints.forEach((pt, i) => {
+      leafletMarkers.push({
+        id: `pin-${i}`,
+        coordinate: { latitude: pt.latitude, longitude: pt.longitude },
+        color: '#94a3b8',
+      });
+    });
 
     const fallbackCoordinates =
       activeGuidanceTrip && driverMapPosition && guidanceTargetCoordinate
@@ -3430,6 +3462,17 @@ export default function DriverRadarScreen() {
                 </MapCallout>
               </OlaAnimatedMarker>
             ) : null}
+
+            {/* DEV: last 3 pinned location dots */}
+            {recentPinPoints.map((pt, i) => (
+              <MapMarker
+                key={`pin-${i}`}
+                coordinate={{ latitude: pt.latitude, longitude: pt.longitude }}
+                anchor={{ x: 0.5, y: 0.5 }}
+              >
+                <View style={styles.pinHistoryDot} />
+              </MapMarker>
+            ))}
 
             {shouldShowMap && routeContextTrip && (
               <>
@@ -7463,6 +7506,14 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
+  },
+  pinHistoryDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#94a3b8',
+    borderWidth: 1.5,
+    borderColor: 'white',
   },
   compactInviteCard: {
     flexDirection: "row",
