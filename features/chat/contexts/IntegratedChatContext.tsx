@@ -11,7 +11,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { subscribeSharedPostgresChanges } from "@/lib/realtimeRegistry";
 import * as chatService from "../services/chat.service";
-import type { NetworkConversation, NetworkMessageRow, NetworkPartner } from "../types/chat.types";
+import type {
+  NetworkConversation,
+  NetworkConversationRow,
+  NetworkMessageRow,
+  NetworkPartner,
+} from "../types/chat.types";
 
 export type { NetworkConversation, NetworkPartner };
 
@@ -78,6 +83,36 @@ function formatRelativeTime(isoString: string): string {
   if (hours < 24) return `${hours} hour${hours > 1 ? "s" : ""} ago`;
   const days = Math.floor(hours / 24);
   return days === 1 ? "Yesterday" : `${days} days ago`;
+}
+
+/** Org-scoped Realtime specs — avoids full-table WAL on network_messages (no receiver column). */
+function networkConversationsOrgSpecs(orgId: string) {
+  return [
+    {
+      event: "INSERT" as const,
+      schema: "public",
+      table: "network_conversations",
+      filter: `org_a_id=eq.${orgId}`,
+    },
+    {
+      event: "INSERT" as const,
+      schema: "public",
+      table: "network_conversations",
+      filter: `org_b_id=eq.${orgId}`,
+    },
+    {
+      event: "UPDATE" as const,
+      schema: "public",
+      table: "network_conversations",
+      filter: `org_a_id=eq.${orgId}`,
+    },
+    {
+      event: "UPDATE" as const,
+      schema: "public",
+      table: "network_conversations",
+      filter: `org_b_id=eq.${orgId}`,
+    },
+  ];
 }
 
 function toIntegratedChat(conv: NetworkConversation, currentOrgId: string): IntegratedChat {
@@ -166,47 +201,41 @@ export function IntegratedChatProvider({
     };
   }, []);
 
-  // Lightweight always-on realtime: keep network unread badges fresh when chat screen is hidden.
+  // Lightweight always-on realtime: conversation rows only (org-filtered), not global network_messages WAL.
   useEffect(() => {
     if (!orgId || isActive) return;
     return subscribeSharedPostgresChanges(
-      `network_messages:org:${orgId}`,
-      [
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "network_messages",
-        },
-      ],
+      `network_conversations:org:${orgId}`,
+      networkConversationsOrgSpecs(orgId),
       (payload) => {
-        if (isActive) return; // focused screen uses full sync effect below
-        const row = payload.new as Partial<NetworkMessageRow> | null;
-        const conversationId = row?.conversation_id;
-        if (!conversationId) return;
-        if (row?.sender_org_id && row.sender_org_id === orgId) return;
+        if (isActive) return;
+        const row = payload.new as Partial<NetworkConversationRow> | null;
+        if (!row?.id || row.org_a_id == null || row.org_b_id == null) return;
+
+        const myUnread =
+          row.org_a_id === orgId ? row.unread_count_a : row.unread_count_b;
+        if (typeof myUnread !== "number") return;
 
         let found = false;
-        setConversations((prev) =>
-          prev.map((conv) => {
-            if (conv.id !== conversationId) return conv;
+        setConversations((prev) => {
+          const next = prev.map((conv) => {
+            if (conv.id !== row.id) return conv;
             found = true;
             return {
               ...conv,
-              unread_count: (conv.unread_count ?? 0) + 1,
-              last_message_at: row?.created_at ?? conv.last_message_at,
-              last_message_preview:
-                typeof row?.content === "string" && row.content.trim().length > 0
-                  ? row.content.slice(0, 120)
-                  : conv.last_message_preview,
+              unread_count: myUnread,
+              last_message_at: row.last_message_at ?? conv.last_message_at,
+              last_message_preview: row.last_message_preview ?? conv.last_message_preview,
             };
-          })
-        );
+          });
+          return next;
+        });
 
         if (!found) {
           const now = Date.now();
-          const last = missingNetConvRefreshAtRef.current[conversationId] ?? 0;
+          const last = missingNetConvRefreshAtRef.current[row.id] ?? 0;
           if (now - last > 10_000) {
-            missingNetConvRefreshAtRef.current[conversationId] = now;
+            missingNetConvRefreshAtRef.current[row.id] = now;
             queueRefreshData();
           }
         }
@@ -214,18 +243,12 @@ export function IntegratedChatProvider({
     );
   }, [orgId, isActive, queueRefreshData]);
 
-  // Realtime: full network sync while chat screen is focused
+  // Focused screen: full sync on conversation insert/update for this org (still org-filtered).
   useEffect(() => {
     if (!isActive || !orgId) return;
     return subscribeSharedPostgresChanges(
-      `network_messages:org:${orgId}`,
-      [
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "network_messages",
-        },
-      ],
+      `network_conversations:org:${orgId}`,
+      networkConversationsOrgSpecs(orgId),
       () => {
         queueRefreshData();
       }

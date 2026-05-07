@@ -13,7 +13,6 @@ import { isSessionExpiredError } from '@/features/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { makeQueryClient } from '@/lib/queryClient';
 import { hasSupabaseConfig, SUPABASE_CONFIG_MISSING_MESSAGE } from '@/lib/supabase';
-import { supabase } from '@/lib/supabase';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
@@ -306,7 +305,6 @@ function RootLayoutNav() {
           <IntegratedChatProvider isActive={isDispatcherChatRouteActive}>
             <View style={{ flex: 1 }}>
               <AppAlertHost />
-              {__DEV__ ? <RealtimeDebugProbe /> : null}
               <Stack screenOptions={{ headerShown: false }}>
                 <Stack.Screen name="index" />
                 <Stack.Screen name="welcome" options={{ animation: 'fade' }} />
@@ -331,24 +329,6 @@ function RootLayoutNav() {
       </DemoTabBarScrollProvider>
     </ThemeProvider>
   );
-}
-
-function RealtimeDebugProbe() {
-  useEffect(() => {
-    const id = setInterval(() => {
-      const channels = supabase().getChannels();
-      console.log(
-        `[rt-debug ${new Date().toLocaleTimeString()}] channels=${channels.length}`
-      );
-      channels.forEach((channel) => {
-        console.log(' ->', channel.topic, '|', channel.state);
-      });
-    }, 3000);
-
-    return () => clearInterval(id);
-  }, []);
-
-  return null;
 }
 
 function RootOverlayTabBar() {

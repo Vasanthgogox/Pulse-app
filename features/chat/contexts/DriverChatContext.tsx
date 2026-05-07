@@ -187,9 +187,10 @@ export function DriverChatProvider({
     [driverIds, profile, loadConversations, uid],
   );
 
-  // Realtime: merge inserts for known threads; refetch if conversation not loaded yet
+  // Realtime: INSERT on trip_messages (spec has no driver filter — deps must not include
+  // `driverIds` or every refetch produces a new [] reference and tears the channel down).
   useEffect(() => {
-    if (!isActive || !driverIds.length || !uid) return;
+    if (!isActive || !uid) return;
     return subscribeSharedPostgresChanges(
       `driver_trip_messages:user:${uid}`,
       [
@@ -203,7 +204,7 @@ export function DriverChatProvider({
         queueRefreshConversations();
       }
     );
-  }, [isActive, driverIds, uid, queueRefreshConversations]);
+  }, [isActive, uid, queueRefreshConversations]);
 
   const sendMessage = useCallback(
     async (conversationId: string, organizationId: string, content: string) => {
