@@ -12,6 +12,11 @@ import * as authService from '@/features/auth';
 import { isSessionExpiredError } from '@/features/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { makeQueryClient } from '@/lib/queryClient';
+import {
+  installRealtimeDiagnosticsGlobalHook,
+  startRealtimeDiagnosticsLogger,
+  stopRealtimeDiagnosticsLogger,
+} from '@/lib/realtimeRegistry';
 import { hasSupabaseConfig, SUPABASE_CONFIG_MISSING_MESSAGE } from '@/lib/supabase';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
@@ -297,6 +302,15 @@ function RootLayoutNav() {
       pathname === ROUTES.TABS.NETWORK ||
       pathname === '/chat' ||
       pathname.startsWith('/chat/'));
+
+  useEffect(() => {
+    if (!__DEV__) return;
+    installRealtimeDiagnosticsGlobalHook();
+    startRealtimeDiagnosticsLogger();
+    return () => {
+      stopRealtimeDiagnosticsLogger();
+    };
+  }, []);
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>

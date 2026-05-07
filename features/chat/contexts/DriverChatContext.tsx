@@ -3,6 +3,7 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -187,24 +188,38 @@ export function DriverChatProvider({
     [driverIds, profile, loadConversations, uid],
   );
 
-  // Realtime: INSERT on trip_messages (spec has no driver filter — deps must not include
-  // `driverIds` or every refetch produces a new [] reference and tears the channel down).
+  // Derive unique org IDs from loaded conversations so we subscribe per-org
+  // instead of the entire trip_messages table (full-table WAL fanout).
+  const conversationOrgIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const c of conversations) {
+      if (c.organization_id) ids.add(c.organization_id);
+    }
+    return Array.from(ids).sort();
+  }, [conversations]);
+  const orgIdsKey = conversationOrgIds.join(",");
+
   useEffect(() => {
-    if (!isActive || !uid) return;
-    return subscribeSharedPostgresChanges(
-      `driver_trip_messages:user:${uid}`,
-      [
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "trip_messages",
-        },
-      ],
-      () => {
-        queueRefreshConversations();
-      }
+    if (!isActive || !uid || !orgIdsKey) return;
+    const orgIds = orgIdsKey.split(",").filter(Boolean);
+    const unsubs = orgIds.map((orgId) =>
+      subscribeSharedPostgresChanges(
+        `trip_messages:org:${orgId}`,
+        [
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "trip_messages",
+            filter: `organization_id=eq.${orgId}`,
+          },
+        ],
+        () => {
+          queueRefreshConversations();
+        }
+      )
     );
-  }, [isActive, uid, queueRefreshConversations]);
+    return () => unsubs.forEach((u) => u());
+  }, [isActive, uid, orgIdsKey, queueRefreshConversations]);
 
   const sendMessage = useCallback(
     async (conversationId: string, organizationId: string, content: string) => {

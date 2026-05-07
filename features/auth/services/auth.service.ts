@@ -54,6 +54,12 @@ export interface AuthProfile {
   memberships?: Record<string, unknown>;
 }
 
+const AUTH_EVENT_DEBOUNCE_MS = 800;
+const REFRESH_DEBOUNCE_MS = 1000;
+let refreshSessionInFlight: Promise<{ user: AuthUser; profile: AuthProfile } | null> | null = null;
+let lastRefreshSessionAt = 0;
+let lastRefreshSessionResult: { user: AuthUser; profile: AuthProfile } | null = null;
+
 function mapSupabaseUserToAuth(user: SupabaseUser): {
   user: AuthUser;
   profile: AuthProfile;
@@ -765,43 +771,128 @@ export async function refreshSession(): Promise<{
   user: AuthUser;
   profile: AuthProfile;
 } | null> {
-  try {
-    const { data: { user }, error } = await supabase().auth.getUser();
-    if (error || !user) return null;
-
-    // Base profile from auth metadata (immediate source after avatar/profile updates).
-    const base = mapSupabaseUserToAuth(user);
-
-    // Fetch from public.profiles and merge with metadata so stale DB values don't hide fresh updates.
-    const { data: profile } = await supabase()
-      .from("profiles")
-      .select("*")
-      .eq("id", user.id)
-      .single();
-
-    if (profile) {
-      const dbProfile = mapDbProfileToAuth(profile);
-      const merged: AuthProfile = {
-        ...base.profile,
-        ...dbProfile,
-        avatar_url: dbProfile.avatar_url ?? base.profile.avatar_url,
-        avatar_seed: dbProfile.avatar_seed ?? base.profile.avatar_seed,
-        status_text: dbProfile.status_text ?? base.profile.status_text,
-        company_name: dbProfile.company_name ?? base.profile.company_name,
-        phone: dbProfile.phone ?? base.profile.phone,
-        full_name: dbProfile.full_name ?? base.profile.full_name,
-        displayName: dbProfile.displayName || base.profile.displayName,
-      };
-      return {
-        user: { uid: user.id, email: user.email ?? "", displayName: merged.displayName || "User" },
-        profile: merged,
-      };
-    }
-
-    return base;
-  } catch {
-    return null;
+  const now = Date.now();
+  if (refreshSessionInFlight) return refreshSessionInFlight;
+  if (now - lastRefreshSessionAt < REFRESH_DEBOUNCE_MS && lastRefreshSessionResult) {
+    return lastRefreshSessionResult;
   }
+  refreshSessionInFlight = (async () => {
+    try {
+      const { data: { user }, error } = await supabase().auth.getUser();
+      if (error || !user) return null;
+
+      // Base profile from auth metadata (immediate source after avatar/profile updates).
+      const base = mapSupabaseUserToAuth(user);
+
+      // Fetch from public.profiles and merge with metadata so stale DB values don't hide fresh updates.
+      const { data: profile } = await supabase()
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .single();
+
+      if (profile) {
+        const dbProfile = mapDbProfileToAuth(profile);
+        const merged: AuthProfile = {
+          ...base.profile,
+          ...dbProfile,
+          avatar_url: dbProfile.avatar_url ?? base.profile.avatar_url,
+          avatar_seed: dbProfile.avatar_seed ?? base.profile.avatar_seed,
+          status_text: dbProfile.status_text ?? base.profile.status_text,
+          company_name: dbProfile.company_name ?? base.profile.company_name,
+          phone: dbProfile.phone ?? base.profile.phone,
+          full_name: dbProfile.full_name ?? base.profile.full_name,
+          displayName: dbProfile.displayName || base.profile.displayName,
+        };
+        return {
+          user: { uid: user.id, email: user.email ?? "", displayName: merged.displayName || "User" },
+          profile: merged,
+        };
+      }
+
+      return base;
+    } catch {
+      return null;
+    }
+  })();
+  const result = await refreshSessionInFlight;
+  lastRefreshSessionAt = Date.now();
+  lastRefreshSessionResult = result;
+  refreshSessionInFlight = null;
+  return result;
+}
+
+const authEventGate = new Map<string, number>();
+
+function shouldSkipAuthEvent(event: string, userId: string | null): boolean {
+  const gateKey = `${event}:${userId ?? "none"}`;
+  const now = Date.now();
+  const last = authEventGate.get(gateKey) ?? 0;
+  authEventGate.set(gateKey, now);
+  return now - last < AUTH_EVENT_DEBOUNCE_MS;
+}
+
+function flushAuthEventGate(maxEntries = 64) {
+  if (authEventGate.size <= maxEntries) return;
+  const items = Array.from(authEventGate.entries()).sort((a, b) => b[1] - a[1]);
+  authEventGate.clear();
+  for (const [key, ts] of items.slice(0, maxEntries)) {
+    authEventGate.set(key, ts);
+  }
+}
+
+export function onAuthStateChange(
+  callback: (auth: { user: AuthUser; profile: AuthProfile } | null) => void | Promise<void>,
+): () => void {
+  let isProcessing = false;
+  let queuedPayload: { user: AuthUser; profile: AuthProfile } | null | undefined;
+
+  const runCallback = (payload: { user: AuthUser; profile: AuthProfile } | null) => {
+    if (isProcessing) {
+      queuedPayload = payload;
+      return;
+    }
+    isProcessing = true;
+    void Promise.resolve(callback(payload))
+      .catch((err: unknown) => {
+        console.warn("[auth] onAuthStateChange callback failed:", err);
+      })
+      .finally(() => {
+        isProcessing = false;
+        if (queuedPayload !== undefined) {
+          const next = queuedPayload;
+          queuedPayload = undefined;
+          runCallback(next ?? null);
+        }
+      });
+  };
+
+  const {
+    data: { subscription },
+  } = supabase().auth.onAuthStateChange((event, session) => {
+    // TOKEN_REFRESHED and INITIAL_SESSION are internal SDK lifecycle events.
+    // The SDK manages token rotation silently; propagating them triggers a full
+    // DB profile re-verification on every tab focus / cold-start subscription
+    // fire, causing unnecessary re-renders and the "reload to Trips" symptom.
+    // USER_UPDATED fires after updateUser() which already calls refreshSession()
+    // in the callers — no need to double-process here.
+    if (
+      event === 'TOKEN_REFRESHED' ||
+      event === 'INITIAL_SESSION' ||
+      event === 'USER_UPDATED'
+    ) {
+      return;
+    }
+    const userId = session?.user?.id ?? null;
+    if (shouldSkipAuthEvent(event, userId)) return;
+    flushAuthEventGate();
+    if (!session?.user) {
+      runCallback(null);
+      return;
+    }
+    runCallback(mapSupabaseUserToAuth(session.user));
+  });
+  return () => subscription.unsubscribe();
 }
 
 /** Fetch a specific user's profile from the public.profiles table. */
@@ -860,33 +951,6 @@ export async function ensureCurrentUserProfile(): Promise<{ error: Error | null 
   }
 }
 
-export function onAuthStateChange(
-  callback: (auth: { user: AuthUser; profile: AuthProfile } | null) => void,
-): () => void {
-  const {
-    data: { subscription },
-  } = supabase().auth.onAuthStateChange((event, session) => {
-    // TOKEN_REFRESHED and INITIAL_SESSION are internal SDK lifecycle events.
-    // The SDK manages token rotation silently; propagating them triggers a full
-    // DB profile re-verification on every tab focus / cold-start subscription
-    // fire, causing unnecessary re-renders and the "reload to Trips" symptom.
-    // USER_UPDATED fires after updateUser() which already calls refreshSession()
-    // in the callers — no need to double-process here.
-    if (
-      event === 'TOKEN_REFRESHED' ||
-      event === 'INITIAL_SESSION' ||
-      event === 'USER_UPDATED'
-    ) {
-      return;
-    }
-    if (!session?.user) {
-      callback(null);
-      return;
-    }
-    callback(mapSupabaseUserToAuth(session.user));
-  });
-  return () => subscription.unsubscribe();
-}
 
 /** Updates to apply to the current user's profile (stored in auth user_metadata and public.profiles). */
 export interface UpdateProfileOptions {
