@@ -79,6 +79,20 @@ export function tripInPeriod(
   return tripMonth === period;
 }
 
+/** Ledger row date in Garage period (transaction_date, else created_at). */
+export function ledgerTransactionInPeriod(
+  tx: LedgerRow,
+  period: GarragePeriodValue,
+): boolean {
+  const dateStr = (tx.transaction_date ?? tx.created_at ?? "").slice(0, 10);
+  if (!dateStr) return false;
+  if (period.startsWith("ytd-")) {
+    const year = parseInt(period.slice(4), 10);
+    return parseInt(dateStr.slice(0, 4), 10) === year;
+  }
+  return dateStr.slice(0, 7) === period;
+}
+
 /** Format period for display: '2026-03' → 'MAR 2026', 'ytd-2026' → 'YTD 2026' */
 const MONTH_LABELS: Record<string, string> = {
   "01": "JAN",
@@ -356,7 +370,36 @@ export function buildVehiclePnLList(
     row.pnl += net;
   });
 
+  /** Trip-linked cash-out already rolled into outByTripId / row.expense above — do not double-count. */
+  const standaloneExpenseByVehicleId = new Map<string, number>();
+  for (const tx of transactions ?? []) {
+    const out = Number(tx.amount_out ?? 0);
+    if (out <= 0) continue;
+    if (tx.contact_type === "driver" || isDriverPaymentByDescription(tx)) continue;
+    if (!ledgerTransactionInPeriod(tx, period)) continue;
+    const tripId = tx.trip_id?.trim();
+    const countedViaTrip = Boolean(tripId && outByTripId[tripId] != null);
+    if (countedViaTrip) continue;
+    const vNum = (tx.vehicle_number ?? "").trim();
+    if (!vNum) continue;
+    const norm = normalizeVehicleNumberForMatch(vNum);
+    if (!norm) continue;
+    const vid = resolutionContext.vehicleIdByNormalizedNumber.get(norm);
+    if (!vid) continue;
+    standaloneExpenseByVehicleId.set(
+      vid,
+      (standaloneExpenseByVehicleId.get(vid) ?? 0) + out,
+    );
+  }
+
   const list = Array.from(vMap.values());
+  for (const r of list) {
+    const extra = standaloneExpenseByVehicleId.get(r.id) ?? 0;
+    if (extra > 0) {
+      r.expense += extra;
+      r.pnl -= extra;
+    }
+  }
   list.forEach((r) => {
     r.margin = r.sales > 0 ? (r.pnl / r.sales) * 100 : r.expense > 0 ? -100 : 0;
   });
