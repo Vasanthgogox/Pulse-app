@@ -669,6 +669,13 @@ interface AddTransactionModalProps {
   viewerOrgId?: string | null;
   /** When true (e.g. Garrage/vehicle context), hide party dropdown for Cash OUT and use vehicle expense categories as first field. */
   hidePartyForCashOut?: boolean;
+  /**
+   * When set (e.g. opened from a Vehicle detail page), pre-select this vehicle in the vehicle row and
+   * make it read-only. Trips list is filtered to this vehicle, and `vehicleNumber` is included on submit.
+   */
+  lockedVehicleId?: string | null;
+  /** Display name for the locked vehicle (e.g. registration number); falls back to value resolved from `vehicles`. */
+  lockedVehicleNumber?: string | null;
   /** Cash IN: suggested receivable in amount placeholder when the field is empty (e.g. customer / trip pending). */
   dueAmountIn?: number | null;
   /** Cash OUT: suggested payable in amount placeholder when the field is empty (e.g. supplier / driver due). */
@@ -711,6 +718,8 @@ export function AddTransactionModal({
   linkedSupplierIdByOrgId,
   viewerOrgId,
   hidePartyForCashOut = false,
+  lockedVehicleId = null,
+  lockedVehicleNumber = null,
   dueAmountIn = null,
   dueAmountOut = null,
   ledgerTransactions = null,
@@ -726,7 +735,18 @@ export function AddTransactionModal({
   const safeClients = clients ?? [];
   const safeSuppliers = suppliers ?? [];
   const safeDrivers = drivers ?? [];
-  const safeVehicles = vehicles ?? [];
+  const baseSafeVehicles = vehicles ?? [];
+  // When a vehicle is locked (e.g. opened from a Vehicle detail page), make sure it is present
+  // in the vehicle list so the row can render its name even before the vehicles fetch settles.
+  const safeVehicles = useMemo(() => {
+    if (!lockedVehicleId) return baseSafeVehicles;
+    if (baseSafeVehicles.some((v) => v.id === lockedVehicleId)) return baseSafeVehicles;
+    return [
+      { id: lockedVehicleId, vehicle_number: lockedVehicleNumber ?? "" },
+      ...baseSafeVehicles,
+    ];
+  }, [baseSafeVehicles, lockedVehicleId, lockedVehicleNumber]);
+  const isVehicleLocked = lockedVehicleId != null;
   const safeTrips = trips ?? [];
 
   const [type, setType] = useState<TransactionType>(
@@ -1887,11 +1907,17 @@ export function AddTransactionModal({
         (defaultDriverPaymentType == null ? null : defaultDriverPaymentType) as DriverPaymentType | null
       );
     }
+    // Vehicle context lock: pre-select the locked vehicle so trips/expense flow already know which
+    // vehicle this entry belongs to (otherwise the trip filter is empty until user picks one).
+    if (lockedVehicleId != null) {
+      setSelectedVehicleIdForExpense(lockedVehicleId);
+    }
   }, [
     visible,
     defaultPartyId,
     lockedPartyId,
     lockedAmount,
+    lockedVehicleId,
     defaultTripId,
     defaultType,
     defaultContactId,
@@ -1923,6 +1949,15 @@ export function AddTransactionModal({
   useEffect(() => {
     if (!visible || tripLocked || !effectivePartyIdForTrips || selectedTripIds.length === 0)
       return;
+    // If the UI has only one possible party for the selected trip/context, keep it stable.
+    // This prevents an auto-select/clear ping-pong that can cause render-depth overflow on web.
+    if (
+      partyOptions.length === 1 &&
+      partyOptions[0]?.id != null &&
+      partyOptions[0].id === effectivePartyIdForTrips
+    ) {
+      return;
+    }
     const isSupplier = safeSuppliers.some(
       (s) => s.id === effectivePartyIdForTrips,
     );
@@ -1961,6 +1996,7 @@ export function AddTransactionModal({
     safeTrips,
     safeSuppliers,
     safeDrivers,
+    partyOptions,
     type,
     supplierLinkedOrgIds,
     tripLocked,
@@ -1982,7 +2018,7 @@ export function AddTransactionModal({
   // When IN + tagged trip: auto-select the trip's client (single option or first of list). When OUT + tagged trip: auto-select if single supplier/driver. Skip when party is locked.
   useEffect(() => {
     if (!visible || isPartyLocked) return;
-    if (type === "in" && selectedTrip && partyOptions.length >= 1) {
+    if (type === "in" && selectedTrip && partyOptions.length === 1) {
       const firstId = partyOptions[0].id;
       const currentInList =
         partyId != null && partyOptions.some((c) => c.id === partyId);
@@ -4445,6 +4481,7 @@ export function AddTransactionModal({
                 <TouchableOpacity
                   style={[styles.vehicleRow, showVehiclePicker && styles.fieldBlockOpen]}
                   onPress={() => {
+                    if (isVehicleLocked) return;
                     if (safeVehicles.length > 0) {
                       setShowPartyPicker(false);
                       setShowTripPicker(false);
@@ -4454,8 +4491,8 @@ export function AddTransactionModal({
                       setShowVehiclePicker((v) => !v);
                     }
                   }}
-                  activeOpacity={safeVehicles.length > 0 ? 0.8 : 1}
-                  disabled={safeVehicles.length === 0}
+                  activeOpacity={isVehicleLocked || safeVehicles.length === 0 ? 1 : 0.8}
+                  disabled={isVehicleLocked || safeVehicles.length === 0}
                 >
                   <Text style={[styles.tagLabel, styles.fieldLabel]}>VEHICLE</Text>
                   <Text style={styles.vehicleValue} numberOfLines={1}>
@@ -4465,7 +4502,7 @@ export function AddTransactionModal({
                         ? "Select vehicle..."
                         : "No vehicles"}
                   </Text>
-                  {safeVehicles.length > 0 ? (
+                  {!isVehicleLocked && safeVehicles.length > 0 ? (
                     <FontAwesome
                       name="chevron-down"
                       size={10}
