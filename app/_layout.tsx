@@ -13,6 +13,7 @@ import { isSessionExpiredError } from '@/features/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { makeQueryClient } from '@/lib/queryClient';
 import {
+  installForegroundPruning,
   installRealtimeDiagnosticsGlobalHook,
   startRealtimeDiagnosticsLogger,
   stopRealtimeDiagnosticsLogger,
@@ -304,6 +305,7 @@ function RootLayoutNav() {
       pathname.startsWith('/chat/'));
 
   useEffect(() => {
+    installForegroundPruning();
     if (!__DEV__) return;
     installRealtimeDiagnosticsGlobalHook();
     startRealtimeDiagnosticsLogger();

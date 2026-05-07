@@ -146,6 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [sessionExpired, setSessionExpired] = useState(false);
   const signOutRequestedRef = useRef(false);
   const authAttemptRef = useRef(0);
+  const listenerSeqRef = useRef(0);
   const unsubscribeRef = useRef<(() => void) | undefined>(undefined);
 
   const beginAuthAttempt = () => {
@@ -155,6 +156,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const isCurrentAuthAttempt = (attemptId: number) => {
     return authAttemptRef.current === attemptId;
+  };
+
+  const beginListenerSeq = () => {
+    listenerSeqRef.current += 1;
+    return listenerSeqRef.current;
+  };
+
+  const isCurrentListenerSeq = (seqId: number) => {
+    return listenerSeqRef.current === seqId;
   };
 
   const logAuthRouteDecision = (event: string, details: Record<string, unknown>) => {
@@ -201,31 +211,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const setupAuthSubscription = () => {
       try {
         unsubscribeRef.current = authService.onAuthStateChange(async (auth) => {
-          const stateChangeAttemptId = beginAuthAttempt();
-          if (!mounted || !isCurrentAuthAttempt(stateChangeAttemptId)) return;
-          if (auth) {
-            const dbProfile = await getVerifiedDbProfile(auth.user.uid);
-            if (!mounted || !isCurrentAuthAttempt(stateChangeAttemptId)) return;
-            if (!dbProfile) {
-              await forceSignOutOnAuthFailure("auth_state_profile_verification_failed");
-              return;
+          const seqId = beginListenerSeq();
+          if (!mounted || !isCurrentListenerSeq(seqId)) return;
+          try {
+            if (auth) {
+              const dbProfile = await getVerifiedDbProfile(auth.user.uid);
+              if (!mounted || !isCurrentListenerSeq(seqId)) return;
+              if (!dbProfile) {
+                await forceSignOutOnAuthFailure("auth_state_profile_verification_failed");
+                return;
+              }
+              const merged = mergeAuthProfiles(auth.profile, dbProfile);
+              const nextProfile = authProfileToUserProfile(merged);
+              setUser((prev) => (prev?.uid === auth.user.uid ? prev : auth.user));
+              setProfile((prev) => (areUserProfilesEqual(prev, nextProfile) ? prev : nextProfile));
+              setRoleVerified(true);
+              setSessionExpired(false);
+              logAuthRouteDecision("auth_state_signed_in", {
+                uid: auth.user.uid,
+                role: merged.role,
+                roleVerified: true,
+              });
+            } else {
+              const wasRequested = signOutRequestedRef.current;
+              signOutRequestedRef.current = false;
+              clearAuthState(!wasRequested);
+              logAuthRouteDecision("auth_state_signed_out", {});
             }
-            const merged = mergeAuthProfiles(auth.profile, dbProfile);
-            const nextProfile = authProfileToUserProfile(merged);
-            setUser((prev) => (prev?.uid === auth.user.uid ? prev : auth.user));
-            setProfile((prev) => (areUserProfilesEqual(prev, nextProfile) ? prev : nextProfile));
-            setRoleVerified(true);
-            setSessionExpired(false);
-            logAuthRouteDecision("auth_state_signed_in", {
-              uid: auth.user.uid,
-              role: merged.role,
-              roleVerified: true,
-            });
-          } else {
-            const wasRequested = signOutRequestedRef.current;
-            signOutRequestedRef.current = false;
-            clearAuthState(!wasRequested);
-            logAuthRouteDecision("auth_state_signed_out", {});
+          } catch (err) {
+            if (!mounted || !isCurrentListenerSeq(seqId)) return;
+            console.warn("[auth] onAuthStateChange callback error, forcing sign out:", err);
+            await forceSignOutOnAuthFailure("auth_state_callback_error");
           }
         });
       } catch {
@@ -342,6 +358,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       unsubscribeRef.current = undefined;
     };
   }, []);
+
+  // Zombie recovery: if user+profile exist but roleVerified stays false after
+  // loading completes, retry verification once then force sign out.
+  useEffect(() => {
+    if (loading || !user || roleVerified) return;
+    const timer = setTimeout(async () => {
+      if (!user) return;
+      logAuthRouteDecision("zombie_recovery_triggered", { uid: user.uid });
+      try {
+        const dbProfile = await getVerifiedDbProfile(user.uid);
+        if (dbProfile) {
+          setRoleVerified(true);
+          logAuthRouteDecision("zombie_recovery_success", { uid: user.uid });
+          return;
+        }
+      } catch {
+        // Fall through to force sign out
+      }
+      await forceSignOutOnAuthFailure("zombie_recovery_failed");
+    }, 10_000);
+    return () => clearTimeout(timer);
+  }, [loading, user, roleVerified]);
 
   // When "Keep me signed in" is off, sign out on app background so next open shows sign-in.
   useEffect(() => {

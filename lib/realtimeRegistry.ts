@@ -1,5 +1,6 @@
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
+import { AppState } from "react-native";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type RealtimeListener = (payload: RealtimePostgresChangesPayload<Record<string, any>>) => void;
@@ -166,6 +167,39 @@ export function clearAllRealtimeChannels() {
     void supabase().removeChannel(entry.channel).catch(() => {});
   });
   registry.clear();
+}
+
+/**
+ * Force-prune channels with refs=0 that have been idle beyond the stale threshold.
+ * Called automatically on app foreground to prevent server-side subscription accumulation
+ * when clients disconnect without clean unsubscribe (e.g. backgrounded, network drop).
+ */
+export function pruneStaleChannels() {
+  const now = Date.now();
+  let removed = 0;
+  registry.forEach((entry, key) => {
+    if (entry.refs > 0) return;
+    if (entry.teardownTimer) clearTimeout(entry.teardownTimer);
+    void supabase().removeChannel(entry.channel).catch(() => {});
+    registry.delete(key);
+    removed += 1;
+  });
+  if (removed > 0) {
+    telemetry.staleSweeps += removed;
+    if (__DEV__) console.log(`[realtime] foreground-prune removed=${removed} | remaining=${registry.size}`);
+  }
+}
+
+let appStateSubscription: ReturnType<typeof AppState.addEventListener> | null = null;
+
+/** Call once at app init to auto-prune stale channels when app returns to foreground. */
+export function installForegroundPruning() {
+  if (appStateSubscription) return;
+  appStateSubscription = AppState.addEventListener("change", (state) => {
+    if (state === "active") {
+      pruneStaleChannels();
+    }
+  });
 }
 
 /**
