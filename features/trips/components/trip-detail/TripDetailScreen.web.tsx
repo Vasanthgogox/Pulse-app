@@ -28,7 +28,7 @@ import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { MessageSquare } from "lucide-react-native";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -295,6 +295,9 @@ export default function TripDetailScreen({
   const [otpResending, setOtpResending] = useState(false);
   const [provisionVoidReason, setProvisionVoidReason] = useState("");
 
+  const vehicleGalleryScrollRef = useRef<ScrollView | null>(null);
+  const [vehicleGalleryPageWidth, setVehicleGalleryPageWidth] = useState(0);
+
   const closeFinanceProvisionModal = () => {
     setShowFinanceProvisionPanel(null);
     setShowInlineAdjustmentForm(false);
@@ -318,6 +321,35 @@ export default function TripDetailScreen({
     clientNameFromContext,
     onBack,
   });
+
+  const goToVehicleGalleryIndex = useCallback(
+    (nextIndex: number, animated = true) => {
+      const total = detail.vehiclePreviewDocs.length;
+      if (total <= 0) return;
+      const clamped = Math.max(0, Math.min(nextIndex, total - 1));
+      detail.setVehiclePreviewIndex(clamped);
+      if (vehicleGalleryPageWidth > 0) {
+        vehicleGalleryScrollRef.current?.scrollTo({
+          x: clamped * vehicleGalleryPageWidth,
+          animated,
+        });
+      }
+    },
+    [detail, vehicleGalleryPageWidth],
+  );
+
+  useEffect(() => {
+    if (!detail.isVehicleGalleryDoc) return;
+    if (vehicleGalleryPageWidth <= 0) return;
+    vehicleGalleryScrollRef.current?.scrollTo({
+      x: detail.vehiclePreviewIndex * vehicleGalleryPageWidth,
+      animated: false,
+    });
+  }, [
+    detail.isVehicleGalleryDoc,
+    detail.vehiclePreviewIndex,
+    vehicleGalleryPageWidth,
+  ]);
 
   const { initiateDriverConversationForTrip } = useTripChat();
 
@@ -4937,47 +4969,142 @@ export default function TripDetailScreen({
                   <Text style={styles.docModalHint}>Loading preview…</Text>
                 </View>
               ) : detail.isVehicleGalleryDoc ? (
-                <View style={styles.docModalCenter}>
-                  {detail.activeVehiclePreviewDoc?.storagePath ? (
-                    (() => {
-                      const vDoc = detail.activeVehiclePreviewDoc;
-                      const url = vDoc
-                        ? detail.vehiclePreviewUrls[vDoc.id]
-                        : null;
-                      const isPdf = vDoc?.type === "PDF";
-                      if (url && !isPdf) {
-                        return (
-                          <Image
-                            source={{ uri: url }}
-                            style={styles.docModalImage}
-                            resizeMode="contain"
-                          />
+                detail.vehiclePreviewDocs.length > 0 ? (
+                  <View
+                    style={styles.docGalleryWrap}
+                    onLayout={(event) =>
+                      setVehicleGalleryPageWidth(event.nativeEvent.layout.width)
+                    }
+                  >
+                    <ScrollView
+                      ref={vehicleGalleryScrollRef}
+                      horizontal
+                      pagingEnabled
+                      showsHorizontalScrollIndicator={false}
+                      onMomentumScrollEnd={(event) => {
+                        const pageWidth =
+                          event.nativeEvent.layoutMeasurement.width;
+                        if (pageWidth <= 0) return;
+                        const nextIndex = Math.round(
+                          event.nativeEvent.contentOffset.x / pageWidth,
                         );
-                      }
-                      return (
-                        <>
+                        const clamped = Math.max(
+                          0,
+                          Math.min(
+                            nextIndex,
+                            detail.vehiclePreviewDocs.length - 1,
+                          ),
+                        );
+                        if (clamped !== detail.vehiclePreviewIndex) {
+                          detail.setVehiclePreviewIndex(clamped);
+                        }
+                      }}
+                    >
+                      {detail.vehiclePreviewDocs.map((doc) => {
+                        const url = detail.vehiclePreviewUrls[doc.id] ?? null;
+                        const isPdf = doc.type === "PDF";
+                        const slideStyle = [
+                          styles.docGallerySlide,
+                          vehicleGalleryPageWidth > 0
+                            ? { width: vehicleGalleryPageWidth }
+                            : null,
+                        ];
+                        return (
+                          <View key={doc.id} style={slideStyle}>
+                            {url && !isPdf ? (
+                              <Image
+                                source={{ uri: url }}
+                                style={styles.docModalImage}
+                                resizeMode="contain"
+                              />
+                            ) : (
+                              <View style={styles.docModalCenter}>
+                                <FontAwesome
+                                  name={url ? "file-pdf-o" : "file-o"}
+                                  size={48}
+                                  color={url ? Theme.primary : "#94a3b8"}
+                                />
+                                <Text style={styles.docModalHint}>
+                                  {doc.label}
+                                </Text>
+                                <Text style={styles.docModalHint}>
+                                  {url
+                                    ? "PDF preview may be limited in the browser."
+                                    : doc.storagePath
+                                      ? "Generating secure link…"
+                                      : "No document uploaded yet."}
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+                        );
+                      })}
+                    </ScrollView>
+
+                    {detail.vehiclePreviewDocs.length > 1 ? (
+                      <>
+                        <TouchableOpacity
+                          accessibilityLabel="Previous document"
+                          activeOpacity={0.85}
+                          disabled={detail.vehiclePreviewIndex <= 0}
+                          onPress={() =>
+                            goToVehicleGalleryIndex(
+                              detail.vehiclePreviewIndex - 1,
+                            )
+                          }
+                          style={[
+                            styles.docGalleryNavBtn,
+                            styles.docGalleryNavBtnLeft,
+                            detail.vehiclePreviewIndex <= 0 &&
+                              styles.docGalleryNavBtnDisabled,
+                          ]}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
                           <FontAwesome
-                            name="file-pdf-o"
-                            size={48}
-                            color={Theme.primary}
+                            name="chevron-left"
+                            size={16}
+                            color="#0f172a"
                           />
-                          <Text style={styles.docModalHint}>
-                            {url
-                              ? "PDF preview may be limited in the browser."
-                              : "Generating secure link…"}
-                          </Text>
-                        </>
-                      );
-                    })()
-                  ) : (
-                    <>
-                      <FontAwesome name="file-o" size={48} color="#94a3b8" />
-                      <Text style={styles.docModalHint}>
-                        No vehicle document on file yet.
-                      </Text>
-                    </>
-                  )}
-                </View>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          accessibilityLabel="Next document"
+                          activeOpacity={0.85}
+                          disabled={
+                            detail.vehiclePreviewIndex >=
+                            detail.vehiclePreviewDocs.length - 1
+                          }
+                          onPress={() =>
+                            goToVehicleGalleryIndex(
+                              detail.vehiclePreviewIndex + 1,
+                            )
+                          }
+                          style={[
+                            styles.docGalleryNavBtn,
+                            styles.docGalleryNavBtnRight,
+                            detail.vehiclePreviewIndex >=
+                              detail.vehiclePreviewDocs.length - 1 &&
+                              styles.docGalleryNavBtnDisabled,
+                          ]}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <FontAwesome
+                            name="chevron-right"
+                            size={16}
+                            color="#0f172a"
+                          />
+                        </TouchableOpacity>
+                      </>
+                    ) : null}
+                  </View>
+                ) : (
+                  <View style={styles.docModalCenter}>
+                    <FontAwesome name="file-o" size={48} color="#94a3b8" />
+                    <Text style={styles.docModalHint}>
+                      No vehicle document on file yet.
+                    </Text>
+                  </View>
+                )
               ) : detail.docPreviewUrl ? (
                 <Image
                   source={{ uri: detail.docPreviewUrl }}
@@ -5006,6 +5133,33 @@ export default function TripDetailScreen({
                 </View>
               )}
             </View>
+
+            {detail.isVehicleGalleryDoc &&
+            detail.vehiclePreviewDocs.length > 1 ? (
+              <View style={styles.docGalleryDots}>
+                {detail.vehiclePreviewDocs.map((doc, index) => {
+                  const isActive = index === detail.vehiclePreviewIndex;
+                  return (
+                    <TouchableOpacity
+                      key={doc.id}
+                      accessibilityLabel={`Go to document ${index + 1}`}
+                      onPress={() => goToVehicleGalleryIndex(index)}
+                      activeOpacity={0.85}
+                      hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                    >
+                      <View
+                        style={[
+                          styles.docGalleryDot,
+                          isActive
+                            ? styles.docGalleryDotActive
+                            : styles.docGalleryDotInactive,
+                        ]}
+                      />
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ) : null}
 
             <View style={styles.docModalFooter}>
               <TouchableOpacity
@@ -11392,6 +11546,62 @@ const styles = StyleSheet.create({
     color: "#64748b",
     textAlign: "center",
     paddingHorizontal: 20,
+  },
+  docGalleryWrap: {
+    position: "relative",
+    width: "100%",
+  },
+  docGallerySlide: {
+    minHeight: 280,
+    alignItems: "stretch",
+    justifyContent: "center",
+  },
+  docGalleryNavBtn: {
+    position: "absolute",
+    top: "50%",
+    width: 36,
+    height: 36,
+    marginTop: -18,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.95)",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  docGalleryNavBtnLeft: {
+    left: 8,
+  },
+  docGalleryNavBtnRight: {
+    right: 8,
+  },
+  docGalleryNavBtnDisabled: {
+    opacity: 0.35,
+  },
+  docGalleryDots: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 10,
+    backgroundColor: "#fff",
+  },
+  docGalleryDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 999,
+  },
+  docGalleryDotActive: {
+    width: 18,
+    backgroundColor: Theme.primary,
+  },
+  docGalleryDotInactive: {
+    backgroundColor: "#e2e8f0",
   },
   docModalFooter: {
     paddingHorizontal: 16,
