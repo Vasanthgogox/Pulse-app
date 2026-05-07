@@ -280,10 +280,8 @@ async function getExpoLocation(): Promise<typeof ExpoLocation | null> {
   }
 }
 
-/** Location report interval: 10s in dev, 30s in production when driver is on trip. */
-const LOCATION_REPORT_INTERVAL_MS = __DEV__ ? 10 * 1000 : 30 * 1000;
-/** Minimum displacement (metres) before sending another point; skip noisy duplicates. */
-const MIN_DISPLACEMENT_M = 30;
+/** Route checkpoint cadence while trip is moving (fixed 5-minute DB writes). */
+const LOCATION_REPORT_INTERVAL_MS = 5 * 60 * 1000;
 
 /** Approximate distance in metres between two WGS84 points (Haversine-style). */
 function distanceMeters(
@@ -998,8 +996,8 @@ export default function DriverRadarScreen() {
       accuracy: number | null,
       source: driverLocationService.DriverLocationSource,
     ) => {
-      if (!driver?.organization_id) return;
-      await driverLocationService.reportDriverLocation({
+      if (!driver?.organization_id) return false;
+      const { error } = await driverLocationService.reportDriverLocation({
         driverId: driver.id,
         organizationId: driver.organization_id,
         tripId,
@@ -1008,6 +1006,7 @@ export default function DriverRadarScreen() {
         accuracy,
         source,
       });
+      return !error;
     },
     [driver],
   );
@@ -1830,20 +1829,23 @@ export default function DriverRadarScreen() {
         > = await expoLocation.getCurrentPositionAsync({});
         const { latitude, longitude } = pos.coords;
         const acc = pos.coords.accuracy ?? null;
-        const last = lastSentLocationRef.current;
-        const shouldSend =
-          !last ||
-          distanceMeters(last.lat, last.lng, latitude, longitude) >=
-            MIN_DISPLACEMENT_M;
-        if (shouldSend) {
-          await reportLocationToDb(
+        const step = deriveDriverGuidanceStep(activeGuidanceTrip);
+        const shouldPersistCheckpoint =
+          step === "accepted" ||
+          step === "pickup" ||
+          step === "transit" ||
+          step === "reached";
+        if (shouldPersistCheckpoint) {
+          const saved = await reportLocationToDb(
             activeGuidanceTrip.id,
             latitude,
             longitude,
             acc,
-            "live",
+            "background",
           );
-          lastSentLocationRef.current = { lat: latitude, lng: longitude };
+          if (saved) {
+            lastSentLocationRef.current = { lat: latitude, lng: longitude };
+          }
         }
         setDriverMapPosition({ latitude, longitude });
 

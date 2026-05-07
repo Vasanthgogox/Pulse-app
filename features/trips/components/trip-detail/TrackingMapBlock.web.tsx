@@ -299,8 +299,21 @@ export function TrackingMapBlock({
         color: Theme.primary,
       });
     }
+    // Show sampled history checkpoints so crossed movement is visible.
+    const checkpointStep = historyCoordinates.length > 12 ? Math.ceil(historyCoordinates.length / 8) : 2;
+    historyCoordinates.forEach((coord, idx) => {
+      if (idx === 0 || idx === historyCoordinates.length - 1) return;
+      if (idx % checkpointStep !== 0) return;
+      if (latestCoordinate && areCoordinatesClose(coord, latestCoordinate)) return;
+      next.push({
+        id: `checkpoint-${idx}`,
+        coordinate: coord,
+        label: `Checkpoint ${idx + 1}`,
+        color: Theme.primaryLight,
+      });
+    });
     return next;
-  }, [normalizedOrigin, normalizedDestination, latestCoordinate]);
+  }, [normalizedOrigin, normalizedDestination, latestCoordinate, historyCoordinates]);
 
   const polyline = useMemo<LeafletLatLng[]>(() => {
     // Priority:
@@ -314,9 +327,8 @@ export function TrackingMapBlock({
     }
 
     const dedupedTrace = dedupeCoordinates(traced);
-    // Two-point traces are usually just source+destination and render as straight lines.
-    // Prefer road routing unless we have a meaningful sequence of path points.
-    const hasRichTrace = dedupedTrace.length >= 4;
+    // Use recorded trace as soon as we have at least 2 checkpoints so movement path is visible.
+    const hasRichTrace = dedupedTrace.length >= 2;
     if (hasRichTrace) return dedupedTrace;
 
     if (optimalRoute?.coordinates?.length) {

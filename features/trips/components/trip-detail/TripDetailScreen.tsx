@@ -7,6 +7,7 @@ import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { useTripChat } from "@/features/chat/contexts/TripChatContext";
 import { getClientById } from "@/features/clients/services/clients.service";
 import { getDriverById, getDriverProfileDisplay } from "@/features/drivers/services/drivers.service";
 import {
@@ -26,7 +27,6 @@ import { getVehicleDocumentViewUrl } from "@/features/vehicles/services/vehicleD
 import { getVehicleById } from "@/features/vehicles/services/vehicles.service";
 import type { VehicleDocuments } from "@/features/vehicles/utils/vehicleDocuments.util";
 import { DOCUMENT_EXPIRY_ORDER, DOCUMENT_LABELS } from "@/features/vehicles/utils/vehicleDocuments.util";
-import { useTripChat } from "@/features/chat/contexts/TripChatContext";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { canAssignTrip, getCapabilitiesFromProfile } from "@/lib/capabilities";
 import { isAggregateTrip, shouldShowAggregateTripKindPill } from "@/lib/driverUtils";
@@ -47,12 +47,12 @@ import {
 import * as tripDocumentsService from "@/services/tripDocumentsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
+import { useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import type * as ExpoLocationTypes from "expo-location";
 import { useRouter } from "expo-router";
 import { MessageSquare, ReceiptText } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import {
     ActivityIndicator,
     Alert,
@@ -68,7 +68,7 @@ import {
     View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRealtimeTrip } from "../../hooks/useRealtimeTrips";
+import { useRealtimeDriverLocations, useRealtimeTrip } from "../../hooks/useRealtimeTrips";
 import {
     clearInitialTripForDetail,
     getInitialTripForDetail,
@@ -97,7 +97,6 @@ import {
 import { AggregateTripOtpPanel, type AggregateOtpUiState } from "../AggregateTripOtpPanel";
 import { TripAssignmentBlock, type AssignmentSource } from "../TripAssignmentBlock";
 import { TrackingMapBlock, VehicleTrackingCard } from "./TrackingMapBlock";
-import type { TripDetailScreenProps } from "./TripDetailScreen.types";
 import { TripAdjustmentModal } from "./TripAdjustmentModal";
 import {
     TripDetailFinanceView,
@@ -105,6 +104,7 @@ import {
     type TripDetailTab,
     type TripDocItem,
 } from "./TripDetailFinanceView";
+import type { TripDetailScreenProps } from "./TripDetailScreen.types";
 
 export type { TripDetailScreenProps } from "./TripDetailScreen.types";
 
@@ -996,8 +996,18 @@ export default function TripDetailScreen({
         const historyByDriver = await driverLocationService.getDriverLocationHistoryByDriverId(driverId);
         if (!historyByDriver.error) effectivePoints = historyByDriver.points;
       }
+      // Keep route rendering stable: drop obvious duplicate points from same/similar fix.
+      const dedupedPoints = effectivePoints.filter((point, idx, arr) => {
+        if (idx === 0) return true;
+        const prev = arr[idx - 1];
+        return !(
+          Math.abs(point.latitude - prev.latitude) < 0.00001 &&
+          Math.abs(point.longitude - prev.longitude) < 0.00001 &&
+          point.recorded_at === prev.recorded_at
+        );
+      });
       setDriverLocation(!latestRes.error ? latestRes.location : null);
-      setTripLocationPoints(effectivePoints);
+      setTripLocationPoints(dedupedPoints);
     } catch {
       setDriverLocation(null);
       setTripLocationPoints([]);
@@ -1006,7 +1016,7 @@ export default function TripDetailScreen({
     }
   }, [trip?.id, effectiveDriverIdForLocation]);
 
-  /** When Live Tracking modal opens, fetch from DB immediately and then poll every 10s. */
+  /** When Live Tracking modal opens, fetch immediately and keep a light fallback poll. */
   useEffect(() => {
     if (!showTrackingModal || !trip?.id) {
       setDriverLocation(null);
@@ -1022,7 +1032,7 @@ export default function TripDetailScreen({
     const interval = setInterval(() => {
       setDriverLocationLoading(true);
       fetchDriverLocationFromDb();
-    }, 10000);
+    }, 30000);
 
     return () => {
       clearInterval(interval);
@@ -1031,6 +1041,16 @@ export default function TripDetailScreen({
       setTripLocationPoints([]);
     };
   }, [showTrackingModal, trip?.id, fetchDriverLocationFromDb]);
+
+  useRealtimeDriverLocations(
+    showTrackingModal ? trip?.id ?? null : null,
+    showTrackingModal ? effectiveDriverIdForLocation : null,
+    () => {
+      if (!showTrackingModal) return;
+      setDriverLocationLoading(true);
+      void fetchDriverLocationFromDb();
+    },
+  );
 
   /** Reverse-geocode driver location so we show address text (same as driver app). */
   useEffect(() => {

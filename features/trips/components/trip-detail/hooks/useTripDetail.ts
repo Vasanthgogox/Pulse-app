@@ -4,91 +4,91 @@
  * from the 5k-line monolith so the screen component stays thin.
  */
 import { useAuth } from "@/contexts/AuthContext";
-import { useOrganization } from "@/contexts/OrganizationContext";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useOrganization } from "@/contexts/OrganizationContext";
 import {
-  getClientById,
-  getClientDetails,
-  getLinkedOrgProfile,
+    getClientById,
+    getClientDetails,
+    getLinkedOrgProfile,
 } from "@/features/clients/services/clients.service";
 import {
-  getDriverById,
-  getDriverProfileDisplay,
+    getDriverById,
+    getDriverProfileDisplay,
 } from "@/features/drivers/services/drivers.service";
-import type { LedgerRow } from "@/features/finance/services/finance.service";
 import { openTripLedgerEntryChooser } from "@/features/finance/ledger/tripLedgerEntryChooser";
+import type { LedgerRow } from "@/features/finance/services/finance.service";
 import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntries";
 import { averageScore, getRatingsForTrip } from "@/features/ratings/services/ratings.service";
 import {
-  getSupplierById,
-  getSupplierDetails,
-  getLinkedOrgProfileForSupplier,
+    getLinkedOrgProfileForSupplier,
+    getSupplierById,
+    getSupplierDetails,
 } from "@/features/suppliers/services/suppliers.service";
-import { getVehicleById } from "@/features/vehicles/services/vehicles.service";
 import { getVehicleDocumentViewUrl } from "@/features/vehicles/services/vehicleDocuments.service";
+import { getVehicleById } from "@/features/vehicles/services/vehicles.service";
 import type { VehicleDocuments } from "@/features/vehicles/utils/vehicleDocuments.util";
 import {
-  DOCUMENT_EXPIRY_ORDER,
-  DOCUMENT_LABELS,
+    DOCUMENT_EXPIRY_ORDER,
+    DOCUMENT_LABELS,
 } from "@/features/vehicles/utils/vehicleDocuments.util";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { canAssignTrip, getCapabilitiesFromProfile } from "@/lib/capabilities";
 import { isAggregateTrip } from "@/lib/driverUtils";
 import { formatIndianVehicleNumber } from "@/lib/format";
 import {
-  useShipperDisplayNamesQuery,
-  useTransactionsQuery,
-  useTripSubcontractsQuery,
+    useShipperDisplayNamesQuery,
+    useTransactionsQuery,
+    useTripSubcontractsQuery,
 } from "@/lib/queries";
 import { queryKeys } from "@/lib/queryKeys";
 import * as driverLocationService from "@/services/driverLocationService";
-import * as tripDocumentsService from "@/services/tripDocumentsService";
-import {
-  acceptPartnerView,
-  createDispute,
-  getDisputesForPartner,
-  getDisputesReceived,
-  getSharedLedgerEntriesForPartner,
-  resolveDispute,
-  resolveDisputeTableOnly,
-} from "@/services/sharedLedgerService";
 import type { DisputeRow } from "@/services/sharedLedgerService";
+import {
+    acceptPartnerView,
+    createDispute,
+    getDisputesForPartner,
+    getDisputesReceived,
+    getSharedLedgerEntriesForPartner,
+    resolveDispute,
+    resolveDisputeTableOnly,
+} from "@/services/sharedLedgerService";
+import * as tripDocumentsService from "@/services/tripDocumentsService";
+import { useQueryClient } from "@tanstack/react-query";
 import type * as ExpoLocationTypes from "expo-location";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { Alert } from "react-native";
 import { useRealtimeTrip } from "../../../hooks/useRealtimeTrips";
 import {
-  clearInitialTripForDetail,
-  getInitialTripForDetail,
+    clearInitialTripForDetail,
+    getInitialTripForDetail,
 } from "../../../initialTripForDetail";
 import type { TripAssignmentAuditRow } from "../../../services/trip-assignment-audit.service";
 import { getTripAssignmentAuditHistory } from "../../../services/trip-assignment-audit.service";
 import type {
-  TripAdjustment,
-  TripAdjustmentImpact,
-  TripAdjustmentType,
+    TripAdjustment,
+    TripAdjustmentImpact,
+    TripAdjustmentType,
 } from "../../../services/tripAdjustments";
 import {
-  addTripAdjustment,
-  getTripAdjustments,
-  voidTripAdjustment,
-  updateTripAdjustment,
+    addTripAdjustment,
+    getTripAdjustments,
+    updateTripAdjustment,
+    voidTripAdjustment,
 } from "../../../services/tripAdjustments";
 import { getTripOtpForDisplay } from "../../../services/tripOtp.service";
 import {
-  getTripById,
-  getTripDisplayNumber,
-  getTripsWhereOrgIsSupplier,
-  isTripCompleted,
-  type TripRow,
+    getTripById,
+    getTripDisplayNumber,
+    getTripsWhereOrgIsSupplier,
+    isTripCompleted,
+    type TripRow,
 } from "../../../services/trips.service";
 import type { AssignmentSource } from "../../TripAssignmentBlock";
 import type {
-  ReconciliationPartyInfo,
-  TripDetailTab,
-  TripDocItem,
+    ReconciliationPartyInfo,
+    TripDetailTab,
+    TripDocItem,
 } from "../TripDetailFinanceView";
 
 let ExpoLocationModule: typeof ExpoLocationTypes | null = null;
