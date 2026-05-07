@@ -232,7 +232,8 @@ export async function getMarketIndentsForOrganization(
         null;
       return { ...rest, creator_organization_name: name } as IndentRow;
     });
-    return { error: null, indents };
+    const merged = await mergeQuotedIndentsForSupplier(orgId, indents);
+    return { error: null, indents: merged };
   }
 
   const linkMap = await fetchPartnerShipperLinkSinceMap(orgId);
@@ -263,7 +264,63 @@ export async function getMarketIndentsForOrganization(
       creator_organization_name: organizations?.name ?? null,
     } as IndentRow;
   });
-  return { error: null, indents };
+  const merged = await mergeQuotedIndentsForSupplier(orgId, indents);
+  return { error: null, indents: merged };
+}
+
+/**
+ * Safety net for supplier load pages:
+ * if supplier has already quoted/bid on an indent (incl. story bid -> direct_quote),
+ * ensure that indent appears in market loads even when partner-link/date filters exclude it.
+ */
+async function mergeQuotedIndentsForSupplier(
+  orgId: string,
+  baseIndents: IndentRow[],
+): Promise<IndentRow[]> {
+  const existing = new Map(baseIndents.map((i) => [i.id, i]));
+
+  const { data: myQuotes, error: quoteErr } = await supabase()
+    .from("direct_quotes")
+    .select("indent_id")
+    .eq("supplier_organization_id", orgId);
+  if (quoteErr || !myQuotes?.length) return baseIndents;
+
+  const quotedIndentIds = Array.from(
+    new Set(
+      (myQuotes as Array<{ indent_id?: string | null }>)
+        .map((q) => (q.indent_id ?? "").trim())
+        .filter(Boolean),
+    ),
+  ).filter((id) => !existing.has(id));
+
+  if (quotedIndentIds.length === 0) return baseIndents;
+
+  const { data: extraRows, error: extraErr } = await supabase()
+    .from("indents")
+    .select("*, organizations(name)")
+    .in("id", quotedIndentIds)
+    .neq("status", "draft")
+    .order("created_at", { ascending: false });
+  if (extraErr || !extraRows?.length) return baseIndents;
+
+  const extras = (extraRows as Array<
+    IndentRow & { organizations?: { name: string | null } | null }
+  >).map((row) => {
+    const { organizations, ...rest } = row;
+    return {
+      ...rest,
+      creator_organization_name: organizations?.name ?? null,
+    } as IndentRow;
+  });
+
+  const merged = [...baseIndents];
+  for (const row of extras) {
+    if (!existing.has(row.id)) {
+      existing.set(row.id, row);
+      merged.push(row);
+    }
+  }
+  return merged;
 }
 
 /** Fetch a single indent by id (for detail screen). */
