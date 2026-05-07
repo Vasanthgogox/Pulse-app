@@ -1753,8 +1753,8 @@ export function AddTransactionModal({
   /** Cash OUT with a vehicle expense category (Fuel, Toll, etc.) — show vehicle row and store vehicle_number. */
   const isVehicleExpenseCategory =
     type === "out" &&
-    effectivePartyId != null &&
-    VEHICLE_EXPENSE_PARTIES.some((p) => p.id === effectivePartyId);
+    category != null &&
+    VEHICLE_CATEGORIES.includes(category as VehicleCategory);
   const supplierNeedsTrip =
     requireTripForSupplierOut && isSupplierPayment && selectedTripIds.length === 0;
 
@@ -1800,7 +1800,7 @@ export function AddTransactionModal({
       isDriverPayment &&
       (isDriverSalaryParty
         ? driverIdForSalary != null
-        : driverPaymentType != null)) ||
+        : driverPaymentType != null || isVehicleExpenseCategory)) ||
     (type === "out" && isVehicleExpenseOut && effectivePartyId != null) ||
     (type === "out" &&
       !isDriverPayment &&
@@ -2552,10 +2552,12 @@ export function AddTransactionModal({
           ? (isClientPayment || tripLocked)
             ? (normalizedCategory ?? undefined)
             : undefined
-          : type === "out" && !isDriverPayment
+          : type === "out"
             ? isVehicleExpenseOut
               ? (effectivePartyId ?? undefined)
-              : (normalizedCategory ?? undefined)
+              : isVehicleExpenseCategory || !isDriverPayment
+                ? (normalizedCategory ?? undefined)
+                : undefined
             : undefined,
       driverPaymentType: isVehicleExpenseEntry ? undefined : finalDriverPaymentType,
       contactId: normalizedContactIdForSubmit ?? undefined,
@@ -2689,7 +2691,7 @@ export function AddTransactionModal({
     ? (driverPaymentType != null
         ? (DRIVER_PAYMENT_TYPES.find((t) => t.type === driverPaymentType)?.label ??
           driverPaymentType)
-        : null)
+        : (isVehicleExpenseCategory ? category : null))
     : (category ?? null);
   const selectedPaymentTypeIcon = selectedPaymentTypeLabel
     ? (PAYMENT_TYPE_ICON[selectedPaymentTypeLabel] ?? "circle-o")
@@ -2750,19 +2752,33 @@ export function AddTransactionModal({
             icon: PAYMENT_TYPE_ICON[cat] ?? "circle-o",
           }))
         : isDriverPayment
-          ? DRIVER_PAYMENT_TYPES.map((opt) => ({
-              key: opt.type,
-              label: opt.label,
-              selected: driverPaymentType === opt.type,
-              onPress: () => {
-                setDriverPaymentType(opt.type);
-                setPaymentTypeExpanded(false);
-              },
-              icon:
-                PAYMENT_TYPE_ICON[opt.type] ??
-                PAYMENT_TYPE_ICON[opt.label] ??
-                "circle-o",
-            }))
+          ? [
+              ...DRIVER_PAYMENT_TYPES.map((opt) => ({
+                key: opt.type,
+                label: opt.label,
+                selected: driverPaymentType === opt.type,
+                onPress: () => {
+                  setDriverPaymentType(opt.type);
+                  setCategory(null);
+                  setPaymentTypeExpanded(false);
+                },
+                icon:
+                  PAYMENT_TYPE_ICON[opt.type] ??
+                  PAYMENT_TYPE_ICON[opt.label] ??
+                  "circle-o",
+              })),
+              ...VEHICLE_CATEGORIES.map((cat) => ({
+                key: `vehicle-${cat}`,
+                label: cat,
+                selected: driverPaymentType == null && category === cat,
+                onPress: () => {
+                  setDriverPaymentType(null);
+                  setCategory(cat);
+                  setPaymentTypeExpanded(false);
+                },
+                icon: PAYMENT_TYPE_ICON[cat] ?? "circle-o",
+              })),
+            ]
           : categoriesForPicker.map((cat) => ({
               key: cat,
               label: cat,
@@ -4281,16 +4297,33 @@ export function AddTransactionModal({
                 ) : (
                   <View style={styles.categoryChipGrid}>
                     {(isDriverPayment
-                      ? DRIVER_PAYMENT_TYPES.map((opt) => ({
-                          key: opt.type,
-                          label: opt.label,
-                          selected: driverPaymentType === opt.type,
-                          onPress: () => {
-                            setDriverPaymentType(opt.type);
-                            setPaymentTypeExpanded(false);
-                          },
-                          iconName: PAYMENT_TYPE_ICON[opt.type] ?? PAYMENT_TYPE_ICON[opt.label] ?? "circle-o",
-                        }))
+                      ? [
+                          ...DRIVER_PAYMENT_TYPES.map((opt) => ({
+                            key: opt.type,
+                            label: opt.label,
+                            selected: driverPaymentType === opt.type,
+                            onPress: () => {
+                              setDriverPaymentType(opt.type);
+                              setCategory(null);
+                              setPaymentTypeExpanded(false);
+                            },
+                            iconName:
+                              PAYMENT_TYPE_ICON[opt.type] ??
+                              PAYMENT_TYPE_ICON[opt.label] ??
+                              "circle-o",
+                          })),
+                          ...VEHICLE_CATEGORIES.map((cat) => ({
+                            key: `vehicle-${cat}`,
+                            label: cat,
+                            selected: driverPaymentType == null && category === cat,
+                            onPress: () => {
+                              setDriverPaymentType(null);
+                              setCategory(cat);
+                              setPaymentTypeExpanded(false);
+                            },
+                            iconName: PAYMENT_TYPE_ICON[cat] ?? "circle-o",
+                          })),
+                        ]
                       : categoriesForPicker.map((cat) => ({
                           key: cat,
                           label: cat,
@@ -4391,10 +4424,13 @@ export function AddTransactionModal({
                   <TouchableOpacity
                     style={[
                       styles.pickerItem,
-                      !driverPaymentType && styles.pickerItemActive,
+                      !driverPaymentType &&
+                        !isVehicleExpenseCategory &&
+                        styles.pickerItemActive,
                     ]}
                     onPress={() => {
                       setDriverPaymentType(null);
+                      setCategory(null);
                       setShowDriverPaymentTypePicker(false);
                     }}
                   >
@@ -4412,10 +4448,29 @@ export function AddTransactionModal({
                       ]}
                       onPress={() => {
                         setDriverPaymentType(opt.type);
+                        setCategory(null);
                         setShowDriverPaymentTypePicker(false);
                       }}
                     >
                       <Text style={styles.pickerItemText}>{opt.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                  {VEHICLE_CATEGORIES.map((cat) => (
+                    <TouchableOpacity
+                      key={`vehicle-${cat}`}
+                      style={[
+                        styles.pickerItem,
+                        !driverPaymentType &&
+                          category === cat &&
+                          styles.pickerItemActive,
+                      ]}
+                      onPress={() => {
+                        setDriverPaymentType(null);
+                        setCategory(cat);
+                        setShowDriverPaymentTypePicker(false);
+                      }}
+                    >
+                      <Text style={styles.pickerItemText}>{cat}</Text>
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
@@ -4869,12 +4924,17 @@ export function AddTransactionModal({
     if (showDriverPaymentTypePicker) {
       return (
         <ScrollView style={pickerModalScrollStyle} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator>
-          <TouchableOpacity style={[styles.pickerItem, !driverPaymentType && styles.pickerItemActive]} onPress={() => { setDriverPaymentType(null); setShowDriverPaymentTypePicker(false); }}>
+          <TouchableOpacity style={[styles.pickerItem, !driverPaymentType && !isVehicleExpenseCategory && styles.pickerItemActive]} onPress={() => { setDriverPaymentType(null); setCategory(null); setShowDriverPaymentTypePicker(false); }}>
             <Text style={styles.pickerItemText}>SELECT PAYMENT TYPE...</Text>
           </TouchableOpacity>
           {DRIVER_PAYMENT_TYPES.map((opt) => (
-            <TouchableOpacity key={opt.label} style={[styles.pickerItem, driverPaymentType === opt.type && styles.pickerItemActive]} onPress={() => { setDriverPaymentType(opt.type); setShowDriverPaymentTypePicker(false); }}>
+            <TouchableOpacity key={opt.label} style={[styles.pickerItem, driverPaymentType === opt.type && styles.pickerItemActive]} onPress={() => { setDriverPaymentType(opt.type); setCategory(null); setShowDriverPaymentTypePicker(false); }}>
               <Text style={styles.pickerItemText}>{opt.label}</Text>
+            </TouchableOpacity>
+          ))}
+          {VEHICLE_CATEGORIES.map((cat) => (
+            <TouchableOpacity key={`vehicle-${cat}`} style={[styles.pickerItem, !driverPaymentType && category === cat && styles.pickerItemActive]} onPress={() => { setDriverPaymentType(null); setCategory(cat); setShowDriverPaymentTypePicker(false); }}>
+              <Text style={styles.pickerItemText}>{cat}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
