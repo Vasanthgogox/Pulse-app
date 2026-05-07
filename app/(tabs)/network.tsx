@@ -474,9 +474,41 @@ function NetworkScreenInner() {
     }
   }, [searchParams.view]);
   const allowLoadPosts = organization?.capabilities?.canBid ?? true;
+  const integratedPartnerOrgIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const client of (clientsQ.data ?? []) as Array<{
+      linked_organization_id?: string | null;
+      is_integrated?: boolean;
+    }>) {
+      const linkedOrgId = client.linked_organization_id?.trim();
+      const isIntegratedClient = client.is_integrated ?? Boolean(linkedOrgId);
+      if (!isIntegratedClient || !linkedOrgId) continue;
+      ids.add(linkedOrgId);
+    }
+    for (const supplier of (suppliersQ.data ?? []) as Array<{
+      linked_organization_id?: string | null;
+      supplier_type?: string | null;
+      is_integrated?: boolean;
+    }>) {
+      const linkedOrgId = supplier.linked_organization_id?.trim();
+      const isIntegratedSupplier =
+        supplier.is_integrated ?? (supplier.supplier_type === "integrated" || Boolean(linkedOrgId));
+      if (!isIntegratedSupplier || !linkedOrgId) continue;
+      ids.add(linkedOrgId);
+    }
+    return ids;
+  }, [clientsQ.data, suppliersQ.data]);
   const feedPosts = useMemo(
-    () => (feedQ.data ?? []).filter((post) => isPostVisibleForOrg(post, { allowLoadPosts })),
-    [feedQ.data, allowLoadPosts],
+    () =>
+      (feedQ.data ?? []).filter((post) => {
+        if (!isPostVisibleForOrg(post, { allowLoadPosts })) return false;
+        if (!orgId) return false;
+        const authorOrgId = (post.organization_id ?? "").trim();
+        if (!authorOrgId) return false;
+        if (authorOrgId === orgId) return true;
+        return integratedPartnerOrgIds.has(authorOrgId);
+      }),
+    [feedQ.data, allowLoadPosts, orgId, integratedPartnerOrgIds],
   );
 
   const onRefresh = useCallback(async () => {
