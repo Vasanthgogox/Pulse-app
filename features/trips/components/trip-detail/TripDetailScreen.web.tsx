@@ -20,8 +20,12 @@ import { formatINR, formatIndianVehicleNumber } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
 import { notifyTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
 import { getOptimalRoute } from "@/services/routingService";
+import * as tripDocumentsService from "@/services/tripDocumentsService";
 import Feather from "@expo/vector-icons/Feather";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system";
+import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { MessageSquare } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -485,6 +489,103 @@ export default function TripDetailScreen({
     }
     return durationLabel !== "—" ? durationLabel : "—";
   }, [detail.trip]);
+
+  // Vault upload hooks — must run before loading/error early returns (Rules of Hooks).
+  const [uploadingDocId, setUploadingDocId] = useState<string | null>(null);
+
+  const readFileAsArrayBuffer = useCallback(
+    async (uri: string): Promise<ArrayBuffer> => {
+      if (Platform.OS === "web") {
+        const response = await fetch(uri);
+        return response.arrayBuffer();
+      }
+      const base64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: "base64" as const,
+      });
+      return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)).buffer;
+    },
+    [],
+  );
+
+  const handleVaultUpload = useCallback(
+    async (doc: (typeof detail.computedTripDocs)[number]) => {
+      const tripIdForUpload = detail.trip?.id;
+      const uploaderId = detail.currentUserId;
+      if (!tripIdForUpload || !uploaderId || uploadingDocId) return;
+
+      const allowPdf = doc.category !== "driver";
+      let uri: string | null = null;
+      let fileName = `${doc.id}-${Date.now()}.jpg`;
+      let mimeType = "image/jpeg";
+
+      try {
+        if (allowPdf) {
+          const res = await DocumentPicker.getDocumentAsync({
+            multiple: false,
+            copyToCacheDirectory: true,
+            type: ["application/pdf", "image/*"],
+          });
+          if (res.canceled || !res.assets?.[0]) return;
+          const asset = res.assets[0];
+          uri = asset.uri;
+          fileName = asset.name || fileName;
+          mimeType = asset.mimeType || "application/pdf";
+        } else {
+          const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (!perm.granted) {
+            Alert.alert(
+              "Permission required",
+              "Photo library access is needed to attach this document.",
+            );
+            return;
+          }
+          const res = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ["images"],
+            allowsEditing: false,
+            quality: 0.9,
+          });
+          if (res.canceled || !res.assets?.[0]) return;
+          const asset = res.assets[0];
+          uri = asset.uri;
+          fileName = asset.fileName ?? fileName;
+          mimeType = asset.mimeType ?? "image/jpeg";
+        }
+
+        if (!uri) return;
+        setUploadingDocId(doc.id);
+        const arrayBuffer = await readFileAsArrayBuffer(uri);
+        if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+          Alert.alert("Upload failed", "Could not read the selected file.");
+          return;
+        }
+
+        const { error } = await tripDocumentsService.uploadTripDocument(
+          tripIdForUpload,
+          uploaderId,
+          { arrayBuffer, fileName, mimeType },
+        );
+        if (error) {
+          Alert.alert("Upload failed", error.message);
+          return;
+        }
+        detail.handleRefresh();
+      } catch (e) {
+        Alert.alert(
+          "Upload failed",
+          e instanceof Error ? e.message : "Something went wrong.",
+        );
+      } finally {
+        setUploadingDocId(null);
+      }
+    },
+    [
+      detail.trip?.id,
+      detail.currentUserId,
+      detail.handleRefresh,
+      uploadingDocId,
+      readFileAsArrayBuffer,
+    ],
+  );
 
   if (detail.loading && !detail.trip) {
     return <CenteredLoadingView message="Loading trip…" />;
@@ -1441,6 +1542,34 @@ export default function TripDetailScreen({
     if (doc.id === "vehicle-documents" && trip.vehicle_id) {
       router.push(`/vehicle/${trip.vehicle_id}` as never);
     }
+  };
+
+  /**
+   * Press handler for the new vault cards. Branches:
+   *  - Already uploaded → open preview (existing behavior).
+   *  - Vehicle Document (pending) → open vehicle profile (vehicle docs aren't trip-scoped).
+   *  - Trip Manifest / Driver POD (pending) → inline file picker → uploadTripDocument.
+   *  - User can't upload (different org) → fall back to existing handleDocOpen.
+   */
+  const handleVaultCardPress = (
+    doc: (typeof detail.computedTripDocs)[number],
+  ) => {
+    const isUploaded = doc.status !== "Pending" || !!doc.storagePath;
+    if (isUploaded) {
+      detail.setSelectedDoc(doc);
+      return;
+    }
+    if (doc.id === "vehicle-documents") {
+      if (trip.vehicle_id) {
+        router.push(`/vehicle/${trip.vehicle_id}` as never);
+      }
+      return;
+    }
+    if (canUploadTripDocs) {
+      void handleVaultUpload(doc);
+      return;
+    }
+    handleDocOpen(doc);
   };
 
   const hasDriverAssigned = !!trip.driver_id;
@@ -2411,6 +2540,19 @@ export default function TripDetailScreen({
                         : doc.status === "Pending"
                           ? "pending"
                           : "ok";
+                    const isUploadingThis = uploadingDocId === doc.id;
+                    const isPending = doc.status === "Pending";
+                    const refBtnLabel = isPending
+                      ? canUploadTripDocs
+                        ? "Upload"
+                        : doc.id === "vehicle-documents" && trip.vehicle_id
+                          ? "Open"
+                          : "Pending"
+                      : "View";
+                    const refBtnIcon =
+                      isPending && canUploadTripDocs
+                        ? "upload"
+                        : "external-link";
                     return (
                       <View key={doc.id} style={styles.refVaultCard}>
                         <Feather
@@ -2431,15 +2573,24 @@ export default function TripDetailScreen({
                         </Text>
                         <TouchableOpacity
                           style={styles.refVaultViewBtn}
-                          onPress={() => void handleDocOpen(doc)}
+                          onPress={() => handleVaultCardPress(doc)}
                           activeOpacity={0.85}
+                          disabled={isUploadingThis}
                         >
-                          <Feather
-                            name="external-link"
-                            size={12}
-                            color="#64748b"
-                          />
-                          <Text style={styles.refVaultViewText}>View</Text>
+                          {isUploadingThis ? (
+                            <ActivityIndicator size="small" color="#64748b" />
+                          ) : (
+                            <>
+                              <Feather
+                                name={refBtnIcon}
+                                size={12}
+                                color="#64748b"
+                              />
+                              <Text style={styles.refVaultViewText}>
+                                {refBtnLabel}
+                              </Text>
+                            </>
+                          )}
                         </TouchableOpacity>
                       </View>
                     );
@@ -3319,47 +3470,64 @@ export default function TripDetailScreen({
                   </View>
                 ) : (
                   <View style={neoStyles.vaultGrid}>
-                    {vaultDocs.map((doc) => (
-                      <View key={doc.id} style={neoStyles.vaultCard}>
-                        <Feather
-                          name={
-                            doc.status === "Pending"
-                              ? "upload-cloud"
-                              : "file-text"
-                          }
-                          size={34}
-                          color={
-                            doc.status === "Pending" ? "#cbd5e1" : "#94a3b8"
-                          }
-                        />
-                        <Text style={neoStyles.vaultTitle} numberOfLines={2}>
-                          {doc.label}
-                        </Text>
-                        <Text style={neoStyles.vaultSub}>{doc.status}</Text>
-                        <TouchableOpacity
-                          onPress={() => void handleDocOpen(doc)}
-                          style={[
-                            neoStyles.vaultBtn,
-                            doc.status === "Pending" &&
-                              neoStyles.vaultBtnUpload,
-                          ]}
-                          activeOpacity={0.85}
-                        >
+                    {vaultDocs.map((doc) => {
+                      const isUploadingThis = uploadingDocId === doc.id;
+                      const isPending = doc.status === "Pending";
+                      const isVehicleDoc = doc.id === "vehicle-documents";
+                      const btnLabel = isPending
+                        ? canUploadTripDocs
+                          ? "Upload"
+                          : isVehicleDoc && trip.vehicle_id
+                            ? "Open"
+                            : "Pending"
+                        : "Preview";
+                      const btnIcon = isPending
+                        ? canUploadTripDocs
+                          ? "upload"
+                          : isVehicleDoc && trip.vehicle_id
+                            ? "external-link"
+                            : "clock"
+                        : "eye";
+                      return (
+                        <View key={doc.id} style={neoStyles.vaultCard}>
                           <Feather
-                            name={doc.status === "Pending" ? "upload" : "eye"}
-                            size={12}
-                            color="#fff"
+                            name={isPending ? "upload-cloud" : "file-text"}
+                            size={34}
+                            color={isPending ? "#cbd5e1" : "#94a3b8"}
                           />
-                          <Text style={neoStyles.vaultBtnText}>
-                            {doc.status === "Pending"
-                              ? canUploadTripDocs
-                                ? "Upload"
-                                : "Pending"
-                              : "Preview"}
+                          <Text style={neoStyles.vaultTitle} numberOfLines={2}>
+                            {doc.label}
                           </Text>
-                        </TouchableOpacity>
-                      </View>
-                    ))}
+                          <Text style={neoStyles.vaultSub}>{doc.status}</Text>
+                          <TouchableOpacity
+                            onPress={() => handleVaultCardPress(doc)}
+                            style={[
+                              neoStyles.vaultBtn,
+                              isPending &&
+                                canUploadTripDocs &&
+                                neoStyles.vaultBtnUpload,
+                            ]}
+                            activeOpacity={0.85}
+                            disabled={isUploadingThis}
+                          >
+                            {isUploadingThis ? (
+                              <ActivityIndicator size="small" color="#fff" />
+                            ) : (
+                              <>
+                                <Feather
+                                  name={btnIcon}
+                                  size={12}
+                                  color="#fff"
+                                />
+                                <Text style={neoStyles.vaultBtnText}>
+                                  {btnLabel}
+                                </Text>
+                              </>
+                            )}
+                          </TouchableOpacity>
+                        </View>
+                      );
+                    })}
                   </View>
                 )}
               </View>
