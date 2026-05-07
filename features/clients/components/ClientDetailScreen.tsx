@@ -44,6 +44,7 @@ import {
     buildUniqueLinkedOrgIdMap,
     isLoadBasedTrip,
 } from "@/features/trips/visibility/tripVisibility";
+import { computeClientPaidSeed } from "@/features/clients/utils/clientPaidSeed.util";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import {
     canAccessFinance,
@@ -977,7 +978,10 @@ export default function ClientDetailScreen({
     for (const t of trips) {
       const key = norm(t.id);
       tripByNormId[key] = t;
-      paidByTripId[key] = Number(t.amount_paid ?? 0);
+      paidByTripId[key] = computeClientPaidSeed({
+        trip: t,
+        hasLinkedClientTx: false,
+      });
       outByTripId[key] = 0;
     }
     const linkedTxIds = new Set<string>();
@@ -992,11 +996,12 @@ export default function ClientDetailScreen({
         // Manual trips sync amount_paid from the same client cash-in ledger entries.
         // If a linked client tx is present, reset the seeded amount_paid once to avoid double counting.
         const trip = tripByNormId[txTripKey];
-        const isManualTrip =
-          trip != null &&
-          String(trip.source ?? "").trim().toLowerCase() === "manual";
-        if (isManualTrip && !manualTripSeedCleared.has(txTripKey)) {
-          paidByTripId[txTripKey] = 0;
+        if (trip && !manualTripSeedCleared.has(txTripKey)) {
+          const nextSeed = computeClientPaidSeed({
+            trip,
+            hasLinkedClientTx: true,
+          });
+          paidByTripId[txTripKey] = nextSeed;
           manualTripSeedCleared.add(txTripKey);
         }
         paidByTripId[txTripKey] =

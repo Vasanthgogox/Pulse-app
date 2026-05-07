@@ -8,6 +8,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useDriverAvatar } from '@/contexts/DriverAvatarContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { EditProfileModal } from '@/features/auth/components/EditProfileModal';
+import {
+  averageScore,
+  getRatingsForDriver,
+} from '@/features/ratings/services/ratings.service';
+import type { RatingRow } from '@/features/ratings/types';
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
 import { ROUTES } from '@/lib/routes';
 import { supabase } from '@/lib/supabase';
@@ -16,26 +21,26 @@ import * as tripsService from '@/services/tripsService';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import {
-  Camera,
-  ChevronLeft,
-  ChevronRight,
-  Crown,
-  Edit3,
-  Dna,
-  Fuel,
-  Gauge,
-  History,
-  LogOut,
-  Milestone,
-  Quote,
-  Shield,
-  Share2,
-  Star,
-  Thermometer,
-  Trophy,
-  Truck,
-  UserPlus,
-  Wrench,
+    Camera,
+    ChevronLeft,
+    ChevronRight,
+    Crown,
+    Dna,
+    Edit3,
+    Fuel,
+    Gauge,
+    History,
+    LogOut,
+    Milestone,
+    Quote,
+    Share2,
+    Shield,
+    Star,
+    Thermometer,
+    Trophy,
+    Truck,
+    UserPlus,
+    Wrench
 } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Image, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -89,6 +94,8 @@ export default function DriverProfileScreen() {
   const [drivers, setDrivers] = useState<driversService.DriverRow[]>([]);
   const [trips, setTrips] = useState<tripsService.TripRow[]>([]);
   const [loadingTrips, setLoadingTrips] = useState(true);
+  const [driverRatings, setDriverRatings] = useState<RatingRow[]>([]);
+  const [loadingDriverRatings, setLoadingDriverRatings] = useState(false);
   const [kycUploadedCount, setKycUploadedCount] = useState(0);
 
   const displayName =
@@ -185,6 +192,35 @@ export default function DriverProfileScreen() {
   }, [loadKycSummary]);
 
   const tripsCount = useMemo(() => trips.filter((t) => isCompleted(t.status)).length, [trips]);
+
+  const primaryDriverId = drivers[0]?.id ?? null;
+
+  useEffect(() => {
+    if (!primaryDriverId) {
+      setDriverRatings([]);
+      setLoadingDriverRatings(false);
+      return;
+    }
+    let cancelled = false;
+    setLoadingDriverRatings(true);
+    void getRatingsForDriver(primaryDriverId)
+      .then((res) => {
+        if (cancelled) return;
+        setDriverRatings(res.error ? [] : (res.ratings ?? []));
+      })
+      .catch(() => {
+        if (!cancelled) setDriverRatings([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingDriverRatings(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [primaryDriverId]);
+
+  const driverRatingAvg = useMemo(() => averageScore(driverRatings), [driverRatings]);
+  const driverRatingCount = driverRatings.length;
 
   /** Same heuristic as `level-progression.tsx` for consistency across driver UI. */
   const currentLevel = useMemo(() => Math.min(1 + Math.floor(tripsCount / 2), 8), [tripsCount]);
@@ -604,8 +640,21 @@ export default function DriverProfileScreen() {
                     <View style={styles.amberIcon}>
                       <Star size={22} color="#d97706" fill="#d97706" />
                     </View>
-                    <Text style={[styles.statNum, { color: colors.text }]}>—</Text>
-                    <Text style={[styles.statLbl, { color: muted }]}>5-STAR RATINGS</Text>
+                    <Text style={[styles.statNum, { color: colors.text }]}>
+                      {primaryDriverId
+                        ? loadingDriverRatings
+                          ? '–'
+                          : driverRatingAvg != null
+                            ? driverRatingAvg.toFixed(1)
+                            : '—'
+                        : '—'}
+                    </Text>
+                    <Text style={[styles.statLbl, { color: muted }]}>AVG RATING</Text>
+                    {primaryDriverId && !loadingDriverRatings && driverRatingCount > 0 ? (
+                      <Text style={[styles.statHint, { color: muted }]} numberOfLines={1}>
+                        {driverRatingCount} {driverRatingCount === 1 ? 'review' : 'reviews'}
+                      </Text>
+                    ) : null}
                   </View>
                   <View style={[styles.statBox, { backgroundColor: colors.surface, borderColor: cardBorder }]}>
                     <View style={styles.blueIconSm}>
@@ -839,6 +888,7 @@ const styles = StyleSheet.create({
   },
   statNum: { fontSize: 22, fontWeight: '900' },
   statLbl: { marginTop: 6, fontSize: 9, fontWeight: '900', letterSpacing: 2 },
+  statHint: { marginTop: 4, fontSize: 10, fontWeight: '600', letterSpacing: 0.2 },
   signOutCard: {
     flexDirection: 'row',
     alignItems: 'center',
