@@ -1949,6 +1949,15 @@ export function AddTransactionModal({
   useEffect(() => {
     if (!visible || tripLocked || !effectivePartyIdForTrips || selectedTripIds.length === 0)
       return;
+    // If the UI has only one possible party for the selected trip/context, keep it stable.
+    // This prevents an auto-select/clear ping-pong that can cause render-depth overflow on web.
+    if (
+      partyOptions.length === 1 &&
+      partyOptions[0]?.id != null &&
+      partyOptions[0].id === effectivePartyIdForTrips
+    ) {
+      return;
+    }
     const isSupplier = safeSuppliers.some(
       (s) => s.id === effectivePartyIdForTrips,
     );
@@ -1987,6 +1996,7 @@ export function AddTransactionModal({
     safeTrips,
     safeSuppliers,
     safeDrivers,
+    partyOptions,
     type,
     supplierLinkedOrgIds,
     tripLocked,
@@ -2008,7 +2018,7 @@ export function AddTransactionModal({
   // When IN + tagged trip: auto-select the trip's client (single option or first of list). When OUT + tagged trip: auto-select if single supplier/driver. Skip when party is locked.
   useEffect(() => {
     if (!visible || isPartyLocked) return;
-    if (type === "in" && selectedTrip && partyOptions.length >= 1) {
+    if (type === "in" && selectedTrip && partyOptions.length === 1) {
       const firstId = partyOptions[0].id;
       const currentInList =
         partyId != null && partyOptions.some((c) => c.id === partyId);
