@@ -280,9 +280,8 @@ async function getExpoLocation(): Promise<typeof ExpoLocation | null> {
   }
 }
 
-/** Route checkpoint cadence while trip is moving (fixed 5-minute DB writes). */
-// DEV: reduced to 15s for testing pin trail; restore to 5 * 60 * 1000 before shipping
-const LOCATION_REPORT_INTERVAL_MS = __DEV__ ? 15 * 1000 : 5 * 60 * 1000;
+/** Route checkpoint cadence while trip is moving (fixed 3-minute DB writes). */
+const LOCATION_REPORT_INTERVAL_MS = 3 * 60 * 1000;
 
 /** Approximate distance in metres between two WGS84 points (Haversine-style). */
 function distanceMeters(

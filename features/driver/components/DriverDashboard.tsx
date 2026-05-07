@@ -265,8 +265,8 @@ async function getExpoLocation() {
   }
 }
 
-/** Location report interval: 10s in dev, 30s in production when driver is on trip. */
-const LOCATION_REPORT_INTERVAL_MS = __DEV__ ? 10 * 1000 : 30 * 1000;
+/** Location report interval: fixed 3 minutes when driver is on trip. */
+const LOCATION_REPORT_INTERVAL_MS = 3 * 60 * 1000;
 /** Minimum displacement (metres) before sending another point; skip noisy duplicates. */
 const MIN_DISPLACEMENT_M = 30;
 
