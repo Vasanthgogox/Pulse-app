@@ -176,7 +176,7 @@ export function TripChatProvider({
 
   // Lightweight always-on realtime: keep unread badges/live indicators fresh even when chat screen is hidden.
   useEffect(() => {
-    if (!organizationId) return;
+    if (!organizationId || isActive) return;
     return subscribeSharedPostgresChanges(
       `trip_messages:org:${organizationId}`,
       [

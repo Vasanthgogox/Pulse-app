@@ -168,7 +168,7 @@ export function IntegratedChatProvider({
 
   // Lightweight always-on realtime: keep network unread badges fresh when chat screen is hidden.
   useEffect(() => {
-    if (!orgId) return;
+    if (!orgId || isActive) return;
     return subscribeSharedPostgresChanges(
       `network_messages:org:${orgId}`,
       [
