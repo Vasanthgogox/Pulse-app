@@ -60,9 +60,16 @@ import { VehicleDocumentsSection } from "./VehicleDocumentsSection";
 export interface VehicleDetailScreenProps {
   vehicleId: string;
   onBack: () => void;
+  openAddEntryOnLoad?: boolean;
+  initialLedgerTripId?: string;
 }
 
-export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetailScreenProps) {
+export default function VehicleDetailScreen({
+  vehicleId,
+  onBack,
+  openAddEntryOnLoad = false,
+  initialLedgerTripId,
+}: VehicleDetailScreenProps) {
   const { t } = useLanguage();
   const { profile } = useAuth();
   const { currentOrganization } = useOrganization();
@@ -89,6 +96,13 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
   const initialLoadDoneRef = useRef(false);
   const heroDecorProgress = useRef(new Animated.Value(0)).current;
   const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
+  const openAddEntryHandledRef = useRef(false);
+
+  useEffect(() => {
+    if (!openAddEntryOnLoad || openAddEntryHandledRef.current) return;
+    setShowAddTransactionModal(true);
+    openAddEntryHandledRef.current = true;
+  }, [openAddEntryOnLoad]);
 
   useEffect(() => {
     if (!isWebDesktop) {
@@ -808,6 +822,7 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
         entryContextLabel={vehicle?.vehicle_number ?? t("vehicle")}
         trips={tripOptions}
         drivers={drivers}
+        initialTripId={initialLedgerTripId}
       />
 
       <Modal

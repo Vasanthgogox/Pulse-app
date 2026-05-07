@@ -425,10 +425,18 @@ export default function TripsScreen() {
       return (data ?? []).map((r) => (r as { trip_id: string }).trip_id);
     },
   });
-
   const tripIdsWithDocuments = useMemo(() => {
-    const raw = tripIdsWithDocumentsRaw;
-    if (Array.isArray(raw)) return new Set(raw);
+    if (tripIdsWithDocumentsRaw instanceof Set) {
+      return tripIdsWithDocumentsRaw;
+    }
+    if (Array.isArray(tripIdsWithDocumentsRaw)) {
+      return new Set(
+        tripIdsWithDocumentsRaw
+          .filter((value): value is string => typeof value === "string")
+          .map((value) => value.trim())
+          .filter(Boolean),
+      );
+    }
     return new Set<string>();
   }, [tripIdsWithDocumentsRaw]);
 

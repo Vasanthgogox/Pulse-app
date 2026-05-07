@@ -117,6 +117,12 @@ const inputStyle = {
   backgroundColor: Theme.surfaceForm,
 };
 const labelStyle = { color: Theme.textMutedDemo };
+const TRIP_TERMINAL_STATUSES = new Set([
+  "completed",
+  "cancelled",
+  "done",
+  "delivered",
+]);
 
 export interface AddTripFormFieldsProps {
   state: AddTripFormState;
@@ -280,10 +286,11 @@ export function AddTripFormFields({
       setDrivers(allDrivers.filter((d) => !d.left_at));
       setVehicles(vRes.error ? [] : vRes.vehicles);
       const trips = tRes.error ? [] : (tRes.trips ?? []);
-      const activeStatuses = ["assigned", "in_progress"];
-      const activeTrips = trips.filter((t) =>
-        activeStatuses.includes((t.status || "").toLowerCase()),
-      );
+      const activeTrips = trips.filter((t) => {
+        const status = String(t.status ?? "").trim().toLowerCase();
+        // Keep UI in sync with server-side guards: any non-terminal trip blocks assignment.
+        return !TRIP_TERMINAL_STATUSES.has(status);
+      });
       const busyDrivers = Array.from(
         new Set(
           activeTrips
@@ -294,7 +301,7 @@ export function AddTripFormFields({
       const busyVehicles = Array.from(
         new Set(
           activeTrips
-            .filter((t) => t.vehicle_id && t.driver_id)
+            .filter((t) => t.vehicle_id)
             .map((t) => t.vehicle_id as string),
         ),
       );

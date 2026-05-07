@@ -226,19 +226,6 @@ export function LoadCenterView({
 
   const scrollRef = useRef<FlashList<IndentRow>>(null);
 
-  useEffect(() => {
-    if (highlightedIndentId) {
-      // Using a timeout to ensure the list has rendered before attempting to scroll.
-      setTimeout(() => {
-        scrollRef.current?.scrollToItem({
-          animated: true,
-          item: { id: highlightedIndentId } as IndentRow, // Cast to IndentRow with just ID
-          viewPosition: 0.5, // Center the item if possible
-        });
-      }, 500);
-    }
-  }, [highlightedIndentId]);
-
   const [loadSubTab, setLoadSubTab] = useState<LoadSubTab>("GIVE_LOAD");
   const [loadTabsWrapWidth, setLoadTabsWrapWidth] = useState(0);
   const loadTabsActiveAnim = useRef(new Animated.Value(0)).current;
@@ -348,6 +335,18 @@ export function LoadCenterView({
 
   const useGridLayout = width >= 1024;
   const isMobileView = width < 820;
+
+  useEffect(() => {
+    if (!highlightedIndentId || useGridLayout) return;
+    const t = setTimeout(() => {
+      scrollRef.current?.scrollToItem({
+        animated: true,
+        item: { id: highlightedIndentId } as IndentRow,
+        viewPosition: 0.5,
+      });
+    }, 500);
+    return () => clearTimeout(t);
+  }, [highlightedIndentId, useGridLayout]);
 
   /** O(myQuotes.length): map indent_id -> quote for Find Work "Quote Sent" / "Update quote" and modal prefill. */
   const myQuoteByIndentId = useMemo(() => {
@@ -2609,24 +2608,42 @@ export function LoadCenterView({
                     </Text>
                   </View>
                 </View>
-                <FlashList<IndentRow>
-                  data={filteredClaimedLoads}
-                  renderItem={({ item: load }: { item: IndentRow }) => (
-                    <View
-                      key={`claimed-${load.id}`}
-                      style={[
-                        useGridLayout ? styles.gridCardWrap : undefined,
-                        highlightedIndentId === load.id &&
-                          styles.highlightedIndentCard,
-                      ]}
-                    >
-                      {renderClaimedLoadCard(load, false, useGridLayout)}
-                    </View>
-                  )}
-                  estimatedItemSize={168}
-                  keyExtractor={(item) => item.id}
-                  ref={scrollRef}
-                />
+                {useGridLayout ? (
+                  <View style={styles.gridList}>
+                    {filteredClaimedLoads.map((load) => (
+                      <View
+                        key={`claimed-${load.id}`}
+                        style={[
+                          width >= 1280
+                            ? styles.gridCardWrap
+                            : styles.gridCardWrapHalf,
+                          highlightedIndentId === load.id &&
+                            styles.highlightedIndentCard,
+                        ]}
+                      >
+                        {renderClaimedLoadCard(load, false, true)}
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  <FlashList<IndentRow>
+                    data={filteredClaimedLoads}
+                    renderItem={({ item: load }: { item: IndentRow }) => (
+                      <View
+                        style={[
+                          highlightedIndentId === load.id
+                            ? styles.highlightedIndentCard
+                            : null,
+                        ]}
+                      >
+                        {renderClaimedLoadCard(load, false, false)}
+                      </View>
+                    )}
+                    estimatedItemSize={168}
+                    keyExtractor={(item) => item.id}
+                    ref={scrollRef}
+                  />
+                )}
               </View>
             ))}
         </ScrollView>
@@ -4837,6 +4854,12 @@ const styles = StyleSheet.create({
   },
   gridCardWrap: {
     width: "33.333%",
+    paddingHorizontal: 6,
+    marginBottom: 12,
+    alignSelf: "stretch",
+  },
+  gridCardWrapHalf: {
+    width: "50%",
     paddingHorizontal: 6,
     marginBottom: 12,
     alignSelf: "stretch",
