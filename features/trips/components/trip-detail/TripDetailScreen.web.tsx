@@ -297,6 +297,7 @@ export default function TripDetailScreen({
 
   const vehicleGalleryScrollRef = useRef<ScrollView | null>(null);
   const [vehicleGalleryPageWidth, setVehicleGalleryPageWidth] = useState(0);
+  const vehicleGalleryInitialSyncedRef = useRef(false);
 
   const closeFinanceProvisionModal = () => {
     setShowFinanceProvisionPanel(null);
@@ -327,7 +328,9 @@ export default function TripDetailScreen({
       const total = detail.vehiclePreviewDocs.length;
       if (total <= 0) return;
       const clamped = Math.max(0, Math.min(nextIndex, total - 1));
-      detail.setVehiclePreviewIndex(clamped);
+      if (clamped !== detail.vehiclePreviewIndex) {
+        detail.setVehiclePreviewIndex(clamped);
+      }
       if (vehicleGalleryPageWidth > 0) {
         vehicleGalleryScrollRef.current?.scrollTo({
           x: clamped * vehicleGalleryPageWidth,
@@ -338,9 +341,18 @@ export default function TripDetailScreen({
     [detail, vehicleGalleryPageWidth],
   );
 
+  // One-shot scroll sync when the gallery first becomes visible, so the
+  // hook's auto-jump to the first uploaded doc lines up with the carousel.
+  // After that, scroll position and `vehiclePreviewIndex` stay in sync via
+  // `onScroll` for swipes and `goToVehicleGalleryIndex` for taps.
   useEffect(() => {
-    if (!detail.isVehicleGalleryDoc) return;
+    if (!detail.isVehicleGalleryDoc) {
+      vehicleGalleryInitialSyncedRef.current = false;
+      return;
+    }
     if (vehicleGalleryPageWidth <= 0) return;
+    if (vehicleGalleryInitialSyncedRef.current) return;
+    vehicleGalleryInitialSyncedRef.current = true;
     vehicleGalleryScrollRef.current?.scrollTo({
       x: detail.vehiclePreviewIndex * vehicleGalleryPageWidth,
       animated: false,
@@ -4981,6 +4993,25 @@ export default function TripDetailScreen({
                       horizontal
                       pagingEnabled
                       showsHorizontalScrollIndicator={false}
+                      scrollEventThrottle={16}
+                      onScroll={(event) => {
+                        const pageWidth =
+                          event.nativeEvent.layoutMeasurement.width;
+                        if (pageWidth <= 0) return;
+                        const nextIndex = Math.round(
+                          event.nativeEvent.contentOffset.x / pageWidth,
+                        );
+                        const clamped = Math.max(
+                          0,
+                          Math.min(
+                            nextIndex,
+                            detail.vehiclePreviewDocs.length - 1,
+                          ),
+                        );
+                        if (clamped !== detail.vehiclePreviewIndex) {
+                          detail.setVehiclePreviewIndex(clamped);
+                        }
+                      }}
                       onMomentumScrollEnd={(event) => {
                         const pageWidth =
                           event.nativeEvent.layoutMeasurement.width;
