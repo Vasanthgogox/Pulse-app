@@ -129,22 +129,31 @@ export function TripChatProvider({
     async () => null
   );
   const missingConvHydrateAtRef = useRef<Record<string, number>>({});
+  const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bootstrappedOrgRef = useRef<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const loadConversations = useCallback(async () => {
     if (!organizationId || !selfUid) return;
-    setIsLoading(true);
+    const shouldShowLoading = conversationsRef.current.length === 0;
+    if (shouldShowLoading) setIsLoading(true);
     try {
       const data = await chatService.getConversationsByOrganization(organizationId);
       setConversations(data);
     } catch {
       // Tables may not exist yet; fail silently.
     } finally {
-      setIsLoading(false);
+      if (shouldShowLoading) setIsLoading(false);
     }
   }, [organizationId, selfUid]);
   loadConversationsRef.current = loadConversations;
+
+  const queueRefreshConversations = useCallback(() => {
+    if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current);
+    refreshDebounceRef.current = setTimeout(() => {
+      void loadConversationsRef.current();
+    }, 350);
+  }, []);
 
   useEffect(() => {
     if (organizationId && selfUid) return;
@@ -154,6 +163,12 @@ export function TripChatProvider({
   }, [organizationId, selfUid]);
 
   // Lightweight bootstrap load (for FAB preview/unread badges even when chat screen is not focused).
+  useEffect(() => {
+    return () => {
+      if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current);
+    };
+  }, []);
+
   useEffect(() => {
     if (!organizationId || !selfUid) return;
     if (bootstrappedOrgRef.current === organizationId) return;
@@ -247,10 +262,10 @@ export function TripChatProvider({
         },
       ],
       () => {
-        void loadConversationsRef.current();
+        queueRefreshConversations();
       }
     );
-  }, [isActive, organizationId, selfUid]);
+  }, [isActive, organizationId, selfUid, queueRefreshConversations]);
 
   const sendMessage = useCallback(
     async (conversationId: string, content: string, messageType: MessageType = "text") => {
@@ -397,13 +412,24 @@ export function TripChatProvider({
           organizationId: fleetOrg,
           partyId: driverId,
         });
-        await loadConversations();
+        setConversations((prev) => {
+          if (prev.find((c) => c.id === conv.id)) return prev;
+          const newConv: TripConversation = {
+            ...conv,
+            trip_number: params.tripNumber,
+            pickup_area: params.pickupArea,
+            drop_location: params.dropLocation,
+            messages: [],
+          };
+          return [newConv, ...prev];
+        });
+        queueRefreshConversations();
         return conv.id;
       } catch {
         return null;
       }
     },
-    [loadConversations]
+    [queueRefreshConversations]
   );
 
   const hydrateConversationById = useCallback(

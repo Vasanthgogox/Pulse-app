@@ -11,6 +11,8 @@
 import { supabase } from "@/lib/supabase";
 
 const BUCKET = "trip-documents";
+const MAX_TRIP_DOC_BYTES = 10 * 1024 * 1024;
+const MAX_TRIP_CHAT_IMAGE_BYTES = 5 * 1024 * 1024;
 
 /**
  * Postgres/PostgREST: table missing from DB or not in API schema cache (`supabase db push`).
@@ -73,6 +75,10 @@ export interface UploadTripChatImageResult {
   fileName: string;
   mimeType: string | null;
   storagePath: string;
+}
+
+function formatMb(bytes: number): string {
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 const SIGNED_URL_EXPIRY_SEC = 3600;
@@ -166,6 +172,17 @@ export async function uploadTripDocument(
   uploadedBy: string,
   file: { arrayBuffer: ArrayBuffer; fileName: string; mimeType: string }
 ): Promise<UploadTripDocumentResult> {
+  if (!file.arrayBuffer?.byteLength) {
+    return { doc: null, error: new Error("File is empty") };
+  }
+  if (file.arrayBuffer.byteLength > MAX_TRIP_DOC_BYTES) {
+    return {
+      doc: null,
+      error: new Error(
+        `File too large (${formatMb(file.arrayBuffer.byteLength)}). Maximum is ${formatMb(MAX_TRIP_DOC_BYTES)}.`,
+      ),
+    };
+  }
   const ext = file.fileName.split(".").pop()?.toLowerCase() || "jpg";
   const path = `${tripId}/${randomUUID()}.${ext}`;
 
@@ -231,6 +248,17 @@ export async function uploadTripChatImage(
   tripId: string,
   file: { arrayBuffer: ArrayBuffer; fileName: string; mimeType: string },
 ): Promise<{ result: UploadTripChatImageResult | null; error: Error | null }> {
+  if (!file.arrayBuffer?.byteLength) {
+    return { result: null, error: new Error("Image is empty") };
+  }
+  if (file.arrayBuffer.byteLength > MAX_TRIP_CHAT_IMAGE_BYTES) {
+    return {
+      result: null,
+      error: new Error(
+        `Chat image too large (${formatMb(file.arrayBuffer.byteLength)}). Maximum is ${formatMb(MAX_TRIP_CHAT_IMAGE_BYTES)}.`,
+      ),
+    };
+  }
   const ext = file.fileName.split(".").pop()?.toLowerCase() || "jpg";
   const path = `${tripId}/chat/${randomUUID()}.${ext}`;
   const { error: uploadError } = await supabase()

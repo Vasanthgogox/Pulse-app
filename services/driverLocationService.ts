@@ -1,7 +1,7 @@
 /**
  * Driver location reporting — append-only history for live trip tracking.
  * Table: driver_locations (driver_id, trip_id, organization_id, latitude, longitude, accuracy, source).
- * Used when driver is on trip: periodic (10s dev / 30s prod) and on tap of location badge.
+ * Used when driver is on trip: periodic (3 minutes) and on tap of location badge.
  */
 import { supabase } from '@/lib/supabase';
 
@@ -47,7 +47,29 @@ export async function reportDriverLocation(
       accuracy: accuracy ?? null,
       source,
     });
-  return { error: error ? new Error(error.message) : null };
+  if (error) {
+    if (__DEV__) {
+      console.warn('[driver_locations] save failed', {
+        driverId,
+        tripId,
+        source,
+        error: error.message,
+      });
+    }
+    return { error: new Error(error.message) };
+  }
+  if (__DEV__) {
+    console.log('[driver_locations] saved', {
+      driverId,
+      organizationId,
+      tripId,
+      source,
+      latitude,
+      longitude,
+      accuracy: accuracy ?? null,
+    });
+  }
+  return { error: null };
 }
 
 /**

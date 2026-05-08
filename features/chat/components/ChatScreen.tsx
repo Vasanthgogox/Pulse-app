@@ -266,6 +266,7 @@ export function ChatScreen() {
   const useGroupedTripHub = isDesktop || Platform.OS === "web";
   /** Narrow conversation chrome: stack trip selector + scroll party tabs. */
   const compactConversationToolbar = width < 560;
+  const allowNewTripConversation = false;
   /** Web: anchored compose/search UX from tablet width up (avoids sheet on iPad / large phones in browser). */
   const isWebAnchoredPanels = Platform.OS === "web" && (isDesktop || width >= 900);
   const { profile } = useAuth();
@@ -717,6 +718,13 @@ export function ChatScreen() {
   };
 
   const openCompose = async (prefillTripId?: string | null) => {
+    if (!allowNewTripConversation) {
+      Alert.alert(
+        "New conversations disabled",
+        "Only existing conversations are available right now.",
+      );
+      return;
+    }
     setShowTripFilterModal(false);
     setShowCompose(true);
     setComposeSearch("");
@@ -3847,7 +3855,7 @@ function TripConversationDetailLoaded({
       onSelectConversation(target.id);
       return;
     }
-    void onOpenCompose();
+    // New conversation creation is disabled; keep current thread unchanged.
   };
 
   const missionDateLabel = formatTripRouteDate(selectedConv.trip_created_at);
