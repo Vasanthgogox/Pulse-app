@@ -762,6 +762,8 @@ export function LoadCenterView({
       loadMatchesSearch(load, searchQuery),
     );
   }, [awardedLoadsDone, searchQuery, loadMatchesSearch]);
+  const displayedClaimedLoads =
+    statusFilterTab === "DONE" ? filteredClaimedDoneLoads : filteredClaimedLoads;
 
   /** Counts per status tab for the current role tab (Hire Partner / Find Work / Claimed). */
   const statusTabCounts = useMemo(() => {
@@ -826,7 +828,7 @@ export function LoadCenterView({
   useEffect(() => {
     // Keep status filter valid per role tab to avoid confusing empty views.
     if (loadSubTab === "AWARDED") {
-      if (statusFilterTab !== "AWARDED") {
+      if (statusFilterTab !== "AWARDED" && statusFilterTab !== "DONE") {
         setStatusFilterTab("AWARDED");
       }
       return;
@@ -1419,13 +1421,46 @@ export function LoadCenterView({
     }
   };
 
-  const rosterReady =
-    !useAdHocDriver && !!assignDriverId && typeof assignVehicleId === "string";
-  const adHocReady = useAdHocDriver;
   const activeDrivers = useMemo(
     () => drivers.filter((d) => !d.left_at),
     [drivers],
   );
+  const activeTripStatusSet = useMemo(
+    () =>
+      new Set([
+        "completed",
+        "cancelled",
+        "closed",
+        "expired",
+      ]),
+    [],
+  );
+  const driverBusyTripLabelById = useMemo(() => {
+    const byDriverId = new Map<string, string>();
+    for (const t of trips ?? []) {
+      const driverId = (t as { driver_id?: string | null }).driver_id;
+      if (!driverId || byDriverId.has(driverId)) continue;
+      const status = String((t as { status?: string | null }).status ?? "").toLowerCase();
+      if (activeTripStatusSet.has(status)) continue;
+      const label =
+        String((t as { display_trip_id?: string | null }).display_trip_id ?? "").trim() ||
+        String((t as { trip_number?: string | null }).trip_number ?? "").trim() ||
+        String((t as { driver_display_trip_id?: string | null }).driver_display_trip_id ?? "").trim() ||
+        "another ongoing trip";
+      byDriverId.set(driverId, label);
+    }
+    return byDriverId;
+  }, [trips, activeTripStatusSet]);
+  const selectedDriverBusyTripLabel = useMemo(() => {
+    if (!assignDriverId) return null;
+    return driverBusyTripLabelById.get(assignDriverId) ?? null;
+  }, [assignDriverId, driverBusyTripLabelById]);
+  const rosterReady =
+    !useAdHocDriver &&
+    !!assignDriverId &&
+    typeof assignVehicleId === "string" &&
+    !selectedDriverBusyTripLabel;
+  const adHocReady = useAdHocDriver;
   const aggregateHasDriverName = aggregateDriverTrackingName.trim().length > 0;
   const aggregateHasDriverPhone = aggregateDriverPhone.trim().length > 0;
   const aggregateHasVehicleText = assignVehicleRegistration.trim().length > 0;
@@ -1471,7 +1506,8 @@ export function LoadCenterView({
     return hirePartnerFabBottom + Layout.fabSize + Layout.fabBottomOffset;
   }, [hirePartnerFabBottom, insets.bottom, loadSubTab]);
   const statusTabsForRole = useMemo(() => {
-    return isClaimedTab ? [] : STATUS_TABS;
+    if (!isClaimedTab) return STATUS_TABS;
+    return STATUS_TABS.filter((t) => t.id === "AWARDED" || t.id === "DONE");
   }, [isClaimedTab]);
 
   /** Vehicle / weight / load: one header row, one detail row (lighter type). */
@@ -1792,7 +1828,7 @@ export function LoadCenterView({
                   autoCorrect={false}
                 />
               </View>
-              {!isClaimedTab ? (
+              {statusTabsForRole.length > 0 ? (
                 <View style={styles.loadTypeFilterWrap}>
                   {statusTabsForRole.map((tab) => {
                     const count = statusTabCounts[tab.id];
@@ -1860,7 +1896,7 @@ export function LoadCenterView({
                 autoCorrect={false}
               />
             </View>
-            {!isClaimedTab ? (
+            {statusTabsForRole.length > 0 ? (
               <View style={styles.loadTypeFilterWrap}>
                 {statusTabsForRole.map((tab) => {
                   const count = statusTabCounts[tab.id];
@@ -2584,7 +2620,7 @@ export function LoadCenterView({
             ))}
 
           {loadSubTab === "AWARDED" &&
-            (filteredClaimedLoads.length === 0 ? (
+            (displayedClaimedLoads.length === 0 ? (
               <View style={styles.emptyWrap}>
                 <View style={styles.emptyIconWrapGold}>
                   <FontAwesome
@@ -2593,24 +2629,33 @@ export function LoadCenterView({
                     color={Theme.driverGold}
                   />
                 </View>
-                <Text style={styles.emptyTitle}>Claimed</Text>
+                <Text style={styles.emptyTitle}>
+                  {statusFilterTab === "DONE" ? "Done" : "Claimed"}
+                </Text>
                 <Text style={styles.emptySub}>
-                  Claimed loads will appear here.
+                  {statusFilterTab === "DONE"
+                    ? "Completed claimed loads will appear here."
+                    : "Claimed loads will appear here."}
                 </Text>
               </View>
             ) : (
               <View style={styles.securedSection}>
                 <View style={styles.loadSectionRow}>
-                  <Text style={styles.loadSectionTitle}>Ready to deploy</Text>
+                  <Text style={styles.loadSectionTitle}>
+                    {statusFilterTab === "DONE"
+                      ? "Completed claimed loads"
+                      : "Ready to deploy"}
+                  </Text>
                   <View style={styles.loadSectionPill}>
                     <Text style={styles.loadSectionPillText}>
-                      {filteredClaimedLoads.length} live
+                      {displayedClaimedLoads.length}{" "}
+                      {statusFilterTab === "DONE" ? "done" : "live"}
                     </Text>
                   </View>
                 </View>
                 {useGridLayout ? (
                   <View style={styles.gridList}>
-                    {filteredClaimedLoads.map((load) => (
+                    {displayedClaimedLoads.map((load) => (
                       <View
                         key={`claimed-${load.id}`}
                         style={[
@@ -2621,13 +2666,17 @@ export function LoadCenterView({
                             styles.highlightedIndentCard,
                         ]}
                       >
-                        {renderClaimedLoadCard(load, false, true)}
+                        {renderClaimedLoadCard(
+                          load,
+                          statusFilterTab === "DONE",
+                          true,
+                        )}
                       </View>
                     ))}
                   </View>
                 ) : (
                   <FlashList<IndentRow>
-                    data={filteredClaimedLoads}
+                    data={displayedClaimedLoads}
                     renderItem={({ item: load }: { item: IndentRow }) => (
                       <View
                         style={[
@@ -2636,7 +2685,11 @@ export function LoadCenterView({
                             : null,
                         ]}
                       >
-                        {renderClaimedLoadCard(load, false, false)}
+                        {renderClaimedLoadCard(
+                          load,
+                          statusFilterTab === "DONE",
+                          false,
+                        )}
                       </View>
                     )}
                     estimatedItemSize={168}
@@ -3561,25 +3614,32 @@ export function LoadCenterView({
                                   </Text>
                                 </View>
                               </View>
-                              {activeDrivers.map((d) => (
+                              {activeDrivers.map((d) => {
+                                const busyTripLabel =
+                                  driverBusyTripLabelById.get(String(d.id)) ?? null;
+                                const isBusy = !!busyTripLabel;
+                                const isSelected = assignDriverId === String(d.id);
+                                return (
                                 <TouchableOpacity
                                   key={d.id}
                                   style={[
                                     styles.assignEntityRow,
-                                    assignDriverId === String(d.id) &&
-                                      styles.assignEntityRowActive,
+                                    isSelected && styles.assignEntityRowActive,
+                                    isBusy && styles.assignEntityRowDisabled,
                                   ]}
-                                  onPress={() =>
-                                    setAssignDriverId(String(d.id))
-                                  }
+                                  onPress={() => {
+                                    if (isBusy) return;
+                                    setAssignDriverId(String(d.id));
+                                  }}
                                   activeOpacity={0.85}
+                                  disabled={isBusy}
                                 >
                                   <View style={styles.assignEntityIconWrap}>
                                     <FontAwesome
                                       name="user"
                                       size={16}
                                       color={
-                                        assignDriverId === String(d.id)
+                                        isSelected
                                           ? Theme.textOnPrimary
                                           : Theme.textMuted
                                       }
@@ -3590,26 +3650,32 @@ export function LoadCenterView({
                                       {d.name ?? d.phone ?? "—"}
                                     </Text>
                                     <Text style={styles.assignEntitySubtitle}>
-                                      {d.phone
+                                      {isBusy
+                                        ? `Already in ${busyTripLabel}`
+                                        : d.phone
                                         ? `Phone: ${d.phone}`
                                         : "Available"}
                                     </Text>
                                   </View>
                                   <FontAwesome
                                     name={
-                                      assignDriverId === String(d.id)
+                                      isSelected
                                         ? "check-circle"
+                                        : isBusy
+                                        ? "exclamation-circle"
                                         : "chevron-right"
                                     }
                                     size={15}
                                     color={
-                                      assignDriverId === String(d.id)
+                                      isSelected
                                         ? Theme.primary
+                                        : isBusy
+                                        ? Theme.warning
                                         : Theme.textMuted
                                     }
                                   />
                                 </TouchableOpacity>
-                              ))}
+                              )})}
                               {activeDrivers.length === 0 ? (
                                 <View style={styles.assignEmptyState}>
                                   <Text style={styles.assignEmptyText}>
@@ -3781,6 +3847,11 @@ export function LoadCenterView({
                                 </Text>
                               </View>
                             </View>
+                            {selectedDriverBusyTripLabel ? (
+                              <Text style={styles.assignSummaryWarningText}>
+                                Selected driver is already in {selectedDriverBusyTripLabel}. Choose an available driver to deploy.
+                              </Text>
+                            ) : null}
                           </View>
                         </>
                       );
@@ -6163,6 +6234,9 @@ const styles = StyleSheet.create({
     borderColor: Theme.primary,
     backgroundColor: Theme.surfaceLight,
   },
+  assignEntityRowDisabled: {
+    opacity: 0.6,
+  },
   assignEntityIconWrap: {
     width: 34,
     height: 34,
@@ -6251,6 +6325,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
+  },
+  assignSummaryWarningText: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.warning,
+    lineHeight: 18,
   },
   assignInputWrap: {
     marginBottom: 6,

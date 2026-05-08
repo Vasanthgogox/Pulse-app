@@ -211,6 +211,46 @@ async function fetchPartnerShipperLinkSinceMap(
   return map;
 }
 
+/**
+ * Ensure integrated suppliers can see currently active loads from linked shippers,
+ * including rows created before the connection timestamp.
+ * This is a read-merge only safety net layered above RPC/fallback paths.
+ */
+async function mergeLinkedShipperActiveIndents(
+  orgId: string,
+  baseIndents: IndentRow[],
+): Promise<IndentRow[]> {
+  const existing = new Map(baseIndents.map((i) => [i.id, i]));
+  const linkMap = await fetchPartnerShipperLinkSinceMap(orgId);
+  if (linkMap.size === 0) return baseIndents;
+
+  const shipperIds = [...linkMap.keys()];
+  const { data: rows, error } = await supabase()
+    .from("indents")
+    .select("*, organizations(name)")
+    .in("organization_id", shipperIds)
+    .in("circulation_target", ["integrated_supplier", "both"])
+    .not("status", "in", '("completed","cancelled","closed","expired")')
+    .neq("status", "draft")
+    .order("created_at", { ascending: false });
+  if (error || !rows?.length) return baseIndents;
+
+  const merged = [...baseIndents];
+  for (const row of rows as Array<
+    IndentRow & { organizations?: { name: string | null } | null }
+  >) {
+    if (existing.has(row.id)) continue;
+    const { organizations, ...rest } = row;
+    const normalized: IndentRow = {
+      ...rest,
+      creator_organization_name: organizations?.name ?? null,
+    } as IndentRow;
+    existing.set(normalized.id, normalized);
+    merged.push(normalized);
+  }
+  return merged;
+}
+
 /** Market-facing indents visible to the current organization (as integrated supplier). Uses RPC (SECURITY DEFINER) then direct table fallback. */
 export async function getMarketIndentsForOrganization(
   orgId: string,
@@ -232,7 +272,8 @@ export async function getMarketIndentsForOrganization(
         null;
       return { ...rest, creator_organization_name: name } as IndentRow;
     });
-    const merged = await mergeQuotedIndentsForSupplier(orgId, indents);
+    const withActiveLinked = await mergeLinkedShipperActiveIndents(orgId, indents);
+    const merged = await mergeQuotedIndentsForSupplier(orgId, withActiveLinked);
     return { error: null, indents: merged };
   }
 
@@ -253,6 +294,13 @@ export async function getMarketIndentsForOrganization(
   const rows = (data ?? []).filter((row) => {
     const since = linkMap.get(String(row.organization_id ?? ""));
     if (!since) return false;
+    const status = String(row.status ?? "").toLowerCase();
+    const isActive =
+      status !== "completed" &&
+      status !== "cancelled" &&
+      status !== "closed" &&
+      status !== "expired";
+    if (isActive) return true;
     return String(row.created_at ?? "") >= since;
   }) as (IndentRow & {
     organizations?: { name: string | null } | null;
