@@ -28,18 +28,12 @@ export async function resolveChatDocumentStorageUrl(storagePath: string): Promis
 
   let lastError: string | null = null;
 
-  const results = await Promise.allSettled(
-    BUCKET_TRY_ORDER.map((bucket) =>
-      supabase().storage.from(bucket).createSignedUrl(path, SIGNED_EXPIRY_SEC)
-    )
-  );
-  for (const result of results) {
-    if (result.status === 'fulfilled' && !result.value.error && result.value.data?.signedUrl) {
-      return result.value.data.signedUrl;
+  for (const bucket of BUCKET_TRY_ORDER) {
+    const result = await supabase().storage.from(bucket).createSignedUrl(path, SIGNED_EXPIRY_SEC);
+    if (!result.error && result.data?.signedUrl) {
+      return result.data.signedUrl;
     }
-    if (result.status === 'fulfilled' && result.value.error) {
-      lastError = result.value.error.message ?? lastError;
-    }
+    lastError = result.error?.message ?? lastError;
   }
 
   // Fallback: trip-documents may still yield a public URL if bucket is public
@@ -68,12 +62,10 @@ export async function tryChatDocumentBlobObjectUrl(
     return null;
   }
 
-  const dlResults = await Promise.allSettled(
-    BUCKET_TRY_ORDER.map((bucket) => supabase().storage.from(bucket).download(path))
-  );
-  for (const result of dlResults) {
-    if (result.status === 'fulfilled' && !result.value.error && result.value.data) {
-      const url = URL.createObjectURL(result.value.data);
+  for (const bucket of BUCKET_TRY_ORDER) {
+    const result = await supabase().storage.from(bucket).download(path);
+    if (!result.error && result.data) {
+      const url = URL.createObjectURL(result.data);
       return {
         url,
         revoke: () => {
