@@ -256,6 +256,7 @@ export async function getConversationsByOrganization(
     ]);
 
     if (ownErr) throw ownErr;
+    if (supplierTripIdsRes.error) throw supplierTripIdsRes.error;
 
     const supplierTripIds = ((supplierTripIdsRes.data ?? []) as { trip_id: string }[])
       .map((r) => r.trip_id)
@@ -274,16 +275,16 @@ export async function getConversationsByOrganization(
       supplierRows = supRows ?? [];
     }
 
-    const byId = new Map<string, unknown>();
+    const byId = new Map<string, Record<string, unknown>>();
     for (const row of ownOrgRows ?? [])
-      byId.set((row as unknown as { id: string }).id, row);
+      byId.set((row as { id: string }).id, row as Record<string, unknown>);
     for (const row of supplierRows)
-      byId.set((row as unknown as { id: string }).id, row);
+      byId.set((row as { id: string }).id, row as Record<string, unknown>);
 
-    return Array.from(byId.values()).sort((a: any, b: any) => {
-      const ta = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
-      const tb = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
-      return tb - ta;
+    return Array.from(byId.values()).sort((a, b) => {
+      const ta = a.last_message_at as string | null | undefined;
+      const tb = b.last_message_at as string | null | undefined;
+      return (tb ? new Date(tb).getTime() : 0) - (ta ? new Date(ta).getTime() : 0);
     });
   }
 
@@ -295,21 +296,24 @@ export async function getConversationsByOrganization(
     merged = await loadMerged(TRIP_EMBED_FIELDS_LEGACY);
   }
 
-  const conversations: TripConversation[] = merged.map((row: any) => ({
-    ...row,
-    trip_number: row.trips?.trip_number ?? "",
-    display_trip_id: row.trips?.display_trip_id ?? null,
-    trip_status: row.trips?.status ?? null,
-    trip_driver_id: row.trips?.driver_id ?? null,
-    trip_supplier_id: row.trips?.supplier_id ?? null,
-    trip_created_at: (row.trips?.created_at as string | null | undefined) ?? null,
-    pickup_area: row.trips?.pickup_area ?? "",
-    drop_location: row.trips?.drop_location ?? "",
-    messages: ((row.trip_messages ?? []) as TripMessageRow[]).sort(
-      (a, b) =>
-        new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-    ),
-  }));
+  const conversations = (merged as Array<Record<string, unknown>>).map((row) => {
+    const trips = row.trips as Record<string, unknown> | null | undefined;
+    return {
+      ...row,
+      trip_number: (trips?.trip_number as string | undefined) ?? "",
+      display_trip_id: (trips?.display_trip_id as string | null) ?? null,
+      trip_status: (trips?.status as string | null) ?? null,
+      trip_driver_id: (trips?.driver_id as string | null) ?? null,
+      trip_supplier_id: (trips?.supplier_id as string | null) ?? null,
+      trip_created_at: (trips?.created_at as string | null) ?? null,
+      pickup_area: (trips?.pickup_area as string | undefined) ?? "",
+      drop_location: (trips?.drop_location as string | undefined) ?? "",
+      messages: ((row.trip_messages ?? []) as TripMessageRow[]).sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      ),
+    };
+  }) as unknown as TripConversation[];
 
   return resolveGenericPartyNamesForTrips(conversations);
 }
@@ -586,7 +590,8 @@ export async function getNetworkConversationsByOrg(
 
   if (error) throw error;
 
-  return (data ?? []).map((row: any) => {
+  return ((data ?? []) as unknown[]).map((rawRow) => {
+    const row = rawRow as Record<string, unknown>;
     const isA = row.org_a_id === orgId;
     return {
       ...row,
@@ -598,7 +603,7 @@ export async function getNetworkConversationsByOrg(
           new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
       ),
     };
-  });
+  }) as unknown as NetworkConversation[];
 }
 
 export async function getOrCreateNetworkConversation(params: {
@@ -958,7 +963,7 @@ export async function getConversationsByDriverIds(
     .select("id,organization_id,trip_id,party_type,party_name,client_id,supplier_id,driver_id,last_message_at,last_message_preview,unread_dispatcher_count,created_at,updated_at")
     .in("driver_id", driverIds)
     .order("last_message_at", { ascending: false, nullsFirst: false });
-  if (convErr) throw primary.error;
+  if (convErr) throw convErr;
 
   const normalizedConvRows = (convRows ?? []) as DriverChatConversationRow[];
   const tripIds = Array.from(new Set(normalizedConvRows.map((r) => String(r.trip_id ?? "")).filter(Boolean)));
@@ -979,7 +984,7 @@ export async function getConversationsByDriverIds(
           .select("id, conversation_id, content, sender_role, sender_name, sender_user_id, created_at, is_read, message_type, metadata")
           .in("conversation_id", convIds)
           .order("created_at", { ascending: false })
-          .limit(50 * convIds.length)
+          .limit(Math.min(50 * convIds.length, 500))
       : Promise.resolve(emptyMessagesRes),
   ]);
 

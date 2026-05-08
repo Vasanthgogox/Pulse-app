@@ -28,7 +28,7 @@ import {
 } from "@/features/finance/services/tripSubcontracts.service";
 import type { FinancePeriodFilter } from "@/features/finance/types";
 import { allocateAmountsToLargestDueTrips } from "@/features/finance/utils/allocateToLargestDue";
-import { averageScore, getRatingsForClient } from "@/features/ratings";
+import { averageScore } from "@/features/ratings";
 import {
     getSuppliersByOrganization,
     type SupplierRow,
@@ -37,7 +37,6 @@ import { adjustedRevenue } from "@/features/trips/services/tripAdjustments";
 import {
     getTripDisplayNumber,
     getTripsByOrganization,
-    getTripsWhereOrgIsSupplier,
     type TripRow,
 } from "@/features/trips/services/trips.service";
 import {
@@ -78,23 +77,14 @@ import {
     View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import {
-    getContractsByClient,
-    type ClientContract,
-} from "../services/clientContracts.service";
+import type { ClientContract } from "../services/clientContracts.service";
 import {
     getClientDetailBundle,
-    getClientDetails,
     getClientsByOrganization,
     getLinkedOrgProfile,
-    updateClient,
     type ClientRow,
-    type UpdateClientData,
 } from "../services/clients.service";
-import {
-    getWarehousesByClient,
-    type ClientWarehouse,
-} from "../services/clientWarehouses.service";
+import type { ClientWarehouse } from "../services/clientWarehouses.service";
 
 /** UUID-shaped strings are not valid human supplier names (avoid showing raw ids). */
 function isUuidLikeString(value: string | null | undefined): boolean {
@@ -125,32 +115,6 @@ function clientDetailSupplierColumnTitle(
     return { title: "Own operations", sameAsClient: true };
   }
   return { title: aggregateSupplier, sameAsClient: false };
-}
-
-/**
- * When the same trip exists as org-owned row and as supplier-RPC row, we previously kept only the owner
- * copy — `get_trips_where_org_is_supplier` often carries supplier_name / supplier_id the owner row lacks.
- */
-function mergeTripOwnerWithSupplierCopy(
-  owner: TripRow,
-  supplierCopy: TripRow,
-): TripRow {
-  const ownerSid = (owner.supplier_id ?? "").trim();
-  const altSid = (supplierCopy.supplier_id ?? "").trim();
-  const supplier_id =
-    ownerSid || altSid
-      ? ownerSid || altSid
-      : (owner.supplier_id ?? supplierCopy.supplier_id ?? null);
-
-  const ownerSn = (owner.supplier_name ?? "").trim();
-  const altSn = (supplierCopy.supplier_name ?? "").trim();
-  let supplier_name = owner.supplier_name ?? supplierCopy.supplier_name;
-  if (ownerSn && !isUuidLikeString(ownerSn))
-    supplier_name = owner.supplier_name;
-  else if (altSn && !isUuidLikeString(altSn))
-    supplier_name = supplierCopy.supplier_name;
-
-  return { ...owner, supplier_id, supplier_name };
 }
 
 const TRIP_TABLE_AVATAR = 24;
@@ -317,13 +281,6 @@ export default function ClientDetailScreen({
           ? 12
           : 16
       : Layout.screenPaddingHorizontal;
-  const [editOrgName, setEditOrgName] = useState("");
-  const [editContactPerson, setEditContactPerson] = useState("");
-  const [editPhone, setEditPhone] = useState("");
-  const [editEmail, setEditEmail] = useState("");
-  const [editAddress, setEditAddress] = useState("");
-  const [editGstin, setEditGstin] = useState("");
-  const [editPan, setEditPan] = useState("");
   const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
   const [isInApp, setIsInApp] = useState(false);
   const [sendingInvitation, setSendingInvitation] = useState(false);
@@ -517,6 +474,9 @@ export default function ClientDetailScreen({
           setTransactions(forClientTx);
         },
       )
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : "Failed to load client data");
+      })
       .finally(() => {
         setLoading(false);
         initialLoadDoneRef.current = true;
@@ -885,19 +845,6 @@ export default function ClientDetailScreen({
     return m;
   }, [trips]);
 
-  const handleEditSave = async (patch: UpdateClientData) => {
-    if (!currentOrganization?.id || !client) return;
-    const { error: err, client: updated } = await updateClient(
-      currentOrganization.id,
-      client.id,
-      patch,
-    );
-    if (!err && updated) {
-      setClient(updated);
-      load();
-    }
-  };
-
   const triggerSuccess = useCallback((title = "NODE_SYNCED") => {
     setSuccessTitle(title);
     setShowSuccess(true);
@@ -956,7 +903,6 @@ export default function ClientDetailScreen({
 
   // TRANSACTION LEDGER — Aggressive consolidation & tally, O(n). Must run before any early return (Rules of Hooks).
   const {
-    rows: _ledgerProtocolRows,
     totalBilledConsolidated,
     totalPendingConsolidated,
     tripIdToDue,

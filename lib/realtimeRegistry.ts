@@ -89,7 +89,10 @@ function emitToListeners(key: string, payload: RealtimePostgresChangesPayload<Re
 }
 
 function createSharedChannel(key: string, specs: PostgresChangeSpec[]): RealtimeChannel {
-  let channel = supabase().channel(`shared:${key}`);
+  // Use a unique topic per open so Supabase client never reuses an already-subscribed
+  // channel object (which rejects new postgres_changes callbacks after subscribe()).
+  const topic = `shared:${key}:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
+  let channel = supabase().channel(topic);
   for (const spec of specs) {
     channel = channel.on("postgres_changes", spec, (payload) => emitToListeners(key, payload));
   }
@@ -175,7 +178,6 @@ export function clearAllRealtimeChannels() {
  * when clients disconnect without clean unsubscribe (e.g. backgrounded, network drop).
  */
 export function pruneStaleChannels() {
-  const now = Date.now();
   let removed = 0;
   registry.forEach((entry, key) => {
     if (entry.refs > 0) return;
@@ -217,6 +219,7 @@ export function subscribeSharedPostgresChanges(
   if (!entry) {
     enforceChannelCap();
     if (registry.size >= MAX_SHARED_CHANNELS) {
+      console.warn(`[realtimeRegistry] channel cap (${MAX_SHARED_CHANNELS}) reached — subscription for key "${key}" was not registered`);
       return () => {};
     }
     const now = Date.now();
