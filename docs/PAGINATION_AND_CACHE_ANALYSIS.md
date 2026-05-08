@@ -191,3 +191,40 @@ Treat each “list per org” and “detail by id” as a query. Example keys:
 - **Deduplication:** Remove duplicate Finance entity load and redundant Trips/Network focus refetches by relying on the cache.
 
 These changes align with the existing [PERFORMANCE_AND_RESPONSIVENESS_AUDIT.md](./PERFORMANCE_AND_RESPONSIVENESS_AUDIT.md) and will get the largest gain toward a “10x faster” experience.
+
+---
+
+## 7. Delta Caching Rollout (2026 Update)
+
+The app now includes a two-layer cache strategy:
+
+- **Client layer:** TanStack Query persisted cache keyed by domain + org.
+- **Service layer:** domain-level cursor metadata and delta merge helpers in `lib/cache/*`.
+
+### Delta contract
+
+- Cursor: `updated_at` watermark (`DeltaCursor`).
+- Envelope: `{ changed, deletedIds, nextCursor, fullSyncRequired? }`.
+- Merge: id-based upsert + delete (`mergeDeltaRows`).
+
+### Implemented building blocks
+
+- `lib/cache/deltaTypes.ts`
+- `lib/cache/cacheKeys.ts`
+- `lib/cache/cacheMetadataStore.ts`
+- `lib/cache/domainSync.ts`
+- `lib/cache/mergeDelta.ts`
+- `lib/cache/singleflight.ts`
+- `lib/cache/cacheMetrics.ts`
+
+### Hook and service integration
+
+- Query keys now separate finite/infinite list variants to avoid cache-shape collisions.
+- Domain sync wrappers added in core services (trips, transactions, clients, suppliers, drivers, vehicles, indents, chat/network, invoicing, POD reconciliation, log-pods, shared-ledger notifications).
+- Query hooks for core domains now use sync wrappers and preserve existing hook signatures.
+
+### Backend RPC blueprint
+
+- Additive SQL blueprint for `*_delta` RPCs is provided in:
+  - `scripts/sql/delta_rpc_blueprint_safe.sql`
+- Apply in Q-unified-base Supabase project, then enable domain-by-domain delta reads without removing legacy full-fetch paths.

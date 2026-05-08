@@ -248,7 +248,8 @@ export function TripChatProvider({
     );
   }, [organizationId, isActive, selfUid]);
 
-  // Focused-screen realtime sync: full refresh while user is actively in chat.
+  // Focused-screen realtime sync: apply known messages locally. Avoid reloading the
+  // whole conversation list for every insert during active multi-user chat.
   useEffect(() => {
     if (!isActive || !organizationId || !selfUid) return;
     return subscribeSharedPostgresChanges(
@@ -261,11 +262,43 @@ export function TripChatProvider({
           filter: `organization_id=eq.${organizationId}`,
         },
       ],
-      () => {
-        queueRefreshConversations();
+      (payload) => {
+        const row = payload.new as Partial<TripMessageRow> | null;
+        const conversationId = row?.conversation_id;
+        if (!row || !conversationId) return;
+
+        if (selfUid && row.sender_user_id && row.sender_user_id === selfUid) return;
+
+        let found = false;
+        setConversations((prev) =>
+          prev.map((conv) => {
+            if (conv.id !== conversationId) return conv;
+            found = true;
+            const exists = row.id ? conv.messages.some((m) => m.id === row.id) : false;
+            return {
+              ...conv,
+              messages: exists ? conv.messages : [...conv.messages, row as TripMessageRow],
+              unread_dispatcher_count: (conv.unread_dispatcher_count ?? 0) + 1,
+              last_message_at: row.created_at ?? conv.last_message_at,
+              last_message_preview:
+                typeof row.content === "string" && row.content.trim().length > 0
+                  ? row.content.slice(0, 120)
+                  : conv.last_message_preview,
+            };
+          })
+        );
+
+        if (!found) {
+          const now = Date.now();
+          const last = missingConvHydrateAtRef.current[conversationId] ?? 0;
+          if (now - last > 10_000) {
+            missingConvHydrateAtRef.current[conversationId] = now;
+            void hydrateConversationByIdRef.current(conversationId);
+          }
+        }
       }
     );
-  }, [isActive, organizationId, selfUid, queueRefreshConversations]);
+  }, [isActive, organizationId, selfUid]);
 
   const sendMessage = useCallback(
     async (conversationId: string, content: string, messageType: MessageType = "text") => {

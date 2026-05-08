@@ -74,12 +74,10 @@ export async function tryChatDocumentBlobObjectUrl(
     return null;
   }
 
-  const dlResults = await Promise.allSettled(
-    BUCKET_TRY_ORDER.map((bucket) => supabase().storage.from(bucket).download(path))
-  );
-  for (const result of dlResults) {
-    if (result.status === 'fulfilled' && !result.value.error && result.value.data) {
-      const url = URL.createObjectURL(result.value.data);
+  for (const bucket of BUCKET_TRY_ORDER) {
+    const result = await supabase().storage.from(bucket).download(path);
+    if (!result.error && result.data) {
+      const url = URL.createObjectURL(result.data);
       return {
         url,
         revoke: () => {

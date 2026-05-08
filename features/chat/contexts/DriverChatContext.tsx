@@ -213,8 +213,32 @@ export function DriverChatProvider({
             filter: `organization_id=eq.${orgId}`,
           },
         ],
-        () => {
-          queueRefreshConversations();
+        (payload) => {
+          const row = payload.new as Partial<TripMessageRow> | null;
+          const conversationId = row?.conversation_id;
+          if (!row || !conversationId) return;
+          if (row.sender_user_id === uid) return;
+
+          let found = false;
+          setConversations((prev) =>
+            prev.map((conv) => {
+              if (conv.id !== conversationId) return conv;
+              found = true;
+              const exists = row.id ? conv.messages.some((m) => m.id === row.id) : false;
+              return {
+                ...conv,
+                messages: exists ? conv.messages : [...conv.messages, row as TripMessageRow],
+                unread_dispatcher_count: (conv.unread_dispatcher_count ?? 0) + 1,
+                last_message_at: row.created_at ?? conv.last_message_at,
+                last_message_preview:
+                  typeof row.content === "string" && row.content.trim().length > 0
+                    ? row.content.slice(0, 120)
+                    : conv.last_message_preview,
+              };
+            })
+          );
+
+          if (!found) queueRefreshConversations();
         }
       )
     );

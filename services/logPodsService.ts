@@ -8,6 +8,8 @@ import {
     getShipperDisplayNamesForSupplierTrips,
     type TripRow,
 } from "@/features/trips/services/trips.service";
+import { syncDomainRows } from "@/lib/cache/domainSync";
+import { mergeDeltaRows } from "@/lib/cache/mergeDelta";
 import { supabase } from "@/lib/supabase";
 import { expandLR } from "@/lib/utils/lr";
 
@@ -260,6 +262,45 @@ export async function fetchTripsForLogPods(
     return { error: null, trips: views };
   } catch (e) {
     return { error: e instanceof Error ? e : new Error(String(e)), trips: [] };
+  }
+}
+
+export async function syncLogPodsTripsWithCache(
+  orgId: string,
+  currentRows: LogPodsTripView[],
+): Promise<{ error: Error | null; trips: LogPodsTripView[] }> {
+  try {
+    const trips = await syncDomainRows<LogPodsTripView>({
+      domain: "log-pods",
+      orgId,
+      schemaVersion: "1",
+      policy: { maxDeltaLagMs: 2 * 60_000, fullSyncEveryMs: 60 * 60_000 },
+      currentRows,
+      getFull: async () => {
+        const res = await fetchTripsForLogPods(orgId);
+        if (res.error) throw res.error;
+        return res.trips;
+      },
+      getDelta: async () => {
+        const res = await fetchTripsForLogPods(orgId);
+        if (res.error) throw res.error;
+        return {
+          changed: res.trips,
+          deletedIds: [],
+          nextCursor: { updatedAt: new Date().toISOString() },
+        };
+      },
+      merge: (existing, delta) =>
+        mergeDeltaRows({
+          existing,
+          changed: delta.changed,
+          deletedIds: delta.deletedIds,
+          compare: (a, b) => b.date.localeCompare(a.date),
+        }),
+    });
+    return { error: null, trips };
+  } catch (e) {
+    return { error: e instanceof Error ? e : new Error(String(e)), trips: currentRows };
   }
 }
 

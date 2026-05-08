@@ -3,6 +3,9 @@
  * Service-layer validation: single pass over inputs before insert.
  */
 import { getClientById } from "@/features/clients/services/clients.service";
+import { syncDomainRows } from "@/lib/cache/domainSync";
+import { mergeDeltaRows } from "@/lib/cache/mergeDelta";
+import type { DeltaResponse } from "@/lib/cache/deltaTypes";
 import { DEFAULT_PAGE_SIZE, type PageOpts } from "@/lib/pagination";
 import { supabase } from "@/lib/supabase";
 import {
@@ -154,6 +157,62 @@ export async function getIndentsByOrganization(
     trip_number: row.trips?.[0]?.trip_number ?? null,
   })) as IndentRow[];
   return { error: null, indents };
+}
+
+export async function getIndentsDelta(
+  orgId: string,
+  since: { updatedAt: string; tieBreakerId?: string | null },
+): Promise<{ error: Error | null; delta: DeltaResponse<IndentRow> }> {
+  const { data, error } = await supabase().rpc("get_indents_delta", {
+    p_org_id: orgId,
+    p_since: since.updatedAt,
+    p_limit: 1000,
+  });
+  if (error) return { error: new Error(error.message), delta: { changed: [], deletedIds: [], nextCursor: since } };
+  const row = (Array.isArray(data) ? data[0] : data) as
+    | { changed?: IndentRow[]; deleted_ids?: string[]; next_cursor?: string | null }
+    | null;
+  return {
+    error: null,
+    delta: {
+      changed: (row?.changed ?? []) as IndentRow[],
+      deletedIds: (row?.deleted_ids ?? []) as string[],
+      nextCursor: row?.next_cursor ? { updatedAt: row.next_cursor } : since,
+    },
+  };
+}
+
+export async function syncIndentsWithCache(orgId: string, currentRows: IndentRow[]) {
+  try {
+    const indents = await syncDomainRows<IndentRow>({
+      domain: "indents",
+      orgId,
+      schemaVersion: "1",
+      policy: { maxDeltaLagMs: 3 * 60_000, fullSyncEveryMs: 4 * 60 * 60_000 },
+      currentRows,
+      getFull: async () => {
+        const res = await getIndentsByOrganization(orgId);
+        if (res.error) throw res.error;
+        return res.indents;
+      },
+      getDelta: async (cursor) => {
+        const res = await getIndentsDelta(orgId, cursor);
+        if (res.error) throw res.error;
+        return res.delta;
+      },
+      merge: (existing, delta) =>
+        mergeDeltaRows({
+          existing,
+          changed: delta.changed,
+          deletedIds: delta.deletedIds,
+          compare: (a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        }),
+    });
+    return { error: null, indents };
+  } catch (e) {
+    return { error: e instanceof Error ? e : new Error(String(e)), indents: currentRows };
+  }
 }
 
 /**

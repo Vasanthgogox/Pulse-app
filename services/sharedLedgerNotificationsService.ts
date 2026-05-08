@@ -3,6 +3,8 @@
  * Additive to salary-request notifications; fails soft if backend contract is not deployed yet.
  */
 import { getClientsByOrganization } from "@/features/clients/services/clients.service";
+import { syncDomainRows } from "@/lib/cache/domainSync";
+import { mergeDeltaRows } from "@/lib/cache/mergeDelta";
 import {
     getTransactionsByOrganization,
     type LedgerRow,
@@ -60,6 +62,39 @@ export interface SharedLedgerNotificationCount {
 
 const TABLE_SELECT =
   "id, organization_id, partner_org_id, partner_key, trip_id, transaction_id, source_dispute_id, event_type, status, title, subtitle, amount_meta, payload_json, created_at, updated_at, read_at, handled_at";
+
+let sharedLedgerRpcReadAvailable: boolean | null = null;
+let sharedLedgerRpcCountAvailable: boolean | null = null;
+let sharedLedgerRpcMarkReadAvailable: boolean | null = null;
+let sharedLedgerRpcMarkHandledAvailable: boolean | null = null;
+let sharedLedgerTableAvailable: boolean | null = null;
+
+const SHARED_LEDGER_RPC_READ_FLAG_KEY = "qweb:shared_ledger_rpc_read_unavailable";
+const SHARED_LEDGER_RPC_COUNT_FLAG_KEY = "qweb:shared_ledger_rpc_count_unavailable";
+const SHARED_LEDGER_RPC_MARK_READ_FLAG_KEY =
+  "qweb:shared_ledger_rpc_mark_read_unavailable";
+const SHARED_LEDGER_RPC_MARK_HANDLED_FLAG_KEY =
+  "qweb:shared_ledger_rpc_mark_handled_unavailable";
+const SHARED_LEDGER_TABLE_FLAG_KEY = "qweb:shared_ledger_table_unavailable";
+
+function readStickyUnavailableFlag(key: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(key) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeStickyUnavailableFlag(key: string, unavailable: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (unavailable) window.localStorage.setItem(key, "1");
+    else window.localStorage.removeItem(key);
+  } catch {
+    // best effort only
+  }
+}
 
 function rpcOrTableUnavailable(message: string): boolean {
   return /could not find the function|does not exist|relation .* does not exist|schema cache|no function matches|invalid input value for enum|structure of query does not match function result type|function .* has .* parameters but .* were supplied/i.test(
@@ -486,23 +521,55 @@ export async function getSharedLedgerNotifications(
   notifications: SharedLedgerNotificationRow[];
   unavailable?: boolean;
 }> {
-  const { data, error } = await supabase().rpc(
-    "get_shared_ledger_notifications",
-    {
-      org_id: organizationId,
-      status_filter: statusFilter,
-    },
-  );
-  if (!error) {
-    const rows = extractRpcRows(data);
-    const filtered = await filterToLoadBasedSharedLedgerNotifications(
-      organizationId,
-      rows.map(toRow),
+  if (sharedLedgerRpcReadAvailable == null) {
+    sharedLedgerRpcReadAvailable = readStickyUnavailableFlag(
+      SHARED_LEDGER_RPC_READ_FLAG_KEY,
+    )
+      ? false
+      : null;
+  }
+  if (sharedLedgerTableAvailable == null) {
+    sharedLedgerTableAvailable = readStickyUnavailableFlag(
+      SHARED_LEDGER_TABLE_FLAG_KEY,
+    )
+      ? false
+      : null;
+  }
+  if (sharedLedgerRpcReadAvailable !== false) {
+    const { data, error } = await supabase().rpc(
+      "get_shared_ledger_notifications",
+      {
+        org_id: organizationId,
+        status_filter: statusFilter,
+      },
     );
-    return { error: null, notifications: filtered };
+    if (!error) {
+      sharedLedgerRpcReadAvailable = true;
+      const rows = extractRpcRows(data);
+      const filtered = await filterToLoadBasedSharedLedgerNotifications(
+        organizationId,
+        rows.map(toRow),
+      );
+      return { error: null, notifications: filtered };
+    }
+    if (rpcOrTableUnavailable(error.message)) {
+      sharedLedgerRpcReadAvailable = false;
+      writeStickyUnavailableFlag(SHARED_LEDGER_RPC_READ_FLAG_KEY, true);
+    }
   }
 
   // Fallback to direct table read on any RPC failure (permissions/signature/version drift).
+  if (sharedLedgerTableAvailable === false) {
+    const derived = await getDerivedSharedLedgerNotifications(organizationId);
+    const filtered =
+      statusFilter === "action_required"
+        ? derived.filter((r) => r.status === "open")
+        : statusFilter === "history"
+          ? derived.filter((r) => r.status !== "open")
+          : derived;
+    return { error: null, notifications: filtered, unavailable: derived.length === 0 };
+  }
+
   let query = supabase()
     .from("shared_ledger_notifications")
     .select(TABLE_SELECT)
@@ -516,6 +583,10 @@ export async function getSharedLedgerNotifications(
 
   const { data: tableRows, error: tableError } = await query;
   if (tableError) {
+    if (rpcOrTableUnavailable(tableError.message)) {
+      sharedLedgerTableAvailable = false;
+      writeStickyUnavailableFlag(SHARED_LEDGER_TABLE_FLAG_KEY, true);
+    }
     if (rpcOrTableUnavailable(tableError.message)) {
       const derived = await getDerivedSharedLedgerNotifications(organizationId);
       const filtered =
@@ -549,6 +620,8 @@ export async function getSharedLedgerNotifications(
       unavailable: true,
     };
   }
+  sharedLedgerTableAvailable = true;
+  writeStickyUnavailableFlag(SHARED_LEDGER_TABLE_FLAG_KEY, false);
 
   const rows = (tableRows ?? []) as Array<Record<string, unknown>>;
   const filtered = await filterToLoadBasedSharedLedgerNotifications(
@@ -565,25 +638,54 @@ export async function getSharedLedgerNotificationsCount(
   count: SharedLedgerNotificationCount;
   unavailable?: boolean;
 }> {
-  const { data, error } = await supabase().rpc(
-    "get_shared_ledger_notifications_count",
-    {
-      org_id: organizationId,
-    },
-  );
-  if (!error) {
-    const notificationsRes = await getSharedLedgerNotifications(
-      organizationId,
-      "action_required",
+  if (sharedLedgerRpcCountAvailable !== false) {
+    if (sharedLedgerRpcCountAvailable == null) {
+      sharedLedgerRpcCountAvailable = readStickyUnavailableFlag(
+        SHARED_LEDGER_RPC_COUNT_FLAG_KEY,
+      )
+        ? false
+        : null;
+    }
+    const { data, error } = await supabase().rpc(
+      "get_shared_ledger_notifications_count",
+      {
+        org_id: organizationId,
+      },
     );
-    const actionable = notificationsRes.notifications.length;
-    return {
-      error: null,
-      count: { actionableCount: Number.isFinite(actionable) ? actionable : 0 },
-    };
+    if (!error) {
+      sharedLedgerRpcCountAvailable = true;
+      writeStickyUnavailableFlag(SHARED_LEDGER_RPC_COUNT_FLAG_KEY, false);
+      const notificationsRes = await getSharedLedgerNotifications(
+        organizationId,
+        "action_required",
+      );
+      const actionable = notificationsRes.notifications.length;
+      return {
+        error: null,
+        count: { actionableCount: Number.isFinite(actionable) ? actionable : 0 },
+      };
+    }
+    if (rpcOrTableUnavailable(error.message)) {
+      sharedLedgerRpcCountAvailable = false;
+      writeStickyUnavailableFlag(SHARED_LEDGER_RPC_COUNT_FLAG_KEY, true);
+    }
   }
 
   // Fallback to direct table count for open events on any RPC failure.
+  if (sharedLedgerTableAvailable === false) {
+    const derivedRaw = await getDerivedSharedLedgerNotifications(organizationId);
+    const derived = await filterToLoadBasedSharedLedgerNotifications(
+      organizationId,
+      derivedRaw,
+    );
+    const actionable = derived.filter((r) => r.status === "open").length;
+    return {
+      error: null,
+      count: { actionableCount: actionable },
+      unavailable: derived.length === 0,
+    };
+  }
+
   const { count, error: tableError } = await supabase()
     .from("shared_ledger_notifications")
     .select("id", { count: "exact", head: true })
@@ -591,6 +693,10 @@ export async function getSharedLedgerNotificationsCount(
     .eq("status", "open");
 
   if (tableError) {
+    if (rpcOrTableUnavailable(tableError.message)) {
+      sharedLedgerTableAvailable = false;
+      writeStickyUnavailableFlag(SHARED_LEDGER_TABLE_FLAG_KEY, true);
+    }
     const derivedRaw = await getDerivedSharedLedgerNotifications(organizationId);
     const derived = await filterToLoadBasedSharedLedgerNotifications(
       organizationId,
@@ -611,25 +717,94 @@ export async function getSharedLedgerNotificationsCount(
       count: { actionableCount: 0 },
     };
   }
+  sharedLedgerTableAvailable = true;
+  writeStickyUnavailableFlag(SHARED_LEDGER_TABLE_FLAG_KEY, false);
 
   return { error: null, count: { actionableCount: Number(count ?? 0) } };
+}
+
+export async function syncSharedLedgerNotificationsWithCache(
+  orgId: string,
+  currentRows: SharedLedgerNotificationRow[],
+): Promise<{ error: Error | null; notifications: SharedLedgerNotificationRow[] }> {
+  try {
+    const notifications = await syncDomainRows<SharedLedgerNotificationRow>({
+      domain: "shared-ledger-notifications",
+      orgId,
+      schemaVersion: "1",
+      policy: { maxDeltaLagMs: 2 * 60_000, fullSyncEveryMs: 60 * 60_000 },
+      currentRows,
+      getFull: async () => {
+        const res = await getSharedLedgerNotifications(orgId);
+        if (res.error) throw res.error;
+        return res.notifications;
+      },
+      getDelta: async () => {
+        const res = await getSharedLedgerNotifications(orgId);
+        if (res.error) throw res.error;
+        return {
+          changed: res.notifications,
+          deletedIds: [],
+          nextCursor: { updatedAt: new Date().toISOString() },
+        };
+      },
+      merge: (existing, delta) =>
+        mergeDeltaRows({
+          existing,
+          changed: delta.changed,
+          deletedIds: delta.deletedIds,
+          compare: (a, b) => b.created_at.localeCompare(a.created_at),
+        }),
+    });
+    return { error: null, notifications };
+  } catch (e) {
+    return {
+      error: e instanceof Error ? e : new Error(String(e)),
+      notifications: currentRows,
+    };
+  }
 }
 
 export async function markSharedLedgerNotificationRead(
   notificationId: string,
   organizationId: string,
 ): Promise<{ error: Error | null; unavailable?: boolean }> {
-  const { error } = await supabase().rpc(
-    "mark_shared_ledger_notification_read",
-    {
-      p_id: notificationId,
-      p_org_id: organizationId,
-    },
-  );
-  if (!error) return { error: null };
+  if (sharedLedgerRpcMarkReadAvailable == null) {
+    sharedLedgerRpcMarkReadAvailable = readStickyUnavailableFlag(
+      SHARED_LEDGER_RPC_MARK_READ_FLAG_KEY,
+    )
+      ? false
+      : null;
+  }
+  if (sharedLedgerTableAvailable == null) {
+    sharedLedgerTableAvailable = readStickyUnavailableFlag(
+      SHARED_LEDGER_TABLE_FLAG_KEY,
+    )
+      ? false
+      : null;
+  }
+  if (sharedLedgerRpcMarkReadAvailable !== false) {
+    const { error } = await supabase().rpc(
+      "mark_shared_ledger_notification_read",
+      {
+        p_id: notificationId,
+        p_org_id: organizationId,
+      },
+    );
+    if (!error) {
+      sharedLedgerRpcMarkReadAvailable = true;
+      writeStickyUnavailableFlag(SHARED_LEDGER_RPC_MARK_READ_FLAG_KEY, false);
+      return { error: null };
+    }
+    if (!rpcOrTableUnavailable(error.message)) {
+      return { error: new Error(error.message) };
+    }
+    sharedLedgerRpcMarkReadAvailable = false;
+    writeStickyUnavailableFlag(SHARED_LEDGER_RPC_MARK_READ_FLAG_KEY, true);
+  }
 
-  if (!rpcOrTableUnavailable(error.message)) {
-    return { error: new Error(error.message) };
+  if (sharedLedgerTableAvailable === false) {
+    return { error: null, unavailable: true };
   }
 
   const { error: tableError } = await supabase()
@@ -643,10 +818,14 @@ export async function markSharedLedgerNotificationRead(
     .eq("status", "open");
   if (tableError) {
     if (rpcOrTableUnavailable(tableError.message)) {
+      sharedLedgerTableAvailable = false;
+      writeStickyUnavailableFlag(SHARED_LEDGER_TABLE_FLAG_KEY, true);
       return { error: null, unavailable: true };
     }
     return { error: new Error(tableError.message) };
   }
+  sharedLedgerTableAvailable = true;
+  writeStickyUnavailableFlag(SHARED_LEDGER_TABLE_FLAG_KEY, false);
   return { error: null };
 }
 
@@ -654,17 +833,42 @@ export async function markSharedLedgerNotificationHandled(
   notificationId: string,
   organizationId: string,
 ): Promise<{ error: Error | null; unavailable?: boolean }> {
-  const { error } = await supabase().rpc(
-    "mark_shared_ledger_notification_handled",
-    {
-      p_id: notificationId,
-      p_org_id: organizationId,
-    },
-  );
-  if (!error) return { error: null };
+  if (sharedLedgerRpcMarkHandledAvailable == null) {
+    sharedLedgerRpcMarkHandledAvailable = readStickyUnavailableFlag(
+      SHARED_LEDGER_RPC_MARK_HANDLED_FLAG_KEY,
+    )
+      ? false
+      : null;
+  }
+  if (sharedLedgerTableAvailable == null) {
+    sharedLedgerTableAvailable = readStickyUnavailableFlag(
+      SHARED_LEDGER_TABLE_FLAG_KEY,
+    )
+      ? false
+      : null;
+  }
+  if (sharedLedgerRpcMarkHandledAvailable !== false) {
+    const { error } = await supabase().rpc(
+      "mark_shared_ledger_notification_handled",
+      {
+        p_id: notificationId,
+        p_org_id: organizationId,
+      },
+    );
+    if (!error) {
+      sharedLedgerRpcMarkHandledAvailable = true;
+      writeStickyUnavailableFlag(SHARED_LEDGER_RPC_MARK_HANDLED_FLAG_KEY, false);
+      return { error: null };
+    }
+    if (!rpcOrTableUnavailable(error.message)) {
+      return { error: new Error(error.message) };
+    }
+    sharedLedgerRpcMarkHandledAvailable = false;
+    writeStickyUnavailableFlag(SHARED_LEDGER_RPC_MARK_HANDLED_FLAG_KEY, true);
+  }
 
-  if (!rpcOrTableUnavailable(error.message)) {
-    return { error: new Error(error.message) };
+  if (sharedLedgerTableAvailable === false) {
+    return { error: null, unavailable: true };
   }
 
   const { error: tableError } = await supabase()
@@ -678,9 +882,13 @@ export async function markSharedLedgerNotificationHandled(
     .in("status", ["open", "read"]);
   if (tableError) {
     if (rpcOrTableUnavailable(tableError.message)) {
+      sharedLedgerTableAvailable = false;
+      writeStickyUnavailableFlag(SHARED_LEDGER_TABLE_FLAG_KEY, true);
       return { error: null, unavailable: true };
     }
     return { error: new Error(tableError.message) };
   }
+  sharedLedgerTableAvailable = true;
+  writeStickyUnavailableFlag(SHARED_LEDGER_TABLE_FLAG_KEY, false);
   return { error: null };
 }
