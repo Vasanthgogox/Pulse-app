@@ -8,6 +8,9 @@ export const queryKeys = {
 
   trips: {
     all: (orgId: string) => ["q", "trips", orgId] as const,
+    finite: (orgId: string) => ["q", "trips", orgId, "finite"] as const,
+    infinite: (orgId: string, pageSize: number) =>
+      ["q", "trips", orgId, "infinite", pageSize] as const,
     list: (orgId: string, opts?: { limit?: number; offset?: number }) =>
       opts
         ? (["q", "trips", orgId, opts] as const)
@@ -31,6 +34,9 @@ export const queryKeys = {
 
   transactions: {
     all: (orgId: string) => ["q", "transactions", orgId] as const,
+    finite: (orgId: string) => ["q", "transactions", orgId, "finite"] as const,
+    infinite: (orgId: string, pageSize: number) =>
+      ["q", "transactions", orgId, "infinite", pageSize] as const,
     list: (
       orgId: string,
       opts?: { limit?: number; offset?: number; partyName?: string },
@@ -46,6 +52,9 @@ export const queryKeys = {
 
   clients: {
     all: (orgId: string) => ["q", "clients", orgId] as const,
+    finite: (orgId: string) => ["q", "clients", orgId, "finite"] as const,
+    infinite: (orgId: string, pageSize: number) =>
+      ["q", "clients", orgId, "infinite", pageSize] as const,
     list: (orgId: string, opts?: { limit?: number; offset?: number }) =>
       opts
         ? (["q", "clients", orgId, opts] as const)
@@ -56,6 +65,7 @@ export const queryKeys = {
 
   suppliers: {
     all: (orgId: string) => ["q", "suppliers", orgId] as const,
+    finite: (orgId: string) => ["q", "suppliers", orgId, "finite"] as const,
     list: (orgId: string, opts?: { limit?: number; offset?: number }) =>
       opts
         ? (["q", "suppliers", orgId, opts] as const)
@@ -66,6 +76,7 @@ export const queryKeys = {
 
   drivers: {
     all: (orgId: string) => ["q", "drivers", orgId] as const,
+    finite: (orgId: string) => ["q", "drivers", orgId, "finite"] as const,
     list: (orgId: string, opts?: { limit?: number; offset?: number }) =>
       opts
         ? (["q", "drivers", orgId, opts] as const)
@@ -76,6 +87,7 @@ export const queryKeys = {
 
   vehicles: {
     all: (orgId: string) => ["q", "vehicles", orgId] as const,
+    finite: (orgId: string) => ["q", "vehicles", orgId, "finite"] as const,
     list: (orgId: string, opts?: { limit?: number; offset?: number }) =>
       opts
         ? (["q", "vehicles", orgId, opts] as const)
@@ -86,6 +98,9 @@ export const queryKeys = {
 
   indents: {
     all: (orgId: string) => ["q", "indents", orgId] as const,
+    finite: (orgId: string) => ["q", "indents", orgId, "finite"] as const,
+    infinite: (orgId: string, pageSize: number) =>
+      ["q", "indents", orgId, "infinite", pageSize] as const,
     list: (orgId: string, opts?: { limit?: number; offset?: number }) =>
       opts
         ? (["q", "indents", orgId, opts] as const)

@@ -3,6 +3,9 @@
  */
 import { supabase } from '@/lib/supabase';
 import { DEFAULT_PAGE_SIZE, type PageOpts } from '@/lib/pagination';
+import { syncDomainRows } from '@/lib/cache/domainSync';
+import { mergeDeltaRows } from '@/lib/cache/mergeDelta';
+import type { DeltaResponse } from '@/lib/cache/deltaTypes';
 
 const CLIENT_COLUMNS = [
   "id", "organization_id", "name", "contact_person", "phone", "email",
@@ -78,13 +81,76 @@ export async function getClientsByOrganization(
     const offset = opts.offset ?? 0;
     const { data, error } = await base().range(offset, offset + limit);
     if (error) return { error: new Error(error.message), clients: [] };
-    const raw = (data ?? []) as ClientRow[];
+    const raw = (data ?? []) as unknown as ClientRow[];
     const hasMore = raw.length > limit;
     return { error: null, clients: hasMore ? raw.slice(0, limit) : raw, hasMore };
   }
   const { data, error } = await base();
   if (error) return { error: new Error(error.message), clients: [] };
-  return { error: null, clients: (data ?? []) as ClientRow[] };
+  return { error: null, clients: (data ?? []) as unknown as ClientRow[] };
+}
+
+export async function getClientsDelta(
+  orgId: string,
+  since: { updatedAt: string; tieBreakerId?: string | null },
+): Promise<{ error: Error | null; delta: DeltaResponse<ClientRow> }> {
+  const { data, error } = await supabase().rpc('get_clients_delta', {
+    p_org_id: orgId,
+    p_since: since.updatedAt,
+    p_limit: 1000,
+  });
+  if (error) {
+    return {
+      error: new Error(error.message),
+      delta: { changed: [], deletedIds: [], nextCursor: since },
+    };
+  }
+  const row = (Array.isArray(data) ? data[0] : data) as
+    | { changed?: ClientRow[]; deleted_ids?: string[]; next_cursor?: string | null }
+    | null;
+  return {
+    error: null,
+    delta: {
+      changed: (row?.changed ?? []) as ClientRow[],
+      deletedIds: (row?.deleted_ids ?? []) as string[],
+      nextCursor: row?.next_cursor ? { updatedAt: row.next_cursor } : since,
+    },
+  };
+}
+
+export async function syncClientsWithCache(
+  orgId: string,
+  currentRows: ClientRow[],
+): Promise<{ error: Error | null; clients: ClientRow[] }> {
+  try {
+    const clients = await syncDomainRows<ClientRow>({
+      domain: 'clients',
+      orgId,
+      schemaVersion: '1',
+      policy: { maxDeltaLagMs: 5 * 60_000, fullSyncEveryMs: 8 * 60 * 60_000 },
+      currentRows,
+      getFull: async () => {
+        const res = await getClientsByOrganization(orgId);
+        if (res.error) throw res.error;
+        return res.clients;
+      },
+      getDelta: async (cursor) => {
+        const res = await getClientsDelta(orgId, cursor);
+        if (res.error) throw res.error;
+        return res.delta;
+      },
+      merge: (existing, delta) =>
+        mergeDeltaRows({
+          existing,
+          changed: delta.changed,
+          deletedIds: delta.deletedIds,
+          compare: (a, b) => a.name.localeCompare(b.name),
+        }),
+    });
+    return { error: null, clients };
+  } catch (e) {
+    return { error: e instanceof Error ? e : new Error(String(e)), clients: currentRows };
+  }
 }
 
 export async function getClientById(

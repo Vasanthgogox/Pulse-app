@@ -5,6 +5,7 @@ import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-quer
 import {
   getIndentsByOrganization,
   getMarketIndentsForOrganization,
+  syncIndentsWithCache,
 } from '@/features/indents/services/indents.service';
 import {
   getMyDirectQuotes,
@@ -19,10 +20,15 @@ import { STALE } from '@/lib/queryClient';
 
 /** Full list. Use for Load Board, Create Indent when list is small. */
 export function useIndentsQuery(orgId: string | null) {
+  const qc = useQueryClient();
   return useQuery({
-    queryKey: queryKeys.indents.all(orgId ?? ''),
+    queryKey: queryKeys.indents.finite(orgId ?? ''),
     queryFn: async () => {
-      const res = await getIndentsByOrganization(orgId!);
+      const existing =
+        (qc.getQueryData(queryKeys.indents.finite(orgId ?? '')) as
+          | Array<{ id: string }>
+          | undefined) ?? [];
+      const res = await syncIndentsWithCache(orgId!, existing as any);
       if (res.error) throw res.error;
       return res.indents;
     },
@@ -48,7 +54,7 @@ export function useMarketIndentsQuery(orgId: string | null) {
 /** My direct quotes for GET LOAD views (carrier side). */
 export function useMyDirectQuotesQuery(orgId: string | null) {
   return useQuery<DirectQuoteRow[]>({
-    queryKey: [...queryKeys.indents.all(orgId ?? ''), 'my-direct-quotes'],
+    queryKey: [...queryKeys.indents.finite(orgId ?? ''), 'my-direct-quotes'],
     queryFn: async () => {
       const res = await getMyDirectQuotes(orgId!);
       if (res.error) throw res.error;
@@ -117,7 +123,7 @@ export function useIndentOfferCountsQuery(ownerOrgId: string | null, indentIds: 
 export function useIndentsInfiniteQuery(orgId: string | null, opts?: { pageSize?: number }) {
   const pageSize = opts?.pageSize ?? DEFAULT_PAGE_SIZE;
   return useInfiniteQuery({
-    queryKey: [...queryKeys.indents.all(orgId ?? ''), 'infinite', pageSize],
+    queryKey: queryKeys.indents.infinite(orgId ?? '', pageSize),
     queryFn: async ({ pageParam = 0 }) => {
       const res = await getIndentsByOrganization(orgId!, { limit: pageSize, offset: pageParam });
       if (res.error) throw res.error;
@@ -134,6 +140,8 @@ export function useInvalidateIndents() {
   const qc = useQueryClient();
   return (orgId: string) => {
     qc.invalidateQueries({ queryKey: queryKeys.indents.all(orgId) });
+    qc.invalidateQueries({ queryKey: queryKeys.indents.finite(orgId) });
+    qc.invalidateQueries({ queryKey: ['q', 'indents', orgId, 'infinite'] });
     qc.invalidateQueries({ queryKey: queryKeys.indents.market(orgId) });
   };
 }
