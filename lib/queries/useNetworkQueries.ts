@@ -3,6 +3,7 @@
  */
 import { getDriverInvitesSent } from "@/features/drivers/services/drivers.service";
 import { queryKeys } from "@/lib/queryKeys";
+import { STALE } from "@/lib/queryClient";
 import {
     getConnectionRequestsReceived,
     getConnectionRequestsSent,
@@ -18,6 +19,7 @@ export function useConnectionRequestsReceivedQuery(orgId: string | null) {
       return res.requests;
     },
     enabled: !!orgId,
+    staleTime: STALE.moderate,
   });
 }
 
@@ -30,6 +32,7 @@ export function useConnectionRequestsSentQuery(orgId: string | null) {
       return res.requests;
     },
     enabled: !!orgId,
+    staleTime: STALE.moderate,
   });
 }
 
@@ -42,6 +45,7 @@ export function useDriverInvitesSentQuery(orgId: string | null) {
       return res.invites;
     },
     enabled: !!orgId,
+    staleTime: STALE.moderate,
   });
 }
 

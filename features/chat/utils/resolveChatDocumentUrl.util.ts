@@ -2,13 +2,17 @@
  * Resolves a Supabase storage path to a time-limited HTTPS URL for chat document_share messages.
  * Driver POD/trip photos live in `trip-documents`; dispatcher-shared org docs may use `documents`.
  *
- * Complexity: O(buckets) — typically 3 tries.
+ * Uses sequential bucket tries (stops on first success) + 50-min in-memory TTL cache.
+ * Signed URLs are valid for 60 min; caching at 50 min avoids serving an about-to-expire URL.
  */
 import { supabase } from '@/lib/supabase';
 
 const SIGNED_EXPIRY_SEC = 3600;
+const CACHE_TTL_MS = 50 * 60 * 1000;
 
 const BUCKET_TRY_ORDER = ['trip-documents', 'documents', 'pod-documents'] as const;
+
+const signedUrlCache = new Map<string, { url: string; expiresAt: number }>();
 
 /** Strip accidental bucket prefix so createSignedUrl targets the object key inside the bucket. */
 export function normalizeTripDocumentsStoragePath(raw: string): string {
@@ -26,19 +30,21 @@ export async function resolveChatDocumentStorageUrl(storagePath: string): Promis
   if (!path) return null;
   if (/^https?:\/\//i.test(path)) return path;
 
+  const cached = signedUrlCache.get(path);
+  if (cached && Date.now() < cached.expiresAt) return cached.url;
+
   let lastError: string | null = null;
 
-  const results = await Promise.allSettled(
-    BUCKET_TRY_ORDER.map((bucket) =>
-      supabase().storage.from(bucket).createSignedUrl(path, SIGNED_EXPIRY_SEC)
-    )
-  );
-  for (const result of results) {
-    if (result.status === 'fulfilled' && !result.value.error && result.value.data?.signedUrl) {
-      return result.value.data.signedUrl;
-    }
-    if (result.status === 'fulfilled' && result.value.error) {
-      lastError = result.value.error.message ?? lastError;
+  for (const bucket of BUCKET_TRY_ORDER) {
+    try {
+      const { data, error } = await supabase().storage.from(bucket).createSignedUrl(path, SIGNED_EXPIRY_SEC);
+      if (!error && data?.signedUrl) {
+        signedUrlCache.set(path, { url: data.signedUrl, expiresAt: Date.now() + CACHE_TTL_MS });
+        return data.signedUrl;
+      }
+      if (error) lastError = error.message ?? lastError;
+    } catch {
+      // try next bucket
     }
   }
 

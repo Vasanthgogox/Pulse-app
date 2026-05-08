@@ -54,6 +54,8 @@ import { tripDayIso } from "@/lib/dateRangePresets";
 import { formatINR, formatLedgerDate } from "@/lib/format";
 import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/queryKeys";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -81,6 +83,7 @@ import {
     type ClientContract,
 } from "../services/clientContracts.service";
 import {
+    getClientDetailBundle,
     getClientDetails,
     getClientsByOrganization,
     getLinkedOrgProfile,
@@ -288,6 +291,8 @@ export default function ClientDetailScreen({
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
+  const lastFocusRefreshRef = useRef<number>(0);
+  const queryClient = useQueryClient();
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [detailSubTab, setDetailSubTab] = useState<"trips" | "cash" | "shared">(
     "trips",
@@ -405,70 +410,64 @@ export default function ClientDetailScreen({
       setLoading(true);
     setError(null);
     const orgId = currentOrganization.id;
+    // Use TanStack Query cache for org-level entities (warm from Trips/Finance tabs or rehydrated from storage).
+    const cachedTrips = queryClient.getQueryData<TripRow[]>(queryKeys.trips.all(orgId));
+    const cachedClients = queryClient.getQueryData<ClientRow[]>(queryKeys.clients.list(orgId));
+    const cachedTransactions = queryClient.getQueryData<LedgerRow[]>(queryKeys.transactions.all(orgId));
+    const cachedSuppliers = queryClient.getQueryData<SupplierRow[]>(queryKeys.suppliers.list(orgId));
+    const cachedDrivers = queryClient.getQueryData<DriverRow[]>(queryKeys.drivers.list(orgId));
+
     Promise.all([
-      getClientDetails(clientId),
-      getTripsByOrganization(orgId),
-      getTripsWhereOrgIsSupplier(orgId),
-      getClientsByOrganization(orgId),
-      getTransactionsByOrganization(orgId),
-      getSuppliersByOrganization(orgId),
-      getDriversByOrganization(orgId),
-      getRatingsForClient(clientId),
-      getWarehousesByClient(orgId, clientId),
-      getContractsByClient(orgId, clientId, { activeOnly: true }),
+      // Bundle: client row + ratings + warehouses + contracts in 1 RPC
+      getClientDetailBundle(orgId, clientId),
+      // Org-level: read from cache or fall back to DB
+      cachedTrips !== undefined
+        ? Promise.resolve({ error: null, trips: cachedTrips })
+        : getTripsByOrganization(orgId),
+      cachedClients !== undefined
+        ? Promise.resolve({ error: null, clients: cachedClients })
+        : getClientsByOrganization(orgId),
+      cachedTransactions !== undefined
+        ? Promise.resolve({ error: null, transactions: cachedTransactions })
+        : getTransactionsByOrganization(orgId),
+      cachedSuppliers !== undefined
+        ? Promise.resolve({ error: null, suppliers: cachedSuppliers })
+        : getSuppliersByOrganization(orgId),
+      cachedDrivers !== undefined
+        ? Promise.resolve({ error: null, drivers: cachedDrivers })
+        : getDriversByOrganization(orgId),
     ])
       .then(
         ([
-          clientRes,
+          bundleRes,
           tripsRes,
-          supplierTripsRes,
           clientsRes,
           txRes,
           suppliersRes,
           driversRes,
-          ratingsRes,
-          warehousesRes,
-          contractsRes,
         ]) => {
-          if (clientRes.error) {
-            setError(clientRes.error.message);
+          if (bundleRes.error) {
+            setError(bundleRes.error.message);
             setClient(null);
             setClientRatingAvg(null);
           } else {
-            setClient(clientRes.client ?? null);
+            setClient(bundleRes.client ?? null);
           }
-          setProfileWarehouses(
-            warehousesRes.error ? [] : (warehousesRes.warehouses ?? []),
-          );
-          setProfileContracts(
-            contractsRes.error ? [] : (contractsRes.contracts ?? []),
-          );
-          const ownerTrips = tripsRes.error ? [] : (tripsRes.trips ?? []);
-          const supplierTrips = supplierTripsRes.error
-            ? []
-            : (supplierTripsRes.trips ?? []);
-          const byId = new Map<string, TripRow>();
-          for (const t of ownerTrips) byId.set(t.id, t);
-          for (const t of supplierTrips) {
-            const existing = byId.get(t.id);
-            if (existing) {
-              byId.set(t.id, mergeTripOwnerWithSupplierCopy(existing, t));
-            } else {
-              byId.set(t.id, t);
-            }
-          }
-          const allTrips = Array.from(byId.values());
+          setProfileWarehouses(bundleRes.warehouses ?? []);
+          setProfileContracts(bundleRes.contracts ?? []);
+          // get_trips_for_org already merges owner + supplier trips
+          const allTrips = tripsRes.error ? [] : (tripsRes.trips ?? []);
           setOrgTrips(allTrips);
           const clientDisplayName = (
-            clientRes.client?.name ||
-            clientRes.client?.contact_person ||
+            bundleRes.client?.name ||
+            bundleRes.client?.contact_person ||
             ""
           )
             .toLowerCase()
             .trim();
           const normId = (id: string | null | undefined) =>
             id == null ? "" : String(id).trim().toLowerCase();
-          const linkedOrgId = clientRes.client?.linked_organization_id ?? null;
+          const linkedOrgId = bundleRes.client?.linked_organization_id ?? null;
           const linkedClientIdByOrgId = buildUniqueLinkedOrgIdMap(
             clientsRes.error ? [] : (clientsRes.clients ?? []),
           );
@@ -492,7 +491,7 @@ export default function ClientDetailScreen({
                   clientDisplayName);
             const matchesTx = tripIdsFromClientTx.has(normId(t.id));
             const matchesLinkedOrg =
-              clientRes.client?.is_integrated === true &&
+              bundleRes.client?.is_integrated === true &&
               linkedOrgId &&
               isLoadBasedTrip(t) &&
               t.organization_id &&
@@ -506,9 +505,7 @@ export default function ClientDetailScreen({
           );
           setDrivers(driversRes.error ? [] : (driversRes.drivers ?? []));
           setClientRatingAvg(
-            clientRes.error || ratingsRes.error
-              ? null
-              : averageScore(ratingsRes.ratings ?? []),
+            bundleRes.error ? null : averageScore(bundleRes.ratings ?? []),
           );
           const forClientTx = allTx.filter((tx) => {
             return (
@@ -526,7 +523,7 @@ export default function ClientDetailScreen({
         isRefreshingRef.current = false;
         setRefreshing(false);
       });
-  }, [clientId, currentOrganization?.id]);
+  }, [clientId, currentOrganization?.id, queryClient]);
 
   useEffect(() => {
     fetchedPartnerOrgIdsRef.current = new Set();
@@ -788,6 +785,8 @@ export default function ClientDetailScreen({
   useEffect(() => load(), [load]);
   useFocusEffect(
     useCallback(() => {
+      if (initialLoadDoneRef.current && Date.now() - lastFocusRefreshRef.current < 5 * 60_000) return;
+      lastFocusRefreshRef.current = Date.now();
       load();
     }, [load]),
   );

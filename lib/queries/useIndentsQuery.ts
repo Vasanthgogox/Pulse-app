@@ -15,6 +15,7 @@ import {
 import { getStoryBidCountsForOwnerIndents } from '@/features/network/services/bids.service';
 import { queryKeys } from '@/lib/queryKeys';
 import { DEFAULT_PAGE_SIZE } from '@/lib/pagination';
+import { STALE } from '@/lib/queryClient';
 
 /** Full list. Use for Load Board, Create Indent when list is small. */
 export function useIndentsQuery(orgId: string | null) {
@@ -26,6 +27,7 @@ export function useIndentsQuery(orgId: string | null) {
       return res.indents;
     },
     enabled: !!orgId,
+    staleTime: STALE.moderate,
   });
 }
 
@@ -39,6 +41,7 @@ export function useMarketIndentsQuery(orgId: string | null) {
       return res.indents;
     },
     enabled: !!orgId,
+    staleTime: STALE.moderate,
   });
 }
 
@@ -52,6 +55,7 @@ export function useMyDirectQuotesQuery(orgId: string | null) {
       return res.quotes;
     },
     enabled: !!orgId,
+    staleTime: STALE.moderate,
   });
 }
 
@@ -65,6 +69,7 @@ export function useIndentDirectQuotesQuery(indentId: string | null) {
       return res.quotes;
     },
     enabled: !!indentId,
+    staleTime: STALE.frequent,
   });
 }
 
@@ -81,6 +86,7 @@ export function useDirectQuoteCountsQuery(indentIds: string[] | null) {
       return res.counts;
     },
     enabled: !!indentIds?.length,
+    staleTime: STALE.frequent,
   });
 }
 
@@ -103,6 +109,7 @@ export function useIndentOfferCountsQuery(ownerOrgId: string | null, indentIds: 
       return merged;
     },
     enabled: !!ownerOrgId && indentIds.length > 0,
+    staleTime: STALE.frequent,
   });
 }
 
@@ -119,6 +126,7 @@ export function useIndentsInfiniteQuery(orgId: string | null, opts?: { pageSize?
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.nextOffset : undefined),
     initialPageParam: 0,
     enabled: !!orgId,
+    staleTime: STALE.moderate,
   });
 }
 

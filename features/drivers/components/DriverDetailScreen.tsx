@@ -47,6 +47,8 @@ import {
     getCapabilitiesFromProfile,
 } from "@/lib/capabilities";
 import { supabase } from "@/lib/supabase";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/queryKeys";
 import {
     formatIndianVehicleNumber,
     formatINR,
@@ -82,6 +84,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
     attachDriverByContact,
     getDriverById,
+    getDriverDetailBundle,
     getDriverInviteSentStatus,
     getDriverLedgerByDriver,
     getDriverOffersByOrganization,
@@ -309,6 +312,8 @@ export default function DriverDetailScreen({
   const [refreshing, setRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
   const initialLoadDoneRef = useRef(false);
+  const lastFocusRefreshRef = useRef<number>(0);
+  const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const isWebDesktop = Platform.OS === "web" && windowWidth >= 1024;
@@ -353,55 +358,47 @@ export default function DriverDetailScreen({
       setLoading(true);
     setError(null);
     const orgId = currentOrganization.id;
+    // Use TanStack Query cache for trips (warm from Trips tab or rehydrated from storage).
+    const cachedTrips = queryClient.getQueryData<TripRow[]>(queryKeys.trips.all(orgId));
+
     Promise.all([
-      getDriverById(orgId, driverId),
-      getTripsByOrganization(orgId),
-      getTripsWhereOrgIsSupplier(orgId),
-      getRatingsForDriver(driverId),
-      getSalaryRequestsByDriverIds([driverId]),
+      // Bundle: driver row + ratings + salary requests + ledger + transactions in 1 RPC
+      getDriverDetailBundle(orgId, driverId),
+      // Trips: read from cache or fall back to DB; get_trips_for_org merges owner+supplier
+      cachedTrips !== undefined
+        ? Promise.resolve({ error: null, trips: cachedTrips })
+        : getTripsByOrganization(orgId),
       getDriverOffersByOrganization(orgId),
-      getDriverLedgerByDriver(driverId),
-      getTransactionsByOrganizationAndDriver(orgId, driverId),
       getDriverSignupMatchStatus(driverId),
     ])
       .then(
         ([
-          res,
-          ownerRes,
-          supplierRes,
-          ratingsRes,
-          reqsRes,
+          bundleRes,
+          tripsRes,
           offersRes,
-          ledgerRes,
-          txsRes,
           signupMatchRes,
         ]) => {
-          const driverRow = res.error ? null : (res.driver ?? null);
-          if (res.error) {
-            setError(res.error.message);
+          const driverRow = bundleRes.error ? null : (bundleRes.driver ?? null);
+          if (bundleRes.error) {
+            setError(bundleRes.error.message);
             setDriver(null);
           } else {
             setDriver(driverRow);
           }
-          const ownerTrips = ownerRes.error ? [] : (ownerRes.trips ?? []);
-          const supplierTrips = supplierRes.error
-            ? []
-            : (supplierRes.trips ?? []);
-          const byId = new Map(ownerTrips.map((t) => [t.id, t]));
-          for (const t of supplierTrips) if (!byId.has(t.id)) byId.set(t.id, t);
-          const allTrips = Array.from(byId.values());
+          // get_trips_for_org already merges owner + supplier trips
+          const allTrips = tripsRes.error ? [] : (tripsRes.trips ?? []);
           const driver = driverRow;
-          const txs = txsRes.error ? [] : (txsRes.transactions ?? []);
+          const txs = bundleRes.transactions ?? [];
           const tripIdsFromDriverTx = new Set(
             txs
               .filter(
-                (tx) =>
+                (tx: any) =>
                   tx.contact_type === "driver" &&
                   tx.contact_id != null &&
                   String(tx.contact_id).trim() === String(driverId).trim() &&
                   tx.trip_id != null,
               )
-              .map((tx) => String(tx.trip_id).trim().toLowerCase()),
+              .map((tx: any) => String(tx.trip_id).trim().toLowerCase()),
           );
           const tripMatchesDriver = (t: TripRow) => {
             if (t.driver_id === driverId) return true;
@@ -422,11 +419,9 @@ export default function DriverDetailScreen({
             return nameMatch || phoneMatch;
           };
           setTrips(allTrips.filter(tripMatchesDriver));
-          setDriverRatings(ratingsRes.error ? [] : (ratingsRes.ratings ?? []));
+          setDriverRatings(bundleRes.ratings ?? []);
           setDriverRequests(
-            reqsRes.error
-              ? []
-              : (reqsRes.requests ?? []).filter((r) => r.status === "pending"),
+            (bundleRes.salaryRequests ?? []).filter((r: any) => r.status === "pending"),
           );
           const offers = offersRes.error
             ? {}
@@ -442,9 +437,9 @@ export default function DriverDetailScreen({
               : null,
           );
           setDriverLedgerEntries(
-            ledgerRes.error
+            bundleRes.error
               ? []
-              : (ledgerRes.entries ?? []).map((e) => ({
+              : (bundleRes.ledger ?? []).map((e) => ({
                   id: e.id,
                   driver_id: e.driver_id,
                   trip_id: e.trip_id,
@@ -454,9 +449,7 @@ export default function DriverDetailScreen({
                   description: e.description ?? null,
                 })),
           );
-          setDriverTransactions(
-            txsRes.error ? [] : (txsRes.transactions ?? []),
-          );
+          setDriverTransactions(bundleRes.transactions ?? []);
           setSignupMatch(
             signupMatchRes.error ? null : (signupMatchRes.match ?? null),
           );
@@ -468,10 +461,12 @@ export default function DriverDetailScreen({
         isRefreshingRef.current = false;
         setRefreshing(false);
       });
-  }, [driverId, currentOrganization?.id]);
+  }, [driverId, currentOrganization?.id, queryClient]);
 
   useFocusEffect(
     useCallback(() => {
+      if (initialLoadDoneRef.current && Date.now() - lastFocusRefreshRef.current < 5 * 60_000) return;
+      lastFocusRefreshRef.current = Date.now();
       load();
     }, [load]),
   );

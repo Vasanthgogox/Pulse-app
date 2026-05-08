@@ -4,6 +4,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getVehiclesByOrganization } from '@/features/vehicles/services/vehicles.service';
 import { queryKeys } from '@/lib/queryKeys';
+import { STALE } from '@/lib/queryClient';
 
 export function useVehiclesQuery(orgId: string | null) {
   return useQuery({
@@ -14,6 +15,7 @@ export function useVehiclesQuery(orgId: string | null) {
       return res.vehicles;
     },
     enabled: !!orgId,
+    staleTime: STALE.moderate,
   });
 }
 

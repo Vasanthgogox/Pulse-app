@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Platform } from "react-native";
 import * as driverLocationService from "@/services/driverLocationService";
+import { supabase } from "@/lib/supabase";
 import type * as ExpoLocationTypes from "expo-location";
 
 export function useDriverLocation(tripId: string | undefined) {
@@ -47,7 +48,7 @@ export function useDriverLocation(tripId: string | undefined) {
       ]);
       setDriverLocation(locRes.error ? null : locRes.location ?? null);
       setTripLocationPoints(histRes.error ? [] : histRes.points ?? []);
-    } catch (error) {
+    } catch {
       setDriverLocation(null);
       setTripLocationPoints([]);
     } finally {
@@ -57,9 +58,32 @@ export function useDriverLocation(tripId: string | undefined) {
 
   useEffect(() => {
     if (!tripId) return;
+
+    // Initial fetch (location + history)
     fetchDriverLocationFromDb();
-    const interval = setInterval(fetchDriverLocationFromDb, 30000);
-    return () => clearInterval(interval);
+
+    // Realtime subscription for live location updates — replaces 30s polling
+    const channel = supabase()
+      .channel(`driver_location:${tripId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'driver_locations',
+          filter: `trip_id=eq.${tripId}`,
+        },
+        (payload) => {
+          if (payload.new && typeof payload.new === 'object') {
+            setDriverLocation(payload.new as driverLocationService.DriverLocationRow);
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase().removeChannel(channel);
+    };
   }, [tripId, fetchDriverLocationFromDb]);
 
   useEffect(() => {

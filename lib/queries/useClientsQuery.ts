@@ -34,6 +34,7 @@ export function useClientsInfiniteQuery(orgId: string | null, opts?: { pageSize?
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.nextOffset : undefined),
     initialPageParam: 0,
     enabled: !!orgId,
+    staleTime: STALE.moderate,
   });
 }
 

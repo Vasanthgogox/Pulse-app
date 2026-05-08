@@ -1462,3 +1462,28 @@ export async function getDriverLedgerByDriverIds(
   if (error) return { error: new Error(error.message), entries: [] };
   return { error: null, entries: (data ?? []) as DriverLedgerRow[] };
 }
+
+/** Single round-trip bundle for DriverDetailScreen — replaces 6 parallel calls. */
+export async function getDriverDetailBundle(orgId: string, driverId: string): Promise<{
+  error: Error | null;
+  driver: DriverRow | null;
+  ratings: any[];
+  salaryRequests: any[];
+  ledger: DriverLedgerRow[];
+  transactions: any[];
+}> {
+  const { data, error } = await supabase().rpc('get_driver_detail_bundle', {
+    p_org_id: orgId,
+    p_driver_id: driverId,
+  });
+  if (error) return { error: new Error(error.message), driver: null, ratings: [], salaryRequests: [], ledger: [], transactions: [] };
+  const bundle = data as { driver: DriverRow | null; ratings: any[]; salary_requests: any[]; ledger: any[]; transactions: any[] };
+  return {
+    error: null,
+    driver: bundle.driver ?? null,
+    ratings: bundle.ratings ?? [],
+    salaryRequests: bundle.salary_requests ?? [],
+    ledger: (bundle.ledger ?? []) as DriverLedgerRow[],
+    transactions: bundle.transactions ?? [],
+  };
+}
