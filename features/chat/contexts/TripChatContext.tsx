@@ -3,6 +3,7 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -83,7 +84,7 @@ interface TripChatContextType {
     messageType?: MessageType
   ) => Promise<void>;
   markAsRead: (conversationId: string) => Promise<void>;
-  getTotalUnreadCount: () => number;
+  totalUnreadCount: number;
   refreshConversations: () => Promise<void>;
   /** Loads one thread by id and merges into state (deep links when list omits it). */
   hydrateConversationById: (conversationId: string) => Promise<TripConversation | null>;
@@ -139,7 +140,20 @@ export function TripChatProvider({
     if (shouldShowLoading) setIsLoading(true);
     try {
       const data = await chatService.getConversationsByOrganization(organizationId);
-      setConversations(data);
+      setConversations((prev) => {
+        const prevMap = new Map(prev.map((c) => [c.id, c]));
+        return data.map((fresh) => {
+          const existing = prevMap.get(fresh.id);
+          if (!existing) return fresh;
+          return {
+            ...fresh,
+            messages:
+              existing.messages.length > fresh.messages.length
+                ? existing.messages
+                : fresh.messages,
+          };
+        });
+      });
     } catch {
       // Tables may not exist yet; fail silently.
     } finally {
@@ -202,7 +216,7 @@ export function TripChatProvider({
   useEffect(() => {
     if (!organizationId || !selfUid || isActive) return;
     return subscribeSharedPostgresChanges(
-      `trip_messages:org:${organizationId}`,
+      `trip_messages:org:${organizationId}:background`,
       [
         {
           event: "INSERT",
@@ -215,9 +229,10 @@ export function TripChatProvider({
         if (isActive) return; // focused screen uses the heavy sync effect below
         const row = payload.new as Partial<TripMessageRow> | null;
         const conversationId = row?.conversation_id;
+        if (!selfUid) return;
         if (!conversationId) return;
 
-        if (selfUid && row?.sender_user_id && row.sender_user_id === selfUid) return;
+        if (row?.sender_user_id === selfUid) return;
 
         let found = false;
         setConversations((prev) =>
@@ -248,11 +263,11 @@ export function TripChatProvider({
     );
   }, [organizationId, isActive, selfUid]);
 
-  // Focused-screen realtime sync: full refresh while user is actively in chat.
+  // Focused-screen realtime sync: incrementally append incoming messages while user is in chat.
   useEffect(() => {
     if (!isActive || !organizationId || !selfUid) return;
     return subscribeSharedPostgresChanges(
-      `trip_messages:org:${organizationId}`,
+      `trip_messages:org:${organizationId}:focused`,
       [
         {
           event: "INSERT",
@@ -261,8 +276,33 @@ export function TripChatProvider({
           filter: `organization_id=eq.${organizationId}`,
         },
       ],
-      () => {
-        queueRefreshConversations();
+      (payload) => {
+        const row = payload.new as Partial<TripMessageRow> | null;
+        // Own messages are already in state via optimistic insert — skip.
+        if (row?.sender_user_id && row.sender_user_id === selfUid) return;
+        if (!row?.conversation_id) return;
+
+        let found = false;
+        setConversations((prev) =>
+          prev.map((conv) => {
+            if (conv.id !== row.conversation_id) return conv;
+            found = true;
+            return {
+              ...conv,
+              messages: [...conv.messages, row as TripMessageRow],
+              last_message_at: row.created_at ?? conv.last_message_at,
+              last_message_preview:
+                typeof row.content === "string" && row.content.trim().length > 0
+                  ? row.content.slice(0, 120)
+                  : conv.last_message_preview,
+            };
+          })
+        );
+
+        // Conversation not yet in state (e.g. new thread opened elsewhere) — hydrate.
+        if (!found) {
+          queueRefreshConversations();
+        }
       }
     );
   }, [isActive, organizationId, selfUid, queueRefreshConversations]);
@@ -362,7 +402,7 @@ export function TripChatProvider({
     }
   }, []);
 
-  const getTotalUnreadCount = useCallback(
+  const totalUnreadCount = useMemo(
     () => conversations.reduce((sum, c) => sum + c.unread_dispatcher_count, 0),
     [conversations]
   );
@@ -423,13 +463,12 @@ export function TripChatProvider({
           };
           return [newConv, ...prev];
         });
-        queueRefreshConversations();
         return conv.id;
       } catch {
         return null;
       }
     },
-    [queueRefreshConversations]
+    []
   );
 
   const hydrateConversationById = useCallback(
@@ -462,7 +501,7 @@ export function TripChatProvider({
         isLoading,
         sendMessage,
         markAsRead,
-        getTotalUnreadCount,
+        totalUnreadCount,
         refreshConversations: loadConversations,
         hydrateConversationById,
         initiateConversation,
