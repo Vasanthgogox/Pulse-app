@@ -243,19 +243,19 @@ function isMissingTripsDisplayTripIdError(err: unknown): boolean {
   );
 }
 
-export async function getConversationsByOrganization(
+async function getConversationsByOrganizationLight(
   organizationId: string,
 ): Promise<TripConversation[]> {
-  async function loadMerged(tripEmbedFields: string): Promise<unknown[]> {
-    const selectConv = tripConversationSelect(tripEmbedFields);
+  async function loadConversationRows(tripEmbedFields: string): Promise<{
+    rows: any[];
+  }> {
+    const selectConv = `*, trips!inner ( ${tripEmbedFields} )`;
     const [{ data: ownOrgRows, error: ownErr }, supplierTripsRes] = await Promise.all([
       supabase()
         .from("trip_conversations")
         .select(selectConv)
         .eq("organization_id", organizationId)
-        .order("last_message_at", { ascending: false, nullsFirst: false })
-        .order("created_at", { ascending: false, referencedTable: "trip_messages" })
-        .limit(TRIP_MESSAGES_EMBED_RECENT, { referencedTable: "trip_messages" }),
+        .order("last_message_at", { ascending: false, nullsFirst: false }),
       getTripsWhereOrgIsSupplier(organizationId),
     ]);
 
@@ -271,35 +271,57 @@ export async function getConversationsByOrganization(
         .from("trip_conversations")
         .select(selectConv)
         .in("trip_id", supplierTripIds)
-        .order("last_message_at", { ascending: false, nullsFirst: false })
-        .order("created_at", { ascending: false, referencedTable: "trip_messages" })
-        .limit(TRIP_MESSAGES_EMBED_RECENT, { referencedTable: "trip_messages" });
+        .order("last_message_at", { ascending: false, nullsFirst: false });
       if (supErr) throw supErr;
       supplierRows = supRows ?? [];
     }
 
-    const byId = new Map<string, unknown>();
+    const byId = new Map<string, any>();
     for (const row of ownOrgRows ?? [])
       byId.set((row as unknown as { id: string }).id, row);
-    for (const row of supplierRows)
-      byId.set((row as unknown as { id: string }).id, row);
+    for (const row of supplierRows) byId.set((row as { id: string }).id, row);
 
-    return Array.from(byId.values()).sort((a: any, b: any) => {
+    const rows = Array.from(byId.values()).sort((a: any, b: any) => {
       const ta = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
       const tb = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
       return tb - ta;
     });
+
+    return {
+      rows,
+    };
   }
 
-  let merged: unknown[];
+  let loaded: Awaited<ReturnType<typeof loadConversationRows>>;
   try {
-    merged = await loadMerged(TRIP_EMBED_FIELDS_FULL);
+    loaded = await loadConversationRows(TRIP_EMBED_FIELDS_FULL);
   } catch (err) {
     if (!isMissingTripsDisplayTripIdError(err)) throw err;
-    merged = await loadMerged(TRIP_EMBED_FIELDS_LEGACY);
+    loaded = await loadConversationRows(TRIP_EMBED_FIELDS_LEGACY);
   }
 
-  const conversations: TripConversation[] = merged.map((row: any) => ({
+  const convIds = loaded.rows.map((row: any) => String(row.id ?? "")).filter(Boolean);
+  const messagesByConversationId = new Map<string, TripMessageRow[]>();
+
+  if (convIds.length > 0) {
+    const { data: messageRows, error: msgErr } = await supabase()
+      .from("trip_messages")
+      .select("id, conversation_id, content, sender_role, sender_name, sender_user_id, created_at, is_read, message_type, metadata")
+      .in("conversation_id", convIds)
+      .order("created_at", { ascending: false })
+      .limit(TRIP_MESSAGES_EMBED_RECENT * convIds.length);
+    if (msgErr) throw msgErr;
+    for (const msg of (messageRows ?? []) as TripMessageRow[]) {
+      const cid = String(msg.conversation_id ?? "");
+      if (!messagesByConversationId.has(cid)) messagesByConversationId.set(cid, []);
+      messagesByConversationId.get(cid)?.push(msg);
+    }
+    messagesByConversationId.forEach((messages) => {
+      messages.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    });
+  }
+
+  const conversations: TripConversation[] = loaded.rows.map((row: any) => ({
     ...row,
     trip_number: row.trips?.trip_number ?? "",
     display_trip_id: row.trips?.display_trip_id ?? null,
@@ -309,13 +331,16 @@ export async function getConversationsByOrganization(
     trip_created_at: (row.trips?.created_at as string | null | undefined) ?? null,
     pickup_area: row.trips?.pickup_area ?? "",
     drop_location: row.trips?.drop_location ?? "",
-    messages: ((row.trip_messages ?? []) as TripMessageRow[]).sort(
-      (a, b) =>
-        new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-    ),
+    messages: messagesByConversationId.get(String(row.id ?? "")) ?? [],
   }));
 
   return resolveGenericPartyNamesForTrips(conversations);
+}
+
+export async function getConversationsByOrganization(
+  organizationId: string,
+): Promise<TripConversation[]> {
+  return getConversationsByOrganizationLight(organizationId);
 }
 
 /** Fetches one trip thread by id (for deep links when the list has not loaded it yet). RLS must allow read. */
@@ -481,10 +506,8 @@ export async function sendChatMessage(params: {
     p_sender_name: senderName,
     p_sender_user_id: senderUserId,
     p_message_type: messageType,
+    p_metadata: metadata,
   };
-  if (metadata != null) {
-    rpcPayload.p_metadata = metadata;
-  }
   const { data: rpcData, error: rpcError } = await supabase().rpc(
     "send_trip_chat_message",
     rpcPayload as {
@@ -494,58 +517,13 @@ export async function sendChatMessage(params: {
       p_sender_name: string;
       p_sender_user_id: string | null;
       p_message_type: string;
-      p_metadata?: Record<string, unknown> | null;
+      p_metadata: Record<string, unknown> | null;
     },
   );
 
   if (!rpcError && rpcData) return rpcData as TripMessageRow;
 
-  // Fallback for environments that don't have the migration yet.
-  const isMissingRpc =
-    rpcError != null &&
-    (rpcError.code === "42883" ||
-      String(rpcError.message ?? "")
-        .toLowerCase()
-        .includes("send_trip_chat_message"));
-
-  // Drivers are usually not organization_members; older RPC versions rejected them.
-  // Direct insert still succeeds via RLS policy "Drivers can send messages in their conversations".
-  const isDriverRpcDenied =
-    rpcError != null &&
-    senderRole === "driver" &&
-    String(rpcError.message ?? "").toLowerCase().includes("not authorized");
-
-  if (!isMissingRpc && !isDriverRpcDenied && rpcError) throw rpcError;
-
-  const { data: convMeta, error: convMetaErr } = await supabase()
-    .from("trip_conversations")
-    .select("organization_id")
-    .eq("id", conversationId)
-    .maybeSingle();
-
-  if (convMetaErr) throw convMetaErr;
-  const messageOrgId = (convMeta?.organization_id as string | undefined) ?? organizationId;
-
-  const insertRow: Record<string, unknown> = {
-    conversation_id: conversationId,
-    organization_id: messageOrgId,
-    sender_user_id: senderUserId,
-    sender_role: senderRole,
-    sender_name: senderName,
-    content,
-    message_type: messageType,
-    is_read: false,
-  };
-  if (metadata != null) insertRow.metadata = metadata;
-
-  const { data, error } = await supabase()
-    .from("trip_messages")
-    .insert(insertRow as never)
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data;
+  throw rpcError ?? new Error("Trip chat RPC did not return a message.");
 }
 
 export async function markConversationRead(
@@ -1042,24 +1020,16 @@ export async function sendDocumentShareMessage(params: {
     metadata,
   } = params;
 
-  const { data, error } = await supabase()
-    .from("trip_messages")
-    .insert({
-      conversation_id: conversationId,
-      organization_id: organizationId,
-      sender_user_id: senderUserId,
-      sender_role: senderRole,
-      sender_name: senderName,
-      content: `Shared document: ${metadata.document_name}`,
-      message_type: "document_share",
-      is_read: false,
-      metadata,
-    })
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data;
+  return sendChatMessage({
+    conversationId,
+    organizationId,
+    senderRole,
+    senderName,
+    senderUserId,
+    content: `Shared document: ${metadata.document_name}`,
+    messageType: "document_share",
+    metadata: metadata as unknown as Record<string, unknown>,
+  });
 }
 
 /** Fetches shareable documents for a trip (vehicle + driver docs). */
