@@ -2,14 +2,21 @@
  * TanStack Query hooks for suppliers. Cached by orgId.
  */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getSuppliersByOrganization } from '@/features/suppliers/services/suppliers.service';
+import {
+  syncSuppliersWithCache,
+} from '@/features/suppliers/services/suppliers.service';
 import { queryKeys } from '@/lib/queryKeys';
 
 export function useSuppliersQuery(orgId: string | null) {
+  const qc = useQueryClient();
   return useQuery({
-    queryKey: queryKeys.suppliers.all(orgId ?? ''),
+    queryKey: queryKeys.suppliers.finite(orgId ?? ''),
     queryFn: async () => {
-      const res = await getSuppliersByOrganization(orgId!);
+      const existing =
+        (qc.getQueryData(queryKeys.suppliers.finite(orgId ?? '')) as
+          | Array<{ id: string }>
+          | undefined) ?? [];
+      const res = await syncSuppliersWithCache(orgId!, existing as any);
       if (res.error) throw res.error;
       return res.suppliers;
     },
@@ -19,5 +26,8 @@ export function useSuppliersQuery(orgId: string | null) {
 
 export function useInvalidateSuppliers() {
   const qc = useQueryClient();
-  return (orgId: string) => qc.invalidateQueries({ queryKey: queryKeys.suppliers.all(orgId) });
+  return (orgId: string) => {
+    qc.invalidateQueries({ queryKey: queryKeys.suppliers.all(orgId) });
+    qc.invalidateQueries({ queryKey: queryKeys.suppliers.finite(orgId) });
+  };
 }

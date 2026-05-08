@@ -2,17 +2,25 @@
  * TanStack Query hooks for ledger/transactions. Cached by orgId.
  */
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getTransactionsByOrganization } from '@/features/finance/services/finance.service';
+import {
+  getTransactionsByOrganization,
+  syncTransactionsWithCache,
+} from '@/features/finance/services/finance.service';
 import { queryKeys } from '@/lib/queryKeys';
 import { STALE } from '@/lib/queryClient';
 import { LEDGER_PAGE_SIZE } from '@/lib/pagination';
 
 /** Full list (no pagination). Use for aggregation e.g. Trips tab "received by trip". */
 export function useTransactionsQuery(orgId: string | null) {
+  const qc = useQueryClient();
   return useQuery({
-    queryKey: queryKeys.transactions.all(orgId ?? ''),
+    queryKey: queryKeys.transactions.finite(orgId ?? ''),
     queryFn: async () => {
-      const res = await getTransactionsByOrganization(orgId!);
+      const existing =
+        (qc.getQueryData(queryKeys.transactions.finite(orgId ?? '')) as
+          | Array<{ id: string }>
+          | undefined) ?? [];
+      const res = await syncTransactionsWithCache(orgId!, existing as any);
       if (res.error) throw res.error;
       return res.transactions;
     },
@@ -25,7 +33,7 @@ export function useTransactionsQuery(orgId: string | null) {
 export function useTransactionsInfiniteQuery(orgId: string | null, opts?: { pageSize?: number }) {
   const pageSize = opts?.pageSize ?? LEDGER_PAGE_SIZE;
   return useInfiniteQuery({
-    queryKey: [...queryKeys.transactions.all(orgId ?? ''), 'infinite', pageSize],
+    queryKey: queryKeys.transactions.infinite(orgId ?? '', pageSize),
     queryFn: async ({ pageParam = 0 }) => {
       const res = await getTransactionsByOrganization(orgId!, { limit: pageSize, offset: pageParam });
       if (res.error) throw res.error;
@@ -43,5 +51,9 @@ export function useTransactionsInfiniteQuery(orgId: string | null, opts?: { page
 
 export function useInvalidateTransactions() {
   const qc = useQueryClient();
-  return (orgId: string) => qc.invalidateQueries({ queryKey: queryKeys.transactions.all(orgId) });
+  return (orgId: string) => {
+    qc.invalidateQueries({ queryKey: queryKeys.transactions.all(orgId) });
+    qc.invalidateQueries({ queryKey: queryKeys.transactions.finite(orgId) });
+    qc.invalidateQueries({ queryKey: ['q', 'transactions', orgId, 'infinite'] });
+  };
 }

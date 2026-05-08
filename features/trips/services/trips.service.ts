@@ -6,6 +6,9 @@ import {
     DRIVER_TRIPS_PAGE_SIZE,
     type PageOpts,
 } from "@/lib/pagination";
+import { syncDomainRows } from "@/lib/cache/domainSync";
+import { mergeDeltaRows } from "@/lib/cache/mergeDelta";
+import type { DeltaResponse } from "@/lib/cache/deltaTypes";
 import { supabase } from "@/lib/supabase";
 
 export interface TripRow {
@@ -119,6 +122,70 @@ export async function getTripsByOrganization(
   const { data, error } = await q.limit(200);
   if (error) return { error: new Error(error.message), trips: [] };
   return { error: null, trips: processData(data) };
+}
+
+export async function getTripsDelta(
+  orgId: string,
+  since: { updatedAt: string; tieBreakerId?: string | null },
+): Promise<{ error: Error | null; delta: DeltaResponse<TripRow> }> {
+  const { data, error } = await supabase().rpc("get_trips_delta", {
+    p_org_id: orgId,
+    p_since: since.updatedAt,
+    p_limit: 1000,
+  });
+  if (error) {
+    return {
+      error: new Error(error.message),
+      delta: { changed: [], deletedIds: [], nextCursor: since },
+    };
+  }
+  const row = (Array.isArray(data) ? data[0] : data) as
+    | { changed?: TripRow[]; deleted_ids?: string[]; next_cursor?: string | null }
+    | null;
+  return {
+    error: null,
+    delta: {
+      changed: (row?.changed ?? []) as TripRow[],
+      deletedIds: (row?.deleted_ids ?? []) as string[],
+      nextCursor: row?.next_cursor ? { updatedAt: row.next_cursor } : since,
+    },
+  };
+}
+
+export async function syncTripsWithCache(
+  orgId: string,
+  currentRows: TripRow[],
+): Promise<{ error: Error | null; trips: TripRow[] }> {
+  try {
+    const trips = await syncDomainRows<TripRow>({
+      domain: "trips",
+      orgId,
+      schemaVersion: "1",
+      policy: { maxDeltaLagMs: 2 * 60_000, fullSyncEveryMs: 6 * 60 * 60_000 },
+      currentRows,
+      getFull: async () => {
+        const res = await getTripsByOrganization(orgId);
+        if (res.error) throw res.error;
+        return res.trips;
+      },
+      getDelta: async (cursor) => {
+        const res = await getTripsDelta(orgId, cursor);
+        if (res.error) throw res.error;
+        return res.delta;
+      },
+      merge: (existing, delta) =>
+        mergeDeltaRows({
+          existing,
+          changed: delta.changed,
+          deletedIds: delta.deletedIds,
+          compare: (a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        }),
+    });
+    return { error: null, trips };
+  } catch (e) {
+    return { error: e instanceof Error ? e : new Error(String(e)), trips: currentRows };
+  }
 }
 
 /**

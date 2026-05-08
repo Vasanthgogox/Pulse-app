@@ -24,6 +24,9 @@ import {
   extractTagsFromRatingComment,
   findTripRatingMatchingFeedbackMeta,
 } from "../utils/mergeTripFeedbackMessages";
+import { syncDomainRows } from "@/lib/cache/domainSync";
+import { mergeDeltaRows } from "@/lib/cache/mergeDelta";
+import type { DeltaResponse } from "@/lib/cache/deltaTypes";
 
 export interface TripForCompose {
   id: string;
@@ -581,6 +584,70 @@ export async function getNetworkConversationsByOrg(
       ),
     };
   });
+}
+
+export async function getNetworkConversationsDelta(
+  organizationId: string,
+  since: { updatedAt: string; tieBreakerId?: string | null },
+): Promise<{ error: Error | null; delta: DeltaResponse<NetworkConversation> }> {
+  const { data, error } = await supabase().rpc("get_network_conversations_delta", {
+    p_org_id: organizationId,
+    p_since: since.updatedAt,
+    p_limit: 500,
+  });
+  if (error) {
+    return {
+      error: new Error(error.message),
+      delta: { changed: [], deletedIds: [], nextCursor: since },
+    };
+  }
+  const row = (Array.isArray(data) ? data[0] : data) as
+    | { changed?: NetworkConversation[]; deleted_ids?: string[]; next_cursor?: string | null }
+    | null;
+  return {
+    error: null,
+    delta: {
+      changed: (row?.changed ?? []) as NetworkConversation[],
+      deletedIds: (row?.deleted_ids ?? []) as string[],
+      nextCursor: row?.next_cursor ? { updatedAt: row.next_cursor } : since,
+    },
+  };
+}
+
+export async function syncNetworkConversationsWithCache(
+  organizationId: string,
+  currentRows: NetworkConversation[],
+): Promise<{ error: Error | null; conversations: NetworkConversation[] }> {
+  try {
+    const conversations = await syncDomainRows<NetworkConversation>({
+      domain: "network-conversations",
+      orgId: organizationId,
+      schemaVersion: "1",
+      policy: { maxDeltaLagMs: 60_000, fullSyncEveryMs: 60 * 60_000 },
+      currentRows,
+      getFull: async () => getNetworkConversationsByOrg(organizationId),
+      getDelta: async (cursor) => {
+        const res = await getNetworkConversationsDelta(organizationId, cursor);
+        if (res.error) throw res.error;
+        return res.delta;
+      },
+      merge: (existing, delta) =>
+        mergeDeltaRows({
+          existing,
+          changed: delta.changed,
+          deletedIds: delta.deletedIds,
+          compare: (a, b) =>
+            new Date(b.last_message_at ?? "").getTime() -
+            new Date(a.last_message_at ?? "").getTime(),
+        }),
+    });
+    return { error: null, conversations };
+  } catch (e) {
+    return {
+      error: e instanceof Error ? e : new Error(String(e)),
+      conversations: currentRows,
+    };
+  }
 }
 
 export async function getOrCreateNetworkConversation(params: {

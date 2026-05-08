@@ -34,12 +34,13 @@ export function useRealtimeTripsInvalidation(organizationId: string | null) {
         // Invalidate list only on INSERT or DELETE (UPDATE just changes the row in-place)
         if (payload.eventType !== 'UPDATE') {
           qc.invalidateQueries({ queryKey: queryKeys.trips.all(organizationId) });
+          qc.invalidateQueries({ queryKey: queryKeys.trips.finite(organizationId) });
           qc.invalidateQueries({ queryKey: queryKeys.trips.whereOrgIsClient(organizationId) });
           qc.invalidateQueries({ queryKey: queryKeys.trips.whereOrgIsSupplier(organizationId) });
         } else {
           // UPDATE: update the list cache in-place to avoid a full refetch
           qc.setQueriesData(
-            { queryKey: queryKeys.trips.all(organizationId) },
+            { queryKey: queryKeys.trips.finite(organizationId) },
             (old: unknown) => {
               if (!Array.isArray(old) || !tripId) return old;
               const updated = payload.new as Record<string, unknown>;
@@ -69,8 +70,29 @@ export function useRealtimeTransactionsInvalidation(organizationId: string | nul
           filter: `organization_id=eq.${organizationId}`,
         },
       ],
-      () => {
-        // Transactions are aggregated in finance totals — always invalidate all
+      (payload) => {
+        const txId =
+          (payload.new as { id?: string } | undefined)?.id ??
+          (payload.old as { id?: string } | undefined)?.id ??
+          null;
+        if (txId) {
+          qc.setQueriesData(
+            { queryKey: queryKeys.transactions.finite(organizationId) },
+            (old: unknown) => {
+              if (!Array.isArray(old)) return old;
+              const row = (payload.new as Record<string, unknown> | undefined) ?? {};
+              let found = false;
+              const next = old.map((item: { id: string }) => {
+                if (item.id !== txId) return item;
+                found = true;
+                return { ...item, ...row };
+              });
+              if (!found && Object.keys(row).length > 0) next.unshift({ id: txId, ...row });
+              return next;
+            },
+          );
+        }
+        // Still invalidate aggregates keyed under transactions root.
         qc.invalidateQueries({ queryKey: queryKeys.transactions.all(organizationId) });
       },
     );

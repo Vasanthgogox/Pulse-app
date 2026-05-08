@@ -8,6 +8,9 @@
  * Service-layer validation: amount cap, date format, string length.
  */
 import { getAvatarUriForSeed } from "@/constants/DriverLevels";
+import { syncDomainRows } from "@/lib/cache/domainSync";
+import { mergeDeltaRows } from "@/lib/cache/mergeDelta";
+import type { DeltaResponse } from "@/lib/cache/deltaTypes";
 import { getDriverProfileDisplay, getDriverProfileDisplayBatch } from "@/features/drivers/services/drivers.service";
 import { postLedgerEventToChat } from "@/features/chat/services/chatLedgerBridge.service";
 import { interpretLedgerRowStructured } from "@/features/finance/ledger/ledgerEntryModel";
@@ -800,6 +803,74 @@ export async function getTransactionsByOrganization(
   const transactions: LedgerRow[] = rows.map(toLedgerRow);
 
   return { error: null, transactions };
+}
+
+export async function getTransactionsDelta(
+  orgId: string,
+  since: { updatedAt: string; tieBreakerId?: string | null },
+): Promise<{ error: Error | null; delta: DeltaResponse<LedgerRow> }> {
+  const { data, error } = await supabase().rpc("get_transactions_delta", {
+    p_org_id: orgId,
+    p_since: since.updatedAt,
+    p_limit: 1000,
+  });
+  if (error) {
+    return {
+      error: new Error(error.message),
+      delta: { changed: [], deletedIds: [], nextCursor: since },
+    };
+  }
+  const row = (Array.isArray(data) ? data[0] : data) as
+    | { changed?: LedgerRow[]; deleted_ids?: string[]; next_cursor?: string | null }
+    | null;
+  return {
+    error: null,
+    delta: {
+      changed: (row?.changed ?? []) as LedgerRow[],
+      deletedIds: (row?.deleted_ids ?? []) as string[],
+      nextCursor: row?.next_cursor ? { updatedAt: row.next_cursor } : since,
+    },
+  };
+}
+
+export async function syncTransactionsWithCache(
+  orgId: string,
+  currentRows: LedgerRow[],
+): Promise<{ error: Error | null; transactions: LedgerRow[] }> {
+  try {
+    const transactions = await syncDomainRows<LedgerRow>({
+      domain: "transactions",
+      orgId,
+      schemaVersion: "1",
+      policy: { maxDeltaLagMs: 2 * 60_000, fullSyncEveryMs: 4 * 60 * 60_000 },
+      currentRows,
+      getFull: async () => {
+        const res = await getTransactionsByOrganization(orgId);
+        if (res.error) throw res.error;
+        return res.transactions;
+      },
+      getDelta: async (cursor) => {
+        const res = await getTransactionsDelta(orgId, cursor);
+        if (res.error) throw res.error;
+        return res.delta;
+      },
+      merge: (existing, delta) =>
+        mergeDeltaRows({
+          existing,
+          changed: delta.changed,
+          deletedIds: delta.deletedIds,
+          compare: (a, b) =>
+            new Date(b.transaction_date).getTime() -
+            new Date(a.transaction_date).getTime(),
+        }),
+    });
+    return { error: null, transactions };
+  } catch (e) {
+    return {
+      error: e instanceof Error ? e : new Error(String(e)),
+      transactions: currentRows,
+    };
+  }
 }
 
 /** Fetch ledger transactions for a specific party (client/entity level). */

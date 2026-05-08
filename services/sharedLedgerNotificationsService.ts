@@ -3,6 +3,8 @@
  * Additive to salary-request notifications; fails soft if backend contract is not deployed yet.
  */
 import { getClientsByOrganization } from "@/features/clients/services/clients.service";
+import { syncDomainRows } from "@/lib/cache/domainSync";
+import { mergeDeltaRows } from "@/lib/cache/mergeDelta";
 import {
     getTransactionsByOrganization,
     type LedgerRow,
@@ -719,6 +721,48 @@ export async function getSharedLedgerNotificationsCount(
   writeStickyUnavailableFlag(SHARED_LEDGER_TABLE_FLAG_KEY, false);
 
   return { error: null, count: { actionableCount: Number(count ?? 0) } };
+}
+
+export async function syncSharedLedgerNotificationsWithCache(
+  orgId: string,
+  currentRows: SharedLedgerNotificationRow[],
+): Promise<{ error: Error | null; notifications: SharedLedgerNotificationRow[] }> {
+  try {
+    const notifications = await syncDomainRows<SharedLedgerNotificationRow>({
+      domain: "shared-ledger-notifications",
+      orgId,
+      schemaVersion: "1",
+      policy: { maxDeltaLagMs: 2 * 60_000, fullSyncEveryMs: 60 * 60_000 },
+      currentRows,
+      getFull: async () => {
+        const res = await getSharedLedgerNotifications(orgId);
+        if (res.error) throw res.error;
+        return res.notifications;
+      },
+      getDelta: async () => {
+        const res = await getSharedLedgerNotifications(orgId);
+        if (res.error) throw res.error;
+        return {
+          changed: res.notifications,
+          deletedIds: [],
+          nextCursor: { updatedAt: new Date().toISOString() },
+        };
+      },
+      merge: (existing, delta) =>
+        mergeDeltaRows({
+          existing,
+          changed: delta.changed,
+          deletedIds: delta.deletedIds,
+          compare: (a, b) => b.created_at.localeCompare(a.created_at),
+        }),
+    });
+    return { error: null, notifications };
+  } catch (e) {
+    return {
+      error: e instanceof Error ? e : new Error(String(e)),
+      notifications: currentRows,
+    };
+  }
 }
 
 export async function markSharedLedgerNotificationRead(

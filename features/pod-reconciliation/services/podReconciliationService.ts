@@ -7,6 +7,8 @@
  */
 import { supabase } from '@/lib/supabase';
 import { expandLR } from '@/lib/utils/lr';
+import { syncDomainRows } from '@/lib/cache/domainSync';
+import { mergeDeltaRows } from '@/lib/cache/mergeDelta';
 
 type TripRow = Record<string, unknown>;
 
@@ -291,5 +293,46 @@ export async function fetchReconciliationTrips(
     return { error: null, trips: mapped };
   } catch (e) {
     return { error: e instanceof Error ? e : new Error(String(e)), trips: [] };
+  }
+}
+
+export async function syncPodReconciliationTripsWithCache(
+  orgId: string,
+  activeTab: PodTab,
+  currentRows: PodReconciliationTripView[],
+): Promise<{ error: Error | null; trips: PodReconciliationTripView[] }> {
+  try {
+    const trips = await syncDomainRows<PodReconciliationTripView>({
+      domain: 'pod-reconciliation',
+      orgId,
+      schemaVersion: '1',
+      policy: { maxDeltaLagMs: 2 * 60_000, fullSyncEveryMs: 60 * 60_000 },
+      currentRows,
+      getFull: async () => {
+        const res = await fetchReconciliationTrips(orgId, activeTab);
+        if (res.error) throw res.error;
+        return res.trips;
+      },
+      getDelta: async () => {
+        // Use full result as delta until dedicated POD delta RPC is rolled out.
+        const res = await fetchReconciliationTrips(orgId, activeTab);
+        if (res.error) throw res.error;
+        return {
+          changed: res.trips,
+          deletedIds: [],
+          nextCursor: { updatedAt: new Date().toISOString() },
+        };
+      },
+      merge: (existing, delta) =>
+        mergeDeltaRows({
+          existing,
+          changed: delta.changed,
+          deletedIds: delta.deletedIds,
+          compare: (a, b) => b.date.localeCompare(a.date),
+        }),
+    });
+    return { error: null, trips };
+  } catch (e) {
+    return { error: e instanceof Error ? e : new Error(String(e)), trips: currentRows };
   }
 }

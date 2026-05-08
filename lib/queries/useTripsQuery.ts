@@ -7,6 +7,7 @@ import {
   getTripsByOrganization,
   getTripsWhereOrgIsSupplier,
   getShipperDisplayNamesForSupplierTrips,
+  syncTripsWithCache,
   updateTripStatus,
 } from '@/features/trips/services/trips.service';
 import { queryKeys } from '@/lib/queryKeys';
@@ -29,11 +30,16 @@ function mergeTripsLists<T extends { id: string; created_at: string }>(
 
 /** Full list (no pagination). Use for Trips tab. Includes trips where org is owner or supplier on a shared load trip. */
 export function useTripsQuery(orgId: string | null) {
+  const qc = useQueryClient();
   return useQuery({
-    queryKey: queryKeys.trips.all(orgId ?? ''),
+    queryKey: queryKeys.trips.finite(orgId ?? ''),
     queryFn: async () => {
+      const existing =
+        (qc.getQueryData(queryKeys.trips.finite(orgId ?? '')) as
+          | Array<{ id: string; created_at: string }>
+          | undefined) ?? [];
       const [ownerResult, supplierResult] = await Promise.allSettled([
-        getTripsByOrganization(orgId!),
+        syncTripsWithCache(orgId!, existing as any),
         getTripsWhereOrgIsSupplier(orgId!),
       ]);
       const ownerRes = ownerResult.status === 'fulfilled' ? ownerResult.value : { error: ownerResult.reason as Error, trips: [] };
@@ -64,7 +70,7 @@ export function useShipperDisplayNamesQuery(orgId: string | null) {
 export function useTripsInfiniteQuery(orgId: string | null, opts?: { pageSize?: number }) {
   const pageSize = opts?.pageSize ?? DEFAULT_PAGE_SIZE;
   return useInfiniteQuery({
-    queryKey: queryKeys.trips.all(orgId ?? ''),
+    queryKey: queryKeys.trips.infinite(orgId ?? '', pageSize),
     queryFn: async ({ pageParam = 0 }) => {
       const res = await getTripsByOrganization(orgId!, { limit: pageSize, offset: pageParam });
       if (res.error) throw res.error;
@@ -104,10 +110,10 @@ export function useTripStatusMutation(orgId: string | null) {
     },
     onMutate: async ({ tripId, data }) => {
       await qc.cancelQueries({ queryKey: queryKeys.trips.detail(tripId) });
-      if (orgId) await qc.cancelQueries({ queryKey: queryKeys.trips.all(orgId) });
+      if (orgId) await qc.cancelQueries({ queryKey: queryKeys.trips.finite(orgId) });
 
       const prevDetail = qc.getQueryData(queryKeys.trips.detail(tripId));
-      const prevList = orgId ? qc.getQueryData(queryKeys.trips.all(orgId)) : undefined;
+      const prevList = orgId ? qc.getQueryData(queryKeys.trips.finite(orgId)) : undefined;
 
       // Optimistically update detail cache
       qc.setQueryData(queryKeys.trips.detail(tripId), (old: Record<string, unknown> | undefined) =>
@@ -117,7 +123,7 @@ export function useTripStatusMutation(orgId: string | null) {
       // Optimistically update list cache
       if (orgId) {
         qc.setQueriesData(
-          { queryKey: queryKeys.trips.all(orgId) },
+            { queryKey: queryKeys.trips.finite(orgId) },
           (old: unknown) => {
             if (!Array.isArray(old)) return old;
             return old.map((t: { id: string }) => (t.id === tripId ? { ...t, ...data } : t));
@@ -133,12 +139,12 @@ export function useTripStatusMutation(orgId: string | null) {
         qc.setQueryData(queryKeys.trips.detail(ctx.tripId), ctx.prevDetail);
       }
       if (ctx.orgId && ctx.prevList !== undefined) {
-        qc.setQueryData(queryKeys.trips.all(ctx.orgId), ctx.prevList);
+        qc.setQueryData(queryKeys.trips.finite(ctx.orgId), ctx.prevList);
       }
     },
     onSettled: (_data, _err, { tripId }) => {
       qc.invalidateQueries({ queryKey: queryKeys.trips.detail(tripId) });
-      if (orgId) qc.invalidateQueries({ queryKey: queryKeys.trips.all(orgId) });
+      if (orgId) qc.invalidateQueries({ queryKey: queryKeys.trips.finite(orgId) });
     },
   });
 }
@@ -164,5 +170,9 @@ export function useAssignmentAuditQuery(tripIds: string[]) {
 
 export function useInvalidateTrips() {
   const qc = useQueryClient();
-  return (orgId: string) => qc.invalidateQueries({ queryKey: queryKeys.trips.all(orgId) });
+  return (orgId: string) => {
+    qc.invalidateQueries({ queryKey: queryKeys.trips.all(orgId) });
+    qc.invalidateQueries({ queryKey: queryKeys.trips.finite(orgId) });
+    qc.invalidateQueries({ queryKey: ['q', 'trips', orgId, 'infinite'] });
+  };
 }
