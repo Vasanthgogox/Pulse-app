@@ -29,7 +29,7 @@ export function makeQueryClient() {
   return new QueryClient({
     defaultOptions: {
       queries: {
-        staleTime: STALE.frequent,
+        staleTime: STALE.moderate,
         gcTime: GC_TIME_MS,
         retry: 1,
         retryDelay: 1000,

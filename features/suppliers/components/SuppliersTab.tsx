@@ -8,12 +8,14 @@ import Theme from "@/constants/Theme";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import type { EntityListFilter } from "@/features/finance/components/TreasurySummaryCard";
 import { aggregateSuppliers, type FinancialRowData, type TripPartyMap } from "@/features/finance/aggregation";
-import { getTripsByOrganization, type TripRow } from "@/features/trips";
+import type { TripRow } from "@/features/trips";
 import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
+import { useSuppliersQuery } from "@/lib/queries/useSuppliersQuery";
+import { useTripsQuery } from "@/lib/queries/useTripsQuery";
 import { usePaginatedScroll } from "@/lib/usePaginatedScroll";
 import { useRouter } from "expo-router";
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import {
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -25,10 +27,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import {
-    getSuppliersByOrganization,
-    type SupplierRow,
-} from "../services/suppliers.service";
+import type { SupplierRow } from "../services/suppliers.service";
 
 /** Minimal ledger row for aggregation (compatible with LedgerTx). */
 export interface LedgerRowForSupplier {
@@ -91,39 +90,14 @@ export function SuppliersTab({
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [suppliersState, setSuppliersState] = useState<SupplierRow[]>([]);
-  const [tripsState, setTripsState] = useState<TripRow[]>([]);
-  const [loading, setLoading] = useState(true);
   const isControlled = suppliersProp !== undefined && tripsProp !== undefined;
-  const suppliers = isControlled ? (suppliersProp ?? []) : suppliersState;
-  const trips = isControlled ? (tripsProp ?? []) : tripsState;
+  const suppliersQuery = useSuppliersQuery(isControlled ? null : organizationId);
+  const tripsQuery = useTripsQuery(isControlled ? null : organizationId);
+  const suppliers = isControlled ? (suppliersProp ?? []) : (suppliersQuery.data ?? []);
+  const trips = isControlled ? (tripsProp ?? []) : (tripsQuery.data ?? []);
   const tripsWhereOrgIsClient = tripsWhereOrgIsClientProp ?? [];
   const transactions = transactionsProp ?? [];
-  const showLoading = parentLoading || (!isControlled && loading);
-
-  const fetch = useCallback(() => {
-    if (!organizationId || isControlled) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    Promise.all([
-      getSuppliersByOrganization(organizationId),
-      getTripsByOrganization(organizationId),
-    ]).then(([supRes, tripsRes]) => {
-      setSuppliersState(supRes.error ? [] : supRes.suppliers);
-      setTripsState(tripsRes.error ? [] : tripsRes.trips);
-      setLoading(false);
-    });
-  }, [organizationId, isControlled]);
-
-  useEffect(() => {
-    if (isControlled) {
-      setLoading(false);
-      return;
-    }
-    fetch();
-  }, [isControlled, fetch]);
+  const showLoading = parentLoading || (!isControlled && (suppliersQuery.isLoading || tripsQuery.isLoading));
 
   const supplierAvatarById = useMemo(
     () => new Map(suppliers.map((s) => [s.id, { avatar_url: s.avatar_url, avatar_seed: s.avatar_seed }])),

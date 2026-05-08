@@ -5,6 +5,7 @@ import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-quer
 import { getClientsByOrganization } from '@/features/clients/services/clients.service';
 import { queryKeys } from '@/lib/queryKeys';
 import { DEFAULT_PAGE_SIZE } from '@/lib/pagination';
+import { STALE } from '@/lib/queryClient';
 
 /** Full list (no pagination). Use for dropdowns, Finance entities. */
 export function useClientsQuery(orgId: string | null) {
@@ -16,6 +17,7 @@ export function useClientsQuery(orgId: string | null) {
       return res.clients;
     },
     enabled: !!orgId,
+    staleTime: STALE.moderate,
   });
 }
 
@@ -32,6 +34,7 @@ export function useClientsInfiniteQuery(orgId: string | null, opts?: { pageSize?
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.nextOffset : undefined),
     initialPageParam: 0,
     enabled: !!orgId,
+    staleTime: STALE.moderate,
   });
 }
 

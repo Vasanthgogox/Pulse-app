@@ -157,6 +157,7 @@ export function IntegratedChatProvider({
   const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const missingNetConvRefreshAtRef = useRef<Record<string, number>>({});
   const bootstrappedOrgRef = useRef<string | null>(null);
+  const lastFetchedAtRef = useRef<number>(0);
 
   const loadData = useCallback(async () => {
     if (!orgId || !selfUid) return;
@@ -168,6 +169,7 @@ export function IntegratedChatProvider({
       ]);
       setConversations(convs);
       setPartners(pts);
+      lastFetchedAtRef.current = Date.now();
     } catch {
       // Fail silently — tables may not be migrated yet
     } finally {
@@ -194,6 +196,7 @@ export function IntegratedChatProvider({
 
   useEffect(() => {
     if (!isActive || !selfUid) return;
+    if (Date.now() - lastFetchedAtRef.current < 5 * 60_000) return;
     loadData();
   }, [isActive, selfUid, loadData]);
 

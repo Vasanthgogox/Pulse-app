@@ -334,3 +334,26 @@ export async function updateClient(
   if (error) return { error: new Error(error.message), client: null };
   return { error: null, client: data as ClientRow };
 }
+
+/** Single round-trip bundle for ClientDetailScreen — replaces 4 parallel calls. */
+export async function getClientDetailBundle(orgId: string, clientId: string): Promise<{
+  error: Error | null;
+  client: ClientRow | null;
+  ratings: any[];
+  warehouses: any[];
+  contracts: any[];
+}> {
+  const { data, error } = await supabase().rpc('get_client_detail_bundle', {
+    p_org_id: orgId,
+    p_client_id: clientId,
+  });
+  if (error) return { error: new Error(error.message), client: null, ratings: [], warehouses: [], contracts: [] };
+  const bundle = data as { client: ClientRow | null; ratings: any[]; warehouses: any[]; contracts: any[] };
+  return {
+    error: null,
+    client: bundle.client ?? null,
+    ratings: bundle.ratings ?? [],
+    warehouses: bundle.warehouses ?? [],
+    contracts: bundle.contracts ?? [],
+  };
+}

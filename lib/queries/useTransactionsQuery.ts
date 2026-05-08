@@ -38,6 +38,7 @@ export function useTransactionsInfiniteQuery(orgId: string | null, opts?: { page
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.nextOffset : undefined),
     initialPageParam: 0,
     enabled: !!orgId,
+    staleTime: STALE.realtime,
   });
 }
 

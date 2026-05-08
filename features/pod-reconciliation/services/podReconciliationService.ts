@@ -64,41 +64,9 @@ export async function mergeTripsForPodOrg(orgId: string): Promise<{
   trips: TripRow[];
 }> {
   try {
-    const [ownerRes, supRes, clientRes] = await Promise.all([
-      supabase()
-        .from('trips')
-        .select('*')
-        .eq('organization_id', orgId)
-        .order('created_at', { ascending: false })
-        .limit(5000),
-      supabase().rpc('get_trips_where_org_is_supplier', { p_org_id: orgId }),
-      supabase().rpc('get_trips_where_org_is_client', { p_org_id: orgId }),
-    ]);
-
-    if (ownerRes.error) {
-      return { error: new Error(ownerRes.error.message), trips: [] };
-    }
-    if (supRes.error) {
-      return { error: new Error(supRes.error.message), trips: [] };
-    }
-    if (clientRes.error) {
-      return { error: new Error(clientRes.error.message), trips: [] };
-    }
-
-    const map = new Map<string, TripRow>();
-    const push = (rows: unknown) => {
-      if (!Array.isArray(rows)) return;
-      for (const row of rows) {
-        if (row && typeof row === 'object' && 'id' in row) {
-          map.set(str((row as TripRow).id), row as TripRow);
-        }
-      }
-    };
-    push(ownerRes.data);
-    push(supRes.data);
-    push(clientRes.data);
-
-    return { error: null, trips: Array.from(map.values()) };
+    const { data, error } = await supabase().rpc('get_trips_for_pod_org', { p_org_id: orgId });
+    if (error) return { error: new Error(error.message), trips: [] };
+    return { error: null, trips: (data ?? []) as TripRow[] };
   } catch (e) {
     return {
       error: e instanceof Error ? e : new Error(String(e)),

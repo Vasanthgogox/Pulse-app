@@ -1,7 +1,3 @@
-import {
-    getTripsWhereOrgIsSupplier,
-    type TripRow,
-} from "@/features/trips/services/trips.service";
 import { createRating } from "@/features/ratings/services/ratings.service";
 import type { RatedType, RatingRow } from "@/features/ratings/types";
 import { notifyTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
@@ -248,7 +244,7 @@ export async function getConversationsByOrganization(
 ): Promise<TripConversation[]> {
   async function loadMerged(tripEmbedFields: string): Promise<unknown[]> {
     const selectConv = tripConversationSelect(tripEmbedFields);
-    const [{ data: ownOrgRows, error: ownErr }, supplierTripsRes] = await Promise.all([
+    const [{ data: ownOrgRows, error: ownErr }, supplierTripIdsRes] = await Promise.all([
       supabase()
         .from("trip_conversations")
         .select(selectConv)
@@ -256,13 +252,13 @@ export async function getConversationsByOrganization(
         .order("last_message_at", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false, referencedTable: "trip_messages" })
         .limit(TRIP_MESSAGES_EMBED_RECENT, { referencedTable: "trip_messages" }),
-      getTripsWhereOrgIsSupplier(organizationId),
+      supabase().rpc("get_supplier_trip_ids_for_org", { p_org_id: organizationId }),
     ]);
 
     if (ownErr) throw ownErr;
 
-    const supplierTripIds = (supplierTripsRes.trips ?? [])
-      .map((t: TripRow) => t.id)
+    const supplierTripIds = ((supplierTripIdsRes.data ?? []) as { trip_id: string }[])
+      .map((r) => r.trip_id)
       .filter((id): id is string => !!id);
 
     let supplierRows: unknown[] = [];
@@ -860,25 +856,18 @@ export async function markNetworkConversationRead(
 export async function getIntegratedPartners(
   orgId: string,
 ): Promise<NetworkPartner[]> {
-  const [{ data: suppliers }, { data: clients }] = await Promise.all([
-    supabase()
-      .from("suppliers")
-      .select("company_name, name, linked_organization_id")
-      .eq("organization_id", orgId)
-      .not("linked_organization_id", "is", null)
-      .limit(500),
-    supabase()
-      .from("clients")
-      .select("name, linked_organization_id")
-      .eq("organization_id", orgId)
-      .not("linked_organization_id", "is", null)
-      .limit(500),
-  ]);
+  const { data, error } = await supabase().rpc("get_integrated_partners", { p_org_id: orgId });
+  if (error || data == null) return [];
+
+  const bundle = data as {
+    suppliers: { company_name: string | null; name: string | null; linked_organization_id: string }[];
+    clients: { name: string | null; linked_organization_id: string }[];
+  };
 
   const seen = new Set<string>();
   const partners: NetworkPartner[] = [];
 
-  for (const s of suppliers ?? []) {
+  for (const s of bundle.suppliers ?? []) {
     if (s.linked_organization_id && !seen.has(s.linked_organization_id)) {
       seen.add(s.linked_organization_id);
       partners.push({
@@ -887,7 +876,7 @@ export async function getIntegratedPartners(
       });
     }
   }
-  for (const c of clients ?? []) {
+  for (const c of bundle.clients ?? []) {
     if (c.linked_organization_id && !seen.has(c.linked_organization_id)) {
       seen.add(c.linked_organization_id);
       partners.push({

@@ -5,42 +5,23 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getTripsByOrganization,
-  getTripsWhereOrgIsSupplier,
   getShipperDisplayNamesForSupplierTrips,
   updateTripStatus,
+  type TripRow,
 } from '@/features/trips/services/trips.service';
+import { supabase } from '@/lib/supabase';
 import { queryKeys } from '@/lib/queryKeys';
 import { STALE } from '@/lib/queryClient';
 import { DEFAULT_PAGE_SIZE } from '@/lib/pagination';
-
-/** Merge owner trips + shared supplier-side load trips (dedupe by id), sort by created_at desc. */
-function mergeTripsLists<T extends { id: string; created_at: string }>(
-  ownerTrips: T[],
-  supplierTrips: T[],
-): T[] {
-  const byId = new Map(ownerTrips.map((t) => [t.id, t]));
-  for (const t of supplierTrips) {
-    if (!byId.has(t.id)) byId.set(t.id, t);
-  }
-  return [...byId.values()].sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-  );
-}
 
 /** Full list (no pagination). Use for Trips tab. Includes trips where org is owner or supplier on a shared load trip. */
 export function useTripsQuery(orgId: string | null) {
   return useQuery({
     queryKey: queryKeys.trips.all(orgId ?? ''),
     queryFn: async () => {
-      const [ownerResult, supplierResult] = await Promise.allSettled([
-        getTripsByOrganization(orgId!),
-        getTripsWhereOrgIsSupplier(orgId!),
-      ]);
-      const ownerRes = ownerResult.status === 'fulfilled' ? ownerResult.value : { error: ownerResult.reason as Error, trips: [] };
-      const supplierRes = supplierResult.status === 'fulfilled' ? supplierResult.value : { error: supplierResult.reason as Error, trips: [] };
-      if (ownerRes.error) throw ownerRes.error;
-      if (supplierRes.error) throw supplierRes.error;
-      return mergeTripsLists(ownerRes.trips, supplierRes.trips);
+      const { data, error } = await supabase().rpc('get_trips_for_org', { p_org_id: orgId! });
+      if (error) throw new Error(error.message);
+      return (data ?? []) as TripRow[];
     },
     enabled: !!orgId,
     staleTime: STALE.realtime,
@@ -57,6 +38,7 @@ export function useShipperDisplayNamesQuery(orgId: string | null) {
       return res.shipperNameByTripId;
     },
     enabled: !!orgId,
+    staleTime: STALE.moderate,
   });
 }
 
@@ -73,6 +55,7 @@ export function useTripsInfiniteQuery(orgId: string | null, opts?: { pageSize?: 
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.nextOffset : undefined),
     initialPageParam: 0,
     enabled: !!orgId,
+    staleTime: STALE.realtime,
   });
 }
 

@@ -1,8 +1,10 @@
 /**
  * Query hooks for Finance screen entity data. Used by useFinanceEntities to read from cache.
  */
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getTripsWhereOrgIsClient, getTripsWhereOrgIsSupplier } from '@/features/trips/services/trips.service';
+import { getTripsWhereOrgIsClient } from '@/features/trips/services/trips.service';
+import { useTripsQuery } from '@/lib/queries/useTripsQuery';
 import { getDriverOffersByOrganization } from '@/features/drivers/services/drivers.service';
 import { getSalaryRequestsByOrganization } from '@/services/salaryRequestsService';
 import { getIndentsByOrganization } from '@/features/indents/services/indents.service';
@@ -11,7 +13,7 @@ import { getTripSubcontracts } from '@/features/finance/services/tripSubcontract
 import { queryKeys } from '@/lib/queryKeys';
 import { STALE } from '@/lib/queryClient';
 
-export function useTripsWhereOrgIsClientQuery(orgId: string | null) {
+export function useTripsWhereOrgIsClientQuery(orgId: string | null, active = true) {
   return useQuery({
     queryKey: queryKeys.trips.whereOrgIsClient(orgId ?? ''),
     queryFn: async () => {
@@ -19,23 +21,19 @@ export function useTripsWhereOrgIsClientQuery(orgId: string | null) {
       if (res.error) throw res.error;
       return res.trips;
     },
-    enabled: !!orgId,
+    enabled: !!orgId && active,
     staleTime: STALE.realtime,
   });
 }
 
-/** Trips owned by other orgs where this org is the supplier (carrier view). Used in Customers tab aggregation. */
+/** Trips owned by other orgs where this org is the supplier — derived from useTripsQuery cache, no extra request. */
 export function useTripsWhereOrgIsSupplierQuery(orgId: string | null) {
-  return useQuery({
-    queryKey: queryKeys.trips.whereOrgIsSupplier(orgId ?? ''),
-    queryFn: async () => {
-      const res = await getTripsWhereOrgIsSupplier(orgId!);
-      if (res.error) throw res.error;
-      return res.trips;
-    },
-    enabled: !!orgId,
-    staleTime: STALE.realtime,
-  });
+  const tripsQuery = useTripsQuery(orgId);
+  const supplierTrips = useMemo(
+    () => tripsQuery.data?.filter((t) => t.organization_id !== orgId) ?? [],
+    [tripsQuery.data, orgId],
+  );
+  return { ...tripsQuery, data: supplierTrips };
 }
 
 /**

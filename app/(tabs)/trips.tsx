@@ -61,7 +61,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
     Modal,
@@ -203,6 +203,7 @@ export default function TripsScreen() {
   const { currentOrganization } = useOrganization();
   const { profile } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
+  const lastFocusRefreshRef = useRef<number>(0);
   const [tripFilter, setTripFilter] = useState<"Active" | "History">("Active");
   const [searchQuery, setSearchQuery] = useState("");
   const queryClient = useQueryClient();
@@ -340,7 +341,12 @@ export default function TripsScreen() {
       setTripFilter("Active");
       setActiveMetricTab("assigned");
       setActiveHistoryMetricTab(null);
-      onRefresh();
+      // Only force-refetch if stale (>5 min). Realtime subscriptions handle live updates;
+      // pull-to-refresh handles explicit reloads.
+      if (Date.now() - lastFocusRefreshRef.current > 5 * 60_000) {
+        lastFocusRefreshRef.current = Date.now();
+        onRefresh();
+      }
     }, [onRefresh]),
   );
 
