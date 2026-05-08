@@ -85,6 +85,8 @@ interface TripChatContextType {
   ) => Promise<void>;
   markAsRead: (conversationId: string) => Promise<void>;
   totalUnreadCount: number;
+  /** Backward-compat helper used by existing consumers (FAB/chat screens). */
+  getTotalUnreadCount: () => number;
   refreshConversations: () => Promise<void>;
   /** Loads one thread by id and merges into state (deep links when list omits it). */
   hydrateConversationById: (conversationId: string) => Promise<TripConversation | null>;
@@ -406,6 +408,7 @@ export function TripChatProvider({
     () => conversations.reduce((sum, c) => sum + c.unread_dispatcher_count, 0),
     [conversations]
   );
+  const getTotalUnreadCount = useCallback(() => totalUnreadCount, [totalUnreadCount]);
 
   const initiateConversation = useCallback(
     async (params: InitiateConversationParams): Promise<string | null> => {
@@ -502,6 +505,7 @@ export function TripChatProvider({
         sendMessage,
         markAsRead,
         totalUnreadCount,
+        getTotalUnreadCount,
         refreshConversations: loadConversations,
         hydrateConversationById,
         initiateConversation,
