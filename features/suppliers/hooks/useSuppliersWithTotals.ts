@@ -1,52 +1,31 @@
 /**
- * Reusable hook: fetch suppliers + trips for an org and compute supplier totals and trip summary.
- * Used by Suppliers tab and can be reused anywhere that needs suppliers with give totals.
+ * Reusable hook: suppliers + trips for an org with computed totals.
+ * Reads from the shared TanStack Query cache — no redundant network requests.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { getSuppliersByOrganization, type SupplierRow } from '@/features/suppliers';
-import { getTripsByOrganization, type TripRow } from '@/features/trips/services/trips.service';
+import { useCallback, useMemo } from 'react';
+import { useSuppliersQuery } from '@/lib/queries/useSuppliersQuery';
+import { useTripsQuery } from '@/lib/queries/useTripsQuery';
 import {
   computeSupplierTotalsFromTrips,
   computeTripSummary,
 } from '@/features/suppliers/utils/totals.util';
 
 export function useSuppliersWithTotals(organizationId: string | null) {
-  const [suppliers, setSuppliers] = useState<SupplierRow[]>([]);
-  const [trips, setTrips] = useState<TripRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const suppliersQuery = useSuppliersQuery(organizationId);
+  const tripsQuery = useTripsQuery(organizationId);
 
-  const refetch = useCallback(() => {
-    if (!organizationId) {
-      setLoading(false);
-      setError(null);
-      setSuppliers([]);
-      setTrips([]);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    Promise.all([
-      getSuppliersByOrganization(organizationId),
-      getTripsByOrganization(organizationId),
-    ]).then(([resSuppliers, resTrips]) => {
-      if (resSuppliers.error) {
-        setError(resSuppliers.error.message);
-        setSuppliers([]);
-      } else {
-        setSuppliers(resSuppliers.suppliers ?? []);
-      }
-      setTrips(resTrips.trips ?? []);
-      setLoading(false);
-    });
-  }, [organizationId]);
-
-  useEffect(() => {
-    refetch();
-  }, [refetch]);
+  const suppliers = suppliersQuery.data ?? [];
+  const trips = tripsQuery.data ?? [];
+  const loading = suppliersQuery.isLoading || tripsQuery.isLoading;
+  const error = suppliersQuery.error ? (suppliersQuery.error as Error).message : null;
 
   const { totalRevenue, totalCost } = useMemo(() => computeTripSummary(trips), [trips]);
   const supplierTotals = useMemo(() => computeSupplierTotalsFromTrips(trips), [trips]);
+
+  const refetch = useCallback(() => {
+    suppliersQuery.refetch();
+    tripsQuery.refetch();
+  }, [suppliersQuery, tripsQuery]);
 
   return {
     suppliers,

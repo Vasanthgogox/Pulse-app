@@ -1,41 +1,27 @@
 /**
- * Reusable hook: fetch clients + trips for an org and compute client totals and trip summary.
- * Used by Clients tab and can be reused anywhere that needs clients with get/give totals.
+ * Reusable hook: clients + trips for an org with computed totals.
+ * Reads from the shared TanStack Query cache — no redundant network requests.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { getClientsByOrganization, type ClientRow } from '@/features/clients';
-import { getTripsByOrganization, type TripRow } from '@/features/trips/services/trips.service';
+import { useCallback, useMemo } from 'react';
+import { useClientsQuery } from '@/lib/queries/useClientsQuery';
+import { useTripsQuery } from '@/lib/queries/useTripsQuery';
 import { computeClientTotals, computeTripSummary } from '@/features/clients/utils/totals.util';
 
 export function useClientsWithTotals(organizationId: string | null, enabled: boolean) {
-  const [clients, setClients] = useState<ClientRow[]>([]);
-  const [trips, setTrips] = useState<TripRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const clientsQuery = useClientsQuery(enabled ? organizationId : null);
+  const tripsQuery = useTripsQuery(enabled ? organizationId : null);
 
-  const refetch = useCallback(() => {
-    if (!organizationId || !enabled) {
-      setLoading(false);
-      setClients([]);
-      setTrips([]);
-      return;
-    }
-    setLoading(true);
-    Promise.all([
-      getClientsByOrganization(organizationId),
-      getTripsByOrganization(organizationId),
-    ]).then(([resClients, resTrips]) => {
-      setClients(resClients.clients ?? []);
-      setTrips(resTrips.trips ?? []);
-      setLoading(false);
-    });
-  }, [organizationId, enabled]);
-
-  useEffect(() => {
-    refetch();
-  }, [refetch]);
+  const clients = clientsQuery.data ?? [];
+  const trips = tripsQuery.data ?? [];
+  const loading = clientsQuery.isLoading || tripsQuery.isLoading;
 
   const { totalRevenue, totalCost } = useMemo(() => computeTripSummary(trips), [trips]);
   const clientTotals = useMemo(() => computeClientTotals(clients, trips), [clients, trips]);
+
+  const refetch = useCallback(() => {
+    clientsQuery.refetch();
+    tripsQuery.refetch();
+  }, [clientsQuery, tripsQuery]);
 
   return {
     clients,

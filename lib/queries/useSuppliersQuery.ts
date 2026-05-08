@@ -4,6 +4,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getSuppliersByOrganization } from '@/features/suppliers/services/suppliers.service';
 import { queryKeys } from '@/lib/queryKeys';
+import { STALE } from '@/lib/queryClient';
 
 export function useSuppliersQuery(orgId: string | null) {
   return useQuery({
@@ -14,6 +15,7 @@ export function useSuppliersQuery(orgId: string | null) {
       return res.suppliers;
     },
     enabled: !!orgId,
+    staleTime: STALE.moderate,
   });
 }
 
