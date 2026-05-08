@@ -360,6 +360,7 @@ export default function TripDetailScreen({
   /** When set, we've completed a load for this tripId; subsequent load() for same id is background refresh (no loading spinner). */
   const loadCompletedForIdRef = useRef<string | null>(null);
   const supplierRetryForTripIdRef = useRef<string | null>(null);
+  const lastFocusRefreshRef = useRef<number>(0);
   /** Current trip for comparison in supplier fallback; avoid setTrip when data unchanged to reduce flicker. */
   const tripRef = useRef<TripRow | null>(null);
   tripRef.current = trip;
@@ -742,7 +743,7 @@ export default function TripDetailScreen({
     let cancelled = false;
     Promise.all(
       partnerKeys.map((partnerKey) =>
-        getSharedLedgerEntriesForPartner(orgId, partnerKey).then((res) => ({
+        getSharedLedgerEntriesForPartner(orgId, partnerKey, trip.id).then((res) => ({
           partnerKey,
           entries: res.entries ?? [],
         })),
@@ -792,9 +793,9 @@ export default function TripDetailScreen({
     }
     try {
       const [received, clientRaised, supplierRaised] = await Promise.all([
-        getDisputesReceived(orgId),
-        clientOrg ? getDisputesForPartner(orgId, clientOrg) : Promise.resolve({ disputes: [] as DisputeRow[] }),
-        supplierOrg ? getDisputesForPartner(orgId, supplierOrg) : Promise.resolve({ disputes: [] as DisputeRow[] }),
+        getDisputesReceived(orgId, tId),
+        clientOrg ? getDisputesForPartner(orgId, clientOrg, tId) : Promise.resolve({ disputes: [] as DisputeRow[] }),
+        supplierOrg ? getDisputesForPartner(orgId, supplierOrg, tId) : Promise.resolve({ disputes: [] as DisputeRow[] }),
       ]);
       const matchByTrip = (d: DisputeRow) =>
         String(d.transaction_id ?? "").toLowerCase() === String(tId).toLowerCase();
@@ -1278,6 +1279,8 @@ export default function TripDetailScreen({
   useFocusEffect(
     useCallback(() => {
       if (tripId && trip) {
+        if (Date.now() - lastFocusRefreshRef.current < 60_000) return;
+        lastFocusRefreshRef.current = Date.now();
         isRefreshingRef.current = true;
         load();
         loadAssignmentAudit();
@@ -1348,79 +1351,61 @@ export default function TripDetailScreen({
       setDriverAvatarUri(null);
       setDriverLinked(false);
       setDriverTrackingOnly(null);
-      getDriverById(orgId, trip.driver_id).then((res) => {
+      const driverId = trip.driver_id;
+      void (async () => {
+        // Phase 1: fetch driver from trip org AND supplier org membership in parallel
+        const [driverRes, supplierRes] = await Promise.all([
+          getDriverById(orgId, driverId),
+          trip.supplier_id
+            ? getSupplierById(orgId, trip.supplier_id)
+            : Promise.resolve({ supplier: null }),
+        ]);
         if (cancelled) return;
-        const d = res.driver;
+        const d = driverRes.driver;
         if (d) {
           setDriverTrackingOnly(d.tracking_only === true);
-          const fromDriver = (d.name || d.phone || "").trim() || null;
-          setDriverName(fromDriver ?? fallbackDriverName ?? "—");
+          setDriverName((d.name || d.phone || "").trim() || fallbackDriverName || "—");
           setDriverLinked(!!d.user_id);
-          void resolveDriverAvatarUri(trip.driver_id!, d.avatar_url ?? null).then(
-            (uri) => {
-              if (!cancelled) setDriverAvatarUri(uri);
-            },
-          );
+          const uri = await resolveDriverAvatarUri(driverId, d.avatar_url ?? null);
+          if (!cancelled) setDriverAvatarUri(uri);
           return;
         }
-        // Driver not in trip org: for load-based (aggregate) trips the driver may live in the supplier's org
-        const trySupplierOrgThenViewerOrg = () => {
-          if (!trip.supplier_id) {
-            tryViewerOrg();
-            return;
-          }
-          getSupplierById(orgId, trip.supplier_id).then((r) => {
-            if (cancelled) return;
-            const linkedOrgId = r.supplier?.linked_organization_id;
-            if (linkedOrgId) {
-              getDriverById(linkedOrgId, trip.driver_id!).then((res2) => {
-                if (cancelled) return;
-                const d2 = res2.driver;
-                if (d2) {
-                  setDriverTrackingOnly(d2.tracking_only === true);
-                  const fromDriver2 = (d2.name || d2.phone || "").trim() || null;
-                  setDriverName(fromDriver2 ?? fallbackDriverName ?? "—");
-                  setDriverLinked(!!d2.user_id);
-                  void resolveDriverAvatarUri(trip.driver_id!, d2.avatar_url ?? null).then(
-                    (uri) => {
-                      if (!cancelled) setDriverAvatarUri(uri);
-                    },
-                  );
-                  return;
-                }
-                tryViewerOrg();
-              });
-            } else {
-              tryViewerOrg();
-            }
-          });
-        };
-        const tryViewerOrg = () => {
-          const viewerOrgId = currentOrganization?.id;
-          if (!viewerOrgId || viewerOrgId === orgId) {
-            setDriverName(fallbackDriverName ?? "—");
-            void resolveDriverAvatarUri(trip.driver_id!, null).then((uri) => {
-              if (!cancelled) setDriverAvatarUri(uri);
-            });
-            setDriverLinked(false);
-            return;
-          }
-          getDriverById(viewerOrgId, trip.driver_id!).then((res3) => {
-            if (cancelled) return;
-            const d3 = res3.driver;
-            if (d3) setDriverTrackingOnly(d3.tracking_only === true);
-            const fromDriver3 = d3 ? (d3.name || d3.phone || "").trim() || null : null;
-            setDriverName(fromDriver3 ?? fallbackDriverName ?? "—");
-            void resolveDriverAvatarUri(trip.driver_id!, d3?.avatar_url ?? null).then(
-              (uri) => {
-                if (!cancelled) setDriverAvatarUri(uri);
-              },
-            );
-            setDriverLinked(!!d3?.user_id);
-          });
-        };
-        trySupplierOrgThenViewerOrg();
-      });
+        // Phase 2: driver not in trip org — try supplier's linked org + viewer org in parallel
+        const linkedOrgId = (supplierRes as { supplier?: { linked_organization_id?: string | null } | null }).supplier?.linked_organization_id ?? null;
+        const viewerOrgId = currentOrganization?.id ?? null;
+        const fallbackOrgs = [
+          linkedOrgId,
+          viewerOrgId && viewerOrgId !== orgId ? viewerOrgId : null,
+        ].filter((id): id is string => Boolean(id));
+        if (!fallbackOrgs.length) {
+          setDriverName(fallbackDriverName ?? "—");
+          const uri = await resolveDriverAvatarUri(driverId, null);
+          if (!cancelled) setDriverAvatarUri(uri);
+          setDriverLinked(false);
+          return;
+        }
+        const fallbackResults = await Promise.allSettled(
+          fallbackOrgs.map((id) => getDriverById(id, driverId)),
+        );
+        if (cancelled) return;
+        type DriverLike = { name?: string | null; phone?: string | null; user_id?: string | null; avatar_url?: string | null; tracking_only?: boolean | null };
+        const found = fallbackResults
+          .filter((r): r is PromiseFulfilledResult<{ driver: DriverLike | null }> => r.status === "fulfilled")
+          .map((r) => r.value.driver)
+          .find(Boolean) ?? null;
+        if (found) {
+          setDriverTrackingOnly(found.tracking_only === true);
+          setDriverName((found.name || found.phone || "").trim() || fallbackDriverName || "—");
+          setDriverLinked(!!found.user_id);
+          const uri = await resolveDriverAvatarUri(driverId, found.avatar_url ?? null);
+          if (!cancelled) setDriverAvatarUri(uri);
+        } else {
+          setDriverName(fallbackDriverName ?? "—");
+          const uri = await resolveDriverAvatarUri(driverId, null);
+          if (!cancelled) setDriverAvatarUri(uri);
+          setDriverLinked(false);
+        }
+      })();
     } else {
       setDriverName(fallbackDriverName);
       setDriverAvatarUri(null);
@@ -1477,65 +1462,34 @@ export default function TripDetailScreen({
       const ownerOrgId = trip.organization_id;
 
       void (async () => {
-        const { supplier: fromRpc } = await getSupplierDetails(supplierId);
-        if (cancelled) return;
-        if (fromRpc) {
-          const integrated =
-            !!fromRpc.linked_organization_id ||
-            fromRpc.supplier_type === "integrated";
-          setCounterpartyIntegrated(integrated);
-          if (fromRpc.linked_organization_id)
-            setPartnerOrgId(fromRpc.linked_organization_id);
-          setSupplierPartyRes((prev) => ({
-            name: pickSupplierDisplayName(fromRpc) ?? prev?.name ?? null,
-            integrated,
-            orgId: fromRpc.linked_organization_id ?? prev?.orgId ?? null,
-          }));
-        }
-        const n = pickSupplierDisplayName(fromRpc);
-        if (n) {
-          setPartnerName(n);
-          return;
-        }
-        const { supplier: fromOwnerOrg } = await getSupplierById(ownerOrgId, supplierId);
-        if (cancelled) return;
-        if (fromOwnerOrg) {
-          const integrated =
-            !!fromOwnerOrg.linked_organization_id ||
-            fromOwnerOrg.supplier_type === "integrated";
-          setCounterpartyIntegrated(integrated);
-          if (fromOwnerOrg.linked_organization_id)
-            setPartnerOrgId(fromOwnerOrg.linked_organization_id);
-          setSupplierPartyRes((prev) => ({
-            name: pickSupplierDisplayName(fromOwnerOrg) ?? prev?.name ?? null,
-            integrated,
-            orgId: fromOwnerOrg.linked_organization_id ?? prev?.orgId ?? null,
-          }));
-        }
-        const n2 = pickSupplierDisplayName(fromOwnerOrg);
-        if (n2) {
-          setPartnerName(n2);
-          return;
-        }
         const viewerOrgId = currentOrganization?.id;
-        if (viewerOrgId && viewerOrgId !== ownerOrgId) {
-          const { supplier: fromViewerOrg } = await getSupplierById(viewerOrgId, supplierId);
-          if (cancelled) return;
-          if (fromViewerOrg) {
-            const integrated =
-              !!fromViewerOrg.linked_organization_id ||
-              fromViewerOrg.supplier_type === "integrated";
-            setCounterpartyIntegrated(integrated);
-            if (fromViewerOrg.linked_organization_id)
-              setPartnerOrgId(fromViewerOrg.linked_organization_id);
-            setSupplierPartyRes((prev) => ({
-              name: pickSupplierDisplayName(fromViewerOrg) ?? prev?.name ?? null,
-              integrated,
-              orgId: fromViewerOrg.linked_organization_id ?? prev?.orgId ?? null,
-            }));
-          }
-          const n3 = pickSupplierDisplayName(fromViewerOrg);
-          if (n3) setPartnerName(n3);
+        const [detailsResult, ownerResult, viewerResult] = await Promise.allSettled([
+          getSupplierDetails(supplierId),
+          getSupplierById(ownerOrgId, supplierId),
+          viewerOrgId && viewerOrgId !== ownerOrgId
+            ? getSupplierById(viewerOrgId, supplierId)
+            : Promise.resolve({ supplier: null }),
+        ]);
+        if (cancelled) return;
+        const fromRpc = detailsResult.status === "fulfilled" ? detailsResult.value.supplier : null;
+        const fromOwnerOrg = ownerResult.status === "fulfilled" ? ownerResult.value.supplier : null;
+        const fromViewerOrg = viewerResult.status === "fulfilled" ? viewerResult.value.supplier : null;
+        const candidates = [fromRpc, fromOwnerOrg, fromViewerOrg];
+        for (const s of candidates) {
+          if (!s) continue;
+          const integrated = !!s.linked_organization_id || s.supplier_type === "integrated";
+          setCounterpartyIntegrated(integrated);
+          if (s.linked_organization_id) setPartnerOrgId(s.linked_organization_id);
+          setSupplierPartyRes({
+            name: pickSupplierDisplayName(s) ?? fallbackSupplierName,
+            integrated,
+            orgId: s.linked_organization_id ?? null,
+          });
+          break;
+        }
+        for (const s of candidates) {
+          const n = pickSupplierDisplayName(s);
+          if (n) { setPartnerName(n); return; }
         }
       })();
     } else {
@@ -2288,6 +2242,7 @@ export default function TripDetailScreen({
     setShowAdjustmentModal(false);
     setAdjustmentModalPreset(null);
   }, []);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const openTripAdjustmentModal = useCallback(
     (
       preset: {
@@ -2300,18 +2255,6 @@ export default function TripDetailScreen({
       setShowAdjustmentModal(true);
     },
     [],
-  );
-  const handleAddAdjustment = useCallback(
-    (
-      preset: {
-        type: TripAdjustmentType;
-        impact: TripAdjustmentImpact;
-        reasonSeed?: string | null;
-      } | null = null,
-    ) => {
-      openTripAdjustmentModal(preset);
-    },
-    [openTripAdjustmentModal],
   );
   const openCompareVerifyFromTrip = useCallback((
     /** Which party tab the user tapped Compare & Verify on. Defaults to supplier-first. */

@@ -144,15 +144,17 @@ export async function getSharedLedgerConnections(orgId: string): Promise<{
  */
 export async function getSharedLedgerEntriesForPartner(
   orgId: string,
-  partnerKey: string
+  partnerKey: string,
+  referenceId?: string,
 ): Promise<{
   error: Error | null;
   entries: SharedLedgerEntry[];
 }> {
-  const { data, error } = await supabase().rpc('get_shared_ledger_entries', {
+  const rpc = supabase().rpc('get_shared_ledger_entries', {
     org_id: orgId,
     partner_key: partnerKey,
-  }).limit(500);
+  }).limit(referenceId ? 10 : 500);
+  const { data, error } = await (referenceId ? rpc.eq('reference_id', referenceId) : rpc);
   if (error) return { error: new Error(error.message), entries: [] };
   const rows = (Array.isArray(data) ? data : []) as Array<{
     id: string;
@@ -346,13 +348,16 @@ export async function createDispute(payload: CreateDisputePayload): Promise<{
  */
 export async function getDisputesForPartner(
   orgId: string,
-  partnerKeyOrOrgId: string
+  partnerKeyOrOrgId: string,
+  transactionId?: string,
 ): Promise<{ error: Error | null; disputes: DisputeRow[] }> {
-  const { data, error } = await supabase()
+  let query = supabase()
     .from('dispute')
     .select('id, transaction_id, raised_by_org_id, partner_org_id, status, internal_snapshot, partner_snapshot, raised_sales, raised_paid, evidence_url, reason_code, proposed_amount')
     .eq('raised_by_org_id', orgId)
     .eq('partner_org_id', partnerKeyOrOrgId);
+  if (transactionId) query = query.eq('transaction_id', transactionId);
+  const { data, error } = await query;
   if (error) return { error: new Error(error.message), disputes: [] };
   const rows = (data ?? []) as Array<{
     id: string;
@@ -432,15 +437,17 @@ export async function getOpenDisputesByOrg(orgId: string): Promise<{
 /**
  * Get disputes received by this org (partner_org_id = orgId, status OPEN).
  */
-export async function getDisputesReceived(orgId: string): Promise<{
+export async function getDisputesReceived(orgId: string, transactionId?: string): Promise<{
   error: Error | null;
   disputes: DisputeRow[];
 }> {
-  const { data, error } = await supabase()
+  let query = supabase()
     .from('dispute')
     .select('id, transaction_id, raised_by_org_id, partner_org_id, status, internal_snapshot, partner_snapshot, raised_sales, raised_paid, evidence_url, reason_code, proposed_amount')
     .eq('partner_org_id', orgId)
     .eq('status', 'OPEN');
+  if (transactionId) query = query.eq('transaction_id', transactionId);
+  const { data, error } = await query;
   if (error) return { error: new Error(error.message), disputes: [] };
   const rows = (data ?? []) as Array<{
     id: string;
