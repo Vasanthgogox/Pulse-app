@@ -151,8 +151,8 @@ const extra = Constants.expoConfig?.extra as {
   supabaseAnonKey?: string;
 } | undefined;
 
-// extra = from app.config.js (loads .env from project root when server starts)
-// process.env.EXPO_PUBLIC_* = fallback if Metro injected them into the bundle
+// Prefer runtime-injected public env vars first (especially on web), then Expo extra.
+// This avoids stale Expo extra manifests when Metro/browser cache lags behind .env edits.
 function pickNonEmpty(...values: (string | undefined)[]): string | undefined {
   for (const v of values) {
     const s = typeof v === 'string' ? v.trim() : '';
@@ -160,8 +160,16 @@ function pickNonEmpty(...values: (string | undefined)[]): string | undefined {
   }
   return undefined;
 }
-const supabaseUrl = pickNonEmpty(extra?.supabaseUrl, process.env.EXPO_PUBLIC_SUPABASE_URL);
-const supabaseAnonKey = pickNonEmpty(extra?.supabaseAnonKey, process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY);
+const envSupabaseUrl = pickNonEmpty(process.env.EXPO_PUBLIC_SUPABASE_URL, process.env.VITE_SUPABASE_URL);
+const envSupabaseAnonKey = pickNonEmpty(
+  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+  process.env.VITE_SUPABASE_ANON_KEY
+);
+const extraSupabaseUrl = pickNonEmpty(extra?.supabaseUrl);
+const extraSupabaseAnonKey = pickNonEmpty(extra?.supabaseAnonKey);
+
+const supabaseUrl = pickNonEmpty(envSupabaseUrl, extraSupabaseUrl);
+const supabaseAnonKey = pickNonEmpty(envSupabaseAnonKey, extraSupabaseAnonKey);
 
 /** Use before any Supabase call to show a config screen instead of throwing or failing network. */
 export function hasSupabaseConfig(): boolean {
@@ -197,7 +205,16 @@ function getSupabase(): SupabaseClient {
   if (__DEV__) {
     try {
       const host = new URL(supabaseUrl).hostname;
+      console.log('[q-mobile] Supabase config marker:', '2026-05-08-extra-only-v2');
+      console.log('[q-mobile] Supabase URL source (env):', envSupabaseUrl ?? '(missing)');
+      console.log('[q-mobile] Supabase URL source (extra):', supabaseUrl);
       console.log('[q-mobile] Supabase URL host:', host);
+      if (envSupabaseUrl && extraSupabaseUrl && envSupabaseUrl !== extraSupabaseUrl) {
+        console.warn('[q-mobile] Supabase source mismatch: preferring env over extra', {
+          envSupabaseUrl,
+          extraSupabaseUrl,
+        });
+      }
     } catch {
       console.warn('[q-mobile] Supabase URL invalid:', supabaseUrl?.slice(0, 50));
     }
