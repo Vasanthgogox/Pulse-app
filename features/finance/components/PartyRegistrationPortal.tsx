@@ -282,6 +282,9 @@ function PartyRegistrationPortalInner(
   const [driverRegisteredAtPhone, setDriverRegisteredAtPhone] = useState(false);
   const phoneLookupSearchIdRef = useRef(0);
   const { width: viewportW, height: viewportH } = useWindowDimensions();
+  const [visualViewportHeight, setVisualViewportHeight] = useState<number | null>(
+    null,
+  );
 
   const hasClientInviteSearch =
     kind === "client" &&
@@ -296,6 +299,29 @@ function PartyRegistrationPortalInner(
     !layoutWide &&
     viewportW > 0 &&
     viewportW < PARTY_PORTAL_STACKED_SHEET_MAX_WIDTH;
+
+  useEffect(() => {
+    if (Platform.OS !== "web" || !visible || typeof window === "undefined") {
+      setVisualViewportHeight(null);
+      return;
+    }
+    const vv = window.visualViewport;
+    if (!vv) {
+      setVisualViewportHeight(null);
+      return;
+    }
+    const syncVisualViewport = () => {
+      const next = Number.isFinite(vv.height) ? vv.height : null;
+      setVisualViewportHeight(next && next > 0 ? next : null);
+    };
+    syncVisualViewport();
+    vv.addEventListener("resize", syncVisualViewport);
+    vv.addEventListener("scroll", syncVisualViewport);
+    return () => {
+      vv.removeEventListener("resize", syncVisualViewport);
+      vv.removeEventListener("scroll", syncVisualViewport);
+    };
+  }, [visible]);
 
   // Shared-ish fields
   const [orgOrCompanyName, setOrgOrCompanyName] = useState("");
@@ -1069,11 +1095,24 @@ function PartyRegistrationPortalInner(
 
   const narrowShellMaxHeight =
     !layoutWide && viewportH > 0
-      ? Math.min(viewportH * 0.94, 900)
+      ? Math.min(
+          Math.min(
+            viewportH,
+            visualViewportHeight != null ? visualViewportHeight : viewportH,
+          ) * 0.94,
+          900,
+        )
       : undefined;
   const shellMaxWidth = layoutWide
     ? 1040
     : Math.min(560, Math.max(280, viewportW - 16));
+  const keyboardInset =
+    !layoutWide &&
+    viewportH > 0 &&
+    visualViewportHeight != null &&
+    visualViewportHeight < viewportH
+      ? viewportH - visualViewportHeight
+      : 0;
 
   return (
     <>
@@ -1133,6 +1172,7 @@ function PartyRegistrationPortalInner(
             contentContainerStyle={[
               styles.mainScrollContent,
               stackedSheetVisuals && styles.mainScrollContentSheet,
+              keyboardInset > 0 && { paddingBottom: 40 + keyboardInset },
             ]}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
