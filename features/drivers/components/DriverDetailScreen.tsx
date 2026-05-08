@@ -14,7 +14,6 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
     computeDriverCommissionForTrip,
-    getTransactionsByOrganizationAndDriver,
     LedgerReportModal,
     type FinancePeriodFilter,
     type LedgerRow,
@@ -27,13 +26,11 @@ import {
 import { LedgerTransactionListView } from "@/features/finance/components/LedgerTransactionListView";
 import {
     averageScore,
-    getRatingsForDriver,
     type RatingRow,
 } from "@/features/ratings";
 import {
     getTripDisplayNumber,
     getTripsByOrganization,
-    getTripsWhereOrgIsSupplier,
     type TripRow,
 } from "@/features/trips/services/trips.service";
 import {
@@ -46,7 +43,6 @@ import {
     canAccessFinance,
     getCapabilitiesFromProfile,
 } from "@/lib/capabilities";
-import { supabase } from "@/lib/supabase";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queryKeys";
 import {
@@ -55,10 +51,7 @@ import {
     formatLedgerAmount,
     formatLedgerDate,
 } from "@/lib/format";
-import {
-    getSalaryRequestsByDriverIds,
-    type SalaryRequestRow,
-} from "@/services/salaryRequestsService";
+import type { SalaryRequestRow } from "@/services/salaryRequestsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -83,10 +76,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
     attachDriverByContact,
-    getDriverById,
     getDriverDetailBundle,
     getDriverInviteSentStatus,
-    getDriverLedgerByDriver,
     getDriverOffersByOrganization,
     getDriverProfileDisplay,
     getDriverSignupMatchStatus,
@@ -388,17 +379,17 @@ export default function DriverDetailScreen({
           // get_trips_for_org already merges owner + supplier trips
           const allTrips = tripsRes.error ? [] : (tripsRes.trips ?? []);
           const driver = driverRow;
-          const txs = bundleRes.transactions ?? [];
+          const txs = (bundleRes.transactions ?? []) as LedgerRow[];
           const tripIdsFromDriverTx = new Set(
             txs
               .filter(
-                (tx: any) =>
+                (tx) =>
                   tx.contact_type === "driver" &&
                   tx.contact_id != null &&
                   String(tx.contact_id).trim() === String(driverId).trim() &&
                   tx.trip_id != null,
               )
-              .map((tx: any) => String(tx.trip_id).trim().toLowerCase()),
+              .map((tx) => String(tx.trip_id).trim().toLowerCase()),
           );
           const tripMatchesDriver = (t: TripRow) => {
             if (t.driver_id === driverId) return true;
@@ -421,7 +412,7 @@ export default function DriverDetailScreen({
           setTrips(allTrips.filter(tripMatchesDriver));
           setDriverRatings(bundleRes.ratings ?? []);
           setDriverRequests(
-            (bundleRes.salaryRequests ?? []).filter((r: any) => r.status === "pending"),
+            (bundleRes.salaryRequests as SalaryRequestRow[]).filter((r) => r.status === "pending"),
           );
           const offers = offersRes.error
             ? {}
@@ -455,6 +446,9 @@ export default function DriverDetailScreen({
           );
         },
       )
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : "Failed to load driver data");
+      })
       .finally(() => {
         setLoading(false);
         initialLoadDoneRef.current = true;
@@ -491,6 +485,10 @@ export default function DriverDetailScreen({
       if (cancelled) return;
       setMatchInviteStatus(statusRes.status);
       setHistoricalInviteOffer(termsRes.offer);
+    }).catch(() => {
+      if (cancelled) return;
+      setMatchInviteStatus(null);
+      setHistoricalInviteOffer(null);
     });
     return () => {
       cancelled = true;

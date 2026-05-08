@@ -209,6 +209,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Do NOT call refreshSession() here — it fires TOKEN_REFRESHED which
     // re-triggers this handler, causing an infinite cascade that freezes the app.
     const setupAuthSubscription = () => {
+      if (unsubscribeRef.current) return;
       try {
         unsubscribeRef.current = authService.onAuthStateChange(async (auth) => {
           const seqId = beginListenerSeq();

@@ -20,7 +20,6 @@ import {
   TripsHubTripCard,
   tripFinanceAdjForHubLookup,
   tripHubCost,
-  tripHubDue,
   tripHubRevenue,
   type TripRow,
 } from "@/features/trips";
@@ -72,7 +71,6 @@ import {
     ScrollView,
     StyleSheet,
     Text,
-    TextInput,
     TouchableOpacity,
     TouchableWithoutFeedback,
     useWindowDimensions,
@@ -205,7 +203,7 @@ export default function TripsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const lastFocusRefreshRef = useRef<number>(0);
   const [tripFilter, setTripFilter] = useState<"Active" | "History">("Active");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery] = useState("");
   const queryClient = useQueryClient();
   const [activeMetricTab, setActiveMetricTab] =
     useState<ActiveMetricTabId>("assigned");
@@ -221,7 +219,7 @@ export default function TripsScreen() {
     useState<HistoryTripMetricId | null>(null);
   const [showDateRangePicker, setShowDateRangePicker] = useState(false);
   const [showSortModal, setShowSortModal] = useState(false);
-  const [sortAnchorY, setSortAnchorY] = useState(0);
+  const [sortAnchorY] = useState(0);
   const toolbarDateRangeFilter: ToolbarDateFilter =
     dateRangeFilter === "tomorrow" ? "all" : dateRangeFilter;
   /** Default to cards for all users; table remains an explicit user toggle. */
@@ -313,18 +311,27 @@ export default function TripsScreen() {
       return;
     }
     setRefreshing(true);
+    const REFRESH_TIMEOUT_MS = 20_000;
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("refresh timeout")), REFRESH_TIMEOUT_MS),
+    );
     try {
-      await Promise.all([
-        refetchTrips(),
-        refetchTransactions(),
-        refetchAssignment(),
-        queryClient.invalidateQueries({
-          queryKey: ["q", "trips", "doc-trip-ids", orgId],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: [...queryKeys.tripFinanceAdjustmentsRoot],
-        }),
+      await Promise.race([
+        Promise.all([
+          refetchTrips(),
+          refetchTransactions(),
+          refetchAssignment(),
+          queryClient.invalidateQueries({
+            queryKey: ["q", "trips", "doc-trip-ids", orgId],
+          }),
+          queryClient.invalidateQueries({
+            queryKey: [...queryKeys.tripFinanceAdjustmentsRoot],
+          }),
+        ]),
+        timeoutPromise,
       ]);
+    } catch {
+      // timeout or network error — silently complete; stale data remains visible
     } finally {
       setRefreshing(false);
     }
@@ -1276,16 +1283,6 @@ export default function TripsScreen() {
     ],
     [tr],
   );
-
-  const activeQuickFilterCount = useMemo(() => {
-    let count = 0;
-    if (supplyFilter !== "all") count += 1;
-    if (paymentFilter !== "all") count += 1;
-    if (loadTypeFilter !== "all") count += 1;
-    if (dateRangeFilter !== "all") count += 1;
-    if (sortBy !== "date_desc") count += 1;
-    return count;
-  }, [supplyFilter, paymentFilter, loadTypeFilter, dateRangeFilter, sortBy]);
 
   const renderHistoryMetricButton = (metricId: HistoryTripMetricId) => {
     const metric = historyMetricCards[metricId];
@@ -3138,7 +3135,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         outlineStyle: "none",
-      } as any,
+      } as object,
     }),
   },
   tripsFilterCountBadge: {
@@ -3648,7 +3645,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         outlineStyle: "none",
-      } as any,
+      } as object,
     }),
   },
   tripsMainPillWebMobile: {
@@ -3717,7 +3714,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         outlineStyle: "none",
-      } as any,
+      } as object,
     }),
   },
   tripsScopePillActiveWeb: {
