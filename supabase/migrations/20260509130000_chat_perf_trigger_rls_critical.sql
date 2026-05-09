@@ -254,7 +254,7 @@ CREATE POLICY "Linked supplier org inserts supplier party messages"
 
 CREATE OR REPLACE FUNCTION public.fn_post_system_message_to_trip_chats(
   p_trip_id       UUID,
-  p_message       TEXT,
+  p_content       TEXT,
   p_dedupe_status TEXT DEFAULT NULL
 )
 RETURNS void
@@ -311,7 +311,7 @@ BEGIN
       message_type,     is_read,             metadata
     ) VALUES (
       v_conv.id,        v_conv.organization_id, NULL,
-      'system',         'Trip System',          p_message,
+      'system',         'Trip System',          p_content,
       'system',         FALSE,                  v_meta
     );
 
@@ -373,7 +373,7 @@ BEGIN
       message_type,     is_read,                   metadata
     ) VALUES (
       v_partner_conv,   v_partner_trip.organization_id, NULL,
-      'system',         'Trip System',                  p_message,
+      'system',         'Trip System',                  p_content,
       'system',         FALSE,                          v_meta
     );
 
