@@ -169,4 +169,10 @@ export const queryKeys = {
     messages: (conversationId: string) =>
       ["q", "trip-conversations", "messages", conversationId] as const,
   },
+
+  disputes: {
+    all: (orgId: string) => ["q", "disputes", orgId] as const,
+    received: (orgId: string) => ["q", "disputes", orgId, "received"] as const,
+    open: (orgId: string) => ["q", "disputes", orgId, "open"] as const,
+  },
 } as const;

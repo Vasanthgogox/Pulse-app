@@ -80,3 +80,9 @@ export {
   useInvalidateOrgMembers,
   useInvalidateTeamInvites,
 } from './useOrgMembersQuery';
+export {
+  useDisputesReceivedQuery,
+  useOpenDisputesQuery,
+  useDisputeMapQuery,
+  useInvalidateDisputes,
+} from './useDisputesQuery';

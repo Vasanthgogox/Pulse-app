@@ -26,10 +26,7 @@ import { LedgerTransactionListView } from "./LedgerTransactionListView";
 import type { ClientRow } from "@/features/clients/services/clients.service";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
-import {
-  getDisputesForPartner,
-  getDisputesReceived,
-} from "@/services/sharedLedgerService";
+import { useDisputeMapQuery } from "@/lib/queries";
 
 
 export type LedgerViewMode = "table" | "transaction";
@@ -160,51 +157,10 @@ export function LedgerTab({
     return Array.from(set).sort().join("|");
   }, [clientRows, supplierRows]);
 
-  /** Disputes keyed by trip_id. Fetched in bulk for all connected partners this user has. */
-  const [disputesByTripId, setDisputesByTripId] = useState<
-    Record<string, { status: "OPEN" | "RESOLVED"; direction: "RAISED_BY_US" | "RECEIVED" }>
-  >({});
+  const { disputesByTripId } = useDisputeMapQuery(organizationId);
   const [selectedDetailData, setSelectedDetailData] = useState<FinancialRowData | null>(
     null,
   );
-  useEffect(() => {
-    if (!organizationId) {
-      setDisputesByTripId({});
-      return;
-    }
-    const partnerOrgIds = partnerOrgIdsKey ? partnerOrgIdsKey.split("|") : [];
-    let cancelled = false;
-    void (async () => {
-      const map: Record<
-        string,
-        { status: "OPEN" | "RESOLVED"; direction: "RAISED_BY_US" | "RECEIVED" }
-      > = {};
-      try {
-        const raisedResults = await Promise.all(
-          partnerOrgIds.map((pid) =>
-            getDisputesForPartner(organizationId, pid).then((r) => r.disputes ?? []),
-          ),
-        );
-        raisedResults.flat().forEach((d) => {
-          if (d.status === "OPEN" && d.transaction_id) {
-            map[d.transaction_id] = { status: "OPEN", direction: "RAISED_BY_US" };
-          }
-        });
-        const { disputes: received } = await getDisputesReceived(organizationId);
-        (received ?? []).forEach((d) => {
-          if (d.status === "OPEN" && d.transaction_id && !map[d.transaction_id]) {
-            map[d.transaction_id] = { status: "OPEN", direction: "RECEIVED" };
-          }
-        });
-      } catch {
-        // Best-effort: dispute chips simply won't appear if fetch fails.
-      }
-      if (!cancelled) setDisputesByTripId(map);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [organizationId, partnerOrgIdsKey, refreshKey]);
 
   const getResolvedPartyName = (row: financeService.LedgerRow): string => {
     const contactType = row.contact_type;

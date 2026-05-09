@@ -134,6 +134,7 @@ export function TripChatProvider({
   const missingConvHydrateAtRef = useRef<Record<string, number>>({});
   const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bootstrappedOrgRef = useRef<string | null>(null);
+  const lastFocusLoadAtRef = useRef<number>(0);
   const [isLoading, setIsLoading] = useState(false);
 
   const loadConversations = useCallback(async () => {
@@ -192,9 +193,12 @@ export function TripChatProvider({
     void loadConversations();
   }, [organizationId, selfUid, loadConversations]);
 
-  // Focused-screen load
+  // Focused-screen load — 30s cooldown; Realtime handles live updates in between
   useEffect(() => {
     if (!isActive || !selfUid) return;
+    const now = Date.now();
+    if (now - lastFocusLoadAtRef.current < 30_000) return;
+    lastFocusLoadAtRef.current = now;
     loadConversations();
   }, [isActive, selfUid, loadConversations]);
 

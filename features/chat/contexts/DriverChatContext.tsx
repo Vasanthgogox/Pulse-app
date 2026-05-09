@@ -71,6 +71,7 @@ export function DriverChatProvider({
   conversationsRef.current = conversations;
   const loadConversationsRef = useRef<() => Promise<TripConversation[]>>(async () => []);
   const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastFocusLoadAtRef = useRef<number>(0);
   const [isLoading, setIsLoading] = useState(false);
 
   // Resolve driver record IDs from current user
@@ -121,8 +122,12 @@ export function DriverChatProvider({
   }, [driverIds]);
   loadConversationsRef.current = loadConversations;
 
+  // 30s cooldown on focus load — Realtime handles live updates in between
   useEffect(() => {
     if (!isActive) return;
+    const now = Date.now();
+    if (now - lastFocusLoadAtRef.current < 30_000) return;
+    lastFocusLoadAtRef.current = now;
     void loadConversations();
   }, [isActive, loadConversations]);
 
