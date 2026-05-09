@@ -559,14 +559,20 @@ export async function markConversationRead(
 
 export async function getMessagesByConversation(
   conversationId: string,
+  opts?: { before?: string; limit?: number },
 ): Promise<TripMessageRow[]> {
-  const { data, error } = await supabase()
+  let query = supabase()
     .from("trip_messages")
     .select("id,conversation_id,organization_id,sender_user_id,sender_role,sender_name,content,message_type,metadata,is_read,read_at,created_at")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: false })
-    .limit(100);
+    .limit(opts?.limit ?? 50);
 
+  if (opts?.before) {
+    query = query.lt("created_at", opts.before);
+  }
+
+  const { data, error } = await query;
   if (error) throw error;
   return (data ?? []).reverse();
 }
