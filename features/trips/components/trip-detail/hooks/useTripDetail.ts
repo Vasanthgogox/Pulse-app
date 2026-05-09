@@ -46,12 +46,14 @@ import type { DisputeRow } from "@/services/sharedLedgerService";
 import {
     acceptPartnerView,
     createDispute,
-    getDisputesForPartner,
-    getDisputesReceived,
     getSharedLedgerEntriesForPartner,
     resolveDispute,
     resolveDisputeTableOnly,
 } from "@/services/sharedLedgerService";
+import {
+    useOpenDisputesQuery,
+    useDisputesReceivedQuery,
+} from "@/lib/queries";
 import * as tripDocumentsService from "@/services/tripDocumentsService";
 import { useQueryClient } from "@tanstack/react-query";
 import type * as ExpoLocationTypes from "expo-location";
@@ -223,18 +225,41 @@ export function useTripDetail({
   } | null>(null);
 
   // ── Disputes ──────────────────────────────────────────────────────────────
-  const [tripDispute, setTripDispute] = useState<DisputeRow | null>(null);
-  const [tripDisputeDirection, setTripDisputeDirection] = useState<
-    "RAISED_BY_US" | "RECEIVED" | null
-  >(null);
-  const [tripDisputeByType, setTripDisputeByType] = useState<
-    Partial<
-      Record<
-        "client" | "supplier",
-        { dispute: DisputeRow; direction: "RAISED_BY_US" | "RECEIVED" }
-      >
-    >
-  >({});
+  const qc = useQueryClient();
+  const orgId = currentOrganization?.id ?? null;
+  const { data: openDisputes } = useOpenDisputesQuery(orgId);
+  const { data: receivedDisputes } = useDisputesReceivedQuery(orgId);
+
+  const tripDisputeByType = useMemo(() => {
+    const tId = trip?.id ?? null;
+    const clientOrg = clientPartyRes?.orgId ?? null;
+    const supplierOrg = supplierPartyRes?.orgId ?? null;
+    if (!tId || (!clientOrg && !supplierOrg)) return {};
+    const matchByTrip = (d: DisputeRow) =>
+      String(d.transaction_id ?? "").toLowerCase() === String(tId).toLowerCase();
+    const receivedByOrg = new Map<string, DisputeRow>();
+    for (const d of receivedDisputes ?? []) {
+      if (!matchByTrip(d) || d.status !== "OPEN") continue;
+      if (d.raised_by_org_id) receivedByOrg.set(d.raised_by_org_id, d);
+    }
+    const byType: Partial<Record<"client" | "supplier", { dispute: DisputeRow; direction: "RAISED_BY_US" | "RECEIVED" }>> = {};
+    const pickForSide = (side: "client" | "supplier", partnerOrg: string | null) => {
+      if (!partnerOrg) return;
+      const raisedOpen = (openDisputes ?? []).find(
+        (d) => matchByTrip(d) && d.status === "OPEN" && d.partner_org_id === partnerOrg,
+      );
+      if (raisedOpen) { byType[side] = { dispute: raisedOpen, direction: "RAISED_BY_US" }; return; }
+      const receivedOpen = receivedByOrg.get(partnerOrg);
+      if (receivedOpen) byType[side] = { dispute: receivedOpen, direction: "RECEIVED" };
+    };
+    pickForSide("client", clientOrg);
+    pickForSide("supplier", supplierOrg);
+    return byType;
+  }, [openDisputes, receivedDisputes, trip?.id, clientPartyRes?.orgId, supplierPartyRes?.orgId]);
+
+  const primary = tripDisputeByType.supplier ?? tripDisputeByType.client ?? null;
+  const tripDispute = primary?.dispute ?? null;
+  const tripDisputeDirection = primary?.direction ?? null;
   const [reconcileActionLoading, setReconcileActionLoading] = useState(false);
   const [reconcileLoadingByType, setReconcileLoadingByType] = useState<
     Partial<Record<"client" | "supplier", boolean>>
@@ -1260,65 +1285,10 @@ export function useTripDetail({
   }, [load, loadAssignmentAudit, loadAdjustments, loadTripDocuments, loadTripOtp]);
 
   // ── Reconciliation actions ────────────────────────────────────────────────
-  const refreshTripDispute = useCallback(async () => {
-    const orgId = currentOrganization?.id ?? null;
-    const tId = trip?.id ?? null;
-    const clientOrg = clientPartyRes?.orgId ?? null;
-    const supplierOrg = supplierPartyRes?.orgId ?? null;
-    if (!orgId || !tId || (!clientOrg && !supplierOrg)) {
-      setTripDispute(null);
-      setTripDisputeDirection(null);
-      setTripDisputeByType({});
-      return;
-    }
-    try {
-      const [received, clientRaised, supplierRaised] = await Promise.all([
-        getDisputesReceived(orgId),
-        clientOrg
-          ? getDisputesForPartner(orgId, clientOrg)
-          : Promise.resolve({ disputes: [] as DisputeRow[] }),
-        supplierOrg
-          ? getDisputesForPartner(orgId, supplierOrg)
-          : Promise.resolve({ disputes: [] as DisputeRow[] }),
-      ]);
-      const matchByTrip = (d: DisputeRow) =>
-        String(d.transaction_id ?? "").toLowerCase() === String(tId).toLowerCase();
-      const receivedByOrg = new Map<string, DisputeRow>();
-      for (const d of received.disputes ?? []) {
-        if (!matchByTrip(d) || d.status !== "OPEN") continue;
-        if (d.raised_by_org_id) receivedByOrg.set(d.raised_by_org_id, d);
-      }
-      const byType: Partial<
-        Record<"client" | "supplier", { dispute: DisputeRow; direction: "RAISED_BY_US" | "RECEIVED" }>
-      > = {};
-      const pickForSide = (
-        side: "client" | "supplier",
-        partnerOrg: string | null,
-        raised: { disputes: DisputeRow[] | undefined },
-      ) => {
-        if (!partnerOrg) return;
-        const raisedOpen = (raised.disputes ?? []).filter(
-          (d) => matchByTrip(d) && d.status === "OPEN",
-        )[0];
-        if (raisedOpen) {
-          byType[side] = { dispute: raisedOpen, direction: "RAISED_BY_US" };
-          return;
-        }
-        const receivedOpen = receivedByOrg.get(partnerOrg);
-        if (receivedOpen) byType[side] = { dispute: receivedOpen, direction: "RECEIVED" };
-      };
-      pickForSide("client", clientOrg, clientRaised);
-      pickForSide("supplier", supplierOrg, supplierRaised);
-      setTripDisputeByType(byType);
-      const primary = byType.supplier ?? byType.client ?? null;
-      setTripDispute(primary?.dispute ?? null);
-      setTripDisputeDirection(primary?.direction ?? null);
-    } catch {
-      setTripDispute(null);
-      setTripDisputeDirection(null);
-      setTripDisputeByType({});
-    }
-  }, [currentOrganization?.id, trip?.id, clientPartyRes?.orgId, supplierPartyRes?.orgId]);
+  const refreshTripDispute = useCallback(() => {
+    if (!orgId) return;
+    void qc.invalidateQueries({ queryKey: queryKeys.disputes.all(orgId) });
+  }, [orgId, qc]);
 
   type PartyType = "client" | "supplier";
 

@@ -31,15 +31,13 @@ import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { canAssignTrip, getCapabilitiesFromProfile } from "@/lib/capabilities";
 import { isAggregateTrip, shouldShowAggregateTripKindPill } from "@/lib/driverUtils";
 import { formatIndianVehicleNumber } from "@/lib/format";
-import { useShipperDisplayNamesQuery, useTransactionsQuery, useTripSubcontractsQuery } from "@/lib/queries";
+import { useShipperDisplayNamesQuery, useTransactionsQuery, useTripSubcontractsQuery, useOpenDisputesQuery, useDisputesReceivedQuery } from "@/lib/queries";
 import { queryKeys } from "@/lib/queryKeys";
 import * as driverLocationService from "@/services/driverLocationService";
 import type { DisputeRow } from "@/services/sharedLedgerService";
 import {
     acceptPartnerView,
     createDispute,
-    getDisputesForPartner,
-    getDisputesReceived,
     getSharedLedgerEntriesForPartner,
     resolveDispute,
     resolveDisputeTableOnly,
@@ -276,17 +274,40 @@ export default function TripDetailScreen({
     integrated: boolean;
     orgId: string | null;
   } | null>(null);
-  const [tripDispute, setTripDispute] = useState<DisputeRow | null>(null);
-  const [tripDisputeDirection, setTripDisputeDirection] = useState<
-    "RAISED_BY_US" | "RECEIVED" | null
-  >(null);
-  /** Dispute state per party type (client vs supplier). Drives per-tab chip + inline actions. */
-  const [tripDisputeByType, setTripDisputeByType] = useState<
-    Partial<Record<"client" | "supplier", {
-      dispute: DisputeRow;
-      direction: "RAISED_BY_US" | "RECEIVED";
-    }>>
-  >({});
+  const orgId = currentOrganization?.id ?? null;
+  const { data: openDisputes } = useOpenDisputesQuery(orgId);
+  const { data: receivedDisputes } = useDisputesReceivedQuery(orgId);
+
+  const tripDisputeByType = useMemo(() => {
+    const tId = trip?.id ?? null;
+    const clientOrg = clientPartyRes?.orgId ?? null;
+    const supplierOrg = supplierPartyRes?.orgId ?? null;
+    if (!tId || (!clientOrg && !supplierOrg)) return {};
+    const matchByTrip = (d: DisputeRow) =>
+      String(d.transaction_id ?? "").toLowerCase() === String(tId).toLowerCase();
+    const receivedByOrg = new Map<string, DisputeRow>();
+    for (const d of receivedDisputes ?? []) {
+      if (!matchByTrip(d) || d.status !== "OPEN") continue;
+      if (d.raised_by_org_id) receivedByOrg.set(d.raised_by_org_id, d);
+    }
+    const byType: Partial<Record<"client" | "supplier", { dispute: DisputeRow; direction: "RAISED_BY_US" | "RECEIVED" }>> = {};
+    const pickForSide = (side: "client" | "supplier", partnerOrg: string | null) => {
+      if (!partnerOrg) return;
+      const raisedOpen = (openDisputes ?? []).find(
+        (d) => matchByTrip(d) && d.status === "OPEN" && d.partner_org_id === partnerOrg,
+      );
+      if (raisedOpen) { byType[side] = { dispute: raisedOpen, direction: "RAISED_BY_US" }; return; }
+      const receivedOpen = receivedByOrg.get(partnerOrg);
+      if (receivedOpen) byType[side] = { dispute: receivedOpen, direction: "RECEIVED" };
+    };
+    pickForSide("client", clientOrg);
+    pickForSide("supplier", supplierOrg);
+    return byType;
+  }, [openDisputes, receivedDisputes, trip?.id, clientPartyRes?.orgId, supplierPartyRes?.orgId]);
+
+  const primaryDispute = tripDisputeByType.supplier ?? tripDisputeByType.client ?? null;
+  const tripDispute = primaryDispute?.dispute ?? null;
+  const tripDisputeDirection = primaryDispute?.direction ?? null;
   const [reconcileActionLoading, setReconcileActionLoading] = useState(false);
   /** Per-party action loading (used when Accept/Raise is in-flight on a specific tab). */
   const [reconcileLoadingByType, setReconcileLoadingByType] = useState<
@@ -775,76 +796,10 @@ export default function TripDetailScreen({
     };
   }, [currentOrganization?.id, trip?.id, trip?.supplier_id, trip?.client_id, counterpartyIntegrated]);
 
-  /** Fetch any open dispute between us and partner for this specific trip.
-   * Resolves disputes for BOTH client and supplier parties when both are
-   * integrated; stored per-type so each tab in the hero renders its own chip.
-   * Legacy `tripDispute`/`tripDisputeDirection` are kept in sync for back-compat.
-   */
-  const refreshTripDispute = useCallback(async () => {
-    const orgId = currentOrganization?.id ?? null;
-    const tId = trip?.id ?? null;
-    const clientOrg = clientPartyRes?.orgId ?? null;
-    const supplierOrg = supplierPartyRes?.orgId ?? null;
-    if (!orgId || !tId || (!clientOrg && !supplierOrg)) {
-      setTripDispute(null);
-      setTripDisputeDirection(null);
-      setTripDisputeByType({});
-      return;
-    }
-    try {
-      const [received, clientRaised, supplierRaised] = await Promise.all([
-        getDisputesReceived(orgId, tId),
-        clientOrg ? getDisputesForPartner(orgId, clientOrg, tId) : Promise.resolve({ disputes: [] as DisputeRow[] }),
-        supplierOrg ? getDisputesForPartner(orgId, supplierOrg, tId) : Promise.resolve({ disputes: [] as DisputeRow[] }),
-      ]);
-      const matchByTrip = (d: DisputeRow) =>
-        String(d.transaction_id ?? "").toLowerCase() === String(tId).toLowerCase();
-      const receivedByOrg = new Map<string, DisputeRow>();
-      for (const d of received.disputes ?? []) {
-        if (!matchByTrip(d) || d.status !== "OPEN") continue;
-        if (d.raised_by_org_id) receivedByOrg.set(d.raised_by_org_id, d);
-      }
-      const byType: Partial<Record<"client" | "supplier", { dispute: DisputeRow; direction: "RAISED_BY_US" | "RECEIVED" }>> = {};
-      const pickForSide = (
-        side: "client" | "supplier",
-        partnerOrg: string | null,
-        raised: { disputes: DisputeRow[] | undefined },
-      ) => {
-        if (!partnerOrg) return;
-        const raisedOpen = (raised.disputes ?? []).filter(
-          (d) => matchByTrip(d) && d.status === "OPEN",
-        )[0];
-        if (raisedOpen) {
-          byType[side] = { dispute: raisedOpen, direction: "RAISED_BY_US" };
-          return;
-        }
-        const receivedOpen = receivedByOrg.get(partnerOrg);
-        if (receivedOpen) {
-          byType[side] = { dispute: receivedOpen, direction: "RECEIVED" };
-        }
-      };
-      pickForSide("client", clientOrg, clientRaised);
-      pickForSide("supplier", supplierOrg, supplierRaised);
-      setTripDisputeByType(byType);
-      /** Legacy single-party mirror: prefer supplier; falls back to client. */
-      const primary = byType.supplier ?? byType.client ?? null;
-      setTripDispute(primary?.dispute ?? null);
-      setTripDisputeDirection(primary?.direction ?? null);
-    } catch {
-      setTripDispute(null);
-      setTripDisputeDirection(null);
-      setTripDisputeByType({});
-    }
-  }, [
-    currentOrganization?.id,
-    trip?.id,
-    clientPartyRes?.orgId,
-    supplierPartyRes?.orgId,
-  ]);
-
-  useEffect(() => {
-    void refreshTripDispute();
-  }, [refreshTripDispute, financeRefreshKey]);
+  const refreshTripDispute = useCallback(() => {
+    if (!orgId) return;
+    void queryClient.invalidateQueries({ queryKey: queryKeys.disputes.all(orgId) });
+  }, [orgId, queryClient]);
 
   /**
    * Always read ledger from the viewer org.

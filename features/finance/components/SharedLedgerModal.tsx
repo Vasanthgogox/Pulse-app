@@ -2,7 +2,7 @@
  * Shared Ledger modal — full-screen modal with header + close + SharedLedgerContent.
  * Fetches verified balances and connections when visible; passes to content for O(n) row build.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Modal, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
@@ -10,8 +10,8 @@ import Theme from '@/constants/Theme';
 import {
   getVerifiedBalances,
   getSharedLedgerConnections,
-  getOpenDisputesByOrg,
 } from '@/services/sharedLedgerService';
+import { useOpenDisputesQuery } from '@/lib/queries';
 import { SharedLedgerContent } from './SharedLedgerContent';
 import type { SharedLedgerContentProps, SharedLedgerPartyRow } from './SharedLedgerContent';
 import { DisputeAuditSheet } from './DisputeAuditSheet';
@@ -40,10 +40,21 @@ export function SharedLedgerModal({
     { partnerKey: string; balance: number }[]
   >([]);
   const [integratedPartnerKeys, setIntegratedPartnerKeys] = useState<Set<string>>(new Set());
-  const [disputesByPartner, setDisputesByPartner] = useState<
-    Record<string, { status: string }[]>
-  >({});
   const [contactIdToPartnerOrgId, setContactIdToPartnerOrgId] = useState<Record<string, string>>({});
+  const openDisputesQuery = useOpenDisputesQuery(organizationId);
+
+  const disputesByPartner = useMemo(() => {
+    const byPartner: Record<string, { status: string }[]> = {};
+    const partnerOrgToContact = new Map(
+      Object.entries(contactIdToPartnerOrgId).map(([cId, oId]) => [oId, cId]),
+    );
+    for (const d of openDisputesQuery.data ?? []) {
+      const key = partnerOrgToContact.get(d.partner_org_id) ?? d.partner_org_id;
+      if (!byPartner[key]) byPartner[key] = [];
+      byPartner[key].push({ status: d.status });
+    }
+    return byPartner;
+  }, [openDisputesQuery.data, contactIdToPartnerOrgId]);
   const [sharedDataLoading, setSharedDataLoading] = useState(false);
   const [showDisputeSheet, setShowDisputeSheet] = useState(false);
   const [disputeRow, setDisputeRow] = useState<SharedLedgerPartyRow | null>(null);
@@ -54,10 +65,9 @@ export function SharedLedgerModal({
   const fetchSharedData = useCallback(async () => {
     if (!organizationId) return;
     setSharedDataLoading(true);
-    const [balancesRes, connectionsRes, disputesRes] = await Promise.all([
+    const [balancesRes, connectionsRes] = await Promise.all([
       getVerifiedBalances(organizationId),
       getSharedLedgerConnections(organizationId),
-      getOpenDisputesByOrg(organizationId),
     ]);
     setSharedDataLoading(false);
     if (!balancesRes.error) setVerifiedBalances(balancesRes.balances);
@@ -76,15 +86,6 @@ export function SharedLedgerModal({
       }
       setIntegratedPartnerKeys(keys);
       setContactIdToPartnerOrgId(contactIdToPartnerOrg);
-    }
-    if (!disputesRes.error) {
-      const byPartner: Record<string, { status: string }[]> = {};
-      for (const d of disputesRes.disputes) {
-        const key = partnerOrgToContactId.get(d.partner_org_id) ?? d.partner_org_id;
-        if (!byPartner[key]) byPartner[key] = [];
-        byPartner[key].push({ status: d.status });
-      }
-      setDisputesByPartner(byPartner);
     }
   }, [organizationId]);
 
