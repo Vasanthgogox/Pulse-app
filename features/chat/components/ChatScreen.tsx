@@ -340,22 +340,29 @@ export function ChatScreen() {
 
   /** driver_id → resolved avatar URI (profile photo → seed preset). Populated for all driver conversations. */
   const [driverAvatarMap, setDriverAvatarMap] = useState<Record<string, string | null>>({});
+
+  // Stable key: sorted comma-joined driver IDs. Re-fetches only when the set of
+  // driver conversation participants changes, not on every message or metadata update.
+  const driverConvIdsKey = useMemo(
+    () =>
+      conversations
+        .filter((c) => c.party_type === "driver" && c.driver_id)
+        .map((c) => c.driver_id as string)
+        .sort()
+        .join(","),
+    [conversations],
+  );
+
   useEffect(() => {
-    const driverIds = [
-      ...new Set(
-        conversations
-          .filter((c) => c.party_type === "driver" && c.driver_id)
-          .map((c) => c.driver_id as string),
-      ),
-    ];
-    if (driverIds.length === 0) return;
+    if (!driverConvIdsKey) return;
+    const driverIds = driverConvIdsKey.split(",");
     let cancelled = false;
     void getProfileImageBatch(driverIds).then((uriMap) => {
       if (cancelled) return;
       setDriverAvatarMap((prev) => ({ ...prev, ...uriMap }));
     });
     return () => { cancelled = true; };
-  }, [conversations]);
+  }, [driverConvIdsKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -374,7 +381,9 @@ export function ChatScreen() {
     return () => {
       cancelled = true;
     };
-  }, [organizationId, conversations.length]);
+    // conversations.length removed: trips do not change when messages arrive.
+    // Re-fetch only when the organisation switches.
+  }, [organizationId]);
 
   const tripUnread = getTotalUnreadCount();
   const netUnread = netTotal();
@@ -3739,6 +3748,13 @@ function TripConversationDetailLoaded({
     hydrateConversationById,
   ]);
 
+  // Keep a ref to the latest messages so the ratings effect can read them
+  // without listing them in the dep array. Without this, the effect would
+  // re-fire on every incoming message → getRatingsForTrip network call →
+  // hydrateConversationById → conversations state update → repeat.
+  const selectedConvMessagesRef = useRef(selectedConv.messages);
+  selectedConvMessagesRef.current = selectedConv.messages;
+
   useEffect(() => {
     if (!tripEligibleForFeedback) {
       setTripRatings([]);
@@ -3751,9 +3767,10 @@ function TripConversationDetailLoaded({
       if (error && __DEV__) console.warn("[getRatingsForTrip]", error.message);
       const rows = ratings ?? [];
       setTripRatings(rows);
+      // Read latest messages from ref — avoids adding selectedConv.messages to deps
       await persistTripFeedbackMessageMetadataIfRated({
         tripId: selectedConv.trip_id,
-        messages: selectedConv.messages,
+        messages: selectedConvMessagesRef.current,
         ratings: rows,
       });
       if (!cancelled) await hydrateConversationById(selectedConv.id);
@@ -3765,7 +3782,10 @@ function TripConversationDetailLoaded({
     tripEligibleForFeedback,
     selectedConv.trip_id,
     selectedConv.id,
-    selectedConv.messages,
+    // selectedConv.messages intentionally excluded: messages change on every
+    // incoming realtime event; the reconciliation only needs to run once per
+    // conversation open, not on every new message. Latest messages are read
+    // via selectedConvMessagesRef inside the async callback.
     hydrateConversationById,
   ]);
 

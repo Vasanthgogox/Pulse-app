@@ -214,11 +214,16 @@ export function TripChatProvider({
     };
   }, [isActive, selfUid, loadConversations]);
 
-  // Lightweight always-on realtime: keep unread badges/live indicators fresh even when chat screen is hidden.
+  // Single always-on realtime channel per org. isActiveRef routes payload to either
+  // incremental append (focused) or badge-only update (background) without creating a
+  // second channel when the screen focus state changes.
+  const isActiveRef = useRef(isActive);
+  isActiveRef.current = isActive;
+
   useEffect(() => {
-    if (!organizationId || !selfUid || isActive) return;
+    if (!organizationId || !selfUid) return;
     return subscribeSharedPostgresChanges(
-      `trip_messages:org:${organizationId}:background`,
+      `trip_messages:org:${organizationId}`,
       [
         {
           event: "INSERT",
@@ -228,86 +233,66 @@ export function TripChatProvider({
         },
       ],
       (payload) => {
-        if (isActive) return; // focused screen uses the heavy sync effect below
         const row = payload.new as Partial<TripMessageRow> | null;
-        const conversationId = row?.conversation_id;
-        if (!selfUid) return;
-        if (!conversationId) return;
+        if (!row?.conversation_id) return;
 
-        if (row?.sender_user_id === selfUid) return;
+        if (isActiveRef.current) {
+          // Focused: own messages are already optimistically inserted — skip.
+          if (row.sender_user_id && row.sender_user_id === selfUid) return;
 
-        let found = false;
-        setConversations((prev) =>
-          prev.map((conv) => {
-            if (conv.id !== conversationId) return conv;
-            found = true;
-            return {
-              ...conv,
-              unread_dispatcher_count: (conv.unread_dispatcher_count ?? 0) + 1,
-              last_message_at: row?.created_at ?? conv.last_message_at,
-              last_message_preview:
-                typeof row?.content === "string" && row.content.trim().length > 0
-                  ? row.content.slice(0, 120)
-                  : conv.last_message_preview,
-            };
-          })
-        );
+          let found = false;
+          setConversations((prev) =>
+            prev.map((conv) => {
+              if (conv.id !== row.conversation_id) return conv;
+              found = true;
+              return {
+                ...conv,
+                messages: [...conv.messages, row as TripMessageRow],
+                last_message_at: row.created_at ?? conv.last_message_at,
+                last_message_preview:
+                  typeof row.content === "string" && row.content.trim().length > 0
+                    ? row.content.slice(0, 120)
+                    : conv.last_message_preview,
+              };
+            })
+          );
 
-        if (!found) {
-          const now = Date.now();
-          const last = missingConvHydrateAtRef.current[conversationId] ?? 0;
-          if (now - last > 10_000) {
-            missingConvHydrateAtRef.current[conversationId] = now;
-            void hydrateConversationByIdRef.current(conversationId);
+          if (!found) {
+            queueRefreshConversations();
+          }
+        } else {
+          // Background: bump unread badge only — no full fetch.
+          if (row.sender_user_id === selfUid) return;
+
+          let found = false;
+          setConversations((prev) =>
+            prev.map((conv) => {
+              if (conv.id !== row.conversation_id) return conv;
+              found = true;
+              return {
+                ...conv,
+                unread_dispatcher_count: (conv.unread_dispatcher_count ?? 0) + 1,
+                last_message_at: row.created_at ?? conv.last_message_at,
+                last_message_preview:
+                  typeof row.content === "string" && row.content.trim().length > 0
+                    ? row.content.slice(0, 120)
+                    : conv.last_message_preview,
+              };
+            })
+          );
+
+          if (!found) {
+            const now = Date.now();
+            const last = missingConvHydrateAtRef.current[row.conversation_id] ?? 0;
+            if (now - last > 10_000) {
+              missingConvHydrateAtRef.current[row.conversation_id] = now;
+              void hydrateConversationByIdRef.current(row.conversation_id);
+            }
           }
         }
       }
     );
-  }, [organizationId, isActive, selfUid]);
-
-  // Focused-screen realtime sync: incrementally append incoming messages while user is in chat.
-  useEffect(() => {
-    if (!isActive || !organizationId || !selfUid) return;
-    return subscribeSharedPostgresChanges(
-      `trip_messages:org:${organizationId}:focused`,
-      [
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "trip_messages",
-          filter: `organization_id=eq.${organizationId}`,
-        },
-      ],
-      (payload) => {
-        const row = payload.new as Partial<TripMessageRow> | null;
-        // Own messages are already in state via optimistic insert — skip.
-        if (row?.sender_user_id && row.sender_user_id === selfUid) return;
-        if (!row?.conversation_id) return;
-
-        let found = false;
-        setConversations((prev) =>
-          prev.map((conv) => {
-            if (conv.id !== row.conversation_id) return conv;
-            found = true;
-            return {
-              ...conv,
-              messages: [...conv.messages, row as TripMessageRow],
-              last_message_at: row.created_at ?? conv.last_message_at,
-              last_message_preview:
-                typeof row.content === "string" && row.content.trim().length > 0
-                  ? row.content.slice(0, 120)
-                  : conv.last_message_preview,
-            };
-          })
-        );
-
-        // Conversation not yet in state (e.g. new thread opened elsewhere) — hydrate.
-        if (!found) {
-          queueRefreshConversations();
-        }
-      }
-    );
-  }, [isActive, organizationId, selfUid, queueRefreshConversations]);
+  }, [organizationId, selfUid, queueRefreshConversations]);
 
   const sendMessage = useCallback(
     async (conversationId: string, content: string, messageType: MessageType = "text") => {
