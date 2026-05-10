@@ -73,6 +73,8 @@ export function DriverChatProvider({
   const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastFocusLoadAtRef = useRef<number>(0);
   const [isLoading, setIsLoading] = useState(false);
+  const markReadTimerRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const pendingMarkReadRef = useRef<Set<string>>(new Set());
 
   // Resolve driver record IDs from current user
   useEffect(() => {
@@ -324,17 +326,35 @@ export function DriverChatProvider({
     [uid, profile]
   );
 
+  const flushPendingMarkRead = useCallback(() => {
+    markReadTimerRef.current.forEach((timer) => clearTimeout(timer));
+    markReadTimerRef.current.clear();
+    const pending = Array.from(pendingMarkReadRef.current);
+    pendingMarkReadRef.current.clear();
+    for (const id of pending) {
+      void chatService.markConversationRead(id).catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => () => { flushPendingMarkRead(); }, [flushPendingMarkRead]);
+
   const markAsRead = useCallback(async (conversationId: string) => {
     setConversations((prev) =>
       prev.map((conv) =>
         conv.id === conversationId ? { ...conv, unread_dispatcher_count: 0 } : conv
       )
     );
-    try {
-      await chatService.markConversationRead(conversationId);
-    } catch {
-      // non-critical
-    }
+    pendingMarkReadRef.current.add(conversationId);
+    const existing = markReadTimerRef.current.get(conversationId);
+    if (existing) clearTimeout(existing);
+    markReadTimerRef.current.set(
+      conversationId,
+      setTimeout(() => {
+        markReadTimerRef.current.delete(conversationId);
+        pendingMarkReadRef.current.delete(conversationId);
+        void chatService.markConversationRead(conversationId).catch(() => {});
+      }, 1500),
+    );
   }, []);
 
   const getTotalUnreadCount = useCallback(
