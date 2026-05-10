@@ -136,6 +136,9 @@ export function TripChatProvider({
   const bootstrappedOrgRef = useRef<string | null>(null);
   const lastFocusLoadAtRef = useRef<number>(0);
   const [isLoading, setIsLoading] = useState(false);
+  /** Pending debounce timers: conversationId → timer. Flushed on unmount. */
+  const markReadTimerRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const pendingMarkReadRef = useRef<Set<string>>(new Set());
 
   const loadConversations = useCallback(async () => {
     if (!organizationId || !selfUid) return;
@@ -380,7 +383,21 @@ export function TripChatProvider({
     [organizationId, profile]
   );
 
+  // Flush all pending mark-as-read calls immediately (used on unmount).
+  const flushPendingMarkRead = useCallback(() => {
+    markReadTimerRef.current.forEach((timer) => clearTimeout(timer));
+    markReadTimerRef.current.clear();
+    const pending = Array.from(pendingMarkReadRef.current);
+    pendingMarkReadRef.current.clear();
+    for (const id of pending) {
+      void chatService.markConversationRead(id).catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => () => { flushPendingMarkRead(); }, [flushPendingMarkRead]);
+
   const markAsRead = useCallback(async (conversationId: string) => {
+    // Immediate local update — no UX lag.
     setConversations((prev) =>
       prev.map((conv) =>
         conv.id === conversationId
@@ -388,11 +405,19 @@ export function TripChatProvider({
           : conv
       )
     );
-    try {
-      await chatService.markConversationRead(conversationId);
-    } catch {
-      // Non-critical; local state already updated.
-    }
+    // Debounce the DB write: coalesces rapid open/close bursts (e.g. user
+    // switching conversations quickly) into a single mark_conversation_read call.
+    pendingMarkReadRef.current.add(conversationId);
+    const existing = markReadTimerRef.current.get(conversationId);
+    if (existing) clearTimeout(existing);
+    markReadTimerRef.current.set(
+      conversationId,
+      setTimeout(() => {
+        markReadTimerRef.current.delete(conversationId);
+        pendingMarkReadRef.current.delete(conversationId);
+        void chatService.markConversationRead(conversationId).catch(() => {});
+      }, 1500),
+    );
   }, []);
 
   const totalUnreadCount = useMemo(
