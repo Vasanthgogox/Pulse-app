@@ -131,23 +131,34 @@ export async function getTripsForCompose(
   }));
 }
 
+function isGenericPartyName(name: unknown): boolean {
+  const n = String(name ?? "").trim().toLowerCase();
+  return n === "" || n === "supplier" || n === "client" || n === "driver";
+}
+
 async function resolveGenericPartyNamesForTrips(
   conversations: TripConversation[],
 ): Promise<TripConversation[]> {
+  // Only fetch names for conversations whose party_name is a generic placeholder.
+  // Skips the two DB calls entirely when all names are already resolved (common after setup).
   const unresolvedClientIds = Array.from(
     new Set(
       conversations
-        .filter((c) => c.party_type === "client" && c.client_id)
+        .filter((c) => c.party_type === "client" && c.client_id && isGenericPartyName(c.party_name))
         .map((c) => c.client_id as string),
     ),
   );
   const unresolvedSupplierIds = Array.from(
     new Set(
       conversations
-        .filter((c) => c.party_type === "supplier" && c.supplier_id)
+        .filter((c) => c.party_type === "supplier" && c.supplier_id && isGenericPartyName(c.party_name))
         .map((c) => c.supplier_id as string),
     ),
   );
+
+  if (unresolvedClientIds.length === 0 && unresolvedSupplierIds.length === 0) {
+    return conversations;
+  }
 
   const [clientsResp, suppliersResp] = await Promise.all([
     unresolvedClientIds.length
