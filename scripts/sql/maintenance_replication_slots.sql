@@ -169,7 +169,47 @@ WHERE active = false
 -- $$;
 
 
--- ─── C. REALTIME SUBSCRIPTION AUDIT ─────────────────────────────────────────
+-- ─── C. IDLE-IN-TRANSACTION SESSIONS ────────────────────────────────────────
+-- Sessions stuck "idle in transaction" hold row locks and block VACUUM.
+-- VACUUM can't reclaim dead rows while a lock is held — table bloat → seq
+-- scans → CPU spikes. These sessions are the #2 cause of "Unhealthy" after
+-- WAL pressure.
+
+-- C1. Preview sessions eligible for termination (>5 min threshold)
+SELECT
+  pid,
+  usename,
+  application_name,
+  now() - state_change                AS idle_duration,
+  left(query, 200)                    AS last_query,
+  wait_event_type,
+  wait_event
+FROM pg_stat_activity
+WHERE state = 'idle in transaction'
+  AND (now() - state_change) > interval '5 minutes'
+ORDER BY idle_duration DESC;
+
+-- C2. Run the killer function (safe — uses pg_terminate_backend, not pg_cancel_backend)
+-- Requires migration 20260525150000 to be applied first.
+SELECT * FROM public.kill_idle_in_transaction_sessions('5 minutes');
+
+-- C3. Table bloat check: high n_dead_tup means VACUUM is being blocked
+SELECT
+  relname,
+  n_live_tup,
+  n_dead_tup,
+  CASE WHEN n_live_tup > 0
+    THEN round(n_dead_tup::numeric / (n_live_tup + n_dead_tup) * 100, 1)
+    ELSE 0
+  END AS dead_pct,
+  last_vacuum,
+  last_autovacuum
+FROM pg_stat_user_tables
+WHERE relname IN ('trip_messages', 'trip_conversations', 'transactions', 'trips')
+ORDER BY dead_pct DESC;
+
+
+-- ─── D. REALTIME SUBSCRIPTION AUDIT ─────────────────────────────────────────
 -- If realtime.list_changes is still hot after dropping stale slots,
 -- the issue is too many active subscriptions (client leak).
 -- This query shows duplicate subscriptions for the same table+filter.
@@ -188,5 +228,26 @@ HAVING count(*) > 1
 ORDER BY subscriber_count DESC;
 
 -- Healthy: one subscriber per org per table filter.
--- Unhealthy: many subscribers for the same filter = frontend leak
+-- Unhealthy: many subscribers for same filter = frontend subscription leak
 --   (component unmounting without calling channel.unsubscribe()).
+--
+-- ─── E. DIAGNOSTIC CHECKLIST (Supabase Dashboard) ────────────────────────────
+-- After applying all migrations, verify recovery via these 3 metrics:
+--
+-- 1. CPU Usage (Database → Usage):
+--    Expect: drops from sustained >80% to <30% idle during chat activity.
+--    If still high: check Section D above for subscription count > 1 per filter.
+--
+-- 2. Active Connections (Database → Usage → Connections):
+--    Expect: stabilises at (active users × 1 per org) + PostgREST pool.
+--    If growing unbounded: frontend is not calling channel.unsubscribe() —
+--    check realtimeRegistry TEARDOWN_GRACE_MS and clearAllRealtimeChannels().
+--
+-- 3. WAL Disk Usage (Database → Usage → Disk):
+--    Expect: no longer growing monotonically after REPLICA IDENTITY DEFAULT migration.
+--    If still growing: a replication slot is stale — run Section B to diagnose.
+--
+-- 4. pg_stat_activity: realtime.list_changes query duration
+--    Run Section A4 during a message burst. Healthy: <100ms. Unhealthy: seconds.
+--    Improvement comes from REPLICA IDENTITY DEFAULT (smaller WAL rows to scan)
+--    + batched React state updates (fewer optimistic INSERT round-trips).

@@ -182,10 +182,12 @@ export function TripChatProvider({
     bootstrappedOrgRef.current = null;
   }, [organizationId, selfUid]);
 
-  // Lightweight bootstrap load (for FAB preview/unread badges even when chat screen is not focused).
   useEffect(() => {
     return () => {
       if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current);
+      if (batchFlushRef.current) clearTimeout(batchFlushRef.current);
+      activeMsgQueueRef.current = [];
+      bgMsgQueueRef.current = [];
     };
   }, []);
 
@@ -229,6 +231,74 @@ export function TripChatProvider({
   const isActiveRef = useRef(isActive);
   isActiveRef.current = isActive;
 
+  // ── Batch queue: WhatsApp-style realtime coalescing ────────────────────────
+  // Each INSERT event is pushed here instead of immediately calling setState.
+  // A 100ms flush window groups bursts (e.g. 20 messages in 500ms) into one
+  // setState pass — one O(conversations) map instead of twenty.
+  const activeMsgQueueRef = useRef<Partial<TripMessageRow>[]>([]);
+  const bgMsgQueueRef = useRef<Partial<TripMessageRow>[]>([]);
+  const batchFlushRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const scheduleBatchFlush = useCallback(() => {
+    if (batchFlushRef.current) return; // already scheduled for this tick window
+    batchFlushRef.current = setTimeout(() => {
+      batchFlushRef.current = null;
+      const activeMessages = activeMsgQueueRef.current.splice(0);
+      const bgMessages = bgMsgQueueRef.current.splice(0);
+      if (activeMessages.length === 0 && bgMessages.length === 0) return;
+
+      // Group by conversation_id so we do one pass over prev.
+      const activeByCid = new Map<string, Partial<TripMessageRow>[]>();
+      for (const row of activeMessages) {
+        if (!row.conversation_id) continue;
+        const b = activeByCid.get(row.conversation_id) ?? [];
+        b.push(row);
+        activeByCid.set(row.conversation_id, b);
+      }
+      const bgByCid = new Map<string, Partial<TripMessageRow>[]>();
+      for (const row of bgMessages) {
+        if (!row.conversation_id) continue;
+        const b = bgByCid.get(row.conversation_id) ?? [];
+        b.push(row);
+        bgByCid.set(row.conversation_id, b);
+      }
+
+      setConversations((prev) =>
+        prev.map((conv) => {
+          const ab = activeByCid.get(conv.id);
+          const bb = bgByCid.get(conv.id);
+          if (!ab && !bb) return conv;
+          let updated = conv;
+          if (ab) {
+            const last = ab[ab.length - 1];
+            updated = {
+              ...updated,
+              messages: [...updated.messages, ...(ab as TripMessageRow[])],
+              last_message_at: last.created_at ?? updated.last_message_at,
+              last_message_preview:
+                typeof last.content === "string" && last.content.trim().length > 0
+                  ? last.content.slice(0, 120)
+                  : updated.last_message_preview,
+            };
+          }
+          if (bb) {
+            const last = bb[bb.length - 1];
+            updated = {
+              ...updated,
+              unread_dispatcher_count: (updated.unread_dispatcher_count ?? 0) + bb.length,
+              last_message_at: last.created_at ?? updated.last_message_at,
+              last_message_preview:
+                typeof last.content === "string" && last.content.trim().length > 0
+                  ? last.content.slice(0, 120)
+                  : updated.last_message_preview,
+            };
+          }
+          return updated;
+        })
+      );
+    }, 100);
+  }, []);
+
   useEffect(() => {
     if (!organizationId || !selfUid) return;
     return subscribeSharedPostgresChanges(
@@ -246,62 +316,34 @@ export function TripChatProvider({
         if (!row?.conversation_id) return;
 
         if (isActiveRef.current) {
-          // Focused: own messages are already optimistically inserted — skip.
+          // Own echo: already optimistically inserted.
           if (row.sender_user_id && row.sender_user_id === selfUid) return;
-
-          let found = false;
-          setConversations((prev) =>
-            prev.map((conv) => {
-              if (conv.id !== row.conversation_id) return conv;
-              found = true;
-              return {
-                ...conv,
-                messages: [...conv.messages, row as TripMessageRow],
-                last_message_at: row.created_at ?? conv.last_message_at,
-                last_message_preview:
-                  typeof row.content === "string" && row.content.trim().length > 0
-                    ? row.content.slice(0, 120)
-                    : conv.last_message_preview,
-              };
-            })
-          );
-
-          if (!found) {
+          // Unknown conversation: refresh inline (rare — new conv arrived before list loaded).
+          if (!conversationsRef.current.some((c) => c.id === row.conversation_id)) {
             queueRefreshConversations();
+            return;
           }
+          activeMsgQueueRef.current.push(row);
         } else {
-          // Background: bump unread badge only — no full fetch.
+          // Background: badge-only. Unknown conv → hydrate; known → batch badge bump.
           if (row.sender_user_id === selfUid) return;
-
-          let found = false;
-          setConversations((prev) =>
-            prev.map((conv) => {
-              if (conv.id !== row.conversation_id) return conv;
-              found = true;
-              return {
-                ...conv,
-                unread_dispatcher_count: (conv.unread_dispatcher_count ?? 0) + 1,
-                last_message_at: row.created_at ?? conv.last_message_at,
-                last_message_preview:
-                  typeof row.content === "string" && row.content.trim().length > 0
-                    ? row.content.slice(0, 120)
-                    : conv.last_message_preview,
-              };
-            })
-          );
-
-          if (!found) {
+          if (!conversationsRef.current.some((c) => c.id === row.conversation_id)) {
+            const convId = row.conversation_id;
             const now = Date.now();
-            const last = missingConvHydrateAtRef.current[row.conversation_id] ?? 0;
+            const last = missingConvHydrateAtRef.current[convId] ?? 0;
             if (now - last > 10_000) {
-              missingConvHydrateAtRef.current[row.conversation_id] = now;
-              void hydrateConversationByIdRef.current(row.conversation_id);
+              missingConvHydrateAtRef.current[convId] = now;
+              void hydrateConversationByIdRef.current(convId);
             }
+            return;
           }
+          bgMsgQueueRef.current.push(row);
         }
+        // Schedule a single flush for this 100ms window — batches any burst.
+        scheduleBatchFlush();
       }
     );
-  }, [organizationId, selfUid, queueRefreshConversations]);
+  }, [organizationId, selfUid, queueRefreshConversations, scheduleBatchFlush]);
 
   const sendMessage = useCallback(
     async (conversationId: string, content: string, messageType: MessageType = "text") => {
