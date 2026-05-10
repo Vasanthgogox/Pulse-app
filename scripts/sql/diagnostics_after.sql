@@ -190,14 +190,14 @@ ORDER BY c.relname;
 -- B5. Index usage on hot chat queries — should show Index Scans (not Seq Scans)
 SELECT
   schemaname,
-  tablename,
-  indexname,
-  idx_scan   AS index_scans,
+  relname       AS table_name,
+  indexrelname  AS index_name,
+  idx_scan      AS index_scans,
   idx_tup_read,
   idx_tup_fetch
 FROM pg_stat_user_indexes
-WHERE tablename IN ('trip_messages','trip_conversations')
-  AND indexname LIKE 'idx_%'
+WHERE relname IN ('trip_messages','trip_conversations')
+  AND indexrelname LIKE 'idx_%'
 ORDER BY idx_scan DESC;
 
 -- Expected AFTER fix:
@@ -209,12 +209,14 @@ ORDER BY idx_scan DESC;
 
 -- B6. Realtime subscriptions — should be 1 per org, not 1 per component
 SELECT
-  filters->>'table'  AS table_name,
-  filters->>'filter' AS filter_condition,
-  count(*)           AS subscriber_count
-FROM realtime.subscription,
-     jsonb_array_elements(filters) AS filters
-GROUP BY 1, 2
+  s.entity::text      AS entity_table,
+  f.column_name,
+  f.op::text          AS op,
+  f.value             AS filter_value,
+  count(*)            AS subscriber_count
+FROM realtime.subscription s,
+     LATERAL unnest(s.filters) AS f
+GROUP BY 1, 2, 3, 4
 ORDER BY subscriber_count DESC;
 
 -- Expected AFTER fix:

@@ -161,9 +161,9 @@ SELECT * FROM (
     END
   FROM (
     SELECT count(*) AS sub_count
-    FROM realtime.subscription,
-         jsonb_array_elements(filters) AS f
-    GROUP BY f->>'table', f->>'filter'
+    FROM realtime.subscription s,
+         LATERAL unnest(s.filters) AS f
+    GROUP BY s.entity, f.column_name, f.op, f.value
   ) sub_counts
 
 ) health_check

@@ -33,7 +33,9 @@ SELECT
   count(*)                                 AS total_connections,
   count(*) FILTER (WHERE state = 'active') AS active,
   count(*) FILTER (WHERE state = 'idle')   AS idle,
-  count(*) FILTER (WHERE state LIKE 'idle in transaction%') AS idle_in_tx;
+  count(*) FILTER (WHERE state LIKE 'idle in transaction%') AS idle_in_tx
+FROM pg_stat_activity
+WHERE backend_type = 'client backend';
 
 
 -- ─── 2. WAL LAG (replication slot pressure) ──────────────────────────────────
@@ -106,14 +108,17 @@ WHERE n.nspname = 'public'
   AND c.relname IN ('trip_messages','trip_conversations','network_messages','network_conversations')
 ORDER BY c.relname;
 
--- Count active Realtime subscriptions per table+filter
--- Healthy: 1 per org per table. Broken: N per org = client leak
+-- Count active Realtime subscriptions per entity + filter tuple
+-- (filters is realtime.user_defined_filter[], not jsonb — use unnest.)
+-- Healthy: modest counts. Broken: huge counts = client leak
 SELECT
-  filters->>'table'  AS table_name,
-  filters->>'filter' AS filter_condition,
-  count(*)           AS subscriber_count
-FROM realtime.subscription,
-     jsonb_array_elements(filters) AS filters
-GROUP BY 1, 2
+  s.entity::text      AS entity_table,
+  f.column_name,
+  f.op::text          AS op,
+  f.value             AS filter_value,
+  count(*)            AS subscriber_count
+FROM realtime.subscription s,
+     LATERAL unnest(s.filters) AS f
+GROUP BY 1, 2, 3, 4
 ORDER BY subscriber_count DESC
 LIMIT 20;
