@@ -204,6 +204,9 @@ export function DriverChatProvider({
   }, [conversations]);
   const orgIdsKey = conversationOrgIds.join(",");
 
+  const isActiveRef = useRef(isActive);
+  isActiveRef.current = isActive;
+
   useEffect(() => {
     if (!isActive || !uid || !orgIdsKey) return;
     const orgIds = orgIdsKey.split(",").filter(Boolean);
@@ -218,8 +221,34 @@ export function DriverChatProvider({
             filter: `organization_id=eq.${orgId}`,
           },
         ],
-        () => {
-          queueRefreshConversations();
+        (payload) => {
+          const row = payload.new as Partial<TripMessageRow> | null;
+          if (!row?.conversation_id) return;
+
+          // Incremental append: avoid a full DB refetch for messages in known conversations.
+          let found = false;
+          setConversations((prev) =>
+            prev.map((conv) => {
+              if (conv.id !== row.conversation_id) return conv;
+              found = true;
+              // Skip own echoed messages (optimistic insert already added them)
+              if (row.sender_user_id && row.sender_user_id === uid) return conv;
+              return {
+                ...conv,
+                messages: [...conv.messages, row as TripMessageRow],
+                last_message_at: row.created_at ?? conv.last_message_at,
+                last_message_preview:
+                  typeof row.content === "string" && row.content.trim().length > 0
+                    ? row.content.slice(0, 120)
+                    : conv.last_message_preview,
+              };
+            })
+          );
+
+          // Fall back to full refresh only when the conversation is not yet loaded.
+          if (!found) {
+            queueRefreshConversations();
+          }
         }
       )
     );

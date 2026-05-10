@@ -190,6 +190,8 @@ export function TripChatProvider({
     if (!organizationId || !selfUid) return;
     if (bootstrappedOrgRef.current === organizationId) return;
     bootstrappedOrgRef.current = organizationId;
+    // Stamp the focus timestamp so the focused-screen effect does not double-fire on mount.
+    lastFocusLoadAtRef.current = Date.now();
     void loadConversations();
   }, [organizationId, selfUid, loadConversations]);
 

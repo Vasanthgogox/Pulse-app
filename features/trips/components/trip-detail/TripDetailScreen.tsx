@@ -985,10 +985,11 @@ export default function TripDetailScreen({
     setDriverLocationLoading(true);
     fetchDriverLocationFromDb();
 
+    // 60s fallback; realtime subscription fires fetchDriverLocationFromDb on each update
     const interval = setInterval(() => {
       setDriverLocationLoading(true);
       fetchDriverLocationFromDb();
-    }, 30000);
+    }, 60000);
 
     return () => {
       clearInterval(interval);
@@ -1263,7 +1264,8 @@ export default function TripDetailScreen({
       statusLower === "in_transit" ||
       statusLower === "at_drop";
     if (!activeJourney) return;
-    const intervalMs = 15000;
+    // 60s: realtime handles live updates; this is a gap-filler only
+    const intervalMs = 60000;
     const id = setInterval(() => {
       isRefreshingRef.current = true;
       load();

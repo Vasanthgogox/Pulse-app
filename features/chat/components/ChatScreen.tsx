@@ -297,6 +297,7 @@ export function ChatScreen() {
   const [expandedTripId, setExpandedTripId] = useState<string | null>(null);
   /** Trips from fleet (incl. no driver) to merge into hub cards that have no conversation row yet. */
   const [hubComposeTrips, setHubComposeTrips] = useState<TripForCompose[]>([]);
+  const hubComposeTripsLoadedAtRef = useRef<number>(0);
   const [initiating, setInitiating] = useState(false);
   const [showNetCompose, setShowNetCompose] = useState(false);
   const [netComposeSearch, setNetComposeSearch] = useState("");
@@ -368,12 +369,16 @@ export function ChatScreen() {
     let cancelled = false;
     if (!organizationId) {
       setHubComposeTrips([]);
+      hubComposeTripsLoadedAtRef.current = 0;
       return;
     }
     (async () => {
       try {
         const trips = await getTripsForCompose(organizationId);
-        if (!cancelled) setHubComposeTrips(trips);
+        if (!cancelled) {
+          setHubComposeTrips(trips);
+          hubComposeTripsLoadedAtRef.current = Date.now();
+        }
       } catch {
         if (!cancelled) setHubComposeTrips([]);
       }
@@ -738,21 +743,32 @@ export function ChatScreen() {
     setShowCompose(true);
     setComposeSearch("");
     setComposeTripListIssue(null);
-    setComposeTrips([]);
+    setExpandedTripId(prefillTripId ?? null);
     if (!organizationId) {
+      setComposeTrips([]);
       setComposeTripListIssue("no_org");
-      setExpandedTripId(null);
+      return;
+    }
+    // Reuse the already-fetched trip list if it was loaded within the last 2 minutes.
+    // The mount effect populates hubComposeTrips; re-fetching on every compose open
+    // was generating 3 duplicate DB calls (trips + clients + suppliers) per click.
+    const COMPOSE_TRIPS_STALE_MS = 2 * 60_000;
+    if (
+      hubComposeTrips.length > 0 &&
+      Date.now() - hubComposeTripsLoadedAtRef.current < COMPOSE_TRIPS_STALE_MS
+    ) {
+      setComposeTrips(hubComposeTrips);
       return;
     }
     setComposeLoading(true);
     try {
       const trips = await getTripsForCompose(organizationId);
       setComposeTrips(trips);
-      setExpandedTripId(prefillTripId ?? null);
+      setHubComposeTrips(trips);
+      hubComposeTripsLoadedAtRef.current = Date.now();
     } catch {
-      setComposeTrips([]);
-      setComposeTripListIssue("fetch_failed");
-      setExpandedTripId(null);
+      setComposeTrips(hubComposeTrips.length > 0 ? hubComposeTrips : []);
+      if (hubComposeTrips.length === 0) setComposeTripListIssue("fetch_failed");
     } finally {
       setComposeLoading(false);
     }
