@@ -30,10 +30,12 @@ ORDER BY session_count DESC;
 
 -- Quick total vs plan limit
 SELECT
-  count(*)                                 AS total_connections,
-  count(*) FILTER (WHERE state = 'active') AS active,
-  count(*) FILTER (WHERE state = 'idle')   AS idle,
-  count(*) FILTER (WHERE state LIKE 'idle in transaction%') AS idle_in_tx;
+  count(*)                                                          AS total_connections,
+  count(*) FILTER (WHERE state = 'active')                         AS active,
+  count(*) FILTER (WHERE state = 'idle')                           AS idle,
+  count(*) FILTER (WHERE state LIKE 'idle in transaction%')        AS idle_in_tx
+FROM pg_stat_activity
+WHERE backend_type = 'client backend';
 
 
 -- ─── 2. WAL LAG (replication slot pressure) ──────────────────────────────────

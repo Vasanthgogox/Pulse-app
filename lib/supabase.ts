@@ -180,11 +180,11 @@ export function getSupabaseAnonKey(): string | undefined {
 
 /** Fresh user access token for API/proxy calls. Call before each request that requires auth. Returns null if no session (user not signed in). */
 export async function getAccessToken(): Promise<string | null> {
-  const client = supabase();
-  await client.auth.getUser(); // refresh session if needed
-  const { data } = await client.auth.getSession();
-  const token = data.session?.access_token ?? null;
-  return token;
+  // getSession() returns the locally cached token and triggers a background refresh
+  // when it's near expiry (autoRefreshToken: true handles this). getUser() fires a
+  // network request to /auth/v1/user on every call — unnecessary and adds Auth spike.
+  const { data } = await supabase().auth.getSession();
+  return data.session?.access_token ?? null;
 }
 
 export const SUPABASE_CONFIG_MISSING_MESSAGE =
@@ -215,6 +215,18 @@ function getSupabase(): SupabaseClient {
     },
     global: {
       fetch: fetchWithTimeoutAndRetry,
+    },
+    realtime: {
+      // Heartbeat every 30s (default 15s) — halves keepalive traffic on mobile connections.
+      // 30s is well within the 60s server-side idle timeout for Supabase Realtime.
+      heartbeatIntervalMs: 30_000,
+      // Reconnect after 250ms, 500ms, 1s, 2s, 4s, 8s, 16s (exponential, capped at 30s).
+      // Default starts at 1s which is fine; we push it slightly faster at the start.
+      reconnectAfterMs: (tries: number) =>
+        Math.min(250 * Math.pow(2, tries), 30_000),
+      // Rate-limit realtime event broadcasts from this client to 10/sec.
+      // Prevents accidental event storms from rapid state changes (e.g. typing indicators).
+      eventsPerSecondLimit: 10,
     },
   });
 
