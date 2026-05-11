@@ -141,7 +141,7 @@ const styles = StyleSheet.create({
     paddingVertical: Platform.OS === "android" ? 4 : 6,
     borderWidth: 0,
     ...Platform.select({
-      web: { outlineStyle: "none" } as TextStyle,
+      web: { outlineStyle: "none" } as unknown as TextStyle,
     }),
   },
   clearHit: {

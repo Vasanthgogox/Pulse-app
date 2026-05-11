@@ -13,6 +13,10 @@ export const ROUTES = {
   SIGN_IN: '/sign-in',
   /** Same as {@link ROUTES.SIGN_IN} — kept for existing call sites (logout, guards). */
   SIGN_IN_DIRECT: '/sign-in',
+  /** Request a Supabase password reset email; allow-list `/auth/reset-password` on the same origin in Supabase Auth. */
+  FORGOT_PASSWORD: '/forgot-password',
+  /** Deep link / web URL target after user taps the reset link in email. */
+  AUTH_RESET_PASSWORD: '/auth/reset-password',
   SIGN_UP: '/sign-up',
 
   TABS: {

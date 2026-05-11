@@ -20,7 +20,7 @@ export {
     tripFinanceAdjForHubLookup,
     tripHubCost,
     tripHubDue,
-    tripHubRevenue, type TripsHubTableColumnId, type TripsHubTableViewProps, type TripsHubTripCardProps
+    tripHubRevenue, type TripHubCostOptions, type TripsHubTableColumnId, type TripsHubTableViewProps, type TripsHubTripCardProps
 } from "./components/TripsHubViews";
 export {
     TripTrackingBlock,

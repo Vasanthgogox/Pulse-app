@@ -10,9 +10,10 @@ import React, {
 import { useAuth } from "@/contexts/AuthContext";
 import { useOptionalOrganization } from "@/contexts/OrganizationContext";
 import { subscribeSharedPostgresChanges } from "@/lib/realtimeRegistry";
+import { supabase } from "@/lib/supabase";
 import * as chatService from "../services/chat.service";
 import { useConversations, useTotalUnreadCount } from "../store/chatStore";
-import { useChatStore } from "../store/useChatStore";
+import { registerMarkMessagesSeenRpc, useChatStore } from "../store/useChatStore";
 import type {
   ConversationPartyType,
   MessageType,
@@ -137,7 +138,8 @@ export function TripChatProvider({
   const isLoading        = useChatStore(s => s.isLoading);
 
   const bootstrappedOrgRef = useRef<string | null>(null);
-  const lastFocusLoadAtRef = useRef<number>(0);
+  const isActiveRef = useRef(isActive);
+  isActiveRef.current = isActive;
   // Queue-and-fetch: holds Realtime rows that arrived before their conversation
   // was in the store (bootstrap failure, or process_b2b_event for a new thread).
   const pendingForUnknownConv = useRef(new Map<string, Partial<TripMessageRow>[]>());
@@ -160,21 +162,27 @@ export function TripChatProvider({
     if (!organizationId || !selfUid) return;
     if (bootstrappedOrgRef.current === organizationId) return;
     bootstrappedOrgRef.current = organizationId;
-    lastFocusLoadAtRef.current = Date.now();
     void loadConversations();
   }, [organizationId, selfUid, loadConversations]);
 
-  // Focus-triggered sync: 5 min cooldown (bootstrap is idempotent after first call).
-  const isActiveRef = useRef(isActive);
-  isActiveRef.current = isActive;
+  // Chat bootstrap is once per org-session (`useChatStore.bootstrap` no-ops when
+  // `bootstrappedOrg` matches). Updates arrive via Realtime — no periodic full
+  // refetch (reduces DB load; matches WhatsApp-style cold load + patch).
 
+  // Single mark-seen RPC path for all `useMarkSeen` instances (debounced in store).
   useEffect(() => {
-    if (!isActive || !selfUid) return;
-    const now = Date.now();
-    if (now - lastFocusLoadAtRef.current < 300_000) return;
-    lastFocusLoadAtRef.current = now;
-    void loadConversations();
-  }, [isActive, selfUid, loadConversations]);
+    registerMarkMessagesSeenRpc((conversationId, messageIds) => {
+      void supabase()
+        .rpc("mark_messages_seen", {
+          p_conversation_id: conversationId,
+          p_message_ids: messageIds,
+        })
+        .then(({ error }) => {
+          if (error && __DEV__) console.warn("[mark_messages_seen]", error.message);
+        });
+    });
+    return () => registerMarkMessagesSeenRpc(null);
+  }, []);
 
   // ── Unknown-conversation recovery ─────────────────────────────────────────
   const _enqueueUnknownConv = useCallback(
@@ -248,16 +256,14 @@ export function TripChatProvider({
         else if (payload.eventType === "UPDATE") {
           const row = payload.new as TripMessageRow | null;
           if (!row?.id || !row.conversation_id) return;
-          useChatStore.getState().onRealtimeAck(
-            row.conversation_id,
-            row.id,
-            {
-              is_delivered: row.is_delivered,
-              delivered_at: row.delivered_at,
-              is_read:      row.is_read,
-              read_at:      row.read_at,
-            },
-          );
+          const patch: Partial<TripMessageRow> = {
+            is_delivered: row.is_delivered,
+            delivered_at: row.delivered_at,
+            is_read:      row.is_read,
+            read_at:      row.read_at,
+          };
+          if (row.metadata != null) patch.metadata = row.metadata;
+          useChatStore.getState().onRealtimeAck(row.conversation_id, row.id, patch);
         }
       }
     );
@@ -270,12 +276,14 @@ export function TripChatProvider({
 
       const conv         = useChatStore.getState().getConversationByConvId(conversationId);
       const messageOrgId = conv?.organization_id ?? organizationId;
-      const senderRole: TripMessageRow["sender_role"] =
-        conv && conv.organization_id !== organizationId ? "supplier" : "dispatcher";
+      // Always dispatch from the signed-in org user in this hub. Using `supplier` when
+      // `conversation.organization_id` differed from `organizationId` made fleet messages
+      // render as the counterparty (wrong bubble side).
+      const senderRole: TripMessageRow["sender_role"] = "dispatcher";
       const senderName =
         (profile as any).full_name ||
         (profile as any).displayName ||
-        (senderRole === "supplier" ? "Supplier" : "Dispatcher");
+        "Dispatcher";
 
       const optimisticMsg: TripMessageRow = {
         id:              `optimistic-${Date.now()}`,
@@ -286,8 +294,9 @@ export function TripChatProvider({
         sender_name:     senderName,
         content,
         message_type:    messageType,
-        is_read:         true,
-        read_at:         new Date().toISOString(),
+        is_read:         false,
+        read_at:         null,
+        delivery_status: "sending",
         created_at:      new Date().toISOString(),
       };
 

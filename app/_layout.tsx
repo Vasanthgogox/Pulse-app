@@ -1,4 +1,5 @@
 import { AppAlertHost } from '@/components/AppAlertHost';
+import { OperationsIsland } from '@/components/OperationsIsland';
 import { FloatingChatButton } from '@/components/FloatingChatButton';
 import { DemoTabBar, type DemoTabId } from '@/components/demo';
 import Theme from '@/constants/Theme';
@@ -324,10 +325,13 @@ function RootLayoutNav() {
           <IntegratedChatProvider isActive={isDispatcherChatRouteActive}>
             <View style={{ flex: 1 }}>
               <AppAlertHost />
+              <OperationsIsland />
               <Stack screenOptions={{ headerShown: false }}>
                 <Stack.Screen name="index" />
                 <Stack.Screen name="welcome" options={{ animation: 'fade' }} />
                 <Stack.Screen name="sign-in" options={{ animation: 'fade' }} />
+                <Stack.Screen name="forgot-password" options={{ animation: 'fade' }} />
+                <Stack.Screen name="auth/reset-password" options={{ animation: 'fade' }} />
                 <Stack.Screen name="sign-up" options={{ animation: 'fade' }} />
                 <Stack.Screen name="(tabs)" />
                 <Stack.Screen name="(driver)" />

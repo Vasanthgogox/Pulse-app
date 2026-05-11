@@ -1,7 +1,12 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { StyleSheet, View, Text, Platform, ActivityIndicator } from 'react-native';
 import { LeafletMap } from '@/components/driver/LeafletMap';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from '@/lib/reactNativeMapsCompat';
+import MapView, {
+  Marker,
+  Polyline,
+  PROVIDER_GOOGLE,
+  type MapViewRef,
+} from '@/lib/reactNativeMapsCompat';
 import { FontAwesome } from '@expo/vector-icons';
 import { getOptimalRoute, LatLon, RouteResult } from '@/services/routingService';
 import Theme from '@/constants/Theme';
@@ -28,7 +33,7 @@ export const OptimalRouteMap: React.FC<OptimalRouteMapProps> = ({
 
   const [route, setRoute] = useState<RouteResult | null>(null);
   const [loading, setLoading] = useState(true);
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<MapViewRef | null>(null);
 
   useEffect(() => {
     async function fetchRoute() {

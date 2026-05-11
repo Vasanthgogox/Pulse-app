@@ -11,6 +11,17 @@ export type {
   GlobalAlertRow,
   GlobalNetworkStatus,
   ActiveTripSummary,
+  ActiveTripLastKnownLocation,
   ActiveTripRecentEvent,
   GlobalAppBootstrapPayload,
 } from './types';
+export type {
+  ClientOperationsRibbon,
+  GlobalOperationAlert,
+  OperationsIslandVisualKind,
+} from './priorityEngine.util';
+export {
+  assignPriorityWeightFromTripMessage,
+  collectAllOperationSignals,
+  selectCurrentActiveAlert,
+} from './priorityEngine.util';

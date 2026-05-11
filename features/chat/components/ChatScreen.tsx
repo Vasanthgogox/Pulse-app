@@ -52,10 +52,13 @@ import {
   useTripChat,
 } from "@/features/chat/contexts/TripChatContext";
 import { chatStore, useConversation, useConversationsByTrip, useTripMeta } from "@/features/chat/store/chatStore";
-import { useChatStore } from "@/features/chat/store/useChatStore";
+import {
+  resolveOutgoingDeliveryStatus,
+  useChatStore,
+} from "@/features/chat/store/useChatStore";
+import { MessageTick } from "@/features/chat/components/MessageTick";
 import { useMarkSeen } from "@/features/chat/hooks/useMarkSeen";
 import { SystemEventCard } from "@/features/chat/components/SystemEventCard";
-import { SmartChatImage } from "@/features/chat/components/SmartChatImage";
 import {
   INTEGRATED_QUICK_MESSAGES,
   IntegratedChat,
@@ -65,27 +68,39 @@ import {
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
   ensureTripFeedbackPromptMessages,
-  fetchConversationHistory,
+  getMessagesByConversation,
   getTripsForCompose,
   persistTripFeedbackMessageMetadataIfRated,
   seedTripConversationFeedbackPromptIfMissing,
   sendDocumentShareMessage,
+  TRIP_CHAT_HISTORY_PAGE,
   type TripForCompose,
 } from "@/features/chat/services/chat.service";
 import { getRatingsForTrip } from "@/features/ratings/services/ratings.service";
 import type { RatingRow } from "@/features/ratings/types";
-import { mergeTripChatMessagesWithFeedbackRatings } from "@/features/chat/utils/mergeTripFeedbackMessages";
+import {
+  dedupeFeedbackRequestMessages,
+  mergeTripChatMessagesWithFeedbackRatings,
+} from "@/features/chat/utils/mergeTripFeedbackMessages.util";
 import {
   acknowledgeLedgerEventMessage,
   disputeLedgerEventMessage,
   mirrorLedgerEntryFromChat,
 } from "@/features/chat/services/chatLedgerBridge.service";
 import { ChatSystemEventCard, ChatLedgerEventCard } from "./ChatEventCard";
+import { DynamicTripIsland } from "./DynamicTripIsland";
+import { LocationEventCard } from "./LocationEventCard";
+import { parseSystemLogLocationData } from "../utils/locationLogPayload.util";
 import { ChatTripFeedbackCard } from "./ChatTripFeedbackCard";
 import { DocumentShareCard } from "./DocumentShareCard";
 import { DocumentShareSheet } from "./DocumentShareSheet";
 import { isMessageVisibleInTab } from "../types/chat.types";
-import type { ConversationPartyType, LedgerEventMetadata, TripMessageRow } from "../types/chat.types";
+import type {
+  ConversationPartyType,
+  LedgerEventMetadata,
+  MessageDeliveryStatus,
+  TripMessageRow,
+} from "../types/chat.types";
 import { tripFeedbackRequestMatchesConversation } from "../utils/feedbackRequestMeta";
 import { useAuth } from "@/contexts/AuthContext";
 import { PartyAvatar } from "@/components/PartyAvatar";
@@ -94,6 +109,7 @@ import {
   isTripFeedbackEligibleStatus,
   parseTripIdSortKey,
 } from "@/features/chat/utils/tripConversationSort";
+import { buildTripMessageListLayoutMeta } from "@/features/chat/utils/chatMessageListLayout";
 
 type TabId = "trips" | "network";
 
@@ -291,6 +307,8 @@ export function ChatScreen() {
   // Document share sheet
   const [showDocShare, setShowDocShare] = useState(false);
   const [addingToBook, setAddingToBook] = useState<string | null>(null);
+  /** Sync guard: React state can lag one frame — blocks double-tap duplicate mirrors. */
+  const addToBookInFlightRef = useRef(new Set<string>());
 
   // Compose modal state
   const [showCompose, setShowCompose] = useState(false);
@@ -713,14 +731,46 @@ export function ChatScreen() {
   const handleAddToBook = async (message: TripMessageRow) => {
     const meta = message.metadata as LedgerEventMetadata | null;
     if (!meta || !currentOrgId || !selectedConv) return;
+    if (meta.acknowledged_at) return;
+    if (addToBookInFlightRef.current.has(message.id)) return;
+    addToBookInFlightRef.current.add(message.id);
     setAddingToBook(message.id);
     try {
       const { error } = await mirrorLedgerEntryFromChat(meta, currentOrgId, selectedConv.trip_id);
-      if (error) { Alert.alert("Error", error.message); return; }
+      if (error) {
+        Alert.alert("Error", error.message);
+        return;
+      }
       await acknowledgeLedgerEventMessage(message.id, selectedConv.id);
+      const ackAt = new Date().toISOString();
+      const txId = meta.transaction_id;
+      const convId = selectedConv.id;
+      const tripKey = useChatStore.getState().convToTrip[convId];
+      if (tripKey && txId) {
+        const entry = useChatStore.getState().trips[tripKey];
+        const stream = entry?.event_stream;
+        if (stream?.length) {
+          for (const e of stream) {
+            if (e.conversation_id !== convId) continue;
+            if (
+              e.message_type !== "ledger_event" &&
+              e.message_type !== "ledger" &&
+              e.message_type !== "payment"
+            ) {
+              continue;
+            }
+            const m = e.metadata as LedgerEventMetadata | undefined;
+            if (m?.transaction_id !== txId) continue;
+            chatStore.patchMessage(convId, e.id, {
+              metadata: { ...m, acknowledged_at: ackAt },
+            });
+          }
+        }
+      }
     } catch {
       Alert.alert("Error", "Could not add to book. Please try again.");
     } finally {
+      addToBookInFlightRef.current.delete(message.id);
       setAddingToBook(null);
     }
   };
@@ -2995,8 +3045,6 @@ const s = StyleSheet.create({
   bubbleMeta: { fontSize: 10, color: "#94a3b8", letterSpacing: 0.2 },
   bubbleMetaRow: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 4 },
   bubbleMetaRowOwn: { justifyContent: "flex-end" },
-  tickGray: { fontSize: 10, color: "#94a3b8", fontWeight: "700" },
-  tickSeen: { fontSize: 10, color: "#3b82f6", fontWeight: "700" },
 
   inputWrap: {
     position: "relative",
@@ -3474,8 +3522,7 @@ function ChatBubble({
   timestamp,
   senderName,
   avatarSeed,
-  isDelivered,
-  isSeen,
+  deliveryStatus,
   isNew,
 }: {
   isOwn: boolean;
@@ -3483,8 +3530,8 @@ function ChatBubble({
   timestamp: string;
   senderName?: string;
   avatarSeed?: string | null;
-  isDelivered?: boolean;
-  isSeen?: boolean;
+  /** WhatsApp-style ticks for outgoing rows (from `resolveOutgoingDeliveryStatus`). */
+  deliveryStatus?: MessageDeliveryStatus;
   /** True only for messages that arrived via Realtime after this screen mounted.
    *  Bootstrap messages start fully visible to avoid the "flash of invisible" blink. */
   isNew?: boolean;
@@ -3565,11 +3612,7 @@ function ChatBubble({
             {displayTime}
             {senderName ? ` · ${senderName.toUpperCase()}` : " · YOU"}
           </Text>
-          {isOwn && (
-            <Text style={isSeen ? s.tickSeen : s.tickGray}>
-              {isSeen || isDelivered ? "✓✓" : "✓"}
-            </Text>
-          )}
+          {isOwn && <MessageTick status={deliveryStatus} />}
         </View>
       </View>
       {isOwn && (
@@ -3889,23 +3932,122 @@ function TripConversationDetailLoaded({
   // Subscribe directly to this conversation for live message updates.
   // Re-renders only when THIS conversation changes, not the full list.
   const liveConv = useConversation(selectedConv.id) ?? selectedConv;
+  const liveConvRef = useRef(liveConv);
+  liveConvRef.current = liveConv;
 
   const [historyLoading, setHistoryLoading] = useState(false);
-  const historyLoadedRef = useRef<string | null>(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [hasMoreOlder, setHasMoreOlder] = useState(false);
+  const olderInFlightRef = useRef(false);
+  const autoBackfillAttemptedRef = useRef<string | null>(null);
+  const olderStartDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const loadHistory = useCallback(async () => {
-    if (historyLoadedRef.current === liveConv.id) return;
+  const mergeHistoryPage = useCallback((rows: TripMessageRow[]) => {
+    const id = liveConvRef.current.id;
+    chatStore.mergeConversationHistory(id, rows);
+    setHasMoreOlder(rows.length === TRIP_CHAT_HISTORY_PAGE);
+  }, []);
+
+  /** Newest page (empty thread backfill or manual retry). */
+  const loadLatestHistoryPage = useCallback(async () => {
     setHistoryLoading(true);
     try {
-      const messages = await fetchConversationHistory(liveConv.id);
-      chatStore.mergeConversationHistory(liveConv.id, messages);
-      historyLoadedRef.current = liveConv.id;
+      const rows = await getMessagesByConversation(liveConv.id, {
+        limit: TRIP_CHAT_HISTORY_PAGE,
+      });
+      mergeHistoryPage(rows);
     } catch {
       // silent — user can retry
     } finally {
       setHistoryLoading(false);
     }
+  }, [liveConv.id, mergeHistoryPage]);
+
+  /** Older messages than the current oldest row in this lane. */
+  const loadOlderHistoryPage = useCallback(async () => {
+    if (!hasMoreOlder || olderInFlightRef.current) return;
+    const msgs = liveConvRef.current.messages;
+    if (msgs.length === 0) return;
+    olderInFlightRef.current = true;
+    setLoadingOlder(true);
+    try {
+      const oldest = msgs[0].created_at;
+      const rows = await getMessagesByConversation(liveConvRef.current.id, {
+        before: oldest,
+        limit: TRIP_CHAT_HISTORY_PAGE,
+      });
+      if (rows.length === 0) {
+        setHasMoreOlder(false);
+        return;
+      }
+      mergeHistoryPage(rows);
+    } catch {
+      // non-critical
+    } finally {
+      olderInFlightRef.current = false;
+      setLoadingOlder(false);
+    }
+  }, [hasMoreOlder, mergeHistoryPage]);
+
+  const onStartReachedLoadOlder = useCallback(() => {
+    if (olderStartDebounceRef.current) return;
+    const convIdWhenScheduled = liveConvRef.current.id;
+    olderStartDebounceRef.current = setTimeout(() => {
+      olderStartDebounceRef.current = null;
+      if (liveConvRef.current.id !== convIdWhenScheduled) return;
+      void loadOlderHistoryPage();
+    }, 400);
+  }, [loadOlderHistoryPage]);
+
+  useEffect(
+    () => () => {
+      if (olderStartDebounceRef.current) {
+        clearTimeout(olderStartDebounceRef.current);
+        olderStartDebounceRef.current = null;
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    setHasMoreOlder((liveConv.messages?.length ?? 0) >= TRIP_CHAT_HISTORY_PAGE);
+    autoBackfillAttemptedRef.current = null;
+    olderInFlightRef.current = false;
+    if (olderStartDebounceRef.current) {
+      clearTimeout(olderStartDebounceRef.current);
+      olderStartDebounceRef.current = null;
+    }
   }, [liveConv.id]);
+
+  // One automatic backfill when the lane shows a preview but no rows (e.g. visibility
+  // filter vs bootstrap) — single flight per conversation; uses same paged query as manual load.
+  useEffect(() => {
+    if (liveConv.messages.length > 0) return;
+    const preview = (liveConv.last_message_preview ?? "").trim();
+    if (!preview) return;
+    if (autoBackfillAttemptedRef.current === liveConv.id) return;
+    autoBackfillAttemptedRef.current = liveConv.id;
+
+    let cancelled = false;
+    setHistoryLoading(true);
+    void getMessagesByConversation(liveConv.id, { limit: TRIP_CHAT_HISTORY_PAGE })
+      .then((rows) => {
+        if (cancelled) return;
+        mergeHistoryPage(rows);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setHistoryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    liveConv.id,
+    liveConv.messages.length,
+    liveConv.last_message_preview,
+    mergeHistoryPage,
+  ]);
 
   const [tripRatings, setTripRatings] = useState<RatingRow[]>([]);
 
@@ -3934,8 +4076,6 @@ function TripConversationDetailLoaded({
   // After seeding, inserted messages arrive via Realtime INSERT → NEW_MESSAGE →
   // chatStore.mergeMessages — no hydrateConversationById needed.
   const feedbackSeededForConvRef = useRef<string | null>(null);
-  const liveConvRef = useRef(liveConv);
-  liveConvRef.current = liveConv;
 
   useEffect(() => {
     if (!tripEligibleForFeedback) return;
@@ -3997,12 +4137,35 @@ function TripConversationDetailLoaded({
 
   const displayMessages = useMemo(
     () =>
-      mergeTripChatMessagesWithFeedbackRatings(
-        liveConv.trip_id,
-        liveConv.messages,
-        tripRatings,
+      dedupeFeedbackRequestMessages(
+        mergeTripChatMessagesWithFeedbackRatings(
+          liveConv.trip_id,
+          liveConv.messages,
+          tripRatings,
+        ),
       ),
     [liveConv.trip_id, liveConv.messages, tripRatings],
+  );
+
+  const handleIslandNavigateTrip = useCallback(
+    (tripId: string) => {
+      const lanes = conversations.filter((c) => c.trip_id === tripId);
+      const pick =
+        lanes.find((c) => c.party_type === liveConv.party_type) ?? lanes[0];
+      if (pick) onSelectConversation(pick.id);
+    },
+    [conversations, liveConv.party_type, onSelectConversation],
+  );
+
+  const messageListLayout = useMemo(
+    () => buildTripMessageListLayoutMeta(displayMessages, liveConv.party_type),
+    [displayMessages, liveConv.party_type],
+  );
+
+  const getMessageItemLayout = useCallback(
+    (_data: ArrayLike<TripMessageRow> | null | undefined, index: number) =>
+      messageListLayout.getItemLayout(index),
+    [messageListLayout],
   );
 
   const quickMsgs = QUICK_MESSAGES[liveConv.party_type];
@@ -4170,6 +4333,10 @@ function TripConversationDetailLoaded({
       m.message_type === "update" ||
       m.message_type === "system_log"
     ) {
+      const locData = parseSystemLogLocationData(m);
+      if (locData) {
+        return <LocationEventCard message={m} location={locData} />;
+      }
       return <ChatSystemEventCard message={m} />;
     }
     if (
@@ -4211,8 +4378,11 @@ function TripConversationDetailLoaded({
         timestamp={m.created_at}
         senderName={m.sender_role !== "dispatcher" ? m.sender_name : undefined}
         avatarSeed={m.sender_role !== "dispatcher" ? m.sender_avatar_seed : undefined}
-        isDelivered={m.is_delivered}
-        isSeen={m.is_read}
+        deliveryStatus={
+          m.sender_role === "dispatcher"
+            ? resolveOutgoingDeliveryStatus(m)
+            : undefined
+        }
         isNew={Date.parse(m.created_at) > mountedAtMs}
       />
     );
@@ -4239,6 +4409,13 @@ function TripConversationDetailLoaded({
         partyType={liveConv.party_type}
         isDesktop={isDesktop}
         onCloseDetail={onCloseDetail}
+      />
+      <DynamicTripIsland
+        currentTripId={liveConv.trip_id}
+        onNavigateTrip={handleIslandNavigateTrip}
+        onReplyShortcut={() => {
+          messagesRef.current?.scrollToEnd({ animated: true });
+        }}
       />
       <View style={s.detailMissionBar}>
         <View style={s.detailMissionRoute}>
@@ -4324,31 +4501,55 @@ function TripConversationDetailLoaded({
         keyExtractor={(m) => m.id}
         renderItem={renderMessage}
         extraData={liveConv}
+        getItemLayout={getMessageItemLayout}
+        removeClippedSubviews={Platform.OS === "android"}
+        windowSize={9}
+        maxToRenderPerBatch={12}
         onViewableItemsChanged={stableOnViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
         onContentSizeChange={() => messagesRef.current?.scrollToEnd({ animated: false })}
+        onStartReached={onStartReachedLoadOlder}
+        onStartReachedThreshold={0.12}
         ListHeaderComponent={
           <>
             <ChatSystemMsg
               label={`${liveConv.pickup_area.toUpperCase()} → ${liveConv.drop_location.toUpperCase()} · TODAY`}
             />
+            {loadingOlder ? (
+              <View style={{ paddingVertical: 10, alignItems: "center" }}>
+                <ActivityIndicator size="small" color={CHAT_ACCENT} />
+                <Text style={{ marginTop: 6, fontSize: 11, color: "#94a3b8" }}>Loading earlier messages…</Text>
+              </View>
+            ) : hasMoreOlder && displayMessages.length > 0 ? (
+              <View style={{ paddingVertical: 8, alignItems: "center" }}>
+                <TouchableOpacity
+                  onPress={() => { void loadOlderHistoryPage(); }}
+                  hitSlop={{ top: 8, bottom: 8 }}
+                  activeOpacity={0.75}
+                >
+                  <Text style={{ fontSize: 12, color: CHAT_ACCENT, fontWeight: "600" }}>
+                    Load earlier messages
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
             {displayMessages.length === 0 && (
               liveConv.last_message_preview ? (
                 <View style={{ alignItems: "center", paddingVertical: 32, gap: 12 }}>
                   <Text style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>
-                    Messages not loaded
+                    {historyLoading ? "Loading messages…" : "Messages not loaded"}
                   </Text>
-                  <TouchableOpacity
-                    style={{ backgroundColor: CHAT_ACCENT, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20 }}
-                    onPress={loadHistory}
-                    disabled={historyLoading}
-                    activeOpacity={0.8}
-                  >
-                    {historyLoading
-                      ? <ActivityIndicator size="small" color="#fff" />
-                      : <Text style={{ color: "#fff", fontSize: 13, fontWeight: "600" }}>Load history</Text>
-                    }
-                  </TouchableOpacity>
+                  {!historyLoading ? (
+                    <TouchableOpacity
+                      style={{ backgroundColor: CHAT_ACCENT, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20 }}
+                      onPress={() => { void loadLatestHistoryPage(); }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={{ color: "#fff", fontSize: 13, fontWeight: "600" }}>Load history</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <ActivityIndicator size="small" color={CHAT_ACCENT} />
+                  )}
                 </View>
               ) : (
                 <View style={{ alignItems: "center", paddingVertical: 32 }}>

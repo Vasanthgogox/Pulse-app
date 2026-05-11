@@ -7,7 +7,7 @@ import { getKeepSignedIn, setKeepSignedIn } from '@/lib/keepSignedInPreference';
 import { ROUTES } from '@/lib/routes';
 import { containsNullByte, validatePasswordForSignIn } from '@/lib/validation';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -42,7 +42,11 @@ function getOAuthErrorFromParams(params: { oauth_error?: string | string[] }): s
 export default function SignIn() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const params = useLocalSearchParams<{ email?: string | string[]; oauth_error?: string | string[] }>();
+  const params = useLocalSearchParams<{
+    email?: string | string[];
+    oauth_error?: string | string[];
+    password_reset?: string | string[];
+  }>();
   const isOnline = useIsOnline();
   const { user, signIn, signInWithGoogle } = useAuth();
   const [webViewportWidth, setWebViewportWidth] = useState<number>(() => {
@@ -64,6 +68,7 @@ export default function SignIn() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [waitingForAuthState, setWaitingForAuthState] = useState(false);
   const [signInError, setSignInError] = useState<string | null>(null);
+  const [passwordResetBanner, setPasswordResetBanner] = useState(false);
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
     const updatePointerMode = () => {
@@ -113,6 +118,12 @@ export default function SignIn() {
     const oauthError = getOAuthErrorFromParams(params);
     if (oauthError) setSignInError(oauthError);
   }, [params.oauth_error]);
+
+  useEffect(() => {
+    const v = params.password_reset;
+    const flag = typeof v === 'string' ? v : Array.isArray(v) && v[0] ? v[0] : '';
+    setPasswordResetBanner(flag === '1');
+  }, [params.password_reset]);
 
   const handleSignIn = async () => {
     setSignInError(null);
@@ -206,6 +217,7 @@ export default function SignIn() {
           value={email}
           onChangeText={(t) => {
             setSignInError(null);
+            setPasswordResetBanner(false);
             setEmail(t);
           }}
           placeholder="Email Address"
@@ -239,6 +251,9 @@ export default function SignIn() {
             <FontAwesome name={showPass ? 'eye-slash' : 'eye'} size={18} color={Theme.textMuted} />
           </Pressable>
         </View>
+        {passwordResetBanner ? (
+          <Text style={styles.successBanner}>Password updated. Sign in with your new password.</Text>
+        ) : null}
         {signInError ? <Text style={styles.errorText}>{signInError}</Text> : null}
 
         <View style={styles.rowBetween}>
@@ -257,7 +272,16 @@ export default function SignIn() {
             />
             <Text style={[styles.keepText, isDesktop && styles.keepTextDesktop]}>Remember Me</Text>
           </TouchableOpacity>
-          <Text style={styles.forgotText}>Forgot password?</Text>
+          <TouchableOpacity
+            onPress={() =>
+              router.push(
+                `${ROUTES.FORGOT_PASSWORD}?email=${encodeURIComponent(email.trim())}` as Href,
+              )
+            }
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={styles.forgotText}>Forgot password?</Text>
+          </TouchableOpacity>
         </View>
 
         <TouchableOpacity
@@ -475,6 +499,12 @@ const styles = StyleSheet.create({
   errorText: {
     color: Theme.negative,
     marginBottom: 8,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  successBanner: {
+    color: Theme.positive,
+    marginBottom: 10,
     fontSize: 13,
     fontWeight: '600',
   },

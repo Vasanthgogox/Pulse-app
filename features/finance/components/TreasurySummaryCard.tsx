@@ -4,8 +4,30 @@
  */
 import Theme from '@/constants/Theme';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from 'react';
+import {
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  useWindowDimensions,
+  View,
+  type StyleProp,
+  type TextStyle,
+  type ViewStyle,
+} from 'react-native';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -369,7 +391,11 @@ export function TreasurySummaryCard({
   const periodAndSourceFilters = (
     <>
       {filterLabel != null && !hideEntityFilterDropdown && (
-        <View ref={refPeriodFilter} style={styles.filterBlock} collapsable={false}>
+        <View
+          ref={refPeriodFilter}
+          style={styles.filterBlock as ViewStyle}
+          collapsable={false}
+        >
           <TouchableOpacity
             activeOpacity={0.8}
             onPress={() => {
@@ -403,12 +429,12 @@ export function TreasurySummaryCard({
             onPressOut={() => {
               filterBtnScale.value = withSpring(1, springConfig);
             }}
-            style={styles.filterTrigger}
+            style={styles.filterTrigger as ViewStyle}
           >
             <Animated.View
               style={[
-                styles.filterTriggerInner,
-                isLightToolbar && styles.filterTriggerInnerLight,
+                styles.filterTriggerInner as ViewStyle,
+                isLightToolbar && (styles.filterTriggerInnerLight as ViewStyle),
                 filterAnimatedStyle,
               ]}
             >
@@ -419,8 +445,8 @@ export function TreasurySummaryCard({
               />
               <Text
                 style={[
-                  styles.filterTriggerText,
-                  isLightToolbar && styles.filterTriggerTextLight,
+                  styles.filterTriggerText as TextStyle,
+                  isLightToolbar && (styles.filterTriggerTextLight as TextStyle),
                 ]}
                 numberOfLines={1}
               >
@@ -440,7 +466,7 @@ export function TreasurySummaryCard({
                 setShowSourceDropdown(false);
               }}
             >
-              <View style={styles.filterModalOverlay}>
+              <View style={styles.filterModalOverlay as ViewStyle}>
                 <TouchableWithoutFeedback
                   onPress={() => {
                     setShowFilterDropdown(false);
@@ -453,7 +479,7 @@ export function TreasurySummaryCard({
                 </TouchableWithoutFeedback>
                 <View
                   style={[
-                    styles.filterModalCardWrap,
+                    styles.filterModalCardWrap as ViewStyle,
                     {
                       top:
                         dropdownAnchorY > 0
@@ -625,7 +651,19 @@ export function TreasurySummaryCard({
                                 {ledgerCategory === c && <View style={styles.dropdownItemAccent} />}
                                 <View style={[styles.dropdownItemIconWrap, ledgerCategory === c && styles.dropdownItemIconWrapActive]}>
                                   <FontAwesome
-                                    name={c === 'all' ? 'list' : c === 'customers' ? 'building' : c === 'suppliers' ? 'warehouse' : c === 'vehicle' ? 'truck' : 'user'}
+                                    name={
+                                      (c === "all"
+                                        ? "list"
+                                        : c === "customers"
+                                          ? "building"
+                                          : c === "suppliers"
+                                            ? "warehouse"
+                                            : c === "vehicle"
+                                              ? "truck"
+                                              : "user") as ComponentProps<
+                                        typeof FontAwesome
+                                      >["name"]
+                                    }
                                     size={14}
                                     color={ledgerCategory === c ? Theme.teslaRed : Theme.textMutedDemo}
                                   />
@@ -666,7 +704,19 @@ export function TreasurySummaryCard({
                             {ledgerCategory === c && <View style={styles.dropdownItemAccent} />}
                             <View style={[styles.dropdownItemIconWrap, ledgerCategory === c && styles.dropdownItemIconWrapActive]}>
                               <FontAwesome
-                                name={c === 'all' ? 'list' : c === 'customers' ? 'building' : c === 'suppliers' ? 'warehouse' : c === 'vehicle' ? 'truck' : 'user'}
+                                name={
+                                  (c === "all"
+                                    ? "list"
+                                    : c === "customers"
+                                      ? "building"
+                                      : c === "suppliers"
+                                        ? "warehouse"
+                                        : c === "vehicle"
+                                          ? "truck"
+                                          : "user") as ComponentProps<
+                                    typeof FontAwesome
+                                  >["name"]
+                                }
                                 size={14}
                                 color={ledgerCategory === c ? Theme.teslaRed : Theme.textMutedDemo}
                               />
@@ -723,7 +773,11 @@ export function TreasurySummaryCard({
         </View>
       )}
       {sourceFilterLabel != null && !showInlineSourceChips && (
-        <View ref={refSourceFilter} style={styles.filterBlock} collapsable={false}>
+        <View
+          ref={refSourceFilter}
+          style={styles.filterBlock as ViewStyle}
+          collapsable={false}
+        >
           <TouchableOpacity
             activeOpacity={0.8}
             onPress={() => {
@@ -741,12 +795,12 @@ export function TreasurySummaryCard({
             onPressOut={() => {
               filterBtnScale.value = withSpring(1, springConfig);
             }}
-            style={styles.filterTrigger}
+            style={styles.filterTrigger as ViewStyle}
           >
             <Animated.View
               style={[
-                styles.filterTriggerInner,
-                isLightToolbar && styles.filterTriggerInnerLight,
+                styles.filterTriggerInner as ViewStyle,
+                isLightToolbar && (styles.filterTriggerInnerLight as ViewStyle),
                 filterAnimatedStyle,
               ]}
             >
@@ -757,8 +811,8 @@ export function TreasurySummaryCard({
               />
               <Text
                 style={[
-                  styles.filterTriggerText,
-                  isLightToolbar && styles.filterTriggerTextLight,
+                  styles.filterTriggerText as TextStyle,
+                  isLightToolbar && (styles.filterTriggerTextLight as TextStyle),
                 ]}
                 numberOfLines={1}
               >
@@ -1009,6 +1063,8 @@ export function TreasurySummaryCard({
                     styles.searchInput,
                     styles.searchInputNetwork,
                     isLightToolbar && styles.searchInputNetworkLight,
+                    Platform.OS === "web" &&
+                      ({ outlineStyle: "none" } as unknown as TextStyle),
                   ]}
                   value={searchQuery}
                   onChangeText={onSearchChange}
@@ -1115,7 +1171,11 @@ export function TreasurySummaryCard({
           <View style={[styles.searchWrap, compactToolbar && styles.searchWrapStacked]}>
             <AnimatedIcon name="search" size={11} color={Theme.textMutedDemo} style={styles.searchIcon} />
             <TextInput
-              style={styles.searchInput}
+              style={[
+                styles.searchInput,
+                Platform.OS === "web" &&
+                  ({ outlineStyle: "none" } as unknown as TextStyle),
+              ]}
               value={searchQuery}
               onChangeText={onSearchChange}
               placeholder={searchPlaceholder}
@@ -1189,9 +1249,15 @@ const styles = StyleSheet.create({
     borderColor: Theme.separatorDark,
     overflow: 'visible',
     padding: 12,
-    shadowColor: Theme.shadow,
-    boxShadow: "0px 2px 6px 0px rgba(0, 0, 0, 0.15)",
-    elevation: 4,
+    ...(Platform.OS === "web"
+      ? ({ boxShadow: "0px 2px 6px 0px rgba(0, 0, 0, 0.15)" } as ViewStyle)
+      : ({
+          shadowColor: Theme.shadow,
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.2,
+          shadowRadius: 6,
+          elevation: 4,
+        } as ViewStyle)),
   },
   cardFullWidth: {
     marginHorizontal: 0,
@@ -1313,11 +1379,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 14,
     color: Theme.textOnDark,
-    ...Platform.select({
-      web: {
-        outlineStyle: 'none',
-      } as any,
-    }),
   },
   searchInputNetworkLight: {
     color: Theme.textPrimary,
@@ -1501,11 +1562,6 @@ const styles = StyleSheet.create({
     color: Theme.textOnDark,
     paddingVertical: 0,
     minWidth: 0,
-    ...Platform.select({
-      web: {
-        outlineStyle: 'none',
-      } as any,
-    }),
   },
   reportIconBtn: {
     width: 32,
@@ -1570,9 +1626,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.2)',
     gap: 5,
-    shadowColor: '#000',
-    boxShadow: "0px 1px 2px 0px rgba(0, 0, 0, 0.12)",
-    elevation: 2,
+    ...(Platform.OS === "web"
+      ? ({ boxShadow: "0px 1px 2px 0px rgba(0, 0, 0, 0.12)" } as ViewStyle)
+      : ({
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.12,
+          shadowRadius: 2,
+          elevation: 2,
+        } as ViewStyle)),
   },
   filterTriggerInnerLight: {
     backgroundColor: Theme.screenBackground,
@@ -1614,7 +1676,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.28)',
   },
   inlineSourceChipActiveLight: {
-    backgroundColor: Theme.cardBackground,
+    backgroundColor: Theme.surface,
     borderColor: Theme.textSecondary,
   },
   inlineSourceChipText: {
@@ -1656,9 +1718,15 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 12,
-    shadowColor: '#000',
-    boxShadow: "0px 3px 8px 0px rgba(0, 0, 0, 0.22)",
-    elevation: 12,
+    ...(Platform.OS === "web"
+      ? ({ boxShadow: "0px 3px 8px 0px rgba(0, 0, 0, 0.22)" } as ViewStyle)
+      : ({
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.22,
+          shadowRadius: 8,
+          elevation: 12,
+        } as ViewStyle)),
     overflow: 'hidden',
   },
   filterModalHandle: {
@@ -1704,9 +1772,15 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 8,
     zIndex: 10000,
-    elevation: 10000,
-    shadowColor: '#000',
-    boxShadow: "0px 4px 12px 0px rgba(0, 0, 0, 0.3)",
+    ...(Platform.OS === "web"
+      ? ({ boxShadow: "0px 4px 12px 0px rgba(0, 0, 0, 0.3)" } as ViewStyle)
+      : ({
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.3,
+          shadowRadius: 12,
+          elevation: 10000,
+        } as ViewStyle)),
   },
   dropdownItem: {
     flexDirection: 'row',
@@ -1755,4 +1829,4 @@ const styles = StyleSheet.create({
   dropdownItemCheck: {
     marginLeft: 6,
   },
-});
+} as any);

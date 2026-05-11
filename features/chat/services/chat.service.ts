@@ -18,7 +18,7 @@ import { parseFeedbackRequestMetadata } from "../utils/feedbackRequestMeta";
 import {
   extractTagsFromRatingComment,
   findTripRatingMatchingFeedbackMeta,
-} from "../utils/mergeTripFeedbackMessages";
+} from "../utils/mergeTripFeedbackMessages.util";
 
 export interface TripForCompose {
   id: string;
@@ -226,6 +226,9 @@ const TRIP_EMBED_FIELDS_LEGACY =
 const TRIP_MESSAGES_EMBED = `trip_messages ( id, conversation_id, content, sender_role, sender_name, sender_user_id, created_at, is_read, message_type, metadata )`;
 /** Newest N rows per conversation embed. Keep low — bulk loads (13+ convos × limit) can spike CPU/RAM. */
 const TRIP_MESSAGES_EMBED_RECENT = 20;
+
+/** Page size for on-demand trip thread history (must match bootstrap window expectations in UI). */
+export const TRIP_CHAT_HISTORY_PAGE = 50;
 
 function tripConversationSelect(tripEmbedFields: string): string {
   return `
@@ -571,12 +574,13 @@ export async function getMessagesByConversation(
   conversationId: string,
   opts?: { before?: string; limit?: number },
 ): Promise<TripMessageRow[]> {
+  const limit = opts?.limit ?? TRIP_CHAT_HISTORY_PAGE;
   let query = supabase()
     .from("trip_messages")
     .select("id,conversation_id,organization_id,sender_user_id,sender_role,sender_name,content,message_type,metadata,is_read,read_at,created_at,sender_avatar_seed,is_delivered,delivered_at")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: false })
-    .limit(opts?.limit ?? 50);
+    .limit(limit);
 
   if (opts?.before) {
     query = query.lt("created_at", opts.before);
@@ -1217,7 +1221,7 @@ export async function getB2BChatBootstrap(
 ): Promise<TripConversation[]> {
   const { data, error } = await supabase().rpc('get_b2b_chat_bootstrap', {
     p_organization_id: organizationId,
-    p_message_limit:   50,
+    p_message_limit:   TRIP_CHAT_HISTORY_PAGE,
   });
   if (error) throw error;
 
@@ -1239,7 +1243,7 @@ export async function getUnifiedB2BChatBootstrap(
 ): Promise<TripConversation[]> {
   const { data, error } = await supabase().rpc('get_unified_b2b_bootstrap', {
     p_organization_id: organizationId,
-    p_message_limit:   50,
+    p_message_limit:   TRIP_CHAT_HISTORY_PAGE,
   });
 
   // Graceful fallback: if the unified RPC doesn't exist yet, use the previous one.
@@ -1261,22 +1265,19 @@ export async function getUnifiedB2BChatBootstrap(
 }
 
 /**
- * On-demand history loader — called when the detail panel opens on a conversation
- * that has a last_message_preview but 0 messages in the store (i.e., bootstrap
- * window did not include this conversation's history).
+ * On-demand history: same query plan as {@link getMessagesByConversation}.
+ * Prefer passing `{ before: oldestMessageIso }` to page older rows; omit `before`
+ * for the newest page (e.g. empty store backfill). Avoids `select *` and avoids
+ * returning the wrong end of the timeline (oldest-only bug).
  */
 export async function fetchConversationHistory(
   conversationId: string,
-  limit = 50,
+  opts?: { before?: string; limit?: number },
 ): Promise<TripMessageRow[]> {
-  const { data, error } = await supabase()
-    .from('trip_messages')
-    .select('*')
-    .eq('conversation_id', conversationId)
-    .order('created_at', { ascending: true })
-    .limit(limit);
-  if (error) throw error;
-  return (data as TripMessageRow[]) ?? [];
+  return getMessagesByConversation(conversationId, {
+    before: opts?.before,
+    limit: opts?.limit ?? TRIP_CHAT_HISTORY_PAGE,
+  });
 }
 
 // ── processB2BEvent ───────────────────────────────────────────────────────────

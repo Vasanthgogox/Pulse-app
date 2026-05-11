@@ -382,7 +382,7 @@ export function DriverChatProvider({
         markReadTimerRef.current.delete(conversationId);
         pendingMarkReadRef.current.delete(conversationId);
         void chatService.markConversationRead(conversationId).catch(() => {});
-      }, 1500),
+      }, 2000),
     );
   }, []);
 

@@ -1,0 +1,69 @@
+-- =============================================================================
+-- B2B TRIGGER HEALTH AUDIT (read-only inventory — run in SQL editor as needed)
+-- =============================================================================
+-- Scope: trips, transactions (payments), in-app alerts / notification drivers.
+--
+-- public.trips (representative; full list in pg_trigger):
+--   trg_trip_status_to_chat              AFTER INSERT OR UPDATE OF status → chat
+--   trg_set_trip_number                  BEFORE INSERT
+--   trg_enforce_single_active_trip_per_driver  BEFORE INSERT OR UPDATE
+--   trg_assign_driver_display_trip_id    BEFORE INSERT OR UPDATE OF driver_id
+--   trips_sync_driver_vehicle_display    AFTER INSERT OR UPDATE …
+--   trg_refresh_dashboard_trip_metrics   AFTER INSERT OR UPDATE OR DELETE (heavy)
+--
+-- public.transactions:
+--   trg_transactions_broadcast_ledger_chat  AFTER INSERT → trip_messages (ledger)
+--
+-- public.trip_messages:
+--   on_trip_message_insert               → sync_conversation_on_message (light)
+--   trg_trip_messages_avatar_seed        BEFORE INSERT
+--
+-- public.dispute / driver_salary_requests:
+--   Handled in app GlobalSync Realtime (not trip_messages triggers).
+--
+-- DESIGN GOAL (SRE):
+--   Prefer: single INSERT into trip_messages with JSON metadata.event_payload
+--   carrying { action_id, transaction_id, amounts, global_bell, … }.
+--   Avoid: multi-table scans, partner org resolution, mirroring chains inside
+--   hot triggers — move enrichment to Edge Functions + idempotent RPCs.
+--
+-- =============================================================================
+-- TEMPLATE: minimal payment → trip_messages row (direct INSERT pattern)
+-- =============================================================================
+-- Preconditions (application / Edge Function should set on transactions row):
+--   chat_target_conversation_id uuid  -- denormalized lane target (optional column)
+-- When present, trigger body can be O(NEW) only + one INSERT. Example:
+--
+-- INSERT INTO public.trip_messages (
+--   conversation_id,
+--   organization_id,
+--   sender_user_id,
+--   sender_role,
+--   sender_name,
+--   content,
+--   message_type,
+--   is_read,
+--   metadata
+-- ) VALUES (
+--   NEW.chat_target_conversation_id,
+--   NEW.organization_id,
+--   NULL,
+--   'system',
+--   'Payment System',
+--   coalesce(NEW.description, 'Payment'),
+--   'ledger_update',
+--   false,
+--   jsonb_build_object(
+--     'action_id', NEW.id::text,
+--     'event_payload', jsonb_build_object(
+--       'transaction_id', NEW.id::text,
+--       'amount', coalesce(NEW.amount_in, NEW.amount_out),
+--       'flow', case when coalesce(NEW.amount_in, 0) > 0 then 'in' else 'out' end,
+--       'trip_id', NEW.trip_id,
+--       'global_bell', true
+--     )
+--   )
+-- );
+--
+-- NOTE: Mirroring to linked-org conversations should stay in send_trip_chat_message
+-- or an Edge Function — not duplicated in a second heavy trigger.
