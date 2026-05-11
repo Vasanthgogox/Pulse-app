@@ -61,6 +61,9 @@ const REALTIME_ACK_DEDUPE_MS = 500;
 const lastRealtimeInsertAt = new Map<string, number>();
 const lastRealtimeAckAt = new Map<string, number>();
 
+/** Prevents duplicate concurrent `get_unified_b2b_bootstrap` RPCs (Strict Mode / remounts). */
+let chatBootstrapInFlightFor: string | null = null;
+
 function realtimeInsertDedupeKey(row: Partial<TripMessageRow>): string {
   const id = row.id != null ? String(row.id) : '';
   if (id) return `m:${id}`;
@@ -384,10 +387,13 @@ function clearReadReceiptDebouncers(): void {
  * Accumulates message ids and flushes one optimistic store write + one RPC after
  * `debounceMs` of quiet time (FlatList viewability → many rows, one round-trip).
  */
+/** Default debounce for batched read receipts (mobile + web). */
+export const READ_RECEIPT_DEBOUNCE_MS = 2000;
+
 export function enqueueReadReceiptsDebounced(
   conversationId: string,
   messageIds: string[],
-  debounceMs = 2000,
+  debounceMs = READ_RECEIPT_DEBOUNCE_MS,
 ): void {
   if (!conversationId || messageIds.length === 0) return;
   let set = readPendingIds.get(conversationId);
@@ -488,6 +494,10 @@ interface ChatState {
   /** Idempotent upsert used for optimistic sends (and any local append). */
   appendMessage:      (convId: string, msg: TripMessageRow) => void;
   onRealtimeAck:      (convId: string, msgId: string, patch: Partial<TripMessageRow>) => void;
+  /** Coalesces many `trip_messages` UPDATE Realtime events into one Zustand write (read receipts). */
+  onRealtimeAckBatch: (
+    items: ReadonlyArray<{ convId: string; msgId: string; patch: Partial<TripMessageRow> }>,
+  ) => void;
   switchParty:        (tripId: string, partyType: ConversationPartyType) => void;
   markRead:           (convId: string) => void;
   patchMessage:       (convId: string, msgId: string, patch: Partial<TripMessageRow>) => void;
@@ -691,6 +701,32 @@ function sumUnread(parties: Partial<Record<ConversationPartyType, PartyConv>>): 
   return Object.values(parties).reduce((s, p) => s + (p?.unreadCount ?? 0), 0);
 }
 
+/** Apply delivery/read patch to one message in a trip entry (pure). */
+function applyAckToTripEntry(
+  entry: TripEntry,
+  msgId: string,
+  patch: Partial<TripMessageRow>,
+): TripEntry | null {
+  const idx = entry.event_stream.findIndex((e) => e.id === msgId);
+  if (idx === -1) return null;
+  const prevEvt = entry.event_stream[idx];
+  const mergedMeta = mergeTripMessageMetadata(prevEvt.metadata, patch.metadata);
+  let nextEvt: TripEvent = {
+    ...prevEvt,
+    ...patch,
+    metadata: mergedMeta,
+  };
+  if (nextEvt.sender_role === "dispatcher") {
+    nextEvt = {
+      ...nextEvt,
+      delivery_status: resolveOutgoingDeliveryStatus(nextEvt),
+    };
+  }
+  const event_stream = [...entry.event_stream];
+  event_stream[idx] = nextEvt;
+  return { ...entry, event_stream };
+}
+
 // ── Store ─────────────────────────────────────────────────────────────────────
 
 export const useChatStore = create<ChatState>()(
@@ -713,6 +749,8 @@ export const useChatStore = create<ChatState>()(
 
     bootstrap: async (orgId) => {
       if (get().bootstrappedOrg === orgId) return;
+      if (chatBootstrapInFlightFor === orgId) return;
+      chatBootstrapInFlightFor = orgId;
       set({ isLoading: true });
 
       try {
@@ -795,6 +833,8 @@ export const useChatStore = create<ChatState>()(
       } catch (err) {
         if (__DEV__) console.error('[useChatStore] bootstrap failed:', err);
         set({ isLoading: false });
+      } finally {
+        chatBootstrapInFlightFor = null;
       }
     },
 
@@ -910,27 +950,29 @@ export const useChatStore = create<ChatState>()(
       if (!tripId) return;
       const entry = trips[tripId];
       if (!entry) return;
+      const merged = applyAckToTripEntry(entry, msgId, patch);
+      if (!merged) return;
+      set({ trips: { ...trips, [tripId]: merged } });
+    },
 
-      const idx = entry.event_stream.findIndex((e) => e.id === msgId);
-      if (idx === -1) return;
+    onRealtimeAckBatch: (items) => {
+      if (items.length === 0) return;
+      const { trips, convToTrip } = get();
+      let nextTrips: Record<string, TripEntry> | null = null;
 
-      const prevEvt = entry.event_stream[idx];
-      const mergedMeta = mergeTripMessageMetadata(prevEvt.metadata, patch.metadata);
-      let nextEvt: TripEvent = {
-        ...prevEvt,
-        ...patch,
-        metadata: mergedMeta,
-      };
-      if (nextEvt.sender_role === "dispatcher") {
-        nextEvt = {
-          ...nextEvt,
-          delivery_status: resolveOutgoingDeliveryStatus(nextEvt),
-        };
+      for (const { convId, msgId, patch } of items) {
+        if (!consumeRealtimeAckDedupe(msgId, patch)) continue;
+        const tripId = convToTrip[convId];
+        if (!tripId) continue;
+        const base = nextTrips?.[tripId] ?? trips[tripId];
+        if (!base) continue;
+        const merged = applyAckToTripEntry(base, msgId, patch);
+        if (!merged) continue;
+        if (!nextTrips) nextTrips = { ...trips };
+        nextTrips[tripId] = merged;
       }
 
-      const event_stream = [...entry.event_stream];
-      event_stream[idx] = nextEvt;
-      set({ trips: { ...trips, [tripId]: { ...entry, event_stream } } });
+      if (nextTrips) set({ trips: nextTrips });
     },
 
     // ── applySystemUpdate ─────────────────────────────────────────────────────

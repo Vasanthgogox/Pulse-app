@@ -29,10 +29,14 @@ config.resolver = {
   ...resolver,
   assetExts: resolver.assetExts.filter((ext) => ext !== 'svg'),
   sourceExts: [...resolver.sourceExts, 'svg'],
-  /** Framer Motion / moti import tslib; Metro can pick `tslib/modules/index.mjs` and break CJS default interop (`tslib.default` undefined). */
+  // Framer Motion / moti pull in tslib; Metro can pick ESM entries and break CJS default interop.
+  // Force the classic tslib.js entry (Expo web + Moti / TS-emitted libs). See expo#38103.
   resolveRequest(context, moduleName, platform) {
-    if (moduleName === 'tslib') {
-      return { type: 'sourceFile', filePath: require.resolve('tslib') };
+    if (moduleName === 'tslib' || moduleName.endsWith('/tslib')) {
+      return {
+        filePath: path.resolve(__dirname, 'node_modules/tslib/tslib.js'),
+        type: 'sourceFile',
+      };
     }
     if (typeof upstreamResolveRequest === 'function') {
       return upstreamResolveRequest(context, moduleName, platform);

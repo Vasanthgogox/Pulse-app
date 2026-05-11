@@ -3,7 +3,6 @@ import React, {
   useCallback,
   useContext,
   useEffect,
-  useMemo,
   useRef,
   type ReactNode,
 } from "react";
@@ -17,7 +16,6 @@ import { registerMarkMessagesSeenRpc, useChatStore } from "../store/useChatStore
 import type {
   ConversationPartyType,
   MessageType,
-  StatusChangeMetadata,
   TripConversation,
   TripMessageRow,
   TripMeta,
@@ -144,6 +142,18 @@ export function TripChatProvider({
   // was in the store (bootstrap failure, or process_b2b_event for a new thread).
   const pendingForUnknownConv = useRef(new Map<string, Partial<TripMessageRow>[]>());
 
+  // Batch `trip_messages` UPDATE (read/delivery ticks) into one store write per frame
+  // so bursty mark_messages_seen / Realtime does not max React update depth.
+  const ackBatchRef = useRef<{ convId: string; msgId: string; patch: Partial<TripMessageRow> }[]>([]);
+  const ackRafRef = useRef<number | null>(null);
+  const flushAckBatch = useCallback(() => {
+    ackRafRef.current = null;
+    const batch = ackBatchRef.current;
+    ackBatchRef.current = [];
+    if (batch.length === 0) return;
+    useChatStore.getState().onRealtimeAckBatch(batch);
+  }, []);
+
   // ── Bootstrap: single RPC, populates Zustand store ───────────────────────
   const loadConversations = useCallback(async () => {
     if (!organizationId || !selfUid) return;
@@ -214,7 +224,7 @@ export function TripChatProvider({
   // ── Realtime subscription ──────────────────────────────────────────────────
   useEffect(() => {
     if (!organizationId || !selfUid) return;
-    return subscribeSharedPostgresChanges(
+    const unsub = subscribeSharedPostgresChanges(
       `trip_messages:org:${organizationId}`,
       [
         {
@@ -263,11 +273,30 @@ export function TripChatProvider({
             read_at:      row.read_at,
           };
           if (row.metadata != null) patch.metadata = row.metadata;
-          useChatStore.getState().onRealtimeAck(row.conversation_id, row.id, patch);
+          ackBatchRef.current.push({
+            convId: row.conversation_id,
+            msgId:  row.id,
+            patch,
+          });
+          if (ackRafRef.current == null) {
+            ackRafRef.current = requestAnimationFrame(() => {
+              flushAckBatch();
+            });
+          }
         }
       }
     );
-  }, [organizationId, selfUid, _enqueueUnknownConv]);
+    return () => {
+      if (ackRafRef.current != null) {
+        cancelAnimationFrame(ackRafRef.current);
+        ackRafRef.current = null;
+      }
+      const pending = ackBatchRef.current;
+      ackBatchRef.current = [];
+      if (pending.length) useChatStore.getState().onRealtimeAckBatch(pending);
+      unsub();
+    };
+  }, [organizationId, selfUid, _enqueueUnknownConv, flushAckBatch]);
 
   // ── sendMessage: optimistic + persist + rollback ───────────────────────────
   const sendMessage = useCallback(
@@ -351,6 +380,7 @@ export function TripChatProvider({
   // ── markAsRead ─────────────────────────────────────────────────────────────
   const markAsRead = useCallback(async (conversationId: string) => {
     useChatStore.getState().markRead(conversationId);
+    void chatService.markConversationRead(conversationId).catch(() => {});
   }, []);
 
   // ── hydrateConversationById (deep-link fallback) ───────────────────────────

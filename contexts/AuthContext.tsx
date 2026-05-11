@@ -269,79 +269,84 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       authService
         .getSession()
         .then(async (session) => {
-        if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
-        if (session) {
-          const keep = await getKeepSignedIn();
           if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
-          if (!keep) {
-            signOutRequestedRef.current = true;
-            await authService.signOut();
-            if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
-            setUser(null);
-            setProfile(null);
-            setRoleVerified(false);
-            setSessionExpired(false);
-            logAuthRouteDecision("restore_signed_out_keep_off", {
-              uid: session.user.uid,
-            });
-          } else {
-            setSessionExpired(false);
-            // Do not expose JWT-only metadata to routing before DB merge: stale
-            // `user_metadata.role` can disagree with `profiles.role` and send fleet
-            // users to the driver app until refresh completes.
-            let nextUser = session.user;
-            let nextProfile = session.profile;
-            let verifiedDbProfile: authService.AuthProfile | null = null;
-            try {
-              const refreshed = await authService.refreshSession();
-              if (mounted && isCurrentAuthAttempt(initAttemptId) && refreshed) {
-                nextUser = refreshed.user;
-                nextProfile = refreshed.profile;
-                verifiedDbProfile = await getVerifiedDbProfile(refreshed.user.uid);
-                if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
-                if (verifiedDbProfile) {
-                  nextProfile = mergeAuthProfiles(refreshed.profile, verifiedDbProfile);
-                  setRoleVerified(true);
-                } else {
-                  setRoleVerified(false);
-                }
-              } else if (mounted && isCurrentAuthAttempt(initAttemptId)) {
-                verifiedDbProfile = await getVerifiedDbProfile(session.user.uid);
-                if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
-                if (verifiedDbProfile) {
-                  nextProfile = mergeAuthProfiles(session.profile, verifiedDbProfile);
-                  setRoleVerified(true);
-                } else {
-                  setRoleVerified(false);
-                }
-              }
-            } catch {
-              // Treat restore/profile verification failures as auth failures.
-              if (mounted && isCurrentAuthAttempt(initAttemptId)) setRoleVerified(false);
-            }
-            if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
-            if (!verifiedDbProfile) {
-              await forceSignOutOnAuthFailure("restore_profile_verification_failed");
+          try {
+            if (session) {
+              const keep = await getKeepSignedIn();
               if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
-              setLoading(false);
-              return;
+              if (!keep) {
+                signOutRequestedRef.current = true;
+                await authService.signOut();
+                if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
+                setUser(null);
+                setProfile(null);
+                setRoleVerified(false);
+                setSessionExpired(false);
+                logAuthRouteDecision("restore_signed_out_keep_off", {
+                  uid: session.user.uid,
+                });
+              } else {
+                setSessionExpired(false);
+                // Do not expose JWT-only metadata to routing before DB merge: stale
+                // `user_metadata.role` can disagree with `profiles.role` and send fleet
+                // users to the driver app until refresh completes.
+                let nextUser = session.user;
+                let nextProfile = session.profile;
+                let verifiedDbProfile: authService.AuthProfile | null = null;
+                try {
+                  const refreshed = await authService.refreshSession();
+                  if (mounted && isCurrentAuthAttempt(initAttemptId) && refreshed) {
+                    nextUser = refreshed.user;
+                    nextProfile = refreshed.profile;
+                    verifiedDbProfile = await getVerifiedDbProfile(refreshed.user.uid);
+                    if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
+                    if (verifiedDbProfile) {
+                      nextProfile = mergeAuthProfiles(refreshed.profile, verifiedDbProfile);
+                      setRoleVerified(true);
+                    } else {
+                      setRoleVerified(false);
+                    }
+                  } else if (mounted && isCurrentAuthAttempt(initAttemptId)) {
+                    verifiedDbProfile = await getVerifiedDbProfile(session.user.uid);
+                    if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
+                    if (verifiedDbProfile) {
+                      nextProfile = mergeAuthProfiles(session.profile, verifiedDbProfile);
+                      setRoleVerified(true);
+                    } else {
+                      setRoleVerified(false);
+                    }
+                  }
+                } catch {
+                  // Treat restore/profile verification failures as auth failures.
+                  if (mounted && isCurrentAuthAttempt(initAttemptId)) setRoleVerified(false);
+                }
+                if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
+                if (!verifiedDbProfile) {
+                  await forceSignOutOnAuthFailure("restore_profile_verification_failed");
+                  if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
+                  return;
+                }
+                setUser(nextUser);
+                setProfile(authProfileToUserProfile(nextProfile));
+                logAuthRouteDecision("restore_completed", {
+                  uid: nextUser.uid,
+                  role: nextProfile.role,
+                  roleVerified: true,
+                });
+              }
+            } else {
+              clearAuthState(true);
+              logAuthRouteDecision("restore_no_session", {});
             }
-            setUser(nextUser);
-            setProfile(authProfileToUserProfile(nextProfile));
-            logAuthRouteDecision("restore_completed", {
-              uid: nextUser.uid,
-              role: nextProfile.role,
-              roleVerified: true,
-            });
+          } finally {
+            // Always unblock UI for the active restore attempt (avoids infinite spinner when
+            // an inner branch returns early after StrictMode remount or aborted refresh).
+            if (mounted && isCurrentAuthAttempt(initAttemptId)) {
+              setLoading(false);
+              setupAuthSubscription();
+            }
           }
-        } else {
-          clearAuthState(true);
-          logAuthRouteDecision("restore_no_session", {});
-        }
-        if (!isCurrentAuthAttempt(initAttemptId)) return;
-        setLoading(false);
-        setupAuthSubscription();
-      })
+        })
       .catch(() => {
         // Defensive: if getSession ever rejects (e.g. unhandled throw), show sign-in
         if (mounted && isCurrentAuthAttempt(initAttemptId)) {
