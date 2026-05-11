@@ -48,7 +48,7 @@ export async function getClientsByOrganization(
     });
 
     if (!rpcError && data) {
-      const raw = (data ?? []) as ClientRow[];
+      const raw = (data ?? []) as unknown as ClientRow[];
       if (opts != null) {
         const limit = opts.limit ?? DEFAULT_PAGE_SIZE;
         const offset = opts.offset ?? 0;
@@ -78,13 +78,13 @@ export async function getClientsByOrganization(
     const offset = opts.offset ?? 0;
     const { data, error } = await base().range(offset, offset + limit);
     if (error) return { error: new Error(error.message), clients: [] };
-    const raw = (data ?? []) as ClientRow[];
+    const raw = (data ?? []) as unknown as ClientRow[];
     const hasMore = raw.length > limit;
     return { error: null, clients: hasMore ? raw.slice(0, limit) : raw, hasMore };
   }
   const { data, error } = await base();
   if (error) return { error: new Error(error.message), clients: [] };
-  return { error: null, clients: (data ?? []) as ClientRow[] };
+  return { error: null, clients: (data ?? []) as unknown as ClientRow[] };
 }
 
 export async function getClientById(

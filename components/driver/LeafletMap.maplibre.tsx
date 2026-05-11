@@ -1,5 +1,5 @@
 import Theme from "@/constants/Theme";
-import MapLibreGL from "@maplibre/maplibre-react-native";
+import MapLibreGL, { type CameraRef } from "@maplibre/maplibre-react-native";
 import React, { useImperativeHandle, useMemo, useRef } from "react";
 import { StyleSheet, View } from "react-native";
 
@@ -11,20 +11,6 @@ function toLngLat(c: LeafletLatLng): [number, number] {
 
 // Free, reliable OSM-based vector style (works well for India coverage).
 const MAP_STYLE = "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
-
-type CameraRefLike = {
-  setCamera: (config: {
-    centerCoordinate?: [number, number];
-    zoomLevel?: number;
-    animationDuration?: number;
-  }) => void;
-  fitBounds?: (
-    ne: [number, number],
-    sw: [number, number],
-    padding?: number,
-    animationDuration?: number,
-  ) => void;
-};
 
 export const LeafletMapMapLibre = React.forwardRef<
   LeafletMapRef,
@@ -43,7 +29,7 @@ export const LeafletMapMapLibre = React.forwardRef<
     },
     ref,
   ) => {
-    const cameraRef = useRef<CameraRefLike | null>(null);
+    const cameraRef = useRef<CameraRef | null>(null);
 
     useImperativeHandle(ref, () => ({
       focusCurrentLocation: (currentCenter, currentZoom = 15) => {
@@ -75,11 +61,10 @@ export const LeafletMapMapLibre = React.forwardRef<
       <View style={style}>
         <MapLibreGL.MapView
           style={StyleSheet.absoluteFill}
-          styleURL={MAP_STYLE}
+          mapStyle={MAP_STYLE}
           logoEnabled={false}
           attributionEnabled={false}
           compassEnabled={false}
-          scaleBarEnabled={false}
           scrollEnabled={!interactionLocked}
           zoomEnabled={!interactionLocked}
         >

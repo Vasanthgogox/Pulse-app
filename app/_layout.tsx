@@ -1,4 +1,5 @@
 import { AppAlertHost } from '@/components/AppAlertHost';
+import { OperationsIsland } from '@/components/OperationsIsland';
 import { FloatingChatButton } from '@/components/FloatingChatButton';
 import { DemoTabBar, type DemoTabId } from '@/components/demo';
 import Theme from '@/constants/Theme';
@@ -324,6 +325,7 @@ function RootLayoutNav() {
           <IntegratedChatProvider isActive={isDispatcherChatRouteActive}>
             <View style={{ flex: 1 }}>
               <AppAlertHost />
+              <OperationsIsland />
               <Stack screenOptions={{ headerShown: false }}>
                 <Stack.Screen name="index" />
                 <Stack.Screen name="welcome" options={{ animation: 'fade' }} />

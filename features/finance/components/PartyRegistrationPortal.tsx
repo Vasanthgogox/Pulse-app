@@ -71,6 +71,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  type ViewStyle,
   useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -2186,7 +2187,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     padding: 18,
-    ...(Platform.OS === "web" ? ({ overflow: "auto" as const } satisfies object) : null),
+    ...(Platform.OS === "web"
+      ? ({ overflow: "auto" } as unknown as ViewStyle)
+      : ({} as ViewStyle)),
   },
   overlayCompact: {
     padding: 12,
@@ -2203,16 +2206,16 @@ const styles = StyleSheet.create({
     borderRadius: 40,
     overflow: "hidden",
     ...(Platform.OS === "web"
-      ? {
+      ? ({
           boxShadow: "0 40px 120px rgba(0,0,0,0.35)",
-        }
-      : {
+        } as ViewStyle)
+      : ({
           shadowColor: "#000",
           shadowOffset: { width: 0, height: 24 },
           shadowOpacity: 0.35,
           shadowRadius: 40,
           elevation: 12,
-        }),
+        } as ViewStyle)),
   },
   shellStacked: {
     flexDirection: "column",
@@ -2482,14 +2485,14 @@ const styles = StyleSheet.create({
     width: "100%",
     alignSelf: "stretch",
     ...(Platform.OS === "web"
-      ? ({ boxShadow: "0 -8px 40px rgba(0,0,0,0.15)" } as object)
-      : {
+      ? ({ boxShadow: "0 -8px 40px rgba(0,0,0,0.15)" } as ViewStyle)
+      : ({
           shadowColor: "#000",
           shadowOffset: { width: 0, height: -4 },
           shadowOpacity: 0.12,
           shadowRadius: 16,
           elevation: 12,
-        }),
+        } as ViewStyle)),
   },
   vehiclePickTitle: {
     fontSize: 17,

@@ -76,6 +76,7 @@ import {
     TouchableOpacity,
     useWindowDimensions,
     View,
+    type TextStyle,
     type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -892,6 +893,10 @@ export default function CreateIndentScreen() {
   const baseInputArr = [styles.tripInput, inputStyle];
   const webPointer =
     Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null;
+  /** Web TextInputs pick up a default focus ring; strip outline without widening Touchable styles. */
+  const webTextInputOutline = (
+    Platform.OS === "web" ? { outlineStyle: "none" as const } : {}
+  ) as TextStyle;
 
   return (
     <View style={{ flex: 1 }}>
@@ -978,6 +983,7 @@ export default function CreateIndentScreen() {
                       leadingIcon={<MapPin size={18} color={Theme.iconMuted} />}
                       inputStyle={[
                         ...baseInputArr,
+                        webTextInputOutline,
                         errors.pickup_area && styles.inputError,
                       ]}
                       labelStyle={[styles.fieldLabel, labelStyle]}
@@ -1009,6 +1015,7 @@ export default function CreateIndentScreen() {
                       }
                       inputStyle={[
                         ...baseInputArr,
+                        webTextInputOutline,
                         errors.drop_location && styles.inputError,
                       ]}
                       labelStyle={[styles.fieldLabel, labelStyle]}
@@ -1073,6 +1080,7 @@ export default function CreateIndentScreen() {
                       <TextInput
                         style={[
                           styles.tripInput,
+                          webTextInputOutline,
                           errors.pickup_date && styles.inputError,
                         ]}
                         placeholder="YYYY-MM-DD"
@@ -1187,6 +1195,7 @@ export default function CreateIndentScreen() {
                     <TextInput
                       style={[
                         styles.tripInput,
+                        webTextInputOutline,
                         errors.weight && styles.inputError,
                       ]}
                       value={form.weight}
@@ -1485,6 +1494,7 @@ export default function CreateIndentScreen() {
                       <TextInput
                         style={[
                           styles.priceInput,
+                          webTextInputOutline,
                           isCompactPhone && styles.priceInputCompact,
                           errors.client_price && styles.inputError,
                         ]}
@@ -1534,6 +1544,7 @@ export default function CreateIndentScreen() {
                       <TextInput
                         style={[
                           styles.priceInput,
+                          webTextInputOutline,
                           isCompactPhone && styles.priceInputCompact,
                           styles.supplierPriceInput,
                           errors.supplier_target && styles.inputError,
@@ -1579,6 +1590,7 @@ export default function CreateIndentScreen() {
                       <TextInput
                         style={[
                           styles.sheetInput,
+                          webTextInputOutline,
                           errors.vehicle_type && styles.inputError,
                         ]}
                         ref={vehicleTypeInputRef}
@@ -2481,9 +2493,6 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: Theme.textPrimary,
     minHeight: 52,
-    ...Platform.select<ViewStyle>({
-      web: { outlineStyle: "none" },
-    }),
   },
   commercialHighlight: {
     backgroundColor: Theme.surfaceLight,
@@ -3135,9 +3144,6 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderInput,
     backgroundColor: Theme.surfaceForm,
     color: Theme.textPrimary,
-    ...Platform.select<ViewStyle>({
-      web: { outlineStyle: "none" },
-    }),
   },
   gridRow: { gap: 14 },
   gridRowWide: { flexDirection: "row", alignItems: "flex-start", gap: 20 },
@@ -3315,9 +3321,6 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
     backgroundColor: Theme.surfaceForm,
     color: Theme.textPrimaryDark,
-    ...Platform.select<ViewStyle>({
-      web: { outlineStyle: "none" },
-    }),
   },
   priceInputCompact: {
     fontSize: 20,

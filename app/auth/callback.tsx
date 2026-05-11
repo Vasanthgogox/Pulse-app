@@ -3,7 +3,12 @@ import Theme from "@/constants/Theme";
 import * as authService from "@/features/auth";
 import { supabase } from "@/lib/supabase";
 import { ROUTES } from "@/lib/routes";
-import { Redirect, useLocalSearchParams, useRootNavigationState } from "expo-router";
+import {
+  Redirect,
+  type Href,
+  useLocalSearchParams,
+  useRootNavigationState,
+} from "expo-router";
 import { useEffect, useState } from "react";
 
 export default function AuthCallback() {
@@ -14,7 +19,7 @@ export default function AuthCallback() {
     error_description?: string | string[];
   }>();
   const [message, setMessage] = useState("Signing you in…");
-  const [redirectTo, setRedirectTo] = useState<string | null>(null);
+  const [redirectTo, setRedirectTo] = useState<Href | null>(null);
 
   useEffect(() => {
     if (!rootNavigationState?.key) return;
@@ -82,13 +87,15 @@ export default function AuthCallback() {
         // Go directly to app entry; AuthGuard routes user without extra hop.
         if (mounted) {
           setMessage("Sign in successful. Redirecting to workspace…");
-          setRedirectTo(ROUTES.INDEX);
+          setRedirectTo(ROUTES.INDEX as Href);
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Google sign in failed";
         if (mounted) {
           setMessage("Google sign in failed. Redirecting to sign in…");
-          setRedirectTo(`${ROUTES.SIGN_IN}?oauth_error=${encodeURIComponent(msg)}`);
+          setRedirectTo(
+            `${ROUTES.SIGN_IN}?oauth_error=${encodeURIComponent(msg)}` as Href,
+          );
         }
       }
     })();

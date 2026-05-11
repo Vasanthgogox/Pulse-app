@@ -26,8 +26,13 @@ export function useRealtimeTripsInvalidation(organizationId: string | null) {
       (payload) => {
         const tripId = (payload.new as { id?: string })?.id ?? (payload.old as { id?: string })?.id;
 
-        // Always invalidate the specific trip detail if we have an id
-        if (tripId) {
+        // Silent merge on UPDATE — avoids refetch storm when status is mirrored in chat payloads.
+        if (tripId && payload.eventType === 'UPDATE' && payload.new && typeof payload.new === 'object') {
+          qc.setQueryData(queryKeys.trips.detail(tripId), (old: unknown) => {
+            if (!old || typeof old !== 'object') return old;
+            return { ...(old as Record<string, unknown>), ...(payload.new as object) };
+          });
+        } else if (tripId) {
           qc.invalidateQueries({ queryKey: queryKeys.trips.detail(tripId) });
         }
 

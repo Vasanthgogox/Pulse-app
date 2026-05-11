@@ -7,7 +7,11 @@ import {
 import { DriverInviteCard } from '@/components/driver/DriverInviteCard';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
-import { tripEarningsForDriver } from '@/lib/driverUtils';
+import {
+  buildOfferText,
+  isCompletedStatus,
+  tripEarningsForDriver,
+} from '@/lib/driverUtils';
 import { phonePeMetaDate } from '@/lib/driverGpayTransactions';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
@@ -178,7 +182,9 @@ export default function DriverRequestsScreen() {
       if (!driver) continue;
       const driverTrips = allTrips.filter((t) => t.driver_id === driver.id);
       const driverLedger = allLedger.filter((e) => e.driver_id === driver.id);
-      const completed = driverTrips.filter((t) => isCompleted(t.status));
+      const completed = driverTrips.filter((t) =>
+        isCompletedStatus(String(t.status ?? '')),
+      );
       const totalEarned = Math.round(
         completed.reduce((sum, t) => sum + tripEarningsForDriver(t), 0)
       );

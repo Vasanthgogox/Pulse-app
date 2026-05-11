@@ -13,7 +13,16 @@ import { useRouter } from "expo-router";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import React, { useMemo, useState, type ReactNode } from 'react';
 import Animated, { FadeInDown, FadeInUp, FadeOutUp, Layout } from 'react-native-reanimated';
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, Platform } from 'react-native';
+import {
+  Image,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  type ViewStyle,
+} from 'react-native';
 import {
   resolveLedgerRowPartyIdentity,
 } from "@/lib/entityIdentity";
@@ -274,13 +283,11 @@ function KanbanColumn({ type, transactions, t, renderCard }: {
           <Text style={styles.countText}>{transactions.length}</Text>
         </View>
       </View>
-      <ScrollView 
+      <ScrollView
         style={[
           styles.columnScroll,
-          // @ts-ignore - web scrollbar styling
-          Platform.OS === 'web' && {
-            scrollbarWidth: 'thin',
-          }
+          Platform.OS === "web" &&
+            ({ scrollbarWidth: "thin" } as ViewStyle),
         ]}
         showsVerticalScrollIndicator={isHovered}
         // @ts-ignore - persistent scrollbar on web
@@ -395,7 +402,9 @@ export function FinanceKanbanTab({
     if (isClient || (hasAmtIn && !resolvedContactType)) return 'customers';
 
     const vehicleNum = row.vehicle_number ?? (row.trip_id != null ? (getVehicleNumberForTripId?.(row.trip_id) ?? null) : null);
-    const isVehicle = resolvedContactType === "vehicle" || (!!vehicleNum && !isClient && resolvedContactType !== "supplier");
+    const isVehicle =
+      (resolvedContactType as string | undefined) === "vehicle" ||
+      (!!vehicleNum && !isClient && resolvedContactType !== "supplier");
     if (isVehicle) return 'garage';
 
     const isSupplier = resolvedContactType === "supplier";

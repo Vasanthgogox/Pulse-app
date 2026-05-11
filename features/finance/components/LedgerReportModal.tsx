@@ -371,7 +371,8 @@ export function LedgerReportModal({
         }
         return;
       }
-      if (!FileSystem.cacheDirectory) throw new Error('No cache directory available');
+      const cacheDirectory = (FileSystem as { cacheDirectory?: string }).cacheDirectory;
+      if (!cacheDirectory) throw new Error('No cache directory available');
       const workbook = isCustomReport
         ? (() => {
             const ws = XLSX.utils.aoa_to_sheet([
@@ -384,8 +385,8 @@ export function LedgerReportModal({
           })()
         : buildLedgerWorkbook(sortedTransactions, totalIn, totalOut);
       const base64 = XLSX.write(workbook, { type: 'base64', bookType: 'xlsx' });
-      const uri = `${FileSystem.cacheDirectory}ledger-report-${Date.now()}.xlsx`;
-      await FileSystem.writeAsStringAsync(uri, base64, { encoding: FileSystem.EncodingType.Base64 });
+      const uri = `${cacheDirectory}ledger-report-${Date.now()}.xlsx`;
+      await FileSystem.writeAsStringAsync(uri, base64, { encoding: 'base64' });
       const sharingAvailable = await Sharing.isAvailableAsync();
       if (sharingAvailable) {
         await Sharing.shareAsync(uri, {

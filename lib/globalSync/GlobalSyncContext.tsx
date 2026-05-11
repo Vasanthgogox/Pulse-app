@@ -129,6 +129,13 @@ export function GlobalSyncProvider({ children }: { children: ReactNode }) {
           table:  'organization_links',
           filter: `owner_org_id=eq.${orgId}`,
         },
+        // Fleet trip health for Operations Island (patches `activeTrips` in-memory).
+        {
+          event:  'UPDATE',
+          schema: 'public',
+          table:  'trips',
+          filter: `organization_id=eq.${orgId}`,
+        },
       ],
       (payload) => {
         const table     = (payload as any).table as string;

@@ -39,7 +39,7 @@ import * as tripsService from '@/services/tripsService';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
-import { useRouter } from 'expo-router';
+import { type Href, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
@@ -473,15 +473,17 @@ export default function DriverNotificationsScreen() {
     ],
   );
 
+  const driverHome: Href = '/(driver)';
+
   const goBack = () => {
     if (router.canGoBack()) router.back();
-    else router.replace('/(driver)/');
+    else router.replace(driverHome);
   };
 
   const openTripOnDashboard = async (tripId: string) => {
     await AsyncStorage.setItem(DRIVER_NOTIFICATION_FOCUS_TRIP_KEY, tripId);
     if (router.canGoBack()) router.back();
-    else router.replace('/(driver)/');
+    else router.replace(driverHome);
   };
 
   const acceptTripFromNotification = async (
@@ -496,7 +498,7 @@ export default function DriverNotificationsScreen() {
     if (!requiresOtp) {
       await AsyncStorage.setItem(DRIVER_ACCEPTED_TRIP_ID_KEY, trip.id);
     }
-    router.replace('/(driver)/');
+    router.replace(driverHome);
   };
 
   const onRefresh = () => {

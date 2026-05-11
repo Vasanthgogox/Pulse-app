@@ -630,7 +630,7 @@ export function EditProfileModal({
                   accessibilityRole="button"
                   accessibilityLabel={hasEmail ? 'Email address (read-only)' : 'Add email'}
                 >
-                  <View style={[styles.driverContactIconMail, styles.driverContactIconBg]}>
+                  <View style={styles.driverContactIconBg}>
                     <Mail size={22} color={Theme.driverEmerald} strokeWidth={2.2} />
                   </View>
                   <View style={styles.driverContactMid}>
@@ -647,7 +647,7 @@ export function EditProfileModal({
                 </TouchableOpacity>
 
                 <View style={styles.driverContactRow}>
-                  <View style={[styles.driverContactIconPhone, styles.driverContactIconBgBlue]}>
+                  <View style={styles.driverContactIconBgBlue}>
                     <Phone size={22} color="#2563eb" strokeWidth={2.2} />
                   </View>
                   <View style={styles.driverContactMid}>

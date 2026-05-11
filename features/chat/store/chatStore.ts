@@ -28,6 +28,7 @@ import {
   previewText,
   type TripEntry,
   type PartyConv,
+  type TripEvent,
 } from './useChatStore';
 import type {
   ChatRealtimeEvent,
@@ -36,6 +37,7 @@ import type {
   TripMessageRow,
   TripMeta,
 } from '../types/chat.types';
+import { isEventVisibleForPartyLane } from '../utils/messagePartyVisibility';
 
 // ── Snapshot cache ────────────────────────────────────────────────────────────
 
@@ -62,6 +64,47 @@ function _buildSnapshot(): TripConversation[] {
 // picks up the new array reference correctly.
 useChatStore.subscribe(() => { _snapshotCache = null; });
 
+/**
+ * Unified bootstrap merges every party lane into `event_stream`. Trip status
+ * broadcasts often carry visibility_tags that include multiple party types, so
+ * the same logical INSERT can appear several times in one lane's filtered view.
+ * Collapse duplicates: same status + body + trip_status_broadcast → one row,
+ * preferring the message whose `conversation_id` matches this lane.
+ */
+function dedupeTripStatusBroadcastsForLane(
+  visible: TripEvent[],
+  laneConversationId: string,
+): TripEvent[] {
+  const groups = new Map<string, TripEvent[]>();
+  for (const e of visible) {
+    if (e.message_type !== 'system') continue;
+    const meta = e.metadata as Record<string, unknown> | null | undefined;
+    if (!meta || String(meta.trip_status_broadcast ?? '') !== '1') continue;
+    const body = String(e.content ?? '').trim();
+    const st = String(meta.status ?? '').trim();
+    const key = `${st}\n${body}`;
+    const arr = groups.get(key) ?? [];
+    arr.push(e);
+    groups.set(key, arr);
+  }
+  const drop = new Set<string>();
+  for (const arr of groups.values()) {
+    if (arr.length < 2) continue;
+    const sorted = [...arr].sort(
+      (a, b) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+    );
+    const preferred =
+      sorted.find(x => String(x.conversation_id ?? '') === laneConversationId)
+      ?? sorted[0];
+    for (const x of arr) {
+      if (x.id !== preferred.id) drop.add(x.id);
+    }
+  }
+  if (drop.size === 0) return visible;
+  return visible.filter(m => !drop.has(m.id));
+}
+
 function _convFromEntry(
   entry:     TripEntry,
   partyType: ConversationPartyType,
@@ -72,13 +115,12 @@ function _convFromEntry(
   // convId or partyType is listed.  Legacy messages (no visibility_tags) fall
   // back to partyType equality — identical to the pre-unified-bootstrap behaviour.
   const convId = party.conversationId;
-  const messages = entry.event_stream.filter(e => {
-    const tags = e.visibility_tags;
-    if (tags && tags.length > 0) {
-      return tags.includes(convId) || tags.includes(partyType);
-    }
-    return e.partyType === partyType;
-  });
+  const messages = dedupeTripStatusBroadcastsForLane(
+    entry.event_stream.filter(e =>
+      isEventVisibleForPartyLane(e, partyType, convId),
+    ),
+    convId,
+  );
 
   // Derive last_message_preview from the actual history array so the sidebar
   // shows meaningful text immediately after bootstrap (before any Realtime
@@ -139,6 +181,7 @@ function _metaPatchToEntryPatch(p: Partial<TripMeta>): Partial<TripEntry> {
   if (p.last_location_at !== undefined) patch.lastLocationAt = p.last_location_at;
   if (p.last_eta_minutes !== undefined) patch.lastEtaMinutes = p.last_eta_minutes;
   if (p.last_eta_label   !== undefined) patch.lastEtaLabel  = p.last_eta_label;
+  if (p.last_location_label !== undefined) patch.lastLocationLabel = p.last_location_label;
   return patch;
 }
 
@@ -240,6 +283,20 @@ export const chatStore = {
 
   patchMessage: (convId: string, msgId: string, patch: Partial<TripMessageRow>): void =>
     useChatStore.getState().patchMessage(convId, msgId, patch),
+
+  patchReadReceiptsOptimistic: (convId: string, messageIds: string[]): void =>
+    useChatStore.getState().patchReadReceiptsOptimistic(convId, messageIds),
+
+  submitFeedback: (convId: string, msgId: string, patch: Partial<TripMessageRow>): void =>
+    useChatStore.getState().submitFeedback(convId, msgId, patch),
+
+  appendMessage: (convId: string, msg: TripMessageRow): void =>
+    useChatStore.getState().appendMessage(convId, msg),
+
+  processIncomingEvent: (
+    row: Partial<TripMessageRow>,
+    mode: "active" | "background",
+  ): void => useChatStore.getState().processIncomingEvent(row, mode),
 
   optimisticInsert: (convId: string, msg: TripMessageRow): void =>
     useChatStore.getState().optimisticInsert(convId, msg),

@@ -590,7 +590,6 @@ export function FinanceScreen() {
       ledgerTransactions ?? [],
       tripsWhereOrgIsClient,
       tripPartyMap,
-      indentsForFinance,
       tripFinanceAdjustmentsByTripId,
     );
     const offersForAggregation: Record<string, DriverOfferForAggregation> = {};
@@ -676,13 +675,23 @@ export function FinanceScreen() {
         secondaryValue: formatCompactRupee(ledgerTotalsData.totalOut),
       },
       customers: {
-        value: formatCompactRupee(customersAgg.totals.totalReceived),
+        value: formatCompactRupee(
+          customersAgg.rows.reduce(
+            (sum, row) => sum + Number(row.received ?? 0),
+            0,
+          ),
+        ),
         count: activeCustomersCount,
         secondaryLabel: "Outstanding",
         secondaryValue: formatCompactRupee(customersOutstanding),
       },
       suppliers: {
-        value: formatCompactRupee(suppliersAgg.totals.totalPaid),
+        value: formatCompactRupee(
+          suppliersAgg.rows.reduce(
+            (sum, row) => sum + Number(row.paid ?? 0),
+            0,
+          ),
+        ),
         count: activeSuppliersCount,
         secondaryLabel: "Outstanding",
         secondaryValue: formatCompactRupee(suppliersOutstanding),
@@ -694,7 +703,12 @@ export function FinanceScreen() {
         secondaryValue: formatCompactRupee(garageExpense),
       },
       drivers: {
-        value: formatCompactRupee(driversAgg.totals.totalPaid),
+        value: formatCompactRupee(
+          driversAgg.rows.reduce(
+            (sum, row) => sum + Number(row.paid ?? 0),
+            0,
+          ),
+        ),
         count: activeDriversCount,
         secondaryLabel: "Pending",
         secondaryValue: formatCompactRupee(driverPending),
@@ -1424,8 +1438,6 @@ export function FinanceScreen() {
       testID="finance-tab-screen"
     >
       <FinanceSummarySection
-        title={t("treasury")}
-        subtitle={t("fiscalMatrix")}
         activeTab={financeSubTab}
         onTabPress={handleTabPress}
         screenWidth={screenWidth}

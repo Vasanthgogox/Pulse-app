@@ -26,6 +26,10 @@ const blobUrlCache = new Map<string, string>();
 /** Cache for transformed (thumbnail) signed URLs, keyed by `${path}:${width}x${height}q${quality}`. */
 const thumbUrlCache = new Map<string, { url: string; expiresAt: number }>();
 
+function thumbCacheKey(path: string, width: number, height: number, quality: number): string {
+  return `${path}:${width}x${height}q${quality}`;
+}
+
 /** Strip accidental bucket prefix so createSignedUrl targets the object key inside the bucket. */
 export function normalizeTripDocumentsStoragePath(raw: string): string {
   let path = String(raw ?? '').trim();
@@ -35,6 +39,17 @@ export function normalizeTripDocumentsStoragePath(raw: string): string {
   if (stripped.startsWith('documents/')) return stripped.slice('documents/'.length);
   if (stripped.startsWith('pod-documents/')) return stripped.slice('pod-documents/'.length);
   return path;
+}
+
+/** Synchronous read of a valid cached signed URL — safe during render (no Supabase client I/O). */
+export function peekChatDocumentSignedUrl(storagePath: string): string | null {
+  const raw = String(storagePath ?? "").trim();
+  if (/^https?:\/\//i.test(raw)) return raw;
+  const path = normalizeTripDocumentsStoragePath(raw);
+  if (!path) return null;
+  const cached = signedUrlCache.get(path);
+  if (cached && Date.now() < cached.expiresAt) return cached.url;
+  return null;
 }
 
 export async function resolveChatDocumentStorageUrl(storagePath: string): Promise<string | null> {
@@ -111,19 +126,39 @@ export async function tryChatDocumentBlobObjectUrl(
  * Returns a signed URL with resize applied — never loads the original binary.
  * Falls back to the full signed URL if the transform endpoint fails.
  *
- * Used by OptimizedChatImage for thumbnail previews (width=150, quality=60).
+ * Used by OptimizedChatImage / ChatImage (default 300×300 @ q70).
  * The transform is handled server-side by Supabase's imgproxy integration.
  */
+/**
+ * Instant read of a cached transformed URL — use for initial React state so the
+ * first paint does not schedule an effect-only network round-trip.
+ */
+export function peekChatImageThumbnailUrl(
+  storagePath: string,
+  width = 300,
+  height = 300,
+  quality = 70,
+): string | null {
+  const raw = String(storagePath ?? "").trim();
+  if (/^https?:\/\//i.test(raw)) return raw;
+  const path = normalizeTripDocumentsStoragePath(raw);
+  if (!path) return null;
+  const cacheKey = thumbCacheKey(path, width, height, quality);
+  const cached = thumbUrlCache.get(cacheKey);
+  if (cached && Date.now() < cached.expiresAt) return cached.url;
+  return null;
+}
+
 export async function resolveChatImageThumbnail(
   storagePath: string,
-  width  = 150,
-  height = 150,
-  quality = 60,
+  width  = 300,
+  height = 300,
+  quality = 70,
 ): Promise<string | null> {
   const path = normalizeTripDocumentsStoragePath(String(storagePath ?? '').trim());
   if (!path || /^https?:\/\//i.test(path)) return storagePath || null;
 
-  const cacheKey = `${path}:${width}x${height}q${quality}`;
+  const cacheKey = thumbCacheKey(path, width, height, quality);
   const cached = thumbUrlCache.get(cacheKey);
   if (cached && Date.now() < cached.expiresAt) return cached.url;
 
@@ -151,6 +186,27 @@ export async function resolveChatImageThumbnail(
 
   // Fallback: return the full signed URL if transforms are not available.
   return resolveChatDocumentStorageUrl(storagePath);
+}
+
+/**
+ * Large preview / lightbox: CDN transform with a generous max edge so we avoid
+ * pulling the full original binary when imgproxy is available.
+ */
+export async function resolveChatImageFullDisplayUrl(
+  storagePath: string,
+  maxEdge = 1280,
+  quality = 80,
+): Promise<string | null> {
+  return resolveChatImageThumbnail(storagePath, maxEdge, maxEdge, quality);
+}
+
+/** Sync peek for the full-display transform cache slot. */
+export function peekChatImageFullDisplayUrl(
+  storagePath: string,
+  maxEdge = 1280,
+  quality = 80,
+): string | null {
+  return peekChatImageThumbnailUrl(storagePath, maxEdge, maxEdge, quality);
 }
 
 /**

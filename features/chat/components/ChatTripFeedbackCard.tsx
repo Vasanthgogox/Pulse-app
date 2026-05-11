@@ -67,7 +67,7 @@ export function ChatTripFeedbackCard({
     }
   }, [message]);
 
-  const submitted = Boolean(meta?.submitted_at);
+  const submitted = Boolean(meta?.submitted_at || meta?.rating_status === "rated");
   const canSubmit = !submitted && currentOrgId === conversationOwnerOrgId;
 
   const targetName = formatChatPartyName(
@@ -99,7 +99,7 @@ export function ChatTripFeedbackCard({
       submitted_score: rating,
       submitted_tags:  tags,
     };
-    chatStore.patchMessage(message.conversation_id, message.id, {
+    chatStore.submitFeedback(message.conversation_id, message.id, {
       metadata: optimisticMeta,
     });
 
