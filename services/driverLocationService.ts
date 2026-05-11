@@ -15,6 +15,10 @@ export interface ReportDriverLocationParams {
   longitude: number;
   accuracy?: number | null;
   source: DriverLocationSource;
+  /** Hubometer (km) when available from the vehicle / driver input. */
+  odometerKm?: number | null;
+  /** Explicit capture time (defaults to DB `now()`). */
+  recordedAt?: string | null;
 }
 
 export interface ReportDriverLocationResult {
@@ -35,18 +39,33 @@ export interface DriverLocationRow {
 export async function reportDriverLocation(
   params: ReportDriverLocationParams
 ): Promise<ReportDriverLocationResult> {
-  const { driverId, organizationId, tripId, latitude, longitude, accuracy, source } = params;
-  const { error } = await supabase()
-    .from('driver_locations')
-    .insert({
-      driver_id: driverId,
-      organization_id: organizationId,
-      trip_id: tripId,
-      latitude,
-      longitude,
-      accuracy: accuracy ?? null,
-      source,
-    });
+  const {
+    driverId,
+    organizationId,
+    tripId,
+    latitude,
+    longitude,
+    accuracy,
+    source,
+    odometerKm,
+    recordedAt,
+  } = params;
+  const row: Record<string, unknown> = {
+    driver_id: driverId,
+    organization_id: organizationId,
+    trip_id: tripId,
+    latitude,
+    longitude,
+    accuracy: accuracy ?? null,
+    source,
+  };
+  if (odometerKm != null && Number.isFinite(odometerKm)) {
+    row.odometer_km = odometerKm;
+  }
+  if (typeof recordedAt === 'string' && recordedAt.trim() !== '') {
+    row.recorded_at = recordedAt.trim();
+  }
+  const { error } = await supabase().from('driver_locations').insert(row);
   if (error) {
     if (__DEV__) {
       console.warn('[driver_locations] save failed', {

@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useDriverAvatar } from '@/contexts/DriverAvatarContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { computeDriverCommissionForTrip } from '@/features/finance/aggregation/aggregateDrivers';
+import { useAdaptiveTripLocationPingLoop } from '@/features/driver/hooks/useAdaptiveTripLocationPingLoop';
 import { claimTripByOtp, getPendingOtpTrips } from '@/features/trips/services/tripOtp.service';
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
 import { isAggregateTrip, isRosterTrip } from '@/lib/driverUtils';
@@ -264,8 +265,6 @@ async function getExpoLocation() {
   }
 }
 
-/** Location report interval: fixed 3 minutes when driver is on trip. */
-const LOCATION_REPORT_INTERVAL_MS = 3 * 60 * 1000;
 /** Minimum displacement (metres) before sending another point; skip noisy duplicates. */
 const MIN_DISPLACEMENT_M = 30;
 
@@ -412,8 +411,13 @@ export default function DriverDashboard() {
   const [recentPinPoints, setRecentPinPoints] = useState<
     { latitude: number; longitude: number; recorded_at: string }[]
   >([]);
-  const lastSentLocationRef = useRef<{ lat: number; lng: number } | null>(null);
-  const locationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pingMapUiRef = useRef<{
+    setDriverMapPosition: (p: { latitude: number; longitude: number } | null) => void;
+    youLatSv: typeof youLatSv;
+    youLonSv: typeof youLonSv;
+    youHeadingSv: typeof youHeadingSv;
+    lastHeadingFixRef: typeof lastHeadingFixRef;
+  } | null>(null);
   const truckAnimTokenRef = useRef(0);
   const truckRafRef = useRef<ReturnType<typeof requestAnimationFrame> | null>(null);
   const truckLastUpdateMsRef = useRef(0);
@@ -637,7 +641,8 @@ export default function DriverDashboard() {
       lat: number,
       lng: number,
       accuracy: number | null,
-      source: driverLocationService.DriverLocationSource
+      source: driverLocationService.DriverLocationSource,
+      extras?: { odometerKm?: number | null; recordedAt?: string },
     ) => {
       if (!driver?.organization_id) return false;
       const { error } = await driverLocationService.reportDriverLocation({
@@ -648,10 +653,12 @@ export default function DriverDashboard() {
         longitude: lng,
         accuracy,
         source,
+        odometerKm: extras?.odometerKm ?? null,
+        recordedAt: extras?.recordedAt ?? null,
       });
       return !error;
     },
-    [driver]
+    [driver],
   );
 
   const fetchAndLogRecentPins = useCallback(async (tripId: string) => {
@@ -976,74 +983,80 @@ export default function DriverDashboard() {
       ? effectiveFirstIncoming
       : null);
 
-  // Keep the driver truck moving on the map for the full guided flow:
-  // accepted -> pickup -> transit -> drop-off.
-  useEffect(() => {
-    if (!driver || !activeGuidanceTrip) {
-      if (locationIntervalRef.current) {
-        clearInterval(locationIntervalRef.current);
-        locationIntervalRef.current = null;
+  const guidanceStepForPing = activeGuidanceTrip
+    ? deriveDriverGuidanceStep(activeGuidanceTrip)
+    : null;
+  const shouldPersistCheckpointPing = Boolean(
+    guidanceStepForPing &&
+      (guidanceStepForPing === 'accepted' ||
+        guidanceStepForPing === 'pickup' ||
+        guidanceStepForPing === 'transit' ||
+        guidanceStepForPing === 'reached'),
+  );
+
+  pingMapUiRef.current = {
+    setDriverMapPosition,
+    youLatSv,
+    youLonSv,
+    youHeadingSv,
+    lastHeadingFixRef,
+  };
+
+  const onPingLocationFix = useCallback(
+    (args: {
+      latitude: number;
+      longitude: number;
+      accuracy: number | null;
+      position: { coords: { latitude: number; longitude: number; heading?: number | null } };
+    }) => {
+      const r = pingMapUiRef.current;
+      if (!r) return;
+      const { latitude, longitude, position } = args;
+      r.setDriverMapPosition({ latitude, longitude });
+      r.youLatSv.value = withTiming(latitude, { duration: 450 });
+      r.youLonSv.value = withTiming(longitude, { duration: 450 });
+      const rawHeading = (position.coords as { heading?: number | null }).heading;
+      let headingDeg: number | null =
+        typeof rawHeading === 'number' && Number.isFinite(rawHeading) ? rawHeading : null;
+      if (headingDeg == null && r.lastHeadingFixRef.current) {
+        const bearing = bearingDegrees(r.lastHeadingFixRef.current, { latitude, longitude });
+        if (bearing != null) headingDeg = bearing;
       }
-      lastSentLocationRef.current = null;
-      return;
-    }
-    const tick = async () => {
-      try {
-        const Location = await getExpoLocation();
-        if (!Location) return;
-        const { status } = await Location.getForegroundPermissionsAsync();
-        if (status !== 'granted') return;
-        const pos = await Location.getCurrentPositionAsync({});
-        const { latitude, longitude } = pos.coords;
-        const acc = pos.coords.accuracy ?? null;
-        const last = lastSentLocationRef.current;
-        const shouldSend =
-          !last ||
-          distanceMeters(last.lat, last.lng, latitude, longitude) >= MIN_DISPLACEMENT_M;
-        if (shouldSend) {
-          const saved = await reportLocationToDb(activeGuidanceTrip.id, latitude, longitude, acc, 'background');
-          if (saved) {
-            console.log('[tracking] checkpoint saved', {
-              tripId: activeGuidanceTrip.id,
-              lat: latitude,
-              lon: longitude,
-              acc,
-            });
-            lastSentLocationRef.current = { lat: latitude, lng: longitude };
-            void fetchAndLogRecentPins(activeGuidanceTrip.id);
-          }
-        }
-        setDriverMapPosition({ latitude, longitude });
-
-        // Ola-style movement: interpolate the marker between GPS fixes (avoid teleport).
-        youLatSv.value = withTiming(latitude, { duration: 450 });
-        youLonSv.value = withTiming(longitude, { duration: 450 });
-
-        const rawHeading = (pos.coords as any).heading;
-        let headingDeg: number | null =
-          typeof rawHeading === 'number' && Number.isFinite(rawHeading) ? rawHeading : null;
-        if (headingDeg == null && lastHeadingFixRef.current) {
-          const bearing = bearingDegrees(lastHeadingFixRef.current, { latitude, longitude });
-          if (bearing != null) headingDeg = bearing;
-        }
-        if (headingDeg != null && Number.isFinite(headingDeg)) {
-          youHeadingSv.value = withTiming(headingDeg, { duration: 350 });
-        }
-        lastHeadingFixRef.current = { latitude, longitude };
-      } catch {
-        // ignore
+      if (headingDeg != null && Number.isFinite(headingDeg)) {
+        r.youHeadingSv.value = withTiming(headingDeg, { duration: 350 });
       }
-    };
-    tick();
-    const id = setInterval(tick, LOCATION_REPORT_INTERVAL_MS);
-    locationIntervalRef.current = id;
-    return () => {
-      clearInterval(id);
-      locationIntervalRef.current = null;
-    };
-  }, [driver, activeGuidanceTrip, reportLocationToDb, fetchAndLogRecentPins]);
+      r.lastHeadingFixRef.current = { latitude, longitude };
+    },
+    [],
+  );
 
-  // Fetch last 3 pins when active trip changes
+  const reportLocationToDbWithPins = useCallback(
+    async (
+      tripId: string | null,
+      lat: number,
+      lng: number,
+      accuracy: number | null,
+      source: driverLocationService.DriverLocationSource,
+      extras?: { odometerKm?: number | null; recordedAt?: string },
+    ) => {
+      const ok = await reportLocationToDb(tripId, lat, lng, accuracy, source, extras);
+      if (ok && tripId) void fetchAndLogRecentPins(tripId);
+      return ok;
+    },
+    [fetchAndLogRecentPins, reportLocationToDb],
+  );
+
+  useAdaptiveTripLocationPingLoop({
+    driver: driver ? { id: driver.id, organization_id: driver.organization_id } : null,
+    trip: activeGuidanceTrip,
+    enabled: Boolean(driver && activeGuidanceTrip),
+    shouldPersistCheckpoint: shouldPersistCheckpointPing,
+    minDisplacementM: null,
+    source: 'background',
+    reportLocationToDb: reportLocationToDbWithPins,
+    onLocationFix: onPingLocationFix,
+  });
+
   useEffect(() => {
     if (!activeGuidanceTrip?.id) {
       setRecentPinPoints([]);

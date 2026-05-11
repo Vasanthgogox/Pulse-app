@@ -33,6 +33,7 @@ import {
   isTripFeedbackEligibleStatus,
 } from "@/features/chat/utils/tripConversationSort";
 import { tripHasPendingOrgFeedback } from "@/features/chat/utils/tripFeedbackPending.util";
+import { PRIORITY_WEIGHT_LONG_HAUL_LATE } from "@/lib/globalSync/priorityEngine.util";
 import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
 import {
   activeTripIslandSignalTs,
@@ -117,6 +118,7 @@ export function DynamicTripIsland({
   const org = useOptionalOrganization();
   const orgId = org?.currentOrganization?.id ?? null;
   const activeTrips = useGlobalSyncStore((s) => s.activeTrips);
+  const clientRibbon = useGlobalSyncStore((s) => s.clientOperationsRibbon);
   const chatTrips = useChatStore((s) => s.trips);
   const pendingTripFeedback = useChatStore((s) =>
     tripHasPendingOrgFeedback(s.trips, currentTripId, orgId),
@@ -283,6 +285,11 @@ export function DynamicTripIsland({
   const isContextTrip = trip.trip_id === currentTripId;
   const showRatePulse = isContextTrip && pendingTripFeedback;
   const signalTs = activeTripIslandSignalTs(trip);
+  const longHaulLateForTrip = Boolean(
+    clientRibbon &&
+      clientRibbon.trip_id === trip.trip_id &&
+      clientRibbon.priority_weight >= PRIORITY_WEIGHT_LONG_HAUL_LATE - 1,
+  );
 
   return (
     <GestureDetector gesture={pan}>
@@ -292,7 +299,11 @@ export function DynamicTripIsland({
       >
         <View style={styles.pressInner}>
           <LinearGradient
-            colors={["rgba(255,255,255,0.88)", "rgba(241,245,249,0.78)"]}
+            colors={
+              longHaulLateForTrip
+                ? ["rgba(254,226,226,0.95)", "rgba(254,202,202,0.88)"]
+                : ["rgba(255,255,255,0.88)", "rgba(241,245,249,0.78)"]
+            }
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={StyleSheet.absoluteFillObject}
@@ -304,12 +315,23 @@ export function DynamicTripIsland({
               <Animated.View style={[styles.pulseRing, pulseDotStyle]}>
                 <Radio
                   size={14}
-                  color={unread || showRatePulse ? CHAT_ACCENT : Theme.textSecondary}
+                  color={
+                    longHaulLateForTrip
+                      ? "#dc2626"
+                      : unread || showRatePulse
+                        ? CHAT_ACCENT
+                        : Theme.textSecondary
+                  }
                 />
               </Animated.View>
             </View>
             <View style={styles.titleBlock}>
               <Text style={styles.kicker}>Live ops</Text>
+              {longHaulLateForTrip ? (
+                <Text style={styles.latePill} numberOfLines={1}>
+                  ⏳ LATE · {trip.display_trip_id?.trim() || trip.trip_number}
+                </Text>
+              ) : null}
               <Text style={styles.title} numberOfLines={1}>
                 {trip.display_trip_id?.trim() || trip.trip_number}
                 {isContextTrip ? " · this trip" : ""}
@@ -433,6 +455,14 @@ const styles = StyleSheet.create({
     color: Theme.textSecondary,
     letterSpacing: 1.2,
     textTransform: "uppercase",
+  },
+  latePill: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#b91c1c",
+    marginTop: 2,
+    marginBottom: 2,
+    letterSpacing: 0.3,
   },
   title: {
     fontSize: 17,

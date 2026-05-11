@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from "react";
 import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useWebLayoutWidth } from '@/lib/useWebLayoutWidth';
 import { MotiView } from 'moti';
@@ -51,6 +51,14 @@ export function AlertSidebar() {
   const ledgerPulseAtMs = useGlobalSyncStore((s) => s.ledgerPulseAtMs);
 
   const items = useOperationsShelfItems();
+  const criticalItems = useMemo(
+    () => items.filter((i) => i.kind === 'critical'),
+    [items],
+  );
+  const routineItems = useMemo(
+    () => items.filter((i) => i.kind !== 'critical'),
+    [items],
+  );
   const pendingFeedbackTrips = useChatStore((s) =>
     orgId ? countPendingFeedbackTripsForOrg(s.trips, orgId) : 0,
   );
@@ -87,13 +95,42 @@ export function AlertSidebar() {
         {items.length === 0 ? (
           <Text style={styles.empty}>All clear — waiting for Realtime signals.</Text>
         ) : (
-          items.map((item) => (
-            <SidebarRow
-              key={item.id}
-              item={item}
-              glow={glowActive && item.trip_id === ledgerPulseTripId && item.category === 'payment_received'}
-            />
-          ))
+          <>
+            {criticalItems.length > 0 ? (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Critical monitor</Text>
+                {criticalItems.map((item) => (
+                  <SidebarRow
+                    key={item.id}
+                    item={item}
+                    glow={Boolean(
+                      glowActive &&
+                        item.trip_id === ledgerPulseTripId &&
+                        item.category === 'payment_received',
+                    )}
+                  />
+                ))}
+              </View>
+            ) : null}
+            {routineItems.length > 0 ? (
+              <View style={styles.section}>
+                {criticalItems.length > 0 ? (
+                  <Text style={styles.sectionTitle}>Live operations</Text>
+                ) : null}
+                {routineItems.map((item) => (
+                  <SidebarRow
+                    key={item.id}
+                    item={item}
+                    glow={Boolean(
+                      glowActive &&
+                        item.trip_id === ledgerPulseTripId &&
+                        item.category === 'payment_received',
+                    )}
+                  />
+                ))}
+              </View>
+            ) : null}
+          </>
         )}
       </ScrollView>
     </View>
@@ -188,6 +225,16 @@ const styles = StyleSheet.create({
   },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 10, paddingBottom: 24, gap: 8 },
+  section: { gap: 8, marginBottom: 4 },
+  sectionTitle: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+    color: Theme.textSecondary,
+    paddingHorizontal: 4,
+    marginBottom: 2,
+  },
   empty: { fontSize: 13, color: Theme.textSecondary, paddingHorizontal: 8, lineHeight: 20 },
   rowCard: {
     borderRadius: 14,
