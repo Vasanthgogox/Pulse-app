@@ -1,0 +1,61 @@
+---
+description: Supabase migration naming, CLI workflow, sync checks, and when to use migration repair
+alwaysApply: true
+---
+
+# Supabase: Migration rules
+
+## Naming convention
+
+- Migration filenames follow: `YYYYMMDDHHMMSS_description.sql`.
+- The timestamp is a **sort key only** — it does not have to match today's calendar date.
+- It must be **strictly greater** than the previous migration's prefix so apply order is correct.
+- Future-looking timestamps are acceptable and not a bug by themselves.
+
+## Creating migrations
+
+- Prefer: `supabase migration new <description>` — auto-generates a correct UTC timestamp.
+- Do not manually craft timestamps unless you must **insert between** two existing migrations.
+- Do not copy-paste a timestamp from another file — generate fresh.
+
+## Applying migrations
+
+- **Local full replay:** `supabase db reset` (replays all migrations from scratch; destructive to local data unless you rely on seeds).
+- **Remote:** `supabase db push` (applies only unapplied migrations in order). Use `--include-all` when the CLI instructs you to (out-of-order local files vs remote history).
+- **Do not** make production schema changes only in the Supabase SQL editor or Table Editor on remote — that bypasses migration files and breaks history / `db push` for the team.
+
+## Checking sync
+
+- Run `supabase migration list --linked` before pushing when unsure.
+- **Local = Remote** for all rows → in sync; nothing to repair for naming alone.
+- Remote missing versions that exist locally → `supabase db push` (or `--include-all` if prompted).
+- Local missing versions that exist on remote → `supabase db pull` **or** align with team process (see caveat below).
+
+### `db pull` caveat
+
+- **`db pull` output depends on CLI version and project state:**
+  - Older CLI behavior can emit a **single large** migration (hard to review, not granular).
+  - Newer CLI may **diff** remote vs migration history and emit something closer to a targeted migration — still verify every line before merging.
+- Some teams **avoid `db pull`** and instead:
+  1. Identify what changed on remote (dashboard, audit, or `pg_dump` / introspection).
+  2. **Hand-write** a new `supabase/migrations/YYYYMMDDHHMMSS_*.sql` that matches reality.
+  3. Use **`supabase migration repair --status applied`** with the concrete 14-digit `version` (and **`--linked`** when fixing remote) only when the migration SQL was **not** run on remote but the objects already exist (history out of sync — rare, deliberate).
+- If the team standard is **fix branch + `db push`** only, treat that as primary: do not run `db pull` expecting a small diff and end up with a multi-thousand-line dump without review.
+
+## `migration repair` — use sparingly
+
+- Use only when you **know** `supabase_migrations.schema_migrations` is wrong **and** the actual database objects already match the intended state.
+- `--status applied <version>` → records the version as applied **without** running the migration SQL.
+- `--status reverted <version>` → removes the version from history **without** rolling back SQL.
+- **No bulk repair.** Do not use repair to "fix" future-looking filenames. Do not run **reverted** then **applied** on a version that is already correctly recorded.
+
+## macOS notes
+
+- Default BSD `grep` does not support `grep -P` (Perl regex). Use `grep -E`, or GNU grep (`ggrep`) from Homebrew when you need `-P`.
+
+## Golden rules
+
+1. Schema changes ship as migration files — not ad hoc on remote production.
+2. Migration prefixes are sort keys, not calendar truth.
+3. `migration repair` is a scalpel — targeted, deliberate, rare.
+4. When in doubt: `supabase migration list --linked`, then choose push / pull / repair with intent.
