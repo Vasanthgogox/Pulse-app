@@ -364,6 +364,79 @@ function getGoogleRedirectTo(): string {
   return Linking.createURL("/auth/callback");
 }
 
+/**
+ * URL Supabase redirects to after the user taps "reset password" in email.
+ * Must be listed under Authentication → URL configuration → Redirect URLs in Supabase Dashboard.
+ * Native builds without EXPO_PUBLIC_WEB_BASE_URL use the app scheme from `Linking.createURL`.
+ */
+export function getPasswordRecoveryRedirectTo(): string {
+  const webBase = process.env.EXPO_PUBLIC_WEB_BASE_URL?.trim().replace(/\/$/, "");
+  if (Platform.OS === "web" && typeof window !== "undefined" && window.location?.origin) {
+    return `${window.location.origin}/auth/reset-password`;
+  }
+  if (webBase && /^https?:\/\//i.test(webBase)) {
+    return `${webBase}/auth/reset-password`;
+  }
+  return Linking.createURL("/auth/reset-password");
+}
+
+/** Sends Supabase password recovery email (does not reveal whether the email is registered). */
+export async function requestPasswordResetEmail(email: string): Promise<SignInResult> {
+  const trimmedEmail = (email ?? "").trim();
+  if (trimmedEmail.length === 0) {
+    return { error: new Error("Enter your email address.") };
+  }
+  if (containsNullByte(trimmedEmail)) {
+    return { error: new Error("Input contains invalid characters.") };
+  }
+  const emailErr = validateEmail(trimmedEmail);
+  if (emailErr) return { error: new Error(emailErr) };
+  try {
+    const { error } = await supabase().auth.resetPasswordForEmail(trimmedEmail, {
+      redirectTo: getPasswordRecoveryRedirectTo(),
+    });
+    if (error) {
+      return { error: new Error(error.message || "Could not send reset email.") };
+    }
+    return { error: null };
+  } catch (e) {
+    if (isNetworkError(e)) {
+      return {
+        error: new Error(
+          "Cannot reach server. Check your internet connection and try again.",
+        ),
+      };
+    }
+    return { error: e instanceof Error ? e : new Error("Could not send reset email.") };
+  }
+}
+
+/** Call while authenticated with a recovery session (after opening the email link). */
+export async function updatePasswordWithCurrentSession(newPassword: string): Promise<SignInResult> {
+  if (containsNullByte(newPassword)) {
+    return { error: new Error("Password contains invalid characters.") };
+  }
+  const trimmed = newPassword.trim();
+  const pwdErr = validatePassword(trimmed);
+  if (pwdErr) return { error: new Error(pwdErr) };
+  try {
+    const { error } = await supabase().auth.updateUser({ password: trimmed });
+    if (error) {
+      return { error: new Error(error.message || "Could not update password.") };
+    }
+    return { error: null };
+  } catch (e) {
+    if (isNetworkError(e)) {
+      return {
+        error: new Error(
+          "Cannot reach server. Check your internet connection and try again.",
+        ),
+      };
+    }
+    return { error: e instanceof Error ? e : new Error("Could not update password.") };
+  }
+}
+
 /** Google OAuth sign-in for web and native (Expo). */
 export async function signInWithGoogle(): Promise<SignInResult> {
   try {

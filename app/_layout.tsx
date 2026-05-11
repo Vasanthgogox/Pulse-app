@@ -328,6 +328,8 @@ function RootLayoutNav() {
                 <Stack.Screen name="index" />
                 <Stack.Screen name="welcome" options={{ animation: 'fade' }} />
                 <Stack.Screen name="sign-in" options={{ animation: 'fade' }} />
+                <Stack.Screen name="forgot-password" options={{ animation: 'fade' }} />
+                <Stack.Screen name="auth/reset-password" options={{ animation: 'fade' }} />
                 <Stack.Screen name="sign-up" options={{ animation: 'fade' }} />
                 <Stack.Screen name="(tabs)" />
                 <Stack.Screen name="(driver)" />
