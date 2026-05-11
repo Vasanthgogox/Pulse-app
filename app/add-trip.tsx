@@ -110,7 +110,17 @@ export default function AddTripPage() {
         }
       }
       if (trip && options?.driverPhone?.trim()) {
-        const { error: assignErr } = await assignTripDriverByPhone(trip.id, orgId, options.driverPhone.trim(), { trackingOnly: true });
+        const { error: assignErr } = await assignTripDriverByPhone(
+          trip.id,
+          orgId,
+          options.driverPhone.trim(),
+          {
+            trackingOnly: true,
+            changedBy: userId,
+            driverIdPrev: null,
+            vehicleIdPrev: null,
+          },
+        );
         if (assignErr) console.warn('Trip created but driver assign by phone failed:', assignErr.message);
       }
       if (trip) {
@@ -156,7 +166,17 @@ export default function AddTripPage() {
     });
     if (error) throw error;
     if (trip && options?.supplySource === 'aggregate' && options?.driverPhone?.trim()) {
-      const { error: assignErr } = await assignTripDriverByPhone(trip.id, orgId, options.driverPhone.trim(), { trackingOnly: true });
+      const { error: assignErr } = await assignTripDriverByPhone(
+        trip.id,
+        orgId,
+        options.driverPhone.trim(),
+        {
+          trackingOnly: true,
+          changedBy: userId,
+          driverIdPrev: null,
+          vehicleIdPrev: null,
+        },
+      );
       if (assignErr) console.warn('Trip created but driver assign by phone failed:', assignErr.message);
     }
     const advancePaid = normalizedAdvancePaid;

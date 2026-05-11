@@ -1482,7 +1482,34 @@ export async function assignTripDriverByPhone(
       error: driverError ?? new Error("Could not resolve driver"),
       trip: null,
     };
-  return updateTripAssignment(tripId, { driver_id: driver.id }, options);
+  const assignment = await updateTripAssignment(
+    tripId,
+    { driver_id: driver.id },
+    options,
+  );
+  if (assignment.error || !assignment.trip) return assignment;
+
+  // Driver app lists phone-preassigned trips via get_pending_otp_trips (join on valid trip_otps).
+  // Post-create assignTripDriverByPhone (add-trip) previously skipped OTP generation, so the trip
+  // was invisible until reassignment triggered regenerateTripOtp from TripAssignmentBlock.
+  const supplierId =
+    assignment.trip.supplier_id != null
+      ? String(assignment.trip.supplier_id).trim()
+      : "";
+  const needsTripOtp =
+    supplierId.length > 0 || driver.user_id == null;
+  if (needsTripOtp) {
+    const { generateTripOtp } = await import("./tripOtp.service");
+    const { error: otpErr } = await generateTripOtp(tripId);
+    if (otpErr && __DEV__) {
+      console.warn(
+        "[trips] assignTripDriverByPhone: ensure OTP failed:",
+        otpErr.message,
+      );
+    }
+  }
+
+  return assignment;
 }
 
 /**
