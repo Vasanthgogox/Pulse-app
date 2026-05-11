@@ -351,6 +351,7 @@ export function TripChatProvider({
   // ── markAsRead ─────────────────────────────────────────────────────────────
   const markAsRead = useCallback(async (conversationId: string) => {
     useChatStore.getState().markRead(conversationId);
+    void chatService.markConversationRead(conversationId).catch(() => {});
   }, []);
 
   // ── hydrateConversationById (deep-link fallback) ───────────────────────────
