@@ -4,6 +4,7 @@ import { GlobalOperationsToast } from '@/components/GlobalOperationsToast';
 import { OperationsIsland } from '@/components/OperationsIsland';
 import { FloatingChatButton } from '@/components/FloatingChatButton';
 import { DemoTabBar, type DemoTabId } from '@/components/demo';
+import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { ROUTES } from '@/lib/routes';
 import {
@@ -30,7 +31,8 @@ import { useFonts } from 'expo-font';
 import { Stack, usePathname, useRouter, type ErrorBoundaryProps } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useMemo, useRef } from 'react';
-import { LogBox, Platform, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { LogBox, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useWebLayoutWidth } from '@/lib/useWebLayoutWidth';
 import 'react-native-gesture-handler';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
@@ -298,8 +300,8 @@ function ConfigErrorScreen() {
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
-  const { width } = useWindowDimensions();
-  const isDesktopWeb = Platform.OS === 'web' && width >= 1024;
+  const layoutWidth = useWebLayoutWidth();
+  const isDesktopWeb = Platform.OS === 'web' && layoutWidth >= Layout.webDesktopMinWidth;
   const pathname = usePathname();
   const auth = useOptionalAuth();
   const isDriverRole = auth?.profile?.role === 'driver';
@@ -364,7 +366,7 @@ function RootOverlayTabBar() {
   const pathname = usePathname();
   const router = useRouter();
   const { resetBarVisible } = useDemoTabBarScroll();
-  const { width } = useWindowDimensions();
+  const layoutWidth = useWebLayoutWidth();
 
   const showOnRootScreens =
     pathname === '/pod-reconciliation' ||
@@ -380,7 +382,7 @@ function RootOverlayTabBar() {
 
   // These screens are reached from header actions, so keep the matching nav item active.
   const activeTab: DemoTabId = pathname === ROUTES.PULSE_LOADS ? 'loadCenter' : 'finance';
-  const isDesktopWeb = Platform.OS === 'web' && width >= 1024;
+  const isDesktopWeb = Platform.OS === 'web' && layoutWidth >= Layout.webDesktopMinWidth;
 
   const shellStyle = [
     styles.rootTabBarWrap,

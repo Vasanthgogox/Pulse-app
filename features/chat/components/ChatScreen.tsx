@@ -31,6 +31,7 @@ import {
   Search,
   Send,
   Smile,
+  Star,
   FileType,
   Truck,
   User,
@@ -67,11 +68,8 @@ import {
 } from "@/features/chat/contexts/IntegratedChatContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
-  ensureTripFeedbackPromptMessages,
   getMessagesByConversation,
   getTripsForCompose,
-  persistTripFeedbackMessageMetadataIfRated,
-  seedTripConversationFeedbackPromptIfMissing,
   sendDocumentShareMessage,
   TRIP_CHAT_HISTORY_PAGE,
   type TripForCompose,
@@ -91,7 +89,7 @@ import { ChatSystemEventCard, ChatLedgerEventCard } from "./ChatEventCard";
 import { DynamicTripIsland } from "./DynamicTripIsland";
 import { LocationEventCard } from "./LocationEventCard";
 import { parseSystemLogLocationData } from "../utils/locationLogPayload.util";
-import { ChatTripFeedbackCard } from "./ChatTripFeedbackCard";
+import { ChatFeedbackCard } from "./ChatFeedbackCard";
 import { DocumentShareCard } from "./DocumentShareCard";
 import { DocumentShareSheet } from "./DocumentShareSheet";
 import { isMessageVisibleInTab } from "../types/chat.types";
@@ -917,6 +915,11 @@ export function ChatScreen() {
     const displayTripId = getConversationTripLabel(item);
     const partyLine = formatChatPartyName(item.party_name);
     const isActiveTrip = !isTerminalTripStatus(item.trip_status);
+    const showPendingFeedbackIcon =
+      Platform.OS === "web" &&
+      isDesktop &&
+      item.trip_feedback_status === "pending" &&
+      item.organization_id === currentOrgId;
     const time = item.last_message_at
       ? new Date(item.last_message_at).toLocaleTimeString("en-IN", {
           hour: "2-digit",
@@ -952,6 +955,15 @@ export function ChatScreen() {
               <Text style={[s.chatTitle, active && s.chatTitleActive]} numberOfLines={1}>
                 {displayTripId}
               </Text>
+              {showPendingFeedbackIcon ? (
+                <Star
+                  size={14}
+                  color={CHAT_ACCENT}
+                  fill="rgba(26,35,126,0.12)"
+                  style={s.chatPendingFeedbackStar}
+                  accessibilityLabel="Pending trip feedback"
+                />
+              ) : null}
               {isActiveTrip ? <View style={[s.activeTripDot, active && s.activeTripDotActive]} /> : null}
             </View>
             <Text style={[s.chatTime, active && s.chatTimeActive]}>{time}</Text>
@@ -970,7 +982,7 @@ export function ChatScreen() {
         )}
       </TouchableOpacity>
     );
-  }, [selectedConvId, openConversation]);
+  }, [selectedConvId, openConversation, isDesktop, currentOrgId]);
 
   const renderNetItem = useCallback(({ item }: { item: IntegratedChat }) => {
     const last = item.messages[item.messages.length - 1];
@@ -1852,7 +1864,7 @@ export function ChatScreen() {
         onSelectConversation={setSelectedConvId}
         onOpenCompose={openCompose}
         onFeedbackSubmitted={() => {
-          // Store is already patched optimistically in ChatTripFeedbackCard.
+          // Store is already patched optimistically in ChatFeedbackCard.
           // No DB refresh needed — Realtime delivers the metadata UPDATE.
         }}
       />
@@ -2762,6 +2774,7 @@ const s = StyleSheet.create({
     marginBottom: 2,
   },
   chatTitleRow: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1, minWidth: 0 },
+  chatPendingFeedbackStar: { marginLeft: 2 },
   chatTitle: { fontSize: 12, fontWeight: "900", color: "#0f172a", flex: 1, textTransform: "uppercase", fontStyle: "italic" },
   chatTitleActive: { color: "#fff" },
   activeTripDot: {
@@ -4052,7 +4065,7 @@ function TripConversationDetailLoaded({
   const [tripRatings, setTripRatings] = useState<RatingRow[]>([]);
 
   // Feedback submitted: store was already patched optimistically in
-  // ChatTripFeedbackCard — no DB refresh needed here.
+  // ChatFeedbackCard — no DB refresh needed here.
   const ratingsLoadedForKeyRef = useRef<string | null>(null);
   const handleFeedbackSubmitted = useCallback(() => {
     onFeedbackSubmitted();
@@ -4071,36 +4084,6 @@ function TripConversationDetailLoaded({
   }, [composeTrips, liveConv.trip_id, liveConv.trip_status]);
 
   const tripEligibleForFeedback = isTripFeedbackEligibleStatus(effectiveTripStatus);
-
-  // Ref-guarded: runs once per conversation ID.
-  // After seeding, inserted messages arrive via Realtime INSERT → NEW_MESSAGE →
-  // chatStore.mergeMessages — no hydrateConversationById needed.
-  const feedbackSeededForConvRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (!tripEligibleForFeedback) return;
-    if (feedbackSeededForConvRef.current === liveConv.id) return;
-    feedbackSeededForConvRef.current = liveConv.id;
-
-    let cancelled = false;
-    void (async () => {
-      const conv = liveConvRef.current;
-      const { error: e1 } = await ensureTripFeedbackPromptMessages(conv.trip_id);
-      if (e1 && __DEV__) console.warn("[ensureTripFeedbackPromptMessages]", e1.message);
-      if (cancelled) return;
-      // No hydrate: Realtime delivers the INSERT to chatStore automatically
-      await seedTripConversationFeedbackPromptIfMissing({
-        conversationId: conv.id,
-        organizationId: conv.organization_id,
-        partyType: conv.party_type,
-        partyName: conv.party_name ?? "",
-        clientId:   conv.client_id   ?? null,
-        supplierId: conv.supplier_id ?? null,
-        driverId:   conv.driver_id   ?? null,
-      });
-    })();
-    return () => { cancelled = true; };
-  }, [tripEligibleForFeedback, liveConv.id]);
 
   // Snapshot messages in a ref — avoids adding to ratings effect deps.
   const liveMessagesRef = useRef(liveConv.messages);
@@ -4123,14 +4106,8 @@ function TripConversationDetailLoaded({
       if (error && __DEV__) console.warn("[getRatingsForTrip]", error.message);
       const rows = ratings ?? [];
       setTripRatings(rows);
-      // persistTripFeedbackMessageMetadataIfRated does a DB UPDATE on metadata.
-      // The resulting UPDATE fires ACK_UPDATE via Realtime → chatStore.patchMessage.
-      // No hydrate needed — the store reflects it automatically.
-      await persistTripFeedbackMessageMetadataIfRated({
-        tripId:   key,
-        messages: liveMessagesRef.current,
-        ratings:  rows,
-      });
+      // Read-only merge: `mergeTripChatMessagesWithFeedbackRatings` shows trip-page ratings in-stream.
+      // Do not write metadata on open (avoids write-on-read / pool pressure); DB trigger + submit RPC own stamps.
     })();
     return () => { cancelled = true; };
   }, [tripEligibleForFeedback, liveConv.trip_id, liveConv.id]);
@@ -4361,7 +4338,7 @@ function TripConversationDetailLoaded({
     if (m.message_type === "feedback_request" || m.message_type === "feedback") {
       if (!tripFeedbackRequestMatchesConversation(m, liveConv)) return null;
       return (
-        <ChatTripFeedbackCard
+        <ChatFeedbackCard
           message={m}
           tripId={liveConv.trip_id}
           ratingOrganizationId={liveConv.organization_id}

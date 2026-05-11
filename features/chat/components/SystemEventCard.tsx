@@ -10,7 +10,7 @@
  *   status_change    → StatusChangeCard  (metadata-driven, replaces content-inferred ChatSystemEventCard)
  *   image            → ImageMessageCard  (Supabase Image Transformations thumbnail + full-size modal)
  *   document_share   → DocumentShareCard (delegated)
- *   feedback_request → ChatTripFeedbackCard (delegated)
+ *   feedback_request → ChatFeedbackCard (delegated)
  *   ledger_event     → ChatLedgerEventCard (delegated)
  *   system / update  → ChatSystemEventCard (content-based fallback)
  *   text / other     → null (rendered as a normal chat bubble)

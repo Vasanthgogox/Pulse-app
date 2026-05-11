@@ -1,5 +1,4 @@
 import type { RatedType, RatingRow } from "@/features/ratings/types";
-import { notifyTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
 import { supabase } from "@/lib/supabase";
 import type {
     ConversationPartyType,
@@ -716,7 +715,6 @@ export async function persistTripFeedbackMessageMetadataIfRated(params: {
 }): Promise<void> {
   const { tripId, messages, ratings } = params;
   if (!ratings.length) return;
-  let wrote = false;
   for (const m of messages) {
     if (m.message_type !== "feedback_request") continue;
     const meta = parseFeedbackRequestMetadata(m);
@@ -733,13 +731,12 @@ export async function persistTripFeedbackMessageMetadataIfRated(params: {
       submitted_score: match.score,
       submitted_tags: extractTagsFromRatingComment(match.comment),
     };
-    const { error } = await supabase()
+    await supabase()
       .from("trip_messages")
       .update({ metadata: nextMeta })
       .eq("id", m.id);
-    if (!error) wrote = true;
   }
-  if (wrote) notifyTripChatMessagesChanged();
+  // Chat uses bootstrap + Zustand + Realtime — do not fan out a global refetch hook here.
 }
 
 /**
@@ -810,14 +807,14 @@ export async function submitTripChatFeedback(params: {
   message: TripMessageRow;
   score: number;
   tags: string[];
-}): Promise<{ error: Error | null }> {
+}): Promise<{ error: Error | null; submittedAt: string | null }> {
   const { ratingOrganizationId, tripId, message, score, tags } = params;
   const meta = parseFeedbackRequestMetadata(message);
   if (!meta) {
-    return { error: new Error("Invalid feedback message") };
+    return { error: new Error("Invalid feedback message"), submittedAt: null };
   }
   if (meta.submitted_at) {
-    return { error: new Error("Feedback already submitted") };
+    return { error: new Error("Feedback already submitted"), submittedAt: null };
   }
 
   // Single-RPC path: replaces 3 sequential DB round trips (upsert rating +
@@ -832,13 +829,20 @@ export async function submitTripChatFeedback(params: {
     p_tags:            tags,
   });
 
-  if (error) return { error: new Error(error.message) };
+  if (error) return { error: new Error(error.message), submittedAt: null };
 
-  const result = data as { ok?: boolean; error?: string } | null;
-  if (result?.error) return { error: new Error(result.error) };
+  const result = data as { ok?: boolean; error?: string; submitted_at?: string } | null;
+  const errKey = typeof result?.error === "string" ? result.error.trim() : "";
+  if (errKey && errKey !== "already_submitted") {
+    return { error: new Error(errKey), submittedAt: null };
+  }
 
-  notifyTripChatMessagesChanged();
-  return { error: null };
+  const submittedAt =
+    typeof result?.submitted_at === "string" && result.submitted_at.trim()
+      ? result.submitted_at.trim()
+      : null;
+  // Bootstrap & Patch: Zustand + Realtime own UI — no list-wide refetch notifier.
+  return { error: null, submittedAt };
 }
 
 /**
@@ -1162,6 +1166,9 @@ export async function getShareableDocumentsForTrip(params: {
  * getConversationsByOrganization without the PostgREST embed wrapping.
  */
 function normalizeInitialStateRow(row: Record<string, unknown>): TripConversation {
+  const tfs = row.trip_feedback_status;
+  const trip_feedback_status =
+    tfs === 'pending' || tfs === 'rated' || tfs === 'none' ? tfs : ('none' as const);
   return {
     id:                      String(row.id ?? ''),
     organization_id:         String(row.organization_id ?? ''),
@@ -1184,6 +1191,7 @@ function normalizeInitialStateRow(row: Record<string, unknown>): TripConversatio
     trip_created_at:         (row.trip_created_at   as string | null) ?? null,
     pickup_area:             String(row.pickup_area   ?? ''),
     drop_location:           String(row.drop_location ?? ''),
+    trip_feedback_status,
     messages:                (row.messages as TripMessageRow[]) ?? [],
   };
 }

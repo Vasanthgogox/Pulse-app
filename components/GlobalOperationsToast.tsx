@@ -1,6 +1,8 @@
 import React from 'react';
-import { Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useWebLayoutWidth } from '@/lib/useWebLayoutWidth';
 import { X } from 'lucide-react-native';
+import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { useOptionalOrganization } from '@/contexts/OrganizationContext';
@@ -11,7 +13,7 @@ import { useVehicleIdleToastAlert } from '@/lib/globalSync/useOperationsDerived'
  * Persistent top toast for **vehicle idle** on desktop web until dismissed (RPC + Realtime).
  */
 export function GlobalOperationsToast() {
-  const { width } = useWindowDimensions();
+  const layoutWidth = useWebLayoutWidth();
   const org = useOptionalOrganization();
   const auth = useOptionalAuth();
   const orgId = org?.currentOrganization?.id ?? null;
@@ -19,7 +21,7 @@ export function GlobalOperationsToast() {
 
   const idle = useVehicleIdleToastAlert();
 
-  const isDesktopWeb = Platform.OS === 'web' && width >= 1024;
+  const isDesktopWeb = Platform.OS === 'web' && layoutWidth >= Layout.webDesktopMinWidth;
   if (!isDesktopWeb || auth?.profile?.role === 'driver' || !orgId || bootstrapStatus !== 'ready' || !idle) {
     return null;
   }
@@ -51,7 +53,7 @@ const styles = StyleSheet.create({
   bar: {
     position: 'absolute',
     top: 0,
-    left: 300,
+    left: Layout.liveOpsShelfWidth,
     right: 0,
     zIndex: 250,
     paddingTop: 10,

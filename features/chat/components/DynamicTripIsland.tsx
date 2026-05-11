@@ -23,10 +23,16 @@ import Animated, {
   withSpring,
   withTiming,
 } from "react-native-reanimated";
-import { ChevronRight, MapPin, Radio, Reply } from "lucide-react-native";
+import { ChevronRight, MapPin, Radio, Reply, Star } from "lucide-react-native";
 import Theme from "@/constants/Theme";
+import { useOptionalOrganization } from "@/contexts/OrganizationContext";
 import { CHAT_ACCENT } from "@/features/chat/chatTheme";
-import { isTerminalTripStatus } from "@/features/chat/utils/tripConversationSort";
+import { useChatStore } from "@/features/chat/store/useChatStore";
+import {
+  isTerminalTripStatus,
+  isTripFeedbackEligibleStatus,
+} from "@/features/chat/utils/tripConversationSort";
+import { tripHasPendingOrgFeedback } from "@/features/chat/utils/tripFeedbackPending.util";
 import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
 import {
   activeTripIslandSignalTs,
@@ -108,12 +114,59 @@ export function DynamicTripIsland({
   onReplyShortcut,
 }: DynamicTripIslandProps) {
   const { width: screenW } = useWindowDimensions();
+  const org = useOptionalOrganization();
+  const orgId = org?.currentOrganization?.id ?? null;
   const activeTrips = useGlobalSyncStore((s) => s.activeTrips);
-
-  const ranked = useMemo(
-    () => rankActiveTripsForIsland(activeTrips.filter((t) => !isTerminalTripStatus(t.status))),
-    [activeTrips],
+  const chatTrips = useChatStore((s) => s.trips);
+  const pendingTripFeedback = useChatStore((s) =>
+    tripHasPendingOrgFeedback(s.trips, currentTripId, orgId),
   );
+  const chatEntryForCurrent = currentTripId ? chatTrips[currentTripId] : undefined;
+  const completedNeedsRate =
+    Boolean(
+      orgId &&
+        currentTripId &&
+        chatEntryForCurrent &&
+        isTripFeedbackEligibleStatus(chatEntryForCurrent.status) &&
+        tripHasPendingOrgFeedback(chatTrips, currentTripId, orgId),
+    );
+
+  const ranked = useMemo(() => {
+    const byId = new Map<string, ActiveTripSummary>();
+    for (const t of activeTrips) {
+      if (!isTerminalTripStatus(t.status)) byId.set(t.trip_id, t);
+    }
+    for (const t of activeTrips) {
+      if (
+        isTripFeedbackEligibleStatus(t.status) &&
+        orgId &&
+        tripHasPendingOrgFeedback(chatTrips, t.trip_id, orgId) &&
+        !byId.has(t.trip_id)
+      ) {
+        byId.set(t.trip_id, t);
+      }
+    }
+    const ct = (currentTripId ?? "").trim();
+    if (ct && orgId && completedNeedsRate && chatEntryForCurrent && !byId.has(ct)) {
+      byId.set(ct, {
+        trip_id:                 chatEntryForCurrent.tripId,
+        trip_number:             chatEntryForCurrent.tripNumber,
+        display_trip_id:         chatEntryForCurrent.displayTripId,
+        status:                  chatEntryForCurrent.status ?? "completed",
+        pickup_area:             chatEntryForCurrent.pickupArea,
+        drop_location:           chatEntryForCurrent.dropLocation,
+        driver_display_name:     chatEntryForCurrent.driverDisplayName,
+        vehicle_display_number:  chatEntryForCurrent.vehicleDisplayNumber,
+        driver_id:               chatEntryForCurrent.driverId,
+        supplier_id:             chatEntryForCurrent.supplierId,
+        client_id:               null,
+        created_at:              chatEntryForCurrent.createdAt ?? new Date().toISOString(),
+        total_unread:            chatEntryForCurrent.totalUnread,
+        recent_events:           [],
+      });
+    }
+    return rankActiveTripsForIsland([...byId.values()]);
+  }, [activeTrips, orgId, currentTripId, completedNeedsRate, chatEntryForCurrent, chatTrips]);
 
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [expanded, setExpanded] = useState(false);
@@ -159,7 +212,9 @@ export function DynamicTripIsland({
   useEffect(() => {
     cancelAnimation(pulse);
     const unread = (trip?.total_unread ?? 0) > 0;
-    if (!unread) {
+    const ratePulse =
+      Boolean(trip && trip.trip_id === currentTripId && pendingTripFeedback);
+    if (!unread && !ratePulse) {
       pulse.value = 1;
       return;
     }
@@ -171,7 +226,7 @@ export function DynamicTripIsland({
       -1,
       true,
     );
-  }, [pulse, trip?.total_unread, trip?.trip_id]);
+  }, [pulse, trip?.total_unread, trip?.trip_id, trip, currentTripId, pendingTripFeedback]);
 
   useEffect(() => {
     expandProgress.value = withSpring(expanded ? 1 : 0, { damping: 20, stiffness: 200 });
@@ -225,8 +280,9 @@ export function DynamicTripIsland({
 
   const cardW = Math.min(400, screenW - 24);
   const unread = trip.total_unread > 0;
-  const signalTs = activeTripIslandSignalTs(trip);
   const isContextTrip = trip.trip_id === currentTripId;
+  const showRatePulse = isContextTrip && pendingTripFeedback;
+  const signalTs = activeTripIslandSignalTs(trip);
 
   return (
     <GestureDetector gesture={pan}>
@@ -246,7 +302,10 @@ export function DynamicTripIsland({
           <View style={styles.rowTop}>
             <View style={styles.pulseCol}>
               <Animated.View style={[styles.pulseRing, pulseDotStyle]}>
-                <Radio size={14} color={unread ? CHAT_ACCENT : Theme.textSecondary} />
+                <Radio
+                  size={14}
+                  color={unread || showRatePulse ? CHAT_ACCENT : Theme.textSecondary}
+                />
               </Animated.View>
             </View>
             <View style={styles.titleBlock}>
@@ -274,6 +333,11 @@ export function DynamicTripIsland({
           <Text style={styles.locLine} numberOfLines={2}>
             {locationSubtitle(trip)}
           </Text>
+          {showRatePulse ? (
+            <Text style={styles.rateHint} numberOfLines={2}>
+              Trip completed — rate your partner in chat.
+            </Text>
+          ) : null}
           {signalTs > 0 ? (
             <Text style={styles.metaMuted}>
               Signal {formatRelativeShort(new Date(signalTs).toISOString())}
@@ -292,15 +356,25 @@ export function DynamicTripIsland({
               </View>
             ))}
             <Pressable
-              style={styles.replyBtn}
+              style={[styles.replyBtn, showRatePulse && styles.rateTripBtn]}
               onPress={() => {
                 onNavigateTrip(trip.trip_id);
                 onReplyShortcut?.();
               }}
               hitSlop={8}
+              accessibilityLabel={showRatePulse ? "Rate trip" : "Reply"}
             >
-              <Reply size={16} color="#fff" />
-              <Text style={styles.replyBtnText}>Reply</Text>
+              {showRatePulse ? (
+                <>
+                  <Star size={16} color="#fff" fill="#fbbf24" strokeWidth={2} />
+                  <Text style={styles.replyBtnText}>Rate trip</Text>
+                </>
+              ) : (
+                <>
+                  <Reply size={16} color="#fff" />
+                  <Text style={styles.replyBtnText}>Reply</Text>
+                </>
+              )}
             </Pressable>
           </Animated.View>
         </View>
@@ -383,6 +457,13 @@ const styles = StyleSheet.create({
     color: Theme.textRouteCard,
     lineHeight: 17,
   },
+  rateHint: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: "800",
+    color: CHAT_ACCENT,
+    lineHeight: 17,
+  },
   metaMuted: {
     marginTop: 4,
     fontSize: 11,
@@ -418,6 +499,9 @@ const styles = StyleSheet.create({
     backgroundColor: CHAT_ACCENT,
     paddingVertical: 11,
     borderRadius: 14,
+  },
+  rateTripBtn: {
+    backgroundColor: "#15803d",
   },
   replyBtnText: { color: "#fff", fontSize: 14, fontWeight: "800" },
 });

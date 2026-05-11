@@ -155,6 +155,7 @@ function _convFromEntry(
     trip_created_at:         entry.createdAt,
     pickup_area:             entry.pickupArea,
     drop_location:           entry.dropLocation,
+    trip_feedback_status:   party.feedbackStatus ?? "none",
     messages,
   };
 }
