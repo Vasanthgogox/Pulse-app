@@ -16,7 +16,7 @@ import {
     useDriverThemeColors,
 } from "@/contexts/DriverThemeContext";
 import { computeDriverCommissionForTrip } from "@/features/finance/aggregation/aggregateDrivers";
-import { claimTripByOtp, getPendingOtpTrips } from "@/features/trips";
+import { claimTripByOtp, getPendingOtpTrips } from "@/features/trips/services/tripOtp.service";
 import { getLatestAssignmentAuditByTripIds } from "@/features/trips/services/trip-assignment-audit.service";
 import { useDriverAvatarUri } from "@/lib/avatarUpload";
 import {

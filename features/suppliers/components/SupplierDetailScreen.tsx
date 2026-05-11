@@ -36,7 +36,7 @@ import {
     getTripsWhereOrgIsClient,
     getTripsWhereOrgIsSupplier,
     type TripRow,
-} from "@/features/trips";
+} from "@/features/trips/services/trips.service";
 import { adjustedCost } from "@/features/trips/services/tripAdjustments";
 import {
     buildUniqueLinkedOrgIdMap,

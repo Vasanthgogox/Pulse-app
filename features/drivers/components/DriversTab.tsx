@@ -21,7 +21,7 @@ import { EntityAvatar } from '@/components/EntityAvatar';
 import { useTabBarAwareScrollProps } from '@/contexts/DemoTabBarScrollContext';
 import Theme from '@/constants/Theme';
 import { getRatingsForDrivers, averageScore } from '@/features/ratings';
-import type { TripRow } from '@/features/trips';
+import type { TripRow } from '@/features/trips/services/trips.service';
 import type { EntityListFilter } from "@/features/finance/components/TreasurySummaryCard";
 import type { FinancialRowData } from "@/features/finance/components/FinancialRow";
 import { aggregateDrivers, type DriverOfferForAggregation, type TripPartyMap } from "@/features/finance/aggregation";

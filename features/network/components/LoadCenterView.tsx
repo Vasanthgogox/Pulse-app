@@ -25,15 +25,14 @@ import {
 import { acceptAwardedQuote } from "@/features/indents/services/accept-awarded-quote.service";
 import { shareDraftIndent } from "@/features/indents/services/indents.service";
 import { indentCanBroadcastToPulseNetwork } from "@/features/network/utils/indentBroadcastEligibility.util";
+import { setInitialTripForDetail } from "@/features/trips";
 import {
     assignAggregateTripDriverByPhone,
-    generateTripOtp,
     getDriverAvailabilityByPhoneGlobal,
     humanizeTripIdInRpcError,
-    regenerateTripOtp,
-    setInitialTripForDetail,
     updateTripSupplier,
-} from "@/features/trips";
+} from "@/features/trips/services/trips.service";
+import { generateTripOtp, regenerateTripOtp } from "@/features/trips/services/tripOtp.service";
 import {
     assignmentShellColors,
     assignmentShellStyles,

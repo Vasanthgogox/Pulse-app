@@ -36,7 +36,7 @@ import { createSupplier } from '@/features/suppliers';
 import { createVehicle } from '@/features/vehicles';
 import { createDriver } from '@/features/drivers';
 import type { DriverFormData } from '@/features/drivers';
-import { createTrip } from '@/features/trips';
+import { createTrip } from '@/features/trips/services/trips.service';
 
 const MODEL = 'gemini-2.0-flash';
 const MAX_HISTORY_TURNS = 20;

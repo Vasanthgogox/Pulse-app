@@ -13,7 +13,7 @@ import {
   getTripById,
   getTripDisplayNumber,
   type TripRow,
-} from "@/features/trips";
+} from "@/features/trips/services/trips.service";
 import { getVehicleById } from "@/features/vehicles/services/vehicles.service";
 import { getClientById } from "@/features/clients/services/clients.service";
 import { getSupplierById } from "@/features/suppliers/services/suppliers.service";

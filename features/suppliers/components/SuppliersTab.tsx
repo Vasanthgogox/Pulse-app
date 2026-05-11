@@ -8,7 +8,7 @@ import Theme from "@/constants/Theme";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import type { EntityListFilter } from "@/features/finance/components/TreasurySummaryCard";
 import { aggregateSuppliers, type FinancialRowData, type TripPartyMap } from "@/features/finance/aggregation";
-import type { TripRow } from "@/features/trips";
+import type { TripRow } from "@/features/trips/services/trips.service";
 import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
 import { useSuppliersQuery } from "@/lib/queries/useSuppliersQuery";
 import { useTripsQuery } from "@/lib/queries/useTripsQuery";

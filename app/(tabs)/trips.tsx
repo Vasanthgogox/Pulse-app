@@ -21,8 +21,8 @@ import {
   tripFinanceAdjForHubLookup,
   tripHubCost,
   tripHubRevenue,
-  type TripRow,
 } from "@/features/trips";
+import type { TripRow } from "@/features/trips/services/trips.service";
 import {
   TripsHubTableView,
   linkedOrgAvatarFields,

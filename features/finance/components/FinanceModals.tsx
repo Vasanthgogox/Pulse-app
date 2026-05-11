@@ -20,7 +20,7 @@ import type { SupplierFormData } from "@/features/suppliers/components/AddSuppli
 import { AddSupplierModal } from "@/features/suppliers/components/AddSupplierModal";
 import { EditSupplierModal } from "@/features/suppliers/components/EditSupplierModal";
 import type { SupplierRow, UpdateSupplierData } from "@/features/suppliers/services/suppliers.service";
-import type { TripRow } from "@/features/trips";
+import type { TripRow } from "@/features/trips/services/trips.service";
 import { AddVehicleModal } from "@/features/vehicles/components/AddVehicleModal";
 import type { AddVehicleCompletePayload } from "@/features/vehicles/components/AddVehicleModal";
 import type { VehicleRow } from "@/features/vehicles/services/vehicles.service";

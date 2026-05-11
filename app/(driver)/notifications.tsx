@@ -11,7 +11,7 @@ import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { computeDriverCommissionForTrip } from '@/features/finance/aggregation/aggregateDrivers';
-import { getPendingOtpTrips } from '@/features/trips';
+import { getPendingOtpTrips } from '@/features/trips/services/tripOtp.service';
 import { getLatestAssignmentAuditByTripIds } from '@/features/trips/services/trip-assignment-audit.service';
 import {
     buildAssignerDisplayForTrip,
