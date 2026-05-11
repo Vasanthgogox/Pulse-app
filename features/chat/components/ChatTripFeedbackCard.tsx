@@ -10,8 +10,9 @@ import { Award, ShieldCheck, Star, ThumbsUp } from "lucide-react-native";
 import Theme from "@/constants/Theme";
 import { CHAT_ACCENT } from "@/features/chat/chatTheme";
 import { formatChatPartyName } from "@/features/chat/utils/partyDisplay";
-import { submitTripChatFeedback } from "../services/chat.service";
-import type { TripMessageRow } from "../types/chat.types";
+import { submitAtomicFeedback } from "../services/chat.service";
+import { chatStore } from "../store/chatStore";
+import type { FeedbackRequestMetadata, TripMessageRow } from "../types/chat.types";
 import { parseFeedbackRequestMetadata } from "../utils/feedbackRequestMeta";
 
 const TAG_OPTIONS = [
@@ -87,19 +88,48 @@ export function ChatTripFeedbackCard({
     }
     setErr(null);
     setSubmitting(true);
+
+    // ── Optimistic update ─────────────────────────────────────────────────
+    // Patch the store immediately so the "Rated ✓" state shows before the DB
+    // responds.  No DB re-fetch or hydrateConversationById needed.
+    const now = new Date().toISOString();
+    const optimisticMeta: FeedbackRequestMetadata = {
+      ...meta,
+      submitted_at:    now,
+      submitted_score: rating,
+      submitted_tags:  tags,
+    };
+    chatStore.patchMessage(message.conversation_id, message.id, {
+      metadata: optimisticMeta,
+    });
+
     try {
-      const { error } = await submitTripChatFeedback({
-        ratingOrganizationId,
+      const result = await submitAtomicFeedback({
+        organizationId: ratingOrganizationId,
         tripId,
         message,
-        score: rating,
+        score:  rating,
         tags,
       });
-      if (error) {
-        setErr(error.message);
-        return;
-      }
+
+      // Overwrite optimistic patch with server-confirmed values
+      const confirmedMeta: FeedbackRequestMetadata = {
+        ...meta,
+        submitted_at:    result.submittedAt,
+        submitted_score: result.submittedScore,
+        submitted_tags:  result.submittedTags,
+      };
+      chatStore.patchMessage(message.conversation_id, message.id, {
+        metadata: confirmedMeta,
+      });
+
       onSubmitted();
+    } catch (e) {
+      // Rollback optimistic patch — restore original metadata
+      chatStore.patchMessage(message.conversation_id, message.id, {
+        metadata: meta,
+      });
+      setErr(e instanceof Error ? e.message : "Submission failed. Please retry.");
     } finally {
       setSubmitting(false);
     }

@@ -51,6 +51,11 @@ import {
   TripConversation,
   useTripChat,
 } from "@/features/chat/contexts/TripChatContext";
+import { chatStore, useConversation, useConversationsByTrip, useTripMeta } from "@/features/chat/store/chatStore";
+import { useChatStore } from "@/features/chat/store/useChatStore";
+import { useMarkSeen } from "@/features/chat/hooks/useMarkSeen";
+import { SystemEventCard } from "@/features/chat/components/SystemEventCard";
+import { SmartChatImage } from "@/features/chat/components/SmartChatImage";
 import {
   INTEGRATED_QUICK_MESSAGES,
   IntegratedChat,
@@ -60,6 +65,7 @@ import {
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
   ensureTripFeedbackPromptMessages,
+  fetchConversationHistory,
   getTripsForCompose,
   persistTripFeedbackMessageMetadataIfRated,
   seedTripConversationFeedbackPromptIfMissing,
@@ -78,10 +84,11 @@ import { ChatSystemEventCard, ChatLedgerEventCard } from "./ChatEventCard";
 import { ChatTripFeedbackCard } from "./ChatTripFeedbackCard";
 import { DocumentShareCard } from "./DocumentShareCard";
 import { DocumentShareSheet } from "./DocumentShareSheet";
+import { isMessageVisibleInTab } from "../types/chat.types";
 import type { ConversationPartyType, LedgerEventMetadata, TripMessageRow } from "../types/chat.types";
+import { tripFeedbackRequestMatchesConversation } from "../utils/feedbackRequestMeta";
 import { useAuth } from "@/contexts/AuthContext";
 import { PartyAvatar } from "@/components/PartyAvatar";
-import { getProfileImageBatch } from "@/features/finance/services/finance.service";
 import {
   isTerminalTripStatus,
   isTripFeedbackEligibleStatus,
@@ -276,7 +283,7 @@ export function ChatScreen() {
   const [activeTab, setActiveTab] = useState<TabId>("trips");
   const [isMobileDetail, setIsMobileDetail] = useState(false);
   const [messageInput, setMessageInput] = useState("");
-  const messagesRef = useRef<ScrollView>(null);
+  const messagesRef = useRef<FlatList>(null);
 
   const [showEmoji, setShowEmoji] = useState(false);
   const [showScripts, setShowScripts] = useState(false);
@@ -302,6 +309,7 @@ export function ChatScreen() {
   const [showNetCompose, setShowNetCompose] = useState(false);
   const [netComposeSearch, setNetComposeSearch] = useState("");
   const [tripChatScope, setTripChatScope] = useState<"active" | "history">("active");
+  const [visibleTripCount, setVisibleTripCount] = useState(20);
   const [tripSidebarSearch, setTripSidebarSearch] = useState("");
   const [showTripFilterModal, setShowTripFilterModal] = useState(false);
   const detailEnterProgress = useRef(new Animated.Value(1)).current;
@@ -320,9 +328,13 @@ export function ChatScreen() {
     markAsRead,
     getTotalUnreadCount,
     initiateConversation,
-    hydrateConversationById,
     refreshConversations,
+    switchParty,
   } = useTripChat();
+  // True once bootstrap has completed at least once for this org.
+  // Used to distinguish "first load" (show full-area spinner) from
+  // "background refresh" (keep list visible, skip spinner).
+  const bootstrapDone = useChatStore(s => s.bootstrappedOrg !== null);
   const {
     chats: netChats,
     partners: netPartners,
@@ -336,34 +348,10 @@ export function ChatScreen() {
   const [selectedConvId, setSelectedConvId] = useState<string | null>(null);
   const [selectedNetId, setSelectedNetId] = useState<string | null>(null);
 
-  const selectedConv = conversations.find((c) => c.id === selectedConvId) ?? null;
+  // useConversation subscribes directly to this one conversation in the singleton
+  // store — re-renders only when THIS conversation changes (not the full list).
+  const selectedConv = useConversation(selectedConvId);
   const selectedNet = netChats.find((c) => c.id === selectedNetId) ?? null;
-
-  /** driver_id → resolved avatar URI (profile photo → seed preset). Populated for all driver conversations. */
-  const [driverAvatarMap, setDriverAvatarMap] = useState<Record<string, string | null>>({});
-
-  // Stable key: sorted comma-joined driver IDs. Re-fetches only when the set of
-  // driver conversation participants changes, not on every message or metadata update.
-  const driverConvIdsKey = useMemo(
-    () =>
-      conversations
-        .filter((c) => c.party_type === "driver" && c.driver_id)
-        .map((c) => c.driver_id as string)
-        .sort()
-        .join(","),
-    [conversations],
-  );
-
-  useEffect(() => {
-    if (!driverConvIdsKey) return;
-    const driverIds = driverConvIdsKey.split(",");
-    let cancelled = false;
-    void getProfileImageBatch(driverIds).then((uriMap) => {
-      if (cancelled) return;
-      setDriverAvatarMap((prev) => ({ ...prev, ...uriMap }));
-    });
-    return () => { cancelled = true; };
-  }, [driverConvIdsKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -450,6 +438,7 @@ export function ChatScreen() {
         tripDriverId: string | null;
         tripSupplierId: string | null;
         tripStatus: string | null;
+        lastActivityConv: TripConversation | null;
       }
     >();
     for (const conv of filteredAndSortedConversations) {
@@ -468,12 +457,17 @@ export function ChatScreen() {
           tripDriverId: conv.trip_driver_id ?? null,
           tripSupplierId: conv.trip_supplier_id ?? null,
           tripStatus: conv.trip_status ?? null,
+          lastActivityConv: null,
         });
       }
       const row = byTrip.get(tripKey)!;
       row.rows.push(conv);
       row.totalUnread += conv.unread_dispatcher_count ?? 0;
-      row.lastAt = Math.max(row.lastAt, new Date(conv.last_message_at ?? 0).getTime());
+      const convLastAt = new Date(conv.last_message_at ?? 0).getTime();
+      if (convLastAt > row.lastAt) {
+        row.lastAt = convLastAt;
+        row.lastActivityConv = conv;
+      }
       row.tripDriverId = conv.trip_driver_id ?? row.tripDriverId ?? null;
       row.tripSupplierId = conv.trip_supplier_id ?? row.tripSupplierId ?? null;
       row.tripStatus = conv.trip_status ?? row.tripStatus ?? null;
@@ -502,6 +496,7 @@ export function ChatScreen() {
         tripDriverId: null,
         tripSupplierId: t.supplier_id ?? null,
         tripStatus: t.status ?? null,
+        lastActivityConv: null,
       });
     }
 
@@ -521,7 +516,13 @@ export function ChatScreen() {
       return tripChatScope === "history" ? terminal : !terminal;
     });
 
-    return list.sort((a, b) => b.lastAt - a.lastAt);
+    // WhatsApp-style: unread trips surface before read ones, then most-recent first.
+    return list.sort((a, b) => {
+      const au = a.totalUnread > 0 ? 0 : 1;
+      const bu = b.totalUnread > 0 ? 0 : 1;
+      if (au !== bu) return au - bu;
+      return b.lastAt - a.lastAt;
+    });
   }, [filteredAndSortedConversations, tripSidebarSearch, tripChatScope, hubComposeTrips]);
 
   const tripChatFilteredConversations = useMemo(() => {
@@ -530,6 +531,10 @@ export function ChatScreen() {
       return tripChatScope === "history" ? terminal : !terminal;
     });
   }, [filteredAndSortedConversations, tripChatScope]);
+
+  useEffect(() => {
+    setVisibleTripCount(20);
+  }, [tripChatScope]);
 
   useEffect(() => {
     const tabParamRaw = Array.isArray(params.tab) ? params.tab[0] : params.tab;
@@ -561,20 +566,9 @@ export function ChatScreen() {
         deepLinkAppliedRef.current = deepLinkKey;
         return;
       }
+      // Wait for bootstrap; once conversations update this effect re-runs.
       if (isLoading) return;
-      if (deeplinkHydrateFailedForKeyRef.current === hydrateAttemptKey) return;
-      void hydrateConversationById(convIdParam).then((c) => {
-        if (c) {
-          setActiveTab("trips");
-          setSelectedConvId(convIdParam);
-          setSelectedNetId(null);
-          markAsRead(convIdParam);
-          if (shouldOpenDetail && !isDesktop) setIsMobileDetail(true);
-          deepLinkAppliedRef.current = deepLinkKey;
-        } else {
-          deeplinkHydrateFailedForKeyRef.current = hydrateAttemptKey;
-        }
-      });
+      deeplinkHydrateFailedForKeyRef.current = hydrateAttemptKey;
       return;
     }
 
@@ -588,7 +582,6 @@ export function ChatScreen() {
     deepLinkAppliedRef.current = deepLinkKey;
   }, [
     conversations,
-    hydrateConversationById,
     isDesktop,
     isLoading,
     markAsRead,
@@ -619,6 +612,16 @@ export function ChatScreen() {
     setShowScripts(false);
   };
 
+  const openConversation = useCallback(
+    (conv: TripConversation) => {
+      chatStore.switchParty(conv.trip_id, conv.party_type);
+      setSelectedConvId(conv.id);
+      markAsRead(conv.id);
+      openDetail();
+    },
+    [markAsRead],
+  );
+
   useEffect(() => {
     const activeDetailId = activeTab === "trips" ? selectedConvId : selectedNetId;
     const detailVisible = isDesktop || isMobileDetail;
@@ -640,19 +643,25 @@ export function ChatScreen() {
     selectedNetId,
   ]);
 
+  const isSendingRef = useRef(false);
   const handleSend = async () => {
+    if (isSendingRef.current) return;
     const text = messageInput.trim();
     if (!text) return;
+    isSendingRef.current = true;
     setMessageInput("");
     setShowEmoji(false);
     setShowScripts(false);
-
-    if (activeTab === "trips" && selectedConvId) {
-      await sendMessage(selectedConvId, text);
-      setTimeout(() => messagesRef.current?.scrollToEnd({ animated: true }), 80);
-    } else if (activeTab === "network" && selectedNetId) {
-      sendNet(selectedNetId, text, "dispatcher");
-      setTimeout(() => messagesRef.current?.scrollToEnd({ animated: true }), 80);
+    try {
+      if (activeTab === "trips" && selectedConvId) {
+        await sendMessage(selectedConvId, text);
+        setTimeout(() => messagesRef.current?.scrollToEnd({ animated: true }), 80);
+      } else if (activeTab === "network" && selectedNetId) {
+        sendNet(selectedNetId, text, "dispatcher");
+        setTimeout(() => messagesRef.current?.scrollToEnd({ animated: true }), 80);
+      }
+    } finally {
+      isSendingRef.current = false;
     }
   };
 
@@ -853,7 +862,7 @@ export function ChatScreen() {
 
   // ── List items ───────────────────────────────────────────────────────────────
 
-  const renderConvItem = ({ item }: { item: TripConversation }) => {
+  const renderConvItem = useCallback(({ item }: { item: TripConversation }) => {
     const active = selectedConvId === item.id;
     const displayTripId = getConversationTripLabel(item);
     const partyLine = formatChatPartyName(item.party_name);
@@ -867,18 +876,13 @@ export function ChatScreen() {
       : "";
 
     const avatarName = partyLine || partyLabel(item.party_type);
-    const driverAvUrl =
-      item.party_type === "driver" && item.driver_id
-        ? driverAvatarMap[item.driver_id] ?? null
-        : null;
+    const lastMsgSeed = item.messages.length > 0
+      ? (item.messages[item.messages.length - 1] as TripMessageRow).sender_avatar_seed ?? null
+      : null;
     return (
       <TouchableOpacity
         style={[s.chatItem, active && s.chatItemActive]}
-        onPress={() => {
-          setSelectedConvId(item.id);
-          markAsRead(item.id);
-          openDetail();
-        }}
+        onPress={() => openConversation(item)}
         activeOpacity={0.8}
       >
         <View style={s.chatAvatarWrap}>
@@ -886,7 +890,7 @@ export function ChatScreen() {
             name={avatarName}
             entityType={item.party_type}
             size={38}
-            avatarUrl={driverAvUrl}
+            avatarSeed={lastMsgSeed}
           />
           {item.unread_dispatcher_count > 0 && !active && (
             <View style={s.chatAvatarUnreadDot} />
@@ -916,9 +920,9 @@ export function ChatScreen() {
         )}
       </TouchableOpacity>
     );
-  };
+  }, [selectedConvId, openConversation]);
 
-  const renderNetItem = ({ item }: { item: IntegratedChat }) => {
+  const renderNetItem = useCallback(({ item }: { item: IntegratedChat }) => {
     const last = item.messages[item.messages.length - 1];
     const active = selectedNetId === item.id;
     return (
@@ -946,7 +950,7 @@ export function ChatScreen() {
         {item.unreadCount > 0 && !active && <Badge count={item.unreadCount} />}
       </TouchableOpacity>
     );
-  };
+  }, [selectedNetId, markNetRead, openDetail]);
 
   // ── Panels ───────────────────────────────────────────────────────────────────
 
@@ -1129,7 +1133,10 @@ export function ChatScreen() {
         )}
 
         {activeTab === "trips" &&
-          (isLoading && conversations.length === 0 ? (
+          (isLoading && !bootstrapDone ? (
+            // First-ever bootstrap in progress: full-area spinner.
+            // After bootstrap has run once, the list is always rendered from
+            // in-memory Zustand state — no spinner on subsequent refreshes.
             <View style={{ paddingTop: 40, alignItems: "center" }}>
               <ActivityIndicator color={CHAT_ACCENT} />
             </View>
@@ -1150,7 +1157,30 @@ export function ChatScreen() {
                   onAction={tripChatScope === "active" ? openCompose : undefined}
                 />
               ) : (
-                groupedTripRows.map((trip) => {
+                (() => {
+                  const visibleRows = groupedTripRows.slice(0, visibleTripCount);
+                  let shownUnreadHeader = false;
+                  let shownReadHeader = false;
+                  const items: React.ReactNode[] = [];
+                  visibleRows.forEach((trip) => {
+                  const isUnreadTrip = trip.totalUnread > 0;
+                  if (isUnreadTrip && !shownUnreadHeader) {
+                    shownUnreadHeader = true;
+                    items.push(
+                      <View key="__unread_header__" style={s.sectionHeaderRow}>
+                        <View style={s.sectionHeaderDot} />
+                        <Text style={s.sectionHeaderText}>UNREAD</Text>
+                      </View>
+                    );
+                  }
+                  if (!isUnreadTrip && !shownReadHeader) {
+                    shownReadHeader = true;
+                    items.push(
+                      <View key="__read_header__" style={s.sectionHeaderRow}>
+                        <Text style={[s.sectionHeaderText, s.sectionHeaderTextMuted]}>ALL TRIPS</Text>
+                      </View>
+                    );
+                  }
                   const hubDateLabel = formatTripRouteDate(trip.tripCreatedAt);
                   const tripActive = selectedConv?.trip_id === trip.tripId;
                   const statusLabel = formatTripHubStatusLabel(
@@ -1160,16 +1190,17 @@ export function ChatScreen() {
                   );
                   const isUnassignedBadge = statusLabel === "UNASSIGNED";
                   const openFallback = () => {
-                    const fallback = trip.rows[0];
-                    if (!fallback) {
+                    if (trip.rows.length === 0) {
                       void openCompose(trip.tripId);
                       return;
                     }
-                    setSelectedConvId(fallback.id);
-                    markAsRead(fallback.id);
-                    openDetail();
+                    const storedParty = chatStore.getActivePartyType(trip.tripId);
+                    const preferred = storedParty
+                      ? (trip.rows.find((r) => r.party_type === storedParty) ?? trip.rows[0])
+                      : trip.rows[0];
+                    openConversation(preferred);
                   };
-                  return (
+                  const card = (
                     <View key={trip.tripId} style={[s.tripHubCard, tripActive && s.tripHubCardOn]}>
                       {trip.totalUnread > 0 ? (
                         <View style={[s.tripHubAlertBar, tripActive && s.tripHubAlertBarOn]}>
@@ -1250,7 +1281,10 @@ export function ChatScreen() {
                         {(["client", "supplier", "driver"] as ConversationPartyType[]).map((partyType) => {
                           const row = trip.rows.find((r) => r.party_type === partyType);
                           const on = Boolean(row && selectedConvId === row.id);
-                          const isMissing = !row;
+                          // Determine if the underlying entity exists so we can offer create-on-demand
+                          const hubTrip = hubComposeTrips.find((t) => t.id === trip.tripId);
+                          const entityExists = hubTrip ? isPartyLinkedForTripChat(hubTrip, partyType) : Boolean(row);
+                          const isMissing = !row && !entityExists;
                           return (
                             <TouchableOpacity
                               key={`${trip.tripId}-${partyType}`}
@@ -1261,11 +1295,31 @@ export function ChatScreen() {
                                 isMissing && s.tripHubPartyIconBtnOff,
                               ]}
                               disabled={isMissing}
-                              onPress={() => {
-                                if (!row) return;
-                                setSelectedConvId(row.id);
-                                markAsRead(row.id);
-                                openDetail();
+                              onPress={async () => {
+                                if (row) {
+                                  openConversation(row);
+                                  return;
+                                }
+                                if (!hubTrip || !entityExists) return;
+                                const pr = getComposePartyRows(hubTrip).find(
+                                  (r) => r.kind === "selectable" && r.partyType === partyType,
+                                );
+                                if (!pr || pr.kind !== "selectable") return;
+                                setInitiating(true);
+                                const convId = await initiateConversation({
+                                  tripId: hubTrip.id,
+                                  tripNumber: hubTrip.display_trip_id ?? hubTrip.trip_number,
+                                  pickupArea: hubTrip.pickup_area,
+                                  dropLocation: hubTrip.drop_location,
+                                  partyType,
+                                  partyName: pr.name,
+                                  partyId: pr.id,
+                                });
+                                setInitiating(false);
+                                if (convId) {
+                                  const created = chatStore.getConversation(convId);
+                                  if (created) openConversation(created);
+                                }
                               }}
                               activeOpacity={0.82}
                             >
@@ -1283,9 +1337,37 @@ export function ChatScreen() {
                           );
                         })}
                       </View>
+                      {trip.lastActivityConv?.last_message_preview ? (
+                        <Text
+                          style={[s.tripHubLastMsg, tripActive && s.tripHubLastMsgOn]}
+                          numberOfLines={1}
+                        >
+                          <Text style={[s.tripHubLastMsgParty, tripActive && s.tripHubLastMsgOn]}>
+                            {partyLabel(trip.lastActivityConv.party_type)}:{" "}
+                          </Text>
+                          {trip.lastActivityConv.last_message_preview}
+                        </Text>
+                      ) : null}
                     </View>
                   );
-                })
+                  items.push(card);
+                  });
+                  if (visibleTripCount < groupedTripRows.length) {
+                    items.push(
+                      <TouchableOpacity
+                        key="__load_more__"
+                        style={s.loadMoreBtn}
+                        onPress={() => setVisibleTripCount(c => c + 20)}
+                        activeOpacity={0.75}
+                      >
+                        <Text style={s.loadMoreText}>
+                          Load {Math.min(20, groupedTripRows.length - visibleTripCount)} more
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  }
+                  return items;
+                })()
               )}
             </ScrollView>
           ) : (
@@ -1720,7 +1802,8 @@ export function ChatScreen() {
         onSelectConversation={setSelectedConvId}
         onOpenCompose={openCompose}
         onFeedbackSubmitted={() => {
-          void refreshConversations();
+          // Store is already patched optimistically in ChatTripFeedbackCard.
+          // No DB refresh needed — Realtime delivers the metadata UPDATE.
         }}
       />
     ) : (
@@ -2196,6 +2279,60 @@ const s = StyleSheet.create({
     shadowOpacity: 0.45,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 1 },
+  },
+  tripHubLastMsg: {
+    marginTop: 6,
+    fontSize: 9,
+    fontWeight: "400",
+    color: "#64748b",
+    lineHeight: 12,
+    letterSpacing: 0.1,
+  },
+  tripHubLastMsgOn: {
+    color: "rgba(248,250,252,0.55)",
+  },
+  tripHubLastMsgParty: {
+    fontWeight: "400",
+    color: "#94a3b8",
+  },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 4,
+    paddingTop: 12,
+    paddingBottom: 4,
+  },
+  sectionHeaderDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: CHAT_ACCENT,
+  },
+  sectionHeaderText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: CHAT_ACCENT,
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+  },
+  sectionHeaderTextMuted: {
+    color: "#94a3b8",
+  },
+  loadMoreBtn: {
+    marginTop: 8,
+    marginHorizontal: 4,
+    paddingVertical: 10,
+    alignItems: "center",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f8fafc",
+  },
+  loadMoreText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#64748b",
   },
   commandMetricCard: {
     flex: 1,
@@ -2855,7 +2992,11 @@ const s = StyleSheet.create({
   bubbleText: { fontSize: 14, lineHeight: 20 },
   bubbleTextOwn: { color: "#fff" },
   bubbleTextOther: { color: "#1e293b" },
-  bubbleMeta: { fontSize: 10, color: "#94a3b8", marginTop: 4, letterSpacing: 0.2 },
+  bubbleMeta: { fontSize: 10, color: "#94a3b8", letterSpacing: 0.2 },
+  bubbleMetaRow: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 4 },
+  bubbleMetaRowOwn: { justifyContent: "flex-end" },
+  tickGray: { fontSize: 10, color: "#94a3b8", fontWeight: "700" },
+  tickSeen: { fontSize: 10, color: "#3b82f6", fontWeight: "700" },
 
   inputWrap: {
     position: "relative",
@@ -3332,11 +3473,21 @@ function ChatBubble({
   content,
   timestamp,
   senderName,
+  avatarSeed,
+  isDelivered,
+  isSeen,
+  isNew,
 }: {
   isOwn: boolean;
   content: string;
   timestamp: string;
   senderName?: string;
+  avatarSeed?: string | null;
+  isDelivered?: boolean;
+  isSeen?: boolean;
+  /** True only for messages that arrived via Realtime after this screen mounted.
+   *  Bootstrap messages start fully visible to avoid the "flash of invisible" blink. */
+  isNew?: boolean;
 }) {
   const { profile } = useAuth();
   const { currentOrganization } = useOrganization();
@@ -3351,32 +3502,40 @@ function ChatBubble({
     // keep raw
   }
 
-  const enterOpacity = useRef(new Animated.Value(0)).current;
-  const enterY = useRef(new Animated.Value(10)).current;
-  const enterScale = useRef(new Animated.Value(0.985)).current;
+  // Capture isNew at first mount only — never re-animate on re-renders.
+  const wasNewRef = useRef(isNew === true);
+  const wasNew    = wasNewRef.current;
+
+  // Bootstrap messages start at opacity=1 / translateY=0 / scale=1 (no animation).
+  // Only brand-new Realtime messages slide in from below.
+  const enterOpacity = useRef(new Animated.Value(wasNew ? 0 : 1)).current;
+  const enterY       = useRef(new Animated.Value(wasNew ? 8 : 0)).current;
+  const enterScale   = useRef(new Animated.Value(wasNew ? 0.97 : 1)).current;
 
   useEffect(() => {
+    if (!wasNew) return;
     Animated.parallel([
       Animated.timing(enterOpacity, {
         toValue: 1,
-        duration: 180,
+        duration: 220,
         useNativeDriver: true,
-        easing: Easing.out(Easing.quad),
+        easing: Easing.out(Easing.cubic),
       }),
       Animated.timing(enterY, {
         toValue: 0,
-        duration: 210,
+        duration: 260,
         useNativeDriver: true,
         easing: Easing.out(Easing.cubic),
       }),
       Animated.spring(enterScale, {
         toValue: 1,
         useNativeDriver: true,
-        speed: 22,
-        bounciness: 4,
+        speed: 20,
+        bounciness: 3,
       }),
     ]).start();
-  }, [enterOpacity, enterScale, enterY]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // intentionally empty — runs once on mount
 
   return (
     <Animated.View
@@ -3394,16 +3553,24 @@ function ChatBubble({
           name={senderName ?? "?"}
           entityType="client"
           size={32}
+          avatarSeed={avatarSeed ?? null}
         />
       )}
       <View style={{ maxWidth: "72%" }}>
         <View style={[s.bubble, isOwn ? s.bubbleOwn : s.bubbleOther]}>
           <Text style={[s.bubbleText, isOwn ? s.bubbleTextOwn : s.bubbleTextOther]}>{content}</Text>
         </View>
-        <Text style={[s.bubbleMeta, isOwn && { textAlign: "right" }]}>
-          {displayTime}
-          {senderName ? ` · ${senderName.toUpperCase()}` : " · YOU"}
-        </Text>
+        <View style={[s.bubbleMetaRow, isOwn && s.bubbleMetaRowOwn]}>
+          <Text style={s.bubbleMeta}>
+            {displayTime}
+            {senderName ? ` · ${senderName.toUpperCase()}` : " · YOU"}
+          </Text>
+          {isOwn && (
+            <Text style={isSeen ? s.tickSeen : s.tickGray}>
+              {isSeen || isDelivered ? "✓✓" : "✓"}
+            </Text>
+          )}
+        </View>
       </View>
       {isOwn && (
         <PartyAvatar
@@ -3618,7 +3785,7 @@ function TripConversationDetailPanel({
   selectedConv: TripConversation | null;
   conversations: TripConversation[];
   composeTrips: TripForCompose[];
-  messagesRef: React.RefObject<ScrollView | null>;
+  messagesRef: React.RefObject<FlatList | null>;
   messageInput: string;
   setMessageInput: React.Dispatch<React.SetStateAction<string>>;
   showEmoji: boolean;
@@ -3695,7 +3862,7 @@ function TripConversationDetailLoaded({
   selectedConv: TripConversation;
   conversations: TripConversation[];
   composeTrips: TripForCompose[];
-  messagesRef: React.RefObject<ScrollView | null>;
+  messagesRef: React.RefObject<FlatList | null>;
   messageInput: string;
   setMessageInput: React.Dispatch<React.SetStateAction<string>>;
   showEmoji: boolean;
@@ -3715,117 +3882,141 @@ function TripConversationDetailLoaded({
   onOpenCompose: () => void | Promise<void>;
   onFeedbackSubmitted: () => void;
 }) {
-  const { hydrateConversationById } = useTripChat();
+  const { profile } = useAuth();
+  const selfUid = (profile as any)?.uid ?? null;
+  const { markAsRead, initiateConversation } = useTripChat();
+
+  // Subscribe directly to this conversation for live message updates.
+  // Re-renders only when THIS conversation changes, not the full list.
+  const liveConv = useConversation(selectedConv.id) ?? selectedConv;
+
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const historyLoadedRef = useRef<string | null>(null);
+
+  const loadHistory = useCallback(async () => {
+    if (historyLoadedRef.current === liveConv.id) return;
+    setHistoryLoading(true);
+    try {
+      const messages = await fetchConversationHistory(liveConv.id);
+      chatStore.mergeConversationHistory(liveConv.id, messages);
+      historyLoadedRef.current = liveConv.id;
+    } catch {
+      // silent — user can retry
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [liveConv.id]);
+
   const [tripRatings, setTripRatings] = useState<RatingRow[]>([]);
 
+  // Feedback submitted: store was already patched optimistically in
+  // ChatTripFeedbackCard — no DB refresh needed here.
+  const ratingsLoadedForKeyRef = useRef<string | null>(null);
+  const handleFeedbackSubmitted = useCallback(() => {
+    onFeedbackSubmitted();
+  }, [onFeedbackSubmitted]);
+
+  // ── useMarkSeen: viewport-based per-message seen tracking ─────────────────
+  const { onViewableItemsChanged, viewabilityConfig } = useMarkSeen({
+    conversationId: liveConv.id,
+    selfUid,
+  });
+
   const effectiveTripStatus = useMemo(() => {
-    const direct = selectedConv.trip_status;
+    const direct = liveConv.trip_status;
     if (direct != null && String(direct).trim() !== "") return direct;
-    return composeTrips.find((t) => t.id === selectedConv.trip_id)?.status ?? null;
-  }, [composeTrips, selectedConv.trip_id, selectedConv.trip_status]);
+    return composeTrips.find((t) => t.id === liveConv.trip_id)?.status ?? null;
+  }, [composeTrips, liveConv.trip_id, liveConv.trip_status]);
 
   const tripEligibleForFeedback = isTripFeedbackEligibleStatus(effectiveTripStatus);
 
+  // Ref-guarded: runs once per conversation ID.
+  // After seeding, inserted messages arrive via Realtime INSERT → NEW_MESSAGE →
+  // chatStore.mergeMessages — no hydrateConversationById needed.
+  const feedbackSeededForConvRef = useRef<string | null>(null);
+  const liveConvRef = useRef(liveConv);
+  liveConvRef.current = liveConv;
+
   useEffect(() => {
     if (!tripEligibleForFeedback) return;
+    if (feedbackSeededForConvRef.current === liveConv.id) return;
+    feedbackSeededForConvRef.current = liveConv.id;
+
     let cancelled = false;
     void (async () => {
-      const { error: e1 } = await ensureTripFeedbackPromptMessages(selectedConv.trip_id);
+      const conv = liveConvRef.current;
+      const { error: e1 } = await ensureTripFeedbackPromptMessages(conv.trip_id);
       if (e1 && __DEV__) console.warn("[ensureTripFeedbackPromptMessages]", e1.message);
       if (cancelled) return;
-      await hydrateConversationById(selectedConv.id);
-      if (cancelled) return;
-      const { created, error: e2 } = await seedTripConversationFeedbackPromptIfMissing({
-        conversationId: selectedConv.id,
-        organizationId: selectedConv.organization_id,
-        partyType: selectedConv.party_type,
-        partyName: selectedConv.party_name ?? "",
-        clientId: selectedConv.client_id ?? null,
-        supplierId: selectedConv.supplier_id ?? null,
-        driverId: selectedConv.driver_id ?? null,
+      // No hydrate: Realtime delivers the INSERT to chatStore automatically
+      await seedTripConversationFeedbackPromptIfMissing({
+        conversationId: conv.id,
+        organizationId: conv.organization_id,
+        partyType: conv.party_type,
+        partyName: conv.party_name ?? "",
+        clientId:   conv.client_id   ?? null,
+        supplierId: conv.supplier_id ?? null,
+        driverId:   conv.driver_id   ?? null,
       });
-      if (e2 && __DEV__) console.warn("[seedTripConversationFeedbackPromptIfMissing]", e2.message);
-      if (cancelled) return;
-      if (created) await hydrateConversationById(selectedConv.id);
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    tripEligibleForFeedback,
-    selectedConv.id,
-    selectedConv.trip_id,
-    selectedConv.organization_id,
-    selectedConv.party_type,
-    selectedConv.party_name,
-    selectedConv.client_id,
-    selectedConv.supplier_id,
-    selectedConv.driver_id,
-    hydrateConversationById,
-  ]);
+    return () => { cancelled = true; };
+  }, [tripEligibleForFeedback, liveConv.id]);
 
-  // Keep a ref to the latest messages so the ratings effect can read them
-  // without listing them in the dep array. Without this, the effect would
-  // re-fire on every incoming message → getRatingsForTrip network call →
-  // hydrateConversationById → conversations state update → repeat.
-  const selectedConvMessagesRef = useRef(selectedConv.messages);
-  selectedConvMessagesRef.current = selectedConv.messages;
+  // Snapshot messages in a ref — avoids adding to ratings effect deps.
+  const liveMessagesRef = useRef(liveConv.messages);
+  liveMessagesRef.current = liveConv.messages;
 
   useEffect(() => {
     if (!tripEligibleForFeedback) {
       setTripRatings([]);
+      ratingsLoadedForKeyRef.current = null;
       return;
     }
+    const key = liveConv.trip_id;
+    if (ratingsLoadedForKeyRef.current === key) return;
+    ratingsLoadedForKeyRef.current = key;
+
     let cancelled = false;
     void (async () => {
-      const { ratings, error } = await getRatingsForTrip(selectedConv.trip_id);
+      const { ratings, error } = await getRatingsForTrip(key);
       if (cancelled) return;
       if (error && __DEV__) console.warn("[getRatingsForTrip]", error.message);
       const rows = ratings ?? [];
       setTripRatings(rows);
-      // Read latest messages from ref — avoids adding selectedConv.messages to deps
+      // persistTripFeedbackMessageMetadataIfRated does a DB UPDATE on metadata.
+      // The resulting UPDATE fires ACK_UPDATE via Realtime → chatStore.patchMessage.
+      // No hydrate needed — the store reflects it automatically.
       await persistTripFeedbackMessageMetadataIfRated({
-        tripId: selectedConv.trip_id,
-        messages: selectedConvMessagesRef.current,
-        ratings: rows,
+        tripId:   key,
+        messages: liveMessagesRef.current,
+        ratings:  rows,
       });
-      if (!cancelled) await hydrateConversationById(selectedConv.id);
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    tripEligibleForFeedback,
-    selectedConv.trip_id,
-    selectedConv.id,
-    // selectedConv.messages intentionally excluded: messages change on every
-    // incoming realtime event; the reconciliation only needs to run once per
-    // conversation open, not on every new message. Latest messages are read
-    // via selectedConvMessagesRef inside the async callback.
-    hydrateConversationById,
-  ]);
+    return () => { cancelled = true; };
+  }, [tripEligibleForFeedback, liveConv.trip_id, liveConv.id]);
 
   const displayMessages = useMemo(
     () =>
       mergeTripChatMessagesWithFeedbackRatings(
-        selectedConv.trip_id,
-        selectedConv.messages,
+        liveConv.trip_id,
+        liveConv.messages,
         tripRatings,
       ),
-    [selectedConv.trip_id, selectedConv.messages, tripRatings],
+    [liveConv.trip_id, liveConv.messages, tripRatings],
   );
 
-  const quickMsgs = QUICK_MESSAGES[selectedConv.party_type];
+  const quickMsgs = QUICK_MESSAGES[liveConv.party_type];
   const PARTY_ORDER: ConversationPartyType[] = ["client", "supplier", "driver"];
-  const sameTripConversations = conversations.filter((conv) => conv.trip_id === selectedConv.trip_id);
+  // useConversationsByTrip returns all lanes for this trip from the singleton store.
+  const sameTripConversations = useConversationsByTrip(liveConv.trip_id);
   const partyConversationMap = PARTY_ORDER.reduce((acc, partyType) => {
     acc[partyType] = sameTripConversations.find((conv) => conv.party_type === partyType) ?? null;
     return acc;
   }, {} as Record<ConversationPartyType, TripConversation | null>);
 
   const tripCompose = useMemo(
-    () => composeTrips.find((t) => t.id === selectedConv.trip_id) ?? null,
-    [composeTrips, selectedConv.trip_id],
+    () => composeTrips.find((t) => t.id === liveConv.trip_id) ?? null,
+    [composeTrips, liveConv.trip_id],
   );
 
   const clientId =
@@ -3833,11 +4024,11 @@ function TripConversationDetailLoaded({
   const supplierId =
     partyConversationMap.supplier?.supplier_id ??
     tripCompose?.supplier_id ??
-    selectedConv.trip_supplier_id ??
+    liveConv.trip_supplier_id ??
     null;
   const driverId =
     partyConversationMap.driver?.driver_id ??
-    selectedConv.trip_driver_id ??
+    liveConv.trip_driver_id ??
     tripCompose?.driver_id ??
     null;
 
@@ -3885,16 +4076,147 @@ function TripConversationDetailLoaded({
     [partyConversationMap, tripCompose],
   );
 
-  const switchConversation = (partyType: ConversationPartyType) => {
+  const switchConversation = async (partyType: ConversationPartyType) => {
+    // Always persist the active party selection immediately.
+    chatStore.switchParty(liveConv.trip_id, partyType);
+
     const target = partyConversationMap[partyType];
     if (target) {
       onSelectConversation(target.id);
+      markAsRead(target.id);
       return;
     }
-    // New conversation creation is disabled; keep current thread unchanged.
+
+    // Create-on-demand: party entity known but conversation not yet started.
+    const partyRow = getComposePartyRows(
+      tripCompose ?? {
+        id: liveConv.trip_id,
+        trip_number: liveConv.trip_number,
+        display_trip_id: liveConv.display_trip_id ?? null,
+        pickup_area: liveConv.pickup_area,
+        drop_location: liveConv.drop_location,
+        status: liveConv.trip_status ?? "active",
+        client_id: clientId ?? null,
+        client_name: null,
+        client_linked_organization_id: null,
+        supplier_id: supplierId ?? null,
+        supplier_name: null,
+        supplier_linked_organization_id: null,
+        driver_id: driverId ?? null,
+        driver_display_name: null,
+        created_at: liveConv.trip_created_at ?? null,
+      } as TripForCompose,
+    ).find((r) => r.kind === "selectable" && r.partyType === partyType);
+
+    if (!partyRow || partyRow.kind !== "selectable") return;
+
+    const convId = await initiateConversation({
+      tripId: liveConv.trip_id,
+      tripNumber: liveConv.trip_number,
+      pickupArea: liveConv.pickup_area,
+      dropLocation: liveConv.drop_location,
+      partyType,
+      partyName: partyRow.name,
+      partyId: partyRow.id,
+    });
+    if (convId) {
+      onSelectConversation(convId);
+      markAsRead(convId);
+    }
   };
 
-  const missionDateLabel = formatTripRouteDate(selectedConv.trip_created_at);
+  const missionDateLabel = formatTripRouteDate(liveConv.trip_created_at);
+
+  const tripMeta = useTripMeta(liveConv.trip_id);
+  const paymentBalance = tripMeta?.payment_balance ?? null;
+
+  // Timestamp captured once at mount. Messages created after this instant
+  // arrived via Realtime and get the slide-in animation; bootstrap messages do not.
+  const mountedAtMs = useRef(Date.now()).current;
+
+  // FlatList requires onViewableItemsChanged to be stable after mount.
+  // This ref-backed wrapper lets us always call the latest version without
+  // triggering the "changing onViewableItemsChanged after mount" warning.
+  const _viewableRef = useRef(onViewableItemsChanged);
+  _viewableRef.current = onViewableItemsChanged;
+  const stableOnViewableItemsChanged = useRef(
+    (info: Parameters<typeof onViewableItemsChanged>[0]) => _viewableRef.current(info)
+  ).current;
+
+  const renderMessage = useCallback(({ item: m }: { item: TripMessageRow }) => {
+    // Tab visibility filter — zero DB calls; pure memory filter on party_type.
+    // Ledger events only appear in Client/Supplier tabs; tracking in Driver tab.
+    if (!isMessageVisibleInTab(m.message_type, liveConv.party_type)) return null;
+
+    if (
+      m.message_type === "status_change" ||
+      m.message_type === "image" ||
+      m.message_type === "tracking"
+    ) {
+      return (
+        <SystemEventCard
+          message={m}
+          isOwn={m.sender_role === "dispatcher"}
+          currentOrgId={currentOrgId}
+          conversationPartyName={liveConv.party_name}
+          onAddToBook={onAddToBook}
+          onDispute={onDispute}
+          addingToBook={addingToBookId === m.id}
+        />
+      );
+    }
+    if (
+      m.message_type === "system" ||
+      m.message_type === "update" ||
+      m.message_type === "system_log"
+    ) {
+      return <ChatSystemEventCard message={m} />;
+    }
+    if (
+      m.message_type === "ledger_event" ||
+      m.message_type === "ledger" ||
+      m.message_type === "payment"
+    ) {
+      return (
+        <ChatLedgerEventCard
+          message={m}
+          currentOrgId={currentOrgId}
+          conversationPartyName={liveConv.party_name}
+          onAddToBook={onAddToBook}
+          onDispute={onDispute}
+          addingToBook={addingToBookId === m.id}
+        />
+      );
+    }
+    if (m.message_type === "document_share") {
+      return <DocumentShareCard message={m} isOwn={m.sender_role === "dispatcher"} />;
+    }
+    if (m.message_type === "feedback_request" || m.message_type === "feedback") {
+      if (!tripFeedbackRequestMatchesConversation(m, liveConv)) return null;
+      return (
+        <ChatTripFeedbackCard
+          message={m}
+          tripId={liveConv.trip_id}
+          ratingOrganizationId={liveConv.organization_id}
+          conversationOwnerOrgId={liveConv.organization_id}
+          currentOrgId={currentOrgId}
+          onSubmitted={handleFeedbackSubmitted}
+        />
+      );
+    }
+    return (
+      <ChatBubble
+        isOwn={m.sender_role === "dispatcher"}
+        content={m.content}
+        timestamp={m.created_at}
+        senderName={m.sender_role !== "dispatcher" ? m.sender_name : undefined}
+        avatarSeed={m.sender_role !== "dispatcher" ? m.sender_avatar_seed : undefined}
+        isDelivered={m.is_delivered}
+        isSeen={m.is_read}
+        isNew={Date.parse(m.created_at) > mountedAtMs}
+      />
+    );
+  }, [currentOrgId, liveConv, onAddToBook, onDispute, addingToBookId, handleFeedbackSubmitted, mountedAtMs]);
 
   const partyTabIcon = (partyType: ConversationPartyType, selected: boolean) => (
     <View
@@ -3912,9 +4234,9 @@ function TripConversationDetailLoaded({
   return (
     <View style={s.detailPanel}>
       <ChatDetailHeader
-        title={`${selectedConv.trip_number} · ${partyLabel(selectedConv.party_type)}`}
-        subtitle={formatChatPartyName(selectedConv.party_name) ?? undefined}
-        partyType={selectedConv.party_type}
+        title={`${liveConv.trip_number} · ${partyLabel(liveConv.party_type)}`}
+        subtitle={formatChatPartyName(liveConv.party_name) ?? undefined}
+        partyType={liveConv.party_type}
         isDesktop={isDesktop}
         onCloseDetail={onCloseDetail}
       />
@@ -3925,7 +4247,7 @@ function TripConversationDetailLoaded({
             <View style={s.detailMissionRouteLine}>
               <View style={s.detailMissionRouteTextWrap}>
                 <Text style={s.detailMissionRouteText} numberOfLines={1} ellipsizeMode="tail">
-                  {selectedConv.pickup_area} {"→"} {selectedConv.drop_location}
+                  {liveConv.pickup_area} {"→"} {liveConv.drop_location}
                 </Text>
               </View>
               {missionDateLabel ? (
@@ -3936,6 +4258,14 @@ function TripConversationDetailLoaded({
             </View>
           </View>
         </View>
+        {paymentBalance != null &&
+          (liveConv.party_type === 'client' || liveConv.party_type === 'supplier') ? (
+          <View style={s.detailMissionUnread}>
+            <Text style={s.detailMissionUnreadText}>
+              {paymentBalance >= 0 ? '+' : '−'}₹{Math.abs(paymentBalance).toLocaleString('en-IN')}
+            </Text>
+          </View>
+        ) : null}
         {detailVisiblePartyTypes.length > 0 ? (
           <ScrollView
             horizontal
@@ -3944,7 +4274,7 @@ function TripConversationDetailLoaded({
             contentContainerStyle={s.detailPartyTabs}
           >
             {detailVisiblePartyTypes.map((partyType) => {
-              const on = selectedConv.party_type === partyType;
+              const on = liveConv.party_type === partyType;
               const hasConversation = Boolean(partyConversationMap[partyType]);
               const partyLine = formatChatPartyName(displayPartyName(partyType));
               return (
@@ -3955,7 +4285,7 @@ function TripConversationDetailLoaded({
                     on && s.detailPartyTabOn,
                     !hasConversation && s.detailPartyTabOff,
                   ]}
-                  onPress={() => switchConversation(partyType)}
+                  onPress={() => { void switchConversation(partyType); }}
                   activeOpacity={0.82}
                 >
                   {partyTabIcon(partyType, on)}
@@ -3986,72 +4316,51 @@ function TripConversationDetailLoaded({
           </ScrollView>
         ) : null}
       </View>
-      <ScrollView
+      <FlatList
         ref={messagesRef}
         style={s.msgs}
         contentContainerStyle={s.msgsContent}
+        data={displayMessages}
+        keyExtractor={(m) => m.id}
+        renderItem={renderMessage}
+        extraData={liveConv}
+        onViewableItemsChanged={stableOnViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
         onContentSizeChange={() => messagesRef.current?.scrollToEnd({ animated: false })}
-      >
-        <ChatSystemMsg
-          label={`${selectedConv.pickup_area.toUpperCase()} → ${selectedConv.drop_location.toUpperCase()} · TODAY`}
-        />
-        {selectedConv.messages.length === 0 && (
-          <View style={{ alignItems: "center", paddingVertical: 32 }}>
-            <Text style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>
-              No messages yet
-            </Text>
-          </View>
-        )}
-        {displayMessages.map((m) => {
-          if (m.message_type === "system") {
-            return <ChatSystemEventCard key={m.id} message={m} />;
-          }
-          if (m.message_type === "ledger_event") {
-            return (
-              <ChatLedgerEventCard
-                key={m.id}
-                message={m}
-                currentOrgId={currentOrgId}
-                conversationPartyName={selectedConv.party_name}
-                onAddToBook={onAddToBook}
-                onDispute={onDispute}
-                addingToBook={addingToBookId === m.id}
-              />
-            );
-          }
-          if (m.message_type === "document_share") {
-            return (
-              <DocumentShareCard
-                key={m.id}
-                message={m}
-                isOwn={m.sender_role === "dispatcher"}
-              />
-            );
-          }
-          if (m.message_type === "feedback_request") {
-            return (
-              <ChatTripFeedbackCard
-                key={m.id}
-                message={m}
-                tripId={selectedConv.trip_id}
-                ratingOrganizationId={selectedConv.organization_id}
-                conversationOwnerOrgId={selectedConv.organization_id}
-                currentOrgId={currentOrgId}
-                onSubmitted={onFeedbackSubmitted}
-              />
-            );
-          }
-          return (
-            <ChatBubble
-              key={m.id}
-              isOwn={m.sender_role === "dispatcher"}
-              content={m.content}
-              timestamp={m.created_at}
-              senderName={m.sender_role !== "dispatcher" ? m.sender_name : undefined}
+        ListHeaderComponent={
+          <>
+            <ChatSystemMsg
+              label={`${liveConv.pickup_area.toUpperCase()} → ${liveConv.drop_location.toUpperCase()} · TODAY`}
             />
-          );
-        })}
-      </ScrollView>
+            {displayMessages.length === 0 && (
+              liveConv.last_message_preview ? (
+                <View style={{ alignItems: "center", paddingVertical: 32, gap: 12 }}>
+                  <Text style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>
+                    Messages not loaded
+                  </Text>
+                  <TouchableOpacity
+                    style={{ backgroundColor: CHAT_ACCENT, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20 }}
+                    onPress={loadHistory}
+                    disabled={historyLoading}
+                    activeOpacity={0.8}
+                  >
+                    {historyLoading
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <Text style={{ color: "#fff", fontSize: 13, fontWeight: "600" }}>Load history</Text>
+                    }
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={{ alignItems: "center", paddingVertical: 32 }}>
+                  <Text style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>
+                    No messages yet
+                  </Text>
+                </View>
+              )
+            )}
+          </>
+        }
+      />
       <ChatInputBar
         quickMsgs={quickMsgs}
         messageInput={messageInput}
@@ -4083,7 +4392,7 @@ function NetworkDetailPanel({
   onCloseDetail,
 }: {
   selectedNet: IntegratedChat | null;
-  messagesRef: React.RefObject<ScrollView | null>;
+  messagesRef: React.RefObject<FlatList | null>;
   messageInput: string;
   setMessageInput: React.Dispatch<React.SetStateAction<string>>;
   showEmoji: boolean;
@@ -4104,23 +4413,23 @@ function NetworkDetailPanel({
         isDesktop={isDesktop}
         onCloseDetail={onCloseDetail}
       />
-      <ScrollView
+      <FlatList
         ref={messagesRef}
         style={s.msgs}
         contentContainerStyle={s.msgsContent}
-        onContentSizeChange={() => messagesRef.current?.scrollToEnd({ animated: false })}
-      >
-        <ChatSystemMsg label="SECURE CHANNEL · TODAY" />
-        {selectedNet.messages.map((m) => (
+        data={selectedNet.messages}
+        keyExtractor={(m) => m.id}
+        renderItem={({ item: m }) => (
           <ChatBubble
-            key={m.id}
             isOwn={m.senderId === "dispatcher-1"}
             content={m.content}
             timestamp={m.timestamp}
             senderName={m.senderId !== "dispatcher-1" ? selectedNet.partnerName : undefined}
           />
-        ))}
-      </ScrollView>
+        )}
+        ListHeaderComponent={<ChatSystemMsg label="SECURE CHANNEL · TODAY" />}
+        onContentSizeChange={() => messagesRef.current?.scrollToEnd({ animated: false })}
+      />
       <ChatInputBar
         quickMsgs={INTEGRATED_QUICK_MESSAGES}
         messageInput={messageInput}

@@ -42,6 +42,7 @@ import { OrganizationProvider } from '@/contexts/OrganizationContext';
 import { WalletProvider } from '@/contexts/WalletContext';
 import { TripChatProvider } from '@/features/chat/contexts/TripChatContext';
 import { IntegratedChatProvider } from '@/features/chat/contexts/IntegratedChatContext';
+import { GlobalSyncProvider } from '@/lib/globalSync';
 
 function isNetworkError(error: Error): boolean {
   const msg = error.message;
@@ -261,7 +262,9 @@ export default function RootLayout() {
               <AuthProvider>
                 <OrganizationProvider>
                   <WalletProvider>
-                    <RootLayoutNav />
+                    <GlobalSyncProvider>
+                      <RootLayoutNav />
+                    </GlobalSyncProvider>
                   </WalletProvider>
                 </OrganizationProvider>
               </AuthProvider>

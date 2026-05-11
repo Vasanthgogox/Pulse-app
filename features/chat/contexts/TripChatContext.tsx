@@ -5,22 +5,30 @@ import React, {
   useEffect,
   useMemo,
   useRef,
-  useState,
   type ReactNode,
 } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOptionalOrganization } from "@/contexts/OrganizationContext";
 import { subscribeSharedPostgresChanges } from "@/lib/realtimeRegistry";
-import { subscribeTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
 import * as chatService from "../services/chat.service";
+import { useConversations, useTotalUnreadCount } from "../store/chatStore";
+import { useChatStore } from "../store/useChatStore";
 import type {
+  ConversationPartyType,
+  MessageType,
+  StatusChangeMetadata,
+  TripConversation,
+  TripMessageRow,
+  TripMeta,
+} from "../types/chat.types";
+
+export type {
   ConversationPartyType,
   MessageType,
   TripConversation,
   TripMessageRow,
-} from "../types/chat.types";
-
-export type { ConversationPartyType, MessageType, TripConversation, TripMessageRow };
+  TripMeta,
+};
 
 // ── Quick message templates by party type ────────────────────────────────────
 
@@ -65,7 +73,6 @@ export interface InitiateConversationParams {
 
 export interface InitiateDriverConversationParams {
   tripId: string;
-  /** Fleet org that owns the trip (`trips.organization_id`) — required for supplier views too */
   fleetOrganizationId: string;
   driverId: string;
   driverDisplayName: string;
@@ -85,20 +92,21 @@ interface TripChatContextType {
   ) => Promise<void>;
   markAsRead: (conversationId: string) => Promise<void>;
   totalUnreadCount: number;
-  /** Backward-compat helper used by existing consumers (FAB/chat screens). */
   getTotalUnreadCount: () => number;
   refreshConversations: () => Promise<void>;
-  /** Loads one thread by id and merges into state (deep links when list omits it). */
-  hydrateConversationById: (conversationId: string) => Promise<TripConversation | null>;
-  /** Creates (or returns existing) conversation. Returns conversation id. */
-  initiateConversation: (params: InitiateConversationParams) => Promise<string | null>;
   /**
-   * Opens the driver ↔ fleet thread for a trip using the trip's owning org id.
-   * Use from Trip Details so suppliers and fleet see the same conversation as Command Hub.
+   * Deep-link helper: returns the conversation from the store if present, or
+   * fetches it via getTripConversationById and upserts it.
    */
+  hydrateConversationById: (conversationId: string) => Promise<TripConversation | null>;
+  /** Optimistically changes trip status + notifies all trip conversations via RPC. */
+  changeTripStatus: (tripId: string, newStatus: string) => Promise<boolean>;
+  initiateConversation: (params: InitiateConversationParams) => Promise<string | null>;
   initiateDriverConversationForTrip: (
     params: InitiateDriverConversationParams
   ) => Promise<string | null>;
+  /** Persist the active party type for a trip to the store. */
+  switchParty: (tripId: string, partyType: ConversationPartyType) => void;
 }
 
 const TripChatContext = createContext<TripChatContextType | undefined>(undefined);
@@ -119,273 +127,171 @@ export function TripChatProvider({
   isActive?: boolean;
 }) {
   const { profile } = useAuth();
-  /** Stable primitive — avoid resubscribing realtime when profile object identity churns. */
   const selfUid = profile?.uid ?? null;
   const orgCtx = useOptionalOrganization();
   const organizationId = orgCtx?.currentOrganization?.id ?? null;
 
-  const [conversations, setConversations] = useState<TripConversation[]>([]);
-  const conversationsRef = useRef(conversations);
-  conversationsRef.current = conversations;
-  const loadConversationsRef = useRef<() => Promise<void>>(async () => {});
-  const hydrateConversationByIdRef = useRef<(conversationId: string) => Promise<TripConversation | null>>(
-    async () => null
-  );
-  const missingConvHydrateAtRef = useRef<Record<string, number>>({});
-  const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // ── State from Zustand ────────────────────────────────────────────────────
+  const conversations    = useConversations();
+  const totalUnreadCount = useTotalUnreadCount();
+  const isLoading        = useChatStore(s => s.isLoading);
+
   const bootstrappedOrgRef = useRef<string | null>(null);
   const lastFocusLoadAtRef = useRef<number>(0);
-  const [isLoading, setIsLoading] = useState(false);
-  /** Pending debounce timers: conversationId → timer. Flushed on unmount. */
-  const markReadTimerRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-  const pendingMarkReadRef = useRef<Set<string>>(new Set());
+  // Queue-and-fetch: holds Realtime rows that arrived before their conversation
+  // was in the store (bootstrap failure, or process_b2b_event for a new thread).
+  const pendingForUnknownConv = useRef(new Map<string, Partial<TripMessageRow>[]>());
 
+  // ── Bootstrap: single RPC, populates Zustand store ───────────────────────
   const loadConversations = useCallback(async () => {
     if (!organizationId || !selfUid) return;
-    const shouldShowLoading = conversationsRef.current.length === 0;
-    if (shouldShowLoading) setIsLoading(true);
-    try {
-      const data = await chatService.getConversationsByOrganization(organizationId);
-      setConversations((prev) => {
-        const prevMap = new Map(prev.map((c) => [c.id, c]));
-        return data.map((fresh) => {
-          const existing = prevMap.get(fresh.id);
-          if (!existing) return fresh;
-          return {
-            ...fresh,
-            messages:
-              existing.messages.length > fresh.messages.length
-                ? existing.messages
-                : fresh.messages,
-          };
-        });
-      });
-    } catch {
-      // Tables may not exist yet; fail silently.
-    } finally {
-      if (shouldShowLoading) setIsLoading(false);
-    }
+    await useChatStore.getState().bootstrap(organizationId);
   }, [organizationId, selfUid]);
-  loadConversationsRef.current = loadConversations;
 
-  const queueRefreshConversations = useCallback(() => {
-    if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current);
-    refreshDebounceRef.current = setTimeout(() => {
-      void loadConversationsRef.current();
-    }, 350);
-  }, []);
-
+  // Clear store on logout / org switch.
   useEffect(() => {
     if (organizationId && selfUid) return;
-    setConversations([]);
-    setIsLoading(false);
+    useChatStore.getState().clear();
     bootstrappedOrgRef.current = null;
   }, [organizationId, selfUid]);
 
-  useEffect(() => {
-    return () => {
-      if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current);
-      if (batchFlushRef.current) clearTimeout(batchFlushRef.current);
-      activeMsgQueueRef.current = [];
-      bgMsgQueueRef.current = [];
-    };
-  }, []);
-
+  // Initial bootstrap: once per org.
   useEffect(() => {
     if (!organizationId || !selfUid) return;
     if (bootstrappedOrgRef.current === organizationId) return;
     bootstrappedOrgRef.current = organizationId;
-    // Stamp the focus timestamp so the focused-screen effect does not double-fire on mount.
     lastFocusLoadAtRef.current = Date.now();
     void loadConversations();
   }, [organizationId, selfUid, loadConversations]);
 
-  // Focused-screen load — 30s cooldown; Realtime handles live updates in between
-  useEffect(() => {
-    if (!isActive || !selfUid) return;
-    const now = Date.now();
-    if (now - lastFocusLoadAtRef.current < 30_000) return;
-    lastFocusLoadAtRef.current = now;
-    loadConversations();
-  }, [isActive, selfUid, loadConversations]);
-
-  // Refetch when ledger (or anything) signals new trip chat rows — survives missing realtime publication
-  useEffect(() => {
-    if (!isActive || !selfUid) return;
-    let debounceTimer: ReturnType<typeof setTimeout> | undefined;
-    const unsub = subscribeTripChatMessagesChanged(() => {
-      clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => {
-        void loadConversations();
-      }, 200);
-    });
-    return () => {
-      unsub();
-      clearTimeout(debounceTimer);
-    };
-  }, [isActive, selfUid, loadConversations]);
-
-  // Single always-on realtime channel per org. isActiveRef routes payload to either
-  // incremental append (focused) or badge-only update (background) without creating a
-  // second channel when the screen focus state changes.
+  // Focus-triggered sync: 5 min cooldown (bootstrap is idempotent after first call).
   const isActiveRef = useRef(isActive);
   isActiveRef.current = isActive;
 
-  // ── Batch queue: WhatsApp-style realtime coalescing ────────────────────────
-  // Each INSERT event is pushed here instead of immediately calling setState.
-  // A 100ms flush window groups bursts (e.g. 20 messages in 500ms) into one
-  // setState pass — one O(conversations) map instead of twenty.
-  const activeMsgQueueRef = useRef<Partial<TripMessageRow>[]>([]);
-  const bgMsgQueueRef = useRef<Partial<TripMessageRow>[]>([]);
-  const batchFlushRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!isActive || !selfUid) return;
+    const now = Date.now();
+    if (now - lastFocusLoadAtRef.current < 300_000) return;
+    lastFocusLoadAtRef.current = now;
+    void loadConversations();
+  }, [isActive, selfUid, loadConversations]);
 
-  const scheduleBatchFlush = useCallback(() => {
-    if (batchFlushRef.current) return; // already scheduled for this tick window
-    batchFlushRef.current = setTimeout(() => {
-      batchFlushRef.current = null;
-      const activeMessages = activeMsgQueueRef.current.splice(0);
-      const bgMessages = bgMsgQueueRef.current.splice(0);
-      if (activeMessages.length === 0 && bgMessages.length === 0) return;
+  // ── Unknown-conversation recovery ─────────────────────────────────────────
+  const _enqueueUnknownConv = useCallback(
+    (convId: string, row: Partial<TripMessageRow>, mode: 'active' | 'background') => {
+      const queue = pendingForUnknownConv.current.get(convId) ?? [];
+      queue.push(row);
+      pendingForUnknownConv.current.set(convId, queue);
 
-      // Group by conversation_id so we do one pass over prev.
-      const activeByCid = new Map<string, Partial<TripMessageRow>[]>();
-      for (const row of activeMessages) {
-        if (!row.conversation_id) continue;
-        const b = activeByCid.get(row.conversation_id) ?? [];
-        b.push(row);
-        activeByCid.set(row.conversation_id, b);
-      }
-      const bgByCid = new Map<string, Partial<TripMessageRow>[]>();
-      for (const row of bgMessages) {
-        if (!row.conversation_id) continue;
-        const b = bgByCid.get(row.conversation_id) ?? [];
-        b.push(row);
-        bgByCid.set(row.conversation_id, b);
-      }
+      if (queue.length > 1) return; // fetch already in-flight
 
-      setConversations((prev) =>
-        prev.map((conv) => {
-          const ab = activeByCid.get(conv.id);
-          const bb = bgByCid.get(conv.id);
-          if (!ab && !bb) return conv;
-          let updated = conv;
-          if (ab) {
-            const last = ab[ab.length - 1];
-            updated = {
-              ...updated,
-              messages: [...updated.messages, ...(ab as TripMessageRow[])],
-              last_message_at: last.created_at ?? updated.last_message_at,
-              last_message_preview:
-                typeof last.content === "string" && last.content.trim().length > 0
-                  ? last.content.slice(0, 120)
-                  : updated.last_message_preview,
-            };
+      void chatService.getTripConversationById(convId)
+        .then(conv => {
+          if (conv) {
+            useChatStore.getState().upsertConversation(conv);
+            const queued = pendingForUnknownConv.current.get(convId) ?? [];
+            pendingForUnknownConv.current.delete(convId);
+            for (const qRow of queued) {
+              useChatStore.getState().onRealtimeInsert(qRow, mode);
+            }
+          } else {
+            pendingForUnknownConv.current.delete(convId);
           }
-          if (bb) {
-            const last = bb[bb.length - 1];
-            updated = {
-              ...updated,
-              unread_dispatcher_count: (updated.unread_dispatcher_count ?? 0) + bb.length,
-              last_message_at: last.created_at ?? updated.last_message_at,
-              last_message_preview:
-                typeof last.content === "string" && last.content.trim().length > 0
-                  ? last.content.slice(0, 120)
-                  : updated.last_message_preview,
-            };
-          }
-          return updated;
         })
-      );
-    }, 100);
-  }, []);
+        .catch(() => { pendingForUnknownConv.current.delete(convId); });
+    },
+    [],
+  );
 
+  // ── Realtime subscription ──────────────────────────────────────────────────
   useEffect(() => {
     if (!organizationId || !selfUid) return;
     return subscribeSharedPostgresChanges(
       `trip_messages:org:${organizationId}`,
       [
         {
-          event: "INSERT",
+          event:  "INSERT",
           schema: "public",
-          table: "trip_messages",
+          table:  "trip_messages",
+          filter: `organization_id=eq.${organizationId}`,
+        },
+        {
+          event:  "UPDATE",
+          schema: "public",
+          table:  "trip_messages",
           filter: `organization_id=eq.${organizationId}`,
         },
       ],
       (payload) => {
-        const row = payload.new as Partial<TripMessageRow> | null;
-        if (!row?.conversation_id) return;
+        // ── INSERT ──────────────────────────────────────────────────────────
+        if (payload.eventType === "INSERT") {
+          const row = payload.new as Partial<TripMessageRow> | null;
+          if (!row?.conversation_id) return;
 
-        if (isActiveRef.current) {
-          // Own echo: already optimistically inserted.
+          // Skip echo from own sends (already optimistically inserted).
           if (row.sender_user_id && row.sender_user_id === selfUid) return;
-          // Unknown conversation: refresh inline (rare — new conv arrived before list loaded).
-          if (!conversationsRef.current.some((c) => c.id === row.conversation_id)) {
-            queueRefreshConversations();
+
+          const mode: 'active' | 'background' = isActiveRef.current ? 'active' : 'background';
+          const s = useChatStore.getState();
+
+          if (!s.convToTrip[row.conversation_id]) {
+            // Unknown conversation — fetch once and flush queued rows atomically.
+            _enqueueUnknownConv(row.conversation_id, row, mode);
             return;
           }
-          activeMsgQueueRef.current.push(row);
-        } else {
-          // Background: badge-only. Unknown conv → hydrate; known → batch badge bump.
-          if (row.sender_user_id === selfUid) return;
-          if (!conversationsRef.current.some((c) => c.id === row.conversation_id)) {
-            const convId = row.conversation_id;
-            const now = Date.now();
-            const last = missingConvHydrateAtRef.current[convId] ?? 0;
-            if (now - last > 10_000) {
-              missingConvHydrateAtRef.current[convId] = now;
-              void hydrateConversationByIdRef.current(convId);
-            }
-            return;
-          }
-          bgMsgQueueRef.current.push(row);
+
+          // onRealtimeInsert handles status_change / tracking state sync internally.
+          s.onRealtimeInsert(row, mode);
         }
-        // Schedule a single flush for this 100ms window — batches any burst.
-        scheduleBatchFlush();
+
+        // ── UPDATE (delivered / seen ticks) ─────────────────────────────────
+        else if (payload.eventType === "UPDATE") {
+          const row = payload.new as TripMessageRow | null;
+          if (!row?.id || !row.conversation_id) return;
+          useChatStore.getState().onRealtimeAck(
+            row.conversation_id,
+            row.id,
+            {
+              is_delivered: row.is_delivered,
+              delivered_at: row.delivered_at,
+              is_read:      row.is_read,
+              read_at:      row.read_at,
+            },
+          );
+        }
       }
     );
-  }, [organizationId, selfUid, queueRefreshConversations, scheduleBatchFlush]);
+  }, [organizationId, selfUid, _enqueueUnknownConv]);
 
+  // ── sendMessage: optimistic + persist + rollback ───────────────────────────
   const sendMessage = useCallback(
     async (conversationId: string, content: string, messageType: MessageType = "text") => {
       if (!organizationId || !profile) return;
 
-      const conv = conversationsRef.current.find((c) => c.id === conversationId);
+      const conv         = useChatStore.getState().getConversationByConvId(conversationId);
       const messageOrgId = conv?.organization_id ?? organizationId;
       const senderRole: TripMessageRow["sender_role"] =
         conv && conv.organization_id !== organizationId ? "supplier" : "dispatcher";
-
       const senderName =
         (profile as any).full_name ||
         (profile as any).displayName ||
         (senderRole === "supplier" ? "Supplier" : "Dispatcher");
 
-      // Optimistic insert
       const optimisticMsg: TripMessageRow = {
-        id: `optimistic-${Date.now()}`,
+        id:              `optimistic-${Date.now()}`,
         conversation_id: conversationId,
         organization_id: messageOrgId,
-        sender_user_id: (profile as any).uid ?? null,
-        sender_role: senderRole,
-        sender_name: senderName,
+        sender_user_id:  (profile as any).uid ?? null,
+        sender_role:     senderRole,
+        sender_name:     senderName,
         content,
-        message_type: messageType,
-        is_read: true,
-        read_at: new Date().toISOString(),
-        created_at: new Date().toISOString(),
+        message_type:    messageType,
+        is_read:         true,
+        read_at:         new Date().toISOString(),
+        created_at:      new Date().toISOString(),
       };
 
-      setConversations((prev) =>
-        prev.map((conv) =>
-          conv.id === conversationId
-            ? {
-                ...conv,
-                messages: [...conv.messages, optimisticMsg],
-                last_message_at: optimisticMsg.created_at,
-                last_message_preview: content.slice(0, 120),
-              }
-            : conv
-        )
-      );
+      useChatStore.getState().optimisticInsert(conversationId, optimisticMsg);
 
       try {
         const persisted = await chatService.sendChatMessage({
@@ -397,75 +303,65 @@ export function TripChatProvider({
           senderUserId: (profile as any).uid ?? null,
           messageType,
         });
-
-        // Replace optimistic message with the persisted one
-        setConversations((prev) =>
-          prev.map((conv) =>
-            conv.id === conversationId
-              ? {
-                  ...conv,
-                  messages: conv.messages.map((m) =>
-                    m.id === optimisticMsg.id ? persisted : m
-                  ),
-                }
-              : conv
-          )
-        );
+        useChatStore.getState().replaceOptimistic(conversationId, optimisticMsg.id, persisted);
       } catch {
-        // Remove optimistic message on failure
-        setConversations((prev) =>
-          prev.map((conv) =>
-            conv.id === conversationId
-              ? { ...conv, messages: conv.messages.filter((m) => m.id !== optimisticMsg.id) }
-              : conv
-          )
-        );
+        useChatStore.getState().removeMessage(conversationId, optimisticMsg.id);
       }
     },
     [organizationId, profile]
   );
 
-  // Flush all pending mark-as-read calls immediately (used on unmount).
-  const flushPendingMarkRead = useCallback(() => {
-    markReadTimerRef.current.forEach((timer) => clearTimeout(timer));
-    markReadTimerRef.current.clear();
-    const pending = Array.from(pendingMarkReadRef.current);
-    pendingMarkReadRef.current.clear();
-    for (const id of pending) {
-      void chatService.markConversationRead(id).catch(() => {});
-    }
-  }, []);
+  // ── changeTripStatus: optimistic + atomic RPC + rollback ──────────────────
+  const changeTripStatus = useCallback(
+    async (tripId: string, newStatus: string): Promise<boolean> => {
+      if (!organizationId || !profile) return false;
 
-  useEffect(() => () => { flushPendingMarkRead(); }, [flushPendingMarkRead]);
+      const prevStatus = useChatStore.getState().trips[tripId]?.status ?? null;
 
-  const markAsRead = useCallback(async (conversationId: string) => {
-    // Immediate local update — no UX lag.
-    setConversations((prev) =>
-      prev.map((conv) =>
-        conv.id === conversationId
-          ? { ...conv, unread_dispatcher_count: 0 }
-          : conv
-      )
-    );
-    // Debounce the DB write: coalesces rapid open/close bursts (e.g. user
-    // switching conversations quickly) into a single mark_conversation_read call.
-    pendingMarkReadRef.current.add(conversationId);
-    const existing = markReadTimerRef.current.get(conversationId);
-    if (existing) clearTimeout(existing);
-    markReadTimerRef.current.set(
-      conversationId,
-      setTimeout(() => {
-        markReadTimerRef.current.delete(conversationId);
-        pendingMarkReadRef.current.delete(conversationId);
-        void chatService.markConversationRead(conversationId).catch(() => {});
-      }, 1500),
-    );
-  }, []);
+      // Optimistic: update trip status in the store immediately.
+      useChatStore.getState().applySystemUpdate(tripId, { status: newStatus });
 
-  const totalUnreadCount = useMemo(
-    () => conversations.reduce((sum, c) => sum + c.unread_dispatcher_count, 0),
-    [conversations]
+      try {
+        await chatService.changeTripStatus({
+          tripId,
+          organizationId,
+          newStatus,
+          userId:   (profile as any).uid ?? null,
+          userName: (profile as any).full_name || (profile as any).displayName || "Dispatcher",
+        });
+        return true;
+      } catch {
+        // Rollback on failure.
+        useChatStore.getState().applySystemUpdate(tripId, { status: prevStatus });
+        return false;
+      }
+    },
+    [organizationId, profile]
   );
+
+  // ── markAsRead ─────────────────────────────────────────────────────────────
+  const markAsRead = useCallback(async (conversationId: string) => {
+    useChatStore.getState().markRead(conversationId);
+  }, []);
+
+  // ── hydrateConversationById (deep-link fallback) ───────────────────────────
+  const hydrateConversationById = useCallback(
+    async (conversationId: string): Promise<TripConversation | null> => {
+      const existing = useChatStore.getState().getConversationByConvId(conversationId);
+      if (existing) return existing;
+      try {
+        const conv = await chatService.getTripConversationById(conversationId);
+        if (conv) {
+          useChatStore.getState().upsertConversation(conv);
+          return useChatStore.getState().getConversationByConvId(conversationId) ?? null;
+        }
+      } catch { /* silent */ }
+      return null;
+    },
+    []
+  );
+
+  // ── Conversation management ────────────────────────────────────────────────
   const getTotalUnreadCount = useCallback(() => totalUnreadCount, [totalUnreadCount]);
 
   const initiateConversation = useCallback(
@@ -473,25 +369,19 @@ export function TripChatProvider({
       if (!organizationId) return null;
       try {
         const conv = await chatService.getOrCreateConversation({
-          tripId: params.tripId,
-          partyType: params.partyType,
-          partyName: params.partyName,
+          tripId:         params.tripId,
+          partyType:      params.partyType,
+          partyName:      params.partyName,
           organizationId,
-          partyId: params.partyId,
+          partyId:        params.partyId,
         });
-
-        setConversations((prev) => {
-          if (prev.find((c) => c.id === conv.id)) return prev;
-          const newConv: TripConversation = {
-            ...conv,
-            trip_number: params.tripNumber,
-            pickup_area: params.pickupArea,
-            drop_location: params.dropLocation,
-            messages: [],
-          };
-          return [newConv, ...prev];
-        });
-
+        useChatStore.getState().upsertConversation({
+          ...conv,
+          trip_number:   params.tripNumber,
+          pickup_area:   params.pickupArea,
+          drop_location: params.dropLocation,
+          messages:      [],
+        } as TripConversation);
         return conv.id;
       } catch {
         return null;
@@ -507,23 +397,19 @@ export function TripChatProvider({
       if (!fleetOrg || !driverId) return null;
       try {
         const conv = await chatService.getOrCreateConversation({
-          tripId: params.tripId,
-          partyType: "driver",
-          partyName: params.driverDisplayName.trim() || "Driver",
+          tripId:         params.tripId,
+          partyType:      "driver",
+          partyName:      params.driverDisplayName.trim() || "Driver",
           organizationId: fleetOrg,
-          partyId: driverId,
+          partyId:        driverId,
         });
-        setConversations((prev) => {
-          if (prev.find((c) => c.id === conv.id)) return prev;
-          const newConv: TripConversation = {
-            ...conv,
-            trip_number: params.tripNumber,
-            pickup_area: params.pickupArea,
-            drop_location: params.dropLocation,
-            messages: [],
-          };
-          return [newConv, ...prev];
-        });
+        useChatStore.getState().upsertConversation({
+          ...conv,
+          trip_number:   params.tripNumber,
+          pickup_area:   params.pickupArea,
+          drop_location: params.dropLocation,
+          messages:      [],
+        } as TripConversation);
         return conv.id;
       } catch {
         return null;
@@ -532,27 +418,12 @@ export function TripChatProvider({
     []
   );
 
-  const hydrateConversationById = useCallback(
-    async (conversationId: string): Promise<TripConversation | null> => {
-      try {
-        const conv = await chatService.getTripConversationById(conversationId);
-        if (!conv) return null;
-        setConversations((prev) => {
-          if (prev.some((c) => c.id === conv.id)) {
-            return prev.map((c) =>
-              c.id === conv.id ? { ...c, ...conv, messages: conv.messages } : c
-            );
-          }
-          return [conv, ...prev];
-        });
-        return conv;
-      } catch {
-        return null;
-      }
+  const switchParty = useCallback(
+    (tripId: string, partyType: ConversationPartyType) => {
+      useChatStore.getState().switchParty(tripId, partyType);
     },
-    []
+    [],
   );
-  hydrateConversationByIdRef.current = hydrateConversationById;
 
   return (
     <TripChatContext.Provider
@@ -566,8 +437,10 @@ export function TripChatProvider({
         getTotalUnreadCount,
         refreshConversations: loadConversations,
         hydrateConversationById,
+        changeTripStatus,
         initiateConversation,
         initiateDriverConversationForTrip,
+        switchParty,
       }}
     >
       {children}
