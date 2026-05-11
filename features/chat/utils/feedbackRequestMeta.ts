@@ -1,4 +1,8 @@
-import type { FeedbackRequestMetadata, TripMessageRow } from "../types/chat.types";
+import type {
+  FeedbackRequestMetadata,
+  TripConversationRow,
+  TripMessageRow,
+} from "../types/chat.types";
 
 function coerceRatedId(raw: unknown): string | null {
   if (raw == null) return null;
@@ -83,4 +87,31 @@ export function parseFeedbackRequestMetadata(
       ? (o.submitted_tags as unknown[]).filter((t): t is string => typeof t === "string")
       : undefined,
   };
+}
+
+/**
+ * True when this message belongs in the given party thread: same conversation row,
+ * and metadata rates exactly that thread's client / supplier / driver.
+ * Use this so a debrief card never appears in the wrong party tab.
+ */
+export function tripFeedbackRequestMatchesConversation(
+  message: Pick<TripMessageRow, "id" | "conversation_id" | "message_type" | "metadata">,
+  conv: Pick<
+    TripConversationRow,
+    "id" | "party_type" | "client_id" | "supplier_id" | "driver_id"
+  >,
+): boolean {
+  if (message.message_type !== "feedback_request") return false;
+  if (message.conversation_id !== conv.id) return false;
+  const meta = parseFeedbackRequestMetadata(message);
+  if (!meta) return false;
+  if (meta.rated_party_type !== conv.party_type) return false;
+  const partyId =
+    conv.party_type === "client"
+      ? conv.client_id
+      : conv.party_type === "supplier"
+        ? conv.supplier_id
+        : conv.driver_id;
+  if (partyId == null || String(partyId).trim() === "") return false;
+  return String(meta.rated_id).trim() === String(partyId).trim();
 }

@@ -2,13 +2,21 @@ export type ConversationPartyType = "client" | "supplier" | "driver";
 export type MessageSenderRole = "dispatcher" | "client" | "supplier" | "driver" | "system";
 export type MessageType =
   | "text"
+  | "chat"           // alias for text — standard dispatcher/party message bubble
   | "update"
   | "question"
   | "challenge"
   | "system"
+  | "system_log"     // alias for system — operational log (e.g. "Vehicle Assigned")
   | "ledger_event"
+  | "ledger"         // alias for ledger_event — from submit_business_event
+  | "payment"        // alias for ledger_event — from execute_b2b_update / external callers
   | "document_share"
-  | "feedback_request";
+  | "feedback_request"
+  | "feedback"       // alias for feedback_request
+  | "image"          // inline image (storage path in metadata.storage_path)
+  | "status_change"  // trip lifecycle event (metadata: StatusChangeMetadata)
+  | "tracking";      // live location/ETA push (metadata: TrackingMetadata)
 
 // ── Ledger event metadata ─────────────────────────────────────────────────────
 
@@ -40,6 +48,119 @@ export interface DocumentShareMetadata {
   entity_id: string;
 }
 
+// ── Status-change event metadata ─────────────────────────────────────────────
+
+/** Emitted by change_trip_status_with_notification RPC (`message_type = status_change`). */
+export interface StatusChangeMetadata {
+  event_type:       'status_change';
+  previous_status:  string;
+  new_status:       string;
+  changed_by?:      string | null;
+  changed_by_name?: string | null;
+  changed_at:       string;
+}
+
+// ── Image message metadata ────────────────────────────────────────────────────
+
+/** Sent when a dispatcher shares an image directly (`message_type = image`). */
+export interface ImageMessageMetadata {
+  storage_path:   string;
+  mime_type?:     string | null;
+  original_name?: string | null;
+  size_bytes?:    number | null;
+}
+
+// ── Tracking / live-location event ───────────────────────────────────────────
+
+/**
+ * Emitted by the driver app via submit_business_event when a location push is
+ * requested (`message_type = 'tracking'`).  The store extracts lat/lng/eta and
+ * writes them into TripMeta so the dispatcher sees live ETA without a DB fetch.
+ */
+export interface TrackingMetadata {
+  lat:           number;
+  lng:           number;
+  accuracy?:     number | null;
+  heading?:      number | null;
+  speed_kmh?:    number | null;
+  eta_minutes?:  number | null;
+  eta_label?:    string | null;
+  address_hint?: string | null;
+}
+
+// ── B2B event metadata (process_b2b_event) ───────────────────────────────────
+
+/**
+ * Full trip state embedded in every message produced by process_b2b_event.
+ * The frontend extracts this and writes it into TripMeta — no follow-up fetch.
+ */
+export interface B2BTripState {
+  id:                     string;
+  trip_number:            string;
+  display_trip_id:        string | null;
+  status:                 string;
+  driver_id:              string | null;
+  vehicle_id:             string | null;
+  supplier_id:            string | null;
+  client_id:              string | null;
+  driver_display_name:    string | null;
+  vehicle_display_number: string | null;
+  pickup_area:            string;
+  drop_location:          string;
+  pickup_date:            string | null;
+  payment_status:         string | null;
+  updated_at:             string;
+}
+
+/** Message metadata shape produced by process_b2b_event. */
+export interface B2BEventMetadata {
+  event_type:       string;
+  previous_status:  string;
+  new_status:       string;
+  changed_by?:      string | null;
+  changed_by_name?: string | null;
+  changed_at:       string;
+  trip_state:       B2BTripState;
+  [key: string]:    unknown;
+}
+
+// ── Message visibility (tab routing) ─────────────────────────────────────────
+
+/**
+ * Per-message-type visibility rules.
+ * Keys present = restricted to listed party types.
+ * Keys absent  = visible in all tabs (client, supplier, driver).
+ *
+ * Rules:
+ *   ledger / ledger_event  → financial tabs only (client, supplier)
+ *   feedback_request       → financial tabs only (client, supplier)
+ *   tracking               → driver tab (dispatcher can see via driver conv)
+ *   everything else        → unrestricted
+ */
+export const MESSAGE_VISIBILITY: Partial<Record<MessageType, ConversationPartyType[]>> = {
+  ledger_event:     ['client', 'supplier'],
+  ledger:           ['client', 'supplier'],
+  payment:          ['client', 'supplier'],
+  feedback_request: ['client', 'supplier'],
+  feedback:         ['client', 'supplier'],
+};
+
+/**
+ * Returns true if a message of the given type should be rendered in the
+ * given party tab.  Used by renderMessage as a pure memory filter —
+ * zero DB calls when switching between Driver / Client / Supplier tabs.
+ */
+export function isMessageVisibleInTab(
+  messageType: MessageType,
+  partyType:   ConversationPartyType,
+): boolean {
+  const allowed = MESSAGE_VISIBILITY[messageType];
+  if (!allowed) return true;
+  return allowed.includes(partyType);
+}
+
+// ── Feedback request ──────────────────────────────────────────────────────────
+
 /** In-chat debrief card after trip completion (`message_type = feedback_request`). */
 export interface FeedbackRequestMetadata {
   feedback_version?: number;
@@ -53,11 +174,58 @@ export interface FeedbackRequestMetadata {
 }
 
 export type TripMessageMetadata =
+  | B2BEventMetadata
   | LedgerEventMetadata
   | DocumentShareMetadata
   | FeedbackRequestMetadata
+  | StatusChangeMetadata
+  | ImageMessageMetadata
+  | TrackingMetadata
   | Record<string, unknown>
   | null;
+
+// ── Store-level trip metadata snapshot ───────────────────────────────────────
+
+/**
+ * Lightweight trip metadata kept in chatStore.tripMetaMap.
+ * Updated in-place by SYSTEM_UPDATE Realtime events and the optimistic
+ * changeTripStatus handler — no DB re-fetch required.
+ */
+export interface TripMeta {
+  trip_id:          string;
+  trip_number:      string;
+  display_trip_id:  string | null;
+  trip_status:      string | null;
+  pickup_area:      string;
+  drop_location:    string;
+  trip_driver_id:   string | null;
+  trip_supplier_id: string | null;
+  trip_created_at:  string | null;
+  /** Live location — injected in-memory from 'tracking' messages; no DB fetch. */
+  last_lat?:         number | null;
+  last_lng?:         number | null;
+  last_location_at?: string | null;
+  last_eta_minutes?: number | null;
+  last_eta_label?:   string | null;
+  /** Running payment balance accumulated from ledger_event messages. No DB fetch. */
+  payment_balance?:  number | null;
+}
+
+// ── Realtime event discriminated union ───────────────────────────────────────
+
+/**
+ * All Realtime events that the chat store can receive.
+ * TripChatContext classifies raw Supabase payloads into one of these types
+ * and calls chatStore.dispatch(event).
+ *
+ * NEW_MESSAGE   — trip_messages INSERT (text, image, system, status_change, …)
+ * SYSTEM_UPDATE — trip metadata changed without a new message (e.g. external trip edit)
+ * ACK_UPDATE    — trip_messages UPDATE: is_delivered / is_read tick changed
+ */
+export type ChatRealtimeEvent =
+  | { type: 'NEW_MESSAGE';   row: Partial<TripMessageRow>; mode: 'active' | 'background' }
+  | { type: 'SYSTEM_UPDATE'; tripId: string; patch: Partial<TripMeta> }
+  | { type: 'ACK_UPDATE';    conversationId: string; messageId: string; patch: Partial<TripMessageRow> };
 
 // ── Trip conversation ─────────────────────────────────────────────────────────
 
@@ -90,6 +258,15 @@ export interface TripMessageRow {
   is_read: boolean;
   read_at: string | null;
   created_at: string;
+  sender_avatar_seed?: string | null;
+  is_delivered?: boolean;
+  delivered_at?: string | null;
+  /**
+   * Party routing tags — conversation IDs (or party_type strings) that should
+   * receive this message. Populated by process_b2b_event / get_unified_b2b_bootstrap.
+   * Absence means: visible only in the originating conversation's tab (legacy).
+   */
+  visibility_tags?: string[] | null;
 }
 
 export interface TripConversation extends TripConversationRow {

@@ -1,4 +1,3 @@
-import { createRating } from "@/features/ratings/services/ratings.service";
 import type { RatedType, RatingRow } from "@/features/ratings/types";
 import { notifyTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
 import { supabase } from "@/lib/supabase";
@@ -288,9 +287,9 @@ export async function getConversationsByOrganization(
 
     const byId = new Map<string, Record<string, unknown>>();
     for (const row of ownOrgRows ?? [])
-      byId.set((row as { id: string }).id, row as Record<string, unknown>);
+      byId.set((row as unknown as { id: string }).id, row as unknown as Record<string, unknown>);
     for (const row of supplierRows)
-      byId.set((row as { id: string }).id, row as Record<string, unknown>);
+      byId.set((row as unknown as { id: string }).id, row as unknown as Record<string, unknown>);
 
     return Array.from(byId.values()).sort((a, b) => {
       const ta = a.last_message_at as string | null | undefined;
@@ -574,7 +573,7 @@ export async function getMessagesByConversation(
 ): Promise<TripMessageRow[]> {
   let query = supabase()
     .from("trip_messages")
-    .select("id,conversation_id,organization_id,sender_user_id,sender_role,sender_name,content,message_type,metadata,is_read,read_at,created_at")
+    .select("id,conversation_id,organization_id,sender_user_id,sender_role,sender_name,content,message_type,metadata,is_read,read_at,created_at,sender_avatar_seed,is_delivered,delivered_at")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: false })
     .limit(opts?.limit ?? 50);
@@ -817,51 +816,76 @@ export async function submitTripChatFeedback(params: {
     return { error: new Error("Feedback already submitted") };
   }
 
-  const ratedType = meta.rated_party_type as RatedType;
-  const comment = JSON.stringify({
-    source: "trip_chat_feedback",
-    tags,
+  // Single-RPC path: replaces 3 sequential DB round trips (upsert rating +
+  // SELECT metadata + UPDATE metadata) with one atomic transaction.
+  const { data, error } = await supabase().rpc("submit_trip_feedback", {
+    p_organization_id: ratingOrganizationId,
+    p_trip_id:         tripId,
+    p_message_id:      message.id,
+    p_rated_type:      meta.rated_party_type as RatedType,
+    p_rated_id:        meta.rated_id,
+    p_score:           Math.min(5, Math.max(1, score)),
+    p_tags:            tags,
   });
 
-  const { error: ratingErr } = await createRating(ratingOrganizationId, {
-    trip_id: tripId,
-    rater_type: "organization",
-    rater_id: ratingOrganizationId,
-    rated_type: ratedType,
-    rated_id: meta.rated_id,
-    score,
-    comment,
-  });
-  if (ratingErr != null) return { error: ratingErr };
+  if (error) return { error: new Error(error.message) };
 
-  const { data: existing, error: readErr } = await supabase()
-    .from("trip_messages")
-    .select("metadata")
-    .eq("id", message.id)
-    .maybeSingle();
-
-  if (readErr) return { error: new Error(readErr.message) };
-
-  const base =
-    existing?.metadata != null && typeof existing.metadata === "object"
-      ? (existing.metadata as Record<string, unknown>)
-      : {};
-  const nextMeta = {
-    ...base,
-    submitted_at: new Date().toISOString(),
-    submitted_score: score,
-    submitted_tags: tags,
-  };
-
-  const { error: updErr } = await supabase()
-    .from("trip_messages")
-    .update({ metadata: nextMeta })
-    .eq("id", message.id);
-
-  if (updErr) return { error: new Error(updErr.message) };
+  const result = data as { ok?: boolean; error?: string } | null;
+  if (result?.error) return { error: new Error(result.error) };
 
   notifyTripChatMessagesChanged();
   return { error: null };
+}
+
+/**
+ * Atomic feedback submission — calls submit_atomic_feedback RPC.
+ * Returns the canonical metadata payload so the caller can patch the store
+ * without waiting for a DB re-fetch.  The frontend patches the store first
+ * (optimistic), then calls this to get the server-confirmed values.
+ */
+export async function submitAtomicFeedback(params: {
+  organizationId: string;
+  tripId:         string;
+  message:        TripMessageRow;
+  score:          number;
+  tags:           string[];
+  comment?:       string;
+}): Promise<{
+  submittedAt:    string;
+  submittedScore: number;
+  submittedTags:  string[];
+  alreadySubmitted: boolean;
+}> {
+  const meta = parseFeedbackRequestMetadata(params.message);
+  if (!meta) throw new Error("Invalid feedback message");
+
+  const { data, error } = await supabase().rpc('submit_atomic_feedback', {
+    p_organization_id: params.organizationId,
+    p_trip_id:         params.tripId,
+    p_message_id:      params.message.id,
+    p_rated_type:      meta.rated_party_type as RatedType,
+    p_rated_id:        meta.rated_id,
+    p_score:           Math.min(5, Math.max(1, params.score)),
+    p_tags:            params.tags,
+    p_comment:         params.comment ?? null,
+  });
+
+  if (error) throw new Error(error.message);
+
+  const result = data as {
+    ok: boolean;
+    already_submitted: boolean;
+    submitted_at:    string;
+    submitted_score: number;
+    submitted_tags:  string[];
+  };
+
+  return {
+    submittedAt:      result.submitted_at,
+    submittedScore:   result.submitted_score,
+    submittedTags:    Array.isArray(result.submitted_tags) ? result.submitted_tags : [],
+    alreadySubmitted: Boolean(result.already_submitted),
+  };
 }
 
 export async function markNetworkConversationRead(
@@ -1124,4 +1148,297 @@ export async function getShareableDocumentsForTrip(params: {
   }
 
   return results;
+}
+
+// ── WhatsApp-architecture bootstrap & status change ───────────────────────────
+
+/**
+ * Parse a raw JSONB conversation row (as returned by get_initial_chat_state)
+ * into a typed TripConversation.  Mirrors the field mapping in
+ * getConversationsByOrganization without the PostgREST embed wrapping.
+ */
+function normalizeInitialStateRow(row: Record<string, unknown>): TripConversation {
+  return {
+    id:                      String(row.id ?? ''),
+    organization_id:         String(row.organization_id ?? ''),
+    trip_id:                 String(row.trip_id ?? ''),
+    party_type:              (row.party_type as ConversationPartyType) ?? 'client',
+    party_name:              String(row.party_name ?? ''),
+    client_id:               (row.client_id   as string | null) ?? null,
+    supplier_id:             (row.supplier_id as string | null) ?? null,
+    driver_id:               (row.driver_id   as string | null) ?? null,
+    last_message_at:         (row.last_message_at as string | null) ?? null,
+    last_message_preview:    (row.last_message_preview as string | null) ?? null,
+    unread_dispatcher_count: Number(row.unread_dispatcher_count ?? 0),
+    created_at:              String(row.created_at ?? ''),
+    updated_at:              String(row.updated_at ?? ''),
+    trip_number:             String(row.trip_number ?? ''),
+    display_trip_id:         (row.display_trip_id  as string | null) ?? null,
+    trip_status:             (row.trip_status       as string | null) ?? null,
+    trip_driver_id:          (row.trip_driver_id    as string | null) ?? null,
+    trip_supplier_id:        (row.trip_supplier_id  as string | null) ?? null,
+    trip_created_at:         (row.trip_created_at   as string | null) ?? null,
+    pickup_area:             String(row.pickup_area   ?? ''),
+    drop_location:           String(row.drop_location ?? ''),
+    messages:                (row.messages as TripMessageRow[]) ?? [],
+  };
+}
+
+/**
+ * Single-RPC bootstrap: fetches all non-cancelled trip conversations + last
+ * N messages per conversation.  After this call the app uses only Realtime.
+ */
+export async function getInitialChatState(
+  organizationId: string,
+  messageLimit = 20,
+): Promise<TripConversation[]> {
+  const { data, error } = await supabase().rpc('get_initial_chat_state', {
+    p_organization_id: organizationId,
+    p_message_limit:   messageLimit,
+  });
+  if (error) throw error;
+
+  const rows = (Array.isArray(data) ? data : []) as Array<Record<string, unknown>>;
+  const conversations = rows.map(normalizeInitialStateRow);
+
+  // Resolve generic party names ("client" / "supplier" placeholders)
+  // — reuses the same lookup already used by getConversationsByOrganization.
+  return resolveGenericPartyNamesForTrips(conversations);
+}
+
+/**
+ * "Bootstrap & Patch" entry point — the one DB call the chat feature makes.
+ * Calls get_b2b_chat_bootstrap (50 messages per conversation) and returns all
+ * non-cancelled trip conversations with full trip metadata embedded.
+ * After this call the app relies exclusively on Realtime for all state updates.
+ */
+export async function getB2BChatBootstrap(
+  organizationId: string,
+): Promise<TripConversation[]> {
+  const { data, error } = await supabase().rpc('get_b2b_chat_bootstrap', {
+    p_organization_id: organizationId,
+    p_message_limit:   50,
+  });
+  if (error) throw error;
+
+  const rows = (Array.isArray(data) ? data : []) as Array<Record<string, unknown>>;
+  const conversations = rows.map(normalizeInitialStateRow);
+  return resolveGenericPartyNamesForTrips(conversations);
+}
+
+/**
+ * Unified bootstrap — calls get_unified_b2b_bootstrap which adds visibility_tags
+ * per message for multi-party routing.  Falls back to get_b2b_chat_bootstrap
+ * automatically when the migration has not been applied yet (PGRST202 / 42883).
+ *
+ * This is the ONLY DB call the chat store is allowed to make after app start.
+ * All subsequent state arrives via Realtime.
+ */
+export async function getUnifiedB2BChatBootstrap(
+  organizationId: string,
+): Promise<TripConversation[]> {
+  const { data, error } = await supabase().rpc('get_unified_b2b_bootstrap', {
+    p_organization_id: organizationId,
+    p_message_limit:   50,
+  });
+
+  // Graceful fallback: if the unified RPC doesn't exist yet, use the previous one.
+  if (error) {
+    const code = String(error.code ?? '');
+    const msg  = String(error.message ?? '').toLowerCase();
+    const isMissing =
+      code === '42883' ||
+      code === 'PGRST202' ||
+      msg.includes('get_unified_b2b_bootstrap') ||
+      msg.includes('does not exist');
+    if (isMissing) return getB2BChatBootstrap(organizationId);
+    throw error;
+  }
+
+  const rows = (Array.isArray(data) ? data : []) as Array<Record<string, unknown>>;
+  const conversations = rows.map(normalizeInitialStateRow);
+  return resolveGenericPartyNamesForTrips(conversations);
+}
+
+/**
+ * On-demand history loader — called when the detail panel opens on a conversation
+ * that has a last_message_preview but 0 messages in the store (i.e., bootstrap
+ * window did not include this conversation's history).
+ */
+export async function fetchConversationHistory(
+  conversationId: string,
+  limit = 50,
+): Promise<TripMessageRow[]> {
+  const { data, error } = await supabase()
+    .from('trip_messages')
+    .select('*')
+    .eq('conversation_id', conversationId)
+    .order('created_at', { ascending: true })
+    .limit(limit);
+  if (error) throw error;
+  return (data as TripMessageRow[]) ?? [];
+}
+
+// ── processB2BEvent ───────────────────────────────────────────────────────────
+
+export interface ProcessB2BEventPayload {
+  content:          string;
+  newStatus?:       string | null;
+  driverId?:        string | null;
+  vehicleId?:       string | null;
+  userId?:          string | null;
+  userName?:        string;
+  conversationId?:  string | null;
+  extraMeta?:       Record<string, unknown>;
+}
+
+export interface ProcessB2BEventResult {
+  ok:          boolean;
+  messageIds:  string[];
+  tripState:   import('../types/chat.types').B2BTripState;
+  prevStatus:  string;
+  newStatus:   string;
+  eventType:   string;
+}
+
+/**
+ * Single atomic DB hit: updates trips state + inserts a message with the full
+ * trip-state snapshot embedded in metadata.  The Realtime INSERT delivers the
+ * snapshot to all subscribers; the store extracts it and updates TripMeta
+ * in-memory without a follow-up fetch.
+ *
+ * Event routing (when conversationId is null):
+ *   ledger / ledger_event  → client + supplier conversations only
+ *   tracking               → driver conversation only
+ *   status_change / system → all conversations (broadcast)
+ */
+export async function processB2BEvent(params: {
+  organizationId: string;
+  tripId:         string;
+  eventType:      string;
+  payload:        ProcessB2BEventPayload;
+}): Promise<ProcessB2BEventResult> {
+  const rpcPayload: Record<string, unknown> = {
+    content:   params.payload.content,
+    user_name: params.payload.userName ?? 'System',
+  };
+  if (params.payload.newStatus    != null) rpcPayload.new_status       = params.payload.newStatus;
+  if (params.payload.driverId     != null) rpcPayload.driver_id        = params.payload.driverId;
+  if (params.payload.vehicleId    != null) rpcPayload.vehicle_id       = params.payload.vehicleId;
+  if (params.payload.userId       != null) rpcPayload.user_id          = params.payload.userId;
+  if (params.payload.conversationId != null) rpcPayload.conversation_id = params.payload.conversationId;
+  if (params.payload.extraMeta)   rpcPayload.extra_meta  = params.payload.extraMeta;
+
+  const { data, error } = await supabase().rpc('process_b2b_event', {
+    p_organization_id: params.organizationId,
+    p_trip_id:         params.tripId,
+    p_event_type:      params.eventType,
+    p_payload:         rpcPayload,
+  });
+  if (error) throw error;
+
+  const r = data as {
+    ok:          boolean;
+    message_ids: string[];
+    trip_state:  import('../types/chat.types').B2BTripState;
+    prev_status: string;
+    new_status:  string;
+    event_type:  string;
+  };
+  return {
+    ok:         r.ok,
+    messageIds: r.message_ids,
+    tripState:  r.trip_state,
+    prevStatus: r.prev_status,
+    newStatus:  r.new_status,
+    eventType:  r.event_type,
+  };
+}
+
+// ── submitBusinessEvent ───────────────────────────────────────────────────────
+
+export interface SubmitBusinessEventParams {
+  organizationId:   string;
+  tripId:           string;
+  eventType:        string;
+  content:          string;
+  metadata?:        Record<string, unknown>;
+  newTripStatus?:   string | null;
+  userId?:          string | null;
+  userName?:        string;
+  conversationId?:  string | null;
+}
+
+export interface SubmitBusinessEventResult {
+  ok:          boolean;
+  messageIds:  string[];
+  updatedAt:   string;
+  prevStatus:  string;
+  newStatus:   string;
+  eventType:   string;
+}
+
+/**
+ * Unified atomic event writer — validates org access, optionally updates
+ * trips.status, and inserts one message per conversation (or just the targeted
+ * conversation when conversationId is provided).  Returns enriched metadata
+ * so the caller can patch the store without a follow-up fetch.
+ */
+export async function submitBusinessEvent(
+  params: SubmitBusinessEventParams,
+): Promise<SubmitBusinessEventResult> {
+  const { data, error } = await supabase().rpc('submit_business_event', {
+    p_organization_id: params.organizationId,
+    p_trip_id:         params.tripId,
+    p_event_type:      params.eventType,
+    p_content:         params.content,
+    p_metadata:        params.metadata ?? {},
+    p_new_trip_status: params.newTripStatus ?? null,
+    p_user_id:         params.userId ?? null,
+    p_user_name:       params.userName ?? 'System',
+    p_conversation_id: params.conversationId ?? null,
+  });
+  if (error) throw error;
+
+  const result = data as {
+    ok:          boolean;
+    message_ids: string[];
+    updated_at:  string;
+    prev_status: string;
+    new_status:  string;
+    event_type:  string;
+  };
+  return {
+    ok:         result.ok,
+    messageIds: result.message_ids,
+    updatedAt:  result.updated_at,
+    prevStatus: result.prev_status,
+    newStatus:  result.new_status,
+    eventType:  result.event_type,
+  };
+}
+
+/**
+ * Atomic status change: updates trip.status + inserts a status_change system
+ * message in every conversation for the trip.  The Realtime INSERT propagates
+ * the system message to all active listeners; the caller's optimistic update
+ * ensures immediate local reflection.
+ */
+export async function changeTripStatus(params: {
+  tripId:         string;
+  organizationId: string;
+  newStatus:      string;
+  userId:         string | null;
+  userName:       string;
+}): Promise<{ previousStatus: string; changedAt: string }> {
+  const { data, error } = await supabase().rpc('change_trip_status_with_notification', {
+    p_trip_id:         params.tripId,
+    p_organization_id: params.organizationId,
+    p_new_status:      params.newStatus,
+    p_user_id:         params.userId,
+    p_user_name:       params.userName,
+  });
+  if (error) throw error;
+  const result = data as { ok: boolean; previous_status: string; changed_at: string };
+  return { previousStatus: result.previous_status, changedAt: result.changed_at };
 }

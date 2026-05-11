@@ -4,6 +4,16 @@
  * is available (e.g. dev/production build); falls back to AsyncStorage on web or
  * when ExpoSecureStore is not available (e.g. some Expo Go). Same DB as Q-unified-base.
  * RLS applies; do not use service_role key in the app.
+ *
+ * CONNECTION MODEL — important:
+ * The JS SDK communicates over HTTPS (REST API via PostgREST + Auth + Storage).
+ * It never opens a raw Postgres wire connection (port 5432 / 6543).
+ * Supavisor Transaction Mode (port 6543) is for pg-wire tools ONLY:
+ *   psql, pgAdmin, db migrations, Node.js `pg` driver, Edge Functions using pg.
+ * Do NOT point EXPO_PUBLIC_SUPABASE_URL at port 6543 — it will break all REST calls.
+ *
+ * SINGLETON — this file exports one client instance created at first call.
+ * Never call createClient() again elsewhere; import supabase() from this module.
  */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
