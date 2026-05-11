@@ -1,7 +1,7 @@
 -- Drop per-conversation EXISTS on public.ratings from get_initial_chat_state.
 -- That scan ran for every trip_conversation row and could stall bootstrap under load.
--- Lane status is derived from feedback_request message metadata only; ratings without
--- a stamped message are reconciled client-side via persistTripFeedbackMessageMetadataIfRated.
+-- Lane status is derived from feedback_request message metadata only. In-memory merge
+-- with `ratings` in the client shows trip-page scores in-stream without write-on-read.
 
 CREATE OR REPLACE FUNCTION public.get_initial_chat_state(
   p_organization_id UUID,

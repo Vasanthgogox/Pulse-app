@@ -23,12 +23,16 @@ import Animated, {
   withSpring,
   withTiming,
 } from "react-native-reanimated";
-import { ChevronRight, MapPin, Radio, Reply } from "lucide-react-native";
+import { ChevronRight, MapPin, Radio, Reply, Star } from "lucide-react-native";
 import Theme from "@/constants/Theme";
 import { useOptionalOrganization } from "@/contexts/OrganizationContext";
 import { CHAT_ACCENT } from "@/features/chat/chatTheme";
-import { useChatStore, type TripEntry } from "@/features/chat/store/useChatStore";
-import { isTerminalTripStatus } from "@/features/chat/utils/tripConversationSort";
+import { useChatStore } from "@/features/chat/store/useChatStore";
+import {
+  isTerminalTripStatus,
+  isTripFeedbackEligibleStatus,
+} from "@/features/chat/utils/tripConversationSort";
+import { tripHasPendingOrgFeedback } from "@/features/chat/utils/tripFeedbackPending.util";
 import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
 import {
   activeTripIslandSignalTs,
@@ -93,22 +97,6 @@ function pickQuickEvents(events: ActiveTripRecentEvent[] | undefined): ActiveTri
   return pool.slice(-3);
 }
 
-function tripHasPendingOrgFeedback(
-  trips: Record<string, TripEntry>,
-  tripId: string,
-  orgId: string | null | undefined,
-): boolean {
-  if (!orgId) return false;
-  const entry = trips[tripId];
-  if (!entry) return false;
-  for (const p of Object.values(entry.parties)) {
-    if (!p) continue;
-    if (p.organizationId !== orgId) continue;
-    if (p.feedbackStatus === "pending") return true;
-  }
-  return false;
-}
-
 export interface DynamicTripIslandProps {
   /** Currently open trip — used to label context, not for data fetch. */
   currentTripId: string;
@@ -129,14 +117,56 @@ export function DynamicTripIsland({
   const org = useOptionalOrganization();
   const orgId = org?.currentOrganization?.id ?? null;
   const activeTrips = useGlobalSyncStore((s) => s.activeTrips);
+  const chatTrips = useChatStore((s) => s.trips);
   const pendingTripFeedback = useChatStore((s) =>
     tripHasPendingOrgFeedback(s.trips, currentTripId, orgId),
   );
+  const chatEntryForCurrent = currentTripId ? chatTrips[currentTripId] : undefined;
+  const completedNeedsRate =
+    Boolean(
+      orgId &&
+        currentTripId &&
+        chatEntryForCurrent &&
+        isTripFeedbackEligibleStatus(chatEntryForCurrent.status) &&
+        tripHasPendingOrgFeedback(chatTrips, currentTripId, orgId),
+    );
 
-  const ranked = useMemo(
-    () => rankActiveTripsForIsland(activeTrips.filter((t) => !isTerminalTripStatus(t.status))),
-    [activeTrips],
-  );
+  const ranked = useMemo(() => {
+    const byId = new Map<string, ActiveTripSummary>();
+    for (const t of activeTrips) {
+      if (!isTerminalTripStatus(t.status)) byId.set(t.trip_id, t);
+    }
+    for (const t of activeTrips) {
+      if (
+        isTripFeedbackEligibleStatus(t.status) &&
+        orgId &&
+        tripHasPendingOrgFeedback(chatTrips, t.trip_id, orgId) &&
+        !byId.has(t.trip_id)
+      ) {
+        byId.set(t.trip_id, t);
+      }
+    }
+    const ct = (currentTripId ?? "").trim();
+    if (ct && orgId && completedNeedsRate && chatEntryForCurrent && !byId.has(ct)) {
+      byId.set(ct, {
+        trip_id:                 chatEntryForCurrent.tripId,
+        trip_number:             chatEntryForCurrent.tripNumber,
+        display_trip_id:         chatEntryForCurrent.displayTripId,
+        status:                  chatEntryForCurrent.status ?? "completed",
+        pickup_area:             chatEntryForCurrent.pickupArea,
+        drop_location:           chatEntryForCurrent.dropLocation,
+        driver_display_name:     chatEntryForCurrent.driverDisplayName,
+        vehicle_display_number:  chatEntryForCurrent.vehicleDisplayNumber,
+        driver_id:               chatEntryForCurrent.driverId,
+        supplier_id:             chatEntryForCurrent.supplierId,
+        client_id:               null,
+        created_at:              chatEntryForCurrent.createdAt ?? new Date().toISOString(),
+        total_unread:            chatEntryForCurrent.totalUnread,
+        recent_events:           [],
+      });
+    }
+    return rankActiveTripsForIsland([...byId.values()]);
+  }, [activeTrips, orgId, currentTripId, completedNeedsRate, chatEntryForCurrent, chatTrips]);
 
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [expanded, setExpanded] = useState(false);
@@ -305,7 +335,7 @@ export function DynamicTripIsland({
           </Text>
           {showRatePulse ? (
             <Text style={styles.rateHint} numberOfLines={2}>
-              Rate your trip — open the chat thread to submit your stars.
+              Trip completed — rate your partner in chat.
             </Text>
           ) : null}
           {signalTs > 0 ? (
@@ -326,15 +356,25 @@ export function DynamicTripIsland({
               </View>
             ))}
             <Pressable
-              style={styles.replyBtn}
+              style={[styles.replyBtn, showRatePulse && styles.rateTripBtn]}
               onPress={() => {
                 onNavigateTrip(trip.trip_id);
                 onReplyShortcut?.();
               }}
               hitSlop={8}
+              accessibilityLabel={showRatePulse ? "Rate trip" : "Reply"}
             >
-              <Reply size={16} color="#fff" />
-              <Text style={styles.replyBtnText}>Reply</Text>
+              {showRatePulse ? (
+                <>
+                  <Star size={16} color="#fff" fill="#fbbf24" strokeWidth={2} />
+                  <Text style={styles.replyBtnText}>Rate trip</Text>
+                </>
+              ) : (
+                <>
+                  <Reply size={16} color="#fff" />
+                  <Text style={styles.replyBtnText}>Reply</Text>
+                </>
+              )}
             </Pressable>
           </Animated.View>
         </View>
@@ -459,6 +499,9 @@ const styles = StyleSheet.create({
     backgroundColor: CHAT_ACCENT,
     paddingVertical: 11,
     borderRadius: 14,
+  },
+  rateTripBtn: {
+    backgroundColor: "#15803d",
   },
   replyBtnText: { color: "#fff", fontSize: 14, fontWeight: "800" },
 });

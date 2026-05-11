@@ -180,6 +180,10 @@ export interface FeedbackRequestMetadata {
   rated_party_type: "client" | "supplier" | "driver";
   rated_id: string;
   rated_display_name?: string;
+  /**
+   * Optional stamp from DB trigger / backfill — if set (1–5), treat as already rated at bootstrap.
+   */
+  rating?: number;
   /** Set after successful submit (merged into row). */
   submitted_at?: string;
   submitted_score?: number;

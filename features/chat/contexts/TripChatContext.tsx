@@ -13,6 +13,7 @@ import { supabase } from "@/lib/supabase";
 import * as chatService from "../services/chat.service";
 import { useConversations, useTotalUnreadCount } from "../store/chatStore";
 import { registerMarkMessagesSeenRpc, useChatStore } from "../store/useChatStore";
+import { tripHasPendingOrgFeedback } from "../utils/tripFeedbackPending.util";
 import type {
   ConversationPartyType,
   MessageType,
@@ -106,6 +107,11 @@ interface TripChatContextType {
   ) => Promise<string | null>;
   /** Persist the active party type for a trip to the store. */
   switchParty: (tripId: string, partyType: ConversationPartyType) => void;
+  /**
+   * Read-only: whether the current org still owes an in-chat debrief for this trip
+   * (`PartyConv.feedbackStatus` from bootstrap / Realtime — no RPC).
+   */
+  tripHasPendingFeedback: (tripId: string) => boolean;
 }
 
 const TripChatContext = createContext<TripChatContextType | undefined>(undefined);
@@ -463,6 +469,14 @@ export function TripChatProvider({
     [],
   );
 
+  const tripHasPendingFeedback = useCallback(
+    (tripId: string) => {
+      if (!organizationId) return false;
+      return tripHasPendingOrgFeedback(useChatStore.getState().trips, tripId, organizationId);
+    },
+    [organizationId],
+  );
+
   return (
     <TripChatContext.Provider
       value={{
@@ -479,6 +493,7 @@ export function TripChatProvider({
         initiateConversation,
         initiateDriverConversationForTrip,
         switchParty,
+        tripHasPendingFeedback,
       }}
     >
       {children}

@@ -31,6 +31,7 @@ import {
   Search,
   Send,
   Smile,
+  Star,
   FileType,
   Truck,
   User,
@@ -67,11 +68,8 @@ import {
 } from "@/features/chat/contexts/IntegratedChatContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
-  ensureTripFeedbackPromptMessages,
   getMessagesByConversation,
   getTripsForCompose,
-  persistTripFeedbackMessageMetadataIfRated,
-  seedTripConversationFeedbackPromptIfMissing,
   sendDocumentShareMessage,
   TRIP_CHAT_HISTORY_PAGE,
   type TripForCompose,
@@ -917,6 +915,11 @@ export function ChatScreen() {
     const displayTripId = getConversationTripLabel(item);
     const partyLine = formatChatPartyName(item.party_name);
     const isActiveTrip = !isTerminalTripStatus(item.trip_status);
+    const showPendingFeedbackIcon =
+      Platform.OS === "web" &&
+      isDesktop &&
+      item.trip_feedback_status === "pending" &&
+      item.organization_id === currentOrgId;
     const time = item.last_message_at
       ? new Date(item.last_message_at).toLocaleTimeString("en-IN", {
           hour: "2-digit",
@@ -952,6 +955,15 @@ export function ChatScreen() {
               <Text style={[s.chatTitle, active && s.chatTitleActive]} numberOfLines={1}>
                 {displayTripId}
               </Text>
+              {showPendingFeedbackIcon ? (
+                <Star
+                  size={14}
+                  color={CHAT_ACCENT}
+                  fill="rgba(26,35,126,0.12)"
+                  style={s.chatPendingFeedbackStar}
+                  accessibilityLabel="Pending trip feedback"
+                />
+              ) : null}
               {isActiveTrip ? <View style={[s.activeTripDot, active && s.activeTripDotActive]} /> : null}
             </View>
             <Text style={[s.chatTime, active && s.chatTimeActive]}>{time}</Text>
@@ -970,7 +982,7 @@ export function ChatScreen() {
         )}
       </TouchableOpacity>
     );
-  }, [selectedConvId, openConversation]);
+  }, [selectedConvId, openConversation, isDesktop, currentOrgId]);
 
   const renderNetItem = useCallback(({ item }: { item: IntegratedChat }) => {
     const last = item.messages[item.messages.length - 1];
@@ -2762,6 +2774,7 @@ const s = StyleSheet.create({
     marginBottom: 2,
   },
   chatTitleRow: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1, minWidth: 0 },
+  chatPendingFeedbackStar: { marginLeft: 2 },
   chatTitle: { fontSize: 12, fontWeight: "900", color: "#0f172a", flex: 1, textTransform: "uppercase", fontStyle: "italic" },
   chatTitleActive: { color: "#fff" },
   activeTripDot: {
@@ -4072,39 +4085,6 @@ function TripConversationDetailLoaded({
 
   const tripEligibleForFeedback = isTripFeedbackEligibleStatus(effectiveTripStatus);
 
-  // Per-conversation lane seed; trip-wide prompt RPC runs at most once per trip (reduces DB load).
-  const feedbackSeededForConvRef = useRef<string | null>(null);
-  const tripWideFeedbackPromptRpcRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (!tripEligibleForFeedback) return;
-    if (feedbackSeededForConvRef.current === liveConv.id) return;
-    feedbackSeededForConvRef.current = liveConv.id;
-
-    let cancelled = false;
-    void (async () => {
-      const conv = liveConvRef.current;
-      const tid = conv.trip_id;
-      if (tripWideFeedbackPromptRpcRef.current !== tid) {
-        tripWideFeedbackPromptRpcRef.current = tid;
-        const { error: e1 } = await ensureTripFeedbackPromptMessages(tid);
-        if (e1 && __DEV__) console.warn("[ensureTripFeedbackPromptMessages]", e1.message);
-      }
-      if (cancelled) return;
-      // No hydrate: Realtime delivers the INSERT to chatStore automatically
-      await seedTripConversationFeedbackPromptIfMissing({
-        conversationId: conv.id,
-        organizationId: conv.organization_id,
-        partyType: conv.party_type,
-        partyName: conv.party_name ?? "",
-        clientId:   conv.client_id   ?? null,
-        supplierId: conv.supplier_id ?? null,
-        driverId:   conv.driver_id   ?? null,
-      });
-    })();
-    return () => { cancelled = true; };
-  }, [tripEligibleForFeedback, liveConv.id, liveConv.trip_id]);
-
   // Snapshot messages in a ref — avoids adding to ratings effect deps.
   const liveMessagesRef = useRef(liveConv.messages);
   liveMessagesRef.current = liveConv.messages;
@@ -4126,14 +4106,8 @@ function TripConversationDetailLoaded({
       if (error && __DEV__) console.warn("[getRatingsForTrip]", error.message);
       const rows = ratings ?? [];
       setTripRatings(rows);
-      // persistTripFeedbackMessageMetadataIfRated does a DB UPDATE on metadata.
-      // The resulting UPDATE fires ACK_UPDATE via Realtime → chatStore.patchMessage.
-      // No hydrate needed — the store reflects it automatically.
-      await persistTripFeedbackMessageMetadataIfRated({
-        tripId:   key,
-        messages: liveMessagesRef.current,
-        ratings:  rows,
-      });
+      // Read-only merge: `mergeTripChatMessagesWithFeedbackRatings` shows trip-page ratings in-stream.
+      // Do not write metadata on open (avoids write-on-read / pool pressure); DB trigger + submit RPC own stamps.
     })();
     return () => { cancelled = true; };
   }, [tripEligibleForFeedback, liveConv.trip_id, liveConv.id]);

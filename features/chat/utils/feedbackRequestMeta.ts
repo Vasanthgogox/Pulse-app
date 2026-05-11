@@ -78,12 +78,21 @@ export function parseFeedbackRequestMetadata(
 
   const ratingStatus = o.rating_status === "rated" ? "rated" : undefined;
 
+  let rating: number | undefined;
+  const rawRating = o.rating;
+  if (typeof rawRating === "number" && Number.isFinite(rawRating)) {
+    rating = rawRating;
+  } else if (typeof rawRating === "string" && rawRating.trim() && Number.isFinite(Number(rawRating))) {
+    rating = Number(rawRating);
+  }
+
   return {
     feedback_version: feedbackVersion,
     rated_party_type: rt,
     rated_id: ratedId,
     rated_display_name:
       typeof o.rated_display_name === "string" ? o.rated_display_name : undefined,
+    rating,
     submitted_at: typeof o.submitted_at === "string" ? o.submitted_at : undefined,
     submitted_score: scoreNum,
     submitted_tags: Array.isArray(o.submitted_tags)
