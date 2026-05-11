@@ -256,6 +256,8 @@ export type TripFeedbackLaneStatus = 'none' | 'pending' | 'rated';
 export interface TripConversationRow {
   id: string;
   organization_id: string;
+  /** Trip owner fleet org (`trips.organization_id`); may differ from `organization_id` on mirrored lanes. */
+  trip_organization_id?: string | null;
   trip_id: string;
   party_type: ConversationPartyType;
   party_name: string;

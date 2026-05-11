@@ -28,7 +28,6 @@ import {
   previewText,
   type TripEntry,
   type PartyConv,
-  type TripEvent,
 } from './useChatStore';
 import type {
   ChatRealtimeEvent,
@@ -38,6 +37,7 @@ import type {
   TripMeta,
 } from '../types/chat.types';
 import { isEventVisibleForPartyLane } from '../utils/messagePartyVisibility';
+import { dedupeTripStatusBroadcastsForLane } from '../utils/dedupeTripStatusBroadcastForLane.util';
 
 // ── Snapshot cache ────────────────────────────────────────────────────────────
 
@@ -63,47 +63,6 @@ function _buildSnapshot(): TripConversation[] {
 // Invalidate snapshot on every Zustand state change so useSyncExternalStore
 // picks up the new array reference correctly.
 useChatStore.subscribe(() => { _snapshotCache = null; });
-
-/**
- * Unified bootstrap merges every party lane into `event_stream`. Trip status
- * broadcasts often carry visibility_tags that include multiple party types, so
- * the same logical INSERT can appear several times in one lane's filtered view.
- * Collapse duplicates: same status + body + trip_status_broadcast → one row,
- * preferring the message whose `conversation_id` matches this lane.
- */
-function dedupeTripStatusBroadcastsForLane(
-  visible: TripEvent[],
-  laneConversationId: string,
-): TripEvent[] {
-  const groups = new Map<string, TripEvent[]>();
-  for (const e of visible) {
-    if (e.message_type !== 'system') continue;
-    const meta = e.metadata as Record<string, unknown> | null | undefined;
-    if (!meta || String(meta.trip_status_broadcast ?? '') !== '1') continue;
-    const body = String(e.content ?? '').trim();
-    const st = String(meta.status ?? '').trim();
-    const key = `${st}\n${body}`;
-    const arr = groups.get(key) ?? [];
-    arr.push(e);
-    groups.set(key, arr);
-  }
-  const drop = new Set<string>();
-  for (const arr of groups.values()) {
-    if (arr.length < 2) continue;
-    const sorted = [...arr].sort(
-      (a, b) =>
-        new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-    );
-    const preferred =
-      sorted.find(x => String(x.conversation_id ?? '') === laneConversationId)
-      ?? sorted[0];
-    for (const x of arr) {
-      if (x.id !== preferred.id) drop.add(x.id);
-    }
-  }
-  if (drop.size === 0) return visible;
-  return visible.filter(m => !drop.has(m.id));
-}
 
 function _convFromEntry(
   entry:     TripEntry,
@@ -156,6 +115,7 @@ function _convFromEntry(
     pickup_area:             entry.pickupArea,
     drop_location:           entry.dropLocation,
     trip_feedback_status:   party.feedbackStatus ?? "none",
+    trip_organization_id:   entry.tripOrganizationId ?? null,
     messages,
   };
 }
@@ -221,8 +181,11 @@ export const chatStore = {
     !!useChatStore.getState().convToTrip[id],
 
   getTripMeta: (tripId: string): TripMeta | undefined => {
-    const entry = useChatStore.getState().trips[tripId];
-    return entry ? tripEntryToMeta(entry) : undefined;
+    const s = useChatStore.getState();
+    const entry = s.trips[tripId];
+    return entry
+      ? tripEntryToMeta(entry, { viewerOrgId: s.bootstrappedOrg })
+      : undefined;
   },
 
   getConversationsByTripId: (tripId: string): TripConversation[] => {
@@ -247,7 +210,9 @@ export const chatStore = {
     const s = useChatStore.getState();
     const entry = s.trips[tripId];
     return {
-      meta: entry ? tripEntryToMeta(entry) : null,
+      meta: entry
+        ? tripEntryToMeta(entry, { viewerOrgId: s.bootstrappedOrg })
+        : null,
       threads: {
         client:   entry?.parties.client   ? _convFromEntry(entry, 'client',   entry.parties.client)   : null,
         supplier: entry?.parties.supplier ? _convFromEntry(entry, 'supplier', entry.parties.supplier) : null,
@@ -381,19 +346,41 @@ export function useConversationsByTrip(tripId: string | null): TripConversation[
   );
 }
 
-/** Trip metadata snapshot — updates in-place on applySystemUpdate. */
-export function useTripMeta(tripId: string | null): TripMeta | null {
-  const prevRef = useRef<{ entryRef: TripEntry | null; meta: TripMeta | null }>({
+/** Trip metadata snapshot; `payment_balance` is lane-scoped to the active party tab. */
+export function useTripMeta(
+  tripId: string | null,
+  viewerOrgId: string | null,
+  lane: { partyType: ConversationPartyType; conversationId: string } | null,
+): TripMeta | null {
+  const prevRef = useRef<{
+    entryRef: TripEntry | null;
+    laneKey:  string;
+    meta:     TripMeta | null;
+  }>({
     entryRef: null,
+    laneKey:  "",
     meta:     null,
   });
   return useSyncExternalStore(
     _subscribe,
     () => {
       const entry = tripId ? useChatStore.getState().trips[tripId] ?? null : null;
-      if (entry === prevRef.current.entryRef) return prevRef.current.meta;
-      const meta = entry ? tripEntryToMeta(entry) : null;
-      prevRef.current = { entryRef: entry, meta };
+      const laneKey = `${viewerOrgId ?? ""}|${lane?.partyType ?? ""}|${lane?.conversationId ?? ""}`;
+      if (
+        entry === prevRef.current.entryRef &&
+        laneKey === prevRef.current.laneKey &&
+        prevRef.current.meta
+      ) {
+        return prevRef.current.meta;
+      }
+      const meta = entry
+        ? tripEntryToMeta(entry, {
+            viewerOrgId,
+            partyType:           lane?.partyType ?? null,
+            laneConversationId:  lane?.conversationId ?? null,
+          })
+        : null;
+      prevRef.current = { entryRef: entry, laneKey, meta };
       return meta;
     },
     () => null,

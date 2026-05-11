@@ -25,10 +25,12 @@ function countPendingFeedbackTripsForOrg(
   const seen = new Set<string>();
   for (const entry of Object.values(trips)) {
     if (!entry?.tripId) continue;
+    const ownerOrg = entry.tripOrganizationId?.trim() ?? "";
+    const isTripOwnerViewer = ownerOrg !== "" && ownerOrg === orgId;
     for (const p of Object.values(entry.parties)) {
       if (!p) continue;
-      if (p.organizationId !== orgId) continue;
-      if (p.feedbackStatus !== 'pending') continue;
+      if (p.feedbackStatus !== "pending") continue;
+      if (!isTripOwnerViewer && p.organizationId !== orgId) continue;
       if (seen.has(entry.tripId)) continue;
       seen.add(entry.tripId);
     }

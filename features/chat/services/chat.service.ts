@@ -218,9 +218,9 @@ async function resolveGenericPartyNamesForTrips(
 }
 
 const TRIP_EMBED_FIELDS_FULL =
-  "trip_number, display_trip_id, status, pickup_area, drop_location, driver_id, supplier_id, created_at";
+  "organization_id, trip_number, display_trip_id, status, pickup_area, drop_location, driver_id, supplier_id, created_at";
 const TRIP_EMBED_FIELDS_LEGACY =
-  "trip_number, status, pickup_area, drop_location, driver_id, supplier_id, created_at";
+  "organization_id, trip_number, status, pickup_area, drop_location, driver_id, supplier_id, created_at";
 
 const TRIP_MESSAGES_EMBED = `trip_messages ( id, conversation_id, content, sender_role, sender_name, sender_user_id, created_at, is_read, message_type, metadata )`;
 /** Newest N rows per conversation embed. Keep low — bulk loads (13+ convos × limit) can spike CPU/RAM. */
@@ -318,6 +318,7 @@ export async function getConversationsByOrganization(
       trip_driver_id: (trips?.driver_id as string | null) ?? null,
       trip_supplier_id: (trips?.supplier_id as string | null) ?? null,
       trip_created_at: (trips?.created_at as string | null) ?? null,
+      trip_organization_id: (trips?.organization_id as string | null | undefined) ?? null,
       pickup_area: (trips?.pickup_area as string | undefined) ?? "",
       drop_location: (trips?.drop_location as string | undefined) ?? "",
       messages: ((row.trip_messages ?? []) as TripMessageRow[]).sort(
@@ -356,6 +357,7 @@ export async function getTripConversationById(
 
   const row = res.data as unknown as {
     trips?: {
+      organization_id?: string | null;
       trip_number?: string;
       display_trip_id?: string | null;
       status?: string | null;
@@ -376,6 +378,7 @@ export async function getTripConversationById(
     trip_driver_id: row.trips?.driver_id ?? null,
     trip_supplier_id: row.trips?.supplier_id ?? null,
     trip_created_at: row.trips?.created_at ?? null,
+    trip_organization_id: row.trips?.organization_id ?? null,
     pickup_area: String(row.trips?.pickup_area ?? ""),
     drop_location: String(row.trips?.drop_location ?? ""),
     messages: ((row.trip_messages ?? []) as TripMessageRow[]).sort(
@@ -1189,6 +1192,10 @@ function normalizeInitialStateRow(row: Record<string, unknown>): TripConversatio
     trip_driver_id:          (row.trip_driver_id    as string | null) ?? null,
     trip_supplier_id:        (row.trip_supplier_id  as string | null) ?? null,
     trip_created_at:         (row.trip_created_at   as string | null) ?? null,
+    trip_organization_id:
+      row.trip_organization_id != null && String(row.trip_organization_id).trim() !== ""
+        ? String(row.trip_organization_id)
+        : null,
     pickup_area:             String(row.pickup_area   ?? ''),
     drop_location:           String(row.drop_location ?? ''),
     trip_feedback_status,
