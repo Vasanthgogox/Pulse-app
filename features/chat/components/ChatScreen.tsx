@@ -91,7 +91,7 @@ import { ChatSystemEventCard, ChatLedgerEventCard } from "./ChatEventCard";
 import { DynamicTripIsland } from "./DynamicTripIsland";
 import { LocationEventCard } from "./LocationEventCard";
 import { parseSystemLogLocationData } from "../utils/locationLogPayload.util";
-import { ChatTripFeedbackCard } from "./ChatTripFeedbackCard";
+import { ChatFeedbackCard } from "./ChatFeedbackCard";
 import { DocumentShareCard } from "./DocumentShareCard";
 import { DocumentShareSheet } from "./DocumentShareSheet";
 import { isMessageVisibleInTab } from "../types/chat.types";
@@ -1852,7 +1852,7 @@ export function ChatScreen() {
         onSelectConversation={setSelectedConvId}
         onOpenCompose={openCompose}
         onFeedbackSubmitted={() => {
-          // Store is already patched optimistically in ChatTripFeedbackCard.
+          // Store is already patched optimistically in ChatFeedbackCard.
           // No DB refresh needed — Realtime delivers the metadata UPDATE.
         }}
       />
@@ -4052,7 +4052,7 @@ function TripConversationDetailLoaded({
   const [tripRatings, setTripRatings] = useState<RatingRow[]>([]);
 
   // Feedback submitted: store was already patched optimistically in
-  // ChatTripFeedbackCard — no DB refresh needed here.
+  // ChatFeedbackCard — no DB refresh needed here.
   const ratingsLoadedForKeyRef = useRef<string | null>(null);
   const handleFeedbackSubmitted = useCallback(() => {
     onFeedbackSubmitted();
@@ -4072,10 +4072,9 @@ function TripConversationDetailLoaded({
 
   const tripEligibleForFeedback = isTripFeedbackEligibleStatus(effectiveTripStatus);
 
-  // Ref-guarded: runs once per conversation ID.
-  // After seeding, inserted messages arrive via Realtime INSERT → NEW_MESSAGE →
-  // chatStore.mergeMessages — no hydrateConversationById needed.
+  // Per-conversation lane seed; trip-wide prompt RPC runs at most once per trip (reduces DB load).
   const feedbackSeededForConvRef = useRef<string | null>(null);
+  const tripWideFeedbackPromptRpcRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!tripEligibleForFeedback) return;
@@ -4085,8 +4084,12 @@ function TripConversationDetailLoaded({
     let cancelled = false;
     void (async () => {
       const conv = liveConvRef.current;
-      const { error: e1 } = await ensureTripFeedbackPromptMessages(conv.trip_id);
-      if (e1 && __DEV__) console.warn("[ensureTripFeedbackPromptMessages]", e1.message);
+      const tid = conv.trip_id;
+      if (tripWideFeedbackPromptRpcRef.current !== tid) {
+        tripWideFeedbackPromptRpcRef.current = tid;
+        const { error: e1 } = await ensureTripFeedbackPromptMessages(tid);
+        if (e1 && __DEV__) console.warn("[ensureTripFeedbackPromptMessages]", e1.message);
+      }
       if (cancelled) return;
       // No hydrate: Realtime delivers the INSERT to chatStore automatically
       await seedTripConversationFeedbackPromptIfMissing({
@@ -4100,7 +4103,7 @@ function TripConversationDetailLoaded({
       });
     })();
     return () => { cancelled = true; };
-  }, [tripEligibleForFeedback, liveConv.id]);
+  }, [tripEligibleForFeedback, liveConv.id, liveConv.trip_id]);
 
   // Snapshot messages in a ref — avoids adding to ratings effect deps.
   const liveMessagesRef = useRef(liveConv.messages);
@@ -4361,7 +4364,7 @@ function TripConversationDetailLoaded({
     if (m.message_type === "feedback_request" || m.message_type === "feedback") {
       if (!tripFeedbackRequestMatchesConversation(m, liveConv)) return null;
       return (
-        <ChatTripFeedbackCard
+        <ChatFeedbackCard
           message={m}
           tripId={liveConv.trip_id}
           ratingOrganizationId={liveConv.organization_id}

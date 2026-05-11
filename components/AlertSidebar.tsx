@@ -1,13 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Platform, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useWebLayoutWidth } from '@/lib/useWebLayoutWidth';
 import { MotiView } from 'moti';
 import { AlertTriangle, CheckCircle2, Radio, Truck } from 'lucide-react-native';
+import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { useOptionalOrganization } from '@/contexts/OrganizationContext';
 import type { GlobalOperationAlert } from '@/lib/globalSync/priorityEngine.util';
 import { useGlobalSyncStore } from '@/lib/globalSync/useGlobalSyncStore';
 import { useOperationsShelfItems } from '@/lib/globalSync/useOperationsDerived';
+import { useChatStore, type TripEntry } from '@/features/chat/store/useChatStore';
 
 function formatMoneyInr(n: number | null | undefined): string | null {
   if (n == null || !Number.isFinite(n)) return null;
@@ -15,11 +18,29 @@ function formatMoneyInr(n: number | null | undefined): string | null {
   return `${sign}₹${Math.abs(n).toLocaleString('en-IN')}`;
 }
 
+function countPendingFeedbackTripsForOrg(
+  trips: Record<string, TripEntry>,
+  orgId: string,
+): number {
+  const seen = new Set<string>();
+  for (const entry of Object.values(trips)) {
+    if (!entry?.tripId) continue;
+    for (const p of Object.values(entry.parties)) {
+      if (!p) continue;
+      if (p.organizationId !== orgId) continue;
+      if (p.feedbackStatus !== 'pending') continue;
+      if (seen.has(entry.tripId)) continue;
+      seen.add(entry.tripId);
+    }
+  }
+  return seen.size;
+}
+
 /**
  * Desktop “Live Operations” shelf — React Native Web. Sorted by priority; ledger rows glow on pulse.
  */
 export function AlertSidebar() {
-  const { width } = useWindowDimensions();
+  const layoutWidth = useWebLayoutWidth();
   const org = useOptionalOrganization();
   const auth = useOptionalAuth();
   const orgId = org?.currentOrganization?.id ?? null;
@@ -28,6 +49,9 @@ export function AlertSidebar() {
   const ledgerPulseAtMs = useGlobalSyncStore((s) => s.ledgerPulseAtMs);
 
   const items = useOperationsShelfItems();
+  const pendingFeedbackTrips = useChatStore((s) =>
+    orgId ? countPendingFeedbackTripsForOrg(s.trips, orgId) : 0,
+  );
 
   const [glowTick, setGlowTick] = useState(0);
   useEffect(() => {
@@ -37,7 +61,7 @@ export function AlertSidebar() {
     return () => clearTimeout(id);
   }, [ledgerPulseAtMs, ledgerPulseTripId]);
 
-  const isDesktopWeb = Platform.OS === 'web' && width >= 1024;
+  const isDesktopWeb = Platform.OS === 'web' && layoutWidth >= Layout.webDesktopMinWidth;
   const glowActive = useMemo(() => {
     const age = Date.now() - ledgerPulseAtMs;
     return ledgerPulseTripId && age >= 0 && age < 4000;
@@ -49,7 +73,14 @@ export function AlertSidebar() {
 
   return (
     <View style={styles.sidebar} accessibilityLabel="Live operations sidebar">
-      <Text style={styles.header}>Live operations</Text>
+      <View style={styles.headerRow}>
+        <Text style={styles.header}>Live operations</Text>
+        {pendingFeedbackTrips > 0 ? (
+          <View style={styles.feedbackBadge} accessibilityLabel="Pending trip feedback">
+            <Text style={styles.feedbackBadgeText}>Feedback {pendingFeedbackTrips}</Text>
+          </View>
+        ) : null}
+      </View>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator>
         {items.length === 0 ? (
           <Text style={styles.empty}>All clear — waiting for Realtime signals.</Text>
@@ -114,12 +145,20 @@ function SidebarRow({ item, glow }: { item: GlobalOperationAlert; glow: boolean 
 
 const styles = StyleSheet.create({
   sidebar: {
-    width: 300,
+    width: Layout.liveOpsShelfWidth,
     borderRightWidth: 1,
     borderRightColor: Theme.borderMedium,
     backgroundColor: Theme.surface,
     paddingTop: 12,
     paddingBottom: 8,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    paddingHorizontal: 14,
+    marginBottom: 10,
   },
   header: {
     fontSize: 11,
@@ -127,8 +166,23 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     textTransform: 'uppercase',
     color: Theme.textSecondary,
-    paddingHorizontal: 14,
-    marginBottom: 10,
+    flex: 1,
+    minWidth: 0,
+  },
+  feedbackBadge: {
+    flexShrink: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: 'rgba(26,35,126,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(26,35,126,0.25)',
+  },
+  feedbackBadgeText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: Theme.textPrimary,
+    letterSpacing: 0.4,
   },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 10, paddingBottom: 24, gap: 8 },

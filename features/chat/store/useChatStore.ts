@@ -42,6 +42,7 @@ import type {
   LedgerEventMetadata,
   MessageDeliveryStatus,
   TripConversation,
+  TripFeedbackLaneStatus,
   TripMessageMetadata,
   TripMessageRow,
   TripMeta,
@@ -437,6 +438,8 @@ export interface PartyConv {
   supplierId:     string | null;
   driverId:       string | null;
   unreadCount:    number;
+  /** Mirrors bootstrap `trip_feedback_status`; patched optimistically on submit. */
+  feedbackStatus?: TripFeedbackLaneStatus;
 }
 
 // ── Single trip entry — the core data unit in the store ──────────────────────
@@ -657,6 +660,7 @@ function partyFromConv(conv: TripConversation): PartyConv {
     supplierId:     conv.supplier_id,
     driverId:       conv.driver_id,
     unreadCount:    conv.unread_dispatcher_count ?? 0,
+    feedbackStatus: conv.trip_feedback_status ?? "none",
   };
 }
 
@@ -689,6 +693,7 @@ function convFromEntry(
     trip_created_at:         entry.createdAt,
     pickup_area:             entry.pickupArea,
     drop_location:           entry.dropLocation,
+    trip_feedback_status:   party.feedbackStatus ?? "none",
     // messages for this party lane only — visibility_tags aware, zero DB calls
     messages: entry.event_stream.filter(e =>
       isEventVisibleForPartyLane(e, partyType, convId),
@@ -725,6 +730,66 @@ function applyAckToTripEntry(
   const event_stream = [...entry.event_stream];
   event_stream[idx] = nextEvt;
   return { ...entry, event_stream };
+}
+
+/** Stamp party lane rated when ACK/metadata confirms feedback was submitted (Realtime echo). */
+function withPartyRatedIfFeedbackAck(
+  merged: TripEntry,
+  convId: string,
+  msgId: string,
+  convToParty: Record<string, ConversationPartyType>,
+): TripEntry {
+  const partyType = convToParty[convId];
+  if (!partyType) return merged;
+  const evt = merged.event_stream.find((e) => e.id === msgId);
+  const md = evt?.metadata as Record<string, unknown> | undefined;
+  if (
+    !evt ||
+    (evt.message_type !== "feedback_request" && evt.message_type !== "feedback") ||
+    !md?.submitted_at
+  ) {
+    return merged;
+  }
+  const p = merged.parties[partyType];
+  if (!p || p.feedbackStatus === "rated") return merged;
+  return {
+    ...merged,
+    parties: {
+      ...merged.parties,
+      [partyType]: { ...p, feedbackStatus: "rated" },
+    },
+  };
+}
+
+/** Realtime INSERT for feedback_request / feedback — lane-level pending without refetch. */
+function applyFeedbackLaneStatusOnIncomingRow(
+  entry: TripEntry,
+  partyType: ConversationPartyType,
+  row: Partial<TripMessageRow>,
+): TripEntry {
+  const mt = row.message_type;
+  if (mt !== "feedback_request" && mt !== "feedback") return entry;
+  const party = entry.parties[partyType];
+  if (!party) return entry;
+  if (party.feedbackStatus === "rated") return entry;
+  const m = row.metadata as Record<string, unknown> | undefined;
+  if (m?.submitted_at || m?.rating_status === "rated") {
+    return {
+      ...entry,
+      parties: {
+        ...entry.parties,
+        [partyType]: { ...party, feedbackStatus: "rated" },
+      },
+    };
+  }
+  if (party.feedbackStatus === "pending") return entry;
+  return {
+    ...entry,
+    parties: {
+      ...entry.parties,
+      [partyType]: { ...party, feedbackStatus: "pending" },
+    },
+  };
 }
 
 // ── Store ─────────────────────────────────────────────────────────────────────
@@ -909,6 +974,7 @@ export const useChatStore = create<ChatState>()(
           isNewId,
           event.created_at,
         );
+        updated = applyFeedbackLaneStatusOnIncomingRow(updated, partyType, row);
       } else {
         const party = entry.parties[partyType];
         if (party) {
@@ -945,19 +1011,20 @@ export const useChatStore = create<ChatState>()(
 
     onRealtimeAck: (convId, msgId, patch) => {
       if (!consumeRealtimeAckDedupe(msgId, patch)) return;
-      const { trips, convToTrip } = get();
+      const { trips, convToTrip, convToParty } = get();
       const tripId = convToTrip[convId];
       if (!tripId) return;
       const entry = trips[tripId];
       if (!entry) return;
-      const merged = applyAckToTripEntry(entry, msgId, patch);
+      let merged = applyAckToTripEntry(entry, msgId, patch);
       if (!merged) return;
+      merged = withPartyRatedIfFeedbackAck(merged, convId, msgId, convToParty);
       set({ trips: { ...trips, [tripId]: merged } });
     },
 
     onRealtimeAckBatch: (items) => {
       if (items.length === 0) return;
-      const { trips, convToTrip } = get();
+      const { trips, convToTrip, convToParty } = get();
       let nextTrips: Record<string, TripEntry> | null = null;
 
       for (const { convId, msgId, patch } of items) {
@@ -966,8 +1033,9 @@ export const useChatStore = create<ChatState>()(
         if (!tripId) continue;
         const base = nextTrips?.[tripId] ?? trips[tripId];
         if (!base) continue;
-        const merged = applyAckToTripEntry(base, msgId, patch);
+        let merged = applyAckToTripEntry(base, msgId, patch);
         if (!merged) continue;
+        merged = withPartyRatedIfFeedbackAck(merged, convId, msgId, convToParty);
         if (!nextTrips) nextTrips = { ...trips };
         nextTrips[tripId] = merged;
       }
@@ -1054,9 +1122,9 @@ export const useChatStore = create<ChatState>()(
     // ── submitFeedback (optimistic — caller also fires the RPC) ──────────────
 
     submitFeedback: (convId, msgId, patch) => {
-      const { trips, convToTrip } = get();
+      const { trips, convToTrip, convToParty } = get();
       const tripId = convToTrip[convId];
-      if (!tripId) return;
+      if (!tripId || !convToParty[convId]) return;
       const entry = trips[tripId];
       if (!entry) return;
       const prevEvt = entry.event_stream.find((e) => e.id === msgId);
@@ -1066,7 +1134,10 @@ export const useChatStore = create<ChatState>()(
           : {}),
         rating_status: "rated",
       } as TripMessageMetadata);
-      get().patchMessage(convId, msgId, { ...patch, metadata: mergedMeta });
+      let merged = applyAckToTripEntry(entry, msgId, { ...patch, metadata: mergedMeta });
+      if (!merged) return;
+      merged = withPartyRatedIfFeedbackAck(merged, convId, msgId, convToParty);
+      set({ trips: { ...trips, [tripId]: merged } });
     },
 
     // ── mergeConversationHistory ──────────────────────────────────────────────

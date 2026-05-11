@@ -25,7 +25,9 @@ import Animated, {
 } from "react-native-reanimated";
 import { ChevronRight, MapPin, Radio, Reply } from "lucide-react-native";
 import Theme from "@/constants/Theme";
+import { useOptionalOrganization } from "@/contexts/OrganizationContext";
 import { CHAT_ACCENT } from "@/features/chat/chatTheme";
+import { useChatStore, type TripEntry } from "@/features/chat/store/useChatStore";
 import { isTerminalTripStatus } from "@/features/chat/utils/tripConversationSort";
 import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
 import {
@@ -91,6 +93,22 @@ function pickQuickEvents(events: ActiveTripRecentEvent[] | undefined): ActiveTri
   return pool.slice(-3);
 }
 
+function tripHasPendingOrgFeedback(
+  trips: Record<string, TripEntry>,
+  tripId: string,
+  orgId: string | null | undefined,
+): boolean {
+  if (!orgId) return false;
+  const entry = trips[tripId];
+  if (!entry) return false;
+  for (const p of Object.values(entry.parties)) {
+    if (!p) continue;
+    if (p.organizationId !== orgId) continue;
+    if (p.feedbackStatus === "pending") return true;
+  }
+  return false;
+}
+
 export interface DynamicTripIslandProps {
   /** Currently open trip — used to label context, not for data fetch. */
   currentTripId: string;
@@ -108,7 +126,12 @@ export function DynamicTripIsland({
   onReplyShortcut,
 }: DynamicTripIslandProps) {
   const { width: screenW } = useWindowDimensions();
+  const org = useOptionalOrganization();
+  const orgId = org?.currentOrganization?.id ?? null;
   const activeTrips = useGlobalSyncStore((s) => s.activeTrips);
+  const pendingTripFeedback = useChatStore((s) =>
+    tripHasPendingOrgFeedback(s.trips, currentTripId, orgId),
+  );
 
   const ranked = useMemo(
     () => rankActiveTripsForIsland(activeTrips.filter((t) => !isTerminalTripStatus(t.status))),
@@ -159,7 +182,9 @@ export function DynamicTripIsland({
   useEffect(() => {
     cancelAnimation(pulse);
     const unread = (trip?.total_unread ?? 0) > 0;
-    if (!unread) {
+    const ratePulse =
+      Boolean(trip && trip.trip_id === currentTripId && pendingTripFeedback);
+    if (!unread && !ratePulse) {
       pulse.value = 1;
       return;
     }
@@ -171,7 +196,7 @@ export function DynamicTripIsland({
       -1,
       true,
     );
-  }, [pulse, trip?.total_unread, trip?.trip_id]);
+  }, [pulse, trip?.total_unread, trip?.trip_id, trip, currentTripId, pendingTripFeedback]);
 
   useEffect(() => {
     expandProgress.value = withSpring(expanded ? 1 : 0, { damping: 20, stiffness: 200 });
@@ -225,8 +250,9 @@ export function DynamicTripIsland({
 
   const cardW = Math.min(400, screenW - 24);
   const unread = trip.total_unread > 0;
-  const signalTs = activeTripIslandSignalTs(trip);
   const isContextTrip = trip.trip_id === currentTripId;
+  const showRatePulse = isContextTrip && pendingTripFeedback;
+  const signalTs = activeTripIslandSignalTs(trip);
 
   return (
     <GestureDetector gesture={pan}>
@@ -246,7 +272,10 @@ export function DynamicTripIsland({
           <View style={styles.rowTop}>
             <View style={styles.pulseCol}>
               <Animated.View style={[styles.pulseRing, pulseDotStyle]}>
-                <Radio size={14} color={unread ? CHAT_ACCENT : Theme.textSecondary} />
+                <Radio
+                  size={14}
+                  color={unread || showRatePulse ? CHAT_ACCENT : Theme.textSecondary}
+                />
               </Animated.View>
             </View>
             <View style={styles.titleBlock}>
@@ -274,6 +303,11 @@ export function DynamicTripIsland({
           <Text style={styles.locLine} numberOfLines={2}>
             {locationSubtitle(trip)}
           </Text>
+          {showRatePulse ? (
+            <Text style={styles.rateHint} numberOfLines={2}>
+              Rate your trip — open the chat thread to submit your stars.
+            </Text>
+          ) : null}
           {signalTs > 0 ? (
             <Text style={styles.metaMuted}>
               Signal {formatRelativeShort(new Date(signalTs).toISOString())}
@@ -381,6 +415,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     color: Theme.textRouteCard,
+    lineHeight: 17,
+  },
+  rateHint: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: "800",
+    color: CHAT_ACCENT,
     lineHeight: 17,
   },
   metaMuted: {

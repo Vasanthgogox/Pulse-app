@@ -52,6 +52,15 @@ export const Layout = {
   /** Height of custom tab bar (FISCAL | OPS | TRIPS) for consistent layout */
   tabBarHeight: 56,
   /**
+   * React Native Web: minimum width to treat the window as “desktop” for the Live
+   * Operations sidebar, idle toast offset, and floating chat. Below the old 1024
+   * breakpoint so a docked devtools panel still leaves enough usable width to preview.
+   * (Chat hub and other screens may still use 1024 for their own split layouts.)
+   */
+  webDesktopMinWidth: 900,
+  /** Width of the Live Operations sidebar — keep `GlobalOperationsToast` `left` in sync */
+  liveOpsShelfWidth: 300,
+  /**
    * Desktop web top navigation reserve height.
    * Keep scene content below the fixed Pulse header shell.
    */

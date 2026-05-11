@@ -10,8 +10,9 @@ import { Award, ShieldCheck, Star, ThumbsUp } from "lucide-react-native";
 import Theme from "@/constants/Theme";
 import { CHAT_ACCENT } from "@/features/chat/chatTheme";
 import { formatChatPartyName } from "@/features/chat/utils/partyDisplay";
-import { submitAtomicFeedback } from "../services/chat.service";
+import { submitTripChatFeedback } from "../services/chat.service";
 import { chatStore } from "../store/chatStore";
+import { useChatStore } from "../store/useChatStore";
 import type { FeedbackRequestMetadata, TripMessageRow } from "../types/chat.types";
 import { parseFeedbackRequestMetadata } from "../utils/feedbackRequestMeta";
 
@@ -89,9 +90,8 @@ export function ChatTripFeedbackCard({
     setErr(null);
     setSubmitting(true);
 
-    // ── Optimistic update ─────────────────────────────────────────────────
-    // Patch the store immediately so the "Rated ✓" state shows before the DB
-    // responds.  No DB re-fetch or hydrateConversationById needed.
+    // ── Optimistic update (Bootstrap & Patch) ─────────────────────────────
+    // Zustand + `submit_trip_feedback` RPC — no trip list refetch / hydrate.
     const now = new Date().toISOString();
     const optimisticMeta: FeedbackRequestMetadata = {
       ...meta,
@@ -104,30 +104,51 @@ export function ChatTripFeedbackCard({
     });
 
     try {
-      const result = await submitAtomicFeedback({
-        organizationId: ratingOrganizationId,
+      const { error: rpcErr, submittedAt } = await submitTripChatFeedback({
+        ratingOrganizationId,
         tripId,
         message,
-        score:  rating,
+        score: rating,
         tags,
       });
+      if (rpcErr) throw rpcErr;
 
-      // Overwrite optimistic patch with server-confirmed values
       const confirmedMeta: FeedbackRequestMetadata = {
         ...meta,
-        submitted_at:    result.submittedAt,
-        submitted_score: result.submittedScore,
-        submitted_tags:  result.submittedTags,
+        submitted_at:    submittedAt ?? now,
+        submitted_score: rating,
+        submitted_tags:  tags,
       };
-      chatStore.patchMessage(message.conversation_id, message.id, {
+      // Use submitFeedback (not patchMessage) so metadata merges are not dropped by ACK dedupe.
+      chatStore.submitFeedback(message.conversation_id, message.id, {
         metadata: confirmedMeta,
       });
 
       onSubmitted();
     } catch (e) {
-      // Rollback optimistic patch — restore original metadata
+      // Rollback optimistic patch — restore message + lane status for island / sidebar.
       chatStore.patchMessage(message.conversation_id, message.id, {
         metadata: meta,
+      });
+      useChatStore.setState((s) => {
+        const tripId = s.convToTrip[message.conversation_id];
+        const pt = s.convToParty[message.conversation_id];
+        if (!tripId || !pt) return s;
+        const e = s.trips[tripId];
+        const p = e?.parties[pt];
+        if (!e || !p) return s;
+        return {
+          trips: {
+            ...s.trips,
+            [tripId]: {
+              ...e,
+              parties: {
+                ...e.parties,
+                [pt]: { ...p, feedbackStatus: "pending" },
+              },
+            },
+          },
+        };
       });
       setErr(e instanceof Error ? e.message : "Submission failed. Please retry.");
     } finally {
@@ -158,8 +179,8 @@ export function ChatTripFeedbackCard({
             <ThumbsUp size={22} color="#059669" strokeWidth={2} />
           </View>
           <View style={s.headerText}>
-            <Text style={s.kicker}>MISSION DEBRIEF</Text>
-            <Text style={s.title}>Rate handshake</Text>
+            <Text style={s.kicker}>{submitting ? "SUBMITTING" : "RATE YOUR TRIP"}</Text>
+            <Text style={s.title}>Partner feedback</Text>
             {targetName ? (
               <Text style={s.target} numberOfLines={2}>
                 {targetName}
@@ -227,9 +248,9 @@ export function ChatTripFeedbackCard({
         <View style={s.doneRow}>
           <ShieldCheck size={18} color={CHAT_ACCENT} strokeWidth={2.2} />
           <Text style={s.doneText}>
-            Debrief recorded
+            Thank you
             {meta.submitted_score != null
-              ? ` · ${meta.submitted_score}/5`
+              ? ` · ${meta.submitted_score}/5 stars`
               : ""}
           </Text>
         </View>
@@ -242,11 +263,14 @@ export function ChatTripFeedbackCard({
             activeOpacity={0.88}
           >
             {submitting ? (
-              <ActivityIndicator color="#fff" size="small" />
+              <View style={s.submittingRow}>
+                <ActivityIndicator color="#fff" size="small" />
+                <Text style={s.submitText}>SUBMITTING…</Text>
+              </View>
             ) : (
               <>
                 <ShieldCheck size={18} color="#fff" strokeWidth={2.2} />
-                <Text style={s.submitText}>SUBMIT DEBRIEF</Text>
+                <Text style={s.submitText}>SUBMIT RATING</Text>
               </>
             )}
           </TouchableOpacity>
@@ -433,6 +457,11 @@ const s = StyleSheet.create({
     color: "#fff",
     letterSpacing: 0.6,
     fontStyle: "italic",
+  },
+  submittingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
   time: {
     fontSize: 10,

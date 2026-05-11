@@ -244,6 +244,9 @@ export type ChatRealtimeEvent =
   | { type: 'SYSTEM_UPDATE'; tripId: string; patch: Partial<TripMeta> }
   | { type: 'ACK_UPDATE';    conversationId: string; messageId: string; patch: Partial<TripMessageRow> };
 
+/** Per conversation lane — from `get_initial_chat_state` / unified bootstrap. */
+export type TripFeedbackLaneStatus = 'none' | 'pending' | 'rated';
+
 // ── Trip conversation ─────────────────────────────────────────────────────────
 
 export interface TripConversationRow {
@@ -260,6 +263,8 @@ export interface TripConversationRow {
   unread_dispatcher_count: number;
   created_at: string;
   updated_at: string;
+  /** Bootstrap-only: whether this lane still needs a trip-chat debrief rating. */
+  trip_feedback_status?: TripFeedbackLaneStatus;
 }
 
 export interface TripMessageRow {
