@@ -341,11 +341,9 @@ export function ChatScreen() {
     conversations,
     isLoading,
     sendMessage,
-    markAsRead,
+    markTripThreadsRead,
     getTotalUnreadCount,
     initiateConversation,
-    refreshConversations,
-    switchParty,
   } = useTripChat();
   // True once bootstrap has completed at least once for this org.
   // Used to distinguish "first load" (show full-area spinner) from
@@ -577,7 +575,7 @@ export function ChatScreen() {
         setActiveTab("trips");
         setSelectedConvId(convIdParam);
         setSelectedNetId(null);
-        markAsRead(convIdParam);
+        void markTripThreadsRead(hit.trip_id);
         if (shouldOpenDetail && !isDesktop) setIsMobileDetail(true);
         deepLinkAppliedRef.current = deepLinkKey;
         return;
@@ -600,7 +598,7 @@ export function ChatScreen() {
     conversations,
     isDesktop,
     isLoading,
-    markAsRead,
+    markTripThreadsRead,
     markNetRead,
     netChats,
     params.conversationId,
@@ -632,10 +630,10 @@ export function ChatScreen() {
     (conv: TripConversation) => {
       chatStore.switchParty(conv.trip_id, conv.party_type);
       setSelectedConvId(conv.id);
-      markAsRead(conv.id);
+      void markTripThreadsRead(conv.trip_id);
       openDetail();
     },
-    [markAsRead],
+    [markTripThreadsRead],
   );
 
   useEffect(() => {
@@ -3940,7 +3938,7 @@ function TripConversationDetailLoaded({
 }) {
   const { profile } = useAuth();
   const selfUid = (profile as any)?.uid ?? null;
-  const { markAsRead, initiateConversation } = useTripChat();
+  const { markTripThreadsRead, initiateConversation } = useTripChat();
 
   // Subscribe directly to this conversation for live message updates.
   // Re-renders only when THIS conversation changes, not the full list.
@@ -4223,7 +4221,7 @@ function TripConversationDetailLoaded({
     const target = partyConversationMap[partyType];
     if (target) {
       onSelectConversation(target.id);
-      markAsRead(target.id);
+      void markTripThreadsRead(liveConv.trip_id);
       return;
     }
 
@@ -4261,7 +4259,7 @@ function TripConversationDetailLoaded({
     });
     if (convId) {
       onSelectConversation(convId);
-      markAsRead(convId);
+      void markTripThreadsRead(liveConv.trip_id);
     }
   };
 

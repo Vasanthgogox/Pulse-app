@@ -391,6 +391,14 @@ function clearReadReceiptDebouncers(): void {
 /** Default debounce for batched read receipts (mobile + web). */
 export const READ_RECEIPT_DEBOUNCE_MS = 2000;
 
+/** Drop pending `mark_messages_seen` debounce for one thread (e.g. full mark-read). */
+export function clearReadReceiptDebouncerForConversation(conversationId: string): void {
+  const t = readFlushTimers.get(conversationId);
+  if (t) clearTimeout(t);
+  readFlushTimers.delete(conversationId);
+  readPendingIds.delete(conversationId);
+}
+
 export function enqueueReadReceiptsDebounced(
   conversationId: string,
   messageIds: string[],

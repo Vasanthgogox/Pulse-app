@@ -12,7 +12,11 @@ import { subscribeSharedPostgresChanges } from "@/lib/realtimeRegistry";
 import { supabase } from "@/lib/supabase";
 import * as chatService from "../services/chat.service";
 import { useConversations, useTotalUnreadCount } from "../store/chatStore";
-import { registerMarkMessagesSeenRpc, useChatStore } from "../store/useChatStore";
+import {
+  clearReadReceiptDebouncerForConversation,
+  registerMarkMessagesSeenRpc,
+  useChatStore,
+} from "../store/useChatStore";
 import { tripHasPendingOrgFeedback } from "../utils/tripFeedbackPending.util";
 import type {
   ConversationPartyType,
@@ -91,6 +95,8 @@ interface TripChatContextType {
     messageType?: MessageType
   ) => Promise<void>;
   markAsRead: (conversationId: string) => Promise<void>;
+  /** Marks every party-lane thread for this trip read (DB + store). */
+  markTripThreadsRead: (tripId: string) => Promise<void>;
   totalUnreadCount: number;
   getTotalUnreadCount: () => number;
   refreshConversations: () => Promise<void>;
@@ -383,10 +389,40 @@ export function TripChatProvider({
     [organizationId, profile]
   );
 
-  // ── markAsRead ─────────────────────────────────────────────────────────────
+  // ── markAsRead / markTripThreadsRead ───────────────────────────────────────
   const markAsRead = useCallback(async (conversationId: string) => {
+    clearReadReceiptDebouncerForConversation(conversationId);
     useChatStore.getState().markRead(conversationId);
-    void chatService.markConversationRead(conversationId).catch(() => {});
+    try {
+      await chatService.markConversationRead(conversationId);
+    } catch (e) {
+      if (__DEV__) console.warn("[TripChat] markConversationRead failed", conversationId, e);
+    }
+  }, []);
+
+  const markTripThreadsRead = useCallback(async (tripId: string) => {
+    const tid = (tripId ?? "").trim();
+    if (!tid) return;
+    const { convToTrip } = useChatStore.getState();
+    const convIds = Object.keys(convToTrip).filter((cid) => convToTrip[cid] === tid);
+    if (convIds.length === 0) {
+      if (__DEV__) console.warn("[TripChat] markTripThreadsRead: no conv ids for trip", tid);
+      return;
+    }
+    for (const cid of convIds) {
+      clearReadReceiptDebouncerForConversation(cid);
+      useChatStore.getState().markRead(cid);
+    }
+    const settled = await Promise.allSettled(
+      convIds.map((cid) => chatService.markConversationRead(cid)),
+    );
+    if (__DEV__) {
+      settled.forEach((r, i) => {
+        if (r.status === "rejected") {
+          console.warn("[TripChat] markConversationRead failed", convIds[i], r.reason);
+        }
+      });
+    }
   }, []);
 
   // ── hydrateConversationById (deep-link fallback) ───────────────────────────
@@ -486,6 +522,7 @@ export function TripChatProvider({
         isLoading,
         sendMessage,
         markAsRead,
+        markTripThreadsRead,
         totalUnreadCount,
         getTotalUnreadCount,
         refreshConversations: loadConversations,
