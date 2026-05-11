@@ -44,6 +44,7 @@ import {
   buildClientRibbonFromTripMessage,
   mergeClientRibbon,
   selectCurrentActiveAlert,
+  selectOperationsShelfItems,
 } from './priorityEngine.util';
 
 // ── Default values ────────────────────────────────────────────────────────────
@@ -69,6 +70,12 @@ interface GlobalSyncStore {
 
   /** Latest high-priority B2B chat signal (fed from useChatStore Realtime — no SELECT). */
   clientOperationsRibbon: ClientOperationsRibbon | null;
+
+  /** Local + server-synced dismissals for toasts / shelf rows (`GlobalOperationAlert.id`). */
+  dismissedOperationKeys: Record<string, true>;
+  /** Web shelf: last ledger hit per trip for glow animation. */
+  ledgerPulseTripId: string | null;
+  ledgerPulseAtMs: number;
 
   // ── Notifications slice ─────────────────────────────────────────────────
   notificationRows:         GlobalNotificationRow[];
@@ -123,6 +130,11 @@ interface GlobalSyncStore {
 
   /** Selector helper (reads only in-memory slices). */
   getCurrentActiveOperationAlert: () => ReturnType<typeof selectCurrentActiveAlert>;
+  getOperationsShelfItems: () => ReturnType<typeof selectOperationsShelfItems>;
+
+  dismissOperationAlert: (alertId: string) => void;
+  /** Persists dismissal for all devices (Realtime fan-out). */
+  acknowledgeGlobalAlert: (alertKey: string, orgId: string) => Promise<{ error: Error | null }>;
 
   // ── Alerts actions ────────────────────────────────────────────────────────
   dismissAlert: (id: string) => void;
@@ -217,6 +229,9 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
     bootstrapError:           null,
     activeTrips:              [],
     clientOperationsRibbon:   null,
+    dismissedOperationKeys:     {},
+    ledgerPulseTripId:        null,
+    ledgerPulseAtMs:          0,
     notificationRows:         [],
     notificationUnreadCount:  0,
     alertRows:                [],
@@ -250,6 +265,9 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
           bootstrapError:          null,
           activeTrips:             Array.isArray(payload?.active_trips)   ? payload.active_trips   : [],
           clientOperationsRibbon:  null,
+          dismissedOperationKeys:  {},
+          ledgerPulseTripId:       null,
+          ledgerPulseAtMs:         0,
           notificationRows:        notifRows,
           notificationUnreadCount: payload?.notifications?.unread_count ?? countUnread(notifRows),
           alertRows:               Array.isArray(payload?.global_alerts)  ? payload.global_alerts  : [],
@@ -273,6 +291,9 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
         bootstrapError:          null,
         activeTrips:             [],
         clientOperationsRibbon:  null,
+        dismissedOperationKeys:  {},
+        ledgerPulseTripId:       null,
+        ledgerPulseAtMs:         0,
         notificationRows:        [],
         notificationUnreadCount: 0,
         alertRows:               [],
@@ -341,6 +362,18 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
             alertRows:               nextAlerts,
           });
         }
+        return;
+      }
+
+      // ── b2b_operations_dismissals — cross-device toast / shelf dismiss ─────
+      if (table === 'b2b_operations_dismissals' && (event === 'INSERT' || event === 'UPDATE')) {
+        const oid = String(row.organization_id ?? '');
+        if (oid !== orgId) return;
+        const key = String(row.alert_key ?? '').trim();
+        if (!key) return;
+        set((s) => ({
+          dismissedOperationKeys: { ...s.dismissedOperationKeys, [key]: true },
+        }));
         return;
       }
 
@@ -459,18 +492,56 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
       const label = trip?.display_trip_id?.trim() || trip?.trip_number || null;
       const ribbon = buildClientRibbonFromTripMessage(tripId, label, row);
       if (!ribbon) return;
-      set((s) => ({
-        clientOperationsRibbon: mergeClientRibbon(s.clientOperationsRibbon, ribbon),
-      }));
+      const ledgerHit =
+        mt === 'ledger_event' || mt === 'ledger' || mt === 'payment' || mt === 'ledger_update';
+      set((s) => {
+        const nextRibbon = mergeClientRibbon(s.clientOperationsRibbon, ribbon);
+        return {
+          clientOperationsRibbon: nextRibbon,
+          ledgerPulseTripId:    ledgerHit ? tripId : s.ledgerPulseTripId,
+          ledgerPulseAtMs:      ledgerHit ? Date.now() : s.ledgerPulseAtMs,
+        };
+      });
     },
 
     getCurrentActiveOperationAlert: () =>
       selectCurrentActiveAlert({
-        activeTrips:        get().activeTrips,
-        alertRows:          get().alertRows,
-        notificationRows:   get().notificationRows,
-        clientOperationsRibbon: get().clientOperationsRibbon,
+        activeTrips:              get().activeTrips,
+        alertRows:                get().alertRows,
+        notificationRows:         get().notificationRows,
+        clientOperationsRibbon:   get().clientOperationsRibbon,
+        dismissedOperationKeys:   get().dismissedOperationKeys,
       }),
+
+    getOperationsShelfItems: () =>
+      selectOperationsShelfItems({
+        activeTrips:              get().activeTrips,
+        alertRows:                get().alertRows,
+        notificationRows:         get().notificationRows,
+        clientOperationsRibbon:   get().clientOperationsRibbon,
+        dismissedOperationKeys:   get().dismissedOperationKeys,
+      }),
+
+    dismissOperationAlert: (alertId) =>
+      set((s) => ({
+        dismissedOperationKeys: { ...s.dismissedOperationKeys, [alertId]: true },
+      })),
+
+    acknowledgeGlobalAlert: async (alertKey, orgId) => {
+      try {
+        const { error } = await supabase().rpc('acknowledge_global_alert', {
+          p_alert_key: alertKey,
+          p_org_id:    orgId,
+        });
+        if (error) return { error: new Error(error.message) };
+        set((s) => ({
+          dismissedOperationKeys: { ...s.dismissedOperationKeys, [alertKey]: true },
+        }));
+        return { error: null };
+      } catch (e) {
+        return { error: e instanceof Error ? e : new Error(String(e)) };
+      }
+    },
 
     ingestB2BMessageForBell: (row) => {
       const meta = row.metadata as Record<string, unknown> | null | undefined;

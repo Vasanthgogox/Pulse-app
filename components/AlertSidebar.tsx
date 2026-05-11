@@ -1,0 +1,168 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import { Platform, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { MotiView } from 'moti';
+import { AlertTriangle, CheckCircle2, Radio, Truck } from 'lucide-react-native';
+import Theme from '@/constants/Theme';
+import { useOptionalAuth } from '@/contexts/AuthContext';
+import { useOptionalOrganization } from '@/contexts/OrganizationContext';
+import type { GlobalOperationAlert } from '@/lib/globalSync/priorityEngine.util';
+import { useGlobalSyncStore } from '@/lib/globalSync/useGlobalSyncStore';
+import { useOperationsShelfItems } from '@/lib/globalSync/useOperationsDerived';
+
+function formatMoneyInr(n: number | null | undefined): string | null {
+  if (n == null || !Number.isFinite(n)) return null;
+  const sign = n >= 0 ? '' : '−';
+  return `${sign}₹${Math.abs(n).toLocaleString('en-IN')}`;
+}
+
+/**
+ * Desktop “Live Operations” shelf — React Native Web. Sorted by priority; ledger rows glow on pulse.
+ */
+export function AlertSidebar() {
+  const { width } = useWindowDimensions();
+  const org = useOptionalOrganization();
+  const auth = useOptionalAuth();
+  const orgId = org?.currentOrganization?.id ?? null;
+  const bootstrapStatus = useGlobalSyncStore((s) => s.bootstrapStatus);
+  const ledgerPulseTripId = useGlobalSyncStore((s) => s.ledgerPulseTripId);
+  const ledgerPulseAtMs = useGlobalSyncStore((s) => s.ledgerPulseAtMs);
+
+  const items = useOperationsShelfItems();
+
+  const [glowTick, setGlowTick] = useState(0);
+  useEffect(() => {
+    if (!ledgerPulseAtMs) return;
+    setGlowTick((t) => t + 1);
+    const id = setTimeout(() => setGlowTick((t) => t + 1), 4200);
+    return () => clearTimeout(id);
+  }, [ledgerPulseAtMs, ledgerPulseTripId]);
+
+  const isDesktopWeb = Platform.OS === 'web' && width >= 1024;
+  const glowActive = useMemo(() => {
+    const age = Date.now() - ledgerPulseAtMs;
+    return ledgerPulseTripId && age >= 0 && age < 4000;
+  }, [glowTick, ledgerPulseAtMs, ledgerPulseTripId]);
+
+  if (!isDesktopWeb || auth?.profile?.role === 'driver' || !orgId || bootstrapStatus !== 'ready') {
+    return null;
+  }
+
+  return (
+    <View style={styles.sidebar} accessibilityLabel="Live operations sidebar">
+      <Text style={styles.header}>Live operations</Text>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator>
+        {items.length === 0 ? (
+          <Text style={styles.empty}>All clear — waiting for Realtime signals.</Text>
+        ) : (
+          items.map((item) => (
+            <SidebarRow
+              key={item.id}
+              item={item}
+              glow={glowActive && item.trip_id === ledgerPulseTripId && item.category === 'payment_received'}
+            />
+          ))
+        )}
+      </ScrollView>
+    </View>
+  );
+}
+
+function SidebarRow({ item, glow }: { item: GlobalOperationAlert; glow: boolean }) {
+  const icon =
+    item.kind === 'critical' ? (
+      <AlertTriangle size={16} color="#dc2626" />
+    ) : item.kind === 'warning' ? (
+      <Radio size={16} color="#ea580c" />
+    ) : item.kind === 'success' ? (
+      <CheckCircle2 size={16} color="#16a34a" />
+    ) : (
+      <Truck size={16} color="#1a237e" />
+    );
+  const money = formatMoneyInr(item.amount);
+
+  return (
+    <MotiView
+      animate={{
+        shadowOpacity: glow ? 0.55 : 0.08,
+        shadowRadius: glow ? 22 : 8,
+        borderColor: glow ? 'rgba(34,197,94,0.65)' : 'rgba(226,232,240,1)',
+      }}
+      transition={{ type: 'timing', duration: 220 }}
+      style={[styles.rowCard, glow && styles.rowCardGlow]}
+    >
+      <View style={styles.rowTop}>
+        <View style={styles.iconWrap}>{icon}</View>
+        <View style={styles.rowBody}>
+          <Text style={styles.cat}>{item.category.replace(/_/g, ' ')}</Text>
+          <Text style={styles.rowTitle} numberOfLines={2}>
+            {item.title}
+          </Text>
+          {item.subtitle ? (
+            <Text style={styles.rowSub} numberOfLines={2}>
+              {item.subtitle}
+            </Text>
+          ) : null}
+          {money ? <Text style={styles.money}>{money}</Text> : null}
+          {item.trip_number ? (
+            <Text style={styles.trip}>{item.trip_number}</Text>
+          ) : null}
+        </View>
+      </View>
+    </MotiView>
+  );
+}
+
+const styles = StyleSheet.create({
+  sidebar: {
+    width: 300,
+    borderRightWidth: 1,
+    borderRightColor: Theme.borderMedium,
+    backgroundColor: Theme.surface,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  header: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    color: Theme.textSecondary,
+    paddingHorizontal: 14,
+    marginBottom: 10,
+  },
+  scroll: { flex: 1 },
+  scrollContent: { paddingHorizontal: 10, paddingBottom: 24, gap: 8 },
+  empty: { fontSize: 13, color: Theme.textSecondary, paddingHorizontal: 8, lineHeight: 20 },
+  rowCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    backgroundColor: Theme.cardWhite,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 4 },
+  },
+  rowCardGlow: {
+    backgroundColor: 'rgba(240,253,244,0.95)',
+  },
+  rowTop: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
+  iconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: Theme.surfaceGray,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rowBody: { flex: 1, minWidth: 0 },
+  cat: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: Theme.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  rowTitle: { marginTop: 2, fontSize: 14, fontWeight: '800', color: Theme.textPrimary },
+  rowSub: { marginTop: 4, fontSize: 12, color: Theme.textRouteCard, lineHeight: 16 },
+  money: { marginTop: 6, fontSize: 15, fontWeight: '900', color: '#15803d' },
+  trip: { marginTop: 4, fontSize: 11, fontWeight: '700', color: Theme.textSecondary },
+});

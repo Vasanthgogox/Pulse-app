@@ -18,10 +18,18 @@ export type {
 export type {
   ClientOperationsRibbon,
   GlobalOperationAlert,
+  OperationCategory,
   OperationsIslandVisualKind,
 } from './priorityEngine.util';
 export {
   assignPriorityWeightFromTripMessage,
   collectAllOperationSignals,
   selectCurrentActiveAlert,
+  selectOperationsShelfItems,
+  selectVehicleIdleToast,
 } from './priorityEngine.util';
+export {
+  useCurrentOperationAlert,
+  useOperationsShelfItems,
+  useVehicleIdleToastAlert,
+} from './useOperationsDerived';
