@@ -80,6 +80,7 @@ import {
   dedupeFeedbackRequestMessages,
   mergeTripChatMessagesWithFeedbackRatings,
 } from "@/features/chat/utils/mergeTripFeedbackMessages.util";
+import { dedupeTripStatusBroadcastsForLane } from "@/features/chat/utils/dedupeTripStatusBroadcastForLane.util";
 import {
   acknowledgeLedgerEventMessage,
   disputeLedgerEventMessage,
@@ -100,6 +101,7 @@ import type {
   TripMessageRow,
 } from "../types/chat.types";
 import { tripFeedbackRequestMatchesConversation } from "../utils/feedbackRequestMeta";
+import { ledgerEventInvolvesOrg } from "../utils/ledgerVisibility.util";
 import { useAuth } from "@/contexts/AuthContext";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import {
@@ -4113,13 +4115,16 @@ function TripConversationDetailLoaded({
   const displayMessages = useMemo(
     () =>
       dedupeFeedbackRequestMessages(
-        mergeTripChatMessagesWithFeedbackRatings(
-          liveConv.trip_id,
-          liveConv.messages,
-          tripRatings,
+        dedupeTripStatusBroadcastsForLane(
+          mergeTripChatMessagesWithFeedbackRatings(
+            liveConv.trip_id,
+            liveConv.messages,
+            tripRatings,
+          ),
+          liveConv.id,
         ),
       ),
-    [liveConv.trip_id, liveConv.messages, tripRatings],
+    [liveConv.trip_id, liveConv.id, liveConv.messages, tripRatings],
   );
 
   const handleIslandNavigateTrip = useCallback(
@@ -4265,7 +4270,10 @@ function TripConversationDetailLoaded({
 
   const missionDateLabel = formatTripRouteDate(liveConv.trip_created_at);
 
-  const tripMeta = useTripMeta(liveConv.trip_id);
+  const tripMeta = useTripMeta(liveConv.trip_id, currentOrgId, {
+    partyType:        liveConv.party_type,
+    conversationId: liveConv.id,
+  });
   const paymentBalance = tripMeta?.payment_balance ?? null;
 
   // Timestamp captured once at mount. Messages created after this instant
@@ -4317,8 +4325,10 @@ function TripConversationDetailLoaded({
     if (
       m.message_type === "ledger_event" ||
       m.message_type === "ledger" ||
-      m.message_type === "payment"
+      m.message_type === "payment" ||
+      m.message_type === "ledger_update"
     ) {
+      if (!ledgerEventInvolvesOrg(m, currentOrgId)) return null;
       return (
         <ChatLedgerEventCard
           message={m}
@@ -4339,8 +4349,9 @@ function TripConversationDetailLoaded({
         <ChatFeedbackCard
           message={m}
           tripId={liveConv.trip_id}
-          ratingOrganizationId={liveConv.organization_id}
-          conversationOwnerOrgId={liveConv.organization_id}
+          ratingOrganizationId={
+            liveConv.trip_organization_id ?? liveConv.organization_id
+          }
           currentOrgId={currentOrgId}
           onSubmitted={handleFeedbackSubmitted}
         />

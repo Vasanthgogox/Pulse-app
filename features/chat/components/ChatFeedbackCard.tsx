@@ -47,14 +47,13 @@ export function ChatFeedbackCard({
   message,
   tripId,
   ratingOrganizationId,
-  conversationOwnerOrgId,
   currentOrgId,
   onSubmitted,
 }: {
   message: TripMessageRow;
   tripId: string;
+  /** Fleet org that owns the trip (`trips.organization_id`); must match viewer to submit. */
   ratingOrganizationId: string;
-  conversationOwnerOrgId: string;
   currentOrgId: string;
   onSubmitted: () => void;
 }) {
@@ -81,7 +80,8 @@ export function ChatFeedbackCard({
   }, [message]);
 
   const canSubmit =
-    phase === "stars" && currentOrgId === conversationOwnerOrgId;
+    phase === "stars" &&
+    currentOrgId.trim() === (ratingOrganizationId ?? "").trim();
 
   const targetName = formatChatPartyName(
     meta?.rated_display_name ?? message.content,

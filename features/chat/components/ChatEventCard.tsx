@@ -25,6 +25,7 @@ import {
   partyInitialsFromName,
 } from "@/lib/partyAvatarDisplay";
 import type { LedgerEventMetadata, TripMessageRow } from "../types/chat.types";
+import { ledgerEventInvolvesOrg } from "../utils/ledgerVisibility.util";
 
 // ── System event card (trip status changes) ───────────────────────────────────
 
@@ -170,11 +171,22 @@ export function ChatLedgerEventCard({
   addingToBook,
   readOnly = false,
 }: LedgerCardProps) {
+  if (!ledgerEventInvolvesOrg(message, currentOrgId)) return null;
   const meta = message.metadata as LedgerEventMetadata | null;
   if (!meta) return null;
 
-  const isReceiver = meta.receiver_org_id === currentOrgId;
-  const isSender = meta.sender_org_id === currentOrgId;
+  const isReceiver =
+    String(meta.receiver_org_id ?? "").trim() === String(currentOrgId ?? "").trim();
+  const isSender =
+    String(meta.sender_org_id ?? "").trim() === String(currentOrgId ?? "").trim();
+  if (!isReceiver && !isSender) return null;
+
+  const directionLabel =
+    isReceiver && !isSender
+      ? "Incoming payment"
+      : isSender && !isReceiver
+        ? "Outgoing payment"
+        : "Transfer";
 
   const paymentModeLabel = String(meta.payment_mode ?? "Cash").trim() || "Cash";
   const safeAmount = Number(meta.amount ?? 0);
@@ -241,6 +253,8 @@ export function ChatLedgerEventCard({
             </Text>
           ) : null}
           <Text style={s.ledgerMeta} numberOfLines={1}>
+            {directionLabel}
+            {" · "}
             {dateUpper}
             {" · "}
             {metaMid}

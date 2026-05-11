@@ -1,6 +1,6 @@
 import type { TripEntry } from "@/features/chat/store/useChatStore";
 
-/** True when this org owns a party lane on the trip that still needs a debrief (bootstrap lane flag). */
+/** True when this org may submit debrief and a lane still shows pending (bootstrap flag). */
 export function tripHasPendingOrgFeedback(
   trips: Record<string, TripEntry>,
   tripId: string,
@@ -9,10 +9,13 @@ export function tripHasPendingOrgFeedback(
   if (!orgId || !tripId) return false;
   const entry = trips[tripId];
   if (!entry) return false;
+  const ownerOrg = entry.tripOrganizationId?.trim() ?? "";
+  const isTripOwnerViewer = ownerOrg !== "" && ownerOrg === orgId;
   for (const p of Object.values(entry.parties)) {
     if (!p) continue;
-    if (p.organizationId !== orgId) continue;
-    if (p.feedbackStatus === "pending") return true;
+    if (p.feedbackStatus !== "pending") continue;
+    if (isTripOwnerViewer) return true;
+    if (p.organizationId === orgId) return true;
   }
   return false;
 }

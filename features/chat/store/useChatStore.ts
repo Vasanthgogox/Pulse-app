@@ -39,7 +39,6 @@ import { getUnifiedB2BChatBootstrap } from '../services/chat.service';
 import type {
   B2BTripState,
   ConversationPartyType,
-  LedgerEventMetadata,
   MessageDeliveryStatus,
   TripConversation,
   TripFeedbackLaneStatus,
@@ -49,7 +48,9 @@ import type {
 } from '../types/chat.types';
 import { useGlobalSyncStore } from '@/lib/globalSync/useGlobalSyncStore';
 import { mergeMessageMetadataForEventPayload } from '../utils/eventPayloadMerge.util';
-import { isEventVisibleForPartyLane } from '../utils/messagePartyVisibility';
+import { isEventVisibleForPartyLane, isLedgerLikeMessageType } from '../utils/messagePartyVisibility';
+import { computeLaneLedgerBalance, ledgerEventInvolvesOrg } from '../utils/ledgerVisibility.util';
+import { dedupeTripStatusBroadcastsForLane } from '../utils/dedupeTripStatusBroadcastForLane.util';
 
 // ── Realtime duplicate suppression (same message_id / transaction_id flood) ──
 // WAL can surface the same logical row twice in quick succession; skipping the
@@ -236,25 +237,6 @@ function resolveTripEntryPatchesFromMessage(
   return Object.keys(patch).length > 0 ? patch : null;
 }
 
-function ledgerAmountFlowFromRow(row: Partial<TripMessageRow>): {
-  amount: number;
-  flow: 'in' | 'out';
-} | null {
-  const merged = mergeMessageMetadataForEventPayload(row);
-  if (!merged || typeof merged !== 'object') return null;
-  const m = merged as LedgerEventMetadata & { event_payload?: Record<string, unknown> };
-  if (m.amount != null && (m.flow === 'in' || m.flow === 'out')) {
-    return { amount: Number(m.amount), flow: m.flow };
-  }
-  const ep = m.event_payload;
-  if (!ep || typeof ep !== 'object') return null;
-  const amt = ep.amount;
-  if (amt == null) return null;
-  const flowRaw = ep.flow;
-  const flow = flowRaw === 'out' ? 'out' : 'in';
-  return { amount: Number(amt), flow };
-}
-
 /**
  * Realtime multiplex: apply `message_type`-specific trip patches on top of
  * generic `event_payload` / `trip_state` resolution (Bootstrap & Patch model).
@@ -278,19 +260,9 @@ function applyActiveMessageTypeMultiplex(
     case "ledger_update":
     case "ledger_event":
     case "ledger":
-    case "payment": {
-      if (isNewId) {
-        const lf = ledgerAmountFlowFromRow(row);
-        if (lf) {
-          const delta = lf.flow === "out" ? -lf.amount : lf.amount;
-          next = {
-            ...next,
-            paymentBalance: (entry.paymentBalance ?? 0) + delta,
-          };
-        }
-      }
+    case "payment":
+      // Financial net is derived in tripEntryToMeta / useTripMeta from visible rows only.
       break;
-    }
     case "assignment_update": {
       const m = mergeMessageMetadataForEventPayload(row);
       const ep = (m?.event_payload ?? {}) as Record<string, unknown>;
@@ -473,8 +445,8 @@ export interface TripEntry {
   lastEtaLabel?:        string | null;
   /** Human label from location logs (`event_payload.location_data.address_name`). */
   lastLocationLabel?:   string | null;
-  // Running payment balance — accumulated from 'ledger_event' messages
-  paymentBalance:       number | null;
+  /** From `trips.organization_id` (bootstrap); used for debrief RPC org scope. */
+  tripOrganizationId:   string | null;
   // Party lanes (at most one per ConversationPartyType)
   parties:              Partial<Record<ConversationPartyType, PartyConv>>;
   // Unified event stream for ALL parties, sorted ASC by created_at.
@@ -650,7 +622,10 @@ function entryFromConv(conv: TripConversation): TripEntry {
     pickupArea:           conv.pickup_area,
     dropLocation:         conv.drop_location,
     createdAt:            conv.trip_created_at ?? null,
-    paymentBalance:       null,
+    tripOrganizationId:
+      conv.trip_organization_id != null && String(conv.trip_organization_id).trim() !== ""
+        ? String(conv.trip_organization_id)
+        : null,
     parties:              {},
     event_stream:         [],
     lastEventAt:          conv.last_message_at,
@@ -702,9 +677,13 @@ function convFromEntry(
     pickup_area:             entry.pickupArea,
     drop_location:           entry.dropLocation,
     trip_feedback_status:   party.feedbackStatus ?? "none",
+    trip_organization_id:   entry.tripOrganizationId ?? null,
     // messages for this party lane only — visibility_tags aware, zero DB calls
-    messages: entry.event_stream.filter(e =>
-      isEventVisibleForPartyLane(e, partyType, convId),
+    messages: dedupeTripStatusBroadcastsForLane(
+      entry.event_stream.filter((e) =>
+        isEventVisibleForPartyLane(e, partyType, convId),
+      ),
+      convId,
     ),
   };
 }
@@ -852,7 +831,12 @@ export const useChatStore = create<ChatState>()(
                   new Date(b.created_at).getTime(),
               )
             : history;
-          const newEvts: TripEvent[] = sortedHistory.map(m => ({ ...m, partyType }));
+          const financeSafe = sortedHistory.filter(
+            (m) =>
+              !isLedgerLikeMessageType(String(m.message_type ?? "")) ||
+              ledgerEventInvolvesOrg(m, orgId),
+          );
+          const newEvts: TripEvent[] = financeSafe.map((m) => ({ ...m, partyType }));
 
           entry.parties[partyType] = partyFromConv(conv);
           entry.event_stream       = mergeEvents(entry.event_stream, newEvts);
@@ -861,31 +845,20 @@ export const useChatStore = create<ChatState>()(
           if (conv.trip_status)      entry.status     = conv.trip_status;
           if (conv.trip_driver_id)   entry.driverId   = conv.trip_driver_id;
           if (conv.trip_supplier_id) entry.supplierId = conv.trip_supplier_id;
+          if (
+            conv.trip_organization_id != null &&
+            String(conv.trip_organization_id).trim() !== ""
+          ) {
+            entry.tripOrganizationId = String(conv.trip_organization_id);
+          }
 
           convToTrip[conv.id]  = tripId;
           convToParty[conv.id] = partyType;
         }
 
-        // Compute sidebar fields and payment balance from actual event history.
-        // The last event timestamp/preview is the ground truth for sort order
-        // and the preview line shown in the sidebar card.
+        // Compute sidebar fields from actual event history (payment_balance via useTripMeta).
         for (const entry of Object.values(trips)) {
           entry.totalUnread = sumUnread(entry.parties);
-
-          // Accumulate payment balance from bootstrap events
-          let balance = 0;
-          for (const evt of entry.event_stream) {
-            if (
-              evt.message_type === "ledger_event" ||
-              evt.message_type === "ledger" ||
-              evt.message_type === "payment" ||
-              evt.message_type === "ledger_update"
-            ) {
-              const lf = ledgerAmountFlowFromRow(evt);
-              if (lf) balance += lf.flow === "out" ? -lf.amount : lf.amount;
-            }
-          }
-          entry.paymentBalance = balance !== 0 ? balance : null;
 
           if (entry.event_stream.length > 0) {
             const last              = entry.event_stream[entry.event_stream.length - 1];
@@ -927,6 +900,13 @@ export const useChatStore = create<ChatState>()(
 
       const entry = trips[tripId];
       if (!entry) return;
+
+      if (isLedgerLikeMessageType(String(row.message_type ?? ""))) {
+        const viewerOrg =
+          get().bootstrappedOrg ??
+          (typeof row.organization_id === "string" ? row.organization_id : null);
+        if (!ledgerEventInvolvesOrg(row, viewerOrg)) return;
+      }
 
       const baseRow = row as TripMessageRow;
       const event: TripEvent = {
@@ -1157,7 +1137,15 @@ export const useChatStore = create<ChatState>()(
       if (!tripId || !partyType) return;
       const entry = trips[tripId];
       if (!entry) return;
-      const newEvts: TripEvent[] = messages.map(m => ({ ...m, partyType }));
+      const viewerOrg =
+        get().bootstrappedOrg ?? entry.parties[partyType]?.organizationId ?? "";
+      const newEvts: TripEvent[] = messages
+        .filter(
+          (m) =>
+            !isLedgerLikeMessageType(String(m.message_type ?? "")) ||
+            ledgerEventInvolvesOrg(m, viewerOrg),
+        )
+        .map((m) => ({ ...m, partyType }));
       set({
         trips: {
           ...trips,
@@ -1179,6 +1167,12 @@ export const useChatStore = create<ChatState>()(
 
       const entry = trips[tripId];
       if (!entry) return;
+
+      if (isLedgerLikeMessageType(String(msg.message_type ?? ""))) {
+        const viewerOrg =
+          get().bootstrappedOrg ?? entry.parties[partyType]?.organizationId ?? "";
+        if (!ledgerEventInvolvesOrg(msg, viewerOrg)) return;
+      }
 
       let row: TripMessageRow = { ...msg };
       if (row.sender_role === "dispatcher") {
@@ -1275,7 +1269,14 @@ export const useChatStore = create<ChatState>()(
       const { trips, convToTrip, convToParty } = get();
       const { trip_id: tripId, party_type: partyType } = conv;
 
-      const newEvts: TripEvent[] = conv.messages.map(m => ({ ...m, partyType }));
+      const viewerOrg = get().bootstrappedOrg ?? conv.organization_id;
+      const newEvts: TripEvent[] = conv.messages
+        .filter(
+          (m) =>
+            !isLedgerLikeMessageType(String(m.message_type ?? "")) ||
+            ledgerEventInvolvesOrg(m, viewerOrg),
+        )
+        .map((m) => ({ ...m, partyType }));
       const existing = trips[tripId];
       let entry: TripEntry = existing
         ? { ...existing }
@@ -1287,6 +1288,12 @@ export const useChatStore = create<ChatState>()(
       if (conv.trip_status)      entry.status     = conv.trip_status;
       if (conv.trip_driver_id)   entry.driverId   = conv.trip_driver_id;
       if (conv.trip_supplier_id) entry.supplierId = conv.trip_supplier_id;
+      if (
+        conv.trip_organization_id != null &&
+        String(conv.trip_organization_id).trim() !== ""
+      ) {
+        entry.tripOrganizationId = String(conv.trip_organization_id);
+      }
 
       entry.totalUnread = sumUnread(entry.parties);
 
@@ -1355,7 +1362,24 @@ export const useChatStore = create<ChatState>()(
 
 // ── Selector: TripMeta from TripEntry (backward compat) ──────────────────────
 
-export function tripEntryToMeta(entry: TripEntry): TripMeta {
+export function tripEntryToMeta(
+  entry: TripEntry,
+  opts?: {
+    viewerOrgId?:         string | null;
+    partyType?:           ConversationPartyType | null;
+    laneConversationId?: string | null;
+  } | null,
+): TripMeta {
+  const viewerOrgId = opts?.viewerOrgId?.trim() || null;
+  const payment_balance =
+    viewerOrgId != null
+      ? computeLaneLedgerBalance(
+          entry.event_stream,
+          viewerOrgId,
+          opts?.partyType ?? null,
+          opts?.laneConversationId ?? null,
+        )
+      : null;
   return {
     trip_id:          entry.tripId,
     trip_number:      entry.tripNumber,
@@ -1372,6 +1396,6 @@ export function tripEntryToMeta(entry: TripEntry): TripMeta {
     last_eta_minutes: entry.lastEtaMinutes,
     last_eta_label:   entry.lastEtaLabel,
     last_location_label: entry.lastLocationLabel ?? null,
-    payment_balance:  entry.paymentBalance,
+    payment_balance,
   };
 }
