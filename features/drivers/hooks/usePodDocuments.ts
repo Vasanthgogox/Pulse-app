@@ -55,7 +55,9 @@ export function usePodDocuments(
         const response = await fetch(uri);
         arrayBuffer = await response.arrayBuffer();
       } else {
-        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        const base64 = await FileSystem.readAsStringAsync(uri, {
+          encoding: "base64",
+        });
         arrayBuffer = Uint8Array.from(atob(base64), c => c.charCodeAt(0)).buffer;
       }
       

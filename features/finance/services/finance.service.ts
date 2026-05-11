@@ -168,6 +168,8 @@ export interface LedgerRow {
   ledger_entity_type?: string | null;
   ledger_flow_type?: string | null;
   ledger_category?: string | null;
+  /** Chat "Add to book" mirror — source transaction id (dedupe); migration 20260601100000. */
+  chat_mirror_of_transaction_id?: string | null;
 }
 
 export interface CreateLedgerEntryData {

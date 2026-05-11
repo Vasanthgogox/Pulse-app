@@ -109,7 +109,7 @@ export async function getDriversByOrganization(
     const offset = opts.offset ?? 0;
     const { data, error } = await base().range(offset, offset + limit);
     if (error) return { error: new Error(error.message), drivers: [] };
-    const raw = excludeTrackingOnly((data ?? []) as DriverRow[]);
+    const raw = excludeTrackingOnly((data ?? []) as unknown as DriverRow[]);
     const normalized = raw.map((d) => normalizeDriverRow(d));
     const hasMore = raw.length > limit;
     return {
@@ -120,7 +120,7 @@ export async function getDriversByOrganization(
   }
   const { data, error } = await base();
   if (error) return { error: new Error(error.message), drivers: [] };
-  const raw = excludeTrackingOnly((data ?? []) as DriverRow[]);
+  const raw = excludeTrackingOnly((data ?? []) as unknown as DriverRow[]);
   return { error: null, drivers: raw.map((d) => normalizeDriverRow(d)) };
 }
 
@@ -282,7 +282,7 @@ export async function getLinkedDriversForCurrentUser(
     .order("created_at", { ascending: false })
     .limit(20);
   if (error) return { error: new Error(error.message), drivers: [] };
-  return { error: null, drivers: (data ?? []) as DriverRow[] };
+  return { error: null, drivers: (data ?? []) as unknown as DriverRow[] };
 }
 
 /** Driver invite row (from get_driver_invites_received). Driver sees these in the app. */
@@ -814,7 +814,7 @@ export async function ensureDriverRowByPhone(
           .eq("id", (anyDriver as DriverRow).id)
           .single();
         if (freshErr) return { error: new Error(freshErr.message), driver: null };
-        if (fresh) return { error: null, driver: fresh as DriverRow };
+        if (fresh) return { error: null, driver: fresh as unknown as DriverRow };
       }
     } else {
       // trackingOnly=true, forceUnlinkedForOtp=false: prefer any existing driver for this phone
@@ -822,7 +822,7 @@ export async function ensureDriverRowByPhone(
         .rpc("match_driver_by_phone", { p_org_id: orgId, p_phone: normalized, p_require_unlinked: false })
         .maybeSingle();
       if (findError) return { error: new Error(findError.message), driver: null };
-      if (existing) return { error: null, driver: existing as DriverRow };
+      if (existing) return { error: null, driver: existing as unknown as DriverRow };
     }
   } else {
     const q = supabase().from("drivers").select(DRIVER_COLUMNS).eq("organization_id", orgId);
@@ -834,7 +834,7 @@ export async function ensureDriverRowByPhone(
       .limit(1)
       .maybeSingle();
     if (findError) return { error: new Error(findError.message), driver: null };
-    if (existing) return { error: null, driver: existing as DriverRow };
+    if (existing) return { error: null, driver: existing as unknown as DriverRow };
   }
 
   const insertPayload: Record<string, unknown> = {
@@ -1443,7 +1443,7 @@ export async function getDriverLedgerByDriver(
     .order("created_at", { ascending: false })
     .limit(200);
   if (error) return { error: new Error(error.message), entries: [] };
-  return { error: null, entries: (data ?? []) as DriverLedgerRow[] };
+  return { error: null, entries: (data ?? []) as unknown as DriverLedgerRow[] };
 }
 
 /**
@@ -1460,7 +1460,7 @@ export async function getDriverLedgerByDriverIds(
     .order("created_at", { ascending: false })
     .limit(200);
   if (error) return { error: new Error(error.message), entries: [] };
-  return { error: null, entries: (data ?? []) as DriverLedgerRow[] };
+  return { error: null, entries: (data ?? []) as unknown as DriverLedgerRow[] };
 }
 
 /** Single round-trip bundle for DriverDetailScreen — replaces 6 parallel calls. */

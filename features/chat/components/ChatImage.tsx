@@ -1,68 +1,80 @@
 /**
- * ChatImage — lazy-loading image component for chat document previews.
+ * ChatImage — document_share inline preview (images only).
  *
- * Problem this solves:
- *   DocumentShareCard called resolveChatDocumentStorageUrl + tryChatDocumentBlobObjectUrl
- *   on every component mount. When the parent ScrollView re-renders (e.g. on each
- *   incoming message), every visible image card re-mounted and fired new storage
- *   requests, exhausting the Supabase connection pool.
- *
- * How it works:
- *   1. Checks the module-level signed URL and blob URL caches synchronously on
- *      mount — returns the cached URL immediately with zero network calls.
- *   2. Only resolves over the network on a cache miss (first view of this path).
- *   3. Uses `storagePath` (a stable string) as the effect dependency — not the
- *      `message` or `meta` object, which may change reference on every render.
- *   4. An in-flight ref (`resolvedRef`) prevents the effect from re-running even
- *      if the component re-mounts while resolution is in progress.
+ * CDN-first: uses Supabase Image Transformations (default 300×300 @ q70) so the
+ * Storage API returns a resized object, not the full binary. Module-level URL
+ * caches are peeked synchronously on first paint — no blob download and no
+ * storage client calls during render.
  */
-import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Image, StyleSheet, View } from 'react-native';
-import type { ImageStyle, StyleProp } from 'react-native';
+import React, { useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Image, StyleSheet, View } from "react-native";
+import type { ImageStyle, StyleProp } from "react-native";
 import {
-  resolveChatDocumentStorageUrl,
-  tryChatDocumentBlobObjectUrl,
-} from '../utils/resolveChatDocumentUrl.util';
+  peekChatImageThumbnailUrl,
+  resolveChatImageThumbnail,
+} from "../utils/resolveChatDocumentUrl.util";
+
+const INLINE_W = 300;
+const INLINE_H = 300;
+const INLINE_Q = 70;
+const THUMB_W = 150;
+const THUMB_H = 150;
+const THUMB_Q = 68;
 
 interface ChatImageProps {
   storagePath: string;
   style?: StyleProp<ImageStyle>;
-  /** Show as a square thumbnail when true. Defaults to full-width aspect-ratio. */
   thumbnail?: boolean;
 }
 
+function resolveKey(storagePath: string, thumbnail?: boolean): string {
+  return `${storagePath}|${thumbnail ? "t" : "f"}`;
+}
+
 export function ChatImage({ storagePath, style, thumbnail }: ChatImageProps) {
-  const [uri, setUri] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  // Guard: prevent re-triggering the effect when storagePath hasn't changed
-  const resolvedPathRef = useRef<string | null>(null);
+  const w = thumbnail ? THUMB_W : INLINE_W;
+  const h = thumbnail ? THUMB_H : INLINE_H;
+  const q = thumbnail ? THUMB_Q : INLINE_Q;
+
+  const [uri, setUri] = useState<string | null>(() =>
+    storagePath ? peekChatImageThumbnailUrl(storagePath, w, h, q) : null,
+  );
+  const [loading, setLoading] = useState(
+    () => !storagePath || !peekChatImageThumbnailUrl(storagePath, w, h, q),
+  );
+  const inFlightRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!storagePath || resolvedPathRef.current === storagePath) return;
-    resolvedPathRef.current = storagePath;
-
-    let cancelled = false;
-
-    async function resolve() {
-      // Try blob download first (preferred for inline preview — avoids CORS on web).
-      const blob = await tryChatDocumentBlobObjectUrl(storagePath);
-      if (cancelled) return;
-      if (blob?.url) {
-        setUri(blob.url);
-        setLoading(false);
-        return;
-      }
-
-      // Fallback: signed HTTPS URL (cached at 50-min TTL in the util module).
-      const signed = await resolveChatDocumentStorageUrl(storagePath);
-      if (cancelled) return;
-      setUri(signed);
+    if (!storagePath) {
+      setUri(null);
       setLoading(false);
+      return;
     }
-
-    void resolve();
-    return () => { cancelled = true; };
-  }, [storagePath]);
+    const tw = thumbnail ? THUMB_W : INLINE_W;
+    const th = thumbnail ? THUMB_H : INLINE_H;
+    const tq = thumbnail ? THUMB_Q : INLINE_Q;
+    const key = resolveKey(storagePath, thumbnail);
+    const cached = peekChatImageThumbnailUrl(storagePath, tw, th, tq);
+    if (cached) {
+      setUri(cached);
+      setLoading(false);
+      return;
+    }
+    if (inFlightRef.current === key) return;
+    inFlightRef.current = key;
+    let cancelled = false;
+    setLoading(true);
+    void resolveChatImageThumbnail(storagePath, tw, th, tq).then((url) => {
+      if (cancelled || inFlightRef.current !== key) return;
+      inFlightRef.current = null;
+      setUri(url);
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+      inFlightRef.current = null;
+    };
+  }, [storagePath, thumbnail]);
 
   if (loading) {
     return (
@@ -86,27 +98,27 @@ export function ChatImage({ storagePath, style, thumbnail }: ChatImageProps) {
 
 const s = StyleSheet.create({
   placeholder: {
-    width: '100%',
+    width: "100%",
     height: 160,
-    backgroundColor: 'rgba(0,0,0,0.04)',
+    backgroundColor: "rgba(0,0,0,0.04)",
     borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   thumbnailPlaceholder: {
     width: 80,
     height: 80,
   },
   fullWidth: {
-    width: '100%',
+    width: "100%",
     height: 180,
     borderRadius: 12,
-    backgroundColor: 'rgba(0,0,0,0.04)',
+    backgroundColor: "rgba(0,0,0,0.04)",
   },
   thumbnail: {
     width: 80,
     height: 80,
     borderRadius: 10,
-    backgroundColor: 'rgba(0,0,0,0.04)',
+    backgroundColor: "rgba(0,0,0,0.04)",
   },
 });

@@ -8,7 +8,7 @@
  *  3. BATCH UPDATES    — 100ms flush window collapses message bursts into one
  *                        setState pass (WhatsApp/Telegram pattern).
  *  4. OPTIMISTIC SEND  — message appears instantly; rolled back on server error.
- *  5. DEBOUNCED READ   — markAsRead waits 1.5s before hitting DB, coalescing
+ *  5. DEBOUNCED READ   — markAsRead waits 2s before hitting DB, coalescing
  *                        rapid tab-in/tab-out events into a single UPDATE.
  */
 
@@ -158,7 +158,7 @@ export function useChat({
     markReadTimerRef.current = setTimeout(() => {
       markReadTimerRef.current = null;
       void chatService.markConversationRead(conversationId).catch(() => {});
-    }, 1500);
+    }, 2000);
   }, [conversationId]);
 
   useEffect(() => () => {

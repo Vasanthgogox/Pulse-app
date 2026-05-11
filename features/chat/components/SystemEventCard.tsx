@@ -110,9 +110,8 @@ function ImageMessageCard({ message, isOwn }: { message: TripMessageRow; isOwn: 
 
   return (
     <View style={sc.imageWrap}>
-      {/* OptimizedChatImage uses Supabase Image Transformations for the thumbnail
-          (300×300 @ quality 65) — only loads the full binary when tapped. */}
-      <OptimizedChatImage storagePath={storagePath} isOwn={isOwn} />
+      {/* OptimizedChatImage: CDN thumbnail (300×300 @ q70); lightbox prefers transform before raw URL. */}
+      <OptimizedChatImage message={message} storagePath={storagePath} isOwn={isOwn} />
     </View>
   );
 }

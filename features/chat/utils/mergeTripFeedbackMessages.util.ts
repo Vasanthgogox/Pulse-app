@@ -48,6 +48,26 @@ export function findTripRatingMatchingFeedbackMeta(
 }
 
 /**
+ * Multiple `feedback_request` rows can exist for the same rated party (e.g. per-lane inserts).
+ * Keep a single bubble: newest row wins for each `(rated_party_type, rated_id)`.
+ */
+export function dedupeFeedbackRequestMessages(messages: TripMessageRow[]): TripMessageRow[] {
+  const keepLastByKey = new Map<string, TripMessageRow>();
+  for (const m of messages) {
+    if (m.message_type !== "feedback_request" && m.message_type !== "feedback") continue;
+    const meta = parseFeedbackRequestMetadata(m);
+    const key = meta ? `${meta.rated_party_type}:${meta.rated_id}` : `id:${m.id}`;
+    keepLastByKey.set(key, m);
+  }
+  return messages.filter((m) => {
+    if (m.message_type !== "feedback_request" && m.message_type !== "feedback") return true;
+    const meta = parseFeedbackRequestMetadata(m);
+    const key = meta ? `${meta.rated_party_type}:${meta.rated_id}` : `id:${m.id}`;
+    return keepLastByKey.get(key)?.id === m.id;
+  });
+}
+
+/**
  * When a rating was saved from the trip page (or elsewhere), merge it into in-memory
  * `feedback_request` rows so the chat debrief shows submitted state.
  */

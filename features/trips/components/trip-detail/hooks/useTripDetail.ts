@@ -56,6 +56,7 @@ import {
 } from "@/lib/queries";
 import * as tripDocumentsService from "@/services/tripDocumentsService";
 import { useQueryClient } from "@tanstack/react-query";
+import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import type * as ExpoLocationTypes from "expo-location";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -735,18 +736,6 @@ export function useTripDetail({
     [vehiclePreviewDocs, vehiclePreviewIndex],
   );
 
-  // ── Realtime ──────────────────────────────────────────────────────────────
-  const handleRealtimeTripUpdate = useCallback(() => {
-    isRefreshingRef.current = true;
-    load();
-    loadAssignmentAudit();
-    setFinanceRefreshKey((k) => k + 1);
-    refetchTransactionsRef.current();
-  }, []);
-
-  // Subscribe immediately using route tripId so realtime starts even before trip row is loaded.
-  useRealtimeTrip(tripId ?? null, handleRealtimeTripUpdate);
-
   // ── Data loaders ──────────────────────────────────────────────────────────
   const load = useCallback(() => {
     if (!tripId) {
@@ -825,6 +814,32 @@ export function useTripDetail({
       else setAssignmentAuditRows([]);
     });
   }, [tripId]);
+
+  // ── Realtime (UPDATE merges row from WAL — no getTripById refetch) ───────────
+  const handleRealtimeTripUpdate = useCallback(
+    (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
+      if (
+        payload.eventType === "UPDATE" &&
+        payload.new &&
+        typeof payload.new === "object" &&
+        (payload.new as { id?: string }).id === tripId
+      ) {
+        setTrip((prev) => {
+          if (!prev || prev.id !== tripId) return prev;
+          return { ...prev, ...(payload.new as Partial<TripRow>) } as TripRow;
+        });
+        return;
+      }
+      isRefreshingRef.current = true;
+      load();
+      loadAssignmentAudit();
+      setFinanceRefreshKey((k) => k + 1);
+      refetchTransactionsRef.current();
+    },
+    [tripId, load, loadAssignmentAudit],
+  );
+
+  useRealtimeTrip(tripId ?? null, handleRealtimeTripUpdate);
 
   /** Resolve audit row IDs to labels (web + shared timeline). Native screen had this inline; hook must own it for `.web.tsx`. */
   useEffect(() => {

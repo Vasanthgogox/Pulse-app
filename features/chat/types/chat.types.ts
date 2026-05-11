@@ -1,5 +1,8 @@
 export type ConversationPartyType = "client" | "supplier" | "driver";
 export type MessageSenderRole = "dispatcher" | "client" | "supplier" | "driver" | "system";
+
+/** WhatsApp-style local delivery / read state (outgoing bubbles + optimistic sends). */
+export type MessageDeliveryStatus = "sending" | "sent" | "delivered" | "read";
 export type MessageType =
   | "text"
   | "chat"           // alias for text — standard dispatcher/party message bubble
@@ -11,6 +14,12 @@ export type MessageType =
   | "ledger_event"
   | "ledger"         // alias for ledger_event — from submit_business_event
   | "payment"        // alias for ledger_event — from execute_b2b_update / external callers
+  /** Payload-only balance patch (trigger / Edge Function); same memory rules as ledger_event. */
+  | "ledger_update"
+  /** Driver / vehicle assignment snapshot in event_payload (no extra trip fetch). */
+  | "assignment_update"
+  /** Document attached to trip thread; same visibility as document_share. */
+  | "document_upload"
   | "document_share"
   | "feedback_request"
   | "feedback"       // alias for feedback_request
@@ -132,7 +141,8 @@ export interface B2BEventMetadata {
  * Keys absent  = visible in all tabs (client, supplier, driver).
  *
  * Rules:
- *   ledger / ledger_event  → financial tabs only (client, supplier)
+ *   ledger / ledger_event  → financial tabs only (client, supplier); each row is
+ *                            still filtered to its own conversation_id in the store
  *   feedback_request       → financial tabs only (client, supplier)
  *   tracking               → driver tab (dispatcher can see via driver conv)
  *   everything else        → unrestricted
@@ -141,8 +151,11 @@ export const MESSAGE_VISIBILITY: Partial<Record<MessageType, ConversationPartyTy
   ledger_event:     ['client', 'supplier'],
   ledger:           ['client', 'supplier'],
   payment:          ['client', 'supplier'],
+  ledger_update:    ['client', 'supplier'],
   feedback_request: ['client', 'supplier'],
   feedback:         ['client', 'supplier'],
+  document_upload:  ['client', 'supplier', 'driver'],
+  assignment_update: ['client', 'supplier', 'driver'],
 };
 
 /**
@@ -171,6 +184,8 @@ export interface FeedbackRequestMetadata {
   submitted_at?: string;
   submitted_score?: number;
   submitted_tags?: string[];
+  /** Optimistic: hide rating prompt immediately after submit. */
+  rating_status?: "rated";
 }
 
 export type TripMessageMetadata =
@@ -207,6 +222,8 @@ export interface TripMeta {
   last_location_at?: string | null;
   last_eta_minutes?: number | null;
   last_eta_label?:   string | null;
+  /** From `system_log` `event_payload.location_data.address_name` (cycle / heartbeat). */
+  last_location_label?: string | null;
   /** Running payment balance accumulated from ledger_event messages. No DB fetch. */
   payment_balance?:  number | null;
 }
@@ -255,6 +272,8 @@ export interface TripMessageRow {
   content: string;
   message_type: MessageType;
   metadata?: TripMessageMetadata;
+  /** Optional DB column / Realtime field — merged with `metadata.event_payload` for trip patches. */
+  event_payload?: Record<string, unknown> | null;
   is_read: boolean;
   read_at: string | null;
   created_at: string;
@@ -262,8 +281,14 @@ export interface TripMessageRow {
   is_delivered?: boolean;
   delivered_at?: string | null;
   /**
+   * Client-side delivery lane for ticks (sending → sent → delivered → read).
+   * Derived from Realtime ACKs + optimistic send; not required on every row.
+   */
+  delivery_status?: MessageDeliveryStatus;
+  /**
    * Party routing tags — conversation IDs (or party_type strings) that should
    * receive this message. Populated by process_b2b_event / get_unified_b2b_bootstrap.
+   * Ledger rows: prefer a single originating conversation id (not all fin lanes).
    * Absence means: visible only in the originating conversation's tab (legacy).
    */
   visibility_tags?: string[] | null;

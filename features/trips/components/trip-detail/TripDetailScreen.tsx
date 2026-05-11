@@ -49,6 +49,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import type * as ExpoLocationTypes from "expo-location";
 import { useRouter } from "expo-router";
+import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { MessageSquare, ReceiptText } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -713,14 +714,29 @@ export default function TripDetailScreen({
     refetchTransactionsRef.current();
   }, [load, loadAdjustments, loadAssignmentAudit]);
 
-  /** When realtime reports trip change (e.g. driver rejected), refetch trip and audit so Assignment block and Activity Log stay in sync. Skip loading state to avoid flicker. */
-  const handleRealtimeTripUpdate = useCallback(() => {
-    isRefreshingRef.current = true;
-    load();
-    loadAssignmentAudit();
-    setFinanceRefreshKey((k) => k + 1);
-    refetchTransactionsRef.current();
-  }, [load, loadAssignmentAudit]);
+  /** Realtime UPDATE: merge `trips` row from payload (no getTripById). Other events: full refresh. */
+  const handleRealtimeTripUpdate = useCallback(
+    (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
+      if (
+        payload.eventType === "UPDATE" &&
+        payload.new &&
+        typeof payload.new === "object" &&
+        (payload.new as { id?: string }).id === tripId
+      ) {
+        setTrip((prev) => {
+          if (!prev || prev.id !== tripId) return prev;
+          return { ...prev, ...(payload.new as Partial<TripRow>) } as TripRow;
+        });
+        return;
+      }
+      isRefreshingRef.current = true;
+      load();
+      loadAssignmentAudit();
+      setFinanceRefreshKey((k) => k + 1);
+      refetchTransactionsRef.current();
+    },
+    [tripId, load, loadAssignmentAudit],
+  );
 
   /** When trip is loaded and aggregate, load OTP for Assignments section. */
   useEffect(() => {

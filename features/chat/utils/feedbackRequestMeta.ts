@@ -36,7 +36,8 @@ function normalizeRatedPartyType(raw: unknown): "client" | "supplier" | "driver"
 export function parseFeedbackRequestMetadata(
   message: Pick<TripMessageRow, "message_type" | "metadata">,
 ): FeedbackRequestMetadata | null {
-  if (message.message_type !== "feedback_request") return null;
+  if (message.message_type !== "feedback_request" && message.message_type !== "feedback")
+    return null;
 
   let rawMeta: unknown = message.metadata;
   if (typeof rawMeta === "string") {
@@ -75,6 +76,8 @@ export function parseFeedbackRequestMetadata(
         ? Number(submittedScore)
         : undefined;
 
+  const ratingStatus = o.rating_status === "rated" ? "rated" : undefined;
+
   return {
     feedback_version: feedbackVersion,
     rated_party_type: rt,
@@ -86,6 +89,7 @@ export function parseFeedbackRequestMetadata(
     submitted_tags: Array.isArray(o.submitted_tags)
       ? (o.submitted_tags as unknown[]).filter((t): t is string => typeof t === "string")
       : undefined,
+    rating_status: ratingStatus,
   };
 }
 
@@ -101,7 +105,8 @@ export function tripFeedbackRequestMatchesConversation(
     "id" | "party_type" | "client_id" | "supplier_id" | "driver_id"
   >,
 ): boolean {
-  if (message.message_type !== "feedback_request") return false;
+  if (message.message_type !== "feedback_request" && message.message_type !== "feedback")
+    return false;
   if (message.conversation_id !== conv.id) return false;
   const meta = parseFeedbackRequestMetadata(message);
   if (!meta) return false;

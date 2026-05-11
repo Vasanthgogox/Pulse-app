@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -48,20 +48,9 @@ export function DocumentShareCard({ message, isOwn }: DocumentShareCardProps) {
   // Derive storagePath from meta and memoize so the string identity is stable.
   const storagePath = useMemo(() => String(meta?.storage_path ?? "").trim(), [meta]);
 
-  /** HTTPS signed URL for the "Open / download" button. Loaded lazily on tap. */
+  /** HTTPS signed URL — resolved only on open so mounting the card never hits Storage. */
   const [linkUri, setLinkUri] = useState<string | null>(null);
   const [opening, setOpening] = useState(false);
-
-  // Resolve the link URL once per storagePath so the open button works even if
-  // the user taps before ChatImage has finished loading.
-  useEffect(() => {
-    if (!storagePath) return;
-    let cancelled = false;
-    void resolveChatDocumentStorageUrl(storagePath).then((url) => {
-      if (!cancelled) setLinkUri(url);
-    });
-    return () => { cancelled = true; };
-  }, [storagePath]);
 
   if (!meta) return null;
 

@@ -165,6 +165,10 @@ export async function postLedgerEventToChat(params: PostLedgerEventParams): Prom
 /**
  * Mirrors a ledger entry from chat into the receiver's own transactions ledger.
  * Called when receiver taps "Add to my book" on a ledger card.
+ *
+ * Idempotent: `chat_mirror_of_transaction_id` + unique index (migration) ensures
+ * one row per receiver org per source `transaction_id`. Duplicate taps / races
+ * return success without a second insert.
  */
 export async function mirrorLedgerEntryFromChat(
   metadata: LedgerEventMetadata,
@@ -183,7 +187,8 @@ export async function mirrorLedgerEntryFromChat(
     `Mirrored from: ${metadata.sender_org_name}`,
   ].filter(Boolean).join(" | ");
 
-  const { error } = await supabase().from("transactions").insert({
+  const sourceTxId = String(metadata.transaction_id ?? "").trim();
+  const mirrorPayload = {
     organization_id: receiverOrgId,
     trip_id: tripId,
     party_name: isReceiver ? metadata.sender_org_name : metadata.receiver_org_name,
@@ -191,11 +196,34 @@ export async function mirrorLedgerEntryFromChat(
     amount_in: amountIn,
     amount_out: amountOut,
     transaction_date: new Date().toISOString().slice(0, 10),
-    contact_type: null,
-    contact_id: null,
-  });
+    contact_type: null as string | null,
+    contact_id: null as string | null,
+    ...(sourceTxId ? { chat_mirror_of_transaction_id: sourceTxId } : {}),
+  };
 
-  if (error) return { error: new Error(error.message) };
+  if (sourceTxId) {
+    const { data: existing } = await supabase()
+      .from("transactions")
+      .select("id")
+      .eq("organization_id", receiverOrgId)
+      .eq("chat_mirror_of_transaction_id", sourceTxId)
+      .maybeSingle();
+    if (existing?.id) {
+      notifyTripChatMessagesChanged();
+      return { error: null };
+    }
+  }
+
+  const { error } = await supabase().from("transactions").insert(mirrorPayload);
+
+  if (error) {
+    // Unique violation: another tab/device already mirrored this source tx.
+    if (error.code === "23505" && sourceTxId) {
+      notifyTripChatMessagesChanged();
+      return { error: null };
+    }
+    return { error: new Error(error.message) };
+  }
   notifyTripChatMessagesChanged();
   return { error: null };
 }

@@ -5,11 +5,13 @@
 import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from "@/constants/Theme";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
+import { computePartnerIndentFreightCost } from "@/features/finance/utils/partnerIndentFreightCost.util";
 import {
     adjustedCost,
     adjustedRevenue,
     type TripAdjustment,
 } from "@/features/trips/services/tripAdjustments";
+import { tripNonSupplierOutflowTotal } from "@/features/trips/utils/tripManifestFreightCost";
 import { isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import {
     isAggregateTrip,
@@ -183,12 +185,35 @@ function missionStatusForTrip(trip: TripRow): string {
     .join(" ");
 }
 
+/** Optional manifest / indent context for hub payable (cost) rollups. */
+export type TripHubCostOptions = {
+  subcontractRate?: number | null;
+  nonSupplierExpenseTotal?: number | null;
+};
+
 export function tripHubCost(
   trip: TripRow,
-  _currentOrganizationId: string | null | undefined,
+  currentOrganizationId: string | null | undefined,
   adjustments?: TripAdjustment[] | null,
+  options?: TripHubCostOptions | null,
 ): number {
-  const raw = Number(trip.supplier_rate ?? 0);
+  const isOwner =
+    currentOrganizationId != null &&
+    trip.organization_id != null &&
+    trip.organization_id === currentOrganizationId;
+  const indentPartner = trip.indent_id != null && !isOwner;
+  const nonSup = Math.max(0, Number(options?.nonSupplierExpenseTotal ?? 0));
+
+  let raw: number;
+  if (indentPartner) {
+    const freight = computePartnerIndentFreightCost(options?.subcontractRate ?? null);
+    raw =
+      freight > 0
+        ? freight + nonSup
+        : Number(trip.supplier_rate ?? 0) + nonSup;
+  } else {
+    raw = Number(trip.supplier_rate ?? 0) + nonSup;
+  }
   if (adjustments == null) return raw;
   return adjustedCost(raw, adjustments);
 }
@@ -197,10 +222,11 @@ function tripHubPnl(
   trip: TripRow,
   currentOrganizationId: string | null | undefined,
   adjustments?: TripAdjustment[] | null,
+  costOptions?: TripHubCostOptions | null,
 ): number {
   return (
     tripHubRevenue(trip, currentOrganizationId, adjustments) -
-    tripHubCost(trip, currentOrganizationId, adjustments)
+    tripHubCost(trip, currentOrganizationId, adjustments, costOptions)
   );
 }
 
@@ -208,10 +234,11 @@ function marginPercentLabel(
   trip: TripRow,
   currentOrganizationId: string | null | undefined,
   adjustments?: TripAdjustment[] | null,
+  costOptions?: TripHubCostOptions | null,
 ): string {
   const sales = tripHubRevenue(trip, currentOrganizationId, adjustments);
   if (!sales) return "—";
-  const pnl = tripHubPnl(trip, currentOrganizationId, adjustments);
+  const pnl = tripHubPnl(trip, currentOrganizationId, adjustments, costOptions);
   const pct = (pnl / sales) * 100;
   return `${pct.toFixed(1)}%`;
 }
@@ -422,6 +449,8 @@ export type TripsHubTripCardProps = {
     TripHubPartyMeta,
     "supplierLinkedOrgId" | "driverTrackingOnly"
   > | null;
+  /** Subcontract + non-supplier outflows for hub cost / margin (indent aggregate). */
+  hubCostContext?: TripHubCostOptions | null;
 };
 
 export function TripsHubTripCard({
@@ -449,6 +478,7 @@ export function TripsHubTripCard({
   lastLedgerDateLabel,
   financeAdjustments,
   kindPillMeta,
+  hubCostContext,
 }: TripsHubTripCardProps) {
   const { width: cardViewportWidth } = useWindowDimensions();
   const compactMetricGrid = cardViewportWidth > 0 && cardViewportWidth < 640;
@@ -466,10 +496,10 @@ export function TripsHubTripCard({
   /** `undefined` while adjustment map loads — hub uses raw rates. */
   const adj = financeAdjustments;
   const revenue = tripHubRevenue(trip, currentOrganizationId, adj);
-  const cost = tripHubCost(trip, currentOrganizationId, adj);
-  const pnl = tripHubPnl(trip, currentOrganizationId, adj);
+  const cost = tripHubCost(trip, currentOrganizationId, adj, hubCostContext ?? null);
+  const pnl = tripHubPnl(trip, currentOrganizationId, adj, hubCostContext ?? null);
   const due = tripHubDue(trip, currentOrganizationId, adj);
-  const marginPct = marginPercentLabel(trip, currentOrganizationId, adj);
+  const marginPct = marginPercentLabel(trip, currentOrganizationId, adj, hubCostContext ?? null);
   const stageUpper = (stageLabel || "").toUpperCase();
   const trackingStep = trackingStepForTrip(trip, stageUpper);
   const missionStatus = missionStatusForTrip(trip);
@@ -841,6 +871,8 @@ export type TripsHubTableViewProps = {
    * Trip finance adjustments keyed by normalized trip id; `undefined` while loading (table uses raw rates until then).
    */
   financeAdjustmentsByTripId?: Record<string, TripAdjustment[]>;
+  /** Per-trip subcontract rate (indent aggregate) for hub cost rollups. */
+  subcontractRateByTripId?: Map<string, number | null>;
   /**
    * When set, the manifest table rows are omitted and this render function receives the filtered + sorted trips
    * (toolbar, search/sort, and Filters panel behave like table mode).
@@ -924,6 +956,7 @@ export function TripsHubTableView({
   linkedOrgByOrganizationId,
   partyMetaByTripId,
   financeAdjustmentsByTripId,
+  subcontractRateByTripId,
   renderBody,
   dateRangeFilter = "all",
   onDateRangeFilterChange,
@@ -1347,7 +1380,11 @@ export function TripsHubTableView({
               t.id,
             );
             const mySales = tripHubRevenue(t, currentOrganizationId, rowAdj);
-            const cost = tripHubCost(t, currentOrganizationId, rowAdj);
+            const hubCostOpts: TripHubCostOptions = {
+              subcontractRate: subcontractRateByTripId?.get(t.id) ?? null,
+              nonSupplierExpenseTotal: tripNonSupplierOutflowTotal(entries),
+            };
+            const cost = tripHubCost(t, currentOrganizationId, rowAdj, hubCostOpts);
             const ledgerRoll = summarizeTripLedgerForHub(entries);
             const hasLedgerMismatch =
               isLoadBasedTrip(t) &&
@@ -1369,11 +1406,12 @@ export function TripsHubTableView({
               : tr("manual");
             const routeShort = `${t.pickup_area ?? "—"} → ${t.drop_location ?? "—"}`;
             const routeDisplay = routeShort.toUpperCase();
-            const pnl = tripHubPnl(t, currentOrganizationId, rowAdj);
+            const pnl = tripHubPnl(t, currentOrganizationId, rowAdj, hubCostOpts);
             const marginPct = marginPercentLabel(
               t,
               currentOrganizationId,
               rowAdj,
+              hubCostOpts,
             );
             const displayClient = (
               clientNameByTripId?.[t.id] ??

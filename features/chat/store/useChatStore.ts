@@ -13,8 +13,13 @@
  *   After that the app is silent — only Realtime pushes data in.
  *
  * REALTIME PATCH (zero DB calls):
- *   onRealtimeInsert(row, mode)  appends a new event to trips[tripId].event_stream.
- *   onRealtimeAck(convId, msgId, patch)  patches is_read / is_delivered ticks.
+ *   processIncomingEvent(row, mode)  idempotent upsert; 500ms dedupe (message_id /
+ *   transaction_id); 1s dedupe (metadata.action_id); message_type switch multiplex
+ *   (ledger_update, assignment_update, document_upload, …); payload-driven patches.
+ *   appendMessage(convId, msg)       idempotent upsert + optimistic delivery (outgoing).
+ *   onRealtimeInsert / optimisticInsert — thin aliases for backward compatibility.
+ *   onRealtimeAck(convId, msgId, patch)  patches ticks; identical ACK deduped (500ms).
+ *   enqueueReadReceiptsDebounced / registerMarkMessagesSeenRpc — batched seen RPC.
  *   applySystemUpdate(tripId, patch)  merges external metadata changes.
  *
  * MULTI-PARTY TABS (0 ms, zero DB):
@@ -32,14 +37,382 @@ import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { getUnifiedB2BChatBootstrap } from '../services/chat.service';
 import type {
-  B2BEventMetadata,
   B2BTripState,
   ConversationPartyType,
   LedgerEventMetadata,
+  MessageDeliveryStatus,
   TripConversation,
+  TripMessageMetadata,
   TripMessageRow,
   TripMeta,
 } from '../types/chat.types';
+import { useGlobalSyncStore } from '@/lib/globalSync/useGlobalSyncStore';
+import { mergeMessageMetadataForEventPayload } from '../utils/eventPayloadMerge.util';
+import { isEventVisibleForPartyLane } from '../utils/messagePartyVisibility';
+
+// ── Realtime duplicate suppression (same message_id / transaction_id flood) ──
+// WAL can surface the same logical row twice in quick succession; skipping the
+// second `set()` within this window avoids redundant renders and double side-effects
+// (e.g. ledger balance) before `isNewId` bookkeeping runs.
+
+const REALTIME_INSERT_DEDUPE_MS = 500;
+const REALTIME_ACK_DEDUPE_MS = 500;
+
+const lastRealtimeInsertAt = new Map<string, number>();
+const lastRealtimeAckAt = new Map<string, number>();
+
+function realtimeInsertDedupeKey(row: Partial<TripMessageRow>): string {
+  const id = row.id != null ? String(row.id) : '';
+  if (id) return `m:${id}`;
+  const m = row.metadata as Record<string, unknown> | null | undefined;
+  const ep = m?.event_payload as Record<string, unknown> | undefined;
+  const txn =
+    (typeof m?.transaction_id === 'string' && m.transaction_id) ||
+    (typeof ep?.transaction_id === 'string' && ep.transaction_id) ||
+    '';
+  if (txn) return `t:${txn}`;
+  return `m:${id || 'unknown'}`;
+}
+
+/** @returns true if this event should be processed (first in window). */
+function consumeRealtimeInsertDedupe(row: Partial<TripMessageRow>): boolean {
+  const key = realtimeInsertDedupeKey(row);
+  const now = Date.now();
+  const prev = lastRealtimeInsertAt.get(key);
+  if (prev != null && now - prev < REALTIME_INSERT_DEDUPE_MS) return false;
+  lastRealtimeInsertAt.set(key, now);
+  return true;
+}
+
+function ackFingerprint(patch: Partial<TripMessageRow>): string {
+  return [
+    patch.is_delivered,
+    patch.delivered_at,
+    patch.is_read,
+    patch.read_at,
+  ].join('|');
+}
+
+/** @returns true if this ACK should be applied (dedupes identical patches). */
+function consumeRealtimeAckDedupe(msgId: string, patch: Partial<TripMessageRow>): boolean {
+  const key = `ack:${msgId}:${ackFingerprint(patch)}`;
+  const now = Date.now();
+  const prev = lastRealtimeAckAt.get(key);
+  if (prev != null && now - prev < REALTIME_ACK_DEDUPE_MS) return false;
+  lastRealtimeAckAt.set(key, now);
+  return true;
+}
+
+/** Same logical action from trigger + mobile API: drop duplicate within 1s (metadata.action_id or event_payload.action_id). */
+const ACTION_ID_DEDUPE_MS = 1000;
+const lastActionIdAt = new Map<string, number>();
+
+function extractActionId(row: Partial<TripMessageRow>): string | null {
+  const m = mergeMessageMetadataForEventPayload(row);
+  if (!m) return null;
+  const ep = m.event_payload as Record<string, unknown> | undefined;
+  const top =
+    (typeof m.action_id === 'string' && m.action_id.trim()) ||
+    (ep && typeof ep.action_id === 'string' && String(ep.action_id).trim()) ||
+    '';
+  return top || null;
+}
+
+function consumeActionIdDedupe(row: Partial<TripMessageRow>): boolean {
+  const aid = extractActionId(row);
+  if (!aid) return true;
+  const key = `a:${aid}`;
+  const now = Date.now();
+  const prev = lastActionIdAt.get(key);
+  if (prev != null && now - prev < ACTION_ID_DEDUPE_MS) return false;
+  lastActionIdAt.set(key, now);
+  return true;
+}
+
+const BROADCAST_DEDUPE_WINDOW_MS = 120_000;
+
+function broadcastStatusKeyFromRow(row: Partial<TripMessageRow>): string | null {
+  const m = mergeMessageMetadataForEventPayload(row);
+  if (!m) return null;
+  const tb = m.trip_status_broadcast;
+  const isB = tb === '1' || tb === 1 || tb === true;
+  if (!isB) return null;
+  const st =
+    (typeof m.status === 'string' && m.status.trim()) ||
+    (() => {
+      const ep = m.event_payload;
+      if (ep && typeof ep === 'object' && !Array.isArray(ep) && typeof (ep as { new_status?: unknown }).new_status === 'string') {
+        return String((ep as { new_status: string }).new_status).trim();
+      }
+      return '';
+    })();
+  return st || null;
+}
+
+/**
+ * Trigger + driver "quick status" can both insert a status line; keep one bubble
+ * per (conversation, broadcast status) within the dedupe window.
+ */
+function shouldSkipDuplicateStatusBroadcast(stream: TripEvent[], incoming: TripEvent): boolean {
+  const statusKey = broadcastStatusKeyFromRow(incoming);
+  if (!statusKey) return false;
+  const tIncoming = new Date(incoming.created_at).getTime();
+  if (!Number.isFinite(tIncoming)) return false;
+  for (const e of stream) {
+    if (e.id === incoming.id) continue;
+    if (e.conversation_id !== incoming.conversation_id) continue;
+    const sk = broadcastStatusKeyFromRow(e);
+    if (sk !== statusKey) continue;
+    const t = new Date(e.created_at).getTime();
+    if (Number.isFinite(t) && Math.abs(tIncoming - t) <= BROADCAST_DEDUPE_WINDOW_MS) return true;
+  }
+  return false;
+}
+
+/** Payload-driven trip fields: `trip_state`, `event_payload`, top-level `new_status`. */
+function patchEntryFromB2BTripState(ts: B2BTripState, base: TripEntry): Partial<TripEntry> {
+  return {
+    status:               ts.status != null ? ts.status : base.status,
+    driverId:             ts.driver_id ?? base.driverId,
+    supplierId:           ts.supplier_id ?? base.supplierId,
+    driverDisplayName:    ts.driver_display_name ?? base.driverDisplayName,
+    vehicleDisplayNumber: ts.vehicle_display_number ?? base.vehicleDisplayNumber,
+    pickupArea:           ts.pickup_area ?? base.pickupArea,
+    dropLocation:         ts.drop_location ?? base.dropLocation,
+  };
+}
+
+function resolveTripEntryPatchesFromMessage(
+  row: Partial<TripMessageRow>,
+  entry: TripEntry,
+): Partial<TripEntry> | null {
+  const m = mergeMessageMetadataForEventPayload(row);
+  if (!m || typeof m !== 'object' || Array.isArray(m)) return null;
+
+  let patch: Partial<TripEntry> = {};
+  const ts = m.trip_state as B2BTripState | undefined;
+  if (ts && typeof ts === 'object') {
+    patch = { ...patch, ...patchEntryFromB2BTripState(ts, { ...entry, ...patch } as TripEntry) };
+  }
+  const ep = m.event_payload as Record<string, unknown> | undefined;
+  if (ep && typeof ep === 'object' && !Array.isArray(ep)) {
+    const ets = ep.trip_state as B2BTripState | undefined;
+    if (ets && typeof ets === 'object') {
+      patch = { ...patch, ...patchEntryFromB2BTripState(ets, { ...entry, ...patch } as TripEntry) };
+    }
+    const ns = ep.new_status;
+    if (typeof ns === 'string' && ns.trim()) patch.status = ns;
+
+    const ld = ep.location_data;
+    if (ld && typeof ld === 'object' && !Array.isArray(ld)) {
+      const lat = Number((ld as { lat?: unknown }).lat);
+      const lng = Number((ld as { lng?: unknown }).lng);
+      const address_name =
+        typeof (ld as { address_name?: unknown }).address_name === 'string'
+          ? String((ld as { address_name: string }).address_name).trim() || null
+          : null;
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        const tsLoc =
+          typeof row.created_at === 'string' && row.created_at.trim()
+            ? row.created_at
+            : new Date().toISOString();
+        patch = {
+          ...patch,
+          lastLat:             lat,
+          lastLng:             lng,
+          lastLocationAt:      tsLoc,
+          lastLocationLabel:   address_name,
+        };
+      }
+    }
+  }
+  const nsTop = m.new_status;
+  if (typeof nsTop === 'string' && nsTop.trim()) patch.status = nsTop;
+
+  return Object.keys(patch).length > 0 ? patch : null;
+}
+
+function ledgerAmountFlowFromRow(row: Partial<TripMessageRow>): {
+  amount: number;
+  flow: 'in' | 'out';
+} | null {
+  const merged = mergeMessageMetadataForEventPayload(row);
+  if (!merged || typeof merged !== 'object') return null;
+  const m = merged as LedgerEventMetadata & { event_payload?: Record<string, unknown> };
+  if (m.amount != null && (m.flow === 'in' || m.flow === 'out')) {
+    return { amount: Number(m.amount), flow: m.flow };
+  }
+  const ep = m.event_payload;
+  if (!ep || typeof ep !== 'object') return null;
+  const amt = ep.amount;
+  if (amt == null) return null;
+  const flowRaw = ep.flow;
+  const flow = flowRaw === 'out' ? 'out' : 'in';
+  return { amount: Number(amt), flow };
+}
+
+/**
+ * Realtime multiplex: apply `message_type`-specific trip patches on top of
+ * generic `event_payload` / `trip_state` resolution (Bootstrap & Patch model).
+ */
+function applyActiveMessageTypeMultiplex(
+  row: Partial<TripMessageRow>,
+  entry: TripEntry,
+  updated: TripEntry,
+  isNewId: boolean,
+  eventCreatedAt: string | undefined,
+): TripEntry {
+  let next = updated;
+  const mt = row.message_type ?? "text";
+
+  const baseResolved = resolveTripEntryPatchesFromMessage(row, entry);
+  if (baseResolved) {
+    next = { ...next, ...baseResolved };
+  }
+
+  switch (mt) {
+    case "ledger_update":
+    case "ledger_event":
+    case "ledger":
+    case "payment": {
+      if (isNewId) {
+        const lf = ledgerAmountFlowFromRow(row);
+        if (lf) {
+          const delta = lf.flow === "out" ? -lf.amount : lf.amount;
+          next = {
+            ...next,
+            paymentBalance: (entry.paymentBalance ?? 0) + delta,
+          };
+        }
+      }
+      break;
+    }
+    case "assignment_update": {
+      const m = mergeMessageMetadataForEventPayload(row);
+      const ep = (m?.event_payload ?? {}) as Record<string, unknown>;
+      const patch: Partial<TripEntry> = {};
+      if (typeof ep.driver_id === "string" && ep.driver_id.trim()) {
+        patch.driverId = ep.driver_id.trim();
+      }
+      if (typeof ep.driver_display_name === "string" && ep.driver_display_name.trim()) {
+        patch.driverDisplayName = ep.driver_display_name.trim();
+      }
+      if (typeof ep.vehicle_display_number === "string" && ep.vehicle_display_number.trim()) {
+        patch.vehicleDisplayNumber = ep.vehicle_display_number.trim();
+      }
+      if (Object.keys(patch).length > 0) next = { ...next, ...patch };
+      break;
+    }
+    case "document_upload":
+      break;
+    case "tracking": {
+      const meta = row.metadata as {
+        lat?: number;
+        lng?: number;
+        eta_minutes?: number;
+        eta_label?: string;
+      } | null;
+      if (meta?.lat != null && meta?.lng != null) {
+        next = {
+          ...next,
+          lastLat:        meta.lat,
+          lastLng:        meta.lng,
+          lastLocationAt: eventCreatedAt ?? new Date().toISOString(),
+          lastEtaMinutes: meta.eta_minutes ?? null,
+          lastEtaLabel:   meta.eta_label ?? null,
+        };
+      }
+      break;
+    }
+    default:
+      break;
+  }
+
+  return next;
+}
+
+/** Push last_known_location into GlobalSync active_trips (no DB read). Driver cycle / heartbeat uses `system_log`. */
+function syncLocationLogToGlobalActiveTrips(tripId: string, row: Partial<TripMessageRow>): void {
+  if (row.message_type !== "system_log") return;
+  const m = mergeMessageMetadataForEventPayload(row);
+  const ep = m?.event_payload as Record<string, unknown> | undefined;
+  const ld = ep?.location_data;
+  if (!ld || typeof ld !== "object" || Array.isArray(ld)) return;
+  const lat = Number((ld as { lat?: unknown }).lat);
+  const lng = Number((ld as { lng?: unknown }).lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+  const address_name =
+    typeof (ld as { address_name?: unknown }).address_name === "string"
+      ? String((ld as { address_name: string }).address_name).trim() || null
+      : null;
+  const recorded_at =
+    typeof row.created_at === "string" && row.created_at.trim() ? row.created_at : new Date().toISOString();
+  useGlobalSyncStore.getState().applyActiveTripLocationFromChat(tripId, {
+    lat,
+    lng,
+    address_name: address_name ?? null,
+    recorded_at,
+  });
+}
+
+// ── Debounced mark-seen (one RPC per visibility burst per conversation) ───────
+
+const readFlushTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const readPendingIds = new Map<string, Set<string>>();
+
+let markMessagesSeenInvoker:
+  | ((conversationId: string, messageIds: string[]) => void | Promise<void>)
+  | null = null;
+
+/**
+ * Registers the DB flusher (typically `supabase.rpc('mark_messages_seen', …)`).
+ * Call once from `TripChatProvider`; pass `null` on teardown.
+ */
+export function registerMarkMessagesSeenRpc(
+  fn: ((conversationId: string, messageIds: string[]) => void | Promise<void>) | null,
+): void {
+  markMessagesSeenInvoker = fn;
+}
+
+function clearReadReceiptDebouncers(): void {
+  for (const t of readFlushTimers.values()) clearTimeout(t);
+  readFlushTimers.clear();
+  readPendingIds.clear();
+}
+
+/**
+ * Accumulates message ids and flushes one optimistic store write + one RPC after
+ * `debounceMs` of quiet time (FlatList viewability → many rows, one round-trip).
+ */
+export function enqueueReadReceiptsDebounced(
+  conversationId: string,
+  messageIds: string[],
+  debounceMs = 2000,
+): void {
+  if (!conversationId || messageIds.length === 0) return;
+  let set = readPendingIds.get(conversationId);
+  if (!set) {
+    set = new Set();
+    readPendingIds.set(conversationId, set);
+  }
+  for (const id of messageIds) {
+    if (id) set.add(id);
+  }
+  const existing = readFlushTimers.get(conversationId);
+  if (existing) clearTimeout(existing);
+  readFlushTimers.set(
+    conversationId,
+    setTimeout(() => {
+      readFlushTimers.delete(conversationId);
+      const pending = readPendingIds.get(conversationId);
+      readPendingIds.delete(conversationId);
+      if (!pending?.size) return;
+      const ids = [...pending];
+      useChatStore.getState().patchReadReceiptsOptimistic(conversationId, ids);
+      void markMessagesSeenInvoker?.(conversationId, ids);
+    }, debounceMs),
+  );
+}
 
 // ── Event: a message enriched with its conversation's party type ──────────────
 
@@ -81,6 +454,8 @@ export interface TripEntry {
   lastLocationAt?:      string | null;
   lastEtaMinutes?:      number | null;
   lastEtaLabel?:        string | null;
+  /** Human label from location logs (`event_payload.location_data.address_name`). */
+  lastLocationLabel?:   string | null;
   // Running payment balance — accumulated from 'ledger_event' messages
   paymentBalance:       number | null;
   // Party lanes (at most one per ConversationPartyType)
@@ -107,11 +482,17 @@ interface ChatState {
 
   // ── Actions
   bootstrap:          (orgId: string) => Promise<void>;
+  /** Idempotent: INSERT / echo rows merge into `event_stream` by `id`. */
+  processIncomingEvent: (row: Partial<TripMessageRow>, mode: 'active' | 'background') => void;
   onRealtimeInsert:   (row: Partial<TripMessageRow>, mode: 'active' | 'background') => void;
+  /** Idempotent upsert used for optimistic sends (and any local append). */
+  appendMessage:      (convId: string, msg: TripMessageRow) => void;
   onRealtimeAck:      (convId: string, msgId: string, patch: Partial<TripMessageRow>) => void;
   switchParty:        (tripId: string, partyType: ConversationPartyType) => void;
   markRead:           (convId: string) => void;
   patchMessage:       (convId: string, msgId: string, patch: Partial<TripMessageRow>) => void;
+  /** Single Zustand write for many read receipts (viewability flush). */
+  patchReadReceiptsOptimistic: (convId: string, messageIds: string[]) => void;
   optimisticInsert:   (convId: string, msg: TripMessageRow) => void;
   replaceOptimistic:  (convId: string, tempId: string, persisted: TripMessageRow) => void;
   removeMessage:      (convId: string, msgId: string) => void;
@@ -137,15 +518,25 @@ interface ChatState {
 export function previewText(row: Partial<TripMessageRow>): string | null {
   const body = typeof row.content === 'string' ? row.content.trim() : '';
   switch (row.message_type) {
-    case 'ledger_event': case 'ledger': case 'payment':
+    case 'ledger_event': case 'ledger': case 'payment': case 'ledger_update':
       return `💰 ${body || 'Payment update'}`;
+    case 'assignment_update':
+      return `🚚 ${body || 'Assignment update'}`;
+    case 'document_upload':
+      return `📄 ${body || 'Document uploaded'}`;
     case 'status_change': {
       const meta = row.metadata as { new_status?: string } | null;
       const label = meta?.new_status?.replace(/_/g, ' ').toUpperCase() ?? '';
       return `🚚 ${label || body || 'Status update'}`;
     }
-    case 'system': case 'update': case 'system_log':
+    case 'system': case 'update': case 'system_log': {
+      const em = mergeMessageMetadataForEventPayload(row);
+      const ep = em?.event_payload as { new_status?: string } | undefined;
+      const label =
+        typeof ep?.new_status === 'string' ? ep.new_status.replace(/_/g, ' ').toUpperCase() : '';
+      if (label) return `📋 ${label}`;
       return `📋 ${body || 'System update'}`;
+    }
     case 'tracking':
       return '📍 Location update';
     case 'document_share':
@@ -159,16 +550,69 @@ export function previewText(row: Partial<TripMessageRow>): string | null {
   }
 }
 
-/** Merge two TripEvent arrays by ID, server row wins, sorted ASC by created_at. */
-function mergeEvents(local: TripEvent[], server: TripEvent[]): TripEvent[] {
-  if (local.length  === 0) return server;
-  if (server.length === 0) return local;
-  const byId = new Map<string, TripEvent>();
-  for (const e of local)  byId.set(e.id, e);
-  for (const e of server) byId.set(e.id, e);
-  return Array.from(byId.values()).sort(
+/** Deep-merge message metadata objects (bootstrap + Realtime + optimistic). */
+export function mergeTripMessageMetadata(
+  prev: TripMessageMetadata | undefined,
+  next: TripMessageMetadata | undefined,
+): TripMessageMetadata | undefined {
+  if (next == null) return prev;
+  if (prev == null) return next;
+  if (
+    typeof prev === "object" &&
+    typeof next === "object" &&
+    !Array.isArray(prev) &&
+    !Array.isArray(next)
+  ) {
+    return { ...(prev as object), ...(next as object) } as TripMessageMetadata;
+  }
+  return next;
+}
+
+/**
+ * Idempotent upsert: same `id` updates in place (status ticks, metadata, body)
+ * instead of duplicating — safe for multi-tab Realtime and bootstrap overlap.
+ */
+export function upsertEventIntoStream(stream: TripEvent[], incoming: TripEvent): TripEvent[] {
+  const idx = stream.findIndex((e) => e.id === incoming.id);
+  let next: TripEvent[];
+  if (idx === -1) {
+    next = [...stream, incoming];
+  } else {
+    const prev = stream[idx];
+    const merged: TripEvent = {
+      ...prev,
+      ...incoming,
+      partyType: incoming.partyType ?? prev.partyType,
+      metadata: mergeTripMessageMetadata(prev.metadata, incoming.metadata),
+    };
+    next = [...stream];
+    next[idx] = merged;
+  }
+  return next.sort(
     (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
   );
+}
+
+/** Merge two TripEvent arrays with per-id deep metadata merge, sorted ASC. */
+function mergeEvents(local: TripEvent[], server: TripEvent[]): TripEvent[] {
+  let acc = local.length === 0 ? [] : [...local];
+  if (server.length === 0) return acc;
+  for (const e of server) {
+    acc = upsertEventIntoStream(acc, e);
+  }
+  return acc;
+}
+
+/** Outgoing dispatcher bubble: derive tick lane from row + ACK fields. */
+export function resolveOutgoingDeliveryStatus(
+  m: Partial<TripMessageRow>,
+): MessageDeliveryStatus {
+  if (m.delivery_status === "sending") return "sending";
+  const id = m.id != null ? String(m.id) : "";
+  if (id.startsWith("optimistic-")) return "sending";
+  if (m.read_at) return "read";
+  if (m.is_delivered) return "delivered";
+  return "sent";
 }
 
 /** Construct a blank TripEntry skeleton from the first conversation seen. */
@@ -206,24 +650,6 @@ function partyFromConv(conv: TripConversation): PartyConv {
   };
 }
 
-/**
- * Returns true when an event should be visible in the given party tab.
- * Priority:
- *   1. visibility_tags present → check if convId or partyType is listed
- *   2. Fallback → partyType match (legacy: events tagged at insert time)
- */
-function isEventVisibleForParty(
-  event:     TripEvent,
-  partyType: ConversationPartyType,
-  convId:    string | undefined,
-): boolean {
-  const tags = event.visibility_tags;
-  if (tags && tags.length > 0) {
-    return (convId ? tags.includes(convId) : false) || tags.includes(partyType);
-  }
-  return event.partyType === partyType;
-}
-
 /** Reconstruct a TripConversation from a TripEntry + one party lane. */
 function convFromEntry(
   entry:     TripEntry,
@@ -255,7 +681,7 @@ function convFromEntry(
     drop_location:           entry.dropLocation,
     // messages for this party lane only — visibility_tags aware, zero DB calls
     messages: entry.event_stream.filter(e =>
-      isEventVisibleForParty(e, partyType, convId),
+      isEventVisibleForPartyLane(e, partyType, convId),
     ),
   };
 }
@@ -339,14 +765,13 @@ export const useChatStore = create<ChatState>()(
           let balance = 0;
           for (const evt of entry.event_stream) {
             if (
-              evt.message_type === 'ledger_event' ||
-              evt.message_type === 'ledger' ||
-              evt.message_type === 'payment'
+              evt.message_type === "ledger_event" ||
+              evt.message_type === "ledger" ||
+              evt.message_type === "payment" ||
+              evt.message_type === "ledger_update"
             ) {
-              const meta = evt.metadata as LedgerEventMetadata | null;
-              if (meta?.amount != null) {
-                balance += meta.flow === 'out' ? -Number(meta.amount) : Number(meta.amount);
-              }
+              const lf = ledgerAmountFlowFromRow(evt);
+              if (lf) balance += lf.flow === "out" ? -lf.amount : lf.amount;
             }
           }
           entry.paymentBalance = balance !== 0 ? balance : null;
@@ -373,83 +798,78 @@ export const useChatStore = create<ChatState>()(
       }
     },
 
-    // ── onRealtimeInsert ──────────────────────────────────────────────────────
-    // Receives every trip_messages INSERT from the Realtime channel.
-    //   active     → append event + extract state from metadata
-    //   background → bump unread badge only
+    // ── processIncomingEvent (idempotent Realtime / bootstrap overlap) ───────
+    // Same logical INSERT from multiple tabs → single `event_stream` row; updates
+    // merge metadata + trip fields without duplicate bubbles.
 
-    onRealtimeInsert: (row, mode) => {
-      if (!row.conversation_id) return;
+    processIncomingEvent: (row, mode) => {
+      if (!row.conversation_id || !row.id) return;
+      if (!consumeActionIdDedupe(row)) return;
+      if (!consumeRealtimeInsertDedupe(row)) return;
       const { trips, convToTrip, convToParty } = get();
 
       const tripId    = convToTrip[row.conversation_id];
       const partyType = convToParty[row.conversation_id];
-      if (!tripId || !partyType) return;  // unknown conv — context handles
+      if (!tripId || !partyType) return;
 
       const entry = trips[tripId];
       if (!entry) return;
 
-      const event: TripEvent = { ...(row as TripMessageRow), partyType };
+      const baseRow = row as TripMessageRow;
+      const event: TripEvent = {
+        ...baseRow,
+        partyType,
+        delivery_status:
+          baseRow.sender_role === "dispatcher"
+            ? resolveOutgoingDeliveryStatus(baseRow)
+            : baseRow.delivery_status,
+      };
       let updated: TripEntry = { ...entry };
 
-      if (mode === 'active') {
-        // Dedup: Realtime can overlap with bootstrap window
-        const alreadyIn = entry.event_stream.some(e => e.id === event.id);
-        updated.event_stream = alreadyIn
-          ? entry.event_stream
-          : [...entry.event_stream, event];
-
-        // ── Memory-first state sync (WhatsApp "Data in Payload") ──────────────
-        const b2bMeta = row.metadata as Partial<B2BEventMetadata> | null;
-        if (b2bMeta?.trip_state) {
-          const ts = b2bMeta.trip_state as B2BTripState;
-          updated = {
-            ...updated,
-            status:               ts.status                 ?? entry.status,
-            driverId:             ts.driver_id              ?? entry.driverId,
-            supplierId:           ts.supplier_id            ?? entry.supplierId,
-            driverDisplayName:    ts.driver_display_name    ?? entry.driverDisplayName,
-            vehicleDisplayNumber: ts.vehicle_display_number ?? entry.vehicleDisplayNumber,
-            pickupArea:           ts.pickup_area            ?? entry.pickupArea,
-            dropLocation:         ts.drop_location          ?? entry.dropLocation,
-          };
-        } else if (row.message_type === 'status_change') {
-          const meta = row.metadata as { new_status?: string } | null;
-          if (meta?.new_status) updated.status = meta.new_status;
-        } else if (row.message_type === 'system' || row.message_type === 'system_log' || row.message_type === 'update') {
-          // system messages carry status transitions in event_payload
-          const meta = row.metadata as { event_payload?: { new_status?: string }; new_status?: string } | null;
-          const newStatus = meta?.event_payload?.new_status ?? meta?.new_status;
-          if (newStatus) updated.status = newStatus;
-        } else if (row.message_type === 'tracking') {
-          const meta = row.metadata as {
-            lat?: number; lng?: number;
-            eta_minutes?: number; eta_label?: string
-          } | null;
-          if (meta?.lat != null && meta?.lng != null) {
-            updated = {
-              ...updated,
-              lastLat:        meta.lat,
-              lastLng:        meta.lng,
-              lastLocationAt: event.created_at ?? new Date().toISOString(),
-              lastEtaMinutes: meta.eta_minutes ?? null,
-              lastEtaLabel:   meta.eta_label   ?? null,
-            };
-          }
-        } else if (
-          row.message_type === 'ledger_event' ||
-          row.message_type === 'ledger' ||
-          row.message_type === 'payment'
-        ) {
-          // Accumulate payment balance from each financial event
-          const meta = row.metadata as LedgerEventMetadata | null;
-          if (meta?.amount != null) {
-            const delta = meta.flow === 'out' ? -Number(meta.amount) : Number(meta.amount);
-            updated.paymentBalance = (entry.paymentBalance ?? 0) + delta;
-          }
+      // Second status-broadcast for same trip status (e.g. trigger + driver echo): merge trip only.
+      if (shouldSkipDuplicateStatusBroadcast(entry.event_stream, event)) {
+        const silentPatch = resolveTripEntryPatchesFromMessage(row, entry);
+        if (silentPatch) {
+          set({ trips: { ...trips, [tripId]: { ...entry, ...silentPatch } } });
         }
+        syncLocationLogToGlobalActiveTrips(tripId, row);
+        return;
+      }
+
+      if (mode === "active") {
+        const prevIds = new Set(entry.event_stream.map((e) => e.id));
+        updated.event_stream = upsertEventIntoStream(entry.event_stream, event);
+        const isNewId = !prevIds.has(event.id);
+
+        if (
+          row.message_type === "image" ||
+          row.message_type === "document_share" ||
+          row.message_type === "document_upload"
+        ) {
+          updated.lastEventAt      = event.created_at ?? entry.lastEventAt;
+          updated.lastEventPreview = previewText(row)  ?? entry.lastEventPreview;
+          syncLocationLogToGlobalActiveTrips(tripId, row);
+          useGlobalSyncStore.getState().touchActiveTripClientActivity(
+            tripId,
+            typeof event.created_at === "string" ? event.created_at : undefined,
+          );
+          useGlobalSyncStore.getState().ingestTripMessageForOperationsIsland(
+            tripId,
+            baseRow as unknown as Record<string, unknown>,
+          );
+          useGlobalSyncStore.getState().ingestB2BMessageForBell(baseRow);
+          set({ trips: { ...trips, [tripId]: updated } });
+          return;
+        }
+
+        updated = applyActiveMessageTypeMultiplex(
+          row,
+          entry,
+          updated,
+          isNewId,
+          event.created_at,
+        );
       } else {
-        // Background: bump the unread count for this party
         const party = entry.parties[partyType];
         if (party) {
           updated.parties = {
@@ -463,24 +883,53 @@ export const useChatStore = create<ChatState>()(
       updated.lastEventAt      = event.created_at ?? entry.lastEventAt;
       updated.lastEventPreview = previewText(row)  ?? entry.lastEventPreview;
 
+      syncLocationLogToGlobalActiveTrips(tripId, row);
+      useGlobalSyncStore.getState().touchActiveTripClientActivity(
+        tripId,
+        typeof event.created_at === "string" ? event.created_at : undefined,
+      );
+      useGlobalSyncStore.getState().ingestTripMessageForOperationsIsland(
+        tripId,
+        baseRow as unknown as Record<string, unknown>,
+      );
+      useGlobalSyncStore.getState().ingestB2BMessageForBell(baseRow);
       set({ trips: { ...trips, [tripId]: updated } });
+    },
+
+    onRealtimeInsert: (row, mode) => {
+      get().processIncomingEvent(row, mode);
     },
 
     // ── onRealtimeAck ─────────────────────────────────────────────────────────
     // Patches is_delivered / is_read ticks on an existing event.
 
     onRealtimeAck: (convId, msgId, patch) => {
+      if (!consumeRealtimeAckDedupe(msgId, patch)) return;
       const { trips, convToTrip } = get();
       const tripId = convToTrip[convId];
       if (!tripId) return;
       const entry = trips[tripId];
       if (!entry) return;
 
-      const idx = entry.event_stream.findIndex(e => e.id === msgId);
+      const idx = entry.event_stream.findIndex((e) => e.id === msgId);
       if (idx === -1) return;
 
-      const event_stream  = [...entry.event_stream];
-      event_stream[idx]   = { ...event_stream[idx], ...patch };
+      const prevEvt = entry.event_stream[idx];
+      const mergedMeta = mergeTripMessageMetadata(prevEvt.metadata, patch.metadata);
+      let nextEvt: TripEvent = {
+        ...prevEvt,
+        ...patch,
+        metadata: mergedMeta,
+      };
+      if (nextEvt.sender_role === "dispatcher") {
+        nextEvt = {
+          ...nextEvt,
+          delivery_status: resolveOutgoingDeliveryStatus(nextEvt),
+        };
+      }
+
+      const event_stream = [...entry.event_stream];
+      event_stream[idx] = nextEvt;
       set({ trips: { ...trips, [tripId]: { ...entry, event_stream } } });
     },
 
@@ -535,10 +984,47 @@ export const useChatStore = create<ChatState>()(
       get().onRealtimeAck(convId, msgId, patch);
     },
 
+    patchReadReceiptsOptimistic: (convId, messageIds) => {
+      if (messageIds.length === 0) return;
+      const { trips, convToTrip } = get();
+      const tripId = convToTrip[convId];
+      if (!tripId) return;
+      const entry = trips[tripId];
+      if (!entry) return;
+
+      const readAt = new Date().toISOString();
+      const mark: Partial<TripMessageRow> = { is_read: true, read_at: readAt };
+      const idSet = new Set(messageIds);
+      let changed = false;
+      const event_stream = entry.event_stream.map((e) => {
+        if (!idSet.has(e.id)) return e;
+        changed = true;
+        const merged: TripEvent = { ...e, ...mark };
+        if (merged.sender_role === "dispatcher") {
+          merged.delivery_status = resolveOutgoingDeliveryStatus(merged);
+        }
+        return merged;
+      });
+      if (!changed) return;
+      set({ trips: { ...trips, [tripId]: { ...entry, event_stream } } });
+    },
+
     // ── submitFeedback (optimistic — caller also fires the RPC) ──────────────
 
     submitFeedback: (convId, msgId, patch) => {
-      get().patchMessage(convId, msgId, patch);
+      const { trips, convToTrip } = get();
+      const tripId = convToTrip[convId];
+      if (!tripId) return;
+      const entry = trips[tripId];
+      if (!entry) return;
+      const prevEvt = entry.event_stream.find((e) => e.id === msgId);
+      const mergedMeta = mergeTripMessageMetadata(prevEvt?.metadata, {
+        ...(typeof patch.metadata === "object" && patch.metadata != null
+          ? (patch.metadata as object)
+          : {}),
+        rating_status: "rated",
+      } as TripMessageMetadata);
+      get().patchMessage(convId, msgId, { ...patch, metadata: mergedMeta });
     },
 
     // ── mergeConversationHistory ──────────────────────────────────────────────
@@ -564,7 +1050,7 @@ export const useChatStore = create<ChatState>()(
 
     // ── Optimistic send ───────────────────────────────────────────────────────
 
-    optimisticInsert: (convId, msg) => {
+    appendMessage: (convId, msg) => {
       const { trips, convToTrip, convToParty } = get();
       const tripId    = convToTrip[convId];
       const partyType = convToParty[convId];
@@ -573,18 +1059,41 @@ export const useChatStore = create<ChatState>()(
       const entry = trips[tripId];
       if (!entry) return;
 
-      const event: TripEvent = { ...msg, partyType };
+      let row: TripMessageRow = { ...msg };
+      if (row.sender_role === "dispatcher") {
+        row = {
+          ...row,
+          delivery_status:
+            row.delivery_status ??
+            (String(row.id).startsWith("optimistic-") ? "sending" : resolveOutgoingDeliveryStatus(row)),
+        };
+      }
+
+      const event: TripEvent = { ...row, partyType };
+      const event_stream = upsertEventIntoStream(entry.event_stream, event);
       set({
         trips: {
           ...trips,
           [tripId]: {
             ...entry,
-            event_stream:     [...entry.event_stream, event],
+            event_stream,
             lastEventAt:      msg.created_at,
             lastEventPreview: previewText(msg) ?? entry.lastEventPreview,
           },
         },
       });
+      useGlobalSyncStore.getState().touchActiveTripClientActivity(
+        tripId,
+        typeof msg.created_at === "string" ? msg.created_at : undefined,
+      );
+      useGlobalSyncStore.getState().ingestTripMessageForOperationsIsland(
+        tripId,
+        msg as unknown as Record<string, unknown>,
+      );
+    },
+
+    optimisticInsert: (convId, msg) => {
+      get().appendMessage(convId, msg);
     },
 
     replaceOptimistic: (convId, tempId, persisted) => {
@@ -596,17 +1105,29 @@ export const useChatStore = create<ChatState>()(
       const entry = trips[tripId];
       if (!entry) return;
 
+      const persistedRow: TripMessageRow =
+        persisted.sender_role === "dispatcher"
+          ? {
+              ...persisted,
+              delivery_status: resolveOutgoingDeliveryStatus(persisted),
+            }
+          : persisted;
+
       set({
         trips: {
           ...trips,
           [tripId]: {
             ...entry,
-            event_stream: entry.event_stream.map(e =>
-              e.id === tempId ? { ...persisted, partyType } : e,
+            event_stream: entry.event_stream.map((e) =>
+              e.id === tempId ? { ...persistedRow, partyType } : e,
             ),
           },
         },
       });
+      useGlobalSyncStore.getState().ingestTripMessageForOperationsIsland(
+        tripId,
+        persistedRow as unknown as Record<string, unknown>,
+      );
     },
 
     removeMessage: (convId, msgId) => {
@@ -663,7 +1184,11 @@ export const useChatStore = create<ChatState>()(
 
     // ── clear (logout / org switch) ───────────────────────────────────────────
 
-    clear: () =>
+    clear: () => {
+      lastRealtimeInsertAt.clear();
+      lastRealtimeAckAt.clear();
+      lastActionIdAt.clear();
+      clearReadReceiptDebouncers();
       set({
         trips:           {},
         convToTrip:      {},
@@ -671,7 +1196,8 @@ export const useChatStore = create<ChatState>()(
         activeParties:   {},
         bootstrappedOrg: null,
         isLoading:       false,
-      }),
+      });
+    },
 
     // ── Derived helpers ───────────────────────────────────────────────────────
 
@@ -724,6 +1250,7 @@ export function tripEntryToMeta(entry: TripEntry): TripMeta {
     last_location_at: entry.lastLocationAt,
     last_eta_minutes: entry.lastEtaMinutes,
     last_eta_label:   entry.lastEtaLabel,
+    last_location_label: entry.lastLocationLabel ?? null,
     payment_balance:  entry.paymentBalance,
   };
 }

@@ -1,102 +1,191 @@
 /**
- * Shared Ledger modal — full-screen modal with header + close + SharedLedgerContent.
- * Fetches verified balances and connections when visible; passes to content for O(n) row build.
+ * Shared Ledger modal — pick a client or supplier, then full-screen Compare & verify
+ * (`SharedLedgerContent`) for that party.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal, ActivityIndicator } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
-import Theme from '@/constants/Theme';
+import type { ClientRow } from "@/features/clients/services/clients.service";
+import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
+import type { TripRow } from "@/features/trips";
+import Theme from "@/constants/Theme";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  getVerifiedBalances,
-  getSharedLedgerConnections,
-} from '@/services/sharedLedgerService';
-import { useOpenDisputesQuery } from '@/lib/queries';
-import { SharedLedgerContent } from './SharedLedgerContent';
-import type { SharedLedgerContentProps, SharedLedgerPartyRow } from './SharedLedgerContent';
-import { DisputeAuditSheet } from './DisputeAuditSheet';
+  ActivityIndicator,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import type { LedgerRow } from "../services/finance.service";
+import { SharedLedgerContent } from "./SharedLedgerContent";
+import type { SharedLedgerContentProps } from "./SharedLedgerContent";
 
-export type { SharedLedgerContentProps, SharedLedgerPartyRow } from './SharedLedgerContent';
+export type { SharedLedgerContentProps } from "./SharedLedgerContent";
 
-export interface SharedLedgerModalProps extends SharedLedgerContentProps {
+export interface SharedLedgerModalProps {
   visible: boolean;
   onClose: () => void;
   organizationId: string | null;
-  /** Optional: when user taps a MISMATCH row, modal opens dispute sheet. If not provided, no dispute UI. */
-  onOpenDispute?: (row: SharedLedgerPartyRow, partnerOrgId: string | null) => void;
+  transactions: LedgerRow[];
+  clients: { id: string; name: string }[];
+  suppliers: { id: string; name: string }[];
+  tripCountByParty: Record<string, number>;
+  tripRows: TripRow[];
+  clientRows: ClientRow[];
+  supplierRows: SupplierRow[];
+}
+
+type PickedParty = {
+  id: string;
+  name: string;
+  entityType: "CLIENT" | "SUPPLIER";
+};
+
+function normId(id: string | null | undefined): string {
+  return id == null ? "" : String(id).trim();
 }
 
 export function SharedLedgerModal({
   visible,
   onClose,
   organizationId,
-  ledgerTransactions,
+  transactions,
   clients,
   suppliers,
-  tripCountByParty = {},
-  onOpenDispute,
+  tripCountByParty,
+  tripRows,
+  clientRows,
+  supplierRows,
 }: SharedLedgerModalProps) {
-  const [verifiedBalances, setVerifiedBalances] = useState<
-    { partnerKey: string; balance: number }[]
-  >([]);
-  const [integratedPartnerKeys, setIntegratedPartnerKeys] = useState<Set<string>>(new Set());
-  const [contactIdToPartnerOrgId, setContactIdToPartnerOrgId] = useState<Record<string, string>>({});
-  const openDisputesQuery = useOpenDisputesQuery(organizationId);
-
-  const disputesByPartner = useMemo(() => {
-    const byPartner: Record<string, { status: string }[]> = {};
-    const partnerOrgToContact = new Map(
-      Object.entries(contactIdToPartnerOrgId).map(([cId, oId]) => [oId, cId]),
-    );
-    for (const d of openDisputesQuery.data ?? []) {
-      const key = partnerOrgToContact.get(d.partner_org_id) ?? d.partner_org_id;
-      if (!byPartner[key]) byPartner[key] = [];
-      byPartner[key].push({ status: d.status });
-    }
-    return byPartner;
-  }, [openDisputesQuery.data, contactIdToPartnerOrgId]);
-  const [sharedDataLoading, setSharedDataLoading] = useState(false);
-  const [showDisputeSheet, setShowDisputeSheet] = useState(false);
-  const [disputeRow, setDisputeRow] = useState<SharedLedgerPartyRow | null>(null);
-  const [disputePartnerOrgId, setDisputePartnerOrgId] = useState<string | null>(null);
-  const fetchedRef = useRef(false);
   const insets = useSafeAreaInsets();
-
-  const fetchSharedData = useCallback(async () => {
-    if (!organizationId) return;
-    setSharedDataLoading(true);
-    const [balancesRes, connectionsRes] = await Promise.all([
-      getVerifiedBalances(organizationId),
-      getSharedLedgerConnections(organizationId),
-    ]);
-    setSharedDataLoading(false);
-    if (!balancesRes.error) setVerifiedBalances(balancesRes.balances);
-    const partnerOrgToContactId = new Map<string, string>();
-    const contactIdToPartnerOrg: Record<string, string> = {};
-    if (!connectionsRes.error) {
-      const keys = new Set<string>();
-      for (const c of connectionsRes.connections) {
-        if (c.contact_id) {
-          keys.add(c.contact_id);
-          partnerOrgToContactId.set(c.partner_org_id, c.contact_id);
-          contactIdToPartnerOrg[c.contact_id] = c.partner_org_id;
-        } else {
-          keys.add(c.partner_org_id);
-        }
-      }
-      setIntegratedPartnerKeys(keys);
-      setContactIdToPartnerOrgId(contactIdToPartnerOrg);
-    }
-  }, [organizationId]);
+  const [picked, setPicked] = useState<PickedParty | null>(null);
 
   useEffect(() => {
-    if (visible && organizationId && !fetchedRef.current) {
-      fetchedRef.current = true;
-      setSharedDataLoading(true);
-      fetchSharedData();
+    if (!visible) setPicked(null);
+  }, [visible]);
+
+  const clientById = useMemo(
+    () => new Map(clientRows.map((c) => [c.id, c])),
+    [clientRows],
+  );
+  const supplierById = useMemo(
+    () => new Map(supplierRows.map((s) => [s.id, s])),
+    [supplierRows],
+  );
+
+  const partyTrips = useMemo(() => {
+    if (!picked) return [];
+    if (picked.entityType === "CLIENT") {
+      const pid = normId(picked.id);
+      return tripRows.filter((t) => normId(t.client_id) === pid);
     }
-    if (!visible) fetchedRef.current = false;
-  }, [visible, organizationId, fetchSharedData]);
+    const pid = normId(picked.id);
+    return tripRows.filter((t) => normId(t.supplier_id) === pid);
+  }, [picked, tripRows]);
+
+  const partyTransactions = useMemo(() => {
+    if (!picked) return transactions;
+    const want =
+      picked.entityType === "CLIENT"
+        ? ("client" as const)
+        : ("supplier" as const);
+    const pid = normId(picked.id);
+    return transactions.filter((tx) => {
+      if (normId(tx.contact_id) === pid && tx.contact_type === want)
+        return true;
+      if (!tx.trip_id) return false;
+      const tid = normId(tx.trip_id);
+      const trip = tripRows.find((tr) => normId(tr.id) === tid);
+      if (!trip) return false;
+      if (picked.entityType === "CLIENT")
+        return normId(trip.client_id) === pid;
+      return normId(trip.supplier_id) === pid;
+    });
+  }, [picked, transactions, tripRows]);
+
+  const contentProps: SharedLedgerContentProps | null = useMemo(() => {
+    if (!picked || !organizationId) return null;
+    if (picked.entityType === "CLIENT") {
+      const row = clientById.get(picked.id);
+      return {
+        entity: {
+          id: picked.id,
+          name: picked.name,
+          linked_organization_id: row?.linked_organization_id ?? null,
+          avatar_url: row?.avatar_url ?? null,
+        },
+        entityType: "CLIENT",
+        trips: partyTrips,
+        transactions: partyTransactions,
+        organizationId,
+        integrated: row?.is_integrated === true,
+        embeddedInOverlay: true,
+      };
+    }
+    const row = supplierById.get(picked.id);
+    return {
+      entity: {
+        id: picked.id,
+        name: picked.name,
+        linked_organization_id: row?.linked_organization_id ?? null,
+        avatar_url: row?.avatar_url ?? null,
+      },
+      entityType: "SUPPLIER",
+      trips: partyTrips,
+      transactions: partyTransactions,
+      organizationId,
+      integrated: row?.supplier_type === "integrated",
+      embeddedInOverlay: true,
+    };
+  }, [
+    picked,
+    organizationId,
+    clientById,
+    supplierById,
+    partyTrips,
+    partyTransactions,
+  ]);
+
+  const renderPartyList = useCallback(() => {
+    return (
+      <ScrollView
+        style={styles.listScroll}
+        contentContainerStyle={styles.listContent}
+      >
+        <Text style={styles.listHint}>Choose a party to compare & verify.</Text>
+        {clients.map((c) => (
+          <TouchableOpacity
+            key={`c-${c.id}`}
+            style={styles.partyRow}
+            onPress={() =>
+              setPicked({ id: c.id, name: c.name, entityType: "CLIENT" })
+            }
+          >
+            <Text style={styles.partyName}>{c.name}</Text>
+            <Text style={styles.partyMeta}>
+              Customer · {tripCountByParty[c.id] ?? 0} trips
+            </Text>
+          </TouchableOpacity>
+        ))}
+        {suppliers.map((s) => (
+          <TouchableOpacity
+            key={`s-${s.id}`}
+            style={styles.partyRow}
+            onPress={() =>
+              setPicked({ id: s.id, name: s.name, entityType: "SUPPLIER" })
+            }
+          >
+            <Text style={styles.partyName}>{s.name}</Text>
+            <Text style={styles.partyMeta}>
+              Supplier · {tripCountByParty[s.id] ?? 0} trips
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    );
+  }, [clients, suppliers, tripCountByParty]);
 
   if (!visible) return null;
 
@@ -109,8 +198,20 @@ export function SharedLedgerModal({
     >
       <View style={[styles.container, { paddingBottom: insets.bottom }]}>
         <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+          {picked ? (
+            <TouchableOpacity
+              style={styles.backLink}
+              onPress={() => setPicked(null)}
+              hitSlop={12}
+            >
+              <FontAwesome name="chevron-left" size={14} color={Theme.primary} />
+              <Text style={styles.backLinkText}>Parties</Text>
+            </TouchableOpacity>
+          ) : null}
           <Text style={styles.headerTitle}>Shared Ledger</Text>
-          <Text style={styles.headerSubtitle}>Compare & verify — clients & suppliers</Text>
+          <Text style={styles.headerSubtitle}>
+            {picked ? picked.name : "Compare & verify — clients & suppliers"}
+          </Text>
           <TouchableOpacity
             style={[styles.closeBtn, { top: insets.top + 16 }]}
             onPress={onClose}
@@ -119,61 +220,19 @@ export function SharedLedgerModal({
             <FontAwesome name="times" size={20} color={Theme.textPrimaryDark} />
           </TouchableOpacity>
         </View>
-        {sharedDataLoading ? (
+        {!organizationId ? (
+          <View style={styles.loadingWrap}>
+            <Text style={styles.loadingText}>No organization selected.</Text>
+          </View>
+        ) : !picked ? (
+          renderPartyList()
+        ) : contentProps ? (
+          <SharedLedgerContent {...contentProps} />
+        ) : (
           <View style={styles.loadingWrap}>
             <ActivityIndicator size="large" color={Theme.primary} />
-            <Text style={styles.loadingText}>Loading shared data…</Text>
           </View>
-        ) : (
-          <SharedLedgerContent
-            ledgerTransactions={ledgerTransactions}
-            clients={clients}
-            suppliers={suppliers}
-            tripCountByParty={tripCountByParty}
-            verifiedBalances={verifiedBalances}
-            integratedPartnerKeys={integratedPartnerKeys}
-            disputesByPartner={disputesByPartner}
-            onRowPress={
-              onOpenDispute
-                ? (row) => onOpenDispute(row, contactIdToPartnerOrgId[row.id] ?? null)
-                : (row) => {
-                    if (row.canRaiseDispute) {
-                      setDisputeRow(row);
-                      setDisputePartnerOrgId(contactIdToPartnerOrgId[row.id] ?? null);
-                      setShowDisputeSheet(true);
-                    }
-                  }
-            }
-            onLayerChange={(layer) => {
-              if (layer === 'SHARED' && verifiedBalances.length === 0 && organizationId) {
-                fetchSharedData();
-              }
-            }}
-            embedded={false}
-          />
         )}
-
-        <DisputeAuditSheet
-          visible={showDisputeSheet}
-          onClose={() => {
-            setShowDisputeSheet(false);
-            setDisputeRow(null);
-            setDisputePartnerOrgId(null);
-          }}
-          onSuccess={() => {
-            fetchSharedData();
-            setShowDisputeSheet(false);
-            setDisputeRow(null);
-            setDisputePartnerOrgId(null);
-          }}
-          organizationId={organizationId}
-          partnerKey={disputeRow?.id ?? ''}
-          partnerName={disputeRow?.name ?? ''}
-          partnerType={disputeRow?.type ?? 'CLIENT'}
-          internalDue={disputeRow?.internalDue ?? 0}
-          verifiedDue={disputeRow?.verifiedDue ?? null}
-          partnerOrgId={disputePartnerOrgId}
-        />
       </View>
     </Modal>
   );
@@ -191,34 +250,74 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
   },
+  backLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 8,
+  },
+  backLinkText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: Theme.primary,
+  },
   headerTitle: {
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: "800",
     color: Theme.textPrimaryDark,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
   },
   headerSubtitle: {
     fontSize: 9,
-    fontWeight: '700',
+    fontWeight: "700",
     color: Theme.textMutedDemo,
     letterSpacing: 1,
     marginTop: 4,
   },
   closeBtn: {
-    position: 'absolute',
+    position: "absolute",
     top: 16,
     right: 20,
     padding: 8,
   },
   loadingWrap: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     gap: 12,
   },
   loadingText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: "600",
     color: Theme.textMuted,
+  },
+  listScroll: {
+    flex: 1,
+  },
+  listContent: {
+    padding: 16,
+    paddingBottom: 32,
+  },
+  listHint: {
+    fontSize: 13,
+    color: Theme.textMuted,
+    marginBottom: 12,
+  },
+  partyRow: {
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: Theme.surfaceLight,
+    marginBottom: 10,
+  },
+  partyName: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  partyMeta: {
+    fontSize: 12,
+    color: Theme.textMuted,
+    marginTop: 4,
   },
 });

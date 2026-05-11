@@ -1,5 +1,9 @@
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
-import { CounterpartyProfileSystemCard } from "@/components/CounterpartyProfileSystemCard";
+import {
+  CounterpartyProfileSystemCard,
+  type ProfileContract,
+  type ProfileWarehouse,
+} from "@/components/CounterpartyProfileSystemCard";
 import { DatePresetPillBar } from "@/components/DatePresetPillBar";
 import { DateRangePickerModal } from "@/components/DateRangePickerModal";
 import { entityCompanionCardStyles as ecc } from "@/components/entityCompanionCard.styles";
@@ -749,6 +753,32 @@ export default function ClientDetailScreen({
       lastFocusRefreshRef.current = Date.now();
       load();
     }, [load]),
+  );
+
+  const profileWarehousesForCard = useMemo<ProfileWarehouse[]>(
+    () =>
+      profileWarehouses.map((w) => ({
+        id: w.id,
+        name: w.name,
+        address: [w.address, w.city, w.state].filter(Boolean).join(", ") || "—",
+        gstNumber: w.local_gstin,
+        contactPerson: w.contact_name,
+        phone: w.contact_phone,
+      })),
+    [profileWarehouses],
+  );
+
+  const profileContractsForCard = useMemo<ProfileContract[]>(
+    () =>
+      profileContracts.map((c) => ({
+        id: c.id,
+        pickup: c.pickup_area,
+        destination: c.drop_location,
+        price: Number(c.rate ?? 0),
+        pricingType: c.rate_type === "per_ton" ? "per_ton" : "per_trip",
+        notes: c.notes,
+      })),
+    [profileContracts],
   );
 
   useEffect(() => {
@@ -2394,8 +2424,8 @@ export default function ClientDetailScreen({
             entityDisplayId={
               client?.display_id ?? client?.id?.slice(0, 8) ?? null
             }
-            warehouses={profileWarehouses}
-            contracts={profileContracts}
+            warehouses={profileWarehousesForCard}
+            contracts={profileContractsForCard}
             onClose={() => setShowProfileModal(false)}
             onEditPress={() => {
               setShowProfileModal(false);
