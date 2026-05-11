@@ -193,10 +193,7 @@ interface VehiclePreviewDoc {
 }
 
 /** Step 1–4 and display label from trip status (aligned with driver app flow). */
-function trackingStepAndLabel(
-  status: string | null | undefined,
-  startedAt?: string | null,
-): {
+function trackingStepAndLabel(status: string | null | undefined): {
   step: number;
   total: number;
   label: string;
@@ -206,7 +203,7 @@ function trackingStepAndLabel(
     return { step: 6, total: 6, label: "Completed" };
   if (s === "arrived" || s === "at_destination" || s === "at_drop")
     return { step: 5, total: 6, label: "At drop-off" };
-  if (s === "in_transit" || s === "transit" || (s === "in_progress" && !!startedAt))
+  if (s === "in_transit" || s === "transit")
     return { step: 4, total: 6, label: "In transit" };
   if (
     s === "in_progress" ||
@@ -1856,10 +1853,7 @@ export default function TripDetailScreen({
             </View>
           </View>
           {(() => {
-            const { step, total, label } = trackingStepAndLabel(
-              trip.status,
-              trip.started_at,
-            );
+            const { step, total, label } = trackingStepAndLabel(trip.status);
             return (
               <View style={styles.trackingPageCurrentStepWrap}>
                 <Text style={styles.trackingPageCurrentStepLabel}>
@@ -2836,7 +2830,6 @@ export default function TripDetailScreen({
         {(() => {
           const { step, total, label } = trackingStepAndLabel(
             trip?.status ?? "draft",
-            trip?.started_at,
           );
           return (
             <View style={styles.trackingPageCurrentStepWrap}>
@@ -2944,7 +2937,7 @@ export default function TripDetailScreen({
   }
 
   if (Platform.OS === 'web') {
-    const { label: webStepLabel } = trackingStepAndLabel(trip.status, trip.started_at);
+    const { label: webStepLabel } = trackingStepAndLabel(trip.status);
     const webStatusColor =
       ['in_transit', 'in_progress', 'transit'].some(s => (trip.status ?? '').toLowerCase().includes(s))
         ? '#22c55e'
@@ -3645,7 +3638,6 @@ export default function TripDetailScreen({
                   {(() => {
                     const { step, total, label } = trackingStepAndLabel(
                       trip.status,
-                      trip.started_at,
                     );
                     return (
                       <View style={styles.trackingPageCurrentStepWrap}>

@@ -61,10 +61,11 @@ export function parseDriverUpdatesFromNotes(notes: string | null): ParsedDriverS
 
 export function deriveDriverFlowStepFromTrip(t: TripRow): DriverFlowStepId {
   const s = String(t.status ?? '').toLowerCase();
-  const hasStarted = !!t.started_at;
   if (s === 'completed' || s === 'delivered' || s === 'done') return 'completed';
   if (s === 'at_drop') return 'reached';
-  if (s === 'in_transit' || s === 'transit' || (s === 'in_progress' && hasStarted)) return 'transit';
+  // En route to drop-off is explicit `in_transit` (set by DriverTripFlowCard.engageTransit).
+  // `in_progress` + started_at means "arrived at pickup / loading" after confirmArrival — not transit.
+  if (s === 'in_transit' || s === 'transit') return 'transit';
   if (s === 'picked_up' || s === 'pickup' || s === 'in_progress') return 'pickup';
   return 'accepted';
 }
