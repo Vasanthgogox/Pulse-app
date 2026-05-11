@@ -66,6 +66,8 @@ export const PRIORITY_WEIGHT_DISPUTE_CRITICAL = 122;
 export const PRIORITY_WEIGHT_UNASSIGNED_CRITICAL = 118;
 /** Driver on-road but mission `system_log` heartbeat is stale. */
 export const PRIORITY_WEIGHT_LATE_LOG = 66;
+/** Long-haul schedule slip (`metadata.long_haul_late` / `event_tag` LATE) — tops ops shelf + island. */
+export const PRIORITY_WEIGHT_LONG_HAUL_LATE = 135;
 
 const FOUR_H_MS = 4 * 60 * 60 * 1000;
 const FIVE_H_MS = 5 * 60 * 60 * 1000;
@@ -103,6 +105,13 @@ export function assignPriorityWeightFromTripMessage(
   const mw = meta?.priority_weight;
   if (typeof mw === 'number' && Number.isFinite(mw)) return mw;
   if (typeof mw === 'string' && mw.trim() && Number.isFinite(Number(mw))) return Number(mw);
+  const ep0 =
+    meta?.event_payload && typeof meta.event_payload === 'object' && !Array.isArray(meta.event_payload)
+      ? (meta.event_payload as Record<string, unknown>)
+      : null;
+  if (meta?.long_haul_late === true || String(ep0?.event_tag ?? '').toUpperCase() === 'LATE') {
+    return PRIORITY_WEIGHT_LONG_HAUL_LATE;
+  }
   const mt = String(messageType ?? '').toLowerCase();
   if (mt === 'ledger_event' || mt === 'ledger' || mt === 'payment') return PRIORITY_WEIGHT_LEDGER_SUCCESS;
   if (mt === 'system_log') return 55;
@@ -142,17 +151,35 @@ export function buildClientRibbonFromTripMessage(
     row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata)
       ? (row.metadata as Record<string, unknown>)
       : null;
+  const epRibbon =
+    meta?.event_payload && typeof meta.event_payload === 'object' && !Array.isArray(meta.event_payload)
+      ? (meta.event_payload as Record<string, unknown>)
+      : null;
+  const isLongHaulLate =
+    meta?.long_haul_late === true || String(epRibbon?.event_tag ?? '').toUpperCase() === 'LATE';
   const w = assignPriorityWeightFromTripMessage(row.message_type, row.priority_weight ?? meta?.priority_weight, meta);
   const mt = String(row.message_type);
   const amount = ledgerAmountFromMetadata(meta);
   const isLedger = mt === 'ledger_event' || mt === 'ledger' || mt === 'payment';
-  const kind: OperationsIslandVisualKind = isLedger ? 'success' : w >= 90 ? 'warning' : 'neutral';
+  const kind: OperationsIslandVisualKind = isLedger
+    ? 'success'
+    : isLongHaulLate
+      ? 'critical'
+      : w >= 90
+        ? 'warning'
+        : 'neutral';
   const category: OperationCategory = isLedger
     ? 'payment_received'
     : mt === 'system_log'
       ? 'late_log'
       : 'other';
-  const title = isLedger ? 'Ledger update' : mt === 'system_log' ? 'Trip log' : 'Trip update';
+  const title = isLedger
+    ? 'Ledger update'
+    : isLongHaulLate
+      ? 'LATE — schedule'
+      : mt === 'system_log'
+        ? 'Trip log'
+        : 'Trip update';
   const c = typeof row.content === 'string' ? row.content.trim() : '';
   const subtitle = c ? c.slice(0, 140) : null;
   return {

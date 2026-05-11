@@ -88,6 +88,7 @@ import {
 } from "@/features/chat/services/chatLedgerBridge.service";
 import { ChatSystemEventCard, ChatLedgerEventCard } from "./ChatEventCard";
 import { DynamicTripIsland } from "./DynamicTripIsland";
+import { LateAlertCard, isLongHaulLateChatMessage } from "./LateAlertCard";
 import { LocationEventCard } from "./LocationEventCard";
 import { parseSystemLogLocationData } from "../utils/locationLogPayload.util";
 import { ChatFeedbackCard } from "./ChatFeedbackCard";
@@ -4316,6 +4317,9 @@ function TripConversationDetailLoaded({
       m.message_type === "update" ||
       m.message_type === "system_log"
     ) {
+      if (isLongHaulLateChatMessage(m)) {
+        return <LateAlertCard message={m} />;
+      }
       const locData = parseSystemLogLocationData(m);
       if (locData) {
         return <LocationEventCard message={m} location={locData} />;

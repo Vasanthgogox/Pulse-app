@@ -1080,52 +1080,67 @@ export default function TripDetailScreen({
     }
   };
 
-  const journeyLogs = [
-    {
-      status: "Assigned",
-      location: trip.pickup_area?.trim() || "Origin hub",
-      time: trip.pickup_date
-        ? new Date(trip.pickup_date).toLocaleTimeString("en-IN", {
-            hour: "2-digit",
-            minute: "2-digit",
-          })
-        : "—",
-      details: "Trip assigned and prepared for dispatch.",
-    },
-    {
-      status: "Pickup",
-      location: trip.pickup_area?.trim() || "Pickup point",
-      time: trip.started_at
-        ? new Date(trip.started_at).toLocaleTimeString("en-IN", {
-            hour: "2-digit",
-            minute: "2-digit",
-          })
-        : "—",
-      details: "Pickup verification completed and movement initiated.",
-    },
-    {
-      status: "In-Transit",
-      location: "Route in progress",
-      time: trip.started_at
-        ? new Date(trip.started_at).toLocaleTimeString("en-IN", {
-            hour: "2-digit",
-            minute: "2-digit",
-          })
-        : "—",
-      details: "Vehicle moving towards destination through planned route.",
-    },
-    {
-      status: "Delivered",
-      location: trip.drop_location?.trim() || "Destination",
-      time: trip.completed_at
-        ? new Date(trip.completed_at).toLocaleTimeString("en-IN", {
-            hour: "2-digit",
-            minute: "2-digit",
-          })
-        : "—",
-      details: "Delivery completed and settlement flow closed.",
-    },
-  ];
+  const journeyLogs = useMemo(() => {
+    const loc = detail.driverLocation;
+    const coordLine =
+      loc && Number.isFinite(loc.latitude) && Number.isFinite(loc.longitude)
+        ? `${Number(loc.latitude).toFixed(5)}, ${Number(loc.longitude).toFixed(5)}`
+        : null;
+    const inTransitLocation =
+      detail.driverLocationAddress?.trim() ||
+      coordLine ||
+      "Route in progress";
+    const inTransitDetails =
+      coordLine != null
+        ? `Last GPS checkpoint ${coordLine}. Vehicle moving towards destination through planned route.`
+        : "Vehicle moving towards destination through planned route.";
+    return [
+      {
+        status: "Assigned",
+        location: trip.pickup_area?.trim() || "Origin hub",
+        time: trip.pickup_date
+          ? new Date(trip.pickup_date).toLocaleTimeString("en-IN", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          : "—",
+        details: "Trip assigned and prepared for dispatch.",
+      },
+      {
+        status: "Pickup",
+        location: trip.pickup_area?.trim() || "Pickup point",
+        time: trip.started_at
+          ? new Date(trip.started_at).toLocaleTimeString("en-IN", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          : "—",
+        details: "Pickup verification completed and movement initiated.",
+      },
+      {
+        status: "In-Transit",
+        location: inTransitLocation,
+        time: trip.started_at
+          ? new Date(trip.started_at).toLocaleTimeString("en-IN", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          : "—",
+        details: inTransitDetails,
+      },
+      {
+        status: "Delivered",
+        location: trip.drop_location?.trim() || "Destination",
+        time: trip.completed_at
+          ? new Date(trip.completed_at).toLocaleTimeString("en-IN", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          : "—",
+        details: "Delivery completed and settlement flow closed.",
+      },
+    ];
+  }, [trip, detail.driverLocation, detail.driverLocationAddress]);
   const isTripCompleted =
     String(trip.status ?? "").toLowerCase() === "completed" ||
     !!trip.completed_at;
