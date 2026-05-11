@@ -30,21 +30,39 @@
 -- ─── Step 1: Drop the trigger that fires on every trips write ─────────────────
 DROP TRIGGER IF EXISTS trg_refresh_dashboard_trip_metrics ON public.trips;
 
--- Keep the function — pg_cron will call it on schedule instead.
--- The function is: SELECT public.refresh_dashboard_trip_metrics()
+-- ─── Step 1b: Replace trigger-only function with RETURNS void.
+-- Original (20260506055634) used RETURNS trigger; pg_cron / SELECT cannot call that
+-- (SQLSTATE 0A000). Postgres also forbids changing return type with CREATE OR REPLACE
+-- (SQLSTATE 42P13) — must DROP then CREATE.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron')
+     AND EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'refresh_dashboard_trip_metrics') THEN
+    PERFORM cron.unschedule('refresh_dashboard_trip_metrics');
+  END IF;
+END;
+$$;
 
+DROP FUNCTION IF EXISTS public.refresh_dashboard_trip_metrics();
+
+CREATE FUNCTION public.refresh_dashboard_trip_metrics()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  REFRESH MATERIALIZED VIEW CONCURRENTLY public.dashboard_trip_metrics;
+END;
+$$;
+
+COMMENT ON FUNCTION public.refresh_dashboard_trip_metrics() IS
+  'Refreshes dashboard_trip_metrics MV. Called by pg_cron; formerly a statement-level trigger on trips.';
 
 -- ─── Step 2: Schedule via pg_cron (no-op if not installed) ───────────────────
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
-
-    -- Remove any existing schedule for this job before re-creating
-    PERFORM cron.unschedule('refresh_dashboard_trip_metrics')
-    WHERE EXISTS (
-      SELECT 1 FROM cron.job WHERE jobname = 'refresh_dashboard_trip_metrics'
-    );
-
     PERFORM cron.schedule(
       'refresh_dashboard_trip_metrics',
       '*/5 * * * *',   -- every 5 minutes

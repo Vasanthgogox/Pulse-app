@@ -174,9 +174,10 @@ BEGIN
 
   -- ── 4. Build message metadata ───────────────────────────────────────────────
   v_sender_role := CASE v_canonical
-    WHEN 'tracking'                 THEN 'driver'
-    WHEN 'ledger', 'ledger_event'   THEN 'dispatcher'
-    ELSE                                 'system'
+    WHEN 'tracking'     THEN 'driver'
+    WHEN 'ledger'        THEN 'dispatcher'
+    WHEN 'ledger_event'  THEN 'dispatcher'
+    ELSE                   'system'
   END;
 
   v_msg_meta := jsonb_build_object(

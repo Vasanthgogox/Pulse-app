@@ -89,7 +89,8 @@ BEGIN
           'visibility_tags', COALESCE(ranked.visibility_tags, '[]'::jsonb),
           'is_read',         ranked.is_read,
           'created_at',      ranked.created_at
-        ) ORDER BY ranked.created_at ASC
+        )
+        ORDER BY ranked.created_at ASC
       ),
       '[]'::jsonb
     ) AS recent_events
@@ -146,7 +147,7 @@ BEGIN
       'conversations',          COALESCE(convs.conversations, '[]'::jsonb),
       'recent_events',          msgs.recent_events
     ) AS trip_obj
-  ) build ON true;
+  ) build;
 
 
   -- ── 2. Global alerts ─────────────────────────────────────────────────────────
