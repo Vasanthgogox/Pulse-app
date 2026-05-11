@@ -179,6 +179,7 @@ export async function getLatestDriverLocationForTripOrDriver(
 /**
  * Fetch the most recent N location pings for a trip (newest first). Dev use: last-3 trail.
  * Requires "Drivers read own locations" RLS policy on driver_locations.
+ * For all trip stakeholders (owner + client + supplier) use getLastNLocationsForTripViaRpc.
  */
 export async function getLastNLocationsForTrip(
   tripId: string,
@@ -193,6 +194,28 @@ export async function getLastNLocationsForTrip(
 
   if (error) return { error: new Error(error.message), points: [] };
   return { error: null, points: (data ?? []) as { latitude: number; longitude: number; recorded_at: string }[] };
+}
+
+/**
+ * Partner-safe: last N location pings via SECURITY DEFINER RPC.
+ * Works for fleet org, client org, and supplier org members.
+ * Points are returned newest-first by the DB; caller receives them in that order.
+ */
+export async function getLastNLocationsForTripViaRpc(
+  tripId: string,
+  n = 3,
+): Promise<{ error: Error | null; points: { latitude: number; longitude: number; recorded_at: string }[] }> {
+  const { data, error } = await supabase().rpc('get_last_n_locations_for_trip', {
+    p_trip_id: tripId,
+    p_n: n,
+  });
+  if (error) {
+    console.warn('[tracking] get_last_n_locations_for_trip RPC error', { tripId, n, error: error.message });
+    return { error: new Error(error.message), points: [] };
+  }
+  const points = (Array.isArray(data) ? data : []) as { latitude: number; longitude: number; recorded_at: string }[];
+  console.log('[tracking] getLastNLocationsForTripViaRpc', { tripId, n, returned: points.length });
+  return { error: null, points };
 }
 
 /**

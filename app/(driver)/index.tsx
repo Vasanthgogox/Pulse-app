@@ -276,6 +276,8 @@ async function getExpoLocation(): Promise<typeof ExpoLocation | null> {
 
 /** Route checkpoint cadence while trip is moving (fixed 3-minute DB writes). */
 const LOCATION_REPORT_INTERVAL_MS = 3 * 60 * 1000;
+/** Minimum movement to persist a checkpoint; avoids flooding DB when stationary. */
+const MIN_DISPLACEMENT_M = 30;
 
 /** Approximate distance in metres between two WGS84 points (Haversine-style). */
 function distanceMeters(
@@ -1841,16 +1843,29 @@ export default function DriverRadarScreen() {
           step === "transit" ||
           step === "reached";
         if (shouldPersistCheckpoint) {
-          const saved = await reportLocationToDb(
-            activeGuidanceTrip.id,
-            latitude,
-            longitude,
-            acc,
-            "background",
-          );
-          if (saved) {
-            lastSentLocationRef.current = { lat: latitude, lng: longitude };
-            void fetchAndLogRecentPins(activeGuidanceTrip.id);
+          const last = lastSentLocationRef.current;
+          const moved =
+            !last ||
+            distanceMeters(last.lat, last.lng, latitude, longitude) >= MIN_DISPLACEMENT_M;
+          if (moved) {
+            const saved = await reportLocationToDb(
+              activeGuidanceTrip.id,
+              latitude,
+              longitude,
+              acc,
+              "background",
+            );
+            if (saved) {
+              console.log('[tracking] checkpoint saved', {
+                tripId: activeGuidanceTrip.id,
+                step,
+                lat: latitude,
+                lon: longitude,
+                acc,
+              });
+              lastSentLocationRef.current = { lat: latitude, lng: longitude };
+              void fetchAndLogRecentPins(activeGuidanceTrip.id);
+            }
           }
         }
         setDriverMapPosition({ latitude, longitude });

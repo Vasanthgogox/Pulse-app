@@ -1250,6 +1250,7 @@ export function useTripDetail({
     if (!trip?.id) return;
     const driverId = effectiveDriverIdForLocation;
     setDriverLocationLoading(true);
+    console.log('[tracking] fetchDriverLocation start', { tripId: trip.id, driverId });
     try {
       const [latestRes, historyByTrip] = await Promise.all([
         driverLocationService.getLatestDriverLocationForTripOrDriver(trip.id, driverId),
@@ -1261,7 +1262,8 @@ export function useTripDetail({
           await driverLocationService.getDriverLocationHistoryByDriverId(driverId);
         if (!historyByDriver.error) effectivePoints = historyByDriver.points;
       }
-      setDriverLocation(latestRes.error ? null : (latestRes.location ?? null));
+      const latest = latestRes.error ? null : (latestRes.location ?? null);
+      setDriverLocation(latest);
       setTripLocationPoints(
         effectivePoints.map((p) => ({
           latitude: p.latitude,
@@ -1269,8 +1271,16 @@ export function useTripDetail({
           recorded_at: p.recorded_at,
         })),
       );
-    } catch {
-      // silently ignore
+      const last3 = effectivePoints.slice(-3);
+      console.log('[tracking] fetchDriverLocation done', {
+        tripId: trip.id,
+        hasLatest: !!latest,
+        latestAt: latest?.recorded_at ?? null,
+        totalPoints: effectivePoints.length,
+        last3: last3.map((p) => ({ lat: p.latitude, lon: p.longitude, at: p.recorded_at })),
+      });
+    } catch (err) {
+      console.warn('[tracking] fetchDriverLocation error', { tripId: trip.id, err });
     } finally {
       setDriverLocationLoading(false);
     }

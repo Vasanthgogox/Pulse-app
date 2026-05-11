@@ -409,6 +409,9 @@ export default function DriverDashboard() {
   const [isFullMapVisible, setIsFullMapVisible] = useState(false);
   const [inlineMapViewportHeight, setInlineMapViewportHeight] = useState(0);
   const [toastMessage, setToastMessage] = useState('You are online now.');
+  const [recentPinPoints, setRecentPinPoints] = useState<
+    { latitude: number; longitude: number; recorded_at: string }[]
+  >([]);
   const lastSentLocationRef = useRef<{ lat: number; lng: number } | null>(null);
   const locationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const truckAnimTokenRef = useRef(0);
@@ -636,8 +639,8 @@ export default function DriverDashboard() {
       accuracy: number | null,
       source: driverLocationService.DriverLocationSource
     ) => {
-      if (!driver?.organization_id) return;
-      await driverLocationService.reportDriverLocation({
+      if (!driver?.organization_id) return false;
+      const { error } = await driverLocationService.reportDriverLocation({
         driverId: driver.id,
         organizationId: driver.organization_id,
         tripId,
@@ -646,9 +649,16 @@ export default function DriverDashboard() {
         accuracy,
         source,
       });
+      return !error;
     },
     [driver]
   );
+
+  const fetchAndLogRecentPins = useCallback(async (tripId: string) => {
+    const { points } = await driverLocationService.getLastNLocationsForTrip(tripId, 3);
+    console.log('[tracking] last 3 pinned coordinates for trip', tripId, points);
+    setRecentPinPoints(points);
+  }, []);
 
   useEffect(() => {
     if (!isOnline) return;
@@ -991,8 +1001,17 @@ export default function DriverDashboard() {
           !last ||
           distanceMeters(last.lat, last.lng, latitude, longitude) >= MIN_DISPLACEMENT_M;
         if (shouldSend) {
-          await reportLocationToDb(activeGuidanceTrip.id, latitude, longitude, acc, 'live');
-          lastSentLocationRef.current = { lat: latitude, lng: longitude };
+          const saved = await reportLocationToDb(activeGuidanceTrip.id, latitude, longitude, acc, 'background');
+          if (saved) {
+            console.log('[tracking] checkpoint saved', {
+              tripId: activeGuidanceTrip.id,
+              lat: latitude,
+              lon: longitude,
+              acc,
+            });
+            lastSentLocationRef.current = { lat: latitude, lng: longitude };
+            void fetchAndLogRecentPins(activeGuidanceTrip.id);
+          }
         }
         setDriverMapPosition({ latitude, longitude });
 
@@ -1022,7 +1041,16 @@ export default function DriverDashboard() {
       clearInterval(id);
       locationIntervalRef.current = null;
     };
-  }, [driver, activeGuidanceTrip, reportLocationToDb]);
+  }, [driver, activeGuidanceTrip, reportLocationToDb, fetchAndLogRecentPins]);
+
+  // Fetch last 3 pins when active trip changes
+  useEffect(() => {
+    if (!activeGuidanceTrip?.id) {
+      setRecentPinPoints([]);
+      return;
+    }
+    void fetchAndLogRecentPins(activeGuidanceTrip.id);
+  }, [activeGuidanceTrip?.id, fetchAndLogRecentPins]);
 
   // Blink/ping for pickup dot and Live badge on the offline "Assigned trip waiting" card (must run after effectiveFirstIncoming is defined)
   const showOfflineAssignedCard = Boolean(driver && !isOnline && effectiveFirstIncoming);
