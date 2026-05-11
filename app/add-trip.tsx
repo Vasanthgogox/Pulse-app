@@ -5,7 +5,8 @@
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { createLedgerEntry } from '@/features/finance';
-import { AddTripModal, assignTripDriverByPhone, createTrip, createTripWithOtp, type AddTripFormData } from '@/features/trips';
+import { AddTripModal, type AddTripFormData } from '@/features/trips';
+import { assignTripDriverByPhone, createTrip, createTripWithOtp } from '@/features/trips/services/trips.service';
 import type { AddTripCompleteResult } from '@/features/trips/components/add-trip/types';
 import { useInvalidateTrips } from '@/lib/queries';
 import { useRouter } from 'expo-router';

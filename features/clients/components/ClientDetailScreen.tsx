@@ -752,20 +752,6 @@ export default function ClientDetailScreen({
   );
 
   useEffect(() => {
-    if (client) {
-      setEditOrgName(client.name ?? "");
-      setEditContactPerson(client.contact_person ?? "");
-      setEditPhone(
-        isPlaceholderPhone(client.phone) ? "" : (client.phone ?? ""),
-      );
-      setEditEmail(client.email ?? "");
-      setEditAddress(client.address ?? "");
-      setEditGstin(client.gstin ?? "");
-      setEditPan(client.pan_number ?? "");
-    }
-  }, [client]);
-
-  useEffect(() => {
     let mounted = true;
     const resolveAvatar = async () => {
       if (!client?.linked_organization_id) {

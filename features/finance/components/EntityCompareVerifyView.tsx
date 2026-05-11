@@ -7,7 +7,7 @@ import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { getClientById } from "@/features/clients/services/clients.service";
 import { getSupplierById } from "@/features/suppliers/services/suppliers.service";
-import { getTripDisplayNumber, type TripRow } from "@/features/trips";
+import { getTripDisplayNumber, type TripRow } from "@/features/trips/services/trips.service";
 import {
     adjustedCost,
     adjustedRevenue,

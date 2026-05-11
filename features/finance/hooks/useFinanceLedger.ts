@@ -1,8 +1,7 @@
 /**
  * Ledger state and derived data for the Finance screen. Uses TanStack Query cache.
  */
-import type { TripRow } from "@/features/trips";
-import { getTripDisplayNumber } from "@/features/trips";
+import { getTripDisplayNumber, type TripRow } from "@/features/trips/services/trips.service";
 import {
   buildUniqueLinkedOrgIdMap,
   isCrossOrgIntegrationTrip,

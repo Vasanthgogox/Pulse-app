@@ -8,7 +8,7 @@ import { type ClientRow } from "@/features/clients/services/clients.service";
 import { type DriverOffer, type DriverRow } from "@/features/drivers/services/drivers.service";
 import type { IndentRow } from "@/features/indents/services/indents.service";
 import { type SupplierRow } from "@/features/suppliers/services/suppliers.service";
-import { getTripDisplayNumber, type TripRow } from "@/features/trips";
+import { getTripDisplayNumber, type TripRow } from "@/features/trips/services/trips.service";
 import { getAvailablePeriodOptions } from "@/features/vehicles/pnl";
 import { type VehicleRow } from "@/features/vehicles/services/vehicles.service";
 import { formatLedgerDate } from "@/lib/format";

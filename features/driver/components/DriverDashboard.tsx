@@ -7,7 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useDriverAvatar } from '@/contexts/DriverAvatarContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { computeDriverCommissionForTrip } from '@/features/finance/aggregation/aggregateDrivers';
-import { claimTripByOtp, getPendingOtpTrips } from '@/features/trips';
+import { claimTripByOtp, getPendingOtpTrips } from '@/features/trips/services/tripOtp.service';
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
 import { isAggregateTrip, isRosterTrip } from '@/lib/driverUtils';
 import { formatINR } from '@/lib/format';

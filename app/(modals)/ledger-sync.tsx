@@ -29,7 +29,7 @@ import {
 import { buildLedgerSyncDescriptionLine } from "@/features/finance/ledger/ledgerEntryModel";
 import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntries";
 import { getSuppliersByOrganization, type SupplierRow } from "@/features/suppliers";
-import { getTripDisplayNumber, getTripsByOrganization, getTripsWhereOrgIsClient, getTripsWhereOrgIsSupplier, type TripRow } from "@/features/trips";
+import { getTripDisplayNumber, getTripsByOrganization, getTripsWhereOrgIsClient, getTripsWhereOrgIsSupplier, type TripRow } from "@/features/trips/services/trips.service";
 import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import { getVehiclesByOrganization } from "@/features/vehicles";
 import { updateSalaryRequestStatus } from "@/services/salaryRequestsService";

@@ -12,7 +12,7 @@ import type {
 import type { IndentRow } from "@/features/indents/services/indents.service";
 import { SuppliersTab } from "@/features/suppliers/components/SuppliersTab";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
-import type { TripRow } from "@/features/trips";
+import type { TripRow } from "@/features/trips/services/trips.service";
 import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
 import type { GarrageViewTab } from "@/features/vehicles/components/GarrageTab";
 import { GarrageTab } from "@/features/vehicles/components/GarrageTab";
