@@ -182,6 +182,8 @@ export default function DriverSignUpScreen() {
   const { signIn, signUp, signInWithGoogle } = useAuth();
   const isOnline = useIsOnline();
   const scrollRef = useRef<ScrollView>(null);
+  /** Per-page vertical scroll (horizontal pager does not scroll vertically). */
+  const pageVerticalScrollRefs = useRef<Array<ScrollView | null>>([]);
 
   const [step, setStep] = useState(0);
   const [phone, setPhone] = useState('');
@@ -218,21 +220,43 @@ export default function DriverSignUpScreen() {
   } | null>(null);
   const phoneCheckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const otpInputRef = useRef<TextInput>(null);
-  const fieldYRef = useRef({ callsign: 0, email: 0, password: 0, confirmPassword: 0 });
+  /** Step index 2: approximate Y from top of scroll content for keyboard scroll. */
+  const PROFILE_FIELD_SCROLL_Y = { callsign: 0, email: 112, password: 224, confirmPassword: 336 } as const;
   const isDesktop = width >= 1024;
   const pageWidth = isDesktop ? Math.min(560, width - 120) : width;
+
+  const pageBody = (pageIndex: number, content: React.ReactNode) => (
+    <View key={pageIndex} style={[styles.page, { width: pageWidth }]}>
+      <ScrollView
+        ref={(el) => {
+          pageVerticalScrollRefs.current[pageIndex] = el;
+        }}
+        style={styles.pageInnerScroll}
+        contentContainerStyle={[
+          styles.pageInnerScrollContent,
+          { paddingBottom: insets.bottom + 88 },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator
+        nestedScrollEnabled
+      >
+        <View style={styles.pageContent}>{content}</View>
+      </ScrollView>
+    </View>
+  );
 
   /** Extra scroll offset so focused field stays above keyboard. Use larger offset on iOS when focusing password so the field stays above the "Strong Password" / autofill bar. */
   const SCROLL_OFFSET_DEFAULT = 100;
   const SCROLL_OFFSET_PASSWORD_IOS = 220;
 
-  const scrollToField = (name: keyof typeof fieldYRef.current) => {
+  const scrollToField = (name: keyof typeof PROFILE_FIELD_SCROLL_Y) => {
     const isPasswordOnIos = name === 'password' && Platform.OS === 'ios';
     const offset = isPasswordOnIos ? SCROLL_OFFSET_PASSWORD_IOS : SCROLL_OFFSET_DEFAULT;
     setTimeout(() => {
-      const y = fieldYRef.current[name];
-      scrollRef.current?.scrollTo({
-        x: step * pageWidth,
+      const inner = pageVerticalScrollRefs.current[2];
+      const y = PROFILE_FIELD_SCROLL_Y[name];
+      inner?.scrollTo({
         y: Math.max(0, y - offset),
         animated: true,
       });
@@ -661,7 +685,7 @@ export default function DriverSignUpScreen() {
   return (
     <KeyboardAvoidingView
       style={[styles.container, { paddingTop: insets.top }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+      behavior={Platform.OS === 'web' ? undefined : 'padding'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 20 : 0}
     >
       <TouchableOpacity
@@ -687,8 +711,8 @@ export default function DriverSignUpScreen() {
         keyboardDismissMode="on-drag"
       >
         {/* Step 1: Welcome – India phone only */}
-        <View style={[styles.page, { width: pageWidth }]}>
-          <View style={styles.pageContent}>
+        {pageBody(0, (
+          <>
             <Text style={[styles.mainTitle, styles.mainTitleWelcome]}>{STEP_CONTENT[0].title}</Text>
             <Text style={styles.subTitle}>{STEP_CONTENT[0].subtitle}</Text>
             <View style={styles.inputGroup}>
@@ -747,12 +771,12 @@ export default function DriverSignUpScreen() {
               <FontAwesome name="google" size={18} color={LIGHT.text} />
               <Text style={styles.googleBtnText}>Continue with Google</Text>
             </TouchableOpacity>
-          </View>
-        </View>
+          </>
+        ))}
 
         {/* Step 2: OTP entry */}
-        <View style={[styles.page, { width: pageWidth }]}>
-          <View style={styles.pageContent}>
+        {pageBody(1, (
+          <>
             <Text style={styles.mainTitle}>{STEP_CONTENT[1].title}</Text>
             <Text style={styles.subTitle}>
               We sent a code to {phone.trim().length === 10 ? `+91 ${phone.replace(/(\d{5})(\d{5})/, '$1 $2')}` : 'your number'}. Enter the code in that message.
@@ -799,20 +823,17 @@ export default function DriverSignUpScreen() {
             >
               <Text style={styles.tryAgainText}>Didn&apos;t get it? Try again</Text>
             </TouchableOpacity>
-          </View>
-        </View>
+          </>
+        ))}
 
         {/* Step 3: Your details */}
-        <View style={[styles.page, { width: pageWidth }]}>
-          <View style={styles.pageContent}>
+        {pageBody(2, (
+          <>
             <Text style={styles.mainTitle}>{STEP_CONTENT[2].title}</Text>
             <Text style={styles.subTitle}>{STEP_CONTENT[2].subtitle}</Text>
             <View style={styles.inputGroup}>
               <Text style={styles.fieldLabel}>Full name</Text>
-              <View
-                style={styles.inputWrap}
-                onLayout={(e) => { fieldYRef.current.callsign = e.nativeEvent.layout.y; }}
-              >
+              <View style={styles.inputWrap}>
                 <TextInput
                   style={styles.input}
                   placeholder="Your name"
@@ -833,10 +854,7 @@ export default function DriverSignUpScreen() {
             </View>
             <View style={styles.inputGroup}>
               <Text style={styles.fieldLabel}>Email</Text>
-              <View
-                style={styles.inputWrap}
-                onLayout={(e) => { fieldYRef.current.email = e.nativeEvent.layout.y; }}
-              >
+              <View style={styles.inputWrap}>
                 <TextInput
                   style={styles.input}
                   placeholder="you@example.com"
@@ -858,10 +876,7 @@ export default function DriverSignUpScreen() {
             </View>
             <View style={styles.inputGroup}>
               <Text style={styles.fieldLabel}>Password</Text>
-              <View
-                style={[styles.inputWrap, styles.passwordRow]}
-                onLayout={(e) => { fieldYRef.current.password = e.nativeEvent.layout.y; }}
-              >
+              <View style={[styles.inputWrap, styles.passwordRow]}>
                 <TextInput
                   style={styles.inputPassword}
                   placeholder="At least 6 characters"
@@ -895,10 +910,7 @@ export default function DriverSignUpScreen() {
             </View>
             <View style={styles.inputGroup}>
               <Text style={styles.fieldLabel}>Confirm password</Text>
-              <View
-                style={[styles.inputWrap, styles.passwordRow]}
-                onLayout={(e) => { fieldYRef.current.confirmPassword = e.nativeEvent.layout.y; }}
-              >
+              <View style={[styles.inputWrap, styles.passwordRow]}>
                 <TextInput
                   style={styles.inputPassword}
                   placeholder="Re-enter your password"
@@ -938,12 +950,12 @@ export default function DriverSignUpScreen() {
             >
               <Text style={styles.primaryBtnText}>Next</Text>
             </TouchableOpacity>
-          </View>
-        </View>
+          </>
+        ))}
 
         {/* Step 4: Driving license */}
-        <View style={[styles.page, { width: pageWidth }]}>
-          <View style={styles.pageContent}>
+        {pageBody(3, (
+          <>
             <Text style={styles.mainTitle}>{STEP_CONTENT[3].title}</Text>
             <Text style={styles.subTitle}>{STEP_CONTENT[3].subtitle}</Text>
             <View style={styles.docActionsWrap}>
@@ -997,12 +1009,12 @@ export default function DriverSignUpScreen() {
                 <Text style={styles.tryAgainText}>Skip for now</Text>
               </TouchableOpacity>
             ) : null}
-          </View>
-        </View>
+          </>
+        ))}
 
         {/* Step 5: Aadhaar */}
-        <View style={[styles.page, { width: pageWidth }]}>
-          <View style={styles.pageContent}>
+        {pageBody(4, (
+          <>
             <Text style={styles.mainTitle}>{STEP_CONTENT[4].title}</Text>
             <Text style={styles.subTitle}>{STEP_CONTENT[4].subtitle}</Text>
             <View style={styles.docActionsWrap}>
@@ -1056,12 +1068,12 @@ export default function DriverSignUpScreen() {
                 <Text style={styles.tryAgainText}>Skip for now</Text>
               </TouchableOpacity>
             ) : null}
-          </View>
-        </View>
+          </>
+        ))}
 
         {/* Step 6: PAN */}
-        <View style={[styles.page, { width: pageWidth }]}>
-          <View style={styles.pageContent}>
+        {pageBody(5, (
+          <>
             <Text style={styles.mainTitle}>{STEP_CONTENT[5].title}</Text>
             <Text style={styles.subTitle}>{STEP_CONTENT[5].subtitle}</Text>
             <View style={styles.docActionsWrap}>
@@ -1115,12 +1127,12 @@ export default function DriverSignUpScreen() {
                 <Text style={styles.tryAgainText}>Skip for now</Text>
               </TouchableOpacity>
             ) : null}
-          </View>
-        </View>
+          </>
+        ))}
 
         {/* Step 7: Avatar */}
-        <View style={[styles.page, { width: pageWidth }]}>
-          <View style={styles.pageContent}>
+        {pageBody(6, (
+          <>
             <Text style={styles.mainTitle}>{STEP_CONTENT[6].title}</Text>
             <Text style={styles.subTitle}>{STEP_CONTENT[6].subtitle}</Text>
             <View style={styles.avatarPreviewWrap}>
@@ -1151,12 +1163,12 @@ export default function DriverSignUpScreen() {
                 <Text style={styles.primaryBtnText}>Create account</Text>
               )}
             </TouchableOpacity>
-          </View>
-        </View>
+          </>
+        ))}
 
         {/* Step 8: Success */}
-        <View style={[styles.page, { width: pageWidth }]}>
-          <View style={styles.pageContent}>
+        {pageBody(7, (
+          <>
             <View style={styles.crownWrap}>
               <FontAwesome name="trophy" size={48} color={LIGHT.accent} />
             </View>
@@ -1165,8 +1177,8 @@ export default function DriverSignUpScreen() {
             <TouchableOpacity style={styles.primaryBtn} onPress={initializeHub} activeOpacity={0.8}>
               <Text style={styles.primaryBtnText}>Go to app</Text>
             </TouchableOpacity>
-          </View>
-        </View>
+          </>
+        ))}
       </ScrollView>
 
       <Modal
@@ -1261,6 +1273,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 24,
     justifyContent: 'flex-start',
+  },
+  pageInnerScroll: {
+    flex: 1,
+  },
+  pageInnerScrollContent: {
+    flexGrow: 1,
   },
   pageContent: {
     maxWidth: 360,
