@@ -1279,6 +1279,14 @@ export function useTripDetail({
         totalPoints: effectivePoints.length,
         last3: last3.map((p) => ({ lat: p.latitude, lon: p.longitude, at: p.recorded_at })),
       });
+      console.log(
+        '[tracking] driver_locations lat/lon from DB (all points for this fetch)',
+        effectivePoints.map((p) => ({
+          latitude: p.latitude,
+          longitude: p.longitude,
+          recorded_at: p.recorded_at,
+        })),
+      );
     } catch (err) {
       console.warn('[tracking] fetchDriverLocation error', { tripId: trip.id, err });
     } finally {

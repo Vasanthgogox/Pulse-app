@@ -121,6 +121,8 @@ export interface TripMapProps {
   destCoords?: { latitude: number; longitude: number } | null;
   truckLocation?: { latitude: number; longitude: number } | null;
   truckStatus?: { truckNo?: string; speed?: number; ignitionStatus?: boolean; location?: string; lastUpdated?: string } | null;
+  /** GPS pings from `driver_locations` (chronological). Shown as dots on top of the road route. */
+  dbLocationTrail?: { latitude: number; longitude: number; recorded_at?: string }[];
   intermediateStops?: string[];
   /** Pixel height or a CSS height string (e.g. `"100%"`) to fill the parent. */
   height?: number | string;
@@ -131,6 +133,7 @@ export interface TripMapProps {
 export function TripMap({
   source, destination, sourceCoords, destCoords,
   truckLocation, truckStatus,
+  dbLocationTrail = [],
   intermediateStops = [],
   height,
   onDistanceCalculated,
@@ -307,6 +310,53 @@ export function TripMap({
         truckMarker.addTo(map);
       }
 
+      // ── DB GPS trail (driver_locations) — dots only; brought to front after road route ──
+      let dbTrailLeafletLayer: import('leaflet').LayerGroup | null = null;
+      const validTrailPoints = (Array.isArray(dbLocationTrail) ? dbLocationTrail : []).filter((p) =>
+        isValidCoordinatePair(p),
+      );
+      if (validTrailPoints.length > 0) {
+        if (typeof __DEV__ !== 'undefined' && __DEV__) {
+          console.log(
+            '[TripMap] DB driver_locations lat/lon (rendered on map)',
+            validTrailPoints.map((p, i) => ({
+              i,
+              lat: p.latitude,
+              lon: p.longitude,
+              recorded_at: p.recorded_at ?? null,
+            })),
+          );
+        }
+        const trailGroup = L.layerGroup();
+        validTrailPoints.forEach((p, idx) => {
+          L.circleMarker([p.latitude, p.longitude], {
+            radius: 6,
+            fillColor: '#fb923c',
+            color: '#c2410c',
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.95,
+          })
+            .bindPopup(
+              `<div style="font-family:system-ui,sans-serif;font-size:12px;padding:4px;"><strong>GPS ping ${idx + 1}</strong><br/><span style="color:#64748b;">${p.recorded_at ? new Date(p.recorded_at).toLocaleString() : '—'}</span><br/><code style="font-size:11px;">${p.latitude.toFixed(5)}, ${p.longitude.toFixed(5)}</code></div>`,
+            )
+            .addTo(trailGroup);
+        });
+        trailGroup.addTo(map);
+        dbTrailLeafletLayer = trailGroup;
+      }
+
+      const bringDbTrailToFront = () => {
+        if (!dbTrailLeafletLayer) return;
+        try {
+          if (typeof dbTrailLeafletLayer.bringToFront === 'function') {
+            dbTrailLeafletLayer.bringToFront();
+          }
+        } catch {
+          /* map may be torn down */
+        }
+      };
+
       // ── Road routing via routingService.ts (OSRM → Netlify proxy → Mapbox → Google) ──
       const isMapReadyForDrawing = () => {
         if (unmountedRef.current) return false;
@@ -344,6 +394,7 @@ export function TripMap({
             opacity: 0.7,
             dashArray: '10, 10',
           }).addTo(map);
+          bringDbTrailToFront();
         } catch {
           // Map can be torn down while async routing callbacks are still in flight.
         }
@@ -382,6 +433,7 @@ export function TripMap({
                   lineCap: 'round',
                   lineJoin: 'round',
                 }).addTo(map);
+                bringDbTrailToFront();
                 onDistanceCalculated?.((totalDistM / 1000).toFixed(1));
               } catch {
                 // Map torn down
@@ -399,6 +451,9 @@ export function TripMap({
       const boundsCoords: [number, number][] = [srcCoords, dstCoords, ...stopCoords.map((s) => s.coords)];
       if (isValidCoordinatePair(truckLocation)) {
         boundsCoords.push([truckLocation.latitude, truckLocation.longitude]);
+      }
+      for (const p of validTrailPoints) {
+        boundsCoords.push([p.latitude, p.longitude]);
       }
       map.fitBounds(boundsCoords as any, { padding: [50, 50], maxZoom: 15, animate: false });
 
@@ -490,6 +545,7 @@ export function TripMap({
     destCoords?.latitude, destCoords?.longitude,
     source, destination,
     truckLocation?.latitude, truckLocation?.longitude,
+    dbLocationTrail.map((p) => `${p.latitude},${p.longitude},${p.recorded_at ?? ''}`).join('|'),
   ]);
 
   const containerHeightStyle =
