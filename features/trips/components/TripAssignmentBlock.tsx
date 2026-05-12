@@ -51,6 +51,7 @@ import {
 } from "react";
 import {
     Alert,
+    Keyboard,
     Modal,
     Platform,
     ScrollView,
@@ -207,6 +208,17 @@ export function TripAssignmentBlock({
   const otpLockedByTripProgress = ["in_progress", "in_transit"].includes(
     String(trip.status ?? "").toLowerCase(),
   );
+
+  /** When trip can no longer be edited (completed, view-only, etc.), drop focus and tear down pickers/modals. */
+  useEffect(() => {
+    if (!effectiveCanAssign) {
+      Keyboard.dismiss();
+      closeAssignModal();
+      setShowPhoneModal(false);
+      setPhoneAssignOtpReveal(null);
+      setShowPicker(false);
+    }
+  }, [effectiveCanAssign, closeAssignModal]);
 
   useEffect(() => {
     setPickDriverId(trip.driver_id);

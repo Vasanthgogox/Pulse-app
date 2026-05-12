@@ -1336,6 +1336,20 @@ export async function updateTripAssignment(
   data: UpdateTripAssignmentData,
   options?: UpdateTripAssignmentOptions,
 ): Promise<{ error: Error | null; trip: TripRow | null }> {
+  const { data: tripGate, error: tripGateError } = await supabase()
+    .from("trips")
+    .select("id, status, completed_at")
+    .eq("id", tripId)
+    .maybeSingle();
+  if (tripGateError) return { error: new Error(tripGateError.message), trip: null };
+  if (!tripGate) return { error: new Error("Trip not found"), trip: null };
+  if (isTripCompleted(tripGate as Pick<TripRow, "status" | "completed_at">)) {
+    return {
+      error: new Error("Cannot change driver or vehicle after the trip is completed."),
+      trip: null,
+    };
+  }
+
   if (data.driver_id != null) {
     const { error: conflictCheckError, trip: ongoingTrip } =
       await getDriverOngoingTrip(data.driver_id, tripId);

@@ -60,6 +60,7 @@ import {
 import { regenerateTripOtp } from "../../services/tripOtp.service";
 import {
     getTripDisplayNumber,
+    isTripCompleted,
     updateTripStatus,
     type TripRow,
 } from "../../services/trips.service";
@@ -322,6 +323,14 @@ export default function TripDetailScreen({
     clientNameFromContext,
     onBack,
   });
+
+  useEffect(() => {
+    const tr = detail.trip;
+    if (!tr) return;
+    if (!detail.canAssign || isTripCompleted(tr)) {
+      setShowAssignmentManager(false);
+    }
+  }, [detail.trip, detail.canAssign]);
 
   const goToVehicleGalleryIndex = useCallback(
     (nextIndex: number, animated = true) => {
@@ -1144,10 +1153,9 @@ export default function TripDetailScreen({
     }
   };
 
-  const isTripCompleted =
-    String(trip.status ?? "").toLowerCase() === "completed" ||
-    !!trip.completed_at;
-  const effectiveStatusLower = isTripCompleted
+  const tripCompleted = isTripCompleted(trip);
+  const canChangeManifestAssets = detail.canAssign && !tripCompleted;
+  const effectiveStatusLower = tripCompleted
     ? "completed"
     : String(trip.status ?? "assigned").toLowerCase();
   const hasAnyAssignment =
@@ -2278,19 +2286,19 @@ export default function TripDetailScreen({
                 <View style={styles.refDeliveredCard}>
                   <View>
                     <Text style={styles.refDeliveredLabel}>
-                      {isTripCompleted
+                      {tripCompleted
                         ? "Final Audit Status"
                         : "Current Status"}
                     </Text>
                     <Text style={styles.refDeliveredValue}>
-                      {isTripCompleted
+                      {tripCompleted
                         ? "DELIVERED SUCCESSFULLY"
                         : currentStatusLabel}
                     </Text>
                   </View>
                   <View style={styles.refDeliveredIconWrap}>
                     <FontAwesome
-                      name={isTripCompleted ? "check-circle" : "clock-o"}
+                      name={tripCompleted ? "check-circle" : "clock-o"}
                       size={20}
                       color="#fff"
                     />
@@ -2889,7 +2897,7 @@ export default function TripDetailScreen({
                         <Text style={neoStyles.cardTitleDark}>
                           Manifest Pulse
                         </Text>
-                        {nextSimulateStep && !isTripCompleted ? (
+                        {nextSimulateStep && !tripCompleted ? (
                           <TouchableOpacity
                             style={neoStyles.simBtn}
                             onPress={() => setSimConfirmStep(nextSimulateStep)}
@@ -3649,13 +3657,15 @@ export default function TripDetailScreen({
                           </Text>
                         </View>
                       </View>
-                      <TouchableOpacity
-                        onPress={() => setShowAssignmentManager(true)}
-                        style={neoStyles.assetChangeBtn}
-                        activeOpacity={0.85}
-                      >
-                        <Text style={neoStyles.assetChangeText}>Change</Text>
-                      </TouchableOpacity>
+                      {canChangeManifestAssets ? (
+                        <TouchableOpacity
+                          onPress={() => setShowAssignmentManager(true)}
+                          style={neoStyles.assetChangeBtn}
+                          activeOpacity={0.85}
+                        >
+                          <Text style={neoStyles.assetChangeText}>Change</Text>
+                        </TouchableOpacity>
+                      ) : null}
                     </View>
                     <View style={neoStyles.assetCard}>
                       <View style={neoStyles.assetLeft}>
@@ -3673,13 +3683,15 @@ export default function TripDetailScreen({
                           </Text>
                         </View>
                       </View>
-                      <TouchableOpacity
-                        onPress={() => setShowAssignmentManager(true)}
-                        style={neoStyles.assetChangeBtn}
-                        activeOpacity={0.85}
-                      >
-                        <Text style={neoStyles.assetChangeText}>Change</Text>
-                      </TouchableOpacity>
+                      {canChangeManifestAssets ? (
+                        <TouchableOpacity
+                          onPress={() => setShowAssignmentManager(true)}
+                          style={neoStyles.assetChangeBtn}
+                          activeOpacity={0.85}
+                        >
+                          <Text style={neoStyles.assetChangeText}>Change</Text>
+                        </TouchableOpacity>
+                      ) : null}
                     </View>
                   </View>
                 </View>

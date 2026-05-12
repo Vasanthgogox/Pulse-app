@@ -33,13 +33,14 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
   const [currentOrganization, setCurrentOrganization] = useState<CurrentOrganization | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const mountedRef = useRef(true);
+  /** Current effect session signal — refresh uses this ref so sign-out / user swap cancels in-flight work (no shared mountedRef race). */
+  const sessionSignalRef = useRef<{ cancelled: boolean }>({ cancelled: false });
   const userRef = useRef(user);
   userRef.current = user;
 
-  /** `signal.cancelled` is flipped only by useEffect cleanup (per user session). Manual refresh passes `{ cancelled: false }` and relies on userRef + mountedRef after await. */
+  /** `signal.cancelled` is set in effect cleanup (user change, unmount). Refresh uses `sessionSignalRef` so it honours the same cancellation. */
   const loadOrganizationsForSession = useCallback(async (signal: { cancelled: boolean }) => {
-    const stale = () => signal.cancelled || !mountedRef.current;
+    const stale = () => signal.cancelled;
     const staleForUser = (uid: string) => stale() || userRef.current?.uid !== uid;
 
     const sessionUser = userRef.current;
@@ -78,16 +79,15 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshOrganization = useCallback(async () => {
-    await loadOrganizationsForSession({ cancelled: false });
+    await loadOrganizationsForSession(sessionSignalRef.current);
   }, [loadOrganizationsForSession]);
 
   useEffect(() => {
     const signal = { cancelled: false };
-    mountedRef.current = true;
+    sessionSignalRef.current = signal;
     void loadOrganizationsForSession(signal);
     return () => {
       signal.cancelled = true;
-      mountedRef.current = false;
     };
   }, [user, loadOrganizationsForSession]);
 
