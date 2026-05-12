@@ -4402,6 +4402,7 @@ function TripConversationDetailLoaded({
       />
       <DynamicTripIsland
         currentTripId={liveConv.trip_id}
+        isDesktop={isDesktop}
         onNavigateTrip={handleIslandNavigateTrip}
         onReplyShortcut={() => {
           messagesRef.current?.scrollToEnd({ animated: true });

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import {
   LayoutAnimation,
   Platform,
@@ -101,6 +102,8 @@ function pickQuickEvents(events: ActiveTripRecentEvent[] | undefined): ActiveTri
 export interface DynamicTripIslandProps {
   /** Currently open trip — used to label context, not for data fetch. */
   currentTripId: string;
+  /** Wide chat layout: island is redundant with header + mission bar — skip work and render nothing. */
+  isDesktop?: boolean;
   onNavigateTrip: (tripId: string) => void;
   onReplyShortcut?: () => void;
 }
@@ -111,6 +114,7 @@ export interface DynamicTripIslandProps {
  */
 export function DynamicTripIsland({
   currentTripId,
+  isDesktop = false,
   onNavigateTrip,
   onReplyShortcut,
 }: DynamicTripIslandProps) {
@@ -119,9 +123,14 @@ export function DynamicTripIsland({
   const orgId = org?.currentOrganization?.id ?? null;
   const activeTrips = useGlobalSyncStore((s) => s.activeTrips);
   const clientRibbon = useGlobalSyncStore((s) => s.clientOperationsRibbon);
-  const chatTrips = useChatStore((s) => s.trips);
-  const pendingTripFeedback = useChatStore((s) =>
-    tripHasPendingOrgFeedback(s.trips, currentTripId, orgId),
+  const { chatTrips, pendingTripFeedback } = useChatStore(
+    useShallow((s) => {
+      const trips = s.trips;
+      return {
+        chatTrips: trips,
+        pendingTripFeedback: tripHasPendingOrgFeedback(trips, currentTripId, orgId),
+      };
+    }),
   );
   const chatEntryForCurrent = currentTripId ? chatTrips[currentTripId] : undefined;
   const completedNeedsRate =
@@ -134,6 +143,7 @@ export function DynamicTripIsland({
     );
 
   const ranked = useMemo(() => {
+    if (isDesktop) return [];
     const byId = new Map<string, ActiveTripSummary>();
     for (const t of activeTrips) {
       if (!isTerminalTripStatus(t.status)) byId.set(t.trip_id, t);
@@ -167,8 +177,23 @@ export function DynamicTripIsland({
         recent_events:           [],
       });
     }
-    return rankActiveTripsForIsland([...byId.values()]);
-  }, [activeTrips, orgId, currentTripId, completedNeedsRate, chatEntryForCurrent, chatTrips]);
+    const sorted = rankActiveTripsForIsland([...byId.values()]);
+    if (!orgId) return sorted;
+    // Drop terminal trips once this org has no pending debrief (rated / not applicable).
+    return sorted.filter(
+      (t) =>
+        !isTerminalTripStatus(t.status) ||
+        tripHasPendingOrgFeedback(chatTrips, t.trip_id, orgId),
+    );
+  }, [
+    isDesktop,
+    activeTrips,
+    orgId,
+    currentTripId,
+    completedNeedsRate,
+    chatEntryForCurrent,
+    chatTrips,
+  ]);
 
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [expanded, setExpanded] = useState(false);

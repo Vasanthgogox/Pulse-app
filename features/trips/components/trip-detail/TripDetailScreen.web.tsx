@@ -3129,11 +3129,16 @@ export default function TripDetailScreen({
                           destCoords={
                             detail.trackingMapDestinationCoordinate ?? undefined
                           }
-                          truckLocation={detail.driverLocation ?? undefined}
+                          truckLocation={
+                            detail.tripCompleted
+                              ? undefined
+                              : (detail.driverLocation ?? undefined)
+                          }
                           dbLocationTrail={detail.tripLocationPoints}
                           truckStatus={
-                            detail.driverLocation
-                              ? {
+                            detail.tripCompleted || !detail.driverLocation
+                              ? null
+                              : {
                                   truckNo: allocatedVehicleLabel,
                                   speed: 0,
                                   ignitionStatus: false,
@@ -3143,7 +3148,6 @@ export default function TripDetailScreen({
                                   lastUpdated:
                                     detail.driverLocation.recorded_at,
                                 }
-                              : null
                           }
                           height="100%"
                           onDistanceCalculated={setMapRouteDistanceKm}
@@ -3865,7 +3869,11 @@ export default function TripDetailScreen({
                     destCoords={
                       detail.trackingMapDestinationCoordinate ?? undefined
                     }
-                    truckLocation={detail.driverLocation ?? undefined}
+                    truckLocation={
+                      detail.tripCompleted
+                        ? undefined
+                        : (detail.driverLocation ?? undefined)
+                    }
                     dbLocationTrail={detail.tripLocationPoints}
                     height={mapHeight}
                     onDistanceCalculated={setMapRouteDistanceKm}
@@ -4324,7 +4332,11 @@ export default function TripDetailScreen({
                           destCoords={
                             detail.trackingMapDestinationCoordinate ?? undefined
                           }
-                          truckLocation={detail.driverLocation ?? undefined}
+                          truckLocation={
+                            detail.tripCompleted
+                              ? undefined
+                              : (detail.driverLocation ?? undefined)
+                          }
                           dbLocationTrail={detail.tripLocationPoints}
                           height={520}
                           onDistanceCalculated={setMapRouteDistanceKm}
