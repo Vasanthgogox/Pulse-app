@@ -221,18 +221,25 @@ export function ShareLoadSheet({
     const storyUrl = buildPulseStoryPublicUrl(successPostId, orgId, 'LOAD');
     const routeLabel = `${(indent.pickup_area || '—').toUpperCase()} → ${(indent.drop_location || '—').toUpperCase()}`;
     const message = `Load broadcast · ${routeLabel}\n\nView & bid:\n${storyUrl}`;
+    const encoded = encodeURIComponent(message);
+    const waWeb = `https://wa.me/?text=${encoded}`;
+    const waNative = `whatsapp://send?text=${encoded}`;
     try {
-      const waUrl = `whatsapp://send?text=${encodeURIComponent(message)}`;
-      const canOpen = await Linking.canOpenURL(waUrl);
-      if (canOpen) {
-        await Linking.openURL(waUrl);
-      } else if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(storyUrl, { dialogTitle: message });
-      } else {
-        await Sharing.shareAsync(storyUrl, { dialogTitle: message });
+      if (Platform.OS === 'web') {
+        await Linking.openURL(waWeb);
+        return;
       }
+      // iOS: canOpenURL is false unless whatsapp is in LSApplicationQueriesSchemes — fall back to wa.me.
+      const canNative = await Linking.canOpenURL(waNative);
+      await Linking.openURL(canNative ? waNative : waWeb);
     } catch {
-      await Sharing.shareAsync(storyUrl, { dialogTitle: message });
+      try {
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(storyUrl, { dialogTitle: message });
+        }
+      } catch {
+        // ignore
+      }
     }
   }, [indent, successPostId, orgId]);
 

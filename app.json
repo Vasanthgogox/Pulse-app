@@ -17,6 +17,7 @@
       "bundleIdentifier": "com.qmobile.app",
       "supportsTablet": true,
       "infoPlist": {
+        "LSApplicationQueriesSchemes": ["whatsapp"],
         "UIBackgroundModes": ["location"],
         "NSLocationWhenInUseUsageDescription": "Driver location is used for live trip tracking.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Location tracking continues during trips even when the app is in background.",

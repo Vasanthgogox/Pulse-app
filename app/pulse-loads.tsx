@@ -51,7 +51,7 @@ export default function PulseLoadsScreen() {
         onSuccess={() => {
           invalidatePosts();
           invalidateNetwork();
-          setShareLoad(null);
+          // Keep sheet open so the success step + "Share on WhatsApp" stay usable; user closes with ✕.
         }}
       />
     </View>
