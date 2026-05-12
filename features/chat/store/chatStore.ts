@@ -26,6 +26,7 @@ import {
   useChatStore,
   tripEntryToMeta,
   previewText,
+  resolveChatFlow,
   type TripEntry,
   type PartyConv,
 } from './useChatStore';
@@ -44,6 +45,12 @@ import { dedupeTripStatusBroadcastsForLane } from '../utils/dedupeTripStatusBroa
 let _snapshotCache: TripConversation[] | null = null;
 let _tripsSnapshot: Record<string, TripEntry> | null = null;
 
+function partyLanesForTripEntry(entry: TripEntry): [ConversationPartyType, PartyConv][] {
+  const rows = Object.entries(entry.parties) as [ConversationPartyType, PartyConv][];
+  if (entry.chatFlow === "private_trip") return rows.filter(([pt]) => pt === "driver");
+  return rows;
+}
+
 function _buildSnapshot(): TripConversation[] {
   const { trips } = useChatStore.getState();
   if (trips === _tripsSnapshot && _snapshotCache !== null) return _snapshotCache;
@@ -51,7 +58,7 @@ function _buildSnapshot(): TripConversation[] {
 
   const result: TripConversation[] = [];
   for (const entry of Object.values(trips)) {
-    for (const [pt, party] of Object.entries(entry.parties) as [ConversationPartyType, PartyConv][]) {
+    for (const [pt, party] of partyLanesForTripEntry(entry)) {
       result.push(_convFromEntry(entry, pt, party));
     }
   }
@@ -116,6 +123,8 @@ function _convFromEntry(
     drop_location:           entry.dropLocation,
     trip_feedback_status:   party.feedbackStatus ?? "none",
     trip_organization_id:   entry.tripOrganizationId ?? null,
+    indent_id:               entry.indentId ?? null,
+    conversation_type:     entry.chatFlow,
     messages,
   };
 }
@@ -341,8 +350,7 @@ export function useConversationsByTrip(tripId: string | null): TripConversation[
       const s     = useChatStore.getState();
       const entry = s.trips[tripId];
       if (!entry) return prevRef.current.length === 0 ? prevRef.current : (prevRef.current = []);
-      const next = (Object.entries(entry.parties) as [ConversationPartyType, PartyConv][])
-        .map(([pt, party]) => _convFromEntry(entry, pt, party));
+      const next = partyLanesForTripEntry(entry).map(([pt, party]) => _convFromEntry(entry, pt, party));
       const prev = prevRef.current;
       if (next.length === prev.length && next.every((c, i) => c.id === prev[i]?.id)) return prev;
       prevRef.current = next;

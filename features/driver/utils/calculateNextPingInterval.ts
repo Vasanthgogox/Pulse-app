@@ -1,15 +1,19 @@
 import { supabase } from "@/lib/supabase";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import { getOptimalRoute } from "@/services/routingService";
+import {
+  LONG_HAUL_STANDARD_PINGS,
+  STRETCH_PING_INTERVAL_MS,
+  isRunningLateHealthStatus,
+  standardHeartbeatIntervalMs,
+  type LongHaulHealthStatus,
+} from "./long_haul_heartbeat.util";
 
-/** Standard long-haul budget before stretch mode (3h cadence). */
-export const LONG_HAUL_STANDARD_PINGS = 12;
-
-/** After 12 checkpoints, continue reporting every 3h until trip completes / geofence (handled client-side). */
-export const STRETCH_PING_INTERVAL_MS = 3 * 60 * 60 * 1000;
-
-const MIN_INTERVAL_MS = 2 * 60 * 1000;
-const MAX_INTERVAL_MS = 6 * 60 * 60 * 1000;
+export {
+  LONG_HAUL_STANDARD_PINGS,
+  STRETCH_PING_INTERVAL_MS,
+  type LongHaulHealthStatus,
+} from "./long_haul_heartbeat.util";
 
 const DEFAULT_ETA_MS = 48 * 60 * 60 * 1000;
 
@@ -39,8 +43,6 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): nu
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 }
-
-export type LongHaulHealthStatus = "ON_TRACK" | "LATE_RISK" | "CRITICAL_DELAY" | string;
 
 function parseTripDistanceKm(distance: unknown): number | null {
   if (distance == null) return null;
@@ -138,19 +140,13 @@ export interface CalculateNextPingIntervalArgs {
 }
 
 /**
- * Interval = total ETA / remaining pings; halve when health is `LATE_RISK` (ping more often).
- * Stretch mode fixes cadence at 3 hours.
+ * 12-ping pacing: spread ETA across remaining checkpoints when on track; **3h** when late
+ * (LATE_RISK / CRITICAL_DELAY / RUNNING_LATE); stretch mode = {@link STRETCH_PING_INTERVAL_MS}.
  */
 export function calculateNextPingInterval(args: CalculateNextPingIntervalArgs): number {
   if (args.stretchMode) return STRETCH_PING_INTERVAL_MS;
-  const total = Number.isFinite(args.totalEtaMs) && args.totalEtaMs > 0 ? args.totalEtaMs : DEFAULT_ETA_MS;
-  const remaining = Math.max(1, Math.floor(args.remainingPings));
-  let interval = total / remaining;
-  const h = String(args.healthStatus ?? "").trim().toUpperCase();
-  if (h === "LATE_RISK") interval *= 0.5;
-  if (!Number.isFinite(interval) || interval < MIN_INTERVAL_MS) return MIN_INTERVAL_MS;
-  if (interval > MAX_INTERVAL_MS) return MAX_INTERVAL_MS;
-  return Math.round(interval);
+  if (isRunningLateHealthStatus(args.healthStatus)) return 3 * 60 * 60 * 1000;
+  return standardHeartbeatIntervalMs(args.totalEtaMs, args.remainingPings);
 }
 
 export async function fetchLongHaulHealthStatus(tripId: string): Promise<LongHaulHealthStatus | null> {

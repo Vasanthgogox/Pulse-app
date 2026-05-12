@@ -53,7 +53,7 @@ const styles = StyleSheet.create({
   bar: {
     position: 'absolute',
     top: 0,
-    left: Layout.liveOpsShelfWidth,
+    left: 0,
     right: 0,
     zIndex: 250,
     paddingTop: 10,

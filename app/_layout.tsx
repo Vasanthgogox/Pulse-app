@@ -1,4 +1,4 @@
-import { AlertSidebar } from '@/components/AlertSidebar';
+import { OperationsNotificationBell } from '@/components/OperationsNotificationBell';
 import { AppAlertHost } from '@/components/AppAlertHost';
 import { GlobalOperationsToast } from '@/components/GlobalOperationsToast';
 import { OperationsIsland } from '@/components/OperationsIsland';
@@ -327,12 +327,11 @@ function RootLayoutNav() {
       <DemoTabBarScrollProvider>
         <TripChatProvider isActive={isDispatcherChatRouteActive}>
           <IntegratedChatProvider isActive={isDispatcherChatRouteActive}>
-            <View style={{ flex: 1, flexDirection: 'row' }}>
-              {isDesktopWeb ? <AlertSidebar /> : null}
-              <View style={{ flex: 1 }}>
+            <View style={{ flex: 1 }}>
                 <GlobalOperationsToast />
                 <AppAlertHost />
                 <OperationsIsland />
+                {isDesktopWeb ? <OperationsNotificationBell /> : null}
                 <Stack screenOptions={{ headerShown: false }}>
                   <Stack.Screen name="index" />
                   <Stack.Screen name="welcome" options={{ animation: 'fade' }} />
@@ -353,7 +352,6 @@ function RootLayoutNav() {
                 </Stack>
                 <RootOverlayTabBar />
                 {isDesktopWeb ? <FloatingChatButton /> : null}
-              </View>
             </View>
           </IntegratedChatProvider>
         </TripChatProvider>

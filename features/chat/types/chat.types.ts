@@ -1,4 +1,7 @@
 export type ConversationPartyType = "client" | "supplier" | "driver";
+
+/** B2B integrated indent+trip (3-party) vs employer–driver private trip chat. */
+export type ChatTripFlow = "integrated_group" | "private_trip";
 export type MessageSenderRole = "dispatcher" | "client" | "supplier" | "driver" | "system";
 
 /** WhatsApp-style local delivery / read state (outgoing bubbles + optimistic sends). */
@@ -25,11 +28,15 @@ export type MessageType =
   | "feedback"       // alias for feedback_request
   | "image"          // inline image (storage path in metadata.storage_path)
   | "status_change"  // trip lifecycle event (metadata: StatusChangeMetadata)
-  | "tracking";      // live location/ETA push (metadata: TrackingMetadata)
+  | "tracking"       // live location/ETA push (metadata: TrackingMetadata)
+  /** Driver long-haul checkpoint written to trip_messages (operational lane only). */
+  | "location_log";
 
 // ── Ledger event metadata ─────────────────────────────────────────────────────
 
 export interface LedgerEventMetadata {
+  /** Privacy shield: ledger UI only for these party lanes (never driver). */
+  visible_to?: ("client" | "supplier")[];
   transaction_id: string;
   amount: number;
   flow: "in" | "out";
@@ -158,6 +165,8 @@ export const MESSAGE_VISIBILITY: Partial<Record<MessageType, ConversationPartyTy
   feedback:         ['client', 'supplier'],
   document_upload:  ['client', 'supplier', 'driver'],
   assignment_update: ['client', 'supplier', 'driver'],
+  /** Operational pings — driver thread / live ops island. */
+  location_log: ['driver'],
 };
 
 /**
@@ -256,11 +265,17 @@ export type TripFeedbackLaneStatus = 'none' | 'pending' | 'rated';
 // ── Trip conversation ─────────────────────────────────────────────────────────
 
 export interface TripConversationRow {
+  /** From unified bootstrap: `integrated_group` if trip has indent; else private employer–driver. */
+  conversation_type?: ChatTripFlow;
   id: string;
   organization_id: string;
   /** Trip owner fleet org (`trips.organization_id`); may differ from `organization_id` on mirrored lanes. */
   trip_organization_id?: string | null;
   trip_id: string;
+  /** From `trips.indent_id` at bootstrap — commercial lane key for ledger isolation. */
+  indent_id?: string | null;
+  /** From `indents.status` when trip.indent_id is set (unified bootstrap). */
+  indent_status?: string | null;
   party_type: ConversationPartyType;
   party_name: string;
   client_id: string | null;

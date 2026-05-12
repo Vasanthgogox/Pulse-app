@@ -6,6 +6,17 @@ function parseTs(iso: string | undefined | null): number {
   return Number.isFinite(t) ? t : 0;
 }
 
+function lastLocationLogTs(trip: ActiveTripSummary): number {
+  const ev = trip.recent_events ?? [];
+  let best = 0;
+  for (const e of ev) {
+    if (e.message_type !== "location_log") continue;
+    const ts = parseTs(e.created_at);
+    if (ts > best) best = ts;
+  }
+  return best;
+}
+
 /** Newest `system_log` timestamp in bootstrap `recent_events` (ASC order). */
 function lastSystemLogTs(trip: ActiveTripSummary): number {
   const ev = trip.recent_events ?? [];
@@ -43,9 +54,10 @@ function lastEventTs(trip: ActiveTripSummary): number {
 export function activeTripIslandSignalTs(trip: ActiveTripSummary): number {
   const loc = parseTs(trip.last_known_location?.recorded_at);
   const sys = lastSystemLogTs(trip);
+  const locLog = lastLocationLogTs(trip);
   const unreadTs = trip.total_unread > 0 ? Math.max(lastUnreadEventTs(trip), lastEventTs(trip)) : 0;
   const clientBump = parseTs(trip.client_activity_at);
-  return Math.max(loc, sys, unreadTs, clientBump);
+  return Math.max(loc, sys, locLog, unreadTs, clientBump);
 }
 
 /** Non-terminal trips first (callers pass pre-filtered list), then strongest signal. */

@@ -9,6 +9,7 @@ import {
   fetchLongHaulHealthStatus,
   resolveTotalEtaMsForAdaptivePing,
 } from "@/features/driver/utils/calculateNextPingInterval";
+import { isTripStatusEligibleForLongHaulPings } from "@/features/driver/utils/long_haul_heartbeat.util";
 
 export interface AdaptiveTripLocationPingLoopParams {
   driver: { id: string; organization_id: string } | null;
@@ -34,11 +35,6 @@ export interface AdaptiveTripLocationPingLoopParams {
     accuracy: number | null;
     position: { coords: { latitude: number; longitude: number; heading?: number | null } };
   }) => void;
-}
-
-function isInTransitForPacing(status: string | null | undefined): boolean {
-  const s = String(status ?? "").toLowerCase().trim();
-  return s === "in_transit" || s === "transit" || s === "picked_up";
 }
 
 /**
@@ -174,7 +170,7 @@ export function useAdaptiveTripLocationPingLoop(params: AdaptiveTripLocationPing
         }
 
         let health = healthRef.current;
-        if (isInTransitForPacing(trip.status)) {
+        if (isTripStatusEligibleForLongHaulPings(trip.status)) {
           const h = await fetchLongHaulHealthStatus(trip.id);
           if (!cancelled && h) healthRef.current = h;
           if (h) health = h;
@@ -205,7 +201,7 @@ export function useAdaptiveTripLocationPingLoop(params: AdaptiveTripLocationPing
           const saved = ok !== false;
           if (saved) {
             lastSentRef.current = { lat: latitude, lng: longitude };
-            if (isInTransitForPacing(trip.status)) {
+            if (isTripStatusEligibleForLongHaulPings(trip.status)) {
               pingsUsedRef.current += 1;
               if (pingsUsedRef.current >= LONG_HAUL_STANDARD_PINGS) {
                 stretchRef.current = true;

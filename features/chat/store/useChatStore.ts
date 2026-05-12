@@ -35,9 +35,10 @@
 
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import { getUnifiedB2BChatBootstrap } from '../services/chat.service';
+import { fetchChatBootstrapPayload } from '../services/chat.service';
 import type {
   B2BTripState,
+  ChatTripFlow,
   ConversationPartyType,
   LedgerEventMetadata,
   MessageDeliveryStatus,
@@ -52,6 +53,9 @@ import { mergeMessageMetadataForEventPayload } from '../utils/eventPayloadMerge.
 import { isEventVisibleForPartyLane, isLedgerLikeMessageType } from '../utils/messagePartyVisibility';
 import { computeLaneLedgerBalance, ledgerEventInvolvesOrg } from '../utils/ledgerVisibility.util';
 import { dedupeTripStatusBroadcastsForLane } from '../utils/dedupeTripStatusBroadcastForLane.util';
+import type { ChatLanes } from '../utils/laneMultiplexer.util';
+import { recomputeLongHaulTripFieldsFromStream } from '../utils/longHaulChat.util';
+import { parseSystemLogLocationData } from '../utils/locationLogPayload.util';
 
 // ── Realtime duplicate suppression (same message_id / transaction_id flood) ──
 // WAL can surface the same logical row twice in quick succession; skipping the
@@ -308,28 +312,38 @@ function applyActiveMessageTypeMultiplex(
   return next;
 }
 
-/** Push last_known_location into GlobalSync active_trips (no DB read). Driver cycle / heartbeat uses `system_log`. */
+function withLongHaulFieldsFromStream(entry: TripEntry): TripEntry {
+  const lh = recomputeLongHaulTripFieldsFromStream(entry.event_stream);
+  return {
+    ...entry,
+    trackingStatus:       lh.trackingStatus,
+    longHaulRevisedEta:     lh.longHaulRevisedEta,
+    longHaulHealthStatus:   lh.longHaulHealthStatus,
+  };
+}
+
+/** Push last_known_location + optional odometer heartbeat into GlobalSync active_trips (no DB read). */
 function syncLocationLogToGlobalActiveTrips(tripId: string, row: Partial<TripMessageRow>): void {
-  if (row.message_type !== "system_log") return;
-  const m = mergeMessageMetadataForEventPayload(row);
-  const ep = m?.event_payload as Record<string, unknown> | undefined;
-  const ld = ep?.location_data;
-  if (!ld || typeof ld !== "object" || Array.isArray(ld)) return;
-  const lat = Number((ld as { lat?: unknown }).lat);
-  const lng = Number((ld as { lng?: unknown }).lng);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-  const address_name =
-    typeof (ld as { address_name?: unknown }).address_name === "string"
-      ? String((ld as { address_name: string }).address_name).trim() || null
-      : null;
+  const mt = row.message_type;
+  if (mt !== "system_log" && mt !== "location_log") return;
+  const parsed = parseSystemLogLocationData(row);
+  if (!parsed) return;
   const recorded_at =
-    typeof row.created_at === "string" && row.created_at.trim() ? row.created_at : new Date().toISOString();
+    typeof row.created_at === "string" && row.created_at.trim()
+      ? row.created_at
+      : parsed.recorded_at ?? new Date().toISOString();
   useGlobalSyncStore.getState().applyActiveTripLocationFromChat(tripId, {
-    lat,
-    lng,
-    address_name: address_name ?? null,
+    lat: parsed.lat,
+    lng: parsed.lng,
+    address_name: parsed.address_name ?? null,
     recorded_at,
   });
+  if (parsed.odometer_km != null && Number.isFinite(parsed.odometer_km)) {
+    useGlobalSyncStore.getState().applyActiveTripHeartbeatFromChat(tripId, {
+      odometer_km: parsed.odometer_km,
+      recorded_at: parsed.recorded_at ?? recorded_at,
+    });
+  }
 }
 
 // ── Debounced mark-seen (one RPC per visibility burst per conversation) ───────
@@ -429,6 +443,9 @@ export interface TripEntry {
   tripId:               string;
   tripNumber:           string;
   displayTripId:        string | null;
+  /** Integrated indent-backed vs private employer–driver trip chat. */
+  chatFlow:             ChatTripFlow;
+  indentId:             string | null;
   // Mutable trip metadata — patched by B2BEventMetadata / status_change / system
   status:               string | null;
   driverDisplayName:    string | null;
@@ -446,6 +463,10 @@ export interface TripEntry {
   lastEtaLabel?:        string | null;
   /** Human label from location logs (`event_payload.location_data.address_name`). */
   lastLocationLabel?:   string | null;
+  /** Long-haul lane health from merged event stream (RUNNING_LATE when latest LATE log present). */
+  trackingStatus:       string | null;
+  longHaulRevisedEta:   string | null;
+  longHaulHealthStatus: string | null;
   /** From `trips.organization_id` (bootstrap); used for debrief RPC org scope. */
   tripOrganizationId:   string | null;
   // Party lanes (at most one per ConversationPartyType)
@@ -457,6 +478,8 @@ export interface TripEntry {
   lastEventAt:          string | null;
   lastEventPreview:     string | null;
   totalUnread:          number;
+  /** Counterparty org id for integrated trips (viewer is client → supplier lane org, and vice versa). */
+  partnerOrganizationId: string | null;
 }
 
 // ── Store shape ───────────────────────────────────────────────────────────────
@@ -469,6 +492,8 @@ interface ChatState {
   activeParties:   Record<string, ConversationPartyType>;  // tripId → last selected
   bootstrappedOrg: string | null;
   isLoading:       boolean;
+  /** Multi-lane commercial / operational message-id maps (from `get_multi_lane_bootstrap` or client mux). */
+  chatLanes:       ChatLanes | null;
 
   // ── Actions
   bootstrap:          (orgId: string) => Promise<void>;
@@ -536,6 +561,8 @@ export function previewText(row: Partial<TripMessageRow>): string | null {
     }
     case 'tracking':
       return '📍 Location update';
+    case 'location_log':
+      return `📍 ${body || 'Location ping'}`;
     case 'document_share':
       return `📄 ${body || 'Document shared'}`;
     case 'feedback_request': case 'feedback':
@@ -612,12 +639,62 @@ export function resolveOutgoingDeliveryStatus(
   return "sent";
 }
 
+export function resolveChatFlow(
+  conv: Pick<TripConversation, "conversation_type" | "indent_id">,
+): ChatTripFlow {
+  const hasIndent = conv.indent_id != null && String(conv.indent_id).trim() !== "";
+  if (hasIndent) return "integrated_group";
+  if (conv.conversation_type === "integrated_group") return "integrated_group";
+  return "private_trip";
+}
+
+/** B2B counterparty lane for the viewer (never the viewer's own org when resolvable). */
+export function resolveCounterpartyPartyTypeForViewer(
+  entry: Pick<TripEntry, "chatFlow" | "parties" | "indentId"> | null,
+  viewerOrgId: string | null,
+): "client" | "supplier" | null {
+  if (!entry) return null;
+  const integrated =
+    entry.chatFlow === "integrated_group" ||
+    Boolean(entry.indentId && String(entry.indentId).trim() !== "");
+  if (!integrated) return null;
+  const v = String(viewerOrgId ?? "").trim();
+  if (!v) return null;
+  const c  = entry.parties.client?.organizationId?.trim();
+  const su = entry.parties.supplier?.organizationId?.trim();
+  if (c && v === c && su) return "supplier";
+  if (su && v === su && c) return "client";
+  return null;
+}
+
+function resolvePartnerOrganizationIdForViewer(
+  entry: Pick<TripEntry, "chatFlow" | "parties" | "indentId">,
+  viewerOrgId: string | null,
+): string | null {
+  const pt = resolveCounterpartyPartyTypeForViewer(entry, viewerOrgId);
+  if (pt === "client") return entry.parties.client?.organizationId?.trim() ?? null;
+  if (pt === "supplier") return entry.parties.supplier?.organizationId?.trim() ?? null;
+  return null;
+}
+
+function withPartnerOrganizationStamp(entry: TripEntry, viewerOrgId: string | null): TripEntry {
+  return {
+    ...entry,
+    partnerOrganizationId: resolvePartnerOrganizationIdForViewer(entry, viewerOrgId),
+  };
+}
+
 /** Construct a blank TripEntry skeleton from the first conversation seen. */
 function entryFromConv(conv: TripConversation): TripEntry {
   return {
     tripId:               conv.trip_id,
     tripNumber:           conv.trip_number,
     displayTripId:        conv.display_trip_id ?? null,
+    chatFlow:             resolveChatFlow(conv),
+    indentId:
+      conv.indent_id != null && String(conv.indent_id).trim() !== ""
+        ? String(conv.indent_id)
+        : null,
     status:               conv.trip_status ?? null,
     driverDisplayName:    null,
     vehicleDisplayNumber: null,
@@ -635,6 +712,10 @@ function entryFromConv(conv: TripConversation): TripEntry {
     lastEventAt:          conv.last_message_at,
     lastEventPreview:     conv.last_message_preview,
     totalUnread:          0,
+    trackingStatus:       null,
+    longHaulRevisedEta:   null,
+    longHaulHealthStatus: null,
+    partnerOrganizationId: null,
   };
 }
 
@@ -682,7 +763,8 @@ function convFromEntry(
     drop_location:           entry.dropLocation,
     trip_feedback_status:   party.feedbackStatus ?? "none",
     trip_organization_id:   entry.tripOrganizationId ?? null,
-    // messages for this party lane only — visibility_tags aware, zero DB calls
+    indent_id:                entry.indentId ?? null,
+    conversation_type:      entry.chatFlow,
     messages: dedupeTripStatusBroadcastsForLane(
       entry.event_stream.filter((e) =>
         isEventVisibleForPartyLane(e, partyType, convId),
@@ -796,6 +878,7 @@ export const useChatStore = create<ChatState>()(
     activeParties:   {},
     bootstrappedOrg: null,
     isLoading:       false,
+    chatLanes:       null,
 
     // ── bootstrap ─────────────────────────────────────────────────────────────
     // Called ONCE per org-session from TripChatContext on mount.
@@ -810,7 +893,7 @@ export const useChatStore = create<ChatState>()(
       set({ isLoading: true });
 
       try {
-        const conversations = await getUnifiedB2BChatBootstrap(orgId);
+        const { conversations, lanes } = await fetchChatBootstrapPayload(orgId);
 
         const trips:       Record<string, TripEntry>             = {};
         const convToTrip:  Record<string, string>                = {};
@@ -822,6 +905,13 @@ export const useChatStore = create<ChatState>()(
 
           if (!trips[tripId]) trips[tripId] = entryFromConv(conv);
           const entry = trips[tripId];
+          if (conv.indent_id != null && String(conv.indent_id).trim() !== "") {
+            entry.indentId = String(conv.indent_id);
+          }
+          entry.chatFlow = resolveChatFlow({
+            conversation_type: conv.conversation_type,
+            indent_id:         entry.indentId ?? conv.indent_id,
+          });
 
           // Hydrate history: defensive array check + explicit ASC sort so the
           // detail panel renders oldest-first regardless of RPC ordering.
@@ -869,7 +959,14 @@ export const useChatStore = create<ChatState>()(
             entry.lastEventAt       = last.created_at;
             entry.lastEventPreview  = previewText(last) ?? entry.lastEventPreview;
           }
-          // If no events, fallback values from entryFromConv (DB columns) remain.
+          const lh = recomputeLongHaulTripFieldsFromStream(entry.event_stream);
+          entry.trackingStatus = lh.trackingStatus;
+          entry.longHaulRevisedEta = lh.longHaulRevisedEta;
+          entry.longHaulHealthStatus = lh.longHaulHealthStatus;
+        }
+
+        for (const tid of Object.keys(trips)) {
+          trips[tid] = withPartnerOrganizationStamp(trips[tid], orgId);
         }
 
         set(s => ({
@@ -879,6 +976,7 @@ export const useChatStore = create<ChatState>()(
           activeParties:   s.activeParties,
           bootstrappedOrg: orgId,
           isLoading:       false,
+          chatLanes:       lanes,
         }));
       } catch (err) {
         if (__DEV__) console.error('[useChatStore] bootstrap failed:', err);
@@ -926,9 +1024,11 @@ export const useChatStore = create<ChatState>()(
       // Second status-broadcast for same trip status (e.g. trigger + driver echo): merge trip only.
       if (shouldSkipDuplicateStatusBroadcast(entry.event_stream, event)) {
         const silentPatch = resolveTripEntryPatchesFromMessage(row, entry);
-        if (silentPatch) {
-          set({ trips: { ...trips, [tripId]: { ...entry, ...silentPatch } } });
-        }
+        const merged = withLongHaulFieldsFromStream({
+          ...entry,
+          ...(silentPatch ?? {}),
+        } as TripEntry);
+        set({ trips: { ...trips, [tripId]: merged } });
         syncLocationLogToGlobalActiveTrips(tripId, row);
         return;
       }
@@ -955,7 +1055,12 @@ export const useChatStore = create<ChatState>()(
             baseRow as unknown as Record<string, unknown>,
           );
           useGlobalSyncStore.getState().ingestB2BMessageForBell(baseRow);
-          set({ trips: { ...trips, [tripId]: updated } });
+          set({
+            trips: {
+              ...trips,
+              [tripId]: withLongHaulFieldsFromStream(updated),
+            },
+          });
           return;
         }
 
@@ -980,6 +1085,8 @@ export const useChatStore = create<ChatState>()(
 
       updated.lastEventAt      = event.created_at ?? entry.lastEventAt;
       updated.lastEventPreview = previewText(row)  ?? entry.lastEventPreview;
+
+      updated = withLongHaulFieldsFromStream(updated);
 
       syncLocationLogToGlobalActiveTrips(tripId, row);
       useGlobalSyncStore.getState().touchActiveTripClientActivity(
@@ -1201,13 +1308,14 @@ export const useChatStore = create<ChatState>()(
             ledgerEventInvolvesOrg(m, viewerOrg),
         )
         .map((m) => ({ ...m, partyType }));
+      const merged = withLongHaulFieldsFromStream({
+        ...entry,
+        event_stream: mergeEvents(entry.event_stream, newEvts),
+      });
       set({
         trips: {
           ...trips,
-          [tripId]: {
-            ...entry,
-            event_stream: mergeEvents(entry.event_stream, newEvts),
-          },
+          [tripId]: merged,
         },
       });
     },
@@ -1241,17 +1349,19 @@ export const useChatStore = create<ChatState>()(
 
       const event: TripEvent = { ...row, partyType };
       const event_stream = upsertEventIntoStream(entry.event_stream, event);
+      const merged = withLongHaulFieldsFromStream({
+        ...entry,
+        event_stream,
+        lastEventAt:      msg.created_at,
+        lastEventPreview: previewText(msg) ?? entry.lastEventPreview,
+      });
       set({
         trips: {
           ...trips,
-          [tripId]: {
-            ...entry,
-            event_stream,
-            lastEventAt:      msg.created_at,
-            lastEventPreview: previewText(msg) ?? entry.lastEventPreview,
-          },
+          [tripId]: merged,
         },
       });
+      syncLocationLogToGlobalActiveTrips(tripId, msg);
       useGlobalSyncStore.getState().touchActiveTripClientActivity(
         tripId,
         typeof msg.created_at === "string" ? msg.created_at : undefined,
@@ -1283,17 +1393,19 @@ export const useChatStore = create<ChatState>()(
             }
           : persisted;
 
+      const nextStream = entry.event_stream.map((e) =>
+        e.id === tempId ? { ...persistedRow, partyType } : e,
+      );
       set({
         trips: {
           ...trips,
-          [tripId]: {
+          [tripId]: withLongHaulFieldsFromStream({
             ...entry,
-            event_stream: entry.event_stream.map((e) =>
-              e.id === tempId ? { ...persistedRow, partyType } : e,
-            ),
-          },
+            event_stream: nextStream,
+          }),
         },
       });
+      syncLocationLogToGlobalActiveTrips(tripId, persistedRow);
       useGlobalSyncStore.getState().ingestTripMessageForOperationsIsland(
         tripId,
         persistedRow as unknown as Record<string, unknown>,
@@ -1309,10 +1421,10 @@ export const useChatStore = create<ChatState>()(
       set({
         trips: {
           ...trips,
-          [tripId]: {
+          [tripId]: withLongHaulFieldsFromStream({
             ...entry,
-            event_stream: entry.event_stream.filter(e => e.id !== msgId),
-          },
+            event_stream: entry.event_stream.filter((e) => e.id !== msgId),
+          }),
         },
       });
     },
@@ -1343,12 +1455,18 @@ export const useChatStore = create<ChatState>()(
       if (conv.trip_status)      entry.status     = conv.trip_status;
       if (conv.trip_driver_id)   entry.driverId   = conv.trip_driver_id;
       if (conv.trip_supplier_id) entry.supplierId = conv.trip_supplier_id;
-      if (
-        conv.trip_organization_id != null &&
+      if (conv.trip_organization_id != null &&
         String(conv.trip_organization_id).trim() !== ""
       ) {
         entry.tripOrganizationId = String(conv.trip_organization_id);
       }
+      if (conv.indent_id != null && String(conv.indent_id).trim() !== "") {
+        entry.indentId = String(conv.indent_id);
+      }
+      entry.chatFlow = resolveChatFlow({
+        conversation_type: conv.conversation_type,
+        indent_id:         entry.indentId ?? conv.indent_id,
+      });
 
       entry.totalUnread = sumUnread(entry.parties);
 
@@ -1358,8 +1476,11 @@ export const useChatStore = create<ChatState>()(
         entry.lastEventPreview = previewText(last) ?? entry.lastEventPreview;
       }
 
+      let finalized = withLongHaulFieldsFromStream(entry);
+      finalized = withPartnerOrganizationStamp(finalized, viewerOrg);
+
       set({
-        trips:       { ...trips,       [tripId]:  entry      },
+        trips:       { ...trips,       [tripId]:  finalized      },
         convToTrip:  { ...convToTrip,  [conv.id]: tripId     },
         convToParty: { ...convToParty, [conv.id]: partyType  },
       });
@@ -1379,6 +1500,7 @@ export const useChatStore = create<ChatState>()(
         activeParties:   {},
         bootstrappedOrg: null,
         isLoading:       false,
+        chatLanes:       null,
       });
     },
 

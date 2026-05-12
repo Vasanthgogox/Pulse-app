@@ -29,6 +29,7 @@ import {
   Truck,
   XCircle,
   Package,
+  Send,
 } from 'lucide-react-native';
 import type {
   ImageMessageMetadata,
@@ -42,32 +43,77 @@ import { ChatSystemEventCard } from './ChatEventCard';
 // ── StatusChangeCard ──────────────────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<string, { Icon: React.ComponentType<any>; color: string; bg: string; label: string }> = {
-  pending:     { Icon: Clock,        color: '#94a3b8', bg: '#f8fafc', label: 'Pending' },
-  assigned:    { Icon: Truck,        color: '#6366f1', bg: '#eef2ff', label: 'Assigned' },
-  in_progress: { Icon: Navigation,   color: '#6366f1', bg: '#eef2ff', label: 'In Progress' },
+  pending:     { Icon: Clock,        color: '#94a3b8', bg: '#f1f5f9', label: 'Pending' },
+  assigned:    { Icon: Truck,        color: '#5c6bc0', bg: '#e8eaf6', label: 'Assigned' },
+  in_progress: { Icon: Send,         color: '#5c6bc0', bg: '#e8eaf6', label: 'In Progress' },
   picked_up:   { Icon: MapPin,       color: '#f59e0b', bg: '#fffbeb', label: 'Picked Up' },
   in_transit:  { Icon: Truck,        color: '#06b6d4', bg: '#ecfeff', label: 'In Transit' },
   at_drop:     { Icon: MapPin,       color: '#10b981', bg: '#ecfdf5', label: 'At Drop' },
   completed:   { Icon: CheckCircle,  color: '#22c55e', bg: '#f0fdf4', label: 'Completed' },
   cancelled:   { Icon: XCircle,      color: '#ef4444', bg: '#fef2f2', label: 'Cancelled' },
-  started:     { Icon: Navigation,   color: '#6366f1', bg: '#eef2ff', label: 'Started' },
+  started:     { Icon: Send,         color: '#5c6bc0', bg: '#e8eaf6', label: 'Started' },
   delivered:   { Icon: Package,      color: '#10b981', bg: '#ecfdf5', label: 'Delivered' },
 };
+
+function isGenericStatusActor(name: string | null | undefined): boolean {
+  const n = (name ?? '').trim().toLowerCase();
+  return !n || n === 'system' || n === 'dispatcher';
+}
+
+/** Human line for trip lane (reference: one narrative + timestamp). */
+function statusChangeNarrative(message: TripMessageRow, statusKey: string): string {
+  const meta = message.metadata as StatusChangeMetadata | null;
+  const content = (message.content ?? '').trim();
+
+  if (content.length > 0 && /accepted the trip|heading to pickup/i.test(content)) {
+    return content;
+  }
+
+  const rawName = meta?.changed_by_name?.trim();
+  const actor = isGenericStatusActor(rawName) ? null : rawName;
+  const who = actor ?? 'The driver';
+
+  switch (statusKey) {
+    case 'in_progress':
+      return actor
+        ? `${actor} has accepted the trip and is heading to pickup.`
+        : 'The trip was accepted and the driver is heading to pickup.';
+    case 'assigned':
+      return actor
+        ? `${actor} was assigned to this trip.`
+        : 'A driver was assigned to this trip.';
+    case 'picked_up':
+      return `${who} picked up the load.`;
+    case 'in_transit':
+      return `${who} is in transit.`;
+    case 'at_drop':
+      return `${who} arrived at drop-off.`;
+    case 'completed':
+      return actor ? `Trip completed. Confirmed by ${actor}.` : 'Trip completed.';
+    case 'cancelled':
+      return actor ? `Trip cancelled by ${actor}.` : 'Trip was cancelled.';
+    case 'started':
+      return actor
+        ? `${actor} started the trip.`
+        : 'The trip was started.';
+    case 'delivered':
+      return actor ? `${actor} confirmed delivery.` : 'Delivery was confirmed.';
+    case 'pending':
+      return 'Trip is pending assignment.';
+    default:
+      return content || 'Trip status was updated.';
+  }
+}
 
 function StatusChangeCard({ message }: { message: TripMessageRow }) {
   const meta = message.metadata as StatusChangeMetadata | null;
 
-  // Prefer metadata.new_status; fall back to content-based inference.
   const statusKey = meta?.new_status ?? 'default';
-  const cfg = STATUS_CONFIG[statusKey] ?? { Icon: Clock, color: '#94a3b8', bg: '#f8fafc', label: statusKey };
+  const cfg = STATUS_CONFIG[statusKey] ?? { Icon: Clock, color: '#94a3b8', bg: '#f1f5f9', label: statusKey };
   const { Icon, color, bg } = cfg;
+  const useSendTilt = statusKey === 'in_progress' || statusKey === 'started';
 
-  const prevLabel = meta?.previous_status
-    ? (STATUS_CONFIG[meta.previous_status]?.label ?? meta.previous_status)
-    : null;
-  const nextLabel = STATUS_CONFIG[statusKey]?.label ?? statusKey;
-
-  const changedByName = meta?.changed_by_name?.trim() || null;
+  const bodyText = statusChangeNarrative(message, statusKey);
 
   let displayTime = '';
   try {
@@ -76,25 +122,20 @@ function StatusChangeCard({ message }: { message: TripMessageRow }) {
     });
   } catch { /* keep empty */ }
 
+  const iconInner = <Icon size={18} color={color} strokeWidth={2.1} />;
+
   return (
-    <View style={sc.card}>
-      <View style={[sc.iconWrap, { backgroundColor: bg }]}>
-        <Icon size={16} color={color} />
+    <View style={sc.operationalCard}>
+      <View style={[sc.operationalIcon, { backgroundColor: bg }]}>
+        {useSendTilt ? (
+          <View style={sc.operationalIconTilt}>{iconInner}</View>
+        ) : (
+          iconInner
+        )}
       </View>
-      <View style={sc.body}>
-        <View style={sc.statusRow}>
-          {prevLabel ? (
-            <>
-              <Text style={[sc.statusChip, sc.prevChip]}>{prevLabel}</Text>
-              <Text style={sc.arrow}>→</Text>
-            </>
-          ) : null}
-          <Text style={[sc.statusChip, { backgroundColor: bg, color }]}>{nextLabel}</Text>
-        </View>
-        {changedByName ? (
-          <Text style={sc.byLine}>by {changedByName}</Text>
-        ) : null}
-        <Text style={sc.time}>{displayTime}</Text>
+      <View style={sc.operationalBody}>
+        <Text style={sc.operationalContent}>{bodyText}</Text>
+        {displayTime ? <Text style={sc.operationalTime}>{displayTime}</Text> : null}
       </View>
     </View>
   );
@@ -172,6 +213,10 @@ interface SystemEventCardProps {
   onAddToBook?: (msg: TripMessageRow) => void;
   onDispute?:   (msg: TripMessageRow) => void;
   readOnly?: boolean;
+  /** When true, ledger/payment rows are hidden (e.g. driver financial shield). */
+  financialViewerBlocked?: boolean;
+  /** When true, ledger card renders without Add to book / Dispute (indent-lane-only actions). */
+  hideLedgerActions?: boolean;
   // Feedback card callback
   onFeedbackSubmit?: (score: number, tags: string[]) => Promise<void>;
 }
@@ -184,6 +229,8 @@ export function SystemEventCard({
   onAddToBook,
   onDispute,
   readOnly,
+  financialViewerBlocked,
+  hideLedgerActions,
 }: SystemEventCardProps) {
   switch (message.message_type) {
     case 'status_change':
@@ -206,6 +253,7 @@ export function SystemEventCard({
 
     case 'ledger_event':
     case 'ledger': {
+      if (financialViewerBlocked) return null;
       if (!currentOrgId || !onAddToBook || !onDispute) return null;
       const { ChatLedgerEventCard } = require('./ChatEventCard');
       return (
@@ -216,6 +264,7 @@ export function SystemEventCard({
           onAddToBook={onAddToBook}
           onDispute={onDispute}
           readOnly={readOnly}
+          hideLedgerActions={hideLedgerActions}
         />
       );
     }
@@ -299,5 +348,53 @@ const sc = StyleSheet.create({
     borderRadius: 14,
     overflow: 'hidden',
     maxWidth: 260,
+  },
+
+  // StatusChangeCard (operational — mirrors ChatEventCard event* layout)
+  operationalCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    alignSelf: 'center',
+    gap: 12,
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    maxWidth: '92%',
+    marginVertical: 6,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  operationalIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  operationalIconTilt: {
+    transform: [{ rotate: '-28deg' }],
+    marginTop: 2,
+  },
+  operationalBody: { flex: 1, minWidth: 0, paddingTop: 1 },
+  operationalContent: {
+    fontSize: 14,
+    color: '#1e293b',
+    fontWeight: '600',
+    lineHeight: 20,
+    letterSpacing: -0.1,
+  },
+  operationalTime: {
+    fontSize: 11,
+    color: '#94a3b8',
+    marginTop: 6,
+    fontWeight: '600',
+    letterSpacing: 0.15,
   },
 });

@@ -13,8 +13,8 @@ import {
   Truck,
   MapPin,
   XCircle,
-  Navigation,
   Clock,
+  Send,
 } from "lucide-react-native";
 import { CHAT_ACCENT, CHAT_ACCENT_SOFT } from "@/features/chat/chatTheme";
 import { formatChatPartyName } from "@/features/chat/utils/partyDisplay";
@@ -35,7 +35,7 @@ import {
 
 const STATUS_ICON_MAP: Record<string, { Icon: React.ComponentType<any>; color: string; bg: string }> = {
   assigned:    { Icon: Truck,         color: CHAT_ACCENT, bg: CHAT_ACCENT_SOFT },
-  in_progress: { Icon: Navigation,    color: CHAT_ACCENT, bg: CHAT_ACCENT_SOFT },
+  in_progress: { Icon: Send,          color: "#5c6bc0", bg: "#e8eaf6" },
   picked_up:   { Icon: MapPin,        color: "#f59e0b", bg: "#fffbeb" },
   in_transit:  { Icon: Truck,         color: "#06b6d4", bg: "#ecfeff" },
   at_drop:     { Icon: MapPin,        color: "#10b981", bg: "#ecfdf5" },
@@ -59,6 +59,7 @@ function inferStatusFromContent(content: string): keyof typeof STATUS_ICON_MAP {
 export function ChatSystemEventCard({ message }: { message: TripMessageRow }) {
   const statusKey = inferStatusFromContent(message.content);
   const { Icon, color, bg } = STATUS_ICON_MAP[statusKey] ?? STATUS_ICON_MAP.default;
+  const useSendTilt = statusKey === "in_progress";
 
   let displayTime = message.created_at;
   try {
@@ -71,10 +72,16 @@ export function ChatSystemEventCard({ message }: { message: TripMessageRow }) {
     // keep raw
   }
 
+  const iconInner = <Icon size={18} color={color} strokeWidth={2.1} />;
+
   return (
     <View style={s.eventCard}>
       <View style={[s.eventIcon, { backgroundColor: bg }]}>
-        <Icon size={16} color={color} />
+        {useSendTilt ? (
+          <View style={s.eventIconTilt}>{iconInner}</View>
+        ) : (
+          iconInner
+        )}
       </View>
       <View style={s.eventBody}>
         <Text style={s.eventContent}>{message.content}</Text>
@@ -95,6 +102,8 @@ interface LedgerCardProps {
   onDispute: (message: TripMessageRow) => void;
   /** Driver / embedded views: show the card UI without add-to-book or dispute actions. */
   readOnly?: boolean;
+  /** Integrated indent commercial lane only — hides Add to book / Dispute row when false. */
+  hideLedgerActions?: boolean;
 }
 
 /**
@@ -172,6 +181,7 @@ export function ChatLedgerEventCard({
   onAddToBook,
   onDispute,
   readOnly = false,
+  hideLedgerActions = false,
 }: LedgerCardProps) {
   const addingToBook = useSyncExternalStore(
     subscribeLedgerBookPending,
@@ -303,7 +313,7 @@ export function ChatLedgerEventCard({
           <AlertTriangle size={11} color="#d97706" />
           <Text style={[s.ledgerFooterStatusText, { color: "#b45309" }]}>Dispute raised</Text>
         </View>
-      ) : !readOnly && isReceiver && !isSender ? (
+      ) : !readOnly && !hideLedgerActions && isReceiver && !isSender ? (
         <View style={s.ledgerActions}>
           <TouchableOpacity
             style={s.ledgerAddBtn}
@@ -334,43 +344,52 @@ export function ChatLedgerEventCard({
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  // System event
+  // System event — operational narrative (reference: white card + lavender icon tile + send).
   eventCard: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     alignSelf: "center",
-    gap: 10,
-    backgroundColor: "#f8fafc",
+    gap: 12,
+    backgroundColor: "#ffffff",
     borderRadius: 16,
     borderWidth: 1,
     borderColor: "#e2e8f0",
     paddingHorizontal: 14,
-    paddingVertical: 10,
-    maxWidth: "85%",
-    marginVertical: 4,
+    paddingVertical: 12,
+    maxWidth: "92%",
+    marginVertical: 6,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
   },
   eventIcon: {
-    width: 32,
-    height: 32,
+    width: 40,
+    height: 40,
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
-  eventBody: { flex: 1, minWidth: 0 },
+  eventIconTilt: {
+    transform: [{ rotate: "-28deg" }],
+    marginTop: 2,
+  },
+  eventBody: { flex: 1, minWidth: 0, paddingTop: 1 },
   eventContent: {
-    fontSize: 12,
-    color: "#334155",
-    fontWeight: "500",
-    lineHeight: 17,
+    fontSize: 14,
+    color: "#1e293b",
+    fontWeight: "600",
+    lineHeight: 20,
+    letterSpacing: -0.1,
   },
   eventTime: {
-    fontSize: 9,
+    fontSize: 11,
     color: "#94a3b8",
-    marginTop: 3,
+    marginTop: 6,
     fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
+    letterSpacing: 0.15,
   },
 
   // Ledger row — same footprint as system `eventCard` (compact list tile)

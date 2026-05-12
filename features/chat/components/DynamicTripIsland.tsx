@@ -25,13 +25,16 @@ import Animated, {
 } from "react-native-reanimated";
 import { ChevronRight, MapPin, Radio, Reply, Star } from "lucide-react-native";
 import Theme from "@/constants/Theme";
+import { useOptionalAuth } from "@/contexts/AuthContext";
 import { useOptionalOrganization } from "@/contexts/OrganizationContext";
 import { CHAT_ACCENT } from "@/features/chat/chatTheme";
-import { useChatStore } from "@/features/chat/store/useChatStore";
+import { useChatStore, type TripEntry } from "@/features/chat/store/useChatStore";
 import {
   isTerminalTripStatus,
   isTripFeedbackEligibleStatus,
 } from "@/features/chat/utils/tripConversationSort";
+import { isLedgerLikeMessageType } from "@/features/chat/utils/messagePartyVisibility";
+import { computeLaneLedgerBalance } from "@/features/chat/utils/ledgerVisibility.util";
 import { tripHasPendingOrgFeedback } from "@/features/chat/utils/tripFeedbackPending.util";
 import { PRIORITY_WEIGHT_LONG_HAUL_LATE } from "@/lib/globalSync/priorityEngine.util";
 import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
@@ -47,6 +50,7 @@ if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental
 
 const PREVIEW_TYPES = new Set([
   "system_log",
+  "location_log",
   "ledger_event",
   "ledger",
   "payment",
@@ -56,6 +60,100 @@ const PREVIEW_TYPES = new Set([
   "system",
   "update",
 ]);
+
+type IslandMode = "live_ops" | "commercial";
+
+function parseTsSafe(iso: string | undefined | null): number {
+  if (!iso) return 0;
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? t : 0;
+}
+
+function commercialDeckFromTrips(
+  trips: Record<string, TripEntry>,
+  onlyTripId?: string | null,
+): ActiveTripSummary[] {
+  const entries: TripEntry[] = (() => {
+    const tid = (onlyTripId ?? "").trim();
+    if (tid) {
+      const one = trips[tid];
+      return one ? [one] : [];
+    }
+    return Object.values(trips);
+  })();
+  const rows: { sortKey: number; trip: ActiveTripSummary }[] = [];
+  for (const entry of entries) {
+    const ledgers = entry.event_stream.filter((e) => isLedgerLikeMessageType(String(e.message_type)));
+    if (!ledgers.length) continue;
+    const last = ledgers[ledgers.length - 1]!;
+    const sortKey = parseTsSafe(last.created_at);
+    const recent_events: ActiveTripRecentEvent[] = ledgers.slice(-3).map((e) => ({
+      id: String(e.id),
+      content: e.content ?? "",
+      message_type: String(e.message_type),
+      sender_role: e.sender_role ?? "",
+      sender_name: e.sender_name ?? "",
+      created_at: e.created_at,
+      metadata: e.metadata,
+    }));
+    const lastLoc =
+      entry.lastLat != null && entry.lastLng != null && entry.lastLocationAt
+        ? {
+            lat: entry.lastLat,
+            lng: entry.lastLng,
+            address_name: entry.lastLocationLabel ?? null,
+            recorded_at: entry.lastLocationAt,
+          }
+        : null;
+    rows.push({
+      sortKey,
+      trip: {
+        trip_id: entry.tripId,
+        trip_number: entry.tripNumber,
+        display_trip_id: entry.displayTripId,
+        status: entry.status ?? "active",
+        pickup_area: entry.pickupArea,
+        drop_location: entry.dropLocation,
+        driver_display_name: entry.driverDisplayName,
+        vehicle_display_number: entry.vehicleDisplayNumber,
+        driver_id: entry.driverId,
+        supplier_id: entry.supplierId,
+        client_id: null,
+        created_at: entry.createdAt ?? new Date().toISOString(),
+        total_unread: entry.totalUnread,
+        recent_events,
+        last_known_location: lastLoc,
+      },
+    });
+  }
+  rows.sort((a, b) => b.sortKey - a.sortKey);
+  return rows.map((r) => r.trip);
+}
+
+function islandSignalTs(trip: ActiveTripSummary, mode: IslandMode): number {
+  if (mode === "commercial") {
+    let max = parseTsSafe(trip.last_known_location?.recorded_at);
+    for (const e of trip.recent_events ?? []) {
+      const ts = parseTsSafe(e.created_at);
+      if (ts > max) max = ts;
+    }
+    return max;
+  }
+  return activeTripIslandSignalTs(trip);
+}
+
+function commercialSubtitle(trip: ActiveTripSummary, laneBalanceInr: number | null): string {
+  if (laneBalanceInr != null && Number.isFinite(laneBalanceInr)) {
+    const sign = laneBalanceInr >= 0 ? "" : "−";
+    return `This lane: ${sign}₹${Math.abs(Math.round(laneBalanceInr)).toLocaleString("en-IN")}`;
+  }
+  const evs = trip.recent_events ?? [];
+  const ev = evs[evs.length - 1];
+  if (!ev) return "Payments & ledger — open chat for detail";
+  const rel = formatRelativeShort(ev.created_at);
+  const c = ev.content?.trim() || ev.message_type;
+  return `${c} · ${rel}`;
+}
 
 function formatShortTime(iso: string): string {
   try {
@@ -82,13 +180,24 @@ function formatRelativeShort(iso: string): string {
   return `${d}d ago`;
 }
 
-function locationSubtitle(trip: ActiveTripSummary): string {
+function locationSubtitle(trip: ActiveTripSummary, globalTrip: ActiveTripSummary | null | undefined): string {
   const loc = trip.last_known_location;
-  if (!loc) return "Location pending next driver ping";
-  const rel = formatRelativeShort(loc.recorded_at);
-  const label = (loc.address_name ?? "").trim();
-  if (label) return `${label} · ${rel}`;
-  return `${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)} · ${rel}`;
+  const odo = globalTrip?.last_heartbeat_odometer_km;
+  const odoAt = globalTrip?.last_heartbeat_recorded_at;
+  const parts: string[] = [];
+  if (loc) {
+    const rel = formatRelativeShort(loc.recorded_at);
+    const label = (loc.address_name ?? "").trim();
+    parts.push(label ? `${label} · ${rel}` : `${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)} · ${rel}`);
+  }
+  if (odo != null && Number.isFinite(odo)) {
+    const orel = odoAt ? formatRelativeShort(odoAt) : "";
+    parts.push(
+      `Odometer ${odo.toLocaleString("en-IN", { maximumFractionDigits: 0 })} km${orel ? ` · ${orel}` : ""}`,
+    );
+  }
+  if (parts.length === 0) return "Location pending next driver ping";
+  return parts.join(" · ");
 }
 
 function pickQuickEvents(events: ActiveTripRecentEvent[] | undefined): ActiveTripRecentEvent[] {
@@ -107,7 +216,8 @@ export interface DynamicTripIslandProps {
 
 /**
  * Floating “Dynamic Status” card: glass stack, Reanimated enter + location bounce,
- * swipe between ranked active trips, tap for last 3 log-style events + Reply (store-only).
+ * swipe between trips. Toggle **Live ops** (late drivers / location) vs **Commercial**
+ * (ledger / payments from chat store). Tap to expand quick previews + Reply.
  */
 export function DynamicTripIsland({
   currentTripId,
@@ -116,10 +226,13 @@ export function DynamicTripIsland({
 }: DynamicTripIslandProps) {
   const { width: screenW } = useWindowDimensions();
   const org = useOptionalOrganization();
+  const auth = useOptionalAuth();
   const orgId = org?.currentOrganization?.id ?? null;
+  const isDriverUser = auth?.profile?.role === "driver";
   const activeTrips = useGlobalSyncStore((s) => s.activeTrips);
   const clientRibbon = useGlobalSyncStore((s) => s.clientOperationsRibbon);
   const chatTrips = useChatStore((s) => s.trips);
+  const activeParties = useChatStore((s) => s.activeParties);
   const pendingTripFeedback = useChatStore((s) =>
     tripHasPendingOrgFeedback(s.trips, currentTripId, orgId),
   );
@@ -170,21 +283,106 @@ export function DynamicTripIsland({
     return rankActiveTripsForIsland([...byId.values()]);
   }, [activeTrips, orgId, currentTripId, completedNeedsRate, chatEntryForCurrent, chatTrips]);
 
+  /** In trip chat detail, only the open trip may appear on the island (prevents cross-trip cards). */
+  const rankedScoped = useMemo(() => {
+    const ct = (currentTripId ?? "").trim();
+    if (!ct) return ranked;
+    const sub = ranked.filter((t) => t.trip_id === ct);
+    if (sub.length) return sub;
+    const g = activeTrips.find((t) => t.trip_id === ct);
+    if (g) return [g];
+    if (!chatEntryForCurrent) return [];
+    const lastLoc =
+      chatEntryForCurrent.lastLat != null &&
+      chatEntryForCurrent.lastLng != null &&
+      chatEntryForCurrent.lastLocationAt
+        ? {
+            lat: chatEntryForCurrent.lastLat,
+            lng: chatEntryForCurrent.lastLng,
+            address_name: chatEntryForCurrent.lastLocationLabel ?? null,
+            recorded_at: chatEntryForCurrent.lastLocationAt,
+          }
+        : null;
+    const tail = chatEntryForCurrent.event_stream.slice(-6);
+    const recent_events: ActiveTripRecentEvent[] = tail.map((e) => ({
+      id: String(e.id),
+      content: e.content ?? "",
+      message_type: String(e.message_type),
+      sender_role: e.sender_role ?? "",
+      sender_name: e.sender_name ?? "",
+      created_at: e.created_at,
+      metadata: e.metadata,
+    }));
+    return [
+      {
+        trip_id: ct,
+        trip_number: chatEntryForCurrent.tripNumber,
+        display_trip_id: chatEntryForCurrent.displayTripId,
+        status: chatEntryForCurrent.status ?? "active",
+        pickup_area: chatEntryForCurrent.pickupArea,
+        drop_location: chatEntryForCurrent.dropLocation,
+        driver_display_name: chatEntryForCurrent.driverDisplayName,
+        vehicle_display_number: chatEntryForCurrent.vehicleDisplayNumber,
+        driver_id: chatEntryForCurrent.driverId,
+        supplier_id: chatEntryForCurrent.supplierId,
+        client_id: null,
+        created_at: chatEntryForCurrent.createdAt ?? new Date().toISOString(),
+        total_unread: chatEntryForCurrent.totalUnread,
+        recent_events,
+        last_known_location: lastLoc,
+      },
+    ];
+  }, [ranked, currentTripId, activeTrips, chatEntryForCurrent]);
+
+  const laneBalanceForIsland = useMemo(() => {
+    if (!orgId) return null as number | null;
+    const ct = (currentTripId ?? "").trim();
+    if (!ct) return null;
+    const st = useChatStore.getState();
+    const entry = chatTrips[ct];
+    if (!entry) return null;
+    const party = activeParties[ct] ?? "client";
+    const cid = st.getConversationId(ct, party);
+    return computeLaneLedgerBalance(entry.event_stream, orgId, party, cid);
+  }, [chatTrips, orgId, currentTripId, activeParties]);
+
+  const commercialDeck = useMemo(
+    () => commercialDeckFromTrips(chatTrips, currentTripId),
+    [chatTrips, currentTripId],
+  );
+  const [islandMode, setIslandMode] = useState<IslandMode>("live_ops");
+  const deck = islandMode === "live_ops" ? rankedScoped : commercialDeck;
+
+  useEffect(() => {
+    if (auth?.profile?.role === "driver") setIslandMode("live_ops");
+    else if (auth?.profile?.role) setIslandMode("commercial");
+  }, [auth?.profile?.role]);
+
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [expanded, setExpanded] = useState(false);
   const prevTopIdRef = useRef<string | null>(null);
 
-  const topRankedId = ranked[0]?.trip_id ?? null;
+  const topDeckId = deck[0]?.trip_id ?? null;
   useEffect(() => {
-    if (topRankedId && prevTopIdRef.current !== topRankedId) {
+    if (topDeckId && prevTopIdRef.current !== topDeckId) {
       setSwipeOffset(0);
     }
-    prevTopIdRef.current = topRankedId;
-  }, [topRankedId]);
+    prevTopIdRef.current = topDeckId;
+  }, [topDeckId]);
 
-  const n = ranked.length;
+  useEffect(() => {
+    setSwipeOffset(0);
+    setExpanded(false);
+  }, [islandMode]);
+
+  const n = deck.length;
   const displayIndex = n > 0 ? ((swipeOffset % n) + n) % n : 0;
-  const trip = ranked[displayIndex];
+  const trip = deck[displayIndex];
+
+  const globalTripPatch = useMemo(() => {
+    if (!trip) return null;
+    return activeTrips.find((t) => t.trip_id === trip.trip_id) ?? null;
+  }, [activeTrips, trip?.trip_id]);
 
   const enterY = useSharedValue(-28);
   const enterOpacity = useSharedValue(0);
@@ -193,7 +391,7 @@ export function DynamicTripIsland({
   const pulse = useSharedValue(1);
 
   const locBounceKey = trip
-    ? `${trip.trip_id}:${trip.last_known_location?.recorded_at ?? ""}:${trip.last_known_location?.lat ?? ""}`
+    ? `${trip.trip_id}:${trip.last_known_location?.recorded_at ?? ""}:${trip.last_known_location?.lat ?? ""}:${globalTripPatch?.last_heartbeat_odometer_km ?? ""}:${globalTripPatch?.last_heartbeat_recorded_at ?? ""}`
     : "";
 
   useEffect(() => {
@@ -276,20 +474,63 @@ export function DynamicTripIsland({
     setExpanded((e) => !e);
   }, []);
 
-  const quickEvents = useMemo(() => pickQuickEvents(trip?.recent_events), [trip?.recent_events]);
+  const quickEvents = useMemo(() => {
+    if (islandMode === "commercial") {
+      const evs = trip?.recent_events ?? [];
+      return evs.length ? evs.slice(-3) : [];
+    }
+    return pickQuickEvents(trip?.recent_events);
+  }, [islandMode, trip?.recent_events]);
+
+  const cardW = Math.min(400, screenW - 24);
+
+  if (islandMode === "commercial" && commercialDeck.length === 0) {
+    return (
+      <Animated.View
+        style={[styles.wrap, { maxWidth: cardW }, cardAnimStyle]}
+        pointerEvents="box-none"
+      >
+        <View style={styles.pressInner}>
+          <LinearGradient
+            colors={["rgba(254,243,199,0.95)", "rgba(253,230,138,0.85)"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFillObject}
+          />
+          <View style={styles.glassBorder} pointerEvents="none" />
+          <View style={styles.modeRow}>
+            <Pressable
+              onPress={() => setIslandMode("live_ops")}
+              hitSlop={6}
+              style={styles.modePill}
+            >
+              <Text style={styles.modePillText}>Live ops</Text>
+            </Pressable>
+            <Pressable onPress={() => setIslandMode("commercial")} hitSlop={6} style={[styles.modePill, styles.modePillOn]}>
+              <Text style={[styles.modePillText, styles.modePillTextOn]}>Commercial</Text>
+            </Pressable>
+          </View>
+          <Text style={styles.emptyCommercialText}>
+            No payment or ledger activity in loaded trips yet.
+          </Text>
+        </View>
+      </Animated.View>
+    );
+  }
 
   if (!trip || n === 0) return null;
 
-  const cardW = Math.min(400, screenW - 24);
   const unread = trip.total_unread > 0;
   const isContextTrip = trip.trip_id === currentTripId;
   const showRatePulse = isContextTrip && pendingTripFeedback;
-  const signalTs = activeTripIslandSignalTs(trip);
-  const longHaulLateForTrip = Boolean(
-    clientRibbon &&
-      clientRibbon.trip_id === trip.trip_id &&
-      clientRibbon.priority_weight >= PRIORITY_WEIGHT_LONG_HAUL_LATE - 1,
-  );
+  const signalTs = islandSignalTs(trip, islandMode);
+  const longHaulLateForTrip =
+    islandMode === "live_ops" &&
+    Boolean(
+      clientRibbon &&
+        clientRibbon.trip_id === trip.trip_id &&
+        clientRibbon.priority_weight >= PRIORITY_WEIGHT_LONG_HAUL_LATE - 1,
+    );
 
   return (
     <GestureDetector gesture={pan}>
@@ -300,9 +541,11 @@ export function DynamicTripIsland({
         <View style={styles.pressInner}>
           <LinearGradient
             colors={
-              longHaulLateForTrip
-                ? ["rgba(254,226,226,0.95)", "rgba(254,202,202,0.88)"]
-                : ["rgba(255,255,255,0.88)", "rgba(241,245,249,0.78)"]
+              islandMode === "commercial"
+                ? ["rgba(254,243,199,0.95)", "rgba(253,230,138,0.85)"]
+                : longHaulLateForTrip
+                  ? ["rgba(254,226,226,0.95)", "rgba(254,202,202,0.88)"]
+                  : ["rgba(255,255,255,0.88)", "rgba(241,245,249,0.78)"]
             }
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
@@ -318,15 +561,48 @@ export function DynamicTripIsland({
                   color={
                     longHaulLateForTrip
                       ? "#dc2626"
-                      : unread || showRatePulse
-                        ? CHAT_ACCENT
-                        : Theme.textSecondary
+                      : islandMode === "commercial" && unread
+                        ? "#b45309"
+                        : unread || showRatePulse
+                          ? CHAT_ACCENT
+                          : Theme.textSecondary
                   }
                 />
               </Animated.View>
             </View>
             <View style={styles.titleBlock}>
-              <Text style={styles.kicker}>Live ops</Text>
+              <View style={styles.modeRow}>
+                <Pressable
+                  onPress={() => {
+                    setIslandMode("live_ops");
+                    setSwipeOffset(0);
+                    setExpanded(false);
+                  }}
+                  hitSlop={6}
+                  style={[styles.modePill, islandMode === "live_ops" && styles.modePillOn]}
+                >
+                  <Text style={[styles.modePillText, islandMode === "live_ops" && styles.modePillTextOn]}>
+                    Live ops
+                  </Text>
+                </Pressable>
+                {!isDriverUser ? (
+                  <Pressable
+                    onPress={() => {
+                      setIslandMode("commercial");
+                      setSwipeOffset(0);
+                      setExpanded(false);
+                    }}
+                    hitSlop={6}
+                    style={[styles.modePill, islandMode === "commercial" && styles.modePillOn]}
+                  >
+                    <Text
+                      style={[styles.modePillText, islandMode === "commercial" && styles.modePillTextOn]}
+                    >
+                      Commercial
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
               {longHaulLateForTrip ? (
                 <Text style={styles.latePill} numberOfLines={1}>
                   ⏳ LATE · {trip.display_trip_id?.trim() || trip.trip_number}
@@ -353,7 +629,9 @@ export function DynamicTripIsland({
           </View>
 
           <Text style={styles.locLine} numberOfLines={2}>
-            {locationSubtitle(trip)}
+            {islandMode === "commercial"
+              ? commercialSubtitle(trip, laneBalanceForIsland)
+              : locationSubtitle(trip, globalTripPatch)}
           </Text>
           {showRatePulse ? (
             <Text style={styles.rateHint} numberOfLines={2}>
@@ -449,12 +727,39 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   titleBlock: { flex: 1, minWidth: 0 },
-  kicker: {
-    fontSize: 10,
+  modeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 4,
+  },
+  modePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    backgroundColor: "rgba(15,23,42,0.06)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(15,23,42,0.08)",
+  },
+  modePillOn: {
+    backgroundColor: "rgba(26,35,126,0.12)",
+    borderColor: CHAT_ACCENT,
+  },
+  modePillText: {
+    fontSize: 11,
     fontWeight: "800",
     color: Theme.textSecondary,
-    letterSpacing: 1.2,
-    textTransform: "uppercase",
+    letterSpacing: 0.2,
+  },
+  modePillTextOn: {
+    color: CHAT_ACCENT,
+  },
+  emptyCommercialText: {
+    marginTop: 12,
+    fontSize: 13,
+    fontWeight: "600",
+    color: Theme.textBody,
+    lineHeight: 18,
   },
   latePill: {
     fontSize: 12,

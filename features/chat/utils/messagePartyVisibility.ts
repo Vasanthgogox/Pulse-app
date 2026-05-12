@@ -5,6 +5,7 @@ export type PartyLaneEvent = {
   message_type?: MessageType | string;
   conversation_id?: string;
   visibility_tags?: string[] | null;
+  metadata?: unknown;
   partyType: ConversationPartyType;
 };
 
@@ -27,6 +28,14 @@ export function isEventVisibleForPartyLane(
 ): boolean {
   const mt = event.message_type as string | undefined;
   if (isLedgerLikeMessageType(mt)) {
+    const meta =
+      event.metadata && typeof event.metadata === "object" && !Array.isArray(event.metadata)
+        ? (event.metadata as Record<string, unknown>)
+        : null;
+    const vt = meta?.visible_to;
+    if (Array.isArray(vt) && vt.length > 0) {
+      return vt.some((x) => String(x).toLowerCase() === partyType);
+    }
     if (convId && event.conversation_id) return event.conversation_id === convId;
     return event.partyType === partyType;
   }

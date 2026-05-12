@@ -90,6 +90,9 @@ export interface ActiveTripSummary {
   recent_events: ActiveTripRecentEvent[];
   /** Patched client-side from chat Realtime (`system_log` + location_data); optional on bootstrap. */
   last_known_location?: ActiveTripLastKnownLocation | null;
+  /** Hubometer snapshot from latest chat `location_data.odometer_km` (adaptive ping / heartbeat). */
+  last_heartbeat_odometer_km?: number | null;
+  last_heartbeat_recorded_at?: string | null;
   /** Client-only: bumped on B2B chat Realtime for this trip so the trip island ranks without re-bootstrap. */
   client_activity_at?: string | null;
   /** Fleet-side last vehicle ping when synced from `trips` or bootstrap (optional). */
