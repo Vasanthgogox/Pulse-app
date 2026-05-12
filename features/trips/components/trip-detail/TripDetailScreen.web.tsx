@@ -643,6 +643,27 @@ export default function TripDetailScreen({
   const journeyLogs = useMemo(() => {
     const tr = detail.trip;
     if (!tr) return [];
+    const audits = detail.assignmentAuditRows;
+    /** Real assignment time — not scheduled pickup (`pickup_date`). */
+    const assignedAtIso: string | null = (() => {
+      if (audits.length > 0) {
+        const sorted = [...audits].sort(
+          (a, b) =>
+            new Date(a.changed_at).getTime() - new Date(b.changed_at).getTime(),
+        );
+        const did = tr.driver_id;
+        if (did) {
+          const forCurrentDriver = [...sorted]
+            .reverse()
+            .find((r) => r.driver_id_new === did);
+          if (forCurrentDriver?.changed_at) return forCurrentDriver.changed_at;
+        }
+        return sorted[0]?.changed_at ?? null;
+      }
+      if (tr.driver_id)
+        return tr.updated_at ?? tr.created_at ?? null;
+      return null;
+    })();
     const loc = detail.driverLocation;
     const coordLine =
       loc && Number.isFinite(loc.latitude) && Number.isFinite(loc.longitude)
@@ -660,8 +681,8 @@ export default function TripDetailScreen({
       {
         status: "Assigned",
         location: tr.pickup_area?.trim() || "Origin hub",
-        time: tr.pickup_date
-          ? new Date(tr.pickup_date).toLocaleTimeString("en-IN", {
+        time: assignedAtIso
+          ? new Date(assignedAtIso).toLocaleTimeString("en-IN", {
               hour: "2-digit",
               minute: "2-digit",
             })
@@ -702,7 +723,12 @@ export default function TripDetailScreen({
         details: "Delivery completed and settlement flow closed.",
       },
     ];
-  }, [detail.trip, detail.driverLocation, detail.driverLocationAddress]);
+  }, [
+    detail.trip,
+    detail.assignmentAuditRows,
+    detail.driverLocation,
+    detail.driverLocationAddress,
+  ]);
 
   if (detail.loading && !detail.trip) {
     return <CenteredLoadingView message="Loading trip…" />;
