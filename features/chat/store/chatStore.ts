@@ -125,6 +125,7 @@ function _convFromEntry(
     trip_organization_id:   entry.tripOrganizationId ?? null,
     indent_id:               entry.indentId ?? null,
     conversation_type:     entry.chatFlow,
+    trip_source:             entry.tripSource ?? null,
     messages,
   };
 }

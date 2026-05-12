@@ -1211,6 +1211,10 @@ function normalizeInitialStateRow(row: Record<string, unknown>): TripConversatio
     trip_driver_id:          (row.trip_driver_id    as string | null) ?? null,
     trip_supplier_id:        (row.trip_supplier_id  as string | null) ?? null,
     trip_created_at:         (row.trip_created_at   as string | null) ?? null,
+    trip_source:
+      row.trip_source != null && String(row.trip_source).trim() !== ""
+        ? String(row.trip_source)
+        : null,
     trip_organization_id:
       row.trip_organization_id != null && String(row.trip_organization_id).trim() !== ""
         ? String(row.trip_organization_id)
@@ -1309,18 +1313,58 @@ export async function getUnifiedB2BChatBootstrap(
   return resolveGenericPartyNamesForTrips(conversations);
 }
 
+function distinctTripCount(conversations: TripConversation[]): number {
+  return new Set(conversations.map((c) => String(c.trip_id ?? "").trim()).filter(Boolean)).size;
+}
+
 /**
  * Multi-lane bootstrap: `get_multi_lane_bootstrap` → conversations + lane maps.
  * Falls back to {@link getUnifiedB2BChatBootstrap} + client-side {@link buildChatLanesFromConversations}.
+ *
+ * Optional `tripLimit` / `tripOffset` map to `p_trip_limit` / `p_trip_offset` when the DB migration is applied.
  */
-export async function fetchChatBootstrapPayload(organizationId: string): Promise<{
+export async function fetchChatBootstrapPayload(
+  organizationId: string,
+  opts?: { tripLimit?: number | null; tripOffset?: number },
+): Promise<{
   conversations: TripConversation[];
   lanes: ChatLanes;
+  hasMoreTrips: boolean;
 }> {
-  const { data, error } = await supabase().rpc("get_multi_lane_bootstrap", {
-    p_organization_id: organizationId,
-    p_message_limit:   TRIP_CHAT_HISTORY_PAGE,
-  });
+  const tripLimit = opts?.tripLimit ?? null;
+  const tripOffset = opts?.tripOffset ?? 0;
+
+  const rpcArgs: Record<string, unknown> =
+    tripLimit != null
+      ? {
+          p_organization_id: organizationId,
+          p_message_limit: TRIP_CHAT_HISTORY_PAGE,
+          p_trip_limit: tripLimit,
+          p_trip_offset: tripOffset,
+        }
+      : {
+          p_organization_id: organizationId,
+          p_message_limit: TRIP_CHAT_HISTORY_PAGE,
+        };
+
+  let { data, error } = await supabase().rpc("get_multi_lane_bootstrap", rpcArgs);
+
+  const msg = String(error?.message ?? "").toLowerCase();
+  let usedTripWindowRpc = tripLimit != null;
+  const overloadMissing =
+    tripLimit != null &&
+    (String(error?.code ?? "") === "42883" ||
+      String(error?.code ?? "") === "PGRST202" ||
+      msg.includes("get_multi_lane_bootstrap") ||
+      msg.includes("does not exist"));
+
+  if (overloadMissing) {
+    usedTripWindowRpc = false;
+    ({ data, error } = await supabase().rpc("get_multi_lane_bootstrap", {
+      p_organization_id: organizationId,
+      p_message_limit: TRIP_CHAT_HISTORY_PAGE,
+    }));
+  }
 
   if (!error && data != null && typeof data === "object" && !Array.isArray(data)) {
     const payload = data as Record<string, unknown>;
@@ -1335,16 +1379,18 @@ export async function fetchChatBootstrapPayload(organizationId: string): Promise
       baseLanes,
       payload.messages_by_context ?? payload.messagesByContext,
     );
-    return { conversations, lanes };
+    const n = distinctTripCount(conversations);
+    const hasMoreTrips = Boolean(usedTripWindowRpc && tripLimit != null && n >= tripLimit);
+    return { conversations, lanes, hasMoreTrips };
   }
 
   const code = String(error?.code ?? "");
-  const msg = String(error?.message ?? "").toLowerCase();
+  const errMsg = String(error?.message ?? "").toLowerCase();
   const missing =
     code === "42883" ||
     code === "PGRST202" ||
-    msg.includes("get_multi_lane_bootstrap") ||
-    msg.includes("does not exist");
+    errMsg.includes("get_multi_lane_bootstrap") ||
+    errMsg.includes("does not exist");
 
   if (!missing && error) throw error;
 
@@ -1355,6 +1401,7 @@ export async function fetchChatBootstrapPayload(organizationId: string): Promise
       buildChatLanesFromConversations(conversations),
       null,
     ),
+    hasMoreTrips: false,
   };
 }
 

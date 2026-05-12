@@ -36,6 +36,7 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { fetchChatBootstrapPayload } from '../services/chat.service';
+import { mergeChatLanes } from '../utils/laneMultiplexer.util';
 import type {
   B2BTripState,
   ChatTripFlow,
@@ -480,6 +481,8 @@ export interface TripEntry {
   totalUnread:          number;
   /** Counterparty org id for integrated trips (viewer is client → supplier lane org, and vice versa). */
   partnerOrganizationId: string | null;
+  /** From `trips.source` on bootstrap (e.g. `manual`). */
+  tripSource?: string | null;
 }
 
 // ── Store shape ───────────────────────────────────────────────────────────────
@@ -494,9 +497,15 @@ interface ChatState {
   isLoading:       boolean;
   /** Multi-lane commercial / operational message-id maps (from `get_multi_lane_bootstrap` or client mux). */
   chatLanes:       ChatLanes | null;
+  /** True when the server may return another trip window (windowed bootstrap). */
+  chatBootstrapHasMoreTrips: boolean;
+  /** Next `p_trip_offset` for {@link appendBootstrapTripPage}. */
+  chatBootstrapNextTripOffset: number;
+  isAppendingBootstrap: boolean;
 
   // ── Actions
-  bootstrap:          (orgId: string) => Promise<void>;
+  bootstrap:                 (orgId: string) => Promise<void>;
+  appendBootstrapTripPage:   (orgId: string) => Promise<void>;
   /** Idempotent: INSERT / echo rows merge into `event_stream` by `id`. */
   processIncomingEvent: (row: Partial<TripMessageRow>, mode: 'active' | 'background') => void;
   onRealtimeInsert:   (row: Partial<TripMessageRow>, mode: 'active' | 'background') => void;
@@ -716,6 +725,10 @@ function entryFromConv(conv: TripConversation): TripEntry {
     longHaulRevisedEta:   null,
     longHaulHealthStatus: null,
     partnerOrganizationId: null,
+    tripSource:
+      conv.trip_source != null && String(conv.trip_source).trim() !== ""
+        ? String(conv.trip_source)
+        : null,
   };
 }
 
@@ -765,6 +778,7 @@ function convFromEntry(
     trip_organization_id:   entry.tripOrganizationId ?? null,
     indent_id:                entry.indentId ?? null,
     conversation_type:      entry.chatFlow,
+    trip_source:            entry.tripSource ?? null,
     messages: dedupeTripStatusBroadcastsForLane(
       entry.event_stream.filter((e) =>
         isEventVisibleForPartyLane(e, partyType, convId),
@@ -865,6 +879,98 @@ function applyFeedbackLaneStatusOnIncomingRow(
   };
 }
 
+const CHAT_BOOTSTRAP_TRIP_PAGE = 10;
+const CHAT_BOOTSTRAP_TRIP_PAGE_MORE = 20;
+
+function ingestBootstrapConversations(
+  orgId: string,
+  conversations: TripConversation[],
+  base: {
+    trips: Record<string, TripEntry>;
+    convToTrip: Record<string, string>;
+    convToParty: Record<string, ConversationPartyType>;
+  },
+): {
+  trips: Record<string, TripEntry>;
+  convToTrip: Record<string, string>;
+  convToParty: Record<string, ConversationPartyType>;
+} {
+  const trips: Record<string, TripEntry> = { ...base.trips };
+  const convToTrip = { ...base.convToTrip };
+  const convToParty = { ...base.convToParty };
+
+  for (const conv of conversations) {
+    const { trip_id: tripId, party_type: partyType } = conv;
+    if (!tripId || !partyType) continue;
+
+    if (!trips[tripId]) trips[tripId] = entryFromConv(conv);
+    const entry = trips[tripId];
+    if (conv.indent_id != null && String(conv.indent_id).trim() !== "") {
+      entry.indentId = String(conv.indent_id);
+    }
+    if (conv.trip_source != null && String(conv.trip_source).trim() !== "") {
+      entry.tripSource = String(conv.trip_source);
+    }
+    entry.chatFlow = resolveChatFlow({
+      conversation_type: conv.conversation_type,
+      indent_id:         entry.indentId ?? conv.indent_id,
+    });
+
+    const history: TripMessageRow[] = Array.isArray(conv.messages)
+      ? (conv.messages as TripMessageRow[])
+      : [];
+    const sortedHistory =
+      history.length > 1
+        ? [...history].sort(
+            (a, b) =>
+              new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+          )
+        : history;
+    const financeSafe = sortedHistory.filter(
+      (m) =>
+        !isLedgerLikeMessageType(String(m.message_type ?? "")) ||
+        ledgerEventInvolvesOrg(m, orgId),
+    );
+    const newEvts: TripEvent[] = financeSafe.map((m) => ({ ...m, partyType }));
+
+    entry.parties[partyType] = partyFromConv(conv);
+    entry.event_stream       = mergeEvents(entry.event_stream, newEvts);
+
+    if (conv.trip_status) entry.status = conv.trip_status;
+    if (conv.trip_driver_id) entry.driverId = conv.trip_driver_id;
+    if (conv.trip_supplier_id) entry.supplierId = conv.trip_supplier_id;
+    if (
+      conv.trip_organization_id != null &&
+      String(conv.trip_organization_id).trim() !== ""
+    ) {
+      entry.tripOrganizationId = String(conv.trip_organization_id);
+    }
+
+    convToTrip[conv.id]  = tripId;
+    convToParty[conv.id] = partyType;
+  }
+
+  for (const entry of Object.values(trips)) {
+    entry.totalUnread = sumUnread(entry.parties);
+
+    if (entry.event_stream.length > 0) {
+      const last             = entry.event_stream[entry.event_stream.length - 1];
+      entry.lastEventAt      = last.created_at;
+      entry.lastEventPreview = previewText(last) ?? entry.lastEventPreview;
+    }
+    const lh = recomputeLongHaulTripFieldsFromStream(entry.event_stream);
+    entry.trackingStatus = lh.trackingStatus;
+    entry.longHaulRevisedEta = lh.longHaulRevisedEta;
+    entry.longHaulHealthStatus = lh.longHaulHealthStatus;
+  }
+
+  for (const tid of Object.keys(trips)) {
+    trips[tid] = withPartnerOrganizationStamp(trips[tid], orgId);
+  }
+
+  return { trips, convToTrip, convToParty };
+}
+
 // ── Store ─────────────────────────────────────────────────────────────────────
 
 export const useChatStore = create<ChatState>()(
@@ -879,6 +985,9 @@ export const useChatStore = create<ChatState>()(
     bootstrappedOrg: null,
     isLoading:       false,
     chatLanes:       null,
+    chatBootstrapHasMoreTrips: false,
+    chatBootstrapNextTripOffset: 0,
+    isAppendingBootstrap: false,
 
     // ── bootstrap ─────────────────────────────────────────────────────────────
     // Called ONCE per org-session from TripChatContext on mount.
@@ -893,83 +1002,18 @@ export const useChatStore = create<ChatState>()(
       set({ isLoading: true });
 
       try {
-        const { conversations, lanes } = await fetchChatBootstrapPayload(orgId);
+        const { conversations, lanes, hasMoreTrips } = await fetchChatBootstrapPayload(orgId, {
+          tripLimit: CHAT_BOOTSTRAP_TRIP_PAGE,
+          tripOffset: 0,
+        });
 
-        const trips:       Record<string, TripEntry>             = {};
-        const convToTrip:  Record<string, string>                = {};
-        const convToParty: Record<string, ConversationPartyType> = {};
+        const { trips, convToTrip, convToParty } = ingestBootstrapConversations(
+          orgId,
+          conversations,
+          { trips: {}, convToTrip: {}, convToParty: {} },
+        );
 
-        for (const conv of conversations) {
-          const { trip_id: tripId, party_type: partyType } = conv;
-          if (!tripId || !partyType) continue;
-
-          if (!trips[tripId]) trips[tripId] = entryFromConv(conv);
-          const entry = trips[tripId];
-          if (conv.indent_id != null && String(conv.indent_id).trim() !== "") {
-            entry.indentId = String(conv.indent_id);
-          }
-          entry.chatFlow = resolveChatFlow({
-            conversation_type: conv.conversation_type,
-            indent_id:         entry.indentId ?? conv.indent_id,
-          });
-
-          // Hydrate history: defensive array check + explicit ASC sort so the
-          // detail panel renders oldest-first regardless of RPC ordering.
-          const history: TripMessageRow[] = Array.isArray(conv.messages)
-            ? (conv.messages as TripMessageRow[])
-            : [];
-          const sortedHistory = history.length > 1
-            ? [...history].sort(
-                (a, b) =>
-                  new Date(a.created_at).getTime() -
-                  new Date(b.created_at).getTime(),
-              )
-            : history;
-          const financeSafe = sortedHistory.filter(
-            (m) =>
-              !isLedgerLikeMessageType(String(m.message_type ?? "")) ||
-              ledgerEventInvolvesOrg(m, orgId),
-          );
-          const newEvts: TripEvent[] = financeSafe.map((m) => ({ ...m, partyType }));
-
-          entry.parties[partyType] = partyFromConv(conv);
-          entry.event_stream       = mergeEvents(entry.event_stream, newEvts);
-
-          // Sync trip metadata — prefer most-complete values across parties
-          if (conv.trip_status)      entry.status     = conv.trip_status;
-          if (conv.trip_driver_id)   entry.driverId   = conv.trip_driver_id;
-          if (conv.trip_supplier_id) entry.supplierId = conv.trip_supplier_id;
-          if (
-            conv.trip_organization_id != null &&
-            String(conv.trip_organization_id).trim() !== ""
-          ) {
-            entry.tripOrganizationId = String(conv.trip_organization_id);
-          }
-
-          convToTrip[conv.id]  = tripId;
-          convToParty[conv.id] = partyType;
-        }
-
-        // Compute sidebar fields from actual event history (payment_balance via useTripMeta).
-        for (const entry of Object.values(trips)) {
-          entry.totalUnread = sumUnread(entry.parties);
-
-          if (entry.event_stream.length > 0) {
-            const last              = entry.event_stream[entry.event_stream.length - 1];
-            entry.lastEventAt       = last.created_at;
-            entry.lastEventPreview  = previewText(last) ?? entry.lastEventPreview;
-          }
-          const lh = recomputeLongHaulTripFieldsFromStream(entry.event_stream);
-          entry.trackingStatus = lh.trackingStatus;
-          entry.longHaulRevisedEta = lh.longHaulRevisedEta;
-          entry.longHaulHealthStatus = lh.longHaulHealthStatus;
-        }
-
-        for (const tid of Object.keys(trips)) {
-          trips[tid] = withPartnerOrganizationStamp(trips[tid], orgId);
-        }
-
-        set(s => ({
+        set((s) => ({
           trips,
           convToTrip,
           convToParty,
@@ -977,12 +1021,47 @@ export const useChatStore = create<ChatState>()(
           bootstrappedOrg: orgId,
           isLoading:       false,
           chatLanes:       lanes,
+          chatBootstrapHasMoreTrips: hasMoreTrips,
+          chatBootstrapNextTripOffset: CHAT_BOOTSTRAP_TRIP_PAGE,
+          isAppendingBootstrap: false,
         }));
       } catch (err) {
         if (__DEV__) console.error('[useChatStore] bootstrap failed:', err);
         set({ isLoading: false });
       } finally {
         chatBootstrapInFlightFor = null;
+      }
+    },
+
+    appendBootstrapTripPage: async (orgId) => {
+      if (get().bootstrappedOrg !== orgId) return;
+      if (!get().chatBootstrapHasMoreTrips) return;
+      if (get().isAppendingBootstrap) return;
+      set({ isAppendingBootstrap: true });
+      try {
+        const off = get().chatBootstrapNextTripOffset;
+        const { conversations, lanes, hasMoreTrips } = await fetchChatBootstrapPayload(orgId, {
+          tripLimit: CHAT_BOOTSTRAP_TRIP_PAGE_MORE,
+          tripOffset: off,
+        });
+        const { trips, convToTrip, convToParty } = ingestBootstrapConversations(orgId, conversations, {
+          trips:       get().trips,
+          convToTrip:  get().convToTrip,
+          convToParty: get().convToParty,
+        });
+        const mergedLanes = mergeChatLanes(get().chatLanes, lanes);
+        set({
+          trips,
+          convToTrip,
+          convToParty,
+          chatLanes: mergedLanes,
+          chatBootstrapHasMoreTrips: hasMoreTrips,
+          chatBootstrapNextTripOffset: off + CHAT_BOOTSTRAP_TRIP_PAGE_MORE,
+          isAppendingBootstrap: false,
+        });
+      } catch (err) {
+        if (__DEV__) console.error("[useChatStore] appendBootstrapTripPage failed:", err);
+        set({ isAppendingBootstrap: false });
       }
     },
 
@@ -1463,6 +1542,9 @@ export const useChatStore = create<ChatState>()(
       if (conv.indent_id != null && String(conv.indent_id).trim() !== "") {
         entry.indentId = String(conv.indent_id);
       }
+      if (conv.trip_source != null && String(conv.trip_source).trim() !== "") {
+        entry.tripSource = String(conv.trip_source);
+      }
       entry.chatFlow = resolveChatFlow({
         conversation_type: conv.conversation_type,
         indent_id:         entry.indentId ?? conv.indent_id,
@@ -1501,6 +1583,9 @@ export const useChatStore = create<ChatState>()(
         bootstrappedOrg: null,
         isLoading:       false,
         chatLanes:       null,
+        chatBootstrapHasMoreTrips: false,
+        chatBootstrapNextTripOffset: 0,
+        isAppendingBootstrap: false,
       });
     },
 

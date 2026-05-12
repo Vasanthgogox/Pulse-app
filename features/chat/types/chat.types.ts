@@ -288,6 +288,8 @@ export interface TripConversationRow {
   updated_at: string;
   /** Bootstrap-only: whether this lane still needs a trip-chat debrief rating. */
   trip_feedback_status?: TripFeedbackLaneStatus;
+  /** From `trips.source` when present on bootstrap rows. */
+  trip_source?: string | null;
 }
 
 export interface TripMessageRow {

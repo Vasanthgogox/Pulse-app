@@ -114,3 +114,53 @@ export function mergeMessagesByContextIntoLanes(
   if (messagesByContext.length === 0) return lanes;
   return { ...lanes, messagesByContext };
 }
+
+function mergeStrListMap(
+  a: Record<string, string[]>,
+  b: Record<string, string[]>,
+): Record<string, string[]> {
+  const out: Record<string, string[]> = { ...a };
+  for (const [k, arr] of Object.entries(b)) {
+    out[k] = Array.from(new Set([...(out[k] ?? []), ...arr]));
+  }
+  return out;
+}
+
+function mergeContextGroups(
+  prev: ContextMessageGroup[] | undefined,
+  next: ContextMessageGroup[] | undefined,
+): ContextMessageGroup[] | undefined {
+  if (!next?.length) return prev;
+  if (!prev?.length) return next;
+  const key = (g: ContextMessageGroup) => `${g.contextKind}:${g.contextId}`;
+  const byKey = new Map<string, ContextMessageGroup>();
+  for (const g of prev) {
+    byKey.set(key(g), { ...g, messageIds: [...g.messageIds] });
+  }
+  for (const g of next) {
+    const k = key(g);
+    const ex = byKey.get(k);
+    if (!ex) {
+      byKey.set(k, { ...g, messageIds: [...g.messageIds] });
+    } else {
+      byKey.set(k, {
+        ...ex,
+        messageIds: Array.from(new Set([...ex.messageIds, ...g.messageIds])),
+      });
+    }
+  }
+  return [...byKey.values()];
+}
+
+/** Deep-merge lane maps when appending a bootstrap page (dedupe message ids per key). */
+export function mergeChatLanes(
+  prev: ChatLanes | null | undefined,
+  next: ChatLanes,
+): ChatLanes {
+  const base = prev ?? { commercialByIndent: {}, operationalByTrip: {} };
+  return {
+    commercialByIndent: mergeStrListMap(base.commercialByIndent, next.commercialByIndent),
+    operationalByTrip: mergeStrListMap(base.operationalByTrip, next.operationalByTrip),
+    messagesByContext: mergeContextGroups(base.messagesByContext, next.messagesByContext),
+  };
+}

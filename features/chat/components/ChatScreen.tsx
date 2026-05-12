@@ -385,17 +385,14 @@ type GroupedTripHubRowData = {
   lastActivityConv: TripConversation | null;
 };
 
-/** Integrated / indent-backed lane (same unified bootstrap; split in UI for clarity). */
-function isIndentBackedTripConversation(
-  conv: Pick<TripConversation, "trip_id" | "indent_id" | "conversation_type">,
+/** Integrated hub tab: `indent_id` set on the trip (strict; not aggregate-supplier alone). */
+function tripHubHasIntegratedPartition(
+  conv: Pick<TripConversation, "trip_id" | "indent_id">,
   trips: Record<string, TripEntry>,
 ): boolean {
   if (Boolean(String(conv.indent_id ?? "").trim())) return true;
-  if (conv.conversation_type === "integrated_group") return true;
   const e = trips[conv.trip_id];
-  if (e?.chatFlow === "integrated_group") return true;
-  if (e?.indentId && String(e.indentId).trim() !== "") return true;
-  return false;
+  return Boolean(e?.indentId && String(e.indentId).trim());
 }
 
 function buildGroupedTripHubRows(args: {
@@ -407,6 +404,7 @@ function buildGroupedTripHubRows(args: {
   isDesktop: boolean;
   webCommandPriorityFilter: boolean;
   activeTripsForCommandPriority: ActiveTripSummary[];
+  tripTrackingByTripId: Record<string, string | null>;
 }): GroupedTripHubRowData[] {
   const {
     sourceConversations,
@@ -418,6 +416,7 @@ function buildGroupedTripHubRows(args: {
     webCommandPriorityFilter,
     activeTripsForCommandPriority,
   } = args;
+  const tripTrackingByTripId = args.tripTrackingByTripId;
   const q = tripSidebarSearch.trim().toLowerCase();
   const byTrip = new Map<string, GroupedTripHubRowData>();
   for (const conv of sourceConversations) {
@@ -516,6 +515,11 @@ function buildGroupedTripHubRows(args: {
     const au = a.totalUnread > 0 ? 0 : 1;
     const bu = b.totalUnread > 0 ? 0 : 1;
     if (au !== bu) return au - bu;
+    const la =
+      (tripTrackingByTripId[a.tripId] ?? "") === "RUNNING_LATE" ? 0 : 1;
+    const lb =
+      (tripTrackingByTripId[b.tripId] ?? "") === "RUNNING_LATE" ? 0 : 1;
+    if (la !== lb) return la - lb;
     if (Platform.OS === "web" && isDesktop && webCommandPriorityFilter) {
       const sa = commandPriorityScore(
         {
@@ -667,7 +671,7 @@ export function ChatScreen() {
   /** Web desktop: bubble LATE_RISK / indent-linked trips in the hub list. */
   const [webCommandPriorityFilter, setWebCommandPriorityFilter] = useState(false);
   const activeTripsForCommandPriority = useGlobalSyncStore((s) => s.activeTrips);
-  const [visibleTripCount, setVisibleTripCount] = useState(20);
+  const [visibleTripCount, setVisibleTripCount] = useState(10);
   const [tripSidebarSearch, setTripSidebarSearch] = useState("");
   const [showTripFilterModal, setShowTripFilterModal] = useState(false);
   const detailEnterProgress = useRef(new Animated.Value(1)).current;
@@ -691,6 +695,9 @@ export function ChatScreen() {
   // "background refresh" (keep list visible, skip spinner).
   const bootstrapDone = useChatStore(s => s.bootstrappedOrg !== null);
   const chatTrips = useChatStore((s) => s.trips);
+  const chatBootstrapHasMoreTrips = useChatStore((s) => s.chatBootstrapHasMoreTrips);
+  const appendBootstrapTripPage = useChatStore((s) => s.appendBootstrapTripPage);
+  const isAppendingBootstrap = useChatStore((s) => s.isAppendingBootstrap);
   const {
     chats: netChats,
     partners: netPartners,
@@ -773,7 +780,7 @@ export function ChatScreen() {
   const tripStreamConversations = useMemo(
     () =>
       baseFilteredSortedTripConversations.filter(
-        (c) => !isIndentBackedTripConversation(c, chatTrips),
+        (c) => !tripHubHasIntegratedPartition(c, chatTrips),
       ),
     [baseFilteredSortedTripConversations, chatTrips],
   );
@@ -781,7 +788,7 @@ export function ChatScreen() {
   const indentStreamConversations = useMemo(
     () =>
       baseFilteredSortedTripConversations.filter((c) =>
-        isIndentBackedTripConversation(c, chatTrips),
+        tripHubHasIntegratedPartition(c, chatTrips),
       ),
     [baseFilteredSortedTripConversations, chatTrips],
   );
@@ -806,6 +813,14 @@ export function ChatScreen() {
     });
   }, [netChats]);
 
+  const tripHubTrackingByTripId = useMemo(() => {
+    const m: Record<string, string | null> = {};
+    for (const [id, e] of Object.entries(chatTrips)) {
+      m[id] = e?.trackingStatus ?? null;
+    }
+    return m;
+  }, [chatTrips]);
+
   const groupedManualTripHubRows = useMemo(
     () =>
       buildGroupedTripHubRows({
@@ -817,6 +832,7 @@ export function ChatScreen() {
         isDesktop,
         webCommandPriorityFilter,
         activeTripsForCommandPriority,
+        tripTrackingByTripId: tripHubTrackingByTripId,
       }),
     [
       tripStreamConversations,
@@ -826,6 +842,7 @@ export function ChatScreen() {
       isDesktop,
       webCommandPriorityFilter,
       activeTripsForCommandPriority,
+      tripHubTrackingByTripId,
     ],
   );
 
@@ -840,6 +857,7 @@ export function ChatScreen() {
         isDesktop,
         webCommandPriorityFilter,
         activeTripsForCommandPriority,
+        tripTrackingByTripId: tripHubTrackingByTripId,
       }),
     [
       indentStreamConversations,
@@ -849,6 +867,7 @@ export function ChatScreen() {
       isDesktop,
       webCommandPriorityFilter,
       activeTripsForCommandPriority,
+      tripHubTrackingByTripId,
     ],
   );
 
@@ -881,7 +900,7 @@ export function ChatScreen() {
   }, [tripChatFilteredConversations]);
 
   useEffect(() => {
-    setVisibleTripCount(20);
+    setVisibleTripCount(10);
   }, [tripChatScope, activeTab]);
 
   useEffect(() => {
@@ -931,7 +950,7 @@ export function ChatScreen() {
     const hit = conversations.find((c) => c.id === convIdParam);
     if (hit) {
       const tripsSnap = useChatStore.getState().trips;
-      const inferred = isIndentBackedTripConversation(hit, tripsSnap) ? "indent" : "trips";
+      const inferred = tripHubHasIntegratedPartition(hit, tripsSnap) ? "indent" : "trips";
       const targetTab: TabId =
         tabParamRawNorm === "indent" ? "indent" : tabParamRawNorm === "trips" ? "trips" : inferred;
       const resolvedTab: TabId =
@@ -1371,10 +1390,10 @@ export function ChatScreen() {
       unread: number;
       Icon: React.ComponentType<{ size: number; color: string; strokeWidth?: number }>;
     }[] = [
-      { id: "trips", label: "TRIPS CHAT", unread: tripsChatUnread, Icon: Hash },
+      { id: "trips", label: "MANUAL", unread: tripsChatUnread, Icon: Hash },
       {
         id: "indent",
-        label: "INDENT CHAT",
+        label: "INTEGRATED",
         unread: indentChatUnread,
         Icon: Briefcase,
       },
@@ -1588,11 +1607,11 @@ export function ChatScreen() {
                   label={
                     tripChatScope === "history"
                       ? activeTab === "indent"
-                        ? "No indent trips in history"
-                        : "No trips in history"
+                        ? "No integrated trips in history"
+                        : "No manual trips in history"
                       : activeTab === "indent"
-                        ? "No active indent trip conversations"
-                        : "No active trip conversations"
+                        ? "No active integrated trip conversations"
+                        : "No active manual trip conversations"
                   }
                   actionLabel={tripChatScope === "active" ? "Start a conversation" : undefined}
                   onAction={tripChatScope === "active" ? openCompose : undefined}
@@ -1761,18 +1780,38 @@ export function ChatScreen() {
                   );
                   items.push(card);
                   });
-                  if (visibleTripCount < groupedTripRows.length) {
+                  const showLoadMoreFooter =
+                    groupedTripRows.length > 0 &&
+                    (visibleTripCount < groupedTripRows.length || chatBootstrapHasMoreTrips);
+                  if (showLoadMoreFooter) {
+                    const sliceRemaining = Math.max(0, groupedTripRows.length - visibleTripCount);
+                    const batch =
+                      sliceRemaining > 0 ? Math.min(20, sliceRemaining) : 20;
                     items.push(
                       <TouchableOpacity
                         key="__load_more__"
                         style={s.loadMoreBtn}
-                        onPress={() => setVisibleTripCount(c => c + 20)}
+                        disabled={isAppendingBootstrap}
+                        onPress={() => {
+                          if (visibleTripCount < groupedTripRows.length) {
+                            setVisibleTripCount((c) => c + 20);
+                            return;
+                          }
+                          if (!organizationId) return;
+                          void appendBootstrapTripPage(organizationId).then(() => {
+                            setVisibleTripCount((c) => c + 20);
+                          });
+                        }}
                         activeOpacity={0.75}
                       >
                         <Text style={s.loadMoreText}>
-                          Load {Math.min(20, groupedTripRows.length - visibleTripCount)} more
+                          {isAppendingBootstrap
+                            ? "Loading…"
+                            : sliceRemaining > 0
+                              ? `Load ${batch} more`
+                              : "Load more trips"}
                         </Text>
-                      </TouchableOpacity>
+                      </TouchableOpacity>,
                     );
                   }
                   return items;
@@ -1789,11 +1828,11 @@ export function ChatScreen() {
                   label={
                     tripChatScope === "history"
                       ? activeTab === "indent"
-                        ? "No indent trips in history"
-                        : "No trips in history"
+                        ? "No integrated trips in history"
+                        : "No manual trips in history"
                       : activeTab === "indent"
-                        ? "No active indent trip conversations"
-                        : "No active trip conversations"
+                        ? "No active integrated trip conversations"
+                        : "No active manual trip conversations"
                   }
                   actionLabel={tripChatScope === "active" ? "Start a conversation" : undefined}
                   onAction={tripChatScope === "active" ? openCompose : undefined}

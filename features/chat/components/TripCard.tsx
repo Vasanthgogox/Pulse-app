@@ -79,6 +79,42 @@ export function TripCard({
                     <Network size={14} color={tripActive ? "#a5b4fc" : CHAT_ACCENT} strokeWidth={2.4} />
                   </View>
                 ) : null}
+                {chatFlow === "private_trip" ? (
+                  <View
+                    style={[
+                      styles.hubFlowBadge,
+                      tripActive ? styles.hubFlowBadgeManualOn : styles.hubFlowBadgeManual,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.hubFlowBadgeText,
+                        tripActive && styles.hubFlowBadgeTextOn,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      [MANUAL]
+                    </Text>
+                  </View>
+                ) : null}
+                {chatFlow === "integrated_group" ? (
+                  <View
+                    style={[
+                      styles.hubFlowBadge,
+                      tripActive ? styles.hubFlowBadgeIntegratedOn : styles.hubFlowBadgeIntegrated,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.hubFlowBadgeText,
+                        tripActive && styles.hubFlowBadgeTextIntegratedOn,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      [INTEGRATED]
+                    </Text>
+                  </View>
+                ) : null}
                 <Text
                   style={[styles.tripHubTripTitle, tripActive && styles.tripHubTripTitleOn]}
                   numberOfLines={1}
@@ -238,6 +274,42 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
+  },
+  hubFlowBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    flexShrink: 0,
+  },
+  hubFlowBadgeManual: {
+    backgroundColor: "rgba(100,116,139,0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(100,116,139,0.35)",
+  },
+  hubFlowBadgeManualOn: {
+    backgroundColor: "rgba(148,163,184,0.22)",
+    borderColor: "rgba(226,232,240,0.45)",
+  },
+  hubFlowBadgeIntegrated: {
+    backgroundColor: "rgba(167,139,250,0.22)",
+    borderWidth: 1,
+    borderColor: "rgba(139,92,246,0.45)",
+  },
+  hubFlowBadgeIntegratedOn: {
+    backgroundColor: "rgba(196,181,253,0.2)",
+    borderColor: "rgba(196,181,253,0.55)",
+  },
+  hubFlowBadgeText: {
+    fontSize: 8,
+    fontWeight: "900",
+    letterSpacing: 0.4,
+    color: "#475569",
+  },
+  hubFlowBadgeTextOn: {
+    color: "#e2e8f0",
+  },
+  hubFlowBadgeTextIntegratedOn: {
+    color: "#e9d5ff",
   },
   tripHubHeroTrail: {
     flexDirection: "row",
