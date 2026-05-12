@@ -46,7 +46,7 @@ export function useShipperDisplayNamesQuery(orgId: string | null) {
 export function useTripsInfiniteQuery(orgId: string | null, opts?: { pageSize?: number }) {
   const pageSize = opts?.pageSize ?? DEFAULT_PAGE_SIZE;
   return useInfiniteQuery({
-    queryKey: queryKeys.trips.all(orgId ?? ''),
+    queryKey: queryKeys.trips.paginated(orgId ?? '', pageSize),
     queryFn: async ({ pageParam = 0 }) => {
       const res = await getTripsByOrganization(orgId!, { limit: pageSize, offset: pageParam });
       if (res.error) throw res.error;

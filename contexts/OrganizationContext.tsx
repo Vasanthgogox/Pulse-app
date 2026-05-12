@@ -34,18 +34,30 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const mountedRef = useRef(true);
+  const userRef = useRef(user);
+  userRef.current = user;
 
-  const refreshOrganization = useCallback(async () => {
-    if (!user) {
+  /** `signal.cancelled` is flipped only by useEffect cleanup (per user session). Manual refresh passes `{ cancelled: false }` and relies on userRef + mountedRef after await. */
+  const loadOrganizationsForSession = useCallback(async (signal: { cancelled: boolean }) => {
+    const stale = () => signal.cancelled || !mountedRef.current;
+    const staleForUser = (uid: string) => stale() || userRef.current?.uid !== uid;
+
+    const sessionUser = userRef.current;
+    if (!sessionUser) {
+      if (stale()) return;
       setCurrentOrganization(null);
       setIsLoading(false);
       return;
     }
-    setIsLoading(true);
-    setError(null);
+
+    const sessionUid = sessionUser.uid;
+    if (!stale()) {
+      setIsLoading(true);
+      setError(null);
+    }
     try {
       const { error: err, organizations } = await organizationService.getOrganizationsForUser();
-      if (!mountedRef.current) return;
+      if (staleForUser(sessionUid)) return;
       if (err) {
         setError(err);
         setCurrentOrganization(null);
@@ -55,19 +67,29 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
         setCurrentOrganization(null);
       }
     } catch (e) {
-      if (!mountedRef.current) return;
+      if (staleForUser(sessionUid)) return;
       setError(e instanceof Error ? e : new Error(String(e)));
       setCurrentOrganization(null);
     } finally {
-      if (mountedRef.current) setIsLoading(false);
+      if (!staleForUser(sessionUid)) {
+        setIsLoading(false);
+      }
     }
-  }, [user]);
+  }, []);
+
+  const refreshOrganization = useCallback(async () => {
+    await loadOrganizationsForSession({ cancelled: false });
+  }, [loadOrganizationsForSession]);
 
   useEffect(() => {
+    const signal = { cancelled: false };
     mountedRef.current = true;
-    refreshOrganization();
-    return () => { mountedRef.current = false; };
-  }, [refreshOrganization]);
+    void loadOrganizationsForSession(signal);
+    return () => {
+      signal.cancelled = true;
+      mountedRef.current = false;
+    };
+  }, [user, loadOrganizationsForSession]);
 
   return (
     <OrganizationContext.Provider

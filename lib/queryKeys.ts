@@ -8,6 +8,9 @@ export const queryKeys = {
 
   trips: {
     all: (orgId: string) => ["q", "trips", orgId] as const,
+    /** Offset-paginated infinite list — distinct from `all` (TripRow[] vs InfiniteData). */
+    paginated: (orgId: string, pageSize: number) =>
+      ["q", "trips", orgId, "paginated", pageSize] as const,
     list: (orgId: string, opts?: { limit?: number; offset?: number }) =>
       opts
         ? (["q", "trips", orgId, opts] as const)
