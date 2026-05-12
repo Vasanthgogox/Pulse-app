@@ -7,6 +7,7 @@ import {
   View,
 } from "react-native";
 import {
+  Activity,
   AlertTriangle,
   CheckCircle,
   ChevronRight,
@@ -153,6 +154,21 @@ function inferStatusFromContent(content: string): keyof typeof STATUS_ICON_MAP {
   if (c.includes("cancelled")) return "cancelled";
   if (c.includes("assigned")) return "assigned";
   return "default";
+}
+
+/** WhatsApp-style “protocol / milestone” system ribbon (completed + protocol copy). */
+function shouldUsePulseProtocolSystemCard(
+  content: string,
+  statusKey: keyof typeof STATUS_ICON_MAP,
+): boolean {
+  const c = (content ?? "").toLowerCase();
+  if (statusKey === "completed" || statusKey === "delivered") return true;
+  return (
+    c.includes("protocol") ||
+    c.includes("threshold") ||
+    c.includes("destination threshold") ||
+    c.includes("trip protocol")
+  );
 }
 
 export function getStatusEventSheetVisuals(statusKey: string) {
@@ -589,6 +605,110 @@ const s = StyleSheet.create({
     fontWeight: "700",
     color: "#b45309",
   },
+  // Pulse-style system protocol ribbon (completed / milestone)
+  pulseProtoWrap: {
+    alignSelf: "center",
+    maxWidth: "92%",
+    width: "100%",
+    marginVertical: 6,
+  },
+  pulseProtoCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    borderTopWidth: 1,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderLeftWidth: 4,
+    borderTopColor: "#e8ecf1",
+    borderRightColor: "#e8ecf1",
+    borderBottomColor: "#e8ecf1",
+    borderLeftColor: "#10b981",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    shadowColor: "#059669",
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  pulseProtoIconCol: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  pulseProtoIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#ecfdf5",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pulseProtoLiveDot: {
+    position: "absolute",
+    right: 2,
+    bottom: 2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "#10b981",
+    borderWidth: 2,
+    borderColor: "#ffffff",
+  },
+  pulseProtoDivider: {
+    width: 1,
+    alignSelf: "stretch",
+    backgroundColor: "#f1f5f9",
+    marginVertical: 2,
+  },
+  pulseProtoBody: {
+    flex: 1,
+    minWidth: 0,
+    paddingLeft: 4,
+    gap: 4,
+  },
+  pulseProtoTitle: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.2,
+  },
+  pulseProtoSubtitle: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#64748b",
+    lineHeight: 14,
+  },
+  pulseProtoRight: {
+    alignItems: "flex-end",
+    flexShrink: 0,
+    gap: 6,
+    paddingLeft: 6,
+  },
+  pulseProtoBadge: {
+    backgroundColor: "rgba(16, 185, 129, 0.12)",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  pulseProtoBadgeText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#047857",
+    letterSpacing: 0.6,
+  },
+  pulseProtoTime: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#94a3b8",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
 });
 
 export interface TripProgressEventCardProps {
@@ -666,6 +786,46 @@ function systemSheetAvatarSeed(content: string): string {
   return "Trip update";
 }
 
+function PulseSystemProtocolCard({
+  title,
+  subtitle,
+  displayTime,
+}: {
+  title: string;
+  subtitle: string;
+  displayTime: string;
+}) {
+  return (
+    <View style={s.pulseProtoWrap}>
+      <View style={s.pulseProtoCard}>
+        <View style={s.pulseProtoIconCol}>
+          <View style={s.pulseProtoIconCircle}>
+            <Activity size={18} color="#059669" strokeWidth={2.4} />
+          </View>
+          <View style={s.pulseProtoLiveDot} />
+        </View>
+        <View style={s.pulseProtoDivider} />
+        <View style={s.pulseProtoBody}>
+          <Text style={s.pulseProtoTitle} numberOfLines={2}>
+            {title}
+          </Text>
+          <Text style={s.pulseProtoSubtitle} numberOfLines={3}>
+            {subtitle}
+          </Text>
+        </View>
+        <View style={s.pulseProtoRight}>
+          <View style={s.pulseProtoBadge}>
+            <Text style={s.pulseProtoBadgeText}>SYSTEM DONE</Text>
+          </View>
+          <Text style={s.pulseProtoTime} numberOfLines={1}>
+            {displayTime}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 export function ChatSystemEventCard({ message }: { message: TripMessageRow }) {
   const statusKey = inferStatusFromContent(message.content);
   const cfg = STATUS_ICON_MAP[statusKey] ?? STATUS_ICON_MAP.default;
@@ -684,6 +844,23 @@ export function ChatSystemEventCard({ message }: { message: TripMessageRow }) {
 
   const metaLine = `System update · ${dateUpper} · ${cfg.sheetLabel}`;
   const seed = systemSheetAvatarSeed(message.content);
+
+  if (shouldUsePulseProtocolSystemCard(message.content, statusKey)) {
+    const tripRef =
+      (message.content ?? "").match(/\b(TRP[-A-Z0-9]+)\b/i)?.[1] ??
+      (message.content ?? "").match(/\b([A-Z]{2,4}\d{2,6})\b/i)?.[1];
+    const subtitle = tripRef
+      ? `${tripRef} has reached a destination milestone on the shared trip channel.`
+      : `Recorded ${dateUpper} · ${cfg.sheetLabel}.`;
+
+    return (
+      <PulseSystemProtocolCard
+        title={message.content.trim() || "Trip protocol update"}
+        subtitle={subtitle}
+        displayTime={displayTime}
+      />
+    );
+  }
 
   return (
     <TripProgressEventCard

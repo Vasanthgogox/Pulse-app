@@ -93,15 +93,10 @@ export function useChat({
     return () => { cancelled = true; };
   }, [conversationId, initialLimit]);
 
-  // ── Realtime subscription — strictly filtered + strictly cleaned up ───────────
+  // ── Realtime subscription — filtered channel per thread (narrow WAL fanout) ───
   //
-  // Subscription key: `trip_messages:org:{organizationId}`
-  // This key is SHARED with TripChatContext and DriverChatContext via the
-  // realtimeRegistry ref-count. Opening this hook alongside those contexts costs
-  // zero extra WebSocket connections — only the listener count increases.
-  //
-  // Server-side filter: organization_id=eq.{orgId}  (avoids full-table WAL scan)
-  // Client-side filter: conversation_id === conversationId  (narrows to this thread)
+  // Subscription key is per conversation so specs stay stable and the registry
+  // does not collide with the org-wide hub channel (`trip_messages:org:…`).
   //
   // Cleanup: the returned `unsub` decrements the ref count. When refs → 0, the
   // registry schedules channel teardown after TEARDOWN_GRACE_MS (5 s), preventing
@@ -109,27 +104,50 @@ export function useChat({
   useEffect(() => {
     if (!conversationId || !organizationId || !selfUid) return;
 
+    const filter = `conversation_id=eq.${conversationId}`;
     const unsub = subscribeSharedPostgresChanges(
-      `trip_messages:org:${organizationId}`,
+      `trip_messages:conv:${organizationId}:${conversationId}`,
       [
         {
           event: "INSERT",
           schema: "public",
           table: "trip_messages",
-          filter: `organization_id=eq.${organizationId}`,
+          filter,
+        },
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "trip_messages",
+          filter,
         },
       ],
       (payload) => {
-        const row = payload.new as Partial<TripMessageRow> | null;
-        if (!row?.conversation_id) return;
-        // Strict per-conversation filter — only process rows for this thread.
-        if (row.conversation_id !== conversationId) return;
-        // Own echo — optimistic insert already appended this message.
-        if (row.sender_user_id && row.sender_user_id === selfUid) return;
-
-        // Push to batch queue rather than calling setState immediately.
-        queueRef.current.push(row);
-        scheduleFlush();
+        if (payload.eventType === "INSERT") {
+          const row = payload.new as Partial<TripMessageRow> | null;
+          if (!row?.conversation_id) return;
+          if (row.conversation_id !== conversationId) return;
+          if (row.sender_user_id && row.sender_user_id === selfUid) return;
+          queueRef.current.push(row);
+          scheduleFlush();
+          return;
+        }
+        if (payload.eventType === "UPDATE") {
+          const row = payload.new as Partial<TripMessageRow> | null;
+          if (!row?.id || row.conversation_id !== conversationId) return;
+          setMessages((prev) =>
+            prev.map((m) => {
+              if (m.id !== row.id) return m;
+              return {
+                ...m,
+                is_delivered: row.is_delivered ?? m.is_delivered,
+                delivered_at: row.delivered_at ?? m.delivered_at,
+                is_read: row.is_read ?? m.is_read,
+                read_at: row.read_at ?? m.read_at,
+                metadata: row.metadata != null ? row.metadata : m.metadata,
+              };
+            }),
+          );
+        }
       },
     );
 

@@ -10,6 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useOptionalOrganization } from "@/contexts/OrganizationContext";
 import { subscribeSharedPostgresChanges } from "@/lib/realtimeRegistry";
 import { supabase } from "@/lib/supabase";
+import { getActiveTripMessageConversationId } from "../realtime/activeTripMessageScope";
 import * as chatService from "../services/chat.service";
 import { useConversations, useTotalUnreadCount } from "../store/chatStore";
 import {
@@ -222,7 +223,9 @@ export function TripChatProvider({
             const queued = pendingForUnknownConv.current.get(convId) ?? [];
             pendingForUnknownConv.current.delete(convId);
             for (const qRow of queued) {
-              useChatStore.getState().onRealtimeInsert(qRow, mode);
+              const hubListOnly =
+                getActiveTripMessageConversationId() !== qRow.conversation_id;
+              useChatStore.getState().processIncomingEvent(qRow, mode, { hubListOnly });
             }
           } else {
             pendingForUnknownConv.current.delete(convId);
@@ -270,8 +273,11 @@ export function TripChatProvider({
             return;
           }
 
+          const activeCid = getActiveTripMessageConversationId();
+          const hubListOnly = activeCid !== row.conversation_id;
+
           // onRealtimeInsert handles status_change / tracking state sync internally.
-          s.onRealtimeInsert(row, mode);
+          s.processIncomingEvent(row, mode, { hubListOnly });
         }
 
         // ── UPDATE (delivered / seen ticks) ─────────────────────────────────
@@ -309,6 +315,49 @@ export function TripChatProvider({
       unsub();
     };
   }, [organizationId, selfUid, _enqueueUnknownConv, flushAckBatch]);
+
+  // ── Realtime: trip_conversations (DB denormalized unread + last preview) ─────
+  useEffect(() => {
+    if (!organizationId || !selfUid) return;
+    const unsub = subscribeSharedPostgresChanges(
+      `trip_conversations:org:${organizationId}`,
+      [
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "trip_conversations",
+          filter: `organization_id=eq.${organizationId}`,
+        },
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "trip_conversations",
+          filter: `organization_id=eq.${organizationId}`,
+        },
+      ],
+      (payload) => {
+        const row = payload.new as Record<string, unknown> | null;
+        if (!row?.id || !row.trip_id) return;
+        const tripId = String(row.trip_id);
+        const convId = String(row.id);
+
+        if (payload.eventType === "INSERT") {
+          const trips = useChatStore.getState().trips;
+          if (!trips[tripId]) {
+            void chatService.getTripConversationById(convId).then((conv) => {
+              if (conv) useChatStore.getState().upsertConversation(conv);
+            });
+            return;
+          }
+        }
+
+        useChatStore.getState().patchTripConversationFromRealtime(row);
+      },
+    );
+    return () => {
+      unsub();
+    };
+  }, [organizationId, selfUid]);
 
   // ── sendMessage: optimistic + persist + rollback ───────────────────────────
   const sendMessage = useCallback(

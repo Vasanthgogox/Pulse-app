@@ -26,7 +26,6 @@ import {
   useChatStore,
   tripEntryToMeta,
   previewText,
-  resolveChatFlow,
   type TripEntry,
   type PartyConv,
 } from './useChatStore';
@@ -275,8 +274,12 @@ export const chatStore = {
   submitTripFeedback: (convId: string, msgId: string, rating: number): void =>
     useChatStore.getState().submitTripFeedback(convId, msgId, rating),
 
-  submitSmileyFeedback: (messageId: string, rating: number): Promise<{ error: string | null }> =>
-    useChatStore.getState().submitSmileyFeedback(messageId, rating),
+  submitSmileyFeedback: (
+    messageId: string,
+    rating: number,
+    opts?: { comment?: string },
+  ): Promise<{ error: string | null }> =>
+    useChatStore.getState().submitSmileyFeedback(messageId, rating, opts),
 
   appendMessage: (convId: string, msg: TripMessageRow): void =>
     useChatStore.getState().appendMessage(convId, msg),
@@ -284,7 +287,8 @@ export const chatStore = {
   processIncomingEvent: (
     row: Partial<TripMessageRow>,
     mode: "active" | "background",
-  ): void => useChatStore.getState().processIncomingEvent(row, mode),
+    opts?: { hubListOnly?: boolean },
+  ): void => useChatStore.getState().processIncomingEvent(row, mode, opts),
 
   optimisticInsert: (convId: string, msg: TripMessageRow): void =>
     useChatStore.getState().optimisticInsert(convId, msg),
@@ -295,7 +299,7 @@ export const chatStore = {
   removeMessage: (convId: string, msgId: string): void =>
     useChatStore.getState().removeMessage(convId, msgId),
 
-  mergeConversationHistory: (convId: string, messages: TripMessageRow[]): void =>
+  mergeConversationHistory: (convId: string, messages: TripMessageRow[]): boolean =>
     useChatStore.getState().mergeConversationHistory(convId, messages),
 
   clear: (): void => useChatStore.getState().clear(),

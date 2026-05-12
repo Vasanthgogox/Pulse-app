@@ -9,12 +9,14 @@
  *   }
  *
  * BOOTSTRAP (windowed DB calls):
- *   bootstrap / appendBootstrapTripPage fetch trip windows. Only the first 3 distinct
- *   trips per ingest batch merge full `messages` into `event_stream`; remaining trips
- *   stay lazy until {@link ChatState.hydrateTripMessagesIfNeeded} runs on thread open.
+ *   bootstrap / appendBootstrapTripPage fetch trip windows. RPC returns **conversation
+ *   summaries only** (`p_include_message_bodies=false` when supported); message bodies
+ *   merge into `event_stream` only after {@link ChatState.hydrateTripMessagesIfNeeded}
+ *   runs on thread open. Cold start may hydrate summaries from AsyncStorage first.
  *
  * REALTIME PATCH (zero DB calls):
- *   processIncomingEvent(row, mode)  idempotent upsert; 500ms dedupe (message_id /
+ *   processIncomingEvent(row, mode, opts?)  idempotent upsert; `hubListOnly` skips
+ *   `event_stream` merge for non-open threads (lighter hub CPU). 500ms dedupe (message_id /
  *   transaction_id); 1s dedupe (metadata.action_id); message_type switch multiplex
  *   (ledger_update, assignment_update, document_upload, …); payload-driven patches.
  *   appendMessage(convId, msg)       idempotent upsert + optimistic delivery (outgoing).
@@ -39,8 +41,14 @@ import { subscribeWithSelector } from 'zustand/middleware';
 import {
   fetchChatBootstrapPayload,
   fetchConversationHistory,
+  submitAtomicFeedback,
   submitTripChatFeedback,
 } from '../services/chat.service';
+import {
+  clearChatBootstrapSummaries,
+  loadChatBootstrapSummaries,
+  persistChatBootstrapSummaries,
+} from '../persist/chatBootstrapPersist';
 import { mergeChatLanes } from '../utils/laneMultiplexer.util';
 import type {
   B2BTripState,
@@ -494,10 +502,7 @@ export interface TripEntry {
   partnerOrganizationId: string | null;
   /** From `trips.source` on bootstrap (e.g. `manual`). */
   tripSource?: string | null;
-  /**
-   * When true, bootstrap omitted message rows for this trip (beyond the lazy window).
-   * Open-thread hydration loads history via {@link ChatState.hydrateTripMessagesIfNeeded}.
-   */
+  /** When true, bootstrap omitted message rows for this trip; open-thread hydration loads history. */
   skipEventStreamHydration?: boolean;
 }
 
@@ -534,8 +539,12 @@ interface ChatState {
     tripId: string,
     opts?: { conversationId?: string },
   ) => Promise<void>;
-  /** Idempotent: INSERT / echo rows merge into `event_stream` by `id`. */
-  processIncomingEvent: (row: Partial<TripMessageRow>, mode: 'active' | 'background') => void;
+  /** Idempotent: INSERT / echo rows merge into `event_stream` by `id` (unless `hubListOnly`). */
+  processIncomingEvent: (
+    row: Partial<TripMessageRow>,
+    mode: 'active' | 'background',
+    opts?: { hubListOnly?: boolean },
+  ) => void;
   onRealtimeInsert:   (row: Partial<TripMessageRow>, mode: 'active' | 'background') => void;
   /** Idempotent upsert used for optimistic sends (and any local append). */
   appendMessage:      (convId: string, msg: TripMessageRow) => void;
@@ -553,6 +562,8 @@ interface ChatState {
   replaceOptimistic:  (convId: string, tempId: string, persisted: TripMessageRow) => void;
   removeMessage:      (convId: string, msgId: string) => void;
   upsertConversation: (conv: TripConversation) => void;
+  /** Realtime `trip_conversations` row — sync sidebar unread + preview from DB denorm. */
+  patchTripConversationFromRealtime: (row: Record<string, unknown>) => void;
   applySystemUpdate:  (tripId: string, patch: Partial<TripEntry>) => void;
   /** Optimistic feedback submission — patches message metadata locally. The caller
    *  also fires the RPC; this ensures the UI flips immediately. */
@@ -563,18 +574,19 @@ interface ChatState {
    */
   submitTripFeedback: (convId: string, msgId: string, rating: number) => void;
   /**
-   * WhatsApp-style atomic smiley: optimistic metadata patch, then `confirm_trip_feedback` RPC.
-   * Resolves `conversation_id` from `event_stream`. Returns `{ error }` on failure (store reverted).
+   * Smiley debrief: optimistic patch, then `confirm_trip_feedback` (score only).
+   * Non-empty `opts.comment` uses `submit_atomic_feedback` when available; missing RPC falls back to `confirm_trip_feedback`.
    */
   submitSmileyFeedback: (
     messageId: string,
     rating: number,
+    opts?: { comment?: string },
   ) => Promise<{ error: string | null }>;
   /** Optimistic "Add to books" — marks all ledger rows in this conv with the same transaction_id. */
   applyLedgerBookOptimistic: (convId: string, transactionId: string) => void;
   revertLedgerBookOptimistic: (convId: string, transactionId: string) => void;
   /** Merge on-demand history load into event_stream (used by lazy-load button in detail). */
-  mergeConversationHistory: (convId: string, messages: TripMessageRow[]) => void;
+  mergeConversationHistory: (convId: string, messages: TripMessageRow[]) => boolean;
   clear:              () => void;
 
   // ── Derived helpers
@@ -922,8 +934,6 @@ function applyFeedbackLaneStatusOnIncomingRow(
 
 const CHAT_BOOTSTRAP_TRIP_PAGE = 10;
 const CHAT_BOOTSTRAP_TRIP_PAGE_MORE = 20;
-/** WhatsApp-style: only the first N distinct trips in each bootstrap page get full `messages` merged into `event_stream`. */
-const CHAT_LAZY_HYDRATE_TOP_TRIPS = 3;
 
 const tripHydrationInFlight = new Set<string>();
 
@@ -994,7 +1004,7 @@ function ingestBootstrapConversations(
     convToTrip: Record<string, string>;
     convToParty: Record<string, ConversationPartyType>;
   },
-  ingestOpts?: { lazyHydrateTopN?: number | null },
+  ingestOpts?: { summariesOnly?: boolean },
 ): {
   trips: Record<string, TripEntry>;
   convToTrip: Record<string, string>;
@@ -1004,17 +1014,8 @@ function ingestBootstrapConversations(
   const convToTrip = { ...base.convToTrip };
   const convToParty = { ...base.convToParty };
 
-  const lazyN = ingestOpts?.lazyHydrateTopN;
-  const orderedTripIds: string[] = [];
-  for (const conv of conversations) {
-    const tid = conv.trip_id;
-    if (!tid) continue;
-    if (!orderedTripIds.includes(tid)) orderedTripIds.push(tid);
-  }
-  const hydrateTripIds =
-    lazyN == null || lazyN <= 0
-      ? new Set(orderedTripIds)
-      : new Set(orderedTripIds.slice(0, lazyN));
+  const summariesOnly = ingestOpts?.summariesOnly ?? true;
+  const shouldMergeEvents = !summariesOnly;
 
   for (const conv of conversations) {
     const { trip_id: tripId, party_type: partyType } = conv;
@@ -1049,8 +1050,6 @@ function ingestBootstrapConversations(
         ledgerEventInvolvesOrg(m, orgId),
     );
     const newEvts: TripEvent[] = financeSafe.map((m) => ({ ...m, partyType }));
-
-    const shouldMergeEvents = hydrateTripIds.has(tripId);
 
     entry.parties[partyType] = {
       ...partyFromConv(conv),
@@ -1171,16 +1170,40 @@ export const useChatStore = create<ChatState>()(
     hubHistoryBootstrapDone: false,
 
     // ── bootstrap ─────────────────────────────────────────────────────────────
-    // Called ONCE per org-session from TripChatContext on mount.
-    // Uses get_unified_b2b_bootstrap (falls back to get_b2b_chat_bootstrap if
-    // the migration hasn't been applied yet).
-    // All subsequent state arrives via Realtime → onRealtimeInsert.
+    // Once per org-session from TripChatContext. May seed summaries from disk, then
+    // reconciles via `get_multi_lane_bootstrap` (summaries-only bodies when DB supports it).
+    // Open-thread hydration loads message windows via `hydrateTripMessagesIfNeeded`.
 
     bootstrap: async (orgId) => {
       if (get().bootstrappedOrg === orgId) return;
       if (chatBootstrapInFlightFor === orgId) return;
       chatBootstrapInFlightFor = orgId;
-      set({ isLoading: true });
+
+      let seededFromDisk = false;
+      try {
+        const cached = await loadChatBootstrapSummaries(orgId);
+        if (cached?.length) {
+          const ingested = ingestBootstrapConversations(
+            orgId,
+            cached,
+            { trips: {}, convToTrip: {}, convToParty: {} },
+            { summariesOnly: true },
+          );
+          set({
+            trips: ingested.trips,
+            convToTrip: ingested.convToTrip,
+            convToParty: ingested.convToParty,
+            activeParties: get().activeParties,
+            isLoading: false,
+            chatLanes: null,
+          });
+          seededFromDisk = true;
+        }
+      } catch {
+        /* ignore */
+      }
+
+      if (!seededFromDisk) set({ isLoading: true });
 
       try {
         const { conversations, lanes, hasMoreTrips } = await fetchChatBootstrapPayload(orgId, {
@@ -1189,21 +1212,31 @@ export const useChatStore = create<ChatState>()(
           hubTripBucket: "active",
         });
 
+        const base = seededFromDisk
+          ? {
+              trips: get().trips,
+              convToTrip: get().convToTrip,
+              convToParty: get().convToParty,
+            }
+          : { trips: {}, convToTrip: {}, convToParty: {} };
+
         const { trips, convToTrip, convToParty } = ingestBootstrapConversations(
           orgId,
           conversations,
-          { trips: {}, convToTrip: {}, convToParty: {} },
-          { lazyHydrateTopN: CHAT_LAZY_HYDRATE_TOP_TRIPS },
+          base,
+          { summariesOnly: true },
         );
+
+        void persistChatBootstrapSummaries(orgId, conversations);
 
         set((s) => ({
           trips,
           convToTrip,
           convToParty,
-          activeParties:   s.activeParties,
+          activeParties: s.activeParties,
           bootstrappedOrg: orgId,
-          isLoading:       false,
-          chatLanes:       lanes,
+          isLoading: false,
+          chatLanes: lanes,
           chatBootstrapHasMoreTrips: hasMoreTrips,
           chatBootstrapNextTripOffset: CHAT_BOOTSTRAP_TRIP_PAGE,
           isAppendingBootstrap: false,
@@ -1211,7 +1244,11 @@ export const useChatStore = create<ChatState>()(
         }));
       } catch (err) {
         if (__DEV__) console.error('[useChatStore] bootstrap failed:', err);
-        set({ isLoading: false });
+        if (seededFromDisk) {
+          set({ bootstrappedOrg: orgId, isLoading: false });
+        } else {
+          set({ isLoading: false });
+        }
       } finally {
         chatBootstrapInFlightFor = null;
       }
@@ -1233,7 +1270,7 @@ export const useChatStore = create<ChatState>()(
           trips:       get().trips,
           convToTrip:  get().convToTrip,
           convToParty: get().convToParty,
-        }, { lazyHydrateTopN: CHAT_LAZY_HYDRATE_TOP_TRIPS });
+        }, { summariesOnly: true });
         const mergedLanes = mergeChatLanes(get().chatLanes, lanes);
         set({
           trips,
@@ -1265,7 +1302,7 @@ export const useChatStore = create<ChatState>()(
           trips:       get().trips,
           convToTrip:  get().convToTrip,
           convToParty: get().convToParty,
-        }, { lazyHydrateTopN: null });
+        }, { summariesOnly: true });
         const mergedLanes = mergeChatLanes(get().chatLanes, lanes);
         set({
           trips,
@@ -1336,7 +1373,7 @@ export const useChatStore = create<ChatState>()(
     // Same logical INSERT from multiple tabs → single `event_stream` row; updates
     // merge metadata + trip fields without duplicate bubbles.
 
-    processIncomingEvent: (row, mode) => {
+    processIncomingEvent: (row, mode, opts) => {
       if (!row.conversation_id || !row.id) return;
       if (!consumeActionIdDedupe(row)) return;
       if (!consumeRealtimeInsertDedupe(row)) return;
@@ -1378,6 +1415,60 @@ export const useChatStore = create<ChatState>()(
         );
         set({ trips: { ...trips, [tripId]: merged } });
         syncLocationLogToGlobalActiveTrips(tripId, row);
+        return;
+      }
+
+      // Hub list / non-open thread: apply trip patches + sidebar preview without merging into `event_stream`.
+      if (opts?.hubListOnly) {
+        if (
+          row.message_type === "image" ||
+          row.message_type === "document_share" ||
+          row.message_type === "document_upload"
+        ) {
+          updated.lastEventAt      = event.created_at ?? entry.lastEventAt;
+          updated.lastEventPreview = previewText(row)  ?? entry.lastEventPreview;
+          syncLocationLogToGlobalActiveTrips(tripId, row);
+          useGlobalSyncStore.getState().touchActiveTripClientActivity(
+            tripId,
+            typeof event.created_at === "string" ? event.created_at : undefined,
+          );
+          useGlobalSyncStore.getState().ingestTripMessageForOperationsIsland(
+            tripId,
+            baseRow as unknown as Record<string, unknown>,
+          );
+          useGlobalSyncStore.getState().ingestB2BMessageForBell(baseRow);
+          set({
+            trips: {
+              ...trips,
+              [tripId]: clearEventStreamLazySkipIfFilled(withLongHaulFieldsFromStream(updated)),
+            },
+          });
+          return;
+        }
+
+        updated = applyActiveMessageTypeMultiplex(
+          row,
+          entry,
+          updated,
+          true,
+          event.created_at,
+        );
+        updated = applyFeedbackLaneStatusOnIncomingRow(updated, partyType, row);
+        updated.lastEventAt      = event.created_at ?? updated.lastEventAt;
+        updated.lastEventPreview = previewText(row)  ?? updated.lastEventPreview;
+        updated = withLongHaulFieldsFromStream(updated);
+        updated = clearEventStreamLazySkipIfFilled(updated);
+        syncLocationLogToGlobalActiveTrips(tripId, row);
+        useGlobalSyncStore.getState().touchActiveTripClientActivity(
+          tripId,
+          typeof event.created_at === "string" ? event.created_at : undefined,
+        );
+        useGlobalSyncStore.getState().ingestTripMessageForOperationsIsland(
+          tripId,
+          baseRow as unknown as Record<string, unknown>,
+        );
+        useGlobalSyncStore.getState().ingestB2BMessageForBell(baseRow);
+        set({ trips: { ...trips, [tripId]: updated } });
         return;
       }
 
@@ -1610,17 +1701,18 @@ export const useChatStore = create<ChatState>()(
       get().submitFeedback(convId, msgId, { metadata: optimistic });
     },
 
-    submitSmileyFeedback: async (messageId, rating) => {
+    submitSmileyFeedback: async (messageId, rating, opts) => {
       const { trips, convToTrip } = get();
       const found = findTripFeedbackMessageInStore(trips, convToTrip, messageId);
       if (!found) return { error: "Message not found" };
-      const { convId, row, ratingOrganizationId } = found;
+      const { convId, row, ratingOrganizationId, tripId } = found;
       const preMeta = parseFeedbackRequestMetadata(row);
       if (!preMeta) return { error: "Invalid feedback message" };
       if (isFeedbackRequestAlreadyRatedMeta(preMeta)) return { error: null };
       const prevMetaSnapshot = cloneTripMessageMetadataForRevert(row.metadata);
 
       const score = Math.min(5, Math.max(1, Math.floor(rating)));
+      const commentTrimmed = (opts?.comment ?? "").trim();
       get().submitTripFeedback(convId, messageId, score);
 
       const messageForRpc: TripMessageRow = {
@@ -1628,53 +1720,7 @@ export const useChatStore = create<ChatState>()(
         conversation_id: convId,
       };
 
-      try {
-        const { error: rpcErr, submittedAt } = await submitTripChatFeedback({
-          ratingOrganizationId,
-          tripId,
-          message: messageForRpc,
-          score,
-          tags: [],
-        });
-        if (rpcErr) {
-          const msg = rpcErr.message;
-          if (/already_submitted|feedback already submitted/i.test(msg)) {
-            return { error: null };
-          }
-          get().patchMessage(convId, messageId, { metadata: prevMetaSnapshot });
-          set((s) => {
-            const tid = s.convToTrip[convId];
-            const pt = s.convToParty[convId];
-            if (!tid || !pt) return s;
-            const ent = s.trips[tid];
-            const party = ent?.parties[pt];
-            if (!ent || !party) return s;
-            return {
-              trips: {
-                ...s.trips,
-                [tid]: {
-                  ...ent,
-                  parties: {
-                    ...ent.parties,
-                    [pt]: { ...party, feedbackStatus: "pending" },
-                  },
-                },
-              },
-            };
-          });
-          return { error: msg };
-        }
-
-        const confirmed: FeedbackRequestMetadata = {
-          ...preMeta,
-          submitted_at:    submittedAt ?? new Date().toISOString(),
-          submitted_score: score,
-          rating:          score,
-          submitted_tags:  [],
-        };
-        get().submitFeedback(convId, messageId, { metadata: confirmed });
-        return { error: null };
-      } catch (e) {
+      const revertPartyFeedbackPending = () => {
         get().patchMessage(convId, messageId, { metadata: prevMetaSnapshot });
         set((s) => {
           const tid = s.convToTrip[convId];
@@ -1696,6 +1742,87 @@ export const useChatStore = create<ChatState>()(
             },
           };
         });
+      };
+
+      const applyConfirmTripResult = (submittedAt: string | null) => {
+        const confirmed: FeedbackRequestMetadata = {
+          ...preMeta,
+          submitted_at:    submittedAt ?? new Date().toISOString(),
+          submitted_score: score,
+          rating:          score,
+          submitted_tags:  [],
+        };
+        get().submitFeedback(convId, messageId, { metadata: confirmed });
+      };
+
+      const runConfirmTripFeedback = async (): Promise<{ error: string | null }> => {
+        const { error: rpcErr, submittedAt } = await submitTripChatFeedback({
+          ratingOrganizationId,
+          tripId,
+          message: messageForRpc,
+          score,
+          tags: [],
+        });
+        if (rpcErr) {
+          const msg = rpcErr.message;
+          if (/already_submitted|feedback already submitted/i.test(msg)) {
+            return { error: null };
+          }
+          revertPartyFeedbackPending();
+          return { error: msg };
+        }
+        applyConfirmTripResult(submittedAt);
+        return { error: null };
+      };
+
+      const atomicRpcLikelyMissing = (msg: string) =>
+        /submit_atomic_feedback|function .* does not exist|could not find function|42883/i.test(msg);
+
+      try {
+        if (commentTrimmed) {
+          const orgId =
+            ratingOrganizationId.trim() ||
+            (get().bootstrappedOrg ?? "").trim();
+          if (!orgId) {
+            revertPartyFeedbackPending();
+            return { error: "Missing organization context for debrief comment." };
+          }
+          try {
+            const r = await submitAtomicFeedback({
+              organizationId: orgId,
+              tripId,
+              message: messageForRpc,
+              score,
+              tags: [],
+              comment: commentTrimmed,
+            });
+            if (r.alreadySubmitted) {
+              applyConfirmTripResult(r.submittedAt);
+              return { error: null };
+            }
+            const confirmed: FeedbackRequestMetadata = {
+              ...preMeta,
+              submitted_at:    r.submittedAt,
+              submitted_score: r.submittedScore,
+              rating:          r.submittedScore,
+              submitted_tags:  r.submittedTags,
+            };
+            get().submitFeedback(convId, messageId, { metadata: confirmed });
+            return { error: null };
+          } catch (atomicErr) {
+            const amsg =
+              atomicErr instanceof Error ? atomicErr.message : String(atomicErr);
+            if (atomicRpcLikelyMissing(amsg)) {
+              return runConfirmTripFeedback();
+            }
+            revertPartyFeedbackPending();
+            return { error: amsg };
+          }
+        }
+
+        return runConfirmTripFeedback();
+      } catch (e) {
+        revertPartyFeedbackPending();
         return { error: e instanceof Error ? e.message : String(e) };
       }
     },
@@ -1757,7 +1884,16 @@ export const useChatStore = create<ChatState>()(
       const { trips, convToTrip, convToParty } = get();
       const tripId    = convToTrip[convId];
       const partyType = convToParty[convId];
-      if (!tripId || !partyType) return;
+      if (!tripId || !partyType) {
+        if (__DEV__ && messages.length > 0) {
+          console.warn("[mergeConversationHistory] missing conv map — merge skipped", {
+            convId,
+            hasTripId: Boolean(tripId),
+            hasPartyType: Boolean(partyType),
+          });
+        }
+        return false;
+      }
       const entry = trips[tripId];
       if (!entry) return;
       const viewerOrg =
@@ -1787,6 +1923,7 @@ export const useChatStore = create<ChatState>()(
           [tripId]: merged,
         },
       });
+      return true;
     },
 
     // ── Optimistic send ───────────────────────────────────────────────────────
@@ -1900,6 +2037,72 @@ export const useChatStore = create<ChatState>()(
       });
     },
 
+    patchTripConversationFromRealtime: (raw) => {
+      const convId = typeof raw.id === "string" ? raw.id : null;
+      const tripId = typeof raw.trip_id === "string" ? raw.trip_id : null;
+      const partyRaw = typeof raw.party_type === "string" ? raw.party_type : "";
+      if (
+        !convId ||
+        !tripId ||
+        (partyRaw !== "client" && partyRaw !== "supplier" && partyRaw !== "driver")
+      ) {
+        return;
+      }
+      const partyType = partyRaw as ConversationPartyType;
+      const { trips, convToTrip, convToParty } = get();
+      const mappedTrip = convToTrip[convId];
+      if (mappedTrip && mappedTrip !== tripId) return;
+      const entry = trips[tripId];
+      if (!entry) return;
+      const party = entry.parties[partyType];
+      if (!party || party.conversationId !== convId) return;
+
+      const unreadCount =
+        typeof raw.unread_dispatcher_count === "number"
+          ? raw.unread_dispatcher_count
+          : party.unreadCount;
+
+      const nextParty: PartyConv = { ...party, unreadCount };
+      const parties: TripEntry["parties"] = {
+        ...entry.parties,
+        [partyType]: nextParty,
+      };
+
+      let next: TripEntry = {
+        ...entry,
+        parties,
+        totalUnread: sumUnread(parties),
+      };
+
+      const lmAt =
+        raw.last_message_at != null && String(raw.last_message_at).trim() !== ""
+          ? String(raw.last_message_at)
+          : null;
+      const lmPrev =
+        raw.last_message_preview != null && String(raw.last_message_preview).trim() !== ""
+          ? String(raw.last_message_preview)
+          : null;
+
+      if (
+        lmAt &&
+        (!next.lastEventAt || new Date(lmAt).getTime() > new Date(String(next.lastEventAt)).getTime())
+      ) {
+        next.lastEventAt = lmAt;
+      }
+      if (lmPrev) {
+        next.lastEventPreview = lmPrev;
+      }
+
+      const viewerOrg = get().bootstrappedOrg ?? entry.tripOrganizationId ?? null;
+      next = withPartnerOrganizationStamp(next, viewerOrg);
+
+      set({
+        trips: { ...trips, [tripId]: next },
+        convToTrip: { ...convToTrip, [convId]: tripId },
+        convToParty: { ...convToParty, [convId]: partyType },
+      });
+    },
+
     // ── upsertConversation ────────────────────────────────────────────────────
     // Used by queue-and-fetch recovery and initiateConversation.
 
@@ -1974,6 +2177,7 @@ export const useChatStore = create<ChatState>()(
       lastActionIdAt.clear();
       clearReadReceiptDebouncers();
       hubHistoryBootstrapInFlightFor = null;
+      void clearChatBootstrapSummaries();
       set({
         trips:           {},
         convToTrip:      {},

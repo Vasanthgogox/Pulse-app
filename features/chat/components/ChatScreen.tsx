@@ -35,6 +35,7 @@ import {
   useChatStore,
   type TripEntry,
 } from "@/features/chat/store/useChatStore";
+import { setActiveTripMessageConversationId } from "@/features/chat/realtime/activeTripMessageScope";
 import { buildTripMessageListLayoutMeta } from "@/features/chat/utils/chatMessageListLayout";
 import { applyContractualHubPartyIsolation } from "@/features/chat/utils/contractHubPartyIsolation.util";
 import { dedupeTripStatusBroadcastsForLane } from "@/features/chat/utils/dedupeTripStatusBroadcastForLane.util";
@@ -788,6 +789,18 @@ export function ChatScreen() {
   // store — re-renders only when THIS conversation changes (not the full list).
   const selectedConv = useConversation(selectedConvId);
   const selectedNet = netChats.find((c) => c.id === selectedNetId) ?? null;
+
+  useEffect(() => {
+    if (!isTripStreamTab(activeTab)) {
+      setActiveTripMessageConversationId(null);
+      return;
+    }
+    if (selectedConvId) {
+      setActiveTripMessageConversationId(selectedConvId);
+      return () => setActiveTripMessageConversationId(null);
+    }
+    setActiveTripMessageConversationId(null);
+  }, [activeTab, selectedConvId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -4546,35 +4559,72 @@ function TripConversationDetailLoaded({
   liveConvRef.current = liveConv;
 
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasMoreOlder, setHasMoreOlder] = useState(false);
   const olderInFlightRef = useRef(false);
-  const autoBackfillAttemptedRef = useRef<string | null>(null);
+  /** One newest-page fetch at a time (auto + manual share) — avoids duplicate `trip_messages` hits. */
+  const latestHistoryInFlightRef = useRef(false);
+  /** Increment when `liveConv.id` changes so stale fetches never merge or touch loading UI. */
+  const historyFetchGenerationRef = useRef(0);
   const olderStartDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const mergeHistoryPage = useCallback((rows: TripMessageRow[]) => {
     const id = liveConvRef.current.id;
-    chatStore.mergeConversationHistory(id, rows);
+    const ok = chatStore.mergeConversationHistory(id, rows);
     setHasMoreOlder(rows.length === TRIP_CHAT_HISTORY_PAGE);
+    return ok;
   }, []);
 
-  const partyTypeForHistory = liveConv.party_type ?? null;
-
-  /** Newest page (empty thread backfill or manual retry). */
-  const loadLatestHistoryPage = useCallback(async () => {
+  /** Newest page: single-flight; shared by auto-backfill and "Load history". */
+  const runLatestHistoryPage = useCallback(async () => {
+    if (latestHistoryInFlightRef.current) return;
+    latestHistoryInFlightRef.current = true;
+    const generation = historyFetchGenerationRef.current;
+    const convId = liveConvRef.current.id;
+    const partyType = liveConvRef.current.party_type ?? null;
+    setHistoryError(null);
     setHistoryLoading(true);
     try {
-      const rows = await getMessagesByConversation(liveConv.id, {
+      const rows = await getMessagesByConversation(convId, {
         limit: TRIP_CHAT_HISTORY_PAGE,
-        partyType: partyTypeForHistory,
+        partyType,
       });
-      mergeHistoryPage(rows);
+      if (generation !== historyFetchGenerationRef.current) return;
+
+      const ok = mergeHistoryPage(rows);
+
+      if (rows.length > 0 && !ok) {
+        setHistoryError(
+          "Thread is not synced in the app yet. Return to the inbox and open the trip again, or wait a moment and tap Load history once.",
+        );
+        return;
+      }
+
+      queueMicrotask(() => {
+        if (generation !== historyFetchGenerationRef.current) return;
+        const c = chatStore.getConversation(convId);
+        if (rows.length > 0 && (c?.messages?.length ?? 0) === 0) {
+          setHistoryError(
+            "Messages were fetched but none are visible on this party tab. Try Client, Supplier, or Driver.",
+          );
+        }
+      });
     } catch {
-      // silent — user can retry
+      if (generation === historyFetchGenerationRef.current) {
+        setHistoryError("Could not load messages. Wait a moment and try once.");
+      }
     } finally {
-      setHistoryLoading(false);
+      latestHistoryInFlightRef.current = false;
+      if (generation === historyFetchGenerationRef.current) {
+        setHistoryLoading(false);
+      }
     }
-  }, [liveConv.id, mergeHistoryPage, partyTypeForHistory]);
+  }, [mergeHistoryPage]);
+
+  const loadLatestHistoryPage = useCallback(() => {
+    void runLatestHistoryPage();
+  }, [runLatestHistoryPage]);
 
   /** Older messages than the current oldest row in this lane. */
   const loadOlderHistoryPage = useCallback(async () => {
@@ -4594,7 +4644,8 @@ function TripConversationDetailLoaded({
         setHasMoreOlder(false);
         return;
       }
-      mergeHistoryPage(rows);
+      const ok = mergeHistoryPage(rows);
+      if (!ok) setHasMoreOlder(false);
     } catch {
       // non-critical
     } finally {
@@ -4615,6 +4666,8 @@ function TripConversationDetailLoaded({
 
   useEffect(
     () => () => {
+      historyFetchGenerationRef.current += 1;
+      latestHistoryInFlightRef.current = false;
       if (olderStartDebounceRef.current) {
         clearTimeout(olderStartDebounceRef.current);
         olderStartDebounceRef.current = null;
@@ -4624,8 +4677,11 @@ function TripConversationDetailLoaded({
   );
 
   useEffect(() => {
+    historyFetchGenerationRef.current += 1;
+    latestHistoryInFlightRef.current = false;
+    setHistoryLoading(false);
+    setHistoryError(null);
     setHasMoreOlder((liveConv.messages?.length ?? 0) >= TRIP_CHAT_HISTORY_PAGE);
-    autoBackfillAttemptedRef.current = null;
     olderInFlightRef.current = false;
     if (olderStartDebounceRef.current) {
       clearTimeout(olderStartDebounceRef.current);
@@ -4633,31 +4689,11 @@ function TripConversationDetailLoaded({
     }
   }, [liveConv.id]);
 
-  // One automatic backfill when the lane has no rows yet (bootstrap/hydrate race, empty
-  // preview, or visibility filters) — single flight per conversation mount; same query as manual load.
+  // Single automatic newest-page fetch when the lane is still empty (same in-flight guard as manual).
   useEffect(() => {
     if (liveConv.messages.length > 0) return;
-    if (autoBackfillAttemptedRef.current === liveConv.id) return;
-    autoBackfillAttemptedRef.current = liveConv.id;
-
-    let cancelled = false;
-    setHistoryLoading(true);
-    void getMessagesByConversation(liveConv.id, {
-      limit: TRIP_CHAT_HISTORY_PAGE,
-      partyType: partyTypeForHistory,
-    })
-      .then((rows) => {
-        if (cancelled) return;
-        mergeHistoryPage(rows);
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setHistoryLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [liveConv.id, liveConv.messages.length, mergeHistoryPage, partyTypeForHistory]);
+    void runLatestHistoryPage();
+  }, [liveConv.id, liveConv.messages.length, runLatestHistoryPage]);
 
   const [tripRatings, setTripRatings] = useState<RatingRow[]>([]);
 
@@ -4767,6 +4803,15 @@ function TripConversationDetailLoaded({
       ).filter((m) => String(m.conversation_id ?? "") === liveConv.id),
     [liveConv.trip_id, liveConv.id, liveConv.messages, tripRatings],
   );
+
+  const scrollToEndCooldownRef = useRef(0);
+  const onMessagesContentSizeChange = useCallback(() => {
+    if (displayMessages.length === 0) return;
+    const t = Date.now();
+    if (t - scrollToEndCooldownRef.current < 150) return;
+    scrollToEndCooldownRef.current = t;
+    messagesRef.current?.scrollToEnd({ animated: false });
+  }, [displayMessages.length]);
 
   const messageListLayout = useMemo(
     () => buildTripMessageListLayoutMeta(displayMessages, liveConv.party_type),
@@ -5286,8 +5331,8 @@ function TripConversationDetailLoaded({
         maxToRenderPerBatch={12}
         onViewableItemsChanged={stableOnViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
-        onContentSizeChange={() => messagesRef.current?.scrollToEnd({ animated: false })}
-        onStartReached={onStartReachedLoadOlder}
+        onContentSizeChange={onMessagesContentSizeChange}
+        onStartReached={displayMessages.length > 0 ? onStartReachedLoadOlder : undefined}
         onStartReachedThreshold={0.12}
         ListHeaderComponent={
           <>
@@ -5318,6 +5363,20 @@ function TripConversationDetailLoaded({
                   <Text style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>
                     {historyLoading ? "Loading messages…" : "Messages not loaded"}
                   </Text>
+                  {historyError ? (
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        color: "#b91c1c",
+                        textAlign: "center",
+                        paddingHorizontal: 20,
+                        lineHeight: 17,
+                        fontWeight: "600",
+                      }}
+                    >
+                      {historyError}
+                    </Text>
+                  ) : null}
                   {!historyLoading ? (
                     <TouchableOpacity
                       style={{ backgroundColor: CHAT_ACCENT, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20 }}

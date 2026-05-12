@@ -3,10 +3,11 @@ import {
   ActivityIndicator,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import { Check } from "lucide-react-native";
+import { Building2, CheckCircle, Send, Star } from "lucide-react-native";
 import Theme from "@/constants/Theme";
 import { CHAT_ACCENT, CHAT_ACCENT_SOFT } from "@/features/chat/chatTheme";
 import { formatChatPartyName } from "@/features/chat/utils/partyDisplay";
@@ -15,16 +16,21 @@ import type { TripMessageRow } from "../types/chat.types";
 import { parseFeedbackRequestMetadata } from "../utils/feedbackRequestMeta";
 import { isFeedbackRequestAlreadyRatedMeta } from "../utils/feedbackRequestMeta.util";
 
-/** Five smileys → 1–5 scale; persisted in `trip_messages.metadata.rating` (atomic RPC). */
+/** Five smileys → 1–5 scale; persisted via `confirm_trip_feedback` / `submit_atomic_feedback`. */
 const SMILEY_OPTIONS = [
-  { emoji: "😠", score: 1, a11y: "Terrible, 1 of 5" },
-  { emoji: "😟", score: 2, a11y: "Poor, 2 of 5" },
-  { emoji: "😐", score: 3, a11y: "Average, 3 of 5" },
-  { emoji: "🙂", score: 4, a11y: "Good, 4 of 5" },
-  { emoji: "🤩", score: 5, a11y: "Excellent, 5 of 5" },
+  { emoji: "😠", score: 1, label: "Terrible", a11y: "Terrible, 1 of 5" },
+  { emoji: "😟", score: 2, label: "Poor", a11y: "Poor, 2 of 5" },
+  { emoji: "😐", score: 3, label: "Fair", a11y: "Average, 3 of 5" },
+  { emoji: "🙂", score: 4, label: "Good", a11y: "Good, 4 of 5" },
+  { emoji: "🤩", score: 5, label: "Excellent", a11y: "Excellent, 5 of 5" },
 ] as const;
 
-type FeedbackCardPhase = "pick" | "submitting" | "success" | "already_rated";
+type FeedbackCardPhase =
+  | "pick"
+  | "confirm"
+  | "submitting"
+  | "success"
+  | "already_rated";
 
 function formatTime(iso: string): string {
   try {
@@ -42,9 +48,19 @@ function isAlreadySubmittedMessage(s: string): boolean {
   return /already_submitted|feedback already submitted/i.test(s);
 }
 
+function labelForScore(score: number): string {
+  const row = SMILEY_OPTIONS.find((o) => o.score === score);
+  return row?.label ?? "Rated";
+}
+
+function emojiForScore(score: number): string {
+  const row = SMILEY_OPTIONS.find((o) => o.score === score);
+  return row?.emoji ?? "🙂";
+}
+
 export function ChatFeedbackCard({
   message,
-  tripId: _tripId,
+  tripId,
   ratingOrganizationId,
   currentOrgId,
   onSubmitted,
@@ -56,6 +72,7 @@ export function ChatFeedbackCard({
   currentOrgId: string;
   onSubmitted: () => void;
 }) {
+  void tripId;
   const meta = useMemo(() => parseFeedbackRequestMetadata(message), [message]);
 
   const [phase, setPhase] = useState<FeedbackCardPhase>(() =>
@@ -66,6 +83,7 @@ export function ChatFeedbackCard({
     const s = meta.submitted_score ?? meta.rating;
     return typeof s === "number" && s >= 1 && s <= 5 ? s : null;
   });
+  const [feedbackComment, setFeedbackComment] = useState("");
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
@@ -74,44 +92,66 @@ export function ChatFeedbackCard({
     const s = m.submitted_score ?? m.rating;
     setPickedScore(typeof s === "number" && s >= 1 && s <= 5 ? s : null);
     setPhase((p) => {
-      if (p === "success" || p === "submitting") return p;
-      return isFeedbackRequestAlreadyRatedMeta(m) ? "already_rated" : "pick";
+      if (isFeedbackRequestAlreadyRatedMeta(m)) return "already_rated";
+      if (p === "success" || p === "submitting" || p === "confirm") return p;
+      return "pick";
     });
   }, [message]);
 
   const canSubmit =
-    phase === "pick" &&
     currentOrgId.trim() === (ratingOrganizationId ?? "").trim();
 
   const targetName = formatChatPartyName(
     meta?.rated_display_name ?? message.content,
   );
 
-  const onPickSmiley = useCallback(
-    async (score: number) => {
-      if (!meta || !canSubmit) return;
-      if (pickedScore != null || phase !== "pick") return;
-      setErr(null);
-      setPhase("submitting");
-      setPickedScore(score);
+  const onPickSmiley = useCallback((score: number) => {
+    if (!meta || !canSubmit) return;
+    if (phase !== "pick") return;
+    setErr(null);
+    setPickedScore(score);
+    setPhase("confirm");
+  }, [meta, canSubmit, phase]);
 
-      const { error } = await useChatStore.getState().submitSmileyFeedback(message.id, score);
-      if (error) {
-        if (isAlreadySubmittedMessage(error)) {
-          setPhase("success");
-          onSubmitted();
-          return;
-        }
-        setPhase("pick");
-        setPickedScore(null);
-        setErr(error);
+  const onCancelConfirm = useCallback(() => {
+    setFeedbackComment("");
+    setPickedScore(null);
+    setErr(null);
+    const m = parseFeedbackRequestMetadata(message);
+    setPhase(isFeedbackRequestAlreadyRatedMeta(m) ? "already_rated" : "pick");
+  }, [message]);
+
+  const onSubmitDebrief = useCallback(async () => {
+    if (!meta || !canSubmit || pickedScore == null) return;
+    setErr(null);
+    setPhase("submitting");
+
+    const { error } = await useChatStore
+      .getState()
+      .submitSmileyFeedback(message.id, pickedScore, {
+        comment: feedbackComment.trim() || undefined,
+      });
+
+    if (error) {
+      if (isAlreadySubmittedMessage(error)) {
+        setPhase("success");
+        onSubmitted();
         return;
       }
-      setPhase("success");
-      onSubmitted();
-    },
-    [meta, canSubmit, message, onSubmitted, pickedScore, phase],
-  );
+      setPhase("confirm");
+      setErr(error);
+      return;
+    }
+    setPhase("success");
+    onSubmitted();
+  }, [
+    meta,
+    canSubmit,
+    pickedScore,
+    message.id,
+    feedbackComment,
+    onSubmitted,
+  ]);
 
   if (!meta) return null;
 
@@ -124,65 +164,132 @@ export function ChatFeedbackCard({
     <View style={s.wrap}>
       <View style={s.headerRow}>
         <View style={s.kickerCol}>
-          <Text style={s.kicker}>PULSE CHAT</Text>
+          <View style={s.kickerRow}>
+            <Star size={11} color={CHAT_ACCENT} fill={CHAT_ACCENT} />
+            <Text style={s.kicker}>PULSE CHAT REVIEW</Text>
+          </View>
           <Text style={s.title}>How was the coordination?</Text>
           {targetName ? (
-            <Text style={s.target} numberOfLines={2}>
-              {targetName}
-            </Text>
+            <View style={s.targetRow}>
+              <Building2 size={12} color={Theme.textMuted} strokeWidth={2.2} />
+              <Text style={s.target} numberOfLines={2}>
+                {targetName}
+              </Text>
+            </View>
           ) : null}
         </View>
         <View style={s.sheetPill}>
-          <Text style={s.sheetPillText}>SYSTEM</Text>
+          <Text style={s.sheetPillText}>SYSTEM GENERATED</Text>
         </View>
       </View>
 
-      {phase === "pick" || phase === "submitting" ? (
-        <Text style={s.hint} numberOfLines={2}>
-          Trip closed — tap a face (1–5) to record your rating.
-        </Text>
+      {phase === "pick" ? (
+        <>
+          <Text style={s.hint} numberOfLines={3}>
+            Trip closed — tap a face (1–5) to record your rating.
+          </Text>
+          <View style={s.smileyRow}>
+            {SMILEY_OPTIONS.map((opt) => (
+              <TouchableOpacity
+                key={opt.score}
+                style={s.smileyBtn}
+                onPress={() => onPickSmiley(opt.score)}
+                disabled={!canSubmit}
+                activeOpacity={0.82}
+                accessibilityRole="button"
+                accessibilityLabel={opt.a11y}
+              >
+                <Text style={s.smileyEmoji}>{opt.emoji}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </>
       ) : null}
 
-      {phase === "pick" || phase === "submitting" ? (
-        <View style={s.smileyRow}>
-          {SMILEY_OPTIONS.map((opt) => (
+      {phase === "confirm" ? (
+        <>
+          <View style={s.confirmBanner}>
+            <Text style={s.confirmEmoji}>{emojiForScore(pickedScore ?? 0)}</Text>
+            <View style={s.confirmTextCol}>
+              <Text style={s.confirmTitle} numberOfLines={2}>
+                You selected {labelForScore(pickedScore ?? 0)} (
+                {pickedScore}/5)
+              </Text>
+              <Text style={s.confirmHint} numberOfLines={2}>
+                Care to share more details about your experience?
+              </Text>
+            </View>
+          </View>
+          <TextInput
+            style={s.commentInput}
+            value={feedbackComment}
+            onChangeText={setFeedbackComment}
+            placeholder={
+              targetName
+                ? `Add an optional comment for ${targetName}…`
+                : "Add an optional comment…"
+            }
+            placeholderTextColor={Theme.textMuted}
+            multiline
+            editable={canSubmit}
+            maxLength={2000}
+            textAlignVertical="top"
+          />
+          <View style={s.confirmActions}>
             <TouchableOpacity
-              key={opt.score}
-              style={[
-                s.smileyBtn,
-                pickedScore === opt.score && phase === "submitting" && s.smileyBtnActive,
-              ]}
-              onPress={() => void onPickSmiley(opt.score)}
-              disabled={phase !== "pick" || !canSubmit}
-              activeOpacity={0.82}
-              accessibilityRole="button"
-              accessibilityLabel={opt.a11y}
+              style={s.cancelBtn}
+              onPress={onCancelConfirm}
+              activeOpacity={0.85}
             >
-              <Text style={s.smileyEmoji}>{opt.emoji}</Text>
+              <Text style={s.cancelBtnText}>Cancel</Text>
             </TouchableOpacity>
-          ))}
-        </View>
+            <TouchableOpacity
+              style={[s.submitBtn, !canSubmit && s.submitBtnDisabled]}
+              onPress={() => void onSubmitDebrief()}
+              disabled={!canSubmit}
+              activeOpacity={0.88}
+            >
+              <Text style={s.submitBtnText}>Submit debrief</Text>
+              <Send size={14} color="#fff" strokeWidth={2.4} />
+            </TouchableOpacity>
+          </View>
+        </>
       ) : null}
 
       {phase === "submitting" ? (
         <View style={s.inlineSpinner}>
           <ActivityIndicator size="small" color={CHAT_ACCENT} />
+          <Text style={s.submittingLabel}>Submitting…</Text>
         </View>
       ) : null}
 
       {err ? <Text style={s.err}>{err}</Text> : null}
 
-      {!canSubmit && phase === "pick" ? (
+      {!canSubmit && (phase === "pick" || phase === "confirm") ? (
         <Text style={s.readOnly}>
           Only the trip owner organization can submit this debrief.
         </Text>
       ) : null}
 
-      {phase === "success" || phase === "already_rated" ? (
+      {phase === "success" ? (
+        <View style={s.successBlock}>
+          <View style={s.successIconRing}>
+            <CheckCircle size={36} color="#059669" strokeWidth={2.4} />
+          </View>
+          <Text style={s.successTitle}>Debrief submitted</Text>
+          <Text style={s.successBody}>
+            Thank you for your rating
+            {targetName ? ` of ${targetName}` : ""}. Your feedback helps maintain
+            network quality.
+          </Text>
+        </View>
+      ) : null}
+
+      {phase === "already_rated" ? (
         <View style={s.doneRow}>
-          <Check size={16} color={CHAT_ACCENT} strokeWidth={2.4} />
+          <CheckCircle size={16} color={CHAT_ACCENT} strokeWidth={2.4} />
           <Text style={s.doneText}>
-            {phase === "already_rated" ? "Feedback on file" : "Feedback submitted"}
+            Feedback on file
             {displayScore > 0 ? ` · ${displayScore}/5` : ""}
           </Text>
         </View>
@@ -201,15 +308,20 @@ export const ChatTripFeedbackCard = ChatFeedbackCard;
 const s = StyleSheet.create({
   wrap: {
     alignSelf: "center",
-    maxWidth: 420,
+    maxWidth: 440,
     width: "100%",
-    backgroundColor: CHAT_ACCENT_SOFT,
-    borderRadius: 16,
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 28,
     borderWidth: 1,
-    borderColor: "rgba(67, 56, 202, 0.12)",
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    marginVertical: 6,
+    borderColor: "rgba(67, 56, 202, 0.14)",
+    paddingVertical: 18,
+    paddingHorizontal: 18,
+    marginVertical: 8,
+    shadowColor: "#4338ca",
+    shadowOpacity: 0.06,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 3,
   },
   headerRow: {
     flexDirection: "row",
@@ -218,94 +330,197 @@ const s = StyleSheet.create({
     gap: 10,
   },
   kickerCol: { flex: 1, minWidth: 0 },
+  kickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
   kicker: {
     fontSize: 9,
-    fontWeight: "800",
+    fontWeight: "900",
     color: CHAT_ACCENT,
-    letterSpacing: 1.1,
-    fontStyle: "italic",
+    letterSpacing: 1.4,
   },
   title: {
-    marginTop: 2,
-    fontSize: 15,
-    fontWeight: "800",
+    marginTop: 6,
+    fontSize: 22,
+    fontWeight: "900",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.2,
-    fontStyle: "italic",
+    letterSpacing: -0.6,
+  },
+  targetRow: {
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   target: {
-    marginTop: 4,
-    fontSize: 12,
-    fontWeight: "600",
+    flex: 1,
+    fontSize: 11,
+    fontWeight: "800",
     color: Theme.textSecondary,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
   },
   sheetPill: {
-    backgroundColor: "rgba(67, 56, 202, 0.12)",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+    backgroundColor: CHAT_ACCENT_SOFT,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(67, 56, 202, 0.12)",
   },
   sheetPillText: {
     fontSize: 8,
     fontWeight: "900",
     color: CHAT_ACCENT,
-    letterSpacing: 0.6,
+    letterSpacing: 0.8,
   },
   hint: {
-    marginTop: 10,
-    fontSize: 11,
-    fontWeight: "600",
-    color: Theme.textMuted,
-    lineHeight: 15,
+    marginTop: 14,
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+    lineHeight: 17,
   },
   smileyRow: {
-    marginTop: 12,
+    marginTop: 14,
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: 8,
+    gap: 6,
+    backgroundColor: "#f4f6f8",
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: Theme.surfaceBorder,
+    padding: 12,
   },
   smileyBtn: {
     flex: 1,
     minWidth: 0,
     aspectRatio: 1,
     maxHeight: 52,
-    borderRadius: 14,
+    borderRadius: 999,
     backgroundColor: Theme.cardWhite,
     borderWidth: 1,
     borderColor: Theme.surfaceBorder,
     alignItems: "center",
     justifyContent: "center",
   },
-  smileyBtnActive: {
-    borderColor: CHAT_ACCENT,
-    backgroundColor: "rgba(67, 56, 202, 0.06)",
-  },
   smileyEmoji: {
     fontSize: 26,
     lineHeight: 32,
   },
-  inlineSpinner: {
-    marginTop: 10,
+  confirmBanner: {
+    marginTop: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 12,
+    borderRadius: 18,
+    backgroundColor: "rgba(67, 56, 202, 0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(67, 56, 202, 0.12)",
+  },
+  confirmEmoji: {
+    fontSize: 44,
+    lineHeight: 52,
+  },
+  confirmTextCol: { flex: 1, minWidth: 0 },
+  confirmTitle: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.2,
+  },
+  confirmHint: {
+    marginTop: 4,
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textMuted,
+  },
+  commentInput: {
+    marginTop: 12,
+    minHeight: 100,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Theme.surfaceBorder,
+    backgroundColor: "#f8f9fb",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 13,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+  },
+  confirmActions: {
+    marginTop: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  cancelBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+  },
+  cancelBtnText: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: Theme.textMuted,
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  submitBtn: {
+    flex: 1,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 2,
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 16,
+    backgroundColor: CHAT_ACCENT,
+    minHeight: 44,
+  },
+  submitBtnDisabled: {
+    opacity: 0.45,
+  },
+  submitBtnText: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#fff",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  inlineSpinner: {
+    marginTop: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 8,
+  },
+  submittingLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    letterSpacing: 0.5,
   },
   err: {
-    marginTop: 8,
+    marginTop: 10,
     textAlign: "center",
     fontSize: 11,
     fontWeight: "700",
     color: Theme.negative,
   },
   readOnly: {
-    marginTop: 8,
+    marginTop: 10,
     textAlign: "center",
-    fontSize: 11,
+    fontSize: 10,
     color: Theme.textMuted,
-    fontWeight: "600",
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
   },
   footerRow: {
-    marginTop: 10,
+    marginTop: 14,
     flexDirection: "row",
     justifyContent: "flex-end",
   },
@@ -313,10 +528,9 @@ const s = StyleSheet.create({
     fontSize: 10,
     fontWeight: "700",
     color: Theme.textMuted,
-    fontStyle: "italic",
   },
   doneRow: {
-    marginTop: 12,
+    marginTop: 14,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -326,5 +540,34 @@ const s = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     color: Theme.textSecondary,
+  },
+  successBlock: {
+    marginTop: 8,
+    alignItems: "center",
+    paddingVertical: 12,
+  },
+  successIconRing: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: "#d1fae5",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  successTitle: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.4,
+    marginBottom: 6,
+  },
+  successBody: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.textSecondary,
+    textAlign: "center",
+    lineHeight: 17,
+    maxWidth: 320,
   },
 });

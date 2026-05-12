@@ -244,6 +244,14 @@ function tripConversationSelect(tripEmbedFields: string): string {
     `;
 }
 
+/** Conversation row + trip join only (no embedded `trip_messages`). */
+function tripConversationMetaSelect(tripEmbedFields: string): string {
+  return `
+      *,
+      trips!inner ( ${tripEmbedFields} )
+    `;
+}
+
 /** PostgREST fails the whole row if an embedded column does not exist on `trips`. */
 function isMissingTripsDisplayTripIdError(err: unknown): boolean {
   const e = err as { message?: string; code?: string } | null;
@@ -338,26 +346,31 @@ export async function getConversationsByOrganization(
   return resolveGenericPartyNamesForTrips(conversations);
 }
 
-/** Fetches one trip thread by id (for deep links when the list has not loaded it yet). RLS must allow read. */
+/**
+ * Fetches one trip thread by id (deep links, unknown-conversation recovery).
+ * Default: **no** embedded `trip_messages` — hydrate bodies via {@link fetchConversationHistory} on thread open.
+ */
 export async function getTripConversationById(
   conversationId: string,
+  opts?: { includeRecentMessages?: boolean },
 ): Promise<TripConversation | null> {
-  let res = await supabase()
-    .from("trip_conversations")
-    .select(tripConversationSelect(TRIP_EMBED_FIELDS_FULL))
-    .eq("id", conversationId)
-    .order("created_at", { ascending: false, referencedTable: "trip_messages" })
-    .limit(TRIP_MESSAGES_EMBED_RECENT, { referencedTable: "trip_messages" })
-    .maybeSingle();
+  const includeRecent = opts?.includeRecentMessages === true;
+
+  function buildQuery(tripEmbed: typeof TRIP_EMBED_FIELDS_FULL | typeof TRIP_EMBED_FIELDS_LEGACY) {
+    const sel = includeRecent ? tripConversationSelect(tripEmbed) : tripConversationMetaSelect(tripEmbed);
+    let q = supabase().from("trip_conversations").select(sel).eq("id", conversationId);
+    if (includeRecent) {
+      q = q
+        .order("created_at", { ascending: false, referencedTable: "trip_messages" })
+        .limit(TRIP_MESSAGES_EMBED_RECENT, { referencedTable: "trip_messages" });
+    }
+    return q.maybeSingle();
+  }
+
+  let res = await buildQuery(TRIP_EMBED_FIELDS_FULL);
 
   if (res.error && isMissingTripsDisplayTripIdError(res.error)) {
-    res = await supabase()
-      .from("trip_conversations")
-      .select(tripConversationSelect(TRIP_EMBED_FIELDS_LEGACY))
-      .eq("id", conversationId)
-      .order("created_at", { ascending: false, referencedTable: "trip_messages" })
-      .limit(TRIP_MESSAGES_EMBED_RECENT, { referencedTable: "trip_messages" })
-      .maybeSingle();
+    res = await buildQuery(TRIP_EMBED_FIELDS_LEGACY);
   }
 
   if (res.error || !res.data) return null;
@@ -1343,6 +1356,17 @@ function distinctTripCount(conversations: TripConversation[]): number {
   return new Set(conversations.map((c) => String(c.trip_id ?? "").trim()).filter(Boolean)).size;
 }
 
+/** DB without `p_include_message_bodies` on bootstrap RPCs — retry without the flag. */
+function bootstrapMessageBodiesFlagUnsupported(err: unknown): boolean {
+  const e = err as { message?: string; code?: string } | null;
+  if (!e) return false;
+  const c = String(e.code ?? "");
+  const m = String(e.message ?? "").toLowerCase();
+  if (c === "42883" || c === "PGRST202") return true;
+  if (m.includes("p_include_message_bodies")) return true;
+  return false;
+}
+
 /**
  * Multi-lane bootstrap: `get_multi_lane_bootstrap` → conversations + lane maps.
  * Falls back to {@link getUnifiedB2BChatBootstrap} + client-side {@link buildChatLanesFromConversations}.
@@ -1366,11 +1390,19 @@ export async function fetchChatBootstrapPayload(
   const tripOffset = opts?.tripOffset ?? 0;
   const hubTripBucket = opts?.hubTripBucket ?? "active";
 
-  const buildRpcArgs = (includeHubBucket: boolean): Record<string, unknown> => {
+  let emitBodiesParam = true;
+
+  const buildRpcArgs = (
+    includeHubBucket: boolean,
+    includeMessageBodies: boolean,
+  ): Record<string, unknown> => {
     const a: Record<string, unknown> = {
       p_organization_id: organizationId,
       p_message_limit: TRIP_CHAT_HISTORY_PAGE,
     };
+    if (emitBodiesParam) {
+      a.p_include_message_bodies = includeMessageBodies;
+    }
     if (includeHubBucket) {
       a.p_hub_trip_bucket = hubTripBucket;
     }
@@ -1382,10 +1414,19 @@ export async function fetchChatBootstrapPayload(
   };
 
   let includeHubBucket = true;
+  const includeMessageBodies = false;
   let { data, error } = await supabase().rpc(
     "get_multi_lane_bootstrap",
-    buildRpcArgs(includeHubBucket),
+    buildRpcArgs(includeHubBucket, includeMessageBodies),
   );
+
+  if (error && emitBodiesParam && bootstrapMessageBodiesFlagUnsupported(error)) {
+    emitBodiesParam = false;
+    ({ data, error } = await supabase().rpc(
+      "get_multi_lane_bootstrap",
+      buildRpcArgs(includeHubBucket, includeMessageBodies),
+    ));
+  }
 
   const msg0 = String(error?.message ?? "").toLowerCase();
   const code0 = String(error?.code ?? "");
@@ -1400,7 +1441,7 @@ export async function fetchChatBootstrapPayload(
     includeHubBucket = false;
     ({ data, error } = await supabase().rpc(
       "get_multi_lane_bootstrap",
-      buildRpcArgs(false),
+      buildRpcArgs(false, includeMessageBodies),
     ));
   }
 
@@ -1415,10 +1456,12 @@ export async function fetchChatBootstrapPayload(
 
   if (overloadMissing) {
     usedTripWindowRpc = false;
-    ({ data, error } = await supabase().rpc("get_multi_lane_bootstrap", {
+    const minimal: Record<string, unknown> = {
       p_organization_id: organizationId,
       p_message_limit: TRIP_CHAT_HISTORY_PAGE,
-    }));
+    };
+    if (emitBodiesParam) minimal.p_include_message_bodies = includeMessageBodies;
+    ({ data, error } = await supabase().rpc("get_multi_lane_bootstrap", minimal));
   }
 
   if (!error && data != null && typeof data === "object" && !Array.isArray(data)) {
