@@ -10,19 +10,18 @@ import { Check } from "lucide-react-native";
 import Theme from "@/constants/Theme";
 import { CHAT_ACCENT, CHAT_ACCENT_SOFT } from "@/features/chat/chatTheme";
 import { formatChatPartyName } from "@/features/chat/utils/partyDisplay";
-import { submitTripChatFeedback } from "../services/chat.service";
-import { chatStore } from "../store/chatStore";
 import { useChatStore } from "../store/useChatStore";
-import type { FeedbackRequestMetadata, TripMessageRow } from "../types/chat.types";
+import type { TripMessageRow } from "../types/chat.types";
 import { parseFeedbackRequestMetadata } from "../utils/feedbackRequestMeta";
 import { isFeedbackRequestAlreadyRatedMeta } from "../utils/feedbackRequestMeta.util";
 
-/** Four smileys → contractual 1–4 scale (stored as `rating` / `submitted_score`; RPC clamps 1–5). */
+/** Five smileys → 1–5 scale; persisted in `trip_messages.metadata.rating` (atomic RPC). */
 const SMILEY_OPTIONS = [
-  { emoji: "😠", score: 1, a11y: "Rate poor, 1 of 4" },
-  { emoji: "😐", score: 2, a11y: "Rate fair, 2 of 4" },
-  { emoji: "🙂", score: 3, a11y: "Rate good, 3 of 4" },
-  { emoji: "🤩", score: 4, a11y: "Rate excellent, 4 of 4" },
+  { emoji: "😠", score: 1, a11y: "Terrible, 1 of 5" },
+  { emoji: "😟", score: 2, a11y: "Poor, 2 of 5" },
+  { emoji: "😐", score: 3, a11y: "Average, 3 of 5" },
+  { emoji: "🙂", score: 4, a11y: "Good, 4 of 5" },
+  { emoji: "🤩", score: 5, a11y: "Excellent, 5 of 5" },
 ] as const;
 
 type FeedbackCardPhase = "pick" | "submitting" | "success" | "already_rated";
@@ -39,14 +38,13 @@ function formatTime(iso: string): string {
   }
 }
 
-function isAlreadySubmittedRpcError(e: unknown): boolean {
-  const msg = e instanceof Error ? e.message : String(e ?? "");
-  return /already_submitted/i.test(msg);
+function isAlreadySubmittedMessage(s: string): boolean {
+  return /already_submitted|feedback already submitted/i.test(s);
 }
 
 export function ChatFeedbackCard({
   message,
-  tripId,
+  tripId: _tripId,
   ratingOrganizationId,
   currentOrgId,
   onSubmitted,
@@ -92,70 +90,27 @@ export function ChatFeedbackCard({
   const onPickSmiley = useCallback(
     async (score: number) => {
       if (!meta || !canSubmit) return;
+      if (pickedScore != null || phase !== "pick") return;
       setErr(null);
       setPhase("submitting");
       setPickedScore(score);
 
-      /** Immediate “submitted” UI — `confirm_trip_feedback` follows below. */
-      chatStore.submitTripFeedback(message.conversation_id, message.id, score);
-
-      try {
-        const { error: rpcErr, submittedAt } = await submitTripChatFeedback({
-          ratingOrganizationId,
-          tripId,
-          message,
-          score,
-          tags: [],
-        });
-        if (rpcErr) throw rpcErr;
-
-        const confirmedMeta: FeedbackRequestMetadata = {
-          ...meta,
-          submitted_at:    submittedAt ?? new Date().toISOString(),
-          submitted_score: score,
-          rating:          score,
-          submitted_tags:  [],
-        };
-        chatStore.submitFeedback(message.conversation_id, message.id, {
-          metadata: confirmedMeta,
-        });
-        setPhase("success");
-        onSubmitted();
-      } catch (e) {
-        if (isAlreadySubmittedRpcError(e)) {
+      const { error } = await useChatStore.getState().submitSmileyFeedback(message.id, score);
+      if (error) {
+        if (isAlreadySubmittedMessage(error)) {
           setPhase("success");
           onSubmitted();
           return;
         }
-        chatStore.patchMessage(message.conversation_id, message.id, {
-          metadata: meta,
-        });
-        useChatStore.setState((s) => {
-          const tid = s.convToTrip[message.conversation_id];
-          const pt = s.convToParty[message.conversation_id];
-          if (!tid || !pt) return s;
-          const ent = s.trips[tid];
-          const party = ent?.parties[pt];
-          if (!ent || !party) return s;
-          return {
-            trips: {
-              ...s.trips,
-              [tid]: {
-                ...ent,
-                parties: {
-                  ...ent.parties,
-                  [pt]: { ...party, feedbackStatus: "pending" },
-                },
-              },
-            },
-          };
-        });
         setPhase("pick");
         setPickedScore(null);
-        setErr(e instanceof Error ? e.message : "Submission failed. Please retry.");
+        setErr(error);
+        return;
       }
+      setPhase("success");
+      onSubmitted();
     },
-    [meta, canSubmit, ratingOrganizationId, message, onSubmitted],
+    [meta, canSubmit, message, onSubmitted, pickedScore, phase],
   );
 
   if (!meta) return null;
@@ -170,7 +125,7 @@ export function ChatFeedbackCard({
       <View style={s.headerRow}>
         <View style={s.kickerCol}>
           <Text style={s.kicker}>PULSE CHAT</Text>
-          <Text style={s.title}>Partner feedback</Text>
+          <Text style={s.title}>How was the coordination?</Text>
           {targetName ? (
             <Text style={s.target} numberOfLines={2}>
               {targetName}
@@ -184,7 +139,7 @@ export function ChatFeedbackCard({
 
       {phase === "pick" || phase === "submitting" ? (
         <Text style={s.hint} numberOfLines={2}>
-          Trip closed — tap a mood to send your rating.
+          Trip closed — tap a face (1–5) to record your rating.
         </Text>
       ) : null}
 
@@ -228,9 +183,7 @@ export function ChatFeedbackCard({
           <Check size={16} color={CHAT_ACCENT} strokeWidth={2.4} />
           <Text style={s.doneText}>
             {phase === "already_rated" ? "Feedback on file" : "Feedback submitted"}
-            {displayScore > 0
-              ? ` · ${displayScore}/${displayScore > 4 ? 5 : 4}`
-              : ""}
+            {displayScore > 0 ? ` · ${displayScore}/5` : ""}
           </Text>
         </View>
       ) : null}

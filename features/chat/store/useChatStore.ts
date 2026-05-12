@@ -36,7 +36,11 @@
 
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import { fetchChatBootstrapPayload, fetchConversationHistory } from '../services/chat.service';
+import {
+  fetchChatBootstrapPayload,
+  fetchConversationHistory,
+  submitTripChatFeedback,
+} from '../services/chat.service';
 import { mergeChatLanes } from '../utils/laneMultiplexer.util';
 import type {
   B2BTripState,
@@ -60,6 +64,7 @@ import type { ChatLanes } from '../utils/laneMultiplexer.util';
 import { recomputeLongHaulTripFieldsFromStream } from '../utils/longHaulChat.util';
 import { parseSystemLogLocationData } from '../utils/locationLogPayload.util';
 import { parseFeedbackRequestMetadata } from '../utils/feedbackRequestMeta';
+import { isFeedbackRequestAlreadyRatedMeta } from '../utils/feedbackRequestMeta.util';
 
 // ── Realtime duplicate suppression (same message_id / transaction_id flood) ──
 // WAL can surface the same logical row twice in quick succession; skipping the
@@ -557,6 +562,14 @@ interface ChatState {
    * immediately (caller then invokes `confirm_trip_feedback` via chat.service).
    */
   submitTripFeedback: (convId: string, msgId: string, rating: number) => void;
+  /**
+   * WhatsApp-style atomic smiley: optimistic metadata patch, then `confirm_trip_feedback` RPC.
+   * Resolves `conversation_id` from `event_stream`. Returns `{ error }` on failure (store reverted).
+   */
+  submitSmileyFeedback: (
+    messageId: string,
+    rating: number,
+  ) => Promise<{ error: string | null }>;
   /** Optimistic "Add to books" — marks all ledger rows in this conv with the same transaction_id. */
   applyLedgerBookOptimistic: (convId: string, transactionId: string) => void;
   revertLedgerBookOptimistic: (convId: string, transactionId: string) => void;
@@ -1095,6 +1108,49 @@ function ingestBootstrapConversations(
   return { trips, convToTrip, convToParty };
 }
 
+function cloneTripMessageMetadataForRevert(
+  meta: TripMessageRow["metadata"],
+): TripMessageRow["metadata"] {
+  if (meta == null) return meta;
+  try {
+    return JSON.parse(JSON.stringify(meta)) as TripMessageRow["metadata"];
+  } catch {
+    return meta;
+  }
+}
+
+/** Resolve a `feedback_request` row in the merged stream (for atomic smiley submit). */
+function findTripFeedbackMessageInStore(
+  trips: Record<string, TripEntry>,
+  convToTrip: Record<string, string>,
+  messageId: string,
+): {
+  convId: string;
+  tripId: string;
+  row: TripMessageRow;
+  ratingOrganizationId: string;
+} | null {
+  for (const entry of Object.values(trips)) {
+    const ev = entry.event_stream.find((e) => e.id === messageId);
+    if (!ev) continue;
+    const convId = ev.conversation_id;
+    if (!convId || convToTrip[convId] !== entry.tripId) continue;
+    const mt = String(ev.message_type ?? "");
+    if (mt !== "feedback_request" && mt !== "feedback") continue;
+    const ratingOrganizationId =
+      (entry.tripOrganizationId ?? "").trim() ||
+      (typeof ev.organization_id === "string" ? ev.organization_id.trim() : "") ||
+      "";
+    return {
+      convId,
+      tripId: entry.tripId,
+      row: ev as TripMessageRow,
+      ratingOrganizationId,
+    };
+  }
+  return null;
+}
+
 // ── Store ─────────────────────────────────────────────────────────────────────
 
 export const useChatStore = create<ChatState>()(
@@ -1552,6 +1608,96 @@ export const useChatStore = create<ChatState>()(
         submitted_tags:  [],
       };
       get().submitFeedback(convId, msgId, { metadata: optimistic });
+    },
+
+    submitSmileyFeedback: async (messageId, rating) => {
+      const { trips, convToTrip } = get();
+      const found = findTripFeedbackMessageInStore(trips, convToTrip, messageId);
+      if (!found) return { error: "Message not found" };
+      const { convId, row, ratingOrganizationId } = found;
+      const preMeta = parseFeedbackRequestMetadata(row);
+      if (!preMeta) return { error: "Invalid feedback message" };
+      if (isFeedbackRequestAlreadyRatedMeta(preMeta)) return { error: null };
+      const prevMetaSnapshot = cloneTripMessageMetadataForRevert(row.metadata);
+
+      const score = Math.min(5, Math.max(1, Math.floor(rating)));
+      get().submitTripFeedback(convId, messageId, score);
+
+      const messageForRpc: TripMessageRow = {
+        ...row,
+        conversation_id: convId,
+      };
+
+      try {
+        const { error: rpcErr, submittedAt } = await submitTripChatFeedback({
+          ratingOrganizationId,
+          tripId,
+          message: messageForRpc,
+          score,
+          tags: [],
+        });
+        if (rpcErr) {
+          const msg = rpcErr.message;
+          if (/already_submitted|feedback already submitted/i.test(msg)) {
+            return { error: null };
+          }
+          get().patchMessage(convId, messageId, { metadata: prevMetaSnapshot });
+          set((s) => {
+            const tid = s.convToTrip[convId];
+            const pt = s.convToParty[convId];
+            if (!tid || !pt) return s;
+            const ent = s.trips[tid];
+            const party = ent?.parties[pt];
+            if (!ent || !party) return s;
+            return {
+              trips: {
+                ...s.trips,
+                [tid]: {
+                  ...ent,
+                  parties: {
+                    ...ent.parties,
+                    [pt]: { ...party, feedbackStatus: "pending" },
+                  },
+                },
+              },
+            };
+          });
+          return { error: msg };
+        }
+
+        const confirmed: FeedbackRequestMetadata = {
+          ...preMeta,
+          submitted_at:    submittedAt ?? new Date().toISOString(),
+          submitted_score: score,
+          rating:          score,
+          submitted_tags:  [],
+        };
+        get().submitFeedback(convId, messageId, { metadata: confirmed });
+        return { error: null };
+      } catch (e) {
+        get().patchMessage(convId, messageId, { metadata: prevMetaSnapshot });
+        set((s) => {
+          const tid = s.convToTrip[convId];
+          const pt = s.convToParty[convId];
+          if (!tid || !pt) return s;
+          const ent = s.trips[tid];
+          const party = ent?.parties[pt];
+          if (!ent || !party) return s;
+          return {
+            trips: {
+              ...s.trips,
+              [tid]: {
+                ...ent,
+                parties: {
+                  ...ent.parties,
+                  [pt]: { ...party, feedbackStatus: "pending" },
+                },
+              },
+            },
+          };
+        });
+        return { error: e instanceof Error ? e.message : String(e) };
+      }
     },
 
     applyLedgerBookOptimistic: (convId, transactionId) => {

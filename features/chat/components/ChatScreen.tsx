@@ -5106,6 +5106,7 @@ function TripConversationDetailLoaded({
       return <DocumentShareCard message={m} isOwn={isMessageFromSelf(m)} />;
     }
     if (m.message_type === "feedback_request" || m.message_type === "feedback") {
+      if (viewerIsDriver) return null;
       if (!tripFeedbackRequestMatchesConversation(m, liveConv)) return null;
       const completionKnownInLane = tripMessageHistoryHasCompletedStatus(liveConv.messages);
       if (!completionKnownInLane && !tripEligibleForFeedback) return null;
@@ -5149,6 +5150,7 @@ function TripConversationDetailLoaded({
   }, [
     currentOrgId,
     liveConv,
+    viewerIsDriver,
     allowFinancialCards,
     allowLedgerActions,
     showFeedbackCardOnEligibleLane,

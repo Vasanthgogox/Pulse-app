@@ -275,6 +275,9 @@ export const chatStore = {
   submitTripFeedback: (convId: string, msgId: string, rating: number): void =>
     useChatStore.getState().submitTripFeedback(convId, msgId, rating),
 
+  submitSmileyFeedback: (messageId: string, rating: number): Promise<{ error: string | null }> =>
+    useChatStore.getState().submitSmileyFeedback(messageId, rating),
+
   appendMessage: (convId: string, msg: TripMessageRow): void =>
     useChatStore.getState().appendMessage(convId, msg),
 
