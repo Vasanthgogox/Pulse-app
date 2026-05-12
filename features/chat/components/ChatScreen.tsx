@@ -207,6 +207,120 @@ function formatTripRouteDate(iso: string | null | undefined): string {
   }
 }
 
+function normalizePartyLabelKey(s: string | null | undefined): string {
+  return (s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/**
+ * When the viewer is the linked client on a shipper-hosted trip, the **client** lane is their own
+ * thread — show "You" on the tab/header instead of repeating "DEEPAK ORG" as if it were a counterparty.
+ */
+function resolveViewerClientTabPrimaryName(params: {
+  partyType: ConversationPartyType;
+  convPartyName: string | null | undefined;
+  viewerOrgId: string;
+  viewerOrgName: string | null | undefined;
+  tripHostOrgId: string | null | undefined;
+  composeClientLinkedOrgId: string | null | undefined;
+}): string | null {
+  if (params.partyType !== "client") return null;
+  const v = params.viewerOrgId.trim();
+  const host = (params.tripHostOrgId ?? "").trim();
+  if (!v || !host || v === host) return null;
+  const linked = (params.composeClientLinkedOrgId ?? "").trim();
+  if (linked && v === linked) return "You";
+  const pn = normalizePartyLabelKey(params.convPartyName);
+  const on = normalizePartyLabelKey(params.viewerOrgName);
+  if (pn.length > 0 && on.length > 0 && pn === on) return "You";
+  return null;
+}
+
+/** Linked org user is the trip's integrated client (shipper-hosted trip) — hide redundant "CLIENT / self" tab. */
+function viewerIsLinkedTripClientViewer(params: {
+  clientLanePartyName: string | null | undefined;
+  viewerOrgId: string;
+  viewerOrgName: string | null | undefined;
+  tripHostOrgId: string | null | undefined;
+  composeClientLinkedOrgId: string | null | undefined;
+}): boolean {
+  return (
+    resolveViewerClientTabPrimaryName({
+      partyType: "client",
+      convPartyName: params.clientLanePartyName,
+      viewerOrgId: params.viewerOrgId,
+      viewerOrgName: params.viewerOrgName,
+      tripHostOrgId: params.tripHostOrgId,
+      composeClientLinkedOrgId: params.composeClientLinkedOrgId,
+    }) === "You"
+  );
+}
+
+/** Linked org user is the trip's integrated supplier — hide redundant "SUPPLIER / self" tab. */
+function viewerIsLinkedTripSupplierViewer(params: {
+  supplierLanePartyName: string | null | undefined;
+  viewerOrgId: string;
+  viewerOrgName: string | null | undefined;
+  tripHostOrgId: string | null | undefined;
+  composeSupplierLinkedOrgId: string | null | undefined;
+}): boolean {
+  const v = params.viewerOrgId.trim();
+  const host = (params.tripHostOrgId ?? "").trim();
+  if (!v || !host || v === host) return false;
+  const linked = (params.composeSupplierLinkedOrgId ?? "").trim();
+  if (linked && v === linked) return true;
+  const pn = normalizePartyLabelKey(params.supplierLanePartyName);
+  const on = normalizePartyLabelKey(params.viewerOrgName);
+  return pn.length > 0 && on.length > 0 && pn === on;
+}
+
+/** Dedupe by id then chronological (linked-party tabs merge two conversation streams). */
+function mergeTripMessageStreamsByTime(
+  primary: TripMessageRow[],
+  secondary: TripMessageRow[],
+): TripMessageRow[] {
+  const byId = new Map<string, TripMessageRow>();
+  for (const m of secondary) byId.set(m.id, m);
+  for (const m of primary) byId.set(m.id, m);
+  return [...byId.values()].sort(
+    (a, b) => Date.parse(a.created_at) - Date.parse(b.created_at),
+  );
+}
+
+/** Trip hub card party shortcuts — same rules as detail tabs (hide self-lane for linked client / supplier). */
+function hubCardPartyTypesForViewer(
+  hubTrip: TripForCompose | undefined,
+  viewerOrgId: string,
+  viewerOrgName: string | null | undefined,
+  tripHostOrgId: string | null | undefined,
+): ConversationPartyType[] {
+  const full: ConversationPartyType[] = ["client", "supplier", "driver"];
+  if (!hubTrip || !viewerOrgId.trim()) return full;
+  let out = full.slice();
+  if (
+    viewerIsLinkedTripClientViewer({
+      clientLanePartyName: hubTrip.client_name,
+      viewerOrgId,
+      viewerOrgName,
+      tripHostOrgId,
+      composeClientLinkedOrgId: hubTrip.client_linked_organization_id ?? null,
+    })
+  ) {
+    out = out.filter((p) => p !== "client");
+  }
+  if (
+    viewerIsLinkedTripSupplierViewer({
+      supplierLanePartyName: hubTrip.supplier_name,
+      viewerOrgId,
+      viewerOrgName,
+      tripHostOrgId,
+      composeSupplierLinkedOrgId: hubTrip.supplier_linked_organization_id ?? null,
+    })
+  ) {
+    out = out.filter((p) => p !== "supplier");
+  }
+  return out.length === 0 ? full : out;
+}
+
 /** Hub badge: UNASSIGNED only for aggregate (integrated) trips with no driver; else status label. */
 function formatTripHubStatusLabel(
   tripStatus: string | null | undefined,
@@ -1244,6 +1358,38 @@ export function ChatScreen() {
                     trip.tripSupplierId,
                   );
                   const isUnassignedBadge = statusLabel === "UNASSIGNED";
+                  const hubTripForIcons = hubComposeTrips.find((t) => t.id === trip.tripId);
+                  const clientRowForHub = trip.rows.find((r) => r.party_type === "client");
+                  const supplierRowForHub = trip.rows.find((r) => r.party_type === "supplier");
+                  const hubTripForPartyFilter: TripForCompose | undefined =
+                    hubTripForIcons ??
+                    (clientRowForHub || supplierRowForHub
+                      ? {
+                          id: trip.tripId,
+                          trip_number: trip.tripLabel,
+                          display_trip_id: null,
+                          status: trip.tripStatus,
+                          created_at: trip.tripCreatedAt,
+                          pickup_area: trip.pickup,
+                          drop_location: trip.drop,
+                          client_id: clientRowForHub?.client_id ?? null,
+                          client_name: clientRowForHub?.party_name ?? null,
+                          supplier_id: supplierRowForHub?.supplier_id ?? null,
+                          supplier_name: supplierRowForHub?.party_name ?? null,
+                          driver_id: trip.tripDriverId ?? null,
+                          driver_display_name: null,
+                          client_linked_organization_id: null,
+                          supplier_linked_organization_id: null,
+                        }
+                      : undefined);
+                  const tripHostOrgIdForHub =
+                    trip.rows[0]?.trip_organization_id ?? trip.rows[0]?.organization_id ?? null;
+                  const hubPartyTypesRow = hubCardPartyTypesForViewer(
+                    hubTripForPartyFilter,
+                    organizationId ?? "",
+                    currentOrganization?.name ?? null,
+                    tripHostOrgIdForHub,
+                  );
                   const openFallback = () => {
                     if (trip.rows.length === 0) {
                       void openCompose(trip.tripId);
@@ -1333,12 +1479,13 @@ export function ChatScreen() {
                         </View>
                       </TouchableOpacity>
                       <View style={s.tripHubPartyIconRow}>
-                        {(["client", "supplier", "driver"] as ConversationPartyType[]).map((partyType) => {
+                        {hubPartyTypesRow.map((partyType) => {
                           const row = trip.rows.find((r) => r.party_type === partyType);
                           const on = Boolean(row && selectedConvId === row.id);
                           // Determine if the underlying entity exists so we can offer create-on-demand
-                          const hubTrip = hubComposeTrips.find((t) => t.id === trip.tripId);
-                          const entityExists = hubTrip ? isPartyLinkedForTripChat(hubTrip, partyType) : Boolean(row);
+                          const entityExists = hubTripForIcons
+                            ? isPartyLinkedForTripChat(hubTripForIcons, partyType)
+                            : Boolean(row);
                           const isMissing = !row && !entityExists;
                           return (
                             <TouchableOpacity
@@ -1355,17 +1502,17 @@ export function ChatScreen() {
                                   openConversation(row);
                                   return;
                                 }
-                                if (!hubTrip || !entityExists) return;
-                                const pr = getComposePartyRows(hubTrip).find(
+                                if (!hubTripForIcons || !entityExists) return;
+                                const pr = getComposePartyRows(hubTripForIcons).find(
                                   (r) => r.kind === "selectable" && r.partyType === partyType,
                                 );
                                 if (!pr || pr.kind !== "selectable") return;
                                 setInitiating(true);
                                 const convId = await initiateConversation({
-                                  tripId: hubTrip.id,
-                                  tripNumber: hubTrip.display_trip_id ?? hubTrip.trip_number,
-                                  pickupArea: hubTrip.pickup_area,
-                                  dropLocation: hubTrip.drop_location,
+                                  tripId: hubTripForIcons.id,
+                                  tripNumber: hubTripForIcons.display_trip_id ?? hubTripForIcons.trip_number,
+                                  pickupArea: hubTripForIcons.pickup_area,
+                                  dropLocation: hubTripForIcons.drop_location,
                                   partyType,
                                   partyName: pr.name,
                                   partyId: pr.id,
@@ -3949,6 +4096,13 @@ function TripConversationDetailLoaded({
 }) {
   const { profile } = useAuth();
   const selfUid = (profile as any)?.uid ?? null;
+  const { currentOrganization } = useOrganization();
+  /** Outgoing bubble side / "YOU" — must use auth uid, not sender_role (linked clients see dispatcher messages as incoming). */
+  const isMessageFromSelf = useCallback(
+    (m: TripMessageRow) =>
+      Boolean(selfUid && m.sender_user_id && m.sender_user_id === selfUid),
+    [selfUid],
+  );
   const { markTripThreadsRead, initiateConversation } = useTripChat();
 
   // Subscribe directly to this conversation for live message updates.
@@ -4121,42 +4275,6 @@ function TripConversationDetailLoaded({
     return () => { cancelled = true; };
   }, [tripEligibleForFeedback, liveConv.trip_id, liveConv.id]);
 
-  const displayMessages = useMemo(
-    () =>
-      dedupeFeedbackRequestMessages(
-        dedupeTripStatusBroadcastsForLane(
-          mergeTripChatMessagesWithFeedbackRatings(
-            liveConv.trip_id,
-            liveConv.messages,
-            tripRatings,
-          ),
-          liveConv.id,
-        ),
-      ),
-    [liveConv.trip_id, liveConv.id, liveConv.messages, tripRatings],
-  );
-
-  const handleIslandNavigateTrip = useCallback(
-    (tripId: string) => {
-      const lanes = conversations.filter((c) => c.trip_id === tripId);
-      const pick =
-        lanes.find((c) => c.party_type === liveConv.party_type) ?? lanes[0];
-      if (pick) onSelectConversation(pick.id);
-    },
-    [conversations, liveConv.party_type, onSelectConversation],
-  );
-
-  const messageListLayout = useMemo(
-    () => buildTripMessageListLayoutMeta(displayMessages, liveConv.party_type),
-    [displayMessages, liveConv.party_type],
-  );
-
-  const getMessageItemLayout = useCallback(
-    (_data: ArrayLike<TripMessageRow> | null | undefined, index: number) =>
-      messageListLayout.getItemLayout(index),
-    [messageListLayout],
-  );
-
   const quickMsgs = QUICK_MESSAGES[liveConv.party_type];
   const PARTY_ORDER: ConversationPartyType[] = ["client", "supplier", "driver"];
   // useConversationsByTrip returns all lanes for this trip from the singleton store.
@@ -4211,6 +4329,57 @@ function TripConversationDetailLoaded({
       partyConversationMap.driver,
     ],
   );
+
+  const linkedClientSuppressClientTab = useMemo(
+    () =>
+      Boolean(partyConversationMap.client) &&
+      viewerIsLinkedTripClientViewer({
+        clientLanePartyName: partyConversationMap.client?.party_name,
+        viewerOrgId: currentOrgId,
+        viewerOrgName: currentOrganization?.name ?? null,
+        tripHostOrgId: liveConv.trip_organization_id ?? liveConv.organization_id,
+        composeClientLinkedOrgId: tripCompose?.client_linked_organization_id ?? null,
+      }),
+    [
+      partyConversationMap.client,
+      currentOrgId,
+      currentOrganization?.name,
+      liveConv.trip_organization_id,
+      liveConv.organization_id,
+      tripCompose?.client_linked_organization_id,
+    ],
+  );
+
+  const linkedSupplierSuppressSupplierTab = useMemo(
+    () =>
+      Boolean(partyConversationMap.supplier) &&
+      viewerIsLinkedTripSupplierViewer({
+        supplierLanePartyName: partyConversationMap.supplier?.party_name,
+        viewerOrgId: currentOrgId,
+        viewerOrgName: currentOrganization?.name ?? null,
+        tripHostOrgId: liveConv.trip_organization_id ?? liveConv.organization_id,
+        composeSupplierLinkedOrgId: tripCompose?.supplier_linked_organization_id ?? null,
+      }),
+    [
+      partyConversationMap.supplier,
+      currentOrgId,
+      currentOrganization?.name,
+      liveConv.trip_organization_id,
+      liveConv.organization_id,
+      tripCompose?.supplier_linked_organization_id,
+    ],
+  );
+
+  const missionBarPartyTypes = useMemo(() => {
+    let rows = detailVisiblePartyTypes;
+    if (linkedClientSuppressClientTab) rows = rows.filter((p) => p !== "client");
+    if (linkedSupplierSuppressSupplierTab) rows = rows.filter((p) => p !== "supplier");
+    return rows;
+  }, [
+    linkedClientSuppressClientTab,
+    linkedSupplierSuppressSupplierTab,
+    detailVisiblePartyTypes,
+  ]);
 
   const displayPartyName = useCallback(
     (partyType: ConversationPartyType): string => {
@@ -4277,6 +4446,113 @@ function TripConversationDetailLoaded({
     }
   };
 
+  /** Linked client: shipper↔client messages live in client conv — merge into supplier/driver tabs. Linked supplier: merge supplier conv into client/driver. */
+  const baseMessagesForDisplayPipeline = useMemo(() => {
+    const clientConv = partyConversationMap.client;
+    const supplierConv = partyConversationMap.supplier;
+
+    if (linkedClientSuppressClientTab && clientConv) {
+      if (liveConv.party_type === "supplier") {
+        return mergeTripMessageStreamsByTime(liveConv.messages, clientConv.messages);
+      }
+      if (liveConv.party_type === "driver") {
+        return mergeTripMessageStreamsByTime(liveConv.messages, clientConv.messages);
+      }
+    }
+    if (linkedSupplierSuppressSupplierTab && supplierConv) {
+      if (liveConv.party_type === "client") {
+        return mergeTripMessageStreamsByTime(liveConv.messages, supplierConv.messages);
+      }
+      if (liveConv.party_type === "driver") {
+        return mergeTripMessageStreamsByTime(liveConv.messages, supplierConv.messages);
+      }
+    }
+    return liveConv.messages;
+  }, [
+    linkedClientSuppressClientTab,
+    linkedSupplierSuppressSupplierTab,
+    partyConversationMap.client,
+    partyConversationMap.supplier,
+    liveConv.party_type,
+    liveConv.messages,
+  ]);
+
+  const displayMessages = useMemo(
+    () =>
+      dedupeFeedbackRequestMessages(
+        dedupeTripStatusBroadcastsForLane(
+          mergeTripChatMessagesWithFeedbackRatings(
+            liveConv.trip_id,
+            baseMessagesForDisplayPipeline,
+            tripRatings,
+          ),
+          liveConv.id,
+        ),
+      ),
+    [liveConv.trip_id, liveConv.id, baseMessagesForDisplayPipeline, tripRatings],
+  );
+
+  const handleIslandNavigateTrip = useCallback(
+    (tripId: string) => {
+      const lanes = conversations.filter((c) => c.trip_id === tripId);
+      const pick =
+        lanes.find((c) => c.party_type === liveConv.party_type) ?? lanes[0];
+      if (pick) onSelectConversation(pick.id);
+    },
+    [conversations, liveConv.party_type, onSelectConversation],
+  );
+
+  const messageListLayout = useMemo(
+    () => buildTripMessageListLayoutMeta(displayMessages, liveConv.party_type),
+    [displayMessages, liveConv.party_type],
+  );
+
+  const getMessageItemLayout = useCallback(
+    (_data: ArrayLike<TripMessageRow> | null | undefined, index: number) =>
+      messageListLayout.getItemLayout(index),
+    [messageListLayout],
+  );
+
+  useEffect(() => {
+    if (linkedClientSuppressClientTab && liveConv.party_type === "client") {
+      const s = partyConversationMap.supplier;
+      const d = partyConversationMap.driver;
+      if (s?.id) {
+        chatStore.switchParty(liveConv.trip_id, "supplier");
+        onSelectConversation(s.id);
+        void markTripThreadsRead(liveConv.trip_id);
+      } else if (d?.id) {
+        chatStore.switchParty(liveConv.trip_id, "driver");
+        onSelectConversation(d.id);
+        void markTripThreadsRead(liveConv.trip_id);
+      }
+      return;
+    }
+    if (linkedSupplierSuppressSupplierTab && liveConv.party_type === "supplier") {
+      const c = partyConversationMap.client;
+      const d = partyConversationMap.driver;
+      if (c?.id) {
+        chatStore.switchParty(liveConv.trip_id, "client");
+        onSelectConversation(c.id);
+        void markTripThreadsRead(liveConv.trip_id);
+      } else if (d?.id) {
+        chatStore.switchParty(liveConv.trip_id, "driver");
+        onSelectConversation(d.id);
+        void markTripThreadsRead(liveConv.trip_id);
+      }
+    }
+  }, [
+    linkedClientSuppressClientTab,
+    linkedSupplierSuppressSupplierTab,
+    liveConv.trip_id,
+    liveConv.party_type,
+    partyConversationMap.supplier?.id,
+    partyConversationMap.client?.id,
+    partyConversationMap.driver?.id,
+    onSelectConversation,
+    markTripThreadsRead,
+  ]);
+
   const missionDateLabel = formatTripRouteDate(liveConv.trip_created_at);
 
   const tripMeta = useTripMeta(liveConv.trip_id, currentOrgId, {
@@ -4311,7 +4587,7 @@ function TripConversationDetailLoaded({
       return (
         <SystemEventCard
           message={m}
-          isOwn={m.sender_role === "dispatcher"}
+          isOwn={isMessageFromSelf(m)}
           currentOrgId={currentOrgId}
           conversationPartyName={liveConv.party_name}
           onAddToBook={onAddToBook}
@@ -4351,7 +4627,7 @@ function TripConversationDetailLoaded({
       );
     }
     if (m.message_type === "document_share") {
-      return <DocumentShareCard message={m} isOwn={m.sender_role === "dispatcher"} />;
+      return <DocumentShareCard message={m} isOwn={isMessageFromSelf(m)} />;
     }
     if (m.message_type === "feedback_request" || m.message_type === "feedback") {
       if (!tripFeedbackRequestMatchesConversation(m, liveConv)) return null;
@@ -4367,22 +4643,41 @@ function TripConversationDetailLoaded({
         />
       );
     }
+    const own = isMessageFromSelf(m);
+    const peerLabel =
+      m.sender_name?.trim() ||
+      (m.sender_role === "dispatcher"
+        ? "Dispatcher"
+        : m.sender_role === "client"
+          ? "Client"
+          : m.sender_role === "supplier"
+            ? "Supplier"
+            : m.sender_role === "driver"
+              ? "Driver"
+              : "Partner");
     return (
       <ChatBubble
-        isOwn={m.sender_role === "dispatcher"}
+        isOwn={own}
         content={m.content}
         timestamp={m.created_at}
-        senderName={m.sender_role !== "dispatcher" ? m.sender_name : undefined}
-        avatarSeed={m.sender_role !== "dispatcher" ? m.sender_avatar_seed : undefined}
-        deliveryStatus={
-          m.sender_role === "dispatcher"
-            ? resolveOutgoingDeliveryStatus(m)
-            : undefined
-        }
+        senderName={own ? undefined : peerLabel}
+        avatarSeed={own ? undefined : m.sender_avatar_seed}
+        deliveryStatus={own ? resolveOutgoingDeliveryStatus(m) : undefined}
         isNew={Date.parse(m.created_at) > mountedAtMs}
       />
     );
-  }, [currentOrgId, liveConv, onAddToBook, onDispute, handleFeedbackSubmitted, mountedAtMs]);
+  }, [
+    currentOrgId,
+    liveConv,
+    onAddToBook,
+    onDispute,
+    handleFeedbackSubmitted,
+    mountedAtMs,
+    isMessageFromSelf,
+  ]);
+
+  const chatDetailSubtitle =
+    formatChatPartyName(liveConv.party_name) ?? undefined;
 
   const partyTabIcon = (partyType: ConversationPartyType, selected: boolean) => (
     <View
@@ -4401,7 +4696,7 @@ function TripConversationDetailLoaded({
     <View style={s.detailPanel}>
       <ChatDetailHeader
         title={`${liveConv.trip_number} · ${partyLabel(liveConv.party_type)}`}
-        subtitle={formatChatPartyName(liveConv.party_name) ?? undefined}
+        subtitle={chatDetailSubtitle}
         partyType={liveConv.party_type}
         isDesktop={isDesktop}
         onCloseDetail={onCloseDetail}
@@ -4440,14 +4735,14 @@ function TripConversationDetailLoaded({
             </Text>
           </View>
         ) : null}
-        {detailVisiblePartyTypes.length > 0 ? (
+        {missionBarPartyTypes.length > 0 ? (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             style={s.detailMissionTabsScroller}
             contentContainerStyle={s.detailPartyTabs}
           >
-            {detailVisiblePartyTypes.map((partyType) => {
+            {missionBarPartyTypes.map((partyType) => {
               const on = liveConv.party_type === partyType;
               const hasConversation = Boolean(partyConversationMap[partyType]);
               const partyLine = formatChatPartyName(displayPartyName(partyType));
