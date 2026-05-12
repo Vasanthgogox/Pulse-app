@@ -229,6 +229,28 @@ export async function mirrorLedgerEntryFromChat(
 }
 
 /**
+ * Atomically books a ledger chat message (accounting_books + mirrored transaction + metadata).
+ */
+export async function confirmLedgerToAccountingBooks(
+  messageId: string,
+  orgId: string,
+): Promise<{ error: Error | null; data: Record<string, unknown> | null }> {
+  const { data, error } = await supabase().rpc("confirm_to_accounting_books", {
+    p_message_id: messageId,
+    p_org_id: orgId,
+  });
+
+  if (error) {
+    return { error: new Error(error.message), data: null };
+  }
+
+  notifyTripChatMessagesChanged();
+
+  const row = data && typeof data === "object" && !Array.isArray(data) ? (data as Record<string, unknown>) : null;
+  return { error: null, data: row };
+}
+
+/**
  * Marks a ledger_event message as acknowledged (add-to-book confirmed).
  */
 export async function acknowledgeLedgerEventMessage(

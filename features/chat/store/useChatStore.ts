@@ -39,6 +39,7 @@ import { getUnifiedB2BChatBootstrap } from '../services/chat.service';
 import type {
   B2BTripState,
   ConversationPartyType,
+  LedgerEventMetadata,
   MessageDeliveryStatus,
   TripConversation,
   TripFeedbackLaneStatus,
@@ -494,6 +495,9 @@ interface ChatState {
   /** Optimistic feedback submission — patches message metadata locally. The caller
    *  also fires the RPC; this ensures the UI flips immediately. */
   submitFeedback:     (convId: string, msgId: string, patch: Partial<TripMessageRow>) => void;
+  /** Optimistic "Add to books" — marks all ledger rows in this conv with the same transaction_id. */
+  applyLedgerBookOptimistic: (convId: string, transactionId: string) => void;
+  revertLedgerBookOptimistic: (convId: string, transactionId: string) => void;
   /** Merge on-demand history load into event_stream (used by lazy-load button in detail). */
   mergeConversationHistory: (convId: string, messages: TripMessageRow[]) => void;
   clear:              () => void;
@@ -1126,6 +1130,57 @@ export const useChatStore = create<ChatState>()(
       if (!merged) return;
       merged = withPartyRatedIfFeedbackAck(merged, convId, msgId, convToParty);
       set({ trips: { ...trips, [tripId]: merged } });
+    },
+
+    applyLedgerBookOptimistic: (convId, transactionId) => {
+      const tid = transactionId.trim();
+      if (!tid) return;
+      const { trips, convToTrip } = get();
+      const tripId = convToTrip[convId];
+      if (!tripId) return;
+      const entry = trips[tripId];
+      if (!entry?.event_stream.length) return;
+      const ackAt = new Date().toISOString();
+      let changed = false;
+      const event_stream = entry.event_stream.map((e) => {
+        if (e.conversation_id !== convId) return e;
+        if (!isLedgerLikeMessageType(String(e.message_type ?? ""))) return e;
+        const m = e.metadata as LedgerEventMetadata | undefined;
+        if (m?.transaction_id !== tid) return e;
+        changed = true;
+        const mergedMeta = mergeTripMessageMetadata(m, {
+          is_booked: true,
+          acknowledged_at: ackAt,
+        } as TripMessageMetadata);
+        return { ...e, metadata: mergedMeta };
+      });
+      if (!changed) return;
+      set({ trips: { ...trips, [tripId]: { ...entry, event_stream } } });
+    },
+
+    revertLedgerBookOptimistic: (convId, transactionId) => {
+      const tid = transactionId.trim();
+      if (!tid) return;
+      const { trips, convToTrip } = get();
+      const tripId = convToTrip[convId];
+      if (!tripId) return;
+      const entry = trips[tripId];
+      if (!entry?.event_stream.length) return;
+      let changed = false;
+      const event_stream = entry.event_stream.map((e) => {
+        if (e.conversation_id !== convId) return e;
+        if (!isLedgerLikeMessageType(String(e.message_type ?? ""))) return e;
+        const m = e.metadata as LedgerEventMetadata | undefined;
+        if (m?.transaction_id !== tid) return e;
+        changed = true;
+        const mergedMeta = mergeTripMessageMetadata(m, {
+          is_booked: false,
+          acknowledged_at: null,
+        } as TripMessageMetadata);
+        return { ...e, metadata: mergedMeta };
+      });
+      if (!changed) return;
+      set({ trips: { ...trips, [tripId]: { ...entry, event_stream } } });
     },
 
     // ── mergeConversationHistory ──────────────────────────────────────────────

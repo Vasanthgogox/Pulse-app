@@ -76,6 +76,8 @@ interface GlobalSyncStore {
   /** Web shelf: last ledger hit per trip for glow animation. */
   ledgerPulseTripId: string | null;
   ledgerPulseAtMs: number;
+  /** Mobile Dynamic Island: brief success pulse after chat "Add to ledger". */
+  ledgerBookSuccessAtMs: number;
 
   // ── Notifications slice ─────────────────────────────────────────────────
   notificationRows:         GlobalNotificationRow[];
@@ -127,6 +129,9 @@ interface GlobalSyncStore {
 
   /** Priority engine: merge chat row into the operations ribbon when it outranks prior. */
   ingestTripMessageForOperationsIsland: (tripId: string, row: Record<string, unknown>) => void;
+
+  /** Mobile: Dynamic Island success pulse after atomic "Add to ledger" from chat. */
+  pulseLedgerBookSuccess: () => void;
 
   /** Selector helper (reads only in-memory slices). */
   getCurrentActiveOperationAlert: () => ReturnType<typeof selectCurrentActiveAlert>;
@@ -232,6 +237,7 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
     dismissedOperationKeys:     {},
     ledgerPulseTripId:        null,
     ledgerPulseAtMs:          0,
+    ledgerBookSuccessAtMs:    0,
     notificationRows:         [],
     notificationUnreadCount:  0,
     alertRows:                [],
@@ -268,6 +274,7 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
           dismissedOperationKeys:  {},
           ledgerPulseTripId:       null,
           ledgerPulseAtMs:         0,
+          ledgerBookSuccessAtMs:   0,
           notificationRows:        notifRows,
           notificationUnreadCount: payload?.notifications?.unread_count ?? countUnread(notifRows),
           alertRows:               Array.isArray(payload?.global_alerts)  ? payload.global_alerts  : [],
@@ -294,6 +301,7 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
         dismissedOperationKeys:  {},
         ledgerPulseTripId:       null,
         ledgerPulseAtMs:         0,
+        ledgerBookSuccessAtMs:   0,
         notificationRows:        [],
         notificationUnreadCount: 0,
         alertRows:               [],
@@ -502,6 +510,10 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
           ledgerPulseAtMs:      ledgerHit ? Date.now() : s.ledgerPulseAtMs,
         };
       });
+    },
+
+    pulseLedgerBookSuccess: () => {
+      set({ ledgerBookSuccessAtMs: Date.now() });
     },
 
     getCurrentActiveOperationAlert: () =>

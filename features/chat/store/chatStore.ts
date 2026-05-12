@@ -250,6 +250,12 @@ export const chatStore = {
   patchMessage: (convId: string, msgId: string, patch: Partial<TripMessageRow>): void =>
     useChatStore.getState().patchMessage(convId, msgId, patch),
 
+  applyLedgerBookOptimistic: (convId: string, transactionId: string): void =>
+    useChatStore.getState().applyLedgerBookOptimistic(convId, transactionId),
+
+  revertLedgerBookOptimistic: (convId: string, transactionId: string): void =>
+    useChatStore.getState().revertLedgerBookOptimistic(convId, transactionId),
+
   patchReadReceiptsOptimistic: (convId: string, messageIds: string[]): void =>
     useChatStore.getState().patchReadReceiptsOptimistic(convId, messageIds),
 
