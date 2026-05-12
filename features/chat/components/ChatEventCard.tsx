@@ -15,6 +15,7 @@ import {
   XCircle,
   Clock,
   Send,
+  Package,
 } from "lucide-react-native";
 import { CHAT_ACCENT, CHAT_ACCENT_SOFT } from "@/features/chat/chatTheme";
 import { formatChatPartyName } from "@/features/chat/utils/partyDisplay";
@@ -33,15 +34,113 @@ import {
 
 // ── System event card (trip status changes) ───────────────────────────────────
 
-const STATUS_ICON_MAP: Record<string, { Icon: React.ComponentType<any>; color: string; bg: string }> = {
-  assigned:    { Icon: Truck,         color: CHAT_ACCENT, bg: CHAT_ACCENT_SOFT },
-  in_progress: { Icon: Send,          color: "#5c6bc0", bg: "#e8eaf6" },
-  picked_up:   { Icon: MapPin,        color: "#f59e0b", bg: "#fffbeb" },
-  in_transit:  { Icon: Truck,         color: "#06b6d4", bg: "#ecfeff" },
-  at_drop:     { Icon: MapPin,        color: "#10b981", bg: "#ecfdf5" },
-  completed:   { Icon: CheckCircle,   color: "#22c55e", bg: "#f0fdf4" },
-  cancelled:   { Icon: XCircle,       color: "#ef4444", bg: "#fef2f2" },
-  default:     { Icon: Clock,         color: "#94a3b8", bg: "#f8fafc" },
+type StatusIconComponent = React.ComponentType<{
+  size?: number;
+  color?: string;
+  strokeWidth?: number;
+}>;
+
+const STATUS_ICON_MAP: Record<
+  string,
+  {
+    Icon: StatusIconComponent;
+    color: string;
+    bg: string;
+    /** Short label for meta line (matches payment card middle segment). */
+    sheetLabel: string;
+    /** Bold right column (payment “amount” slot). */
+    rightWord: string;
+    rightColor: string;
+  }
+> = {
+  assigned: {
+    Icon: Truck,
+    color: CHAT_ACCENT,
+    bg: CHAT_ACCENT_SOFT,
+    sheetLabel: "Assigned",
+    rightWord: "NEW",
+    rightColor: "#4338ca",
+  },
+  in_progress: {
+    Icon: Send,
+    color: "#5c6bc0",
+    bg: "#e8eaf6",
+    sheetLabel: "In progress",
+    rightWord: "ACTIVE",
+    rightColor: "#4338ca",
+  },
+  picked_up: {
+    Icon: MapPin,
+    color: "#f59e0b",
+    bg: "#fffbeb",
+    sheetLabel: "Pickup",
+    rightWord: "LOAD",
+    rightColor: "#b45309",
+  },
+  in_transit: {
+    Icon: Truck,
+    color: "#06b6d4",
+    bg: "#ecfeff",
+    sheetLabel: "In transit",
+    rightWord: "LEG",
+    rightColor: "#0e7490",
+  },
+  at_drop: {
+    Icon: MapPin,
+    color: "#10b981",
+    bg: "#ecfdf5",
+    sheetLabel: "At drop",
+    rightWord: "DROP",
+    rightColor: "#047857",
+  },
+  completed: {
+    Icon: CheckCircle,
+    color: "#22c55e",
+    bg: "#f0fdf4",
+    sheetLabel: "Completed",
+    rightWord: "DONE",
+    rightColor: "#047857",
+  },
+  cancelled: {
+    Icon: XCircle,
+    color: "#ef4444",
+    bg: "#fef2f2",
+    sheetLabel: "Cancelled",
+    rightWord: "VOID",
+    rightColor: "#be123c",
+  },
+  pending: {
+    Icon: Clock,
+    color: "#94a3b8",
+    bg: "#f1f5f9",
+    sheetLabel: "Pending",
+    rightWord: "WAIT",
+    rightColor: "#64748b",
+  },
+  started: {
+    Icon: Send,
+    color: "#5c6bc0",
+    bg: "#e8eaf6",
+    sheetLabel: "Started",
+    rightWord: "START",
+    rightColor: "#4338ca",
+  },
+  delivered: {
+    Icon: Package,
+    color: "#10b981",
+    bg: "#ecfdf5",
+    sheetLabel: "Delivered",
+    rightWord: "POD",
+    rightColor: "#047857",
+  },
+  default: {
+    Icon: Clock,
+    color: "#94a3b8",
+    bg: "#f8fafc",
+    sheetLabel: "Update",
+    rightWord: "INFO",
+    rightColor: "#475569",
+  },
 };
 
 function inferStatusFromContent(content: string): keyof typeof STATUS_ICON_MAP {
@@ -56,39 +155,9 @@ function inferStatusFromContent(content: string): keyof typeof STATUS_ICON_MAP {
   return "default";
 }
 
-export function ChatSystemEventCard({ message }: { message: TripMessageRow }) {
-  const statusKey = inferStatusFromContent(message.content);
-  const { Icon, color, bg } = STATUS_ICON_MAP[statusKey] ?? STATUS_ICON_MAP.default;
-  const useSendTilt = statusKey === "in_progress";
-
-  let displayTime = message.created_at;
-  try {
-    displayTime = new Date(message.created_at).toLocaleTimeString("en-IN", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
-  } catch {
-    // keep raw
-  }
-
-  const iconInner = <Icon size={18} color={color} strokeWidth={2.1} />;
-
-  return (
-    <View style={s.eventCard}>
-      <View style={[s.eventIcon, { backgroundColor: bg }]}>
-        {useSendTilt ? (
-          <View style={s.eventIconTilt}>{iconInner}</View>
-        ) : (
-          iconInner
-        )}
-      </View>
-      <View style={s.eventBody}>
-        <Text style={s.eventContent}>{message.content}</Text>
-        <Text style={s.eventTime}>{displayTime}</Text>
-      </View>
-    </View>
-  );
+export function getStatusEventSheetVisuals(statusKey: string) {
+  const row = STATUS_ICON_MAP[statusKey as keyof typeof STATUS_ICON_MAP];
+  return row ?? STATUS_ICON_MAP.default;
 }
 
 // ── Ledger event card (payment / adjustment) ──────────────────────────────────
@@ -160,7 +229,7 @@ function splitOrgLine(orgLine: string): { from: string; to: string } {
   return { from: trimmed || "—", to: "" };
 }
 
-function ledgerDateUpper(iso: string): string {
+export function formatTripEventSheetDate(iso: string): string {
   try {
     return new Date(iso)
       .toLocaleDateString("en-GB", {
@@ -240,7 +309,7 @@ export function ChatLedgerEventCard({
   const avatarSeedName = titleDisplay ? titleParty : namedOther || "Payment";
   const avatarBg = partyAvatarBackgroundColor(avatarSeedName);
   const avatarFg = partyAvatarInitialsTextColor(avatarBg);
-  const dateUpper = ledgerDateUpper(message.created_at);
+  const dateUpper = formatTripEventSheetDate(message.created_at);
   const metaMid = [paymentModeLabel, meta.category].filter(Boolean).join(" · ") || "—";
   const routeLine = `${fromParty.toUpperCase()} → ${toParty.toUpperCase()}`;
 
@@ -344,55 +413,7 @@ export function ChatLedgerEventCard({
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  // System event — operational narrative (reference: white card + lavender icon tile + send).
-  eventCard: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    alignSelf: "center",
-    gap: 12,
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    maxWidth: "92%",
-    marginVertical: 6,
-    shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  eventIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-  eventIconTilt: {
-    transform: [{ rotate: "-28deg" }],
-    marginTop: 2,
-  },
-  eventBody: { flex: 1, minWidth: 0, paddingTop: 1 },
-  eventContent: {
-    fontSize: 14,
-    color: "#1e293b",
-    fontWeight: "600",
-    lineHeight: 20,
-    letterSpacing: -0.1,
-  },
-  eventTime: {
-    fontSize: 11,
-    color: "#94a3b8",
-    marginTop: 6,
-    fontWeight: "600",
-    letterSpacing: 0.15,
-  },
-
-  // Ledger row — same footprint as system `eventCard` (compact list tile)
+  // Ledger row — same footprint as system updates (payment-style sheet)
   ledgerWrap: {
     alignSelf: "center",
     maxWidth: "85%",
@@ -569,3 +590,111 @@ const s = StyleSheet.create({
     color: "#b45309",
   },
 });
+
+export interface TripProgressEventCardProps {
+  avatarSeed: string;
+  avatarDotColor: string;
+  title: string;
+  metaLine: string;
+  subLine?: string | null;
+  rightPrimary: string;
+  rightPrimaryColor: string;
+  time: string;
+}
+
+/**
+ * Same shell as the payment / ledger row: circular avatar + dot, body, vertical rule,
+ * bold right column, time, chevron.
+ */
+export function TripProgressEventCard({
+  avatarSeed,
+  avatarDotColor,
+  title,
+  metaLine,
+  subLine,
+  rightPrimary,
+  rightPrimaryColor,
+  time,
+}: TripProgressEventCardProps) {
+  const avatarBg = partyAvatarBackgroundColor(avatarSeed);
+  const avatarFg = partyAvatarInitialsTextColor(avatarBg);
+  return (
+    <View style={s.ledgerWrap}>
+      <View style={s.ledgerCard}>
+        <View style={[s.ledgerAvatarWrap, s.ledgerAvatarWrapAlign]}>
+          <View style={[s.ledgerAvatar, { backgroundColor: avatarBg }]}>
+            <Text style={[s.ledgerAvatarInitials, { color: avatarFg }]}>
+              {partyInitialsFromName(avatarSeed)}
+            </Text>
+          </View>
+          <View style={[s.ledgerAvatarDot, { backgroundColor: avatarDotColor }]} />
+        </View>
+        <View style={s.ledgerBody}>
+          <Text style={s.ledgerTitle} numberOfLines={2}>
+            {title}
+          </Text>
+          <Text style={s.ledgerMeta} numberOfLines={2}>
+            {metaLine}
+          </Text>
+          {subLine ? (
+            <Text style={s.ledgerRoute} numberOfLines={2}>
+              {subLine}
+            </Text>
+          ) : null}
+        </View>
+        <View style={s.ledgerRight}>
+          <Text style={[s.ledgerAmount, { color: rightPrimaryColor }]} numberOfLines={1}>
+            {rightPrimary}
+          </Text>
+          <Text style={s.ledgerTimeRight} numberOfLines={1}>
+            {time}
+          </Text>
+        </View>
+        <View style={s.ledgerChevronWrap}>
+          <ChevronRight size={14} color="#cbd5e1" />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function systemSheetAvatarSeed(content: string): string {
+  const m = (content ?? "").match(/\b(TRP[-A-Z0-9]+)\b/i);
+  if (m?.[1]) return m[1].toUpperCase();
+  const trip = (content ?? "").match(/\b([A-Z]{2,4}\d{2,6})\b/);
+  if (trip?.[1]) return trip[1].toUpperCase();
+  return "Trip update";
+}
+
+export function ChatSystemEventCard({ message }: { message: TripMessageRow }) {
+  const statusKey = inferStatusFromContent(message.content);
+  const cfg = STATUS_ICON_MAP[statusKey] ?? STATUS_ICON_MAP.default;
+  const dateUpper = formatTripEventSheetDate(message.created_at);
+
+  let displayTime = message.created_at;
+  try {
+    displayTime = new Date(message.created_at).toLocaleTimeString("en-IN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  } catch {
+    // keep raw
+  }
+
+  const metaLine = `System update · ${dateUpper} · ${cfg.sheetLabel}`;
+  const seed = systemSheetAvatarSeed(message.content);
+
+  return (
+    <TripProgressEventCard
+      avatarSeed={seed}
+      avatarDotColor={cfg.rightColor}
+      title={message.content.trim() || "Trip update"}
+      metaLine={metaLine}
+      subLine={null}
+      rightPrimary={cfg.rightWord}
+      rightPrimaryColor={cfg.rightColor}
+      time={displayTime}
+    />
+  );
+}

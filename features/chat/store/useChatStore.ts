@@ -8,9 +8,10 @@
  *     event_stream: TripEvent[]   ← ALL parties merged, sorted ASC
  *   }
  *
- * BOOTSTRAP (one DB call):
- *   bootstrap(orgId)  calls get_unified_b2b_bootstrap and populates trips.
- *   After that the app is silent — only Realtime pushes data in.
+ * BOOTSTRAP (windowed DB calls):
+ *   bootstrap / appendBootstrapTripPage fetch trip windows. Only the first 3 distinct
+ *   trips per ingest batch merge full `messages` into `event_stream`; remaining trips
+ *   stay lazy until {@link ChatState.hydrateTripMessagesIfNeeded} runs on thread open.
  *
  * REALTIME PATCH (zero DB calls):
  *   processIncomingEvent(row, mode)  idempotent upsert; 500ms dedupe (message_id /
@@ -35,12 +36,13 @@
 
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import { fetchChatBootstrapPayload } from '../services/chat.service';
+import { fetchChatBootstrapPayload, fetchConversationHistory } from '../services/chat.service';
 import { mergeChatLanes } from '../utils/laneMultiplexer.util';
 import type {
   B2BTripState,
   ChatTripFlow,
   ConversationPartyType,
+  FeedbackRequestMetadata,
   LedgerEventMetadata,
   MessageDeliveryStatus,
   TripConversation,
@@ -57,6 +59,7 @@ import { dedupeTripStatusBroadcastsForLane } from '../utils/dedupeTripStatusBroa
 import type { ChatLanes } from '../utils/laneMultiplexer.util';
 import { recomputeLongHaulTripFieldsFromStream } from '../utils/longHaulChat.util';
 import { parseSystemLogLocationData } from '../utils/locationLogPayload.util';
+import { parseFeedbackRequestMetadata } from '../utils/feedbackRequestMeta';
 
 // ── Realtime duplicate suppression (same message_id / transaction_id flood) ──
 // WAL can surface the same logical row twice in quick succession; skipping the
@@ -71,6 +74,7 @@ const lastRealtimeAckAt = new Map<string, number>();
 
 /** Prevents duplicate concurrent `get_unified_b2b_bootstrap` RPCs (Strict Mode / remounts). */
 let chatBootstrapInFlightFor: string | null = null;
+let hubHistoryBootstrapInFlightFor: string | null = null;
 
 function realtimeInsertDedupeKey(row: Partial<TripMessageRow>): string {
   const id = row.id != null ? String(row.id) : '';
@@ -483,6 +487,11 @@ export interface TripEntry {
   partnerOrganizationId: string | null;
   /** From `trips.source` on bootstrap (e.g. `manual`). */
   tripSource?: string | null;
+  /**
+   * When true, bootstrap omitted message rows for this trip (beyond the lazy window).
+   * Open-thread hydration loads history via {@link ChatState.hydrateTripMessagesIfNeeded}.
+   */
+  skipEventStreamHydration?: boolean;
 }
 
 // ── Store shape ───────────────────────────────────────────────────────────────
@@ -502,10 +511,15 @@ interface ChatState {
   /** Next `p_trip_offset` for {@link appendBootstrapTripPage}. */
   chatBootstrapNextTripOffset: number;
   isAppendingBootstrap: boolean;
+  /** After {@link ensureHubHistoryBootstrap} succeeds for this org session. */
+  hubHistoryBootstrapDone: boolean;
 
   // ── Actions
   bootstrap:                 (orgId: string) => Promise<void>;
   appendBootstrapTripPage:   (orgId: string) => Promise<void>;
+  ensureHubHistoryBootstrap: (orgId: string) => Promise<void>;
+  /** Load full merged `event_stream` for a lazy-bootstrap trip (no-op if already hydrated). */
+  hydrateTripMessagesIfNeeded: (tripId: string) => Promise<void>;
   /** Idempotent: INSERT / echo rows merge into `event_stream` by `id`. */
   processIncomingEvent: (row: Partial<TripMessageRow>, mode: 'active' | 'background') => void;
   onRealtimeInsert:   (row: Partial<TripMessageRow>, mode: 'active' | 'background') => void;
@@ -529,6 +543,11 @@ interface ChatState {
   /** Optimistic feedback submission — patches message metadata locally. The caller
    *  also fires the RPC; this ensures the UI flips immediately. */
   submitFeedback:     (convId: string, msgId: string, patch: Partial<TripMessageRow>) => void;
+  /**
+   * One-tap smiley feedback: stamps `rating` / `submitted_*` on the message in `event_stream`
+   * immediately (caller then invokes `confirm_trip_feedback` via chat.service).
+   */
+  submitTripFeedback: (convId: string, msgId: string, rating: number) => void;
   /** Optimistic "Add to books" — marks all ledger rows in this conv with the same transaction_id. */
   applyLedgerBookOptimistic: (convId: string, transactionId: string) => void;
   revertLedgerBookOptimistic: (convId: string, transactionId: string) => void;
@@ -881,6 +900,51 @@ function applyFeedbackLaneStatusOnIncomingRow(
 
 const CHAT_BOOTSTRAP_TRIP_PAGE = 10;
 const CHAT_BOOTSTRAP_TRIP_PAGE_MORE = 20;
+/** WhatsApp-style: only the first N distinct trips in each bootstrap page get full `messages` merged into `event_stream`. */
+const CHAT_LAZY_HYDRATE_TOP_TRIPS = 3;
+
+const tripHydrationInFlight = new Set<string>();
+
+function mergeHistoryRowsIntoTripEntry(
+  orgId: string,
+  entry: TripEntry,
+  partyType: ConversationPartyType,
+  history: TripMessageRow[],
+): TripEntry {
+  const sortedHistory =
+    history.length > 1
+      ? [...history].sort(
+          (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+        )
+      : history;
+  const financeSafe = sortedHistory.filter(
+    (m) =>
+      !isLedgerLikeMessageType(String(m.message_type ?? "")) ||
+      ledgerEventInvolvesOrg(m, orgId),
+  );
+  const newEvts: TripEvent[] = financeSafe.map((m) => ({ ...m, partyType }));
+  const event_stream = mergeEvents(entry.event_stream, newEvts);
+  let next: TripEntry = {
+    ...entry,
+    event_stream,
+    skipEventStreamHydration: false,
+  };
+  next.totalUnread = sumUnread(next.parties);
+  if (event_stream.length > 0) {
+    const last = event_stream[event_stream.length - 1];
+    next.lastEventAt = last.created_at;
+    next.lastEventPreview = previewText(last) ?? next.lastEventPreview;
+  }
+  next = withLongHaulFieldsFromStream(next);
+  return withPartnerOrganizationStamp(next, orgId);
+}
+
+function clearEventStreamLazySkipIfFilled(e: TripEntry): TripEntry {
+  if (e.event_stream.length > 0 && e.skipEventStreamHydration) {
+    return { ...e, skipEventStreamHydration: false };
+  }
+  return e;
+}
 
 function ingestBootstrapConversations(
   orgId: string,
@@ -890,6 +954,7 @@ function ingestBootstrapConversations(
     convToTrip: Record<string, string>;
     convToParty: Record<string, ConversationPartyType>;
   },
+  ingestOpts?: { lazyHydrateTopN?: number | null },
 ): {
   trips: Record<string, TripEntry>;
   convToTrip: Record<string, string>;
@@ -898,6 +963,18 @@ function ingestBootstrapConversations(
   const trips: Record<string, TripEntry> = { ...base.trips };
   const convToTrip = { ...base.convToTrip };
   const convToParty = { ...base.convToParty };
+
+  const lazyN = ingestOpts?.lazyHydrateTopN;
+  const orderedTripIds: string[] = [];
+  for (const conv of conversations) {
+    const tid = conv.trip_id;
+    if (!tid) continue;
+    if (!orderedTripIds.includes(tid)) orderedTripIds.push(tid);
+  }
+  const hydrateTripIds =
+    lazyN == null || lazyN <= 0
+      ? new Set(orderedTripIds)
+      : new Set(orderedTripIds.slice(0, lazyN));
 
   for (const conv of conversations) {
     const { trip_id: tripId, party_type: partyType } = conv;
@@ -934,7 +1011,23 @@ function ingestBootstrapConversations(
     const newEvts: TripEvent[] = financeSafe.map((m) => ({ ...m, partyType }));
 
     entry.parties[partyType] = partyFromConv(conv);
-    entry.event_stream       = mergeEvents(entry.event_stream, newEvts);
+    const at = conv.last_message_at;
+    if (
+      at &&
+      (!entry.lastEventAt ||
+        new Date(String(at)).getTime() > new Date(String(entry.lastEventAt)).getTime())
+    ) {
+      entry.lastEventAt = at;
+      entry.lastEventPreview = conv.last_message_preview ?? entry.lastEventPreview;
+    }
+
+    const shouldMergeEvents = hydrateTripIds.has(tripId);
+    if (shouldMergeEvents) {
+      entry.event_stream = mergeEvents(entry.event_stream, newEvts);
+      entry.skipEventStreamHydration = false;
+    } else {
+      entry.skipEventStreamHydration = true;
+    }
 
     if (conv.trip_status) entry.status = conv.trip_status;
     if (conv.trip_driver_id) entry.driverId = conv.trip_driver_id;
@@ -988,6 +1081,7 @@ export const useChatStore = create<ChatState>()(
     chatBootstrapHasMoreTrips: false,
     chatBootstrapNextTripOffset: 0,
     isAppendingBootstrap: false,
+    hubHistoryBootstrapDone: false,
 
     // ── bootstrap ─────────────────────────────────────────────────────────────
     // Called ONCE per org-session from TripChatContext on mount.
@@ -1005,12 +1099,14 @@ export const useChatStore = create<ChatState>()(
         const { conversations, lanes, hasMoreTrips } = await fetchChatBootstrapPayload(orgId, {
           tripLimit: CHAT_BOOTSTRAP_TRIP_PAGE,
           tripOffset: 0,
+          hubTripBucket: "active",
         });
 
         const { trips, convToTrip, convToParty } = ingestBootstrapConversations(
           orgId,
           conversations,
           { trips: {}, convToTrip: {}, convToParty: {} },
+          { lazyHydrateTopN: CHAT_LAZY_HYDRATE_TOP_TRIPS },
         );
 
         set((s) => ({
@@ -1024,6 +1120,7 @@ export const useChatStore = create<ChatState>()(
           chatBootstrapHasMoreTrips: hasMoreTrips,
           chatBootstrapNextTripOffset: CHAT_BOOTSTRAP_TRIP_PAGE,
           isAppendingBootstrap: false,
+          hubHistoryBootstrapDone: false,
         }));
       } catch (err) {
         if (__DEV__) console.error('[useChatStore] bootstrap failed:', err);
@@ -1043,12 +1140,13 @@ export const useChatStore = create<ChatState>()(
         const { conversations, lanes, hasMoreTrips } = await fetchChatBootstrapPayload(orgId, {
           tripLimit: CHAT_BOOTSTRAP_TRIP_PAGE_MORE,
           tripOffset: off,
+          hubTripBucket: "active",
         });
         const { trips, convToTrip, convToParty } = ingestBootstrapConversations(orgId, conversations, {
           trips:       get().trips,
           convToTrip:  get().convToTrip,
           convToParty: get().convToParty,
-        });
+        }, { lazyHydrateTopN: CHAT_LAZY_HYDRATE_TOP_TRIPS });
         const mergedLanes = mergeChatLanes(get().chatLanes, lanes);
         set({
           trips,
@@ -1062,6 +1160,79 @@ export const useChatStore = create<ChatState>()(
       } catch (err) {
         if (__DEV__) console.error("[useChatStore] appendBootstrapTripPage failed:", err);
         set({ isAppendingBootstrap: false });
+      }
+    },
+
+    ensureHubHistoryBootstrap: async (orgId) => {
+      if (get().bootstrappedOrg !== orgId) return;
+      if (get().hubHistoryBootstrapDone) return;
+      if (hubHistoryBootstrapInFlightFor === orgId) return;
+      hubHistoryBootstrapInFlightFor = orgId;
+      try {
+        const { conversations, lanes } = await fetchChatBootstrapPayload(orgId, {
+          tripLimit: 40,
+          tripOffset: 0,
+          hubTripBucket: "history",
+        });
+        const { trips, convToTrip, convToParty } = ingestBootstrapConversations(orgId, conversations, {
+          trips:       get().trips,
+          convToTrip:  get().convToTrip,
+          convToParty: get().convToParty,
+        }, { lazyHydrateTopN: null });
+        const mergedLanes = mergeChatLanes(get().chatLanes, lanes);
+        set({
+          trips,
+          convToTrip,
+          convToParty,
+          chatLanes: mergedLanes,
+          hubHistoryBootstrapDone: true,
+        });
+      } catch (err) {
+        if (__DEV__) console.error("[useChatStore] ensureHubHistoryBootstrap failed:", err);
+        set({ hubHistoryBootstrapDone: true });
+      } finally {
+        hubHistoryBootstrapInFlightFor = null;
+      }
+    },
+
+    hydrateTripMessagesIfNeeded: async (tripId) => {
+      const orgId = get().bootstrappedOrg;
+      if (!orgId || !tripId) return;
+      if (tripHydrationInFlight.has(tripId)) return;
+
+      const entry0 = get().trips[tripId];
+      if (!entry0) return;
+      if (entry0.event_stream.length > 0) {
+        if (entry0.skipEventStreamHydration) {
+          set((s) => {
+            const e = s.trips[tripId];
+            if (!e) return s;
+            return {
+              trips: { ...s.trips, [tripId]: { ...e, skipEventStreamHydration: false } },
+            };
+          });
+        }
+        return;
+      }
+      if (entry0.skipEventStreamHydration !== true) return;
+
+      tripHydrationInFlight.add(tripId);
+      try {
+        let next = entry0;
+        const partyOrder: ConversationPartyType[] = ["client", "supplier", "driver"];
+        for (const pt of partyOrder) {
+          const p = next.parties[pt];
+          if (!p?.conversationId) continue;
+          const rows = await fetchConversationHistory(p.conversationId);
+          next = mergeHistoryRowsIntoTripEntry(orgId, next, pt, rows);
+        }
+        set((s) => ({
+          trips: { ...s.trips, [tripId]: next },
+        }));
+      } catch (err) {
+        if (__DEV__) console.error("[useChatStore] hydrateTripMessagesIfNeeded failed:", err);
+      } finally {
+        tripHydrationInFlight.delete(tripId);
       }
     },
 
@@ -1103,10 +1274,12 @@ export const useChatStore = create<ChatState>()(
       // Second status-broadcast for same trip status (e.g. trigger + driver echo): merge trip only.
       if (shouldSkipDuplicateStatusBroadcast(entry.event_stream, event)) {
         const silentPatch = resolveTripEntryPatchesFromMessage(row, entry);
-        const merged = withLongHaulFieldsFromStream({
-          ...entry,
-          ...(silentPatch ?? {}),
-        } as TripEntry);
+        const merged = clearEventStreamLazySkipIfFilled(
+          withLongHaulFieldsFromStream({
+            ...entry,
+            ...(silentPatch ?? {}),
+          } as TripEntry),
+        );
         set({ trips: { ...trips, [tripId]: merged } });
         syncLocationLogToGlobalActiveTrips(tripId, row);
         return;
@@ -1137,7 +1310,7 @@ export const useChatStore = create<ChatState>()(
           set({
             trips: {
               ...trips,
-              [tripId]: withLongHaulFieldsFromStream(updated),
+              [tripId]: clearEventStreamLazySkipIfFilled(withLongHaulFieldsFromStream(updated)),
             },
           });
           return;
@@ -1166,6 +1339,7 @@ export const useChatStore = create<ChatState>()(
       updated.lastEventPreview = previewText(row)  ?? entry.lastEventPreview;
 
       updated = withLongHaulFieldsFromStream(updated);
+      updated = clearEventStreamLazySkipIfFilled(updated);
 
       syncLocationLogToGlobalActiveTrips(tripId, row);
       useGlobalSyncStore.getState().touchActiveTripClientActivity(
@@ -1318,6 +1492,28 @@ export const useChatStore = create<ChatState>()(
       set({ trips: { ...trips, [tripId]: merged } });
     },
 
+    submitTripFeedback: (convId, msgId, rating) => {
+      const { trips, convToTrip } = get();
+      const tripId = convToTrip[convId];
+      if (!tripId) return;
+      const entry = trips[tripId];
+      if (!entry) return;
+      const row = entry.event_stream.find((e) => e.id === msgId);
+      if (!row) return;
+      const meta = parseFeedbackRequestMetadata(row);
+      if (!meta) return;
+      const score = Math.min(5, Math.max(1, Math.floor(rating)));
+      const now = new Date().toISOString();
+      const optimistic: FeedbackRequestMetadata = {
+        ...meta,
+        submitted_at:    now,
+        submitted_score: score,
+        rating:          score,
+        submitted_tags:  [],
+      };
+      get().submitFeedback(convId, msgId, { metadata: optimistic });
+    },
+
     applyLedgerBookOptimistic: (convId, transactionId) => {
       const tid = transactionId.trim();
       if (!tid) return;
@@ -1387,10 +1583,12 @@ export const useChatStore = create<ChatState>()(
             ledgerEventInvolvesOrg(m, viewerOrg),
         )
         .map((m) => ({ ...m, partyType }));
-      const merged = withLongHaulFieldsFromStream({
-        ...entry,
-        event_stream: mergeEvents(entry.event_stream, newEvts),
-      });
+      const merged = clearEventStreamLazySkipIfFilled(
+        withLongHaulFieldsFromStream({
+          ...entry,
+          event_stream: mergeEvents(entry.event_stream, newEvts),
+        }),
+      );
       set({
         trips: {
           ...trips,
@@ -1428,12 +1626,14 @@ export const useChatStore = create<ChatState>()(
 
       const event: TripEvent = { ...row, partyType };
       const event_stream = upsertEventIntoStream(entry.event_stream, event);
-      const merged = withLongHaulFieldsFromStream({
-        ...entry,
-        event_stream,
-        lastEventAt:      msg.created_at,
-        lastEventPreview: previewText(msg) ?? entry.lastEventPreview,
-      });
+      const merged = clearEventStreamLazySkipIfFilled(
+        withLongHaulFieldsFromStream({
+          ...entry,
+          event_stream,
+          lastEventAt:      msg.created_at,
+          lastEventPreview: previewText(msg) ?? entry.lastEventPreview,
+        }),
+      );
       set({
         trips: {
           ...trips,
@@ -1575,6 +1775,7 @@ export const useChatStore = create<ChatState>()(
       lastRealtimeAckAt.clear();
       lastActionIdAt.clear();
       clearReadReceiptDebouncers();
+      hubHistoryBootstrapInFlightFor = null;
       set({
         trips:           {},
         convToTrip:      {},
@@ -1586,6 +1787,7 @@ export const useChatStore = create<ChatState>()(
         chatBootstrapHasMoreTrips: false,
         chatBootstrapNextTripOffset: 0,
         isAppendingBootstrap: false,
+        hubHistoryBootstrapDone: false,
       });
     },
 

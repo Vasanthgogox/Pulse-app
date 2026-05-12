@@ -818,7 +818,7 @@ export async function submitTripChatFeedback(params: {
   score: number;
   tags: string[];
 }): Promise<{ error: Error | null; submittedAt: string | null }> {
-  const { ratingOrganizationId, tripId, message, score, tags } = params;
+  const { message, score } = params;
   const meta = parseFeedbackRequestMetadata(message);
   if (!meta) {
     return { error: new Error("Invalid feedback message"), submittedAt: null };
@@ -827,16 +827,11 @@ export async function submitTripChatFeedback(params: {
     return { error: new Error("Feedback already submitted"), submittedAt: null };
   }
 
-  // Single-RPC path: replaces 3 sequential DB round trips (upsert rating +
-  // SELECT metadata + UPDATE metadata) with one atomic transaction.
-  const { data, error } = await supabase().rpc("submit_trip_feedback", {
-    p_organization_id: ratingOrganizationId,
-    p_trip_id:         tripId,
-    p_message_id:      message.id,
-    p_rated_type:      meta.rated_party_type as RatedType,
-    p_rated_id:        meta.rated_id,
-    p_score:           Math.min(5, Math.max(1, score)),
-    p_tags:            tags,
+  // Single atomic RPC: server resolves fleet org + rated party from the row
+  // (`confirm_trip_feedback` → `submit_trip_feedback`).
+  const { data, error } = await supabase().rpc("confirm_trip_feedback", {
+    p_msg_id:  message.id,
+    p_rating:  Math.min(5, Math.max(1, score)),
   });
 
   if (error) return { error: new Error(error.message), submittedAt: null };
@@ -1322,10 +1317,15 @@ function distinctTripCount(conversations: TripConversation[]): number {
  * Falls back to {@link getUnifiedB2BChatBootstrap} + client-side {@link buildChatLanesFromConversations}.
  *
  * Optional `tripLimit` / `tripOffset` map to `p_trip_limit` / `p_trip_offset` when the DB migration is applied.
+ * Optional `hubTripBucket` (`active` | `history` | `all`) scopes trips by lifecycle for hub HISTORY vs ACTIVE lists.
  */
 export async function fetchChatBootstrapPayload(
   organizationId: string,
-  opts?: { tripLimit?: number | null; tripOffset?: number },
+  opts?: {
+    tripLimit?: number | null;
+    tripOffset?: number;
+    hubTripBucket?: "active" | "history" | "all";
+  },
 ): Promise<{
   conversations: TripConversation[];
   lanes: ChatLanes;
@@ -1333,24 +1333,48 @@ export async function fetchChatBootstrapPayload(
 }> {
   const tripLimit = opts?.tripLimit ?? null;
   const tripOffset = opts?.tripOffset ?? 0;
+  const hubTripBucket = opts?.hubTripBucket ?? "active";
 
-  const rpcArgs: Record<string, unknown> =
-    tripLimit != null
-      ? {
-          p_organization_id: organizationId,
-          p_message_limit: TRIP_CHAT_HISTORY_PAGE,
-          p_trip_limit: tripLimit,
-          p_trip_offset: tripOffset,
-        }
-      : {
-          p_organization_id: organizationId,
-          p_message_limit: TRIP_CHAT_HISTORY_PAGE,
-        };
+  const buildRpcArgs = (includeHubBucket: boolean): Record<string, unknown> => {
+    const a: Record<string, unknown> = {
+      p_organization_id: organizationId,
+      p_message_limit: TRIP_CHAT_HISTORY_PAGE,
+    };
+    if (includeHubBucket) {
+      a.p_hub_trip_bucket = hubTripBucket;
+    }
+    if (tripLimit != null) {
+      a.p_trip_limit = tripLimit;
+      a.p_trip_offset = tripOffset;
+    }
+    return a;
+  };
 
-  let { data, error } = await supabase().rpc("get_multi_lane_bootstrap", rpcArgs);
+  let includeHubBucket = true;
+  let { data, error } = await supabase().rpc(
+    "get_multi_lane_bootstrap",
+    buildRpcArgs(includeHubBucket),
+  );
 
-  const msg = String(error?.message ?? "").toLowerCase();
+  const msg0 = String(error?.message ?? "").toLowerCase();
+  const code0 = String(error?.code ?? "");
+  if (
+    error &&
+    includeHubBucket &&
+    (code0 === "42883" ||
+      code0 === "PGRST202" ||
+      msg0.includes("p_hub_trip_bucket") ||
+      (msg0.includes("get_multi_lane_bootstrap") && msg0.includes("does not exist")))
+  ) {
+    includeHubBucket = false;
+    ({ data, error } = await supabase().rpc(
+      "get_multi_lane_bootstrap",
+      buildRpcArgs(false),
+    ));
+  }
+
   let usedTripWindowRpc = tripLimit != null;
+  const msg = String(error?.message ?? "").toLowerCase();
   const overloadMissing =
     tripLimit != null &&
     (String(error?.code ?? "") === "42883" ||

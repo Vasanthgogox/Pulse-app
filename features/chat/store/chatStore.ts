@@ -272,6 +272,9 @@ export const chatStore = {
   submitFeedback: (convId: string, msgId: string, patch: Partial<TripMessageRow>): void =>
     useChatStore.getState().submitFeedback(convId, msgId, patch),
 
+  submitTripFeedback: (convId: string, msgId: string, rating: number): void =>
+    useChatStore.getState().submitTripFeedback(convId, msgId, rating),
+
   appendMessage: (convId: string, msg: TripMessageRow): void =>
     useChatStore.getState().appendMessage(convId, msg),
 

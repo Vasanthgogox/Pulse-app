@@ -58,15 +58,20 @@ export function PingProgressBar({ pingCount, trackingStatus, stretchMode }: Ping
 }
 
 const styles = StyleSheet.create({
+  /** Align horizontal inset with `ChatScreen` `detailMissionBar` (paddingHorizontal 14). */
   container: {
-    marginHorizontal: 12,
-    marginBottom: 8,
+    marginHorizontal: 14,
+    marginTop: 6,
+    marginBottom: 0,
     paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    backgroundColor: Theme.surface ?? "#f8fafc",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderMedium ?? "#e2e8f0",
+    paddingHorizontal: 0,
+    borderRadius: 0,
+    backgroundColor: "#fdfefe",
+    borderBottomWidth: 1,
+    borderBottomColor: "#eef2f7",
+    borderTopWidth: 0,
+    borderLeftWidth: 0,
+    borderRightWidth: 0,
   },
   labelRow: {
     flexDirection: "row",

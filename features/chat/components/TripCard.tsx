@@ -69,16 +69,23 @@ export function TripCard({
       <TouchableOpacity onPress={onPressHero} activeOpacity={0.88} style={styles.tripHubHeroTouchable}>
         <View style={styles.tripHubHeroRow}>
           <View style={styles.tripHubHeroMain}>
-            <View style={[styles.tripHubTruckPill, tripActive && styles.tripHubTruckPillOn]}>
-              <Truck size={14} color="#ffffff" />
+            <View
+              style={[
+                styles.tripHubLeadPill,
+                showIntegrated ? styles.tripHubLeadPillIntegrated : styles.tripHubLeadPillManual,
+                tripActive &&
+                  (showIntegrated ? styles.tripHubLeadPillIntegratedOn : styles.tripHubLeadPillManualOn),
+              ]}
+              accessibilityLabel={showIntegrated ? "Integrated network trip" : "Manual trip"}
+            >
+              {showIntegrated ? (
+                <Network size={14} color={tripActive ? "#a5b4fc" : CHAT_ACCENT} strokeWidth={2.4} />
+              ) : (
+                <Truck size={14} color="#ffffff" />
+              )}
             </View>
             <View style={styles.tripHubHeroTextCol}>
               <View style={styles.tripHubTitleRow}>
-                {showIntegrated ? (
-                  <View style={styles.networkIconWrap} accessibilityLabel="Integrated network trip">
-                    <Network size={14} color={tripActive ? "#a5b4fc" : CHAT_ACCENT} strokeWidth={2.4} />
-                  </View>
-                ) : null}
                 {chatFlow === "private_trip" ? (
                   <View
                     style={[
@@ -169,21 +176,26 @@ export function TripCard({
           </View>
         </View>
       </TouchableOpacity>
-      <View style={styles.tripHubPartyIconRow}>{partyIconRow}</View>
-      {(showVehicleLate || (lastActivityPartyLabel && lastMessagePreview)) ? (
-        <Text style={[styles.tripHubLastMsg, tripActive && styles.tripHubLastMsgOn]} numberOfLines={1}>
-          {showVehicleLate ? (
-            <Text style={styles.vehicleLateText}>🚨 VEHICLE LATE</Text>
-          ) : (
-            <>
-              <Text style={[styles.tripHubLastMsgParty, tripActive && styles.tripHubLastMsgOn]}>
-                {lastActivityPartyLabel}:{" "}
-              </Text>
-              {lastMessagePreview}
-            </>
-          )}
-        </Text>
-      ) : null}
+      <View style={styles.tripHubFooterRow}>
+        <View style={styles.tripHubFooterIcons}>{partyIconRow}</View>
+        {showVehicleLate || (lastActivityPartyLabel && lastMessagePreview) ? (
+          <Text
+            style={[styles.tripHubFooterText, tripActive && styles.tripHubLastMsgOn]}
+            numberOfLines={2}
+          >
+            {showVehicleLate ? (
+              <Text style={styles.vehicleLateText}>🚨 VEHICLE LATE</Text>
+            ) : (
+              <>
+                <Text style={[styles.tripHubLastMsgParty, tripActive && styles.tripHubLastMsgOn]}>
+                  {lastActivityPartyLabel}:{" "}
+                </Text>
+                {lastMessagePreview}
+              </>
+            )}
+          </Text>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -263,17 +275,39 @@ const styles = StyleSheet.create({
   tripHubTitleRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
     minWidth: 0,
   },
-  networkIconWrap: {
-    width: 26,
-    height: 26,
-    borderRadius: 8,
-    backgroundColor: "rgba(99,102,241,0.12)",
+  /** Lead icon: truck (manual) or network (integrated), same 34×10 pill footprint. */
+  tripHubLeadPill: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
+  tripHubLeadPillManual: {
+    backgroundColor: "#0f172a",
+  },
+  tripHubLeadPillManualOn: {
+    backgroundColor: "rgba(255,255,255,0.12)",
+  },
+  tripHubLeadPillIntegrated: {
+    backgroundColor: "rgba(99,102,241,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(99,102,241,0.35)",
+    shadowOpacity: 0.08,
+  },
+  tripHubLeadPillIntegratedOn: {
+    backgroundColor: "rgba(99,102,241,0.22)",
+    borderColor: "rgba(165,180,252,0.45)",
+    shadowOpacity: 0.15,
   },
   hubFlowBadge: {
     paddingHorizontal: 6,
@@ -330,22 +364,6 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "900",
     fontSize: 9,
-  },
-  tripHubTruckPill: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: "#0f172a",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#0f172a",
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
-  },
-  tripHubTruckPillOn: {
-    backgroundColor: "rgba(255,255,255,0.12)",
   },
   tripHubStatusPill: {
     flexShrink: 0,
@@ -421,16 +439,25 @@ const styles = StyleSheet.create({
   tripHubRouteDateOn: {
     color: "rgba(248,250,252,0.45)",
   },
-  tripHubPartyIconRow: {
+  /** Party icon buttons + last-line preview on one row (icons keep intrinsic size). */
+  tripHubFooterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 2,
+    minWidth: 0,
+  },
+  tripHubFooterIcons: {
     flexDirection: "row",
     flexWrap: "nowrap",
     alignItems: "center",
-    justifyContent: "flex-start",
+    alignSelf: "center",
+    flexShrink: 0,
     gap: 8,
-    marginTop: 2,
   },
-  tripHubLastMsg: {
-    marginTop: 6,
+  tripHubFooterText: {
+    flex: 1,
+    minWidth: 0,
     fontSize: 9,
     fontWeight: "400",
     color: "#64748b",
