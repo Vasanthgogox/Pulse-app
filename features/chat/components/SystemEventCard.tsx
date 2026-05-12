@@ -171,7 +171,6 @@ interface SystemEventCardProps {
   // Ledger card callbacks
   onAddToBook?: (msg: TripMessageRow) => void;
   onDispute?:   (msg: TripMessageRow) => void;
-  addingToBook?: boolean;
   readOnly?: boolean;
   // Feedback card callback
   onFeedbackSubmit?: (score: number, tags: string[]) => Promise<void>;
@@ -184,7 +183,6 @@ export function SystemEventCard({
   conversationPartyName,
   onAddToBook,
   onDispute,
-  addingToBook,
   readOnly,
 }: SystemEventCardProps) {
   switch (message.message_type) {
@@ -217,7 +215,6 @@ export function SystemEventCard({
           conversationPartyName={conversationPartyName}
           onAddToBook={onAddToBook}
           onDispute={onDispute}
-          addingToBook={addingToBook}
           readOnly={readOnly}
         />
       );

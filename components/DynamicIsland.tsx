@@ -52,8 +52,10 @@ export function DynamicIsland() {
   const bootstrapStatus = useGlobalSyncStore((s) => s.bootstrapStatus);
   const ledgerPulseAtMs = useGlobalSyncStore((s) => s.ledgerPulseAtMs);
   const ledgerPulseTripId = useGlobalSyncStore((s) => s.ledgerPulseTripId);
+  const ledgerBookSuccessAtMs = useGlobalSyncStore((s) => s.ledgerBookSuccessAtMs);
   const [pillExpanded, setPillExpanded] = useState(false);
   const [paymentFlashVisible, setPaymentFlashVisible] = useState(false);
+  const [ledgerBookFlash, setLedgerBookFlash] = useState(false);
   const [flashMoney, setFlashMoney] = useState<string | null>(null);
   const [flashTripLine, setFlashTripLine] = useState('');
   const lastPaymentFlashKeyRef = useRef('');
@@ -96,6 +98,13 @@ export function DynamicIsland() {
     const id = setTimeout(() => setPaymentFlashVisible(false), 3000);
     return () => clearTimeout(id);
   }, [ledgerPulseAtMs, ledgerPulseTripId, alert?.id, alert?.category, alert?.amount, alert?.trip_number]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web' || !ledgerBookSuccessAtMs) return;
+    setLedgerBookFlash(true);
+    const id = setTimeout(() => setLedgerBookFlash(false), 2000);
+    return () => clearTimeout(id);
+  }, [ledgerBookSuccessAtMs]);
 
   const dismissViaSwipe = useCallback(() => {
     if (!orgId || !alert) return;
@@ -143,6 +152,29 @@ export function DynamicIsland() {
 
   return (
     <>
+      {ledgerBookFlash ? (
+        <View style={[styles.ledgerBookShell, { top: insets.top + 6 }]} pointerEvents="none">
+          <MotiView
+            from={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ type: 'timing', duration: 220 }}
+            style={styles.ledgerBookPill}
+          >
+            <MotiView
+              animate={{ scale: [1, 1.1, 1] }}
+              transition={{
+                type: 'timing',
+                duration: 700,
+                loop: true,
+                repeatReverse: true,
+              }}
+            >
+              <CheckCircle2 size={20} color="#16a34a" />
+            </MotiView>
+            <Text style={styles.ledgerBookText}>Added to ledger</Text>
+          </MotiView>
+        </View>
+      ) : null}
       <Modal
         visible={paymentFlashVisible}
         transparent
@@ -384,6 +416,34 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Theme.textSecondary,
     alignSelf: 'center',
+  },
+  ledgerBookShell: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    zIndex: 210,
+    alignItems: 'center',
+  },
+  ledgerBookPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(22,163,74,0.35)',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.14,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
+  },
+  ledgerBookText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: Theme.textPrimary,
   },
   shell: {
     position: 'absolute',

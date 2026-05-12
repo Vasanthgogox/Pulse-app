@@ -41,6 +41,8 @@ export interface LedgerEventMetadata {
   sender_org_name: string;
   receiver_org_id: string;
   receiver_org_name: string;
+  /** Set when the org books this row via confirm_to_accounting_books (or optimistic UI). */
+  is_booked?: boolean;
   acknowledged_at?: string | null;
   disputed?: boolean;
 }

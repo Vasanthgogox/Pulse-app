@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useSyncExternalStore } from "react";
 import {
   ActivityIndicator,
   StyleSheet,
@@ -26,6 +26,10 @@ import {
 } from "@/lib/partyAvatarDisplay";
 import type { LedgerEventMetadata, TripMessageRow } from "../types/chat.types";
 import { ledgerEventInvolvesOrg } from "../utils/ledgerVisibility.util";
+import {
+  getLedgerBookPendingSnapshot,
+  subscribeLedgerBookPending,
+} from "@/lib/ledgerBookPendingStore";
 
 // ── System event card (trip status changes) ───────────────────────────────────
 
@@ -89,7 +93,6 @@ interface LedgerCardProps {
   conversationPartyName?: string | null;
   onAddToBook: (message: TripMessageRow) => void;
   onDispute: (message: TripMessageRow) => void;
-  addingToBook?: boolean;
   /** Driver / embedded views: show the card UI without add-to-book or dispute actions. */
   readOnly?: boolean;
 }
@@ -168,9 +171,14 @@ export function ChatLedgerEventCard({
   conversationPartyName,
   onAddToBook,
   onDispute,
-  addingToBook,
   readOnly = false,
 }: LedgerCardProps) {
+  const addingToBook = useSyncExternalStore(
+    subscribeLedgerBookPending,
+    () => getLedgerBookPendingSnapshot().has(message.id),
+    () => false,
+  );
+
   if (!ledgerEventInvolvesOrg(message, currentOrgId)) return null;
   const meta = message.metadata as LedgerEventMetadata | null;
   if (!meta) return null;
@@ -199,7 +207,7 @@ export function ChatLedgerEventCard({
   }).format(Number.isFinite(safeAmount) ? safeAmount : 0);
 
   const flowPrefix = flow === "in" ? "+" : "−";
-  const isAcknowledged = !!meta.acknowledged_at;
+  const isAcknowledged = !!meta.acknowledged_at || !!meta.is_booked;
   const isDisputed = !!meta.disputed;
 
   let displayTime = message.created_at;

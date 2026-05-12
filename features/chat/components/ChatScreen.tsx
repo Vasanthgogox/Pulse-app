@@ -82,9 +82,8 @@ import {
 } from "@/features/chat/utils/mergeTripFeedbackMessages.util";
 import { dedupeTripStatusBroadcastsForLane } from "@/features/chat/utils/dedupeTripStatusBroadcastForLane.util";
 import {
-  acknowledgeLedgerEventMessage,
+  confirmLedgerToAccountingBooks,
   disputeLedgerEventMessage,
-  mirrorLedgerEntryFromChat,
 } from "@/features/chat/services/chatLedgerBridge.service";
 import { ChatSystemEventCard, ChatLedgerEventCard } from "./ChatEventCard";
 import { DynamicTripIsland } from "./DynamicTripIsland";
@@ -111,6 +110,11 @@ import {
   parseTripIdSortKey,
 } from "@/features/chat/utils/tripConversationSort";
 import { buildTripMessageListLayoutMeta } from "@/features/chat/utils/chatMessageListLayout";
+import {
+  clearLedgerBookPending,
+  markLedgerBookPending,
+} from "@/lib/ledgerBookPendingStore";
+import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
 
 type TabId = "trips" | "network";
 
@@ -288,8 +292,6 @@ export function ChatScreen() {
   const isDesktop = width >= 1024;
   /** Trip hub cards (alerts + party row): desktop always; all web viewports so mobile browser matches. */
   const useGroupedTripHub = isDesktop || Platform.OS === "web";
-  /** Narrow conversation chrome: stack trip selector + scroll party tabs. */
-  const compactConversationToolbar = width < 560;
   const allowNewTripConversation = false;
   /** Web: anchored compose/search UX from tablet width up (avoids sheet on iPad / large phones in browser). */
   const isWebAnchoredPanels = Platform.OS === "web" && (isDesktop || width >= 900);
@@ -307,7 +309,7 @@ export function ChatScreen() {
 
   // Document share sheet
   const [showDocShare, setShowDocShare] = useState(false);
-  const [addingToBook, setAddingToBook] = useState<string | null>(null);
+  const [ledgerWebToast, setLedgerWebToast] = useState(false);
   /** Sync guard: React state can lag one frame — blocks double-tap duplicate mirrors. */
   const addToBookInFlightRef = useRef(new Set<string>());
 
@@ -730,47 +732,37 @@ export function ChatScreen() {
   const handleAddToBook = async (message: TripMessageRow) => {
     const meta = message.metadata as LedgerEventMetadata | null;
     if (!meta || !currentOrgId || !selectedConv) return;
-    if (meta.acknowledged_at) return;
+    if (meta.acknowledged_at || meta.is_booked) return;
     if (addToBookInFlightRef.current.has(message.id)) return;
+    const txId = String(meta.transaction_id ?? "").trim();
+    if (!txId) {
+      Alert.alert("Error", "This ledger entry cannot be booked.");
+      return;
+    }
+
     addToBookInFlightRef.current.add(message.id);
-    setAddingToBook(message.id);
+    markLedgerBookPending(message.id);
+    chatStore.applyLedgerBookOptimistic(selectedConv.id, txId);
+
     try {
-      const { error } = await mirrorLedgerEntryFromChat(meta, currentOrgId, selectedConv.trip_id);
+      const { error } = await confirmLedgerToAccountingBooks(message.id, currentOrgId);
       if (error) {
+        chatStore.revertLedgerBookOptimistic(selectedConv.id, txId);
         Alert.alert("Error", error.message);
         return;
       }
-      await acknowledgeLedgerEventMessage(message.id, selectedConv.id);
-      const ackAt = new Date().toISOString();
-      const txId = meta.transaction_id;
-      const convId = selectedConv.id;
-      const tripKey = useChatStore.getState().convToTrip[convId];
-      if (tripKey && txId) {
-        const entry = useChatStore.getState().trips[tripKey];
-        const stream = entry?.event_stream;
-        if (stream?.length) {
-          for (const e of stream) {
-            if (e.conversation_id !== convId) continue;
-            if (
-              e.message_type !== "ledger_event" &&
-              e.message_type !== "ledger" &&
-              e.message_type !== "payment"
-            ) {
-              continue;
-            }
-            const m = e.metadata as LedgerEventMetadata | undefined;
-            if (m?.transaction_id !== txId) continue;
-            chatStore.patchMessage(convId, e.id, {
-              metadata: { ...m, acknowledged_at: ackAt },
-            });
-          }
-        }
+      if (Platform.OS === "web" && isDesktop) {
+        setLedgerWebToast(true);
+        setTimeout(() => setLedgerWebToast(false), 2600);
+      } else if (Platform.OS !== "web") {
+        useGlobalSyncStore.getState().pulseLedgerBookSuccess();
       }
     } catch {
+      chatStore.revertLedgerBookOptimistic(selectedConv.id, txId);
       Alert.alert("Error", "Could not add to book. Please try again.");
     } finally {
       addToBookInFlightRef.current.delete(message.id);
-      setAddingToBook(null);
+      clearLedgerBookPending(message.id);
     }
   };
 
@@ -1855,13 +1847,11 @@ export function ChatScreen() {
         onSend={handleSend}
         onOpenDocShare={() => setShowDocShare(true)}
         isDesktop={isDesktop}
-        compactConversationToolbar={compactConversationToolbar}
         inputOverlayMaxWidth={inputOverlayMaxWidth}
         onCloseDetail={closeDetail}
         currentOrgId={currentOrgId}
         onAddToBook={handleAddToBook}
         onDispute={handleDispute}
-        addingToBookId={addingToBook}
         onSelectConversation={setSelectedConvId}
         onOpenCompose={openCompose}
         onFeedbackSubmitted={() => {
@@ -1936,6 +1926,11 @@ export function ChatScreen() {
           onClose={() => setShowDocShare(false)}
           onShare={handleDocShare}
         />
+        {Platform.OS === "web" && isDesktop && ledgerWebToast ? (
+          <View style={s.ledgerWebToast} pointerEvents="none">
+            <Text style={s.ledgerWebToastText}>Added to Ledger</Text>
+          </View>
+        ) : null}
       </LinearGradient>
     );
   }
@@ -3322,6 +3317,26 @@ const s = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
     elevation: 10,
   },
+  ledgerWebToast: {
+    position: "absolute",
+    top: 72,
+    alignSelf: "center",
+    zIndex: 400,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: "rgba(15,23,42,0.92)",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 12,
+  },
+  ledgerWebToastText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#f8fafc",
+  },
 });
 
 // ── Compose modal styles ──────────────────────────────────────────────────────
@@ -3828,13 +3843,11 @@ function TripConversationDetailPanel({
   onSend,
   onOpenDocShare,
   isDesktop,
-  compactConversationToolbar,
   inputOverlayMaxWidth,
   onCloseDetail,
   currentOrgId,
   onAddToBook,
   onDispute,
-  addingToBookId,
   onSelectConversation,
   onOpenCompose,
   onFeedbackSubmitted,
@@ -3852,13 +3865,11 @@ function TripConversationDetailPanel({
   onSend: () => void;
   onOpenDocShare: () => void;
   isDesktop: boolean;
-  compactConversationToolbar: boolean;
   inputOverlayMaxWidth: number;
   onCloseDetail: () => void;
   currentOrgId: string;
   onAddToBook: (message: TripMessageRow) => void;
   onDispute: (message: TripMessageRow) => void;
-  addingToBookId: string | null;
   onSelectConversation: (id: string) => void;
   onOpenCompose: () => void | Promise<void>;
   onFeedbackSubmitted: () => void;
@@ -3884,7 +3895,6 @@ function TripConversationDetailPanel({
       currentOrgId={currentOrgId}
       onAddToBook={onAddToBook}
       onDispute={onDispute}
-      addingToBookId={addingToBookId}
       onSelectConversation={onSelectConversation}
       onOpenCompose={onOpenCompose}
       onFeedbackSubmitted={onFeedbackSubmitted}
@@ -3911,9 +3921,8 @@ function TripConversationDetailLoaded({
   currentOrgId,
   onAddToBook,
   onDispute,
-  addingToBookId,
   onSelectConversation,
-  onOpenCompose,
+  onOpenCompose: _onOpenCompose,
   onFeedbackSubmitted,
 }: {
   selectedConv: TripConversation;
@@ -3934,7 +3943,6 @@ function TripConversationDetailLoaded({
   currentOrgId: string;
   onAddToBook: (message: TripMessageRow) => void;
   onDispute: (message: TripMessageRow) => void;
-  addingToBookId: string | null;
   onSelectConversation: (id: string) => void;
   onOpenCompose: () => void | Promise<void>;
   onFeedbackSubmitted: () => void;
@@ -4308,7 +4316,6 @@ function TripConversationDetailLoaded({
           conversationPartyName={liveConv.party_name}
           onAddToBook={onAddToBook}
           onDispute={onDispute}
-          addingToBook={addingToBookId === m.id}
         />
       );
     }
@@ -4340,7 +4347,6 @@ function TripConversationDetailLoaded({
           conversationPartyName={liveConv.party_name}
           onAddToBook={onAddToBook}
           onDispute={onDispute}
-          addingToBook={addingToBookId === m.id}
         />
       );
     }
@@ -4376,7 +4382,7 @@ function TripConversationDetailLoaded({
         isNew={Date.parse(m.created_at) > mountedAtMs}
       />
     );
-  }, [currentOrgId, liveConv, onAddToBook, onDispute, addingToBookId, handleFeedbackSubmitted, mountedAtMs]);
+  }, [currentOrgId, liveConv, onAddToBook, onDispute, handleFeedbackSubmitted, mountedAtMs]);
 
   const partyTabIcon = (partyType: ConversationPartyType, selected: boolean) => (
     <View
