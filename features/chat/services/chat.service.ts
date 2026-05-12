@@ -233,8 +233,8 @@ const TRIP_MESSAGES_EMBED = `trip_messages ( id, conversation_id, content, sende
 /** Newest N rows per conversation embed. Keep low — bulk loads (13+ convos × limit) can spike CPU/RAM. */
 const TRIP_MESSAGES_EMBED_RECENT = 20;
 
-/** Page size for on-demand trip thread history (must match bootstrap window expectations in UI). */
-export const TRIP_CHAT_HISTORY_PAGE = 50;
+/** Page size for on-demand trip thread history (WhatsApp-style window; bootstrap RPC uses same cap). */
+export const TRIP_CHAT_HISTORY_PAGE = 20;
 
 function tripConversationSelect(tripEmbedFields: string): string {
   return `
@@ -581,9 +581,40 @@ export async function markConversationRead(
 
 export async function getMessagesByConversation(
   conversationId: string,
-  opts?: { before?: string; limit?: number },
+  opts?: { before?: string; limit?: number; partyType?: string | null },
 ): Promise<TripMessageRow[]> {
-  const limit = opts?.limit ?? TRIP_CHAT_HISTORY_PAGE;
+  const limit = Math.min(
+    Math.max(opts?.limit ?? TRIP_CHAT_HISTORY_PAGE, 1),
+    100,
+  );
+  const partyType =
+    opts?.partyType != null && String(opts.partyType).trim() !== ""
+      ? String(opts.partyType).trim()
+      : null;
+
+  const { data: rpcData, error: rpcError } = await supabase().rpc(
+    "windowed_trip_message_history",
+    {
+      p_conversation_id: conversationId,
+      p_before:          opts?.before ?? null,
+      p_limit:           limit,
+      p_party_type:      partyType,
+    },
+  );
+
+  if (!rpcError && Array.isArray(rpcData)) {
+    return [...rpcData].reverse() as TripMessageRow[];
+  }
+
+  const missingRpc =
+    rpcError &&
+    (String(rpcError.code ?? "") === "42883" ||
+      String(rpcError.code ?? "") === "PGRST202" ||
+      String(rpcError.message ?? "")
+        .toLowerCase()
+        .includes("windowed_trip_message_history"));
+  if (rpcError && !missingRpc) throw rpcError;
+
   let query = supabase()
     .from("trip_messages")
     .select("id,conversation_id,organization_id,sender_user_id,sender_role,sender_name,content,message_type,metadata,is_read,read_at,created_at,sender_avatar_seed,is_delivered,delivered_at")
@@ -827,8 +858,7 @@ export async function submitTripChatFeedback(params: {
     return { error: new Error("Feedback already submitted"), submittedAt: null };
   }
 
-  // Single atomic RPC: server resolves fleet org + rated party from the row
-  // (`confirm_trip_feedback` → `submit_trip_feedback`).
+  // Single atomic RPC: updates `trip_messages.metadata` (rating) via `confirm_trip_feedback`.
   const { data, error } = await supabase().rpc("confirm_trip_feedback", {
     p_msg_id:  message.id,
     p_rating:  Math.min(5, Math.max(1, score)),
@@ -1437,11 +1467,12 @@ export async function fetchChatBootstrapPayload(
  */
 export async function fetchConversationHistory(
   conversationId: string,
-  opts?: { before?: string; limit?: number },
+  opts?: { before?: string; limit?: number; partyType?: string | null },
 ): Promise<TripMessageRow[]> {
   return getMessagesByConversation(conversationId, {
     before: opts?.before,
     limit: opts?.limit ?? TRIP_CHAT_HISTORY_PAGE,
+    partyType: opts?.partyType ?? null,
   });
 }
 

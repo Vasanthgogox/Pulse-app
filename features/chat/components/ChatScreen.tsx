@@ -48,11 +48,6 @@ import {
   isTripFeedbackEligibleStatus,
   parseTripIdSortKey,
 } from "@/features/chat/utils/tripConversationSort";
-import {
-  isRunningLateHealthStatus,
-  isTripStatusEligibleForLongHaulPings,
-  LONG_HAUL_STANDARD_PINGS,
-} from "@/features/driver/utils/long_haul_heartbeat.util";
 import { getRatingsForTrip } from "@/features/ratings/services/ratings.service";
 import type { RatingRow } from "@/features/ratings/types";
 import {
@@ -118,7 +113,6 @@ import { commandPriorityScore } from "../utils/commandPriority.util";
 import { tripFeedbackRequestMatchesConversation } from "../utils/feedbackRequestMeta";
 import { ledgerEventInvolvesOrg } from "../utils/ledgerVisibility.util";
 import { parseSystemLogLocationData } from "../utils/locationLogPayload.util";
-import { countLongHaulPingsFromStream } from "../utils/longHaulPingCount.util";
 import {
   indentAllowsInChatFeedbackDebrief,
   tripMessageHistoryHasCompletedStatus,
@@ -129,7 +123,6 @@ import { DocumentShareCard } from "./DocumentShareCard";
 import { DocumentShareSheet } from "./DocumentShareSheet";
 import { isLongHaulLateChatMessage, LateAlertCard } from "./LateAlertCard";
 import { LocationEventCard } from "./LocationEventCard";
-import { PingProgressBar } from "./PingProgressBar";
 import { TripCard } from "./TripCard";
 
 type TabId = "trips" | "indent" | "network";
@@ -1113,7 +1106,9 @@ export function ChatScreen() {
     if (hit) {
       deepLinkAppliedRef.current = deepLinkKey;
       void (async () => {
-        await useChatStore.getState().hydrateTripMessagesIfNeeded(hit.trip_id);
+        await useChatStore.getState().hydrateTripMessagesIfNeeded(hit.trip_id, {
+          conversationId: hit.id,
+        });
         const tripsSnap = useChatStore.getState().trips;
         const inferred = tripHubHasIntegratedPartition(hit, tripsSnap) ? "indent" : "trips";
         const targetTab: TabId =
@@ -1165,7 +1160,9 @@ export function ChatScreen() {
 
   const openConversation = useCallback(
     async (conv: TripConversation) => {
-      await useChatStore.getState().hydrateTripMessagesIfNeeded(conv.trip_id);
+      await useChatStore.getState().hydrateTripMessagesIfNeeded(conv.trip_id, {
+        conversationId: conv.id,
+      });
       chatStore.switchParty(conv.trip_id, conv.party_type);
       setSelectedConvId(conv.id);
       void markTripThreadsRead(conv.trip_id);
@@ -1864,11 +1861,13 @@ export function ChatScreen() {
                       void openCompose(trip.tripId);
                       return;
                     }
-                    await useChatStore.getState().hydrateTripMessagesIfNeeded(trip.tripId);
                     const storedParty = chatStore.getActivePartyType(trip.tripId);
                     const preferred = storedParty
                       ? (trip.rows.find((r) => r.party_type === storedParty) ?? trip.rows[0])
                       : trip.rows[0];
+                    await useChatStore.getState().hydrateTripMessagesIfNeeded(trip.tripId, {
+                      conversationId: preferred.id,
+                    });
                     await openConversation(preferred);
                   };
                   const chatEntry = chatTrips[trip.tripId];
@@ -4559,12 +4558,15 @@ function TripConversationDetailLoaded({
     setHasMoreOlder(rows.length === TRIP_CHAT_HISTORY_PAGE);
   }, []);
 
+  const partyTypeForHistory = liveConv.party_type ?? null;
+
   /** Newest page (empty thread backfill or manual retry). */
   const loadLatestHistoryPage = useCallback(async () => {
     setHistoryLoading(true);
     try {
       const rows = await getMessagesByConversation(liveConv.id, {
         limit: TRIP_CHAT_HISTORY_PAGE,
+        partyType: partyTypeForHistory,
       });
       mergeHistoryPage(rows);
     } catch {
@@ -4572,7 +4574,7 @@ function TripConversationDetailLoaded({
     } finally {
       setHistoryLoading(false);
     }
-  }, [liveConv.id, mergeHistoryPage]);
+  }, [liveConv.id, mergeHistoryPage, partyTypeForHistory]);
 
   /** Older messages than the current oldest row in this lane. */
   const loadOlderHistoryPage = useCallback(async () => {
@@ -4586,6 +4588,7 @@ function TripConversationDetailLoaded({
       const rows = await getMessagesByConversation(liveConvRef.current.id, {
         before: oldest,
         limit: TRIP_CHAT_HISTORY_PAGE,
+        partyType: liveConvRef.current.party_type ?? null,
       });
       if (rows.length === 0) {
         setHasMoreOlder(false);
@@ -4630,18 +4633,19 @@ function TripConversationDetailLoaded({
     }
   }, [liveConv.id]);
 
-  // One automatic backfill when the lane shows a preview but no rows (e.g. visibility
-  // filter vs bootstrap) — single flight per conversation; uses same paged query as manual load.
+  // One automatic backfill when the lane has no rows yet (bootstrap/hydrate race, empty
+  // preview, or visibility filters) — single flight per conversation mount; same query as manual load.
   useEffect(() => {
     if (liveConv.messages.length > 0) return;
-    const preview = (liveConv.last_message_preview ?? "").trim();
-    if (!preview) return;
     if (autoBackfillAttemptedRef.current === liveConv.id) return;
     autoBackfillAttemptedRef.current = liveConv.id;
 
     let cancelled = false;
     setHistoryLoading(true);
-    void getMessagesByConversation(liveConv.id, { limit: TRIP_CHAT_HISTORY_PAGE })
+    void getMessagesByConversation(liveConv.id, {
+      limit: TRIP_CHAT_HISTORY_PAGE,
+      partyType: partyTypeForHistory,
+    })
       .then((rows) => {
         if (cancelled) return;
         mergeHistoryPage(rows);
@@ -4653,12 +4657,7 @@ function TripConversationDetailLoaded({
     return () => {
       cancelled = true;
     };
-  }, [
-    liveConv.id,
-    liveConv.messages.length,
-    liveConv.last_message_preview,
-    mergeHistoryPage,
-  ]);
+  }, [liveConv.id, liveConv.messages.length, mergeHistoryPage, partyTypeForHistory]);
 
   const [tripRatings, setTripRatings] = useState<RatingRow[]>([]);
 
@@ -4678,8 +4677,12 @@ function TripConversationDetailLoaded({
   const effectiveTripStatus = useMemo(() => {
     const direct = liveConv.trip_status;
     if (direct != null && String(direct).trim() !== "") return direct;
-    return composeTrips.find((t) => t.id === liveConv.trip_id)?.status ?? null;
-  }, [composeTrips, liveConv.trip_id, liveConv.trip_status]);
+    const fromCompose = composeTrips.find((t) => t.id === liveConv.trip_id)?.status ?? null;
+    if (fromCompose != null && String(fromCompose).trim() !== "") return fromCompose;
+    const fromStore = liveTripEntry?.status;
+    if (fromStore != null && String(fromStore).trim() !== "") return fromStore;
+    return null;
+  }, [composeTrips, liveConv.trip_id, liveConv.trip_status, liveTripEntry?.status]);
 
   const tripEligibleForFeedback = isTripFeedbackEligibleStatus(effectiveTripStatus);
 
@@ -5014,23 +5017,6 @@ function TripConversationDetailLoaded({
   const longHaulLiveEta = useChatStore((s) => s.trips[liveConv.trip_id]?.longHaulRevisedEta ?? null);
   const longHaulLiveHealth = useChatStore((s) => s.trips[liveConv.trip_id]?.longHaulHealthStatus ?? null);
 
-  const tripEntryForPing = useChatStore((s) => s.trips[liveConv.trip_id]);
-  const pingCount = useMemo(
-    () => countLongHaulPingsFromStream(tripEntryForPing?.event_stream ?? []),
-    [tripEntryForPing?.event_stream],
-  );
-  const tripTrackingStatus = tripEntryForPing?.trackingStatus ?? null;
-  const showLongHaulPingBar =
-    isTripStatusEligibleForLongHaulPings(effectiveTripStatus) ||
-    (tripEligibleForFeedback && showFeedbackCardOnEligibleLane);
-  const stretchModeForPingBar =
-    pingCount >= LONG_HAUL_STANDARD_PINGS || isRunningLateHealthStatus(longHaulLiveHealth);
-
-  const longHaulHeaderShowsLate =
-    showLongHaulPingBar &&
-    (String(tripTrackingStatus ?? "").toUpperCase().includes("RUNNING_LATE") ||
-      isRunningLateHealthStatus(longHaulLiveHealth));
-
   const primaryLateMessageId = useMemo(() => {
     for (const row of displayMessages) {
       if (isLongHaulLateChatMessage(row)) return row.id;
@@ -5082,7 +5068,6 @@ function TripConversationDetailLoaded({
       m.message_type === "location_log"
     ) {
       if (isLongHaulLateChatMessage(m)) {
-        if (longHaulHeaderShowsLate) return null;
         if (primaryLateMessageId != null && m.id !== primaryLateMessageId) return null;
         return (
           <LateAlertCard
@@ -5122,7 +5107,8 @@ function TripConversationDetailLoaded({
     }
     if (m.message_type === "feedback_request" || m.message_type === "feedback") {
       if (!tripFeedbackRequestMatchesConversation(m, liveConv)) return null;
-      if (!tripMessageHistoryHasCompletedStatus(liveConv.messages)) return null;
+      const completionKnownInLane = tripMessageHistoryHasCompletedStatus(liveConv.messages);
+      if (!completionKnownInLane && !tripEligibleForFeedback) return null;
       if (!showFeedbackCardOnEligibleLane) return null;
       if (!indentAllowsInChatFeedbackDebrief(liveConv)) return null;
       return (
@@ -5166,6 +5152,7 @@ function TripConversationDetailLoaded({
     allowFinancialCards,
     allowLedgerActions,
     showFeedbackCardOnEligibleLane,
+    tripEligibleForFeedback,
     onAddToBook,
     onDispute,
     handleFeedbackSubmitted,
@@ -5173,7 +5160,6 @@ function TripConversationDetailLoaded({
     isMessageFromSelf,
     longHaulLiveEta,
     longHaulLiveHealth,
-    longHaulHeaderShowsLate,
     primaryLateMessageId,
   ]);
 
@@ -5207,13 +5193,6 @@ function TripConversationDetailLoaded({
         isDesktop={isDesktop}
         onCloseDetail={onCloseDetail}
       />
-      {showLongHaulPingBar ? (
-        <PingProgressBar
-          pingCount={pingCount}
-          trackingStatus={tripTrackingStatus}
-          stretchMode={stretchModeForPingBar}
-        />
-      ) : null}
       <View style={s.detailMissionBar}>
         <View style={s.detailMissionRoute}>
           <MapPin size={13} color={CHAT_ACCENT} />

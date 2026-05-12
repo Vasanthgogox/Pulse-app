@@ -1,13 +1,14 @@
 import type { StatusChangeMetadata, TripConversation, TripMessageRow } from "../types/chat.types";
 
-/** Trip lane: show in-chat feedback card only after a completed status transition exists in history. */
+/** Trip lane: show in-chat feedback when a terminal success status appears in this lane's history. */
 export function tripMessageHistoryHasCompletedStatus(messages: TripMessageRow[] | undefined): boolean {
   if (!messages?.length) return false;
+  const done = new Set(["completed", "delivered", "done"]);
   for (const m of messages) {
     if (m.message_type !== "status_change") continue;
     const meta = m.metadata as StatusChangeMetadata | undefined;
     const ns = String(meta?.new_status ?? "").toLowerCase().trim();
-    if (ns === "completed") return true;
+    if (done.has(ns)) return true;
   }
   return false;
 }

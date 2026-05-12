@@ -25,7 +25,7 @@ export interface UseChatOptions {
   selfUid: string | null;
   senderRole: MessageSenderRole;
   senderName: string;
-  /** How many messages to fetch on mount (default 50). */
+  /** How many messages to fetch on mount (default 20, windowed history). */
   initialLimit?: number;
 }
 
@@ -47,7 +47,7 @@ export function useChat({
   selfUid,
   senderRole,
   senderName,
-  initialLimit = 50,
+  initialLimit = 20,
 }: UseChatOptions): UseChatReturn {
   const [messages, setMessages] = useState<TripMessageRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -218,6 +218,7 @@ export function useChat({
       const older = await chatService.getMessagesByConversation(conversationId, {
         before: oldest,
         limit: initialLimit,
+        partyType: null,
       });
       setMessages((prev) => [...older, ...prev]);
       setHasMore(older.length === initialLimit);

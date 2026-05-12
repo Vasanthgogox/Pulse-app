@@ -19,7 +19,7 @@ export type TripCardProps = {
   hubDateLabel: string | null;
   statusLabel: string;
   isUnassignedBadge: boolean;
-  /** Integrated indent-backed trip — show network icon in title row. */
+  /** Integrated indent-backed trip — show network icon in title row (from bootstrap `indent_id`). */
   chatFlow: ChatTripFlow;
   /** When set, treat as integrated for hub lavender chip even if chatFlow is stale. */
   indentId?: string | null;
@@ -44,16 +44,16 @@ export function TripCard({
   hubDateLabel,
   statusLabel,
   isUnassignedBadge,
-  chatFlow,
+  chatFlow: _chatFlow,
   indentId = null,
   trackingStatus,
   partyIconRow,
   lastActivityPartyLabel,
   lastMessagePreview,
 }: TripCardProps) {
-  const showIntegrated =
-    chatFlow === "integrated_group" ||
-    Boolean(indentId && String(indentId).trim());
+  const hasIndent = Boolean(indentId && String(indentId).trim());
+  /** Hub chrome + [MANUAL]/[INTEGRATED] tags follow bootstrap `indent_id` only (not chatFlow). */
+  const showIntegrated = hasIndent;
   const showVehicleLate = trackingStatus === "RUNNING_LATE";
 
   return (
@@ -86,25 +86,7 @@ export function TripCard({
             </View>
             <View style={styles.tripHubHeroTextCol}>
               <View style={styles.tripHubTitleRow}>
-                {chatFlow === "private_trip" ? (
-                  <View
-                    style={[
-                      styles.hubFlowBadge,
-                      tripActive ? styles.hubFlowBadgeManualOn : styles.hubFlowBadgeManual,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.hubFlowBadgeText,
-                        tripActive && styles.hubFlowBadgeTextOn,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      [MANUAL]
-                    </Text>
-                  </View>
-                ) : null}
-                {chatFlow === "integrated_group" ? (
+                {hasIndent ? (
                   <View
                     style={[
                       styles.hubFlowBadge,
@@ -121,7 +103,24 @@ export function TripCard({
                       [INTEGRATED]
                     </Text>
                   </View>
-                ) : null}
+                ) : (
+                  <View
+                    style={[
+                      styles.hubFlowBadge,
+                      tripActive ? styles.hubFlowBadgeManualOn : styles.hubFlowBadgeManual,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.hubFlowBadgeText,
+                        tripActive && styles.hubFlowBadgeTextOn,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      [MANUAL]
+                    </Text>
+                  </View>
+                )}
                 <Text
                   style={[styles.tripHubTripTitle, tripActive && styles.tripHubTripTitleOn]}
                   numberOfLines={1}

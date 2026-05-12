@@ -111,7 +111,7 @@ export function ChatFeedbackCard({
 
         const confirmedMeta: FeedbackRequestMetadata = {
           ...meta,
-          submitted_at:    submittedAt ?? now,
+          submitted_at:    submittedAt ?? new Date().toISOString(),
           submitted_score: score,
           rating:          score,
           submitted_tags:  [],

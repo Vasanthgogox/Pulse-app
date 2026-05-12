@@ -440,6 +440,8 @@ export interface PartyConv {
   unreadCount:    number;
   /** Mirrors bootstrap `trip_feedback_status`; patched optimistically on submit. */
   feedbackStatus?: TripFeedbackLaneStatus;
+  /** Newest-page history merged for this lane (bootstrap embed or open-thread hydrate). */
+  historyWindowLoaded?: boolean;
 }
 
 // ── Single trip entry — the core data unit in the store ──────────────────────
@@ -518,8 +520,15 @@ interface ChatState {
   bootstrap:                 (orgId: string) => Promise<void>;
   appendBootstrapTripPage:   (orgId: string) => Promise<void>;
   ensureHubHistoryBootstrap: (orgId: string) => Promise<void>;
-  /** Load full merged `event_stream` for a lazy-bootstrap trip (no-op if already hydrated). */
-  hydrateTripMessagesIfNeeded: (tripId: string) => Promise<void>;
+  /**
+   * Windowed history hydrate for lazy trips. Omit opts to fetch every lane that still
+   * needs a window. Pass `conversationId` to load only the active lane (skeleton others).
+   * No-op when `skipEventStreamHydration === false` (full bootstrap already merged all lanes).
+   */
+  hydrateTripMessagesIfNeeded: (
+    tripId: string,
+    opts?: { conversationId?: string },
+  ) => Promise<void>;
   /** Idempotent: INSERT / echo rows merge into `event_stream` by `id`. */
   processIncomingEvent: (row: Partial<TripMessageRow>, mode: 'active' | 'background') => void;
   onRealtimeInsert:   (row: Partial<TripMessageRow>, mode: 'active' | 'background') => void;
@@ -905,12 +914,25 @@ const CHAT_LAZY_HYDRATE_TOP_TRIPS = 3;
 
 const tripHydrationInFlight = new Set<string>();
 
+function allPartyHistoryWindowsLoaded(entry: TripEntry): boolean {
+  const order: ConversationPartyType[] = ["client", "supplier", "driver"];
+  for (const pt of order) {
+    const p = entry.parties[pt];
+    if (!p?.conversationId) continue;
+    if (p.historyWindowLoaded !== true) return false;
+  }
+  return true;
+}
+
 function mergeHistoryRowsIntoTripEntry(
   orgId: string,
   entry: TripEntry,
   partyType: ConversationPartyType,
   history: TripMessageRow[],
 ): TripEntry {
+  const partyBefore = entry.parties[partyType];
+  if (!partyBefore?.conversationId) return entry;
+
   const sortedHistory =
     history.length > 1
       ? [...history].sort(
@@ -924,10 +946,17 @@ function mergeHistoryRowsIntoTripEntry(
   );
   const newEvts: TripEvent[] = financeSafe.map((m) => ({ ...m, partyType }));
   const event_stream = mergeEvents(entry.event_stream, newEvts);
+  const parties: TripEntry["parties"] = {
+    ...entry.parties,
+    [partyType]: { ...partyBefore, historyWindowLoaded: true },
+  };
   let next: TripEntry = {
     ...entry,
     event_stream,
-    skipEventStreamHydration: false,
+    parties,
+    skipEventStreamHydration: allPartyHistoryWindowsLoaded({ ...entry, parties, event_stream })
+      ? false
+      : (entry.skipEventStreamHydration ?? true),
   };
   next.totalUnread = sumUnread(next.parties);
   if (event_stream.length > 0) {
@@ -940,10 +969,8 @@ function mergeHistoryRowsIntoTripEntry(
 }
 
 function clearEventStreamLazySkipIfFilled(e: TripEntry): TripEntry {
-  if (e.event_stream.length > 0 && e.skipEventStreamHydration) {
-    return { ...e, skipEventStreamHydration: false };
-  }
-  return e;
+  if (!allPartyHistoryWindowsLoaded(e)) return e;
+  return { ...e, skipEventStreamHydration: false };
 }
 
 function ingestBootstrapConversations(
@@ -1010,7 +1037,12 @@ function ingestBootstrapConversations(
     );
     const newEvts: TripEvent[] = financeSafe.map((m) => ({ ...m, partyType }));
 
-    entry.parties[partyType] = partyFromConv(conv);
+    const shouldMergeEvents = hydrateTripIds.has(tripId);
+
+    entry.parties[partyType] = {
+      ...partyFromConv(conv),
+      historyWindowLoaded: shouldMergeEvents,
+    };
     const at = conv.last_message_at;
     if (
       at &&
@@ -1021,7 +1053,6 @@ function ingestBootstrapConversations(
       entry.lastEventPreview = conv.last_message_preview ?? entry.lastEventPreview;
     }
 
-    const shouldMergeEvents = hydrateTripIds.has(tripId);
     if (shouldMergeEvents) {
       entry.event_stream = mergeEvents(entry.event_stream, newEvts);
       entry.skipEventStreamHydration = false;
@@ -1195,35 +1226,44 @@ export const useChatStore = create<ChatState>()(
       }
     },
 
-    hydrateTripMessagesIfNeeded: async (tripId) => {
+    hydrateTripMessagesIfNeeded: async (tripId, opts) => {
       const orgId = get().bootstrappedOrg;
       if (!orgId || !tripId) return;
       if (tripHydrationInFlight.has(tripId)) return;
 
       const entry0 = get().trips[tripId];
       if (!entry0) return;
-      if (entry0.event_stream.length > 0) {
-        if (entry0.skipEventStreamHydration) {
-          set((s) => {
-            const e = s.trips[tripId];
-            if (!e) return s;
-            return {
-              trips: { ...s.trips, [tripId]: { ...e, skipEventStreamHydration: false } },
-            };
-          });
-        }
-        return;
-      }
+      // Never short-circuit on `event_stream.length > 0` alone: lazy trips can have a partial
+      // stream (e.g. one Realtime row) before `fetchConversationHistory` runs.
       if (entry0.skipEventStreamHydration !== true) return;
+
+      const targetConvId = (opts?.conversationId ?? "").trim();
 
       tripHydrationInFlight.add(tripId);
       try {
         let next = entry0;
         const partyOrder: ConversationPartyType[] = ["client", "supplier", "driver"];
-        for (const pt of partyOrder) {
+
+        const resolvePartyForConv = (): ConversationPartyType | null => {
+          if (!targetConvId) return null;
+          for (const pt of partyOrder) {
+            if (next.parties[pt]?.conversationId === targetConvId) return pt;
+          }
+          return null;
+        };
+
+        const singlePt = resolvePartyForConv();
+        const partiesToHydrate: ConversationPartyType[] = singlePt
+          ? [singlePt]
+          : partyOrder;
+
+        for (const pt of partiesToHydrate) {
           const p = next.parties[pt];
           if (!p?.conversationId) continue;
-          const rows = await fetchConversationHistory(p.conversationId);
+          if (p.historyWindowLoaded) continue;
+          const rows = await fetchConversationHistory(p.conversationId, {
+            partyType: pt,
+          });
           next = mergeHistoryRowsIntoTripEntry(orgId, next, pt, rows);
         }
         set((s) => ({
@@ -1583,9 +1623,15 @@ export const useChatStore = create<ChatState>()(
             ledgerEventInvolvesOrg(m, viewerOrg),
         )
         .map((m) => ({ ...m, partyType }));
+      const party = entry.parties[partyType];
+      const parties =
+        party && messages.length > 0
+          ? { ...entry.parties, [partyType]: { ...party, historyWindowLoaded: true } }
+          : entry.parties;
       const merged = clearEventStreamLazySkipIfFilled(
         withLongHaulFieldsFromStream({
           ...entry,
+          parties,
           event_stream: mergeEvents(entry.event_stream, newEvts),
         }),
       );
@@ -1728,7 +1774,13 @@ export const useChatStore = create<ChatState>()(
         ? { ...existing }
         : entryFromConv(conv);
 
-      entry.parties      = { ...entry.parties, [partyType]: partyFromConv(conv) };
+      entry.parties = {
+        ...entry.parties,
+        [partyType]: {
+          ...partyFromConv(conv),
+          historyWindowLoaded: Array.isArray(conv.messages) && conv.messages.length > 0,
+        },
+      };
       entry.event_stream = mergeEvents(entry.event_stream, newEvts);
 
       if (conv.trip_status)      entry.status     = conv.trip_status;
