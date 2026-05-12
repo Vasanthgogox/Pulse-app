@@ -214,8 +214,13 @@ export function AddTripFormFields({
     ? submitting
     : !canSubmit || submitting;
   const isWide = winW >= 720;
-  /** Driver + vehicle side-by-side only on wide screens; 720px caused cramped overlap on tablets. */
+  /** Partner + allocation panes side-by-side (aggregate). */
   const allocationWideLayout = winW >= 920;
+  /**
+   * Driver phone + vehicle reg (aggregate) or assign driver + vehicle (asset) in one row.
+   * Higher than `allocationWideLayout` so laptops ~1024–1100px don’t split those fields in half.
+   */
+  const driverVehicleSideBySide = winW >= 1100;
   const showFloatingPreview = winW >= 480 && !isDesktopPreview;
   /** Cap height so the fixed bottom-right panel + validation can scroll instead of clipping off-screen. */
   const floatingPreviewMaxHeight = Math.max(
@@ -1172,20 +1177,20 @@ export function AddTripFormFields({
                     style={[
                       styles.gridRow,
                       styles.gridRowFleet,
-                      allocationWideLayout && styles.gridRowWide,
+                      driverVehicleSideBySide && styles.gridRowWide,
                     ]}
                   >
                     <View
                       style={[
                         styles.gridCol,
-                        !allocationWideLayout && styles.gridColFleetStack,
+                        !driverVehicleSideBySide && styles.gridColFleetStack,
                         invalid("assetDriver") && styles.fieldGroupRing,
                       ]}
                     >
                       <View
                         style={[
                           styles.sectionLabelRow,
-                          !allocationWideLayout && styles.sectionLabelRowFleetStack,
+                          !driverVehicleSideBySide && styles.sectionLabelRowFleetStack,
                         ]}
                       >
                         <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
@@ -1211,7 +1216,7 @@ export function AddTripFormFields({
                           <TouchableOpacity
                             style={[
                               styles.addClientBtn,
-                              !allocationWideLayout && styles.addClientBtnFleetFullWidth,
+                              !driverVehicleSideBySide && styles.addClientBtnFleetFullWidth,
                               Platform.OS === "web"
                                 ? ({ cursor: "pointer" } as ViewStyle)
                                 : null,
@@ -1318,7 +1323,7 @@ export function AddTripFormFields({
                         <ScrollView
                           style={[
                             styles.clientList,
-                            (!allocationWideLayout || isCompactMobile) &&
+                            (!driverVehicleSideBySide || isCompactMobile) &&
                               styles.clientListCompact,
                           ]}
                           nestedScrollEnabled={!isCompactMobile}
@@ -1378,15 +1383,15 @@ export function AddTripFormFields({
                     <View
                       style={[
                         styles.gridCol,
-                        !allocationWideLayout && styles.gridColFleetStack,
-                        !allocationWideLayout && styles.gridColFleetVehicle,
+                        !driverVehicleSideBySide && styles.gridColFleetStack,
+                        !driverVehicleSideBySide && styles.gridColFleetVehicle,
                         invalid("assetVehicle") && styles.fieldGroupRing,
                       ]}
                     >
                       <View
                         style={[
                           styles.sectionLabelRow,
-                          !allocationWideLayout && styles.sectionLabelRowFleetStack,
+                          !driverVehicleSideBySide && styles.sectionLabelRowFleetStack,
                         ]}
                       >
                         <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
@@ -1412,7 +1417,7 @@ export function AddTripFormFields({
                           <TouchableOpacity
                             style={[
                               styles.addClientBtn,
-                              !allocationWideLayout && styles.addClientBtnFleetFullWidth,
+                              !driverVehicleSideBySide && styles.addClientBtnFleetFullWidth,
                               Platform.OS === "web"
                                 ? ({ cursor: "pointer" } as ViewStyle)
                                 : null,
@@ -1516,7 +1521,7 @@ export function AddTripFormFields({
                         <ScrollView
                           style={[
                             styles.clientList,
-                            (!allocationWideLayout || isCompactMobile) &&
+                            (!driverVehicleSideBySide || isCompactMobile) &&
                               styles.clientListCompact,
                           ]}
                           nestedScrollEnabled={!isCompactMobile}
@@ -1809,7 +1814,7 @@ export function AddTripFormFields({
                       style={[
                         styles.gridRow,
                         styles.gridRowFleet,
-                        allocationWideLayout && styles.gridRowWide,
+                        driverVehicleSideBySide && styles.gridRowWide,
                       ]}
                     >
                       <View style={styles.gridCol}>
@@ -1859,7 +1864,12 @@ export function AddTripFormFields({
                           </Text>
                         ) : null}
                       </View>
-                      <View style={styles.gridCol}>
+                      <View
+                        style={[
+                          styles.gridCol,
+                          !driverVehicleSideBySide && styles.gridColFleetVehicle,
+                        ]}
+                      >
                         <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
                           Vehicle number *
                         </Text>
@@ -2564,6 +2574,12 @@ const styles = StyleSheet.create({
   iconField: {
     position: "relative",
     marginBottom: 12,
+    alignSelf: "stretch",
+    minWidth: 0,
+    ...Platform.select<ViewStyle>({
+      web: { width: "100%" as const },
+      default: {},
+    }),
   },
   iconInField: {
     position: "absolute",
@@ -2583,7 +2599,17 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
     backgroundColor: Theme.surfaceForm,
     color: Theme.textPrimary,
-    ...Platform.select({ web: { outlineStyle: "none" } as any }),
+    alignSelf: "stretch",
+    minWidth: 0,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+        width: "100%" as const,
+        maxWidth: "100%" as const,
+        boxSizing: "border-box" as const,
+      } as any,
+      default: {},
+    }),
   },
   inPhoneOuter: {
     flexDirection: "row",
@@ -2597,6 +2623,12 @@ const styles = StyleSheet.create({
     paddingRight: 12,
     gap: 6,
     marginBottom: 12,
+    alignSelf: "stretch",
+    minWidth: 0,
+    ...Platform.select<ViewStyle>({
+      web: { width: "100%" as const, boxSizing: "border-box" as const },
+      default: {},
+    }),
   },
   inPhoneFlag: {
     fontSize: 20,

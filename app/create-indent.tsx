@@ -805,10 +805,9 @@ export default function CreateIndentScreen() {
           await AsyncStorage.removeItem(`indent_draft_${orgId}`);
           await AsyncStorage.removeItem(`indent_draft_id_${orgId}`);
           invalidateIndents(orgId);
-          router.replace({
-            pathname: ROUTES.TABS.NETWORK,
-            params: { tab: "load", indentId: indent.id },
-          } as import("expo-router").Href);
+          router.replace(
+            `/indent/${indent.id}` as import("expo-router").Href,
+          );
         }
         return;
       }
@@ -823,10 +822,9 @@ export default function CreateIndentScreen() {
         await AsyncStorage.removeItem(`indent_draft_${orgId}`);
         await AsyncStorage.removeItem(`indent_draft_id_${orgId}`);
         invalidateIndents(orgId);
-        router.replace({
-          pathname: ROUTES.TABS.NETWORK,
-          params: { tab: "load", indentId: indent.id },
-        } as import("expo-router").Href);
+        router.replace(
+          `/indent/${indent.id}` as import("expo-router").Href,
+        );
       }
     } finally {
       setSubmitting(false);
