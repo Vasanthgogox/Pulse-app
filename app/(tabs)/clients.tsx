@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { getCapabilitiesFromProfile, canAccessClients } from '@/lib/capabilities';
-import { useClientsQuery } from '@/lib/queries';
+import { useClientsQuery } from '@/lib/queries/useClientsQuery';
 import { useRefreshWithFeedback } from '@/lib/useRefreshWithFeedback';
 import { ListScreenLayout } from '@/components/ListScreenLayout';
 import { SummaryCard } from '@/components/SummaryCard';

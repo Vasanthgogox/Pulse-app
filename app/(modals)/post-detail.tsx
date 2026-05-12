@@ -4,13 +4,12 @@
  */
 import Theme from '@/constants/Theme';
 import { BidSheet } from '@/features/network/components/BidSheet';
+import { useNetworkFeedQuery, useAfterPostDeleted } from '@/lib/queries/usePostsQuery';
 import {
-  useNetworkFeedQuery,
   useBidsForPostQuery,
   useAcceptBidMutation,
   useRejectBidMutation,
-  useAfterPostDeleted,
-} from '@/lib/queries';
+} from '@/lib/queries/useBidsQuery';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { deactivatePost, isPostVisibleForOrg, type PostRow } from '@/features/network/services/posts.service';
 import { type BidRow } from '@/features/network/services/bids.service';

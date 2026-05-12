@@ -10,8 +10,8 @@ import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { getClientsByOrganization, type ClientRow } from "@/features/clients";
-import { createIndent, type CreateIndentInput } from "@/features/indents";
+import { getClientsByOrganization, type ClientRow } from "@/features/clients/services/clients.service";
+import { createIndent, type CreateIndentInput } from "@/features/indents/services/indents.service";
 import { LOAD_TYPES } from "@/features/indents/constants";
 import {
     getIndentById,
@@ -30,7 +30,7 @@ import {
     getCapabilitiesFromProfile,
     getEffectivePermissions,
 } from "@/lib/capabilities";
-import { useInvalidateIndents } from "@/lib/queries";
+import { useInvalidateIndents } from "@/lib/queries/useIndentsQuery";
 import { ROUTES } from "@/lib/routes";
 import { useSafeBack } from "@/lib/useSafeBack";
 import {

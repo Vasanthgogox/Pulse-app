@@ -18,7 +18,9 @@ import {
 import { getSignedAvatarUrl, pickAndUploadOrgLogo, updateOrganizationLogo } from "@/lib/avatarUpload";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import { getCapabilitiesFromProfile } from "@/lib/capabilities";
-import { useClientsQuery, useDriversQuery, useTripsQuery } from "@/lib/queries";
+import { useClientsQuery } from "@/lib/queries/useClientsQuery";
+import { useDriversQuery } from "@/lib/queries/useDriversQuery";
+import { useTripsQuery } from "@/lib/queries/useTripsQuery";
 import { queryKeys } from "@/lib/queryKeys";
 import { ROUTES } from "@/lib/routes";
 import FontAwesome from "@expo/vector-icons/FontAwesome";

@@ -4,11 +4,12 @@
  */
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { createLedgerEntry } from '@/features/finance';
-import { AddTripModal, type AddTripFormData } from '@/features/trips';
+import { createLedgerEntry } from '@/features/finance/services/finance.service';
+import { AddTripModal } from '@/features/trips/components/add-trip';
+import type { AddTripFormData } from '@/features/trips/components/add-trip';
 import { assignTripDriverByPhone, createTrip, createTripWithOtp } from '@/features/trips/services/trips.service';
 import type { AddTripCompleteResult } from '@/features/trips/components/add-trip/types';
-import { useInvalidateTrips } from '@/lib/queries';
+import { useInvalidateTrips } from '@/lib/queries/useTripsQuery';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View } from 'react-native';

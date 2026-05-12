@@ -19,7 +19,9 @@ import {
   type ConnectionRequestRow,
   looksLikeConnectionRateLimitError,
 } from "@/services/connectionRequestsService";
-import { useConnectionRequestsSentQuery, useIndentsQuery, useInvalidateNetwork, useNetworkFeedQuery } from '@/lib/queries';
+import { useConnectionRequestsSentQuery, useInvalidateNetwork } from '@/lib/queries/useNetworkQueries';
+import { useIndentsQuery } from '@/lib/queries/useIndentsQuery';
+import { useNetworkFeedQuery } from '@/lib/queries/usePostsQuery';
 import { queryKeys } from '@/lib/queryKeys';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';

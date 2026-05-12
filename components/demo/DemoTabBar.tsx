@@ -18,10 +18,12 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import {
   useConnectionRequestsReceivedQuery,
   useConnectionRequestsSentQuery,
+} from "@/lib/queries/useNetworkQueries";
+import {
   useIndentsQuery,
   useMarketIndentsQuery,
   useMyDirectQuotesQuery,
-} from "@/lib/queries";
+} from "@/lib/queries/useIndentsQuery";
 import { setMobileNetworkDockExpanded } from "@/lib/mobileDockState";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { useIntegratedChat } from "@/features/chat/contexts/IntegratedChatContext";

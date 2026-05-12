@@ -7,16 +7,12 @@ import Layout from "@/constants/Layout";
 import { useAuth } from "@/contexts/AuthContext";
 import { BroadcastPickIndentCard } from "@/features/network/components/BroadcastPickIndentCard";
 import { createPost, type PostType } from "@/features/network/services/posts.service";
-import { createIndent, getIndentDisplayNumber } from "@/features/indents";
+import { createIndent, getIndentDisplayNumber } from "@/features/indents/services/indents.service";
 import { indentCanBroadcastToPulseNetwork } from "@/features/network/utils/indentBroadcastEligibility.util";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import {
-  useInvalidatePosts,
-  useIndentsQuery,
-  useDirectQuoteCountsQuery,
-  useInvalidateIndents,
-  useVehiclesQuery,
-} from "@/lib/queries";
+import { useInvalidatePosts } from "@/lib/queries/usePostsQuery";
+import { useIndentsQuery, useDirectQuoteCountsQuery, useInvalidateIndents } from "@/lib/queries/useIndentsQuery";
+import { useVehiclesQuery } from "@/lib/queries/useVehiclesQuery";
 import { ROUTES } from "@/lib/routes";
 import { useRouter } from "expo-router";
 import {

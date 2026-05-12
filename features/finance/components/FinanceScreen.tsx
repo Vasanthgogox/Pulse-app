@@ -10,7 +10,7 @@ import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { AIInsightsPanel } from "@/features/ai";
+import { AIInsightsPanel } from "@/features/ai/components/AIInsightsPanel";
 import type {
     ClientRow,
     UpdateClientData,

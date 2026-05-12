@@ -28,17 +28,17 @@ import {
   type ConnectionRequestRow,
 } from "@/services/connectionRequestsService";
 import { getOrCreateNetworkConversation } from "@/features/chat/services/chat.service";
+import { useClientsQuery } from "@/lib/queries/useClientsQuery";
 import {
-  useClientsQuery,
   useConnectionRequestsReceivedQuery,
   useConnectionRequestsSentQuery,
   useDriverInvitesSentQuery,
-  useDriversQuery,
   useInvalidateNetwork,
-  useNetworkFeedQuery,
-  useRealtimeNetworkInvalidation,
-  useSuppliersQuery,
-} from "@/lib/queries";
+} from "@/lib/queries/useNetworkQueries";
+import { useDriversQuery } from "@/lib/queries/useDriversQuery";
+import { useNetworkFeedQuery } from "@/lib/queries/usePostsQuery";
+import { useRealtimeNetworkInvalidation } from "@/lib/queries/useRealtimeInvalidation";
+import { useSuppliersQuery } from "@/lib/queries/useSuppliersQuery";
 import { useRouter } from "expo-router";
 import {
   Activity,

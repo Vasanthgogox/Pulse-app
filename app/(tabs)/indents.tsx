@@ -5,13 +5,13 @@ import { SummaryCard } from "@/components/SummaryCard";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { getIndentDisplayNumber } from "@/features/indents";
+import { getIndentDisplayNumber } from "@/features/indents/services/indents.service";
 import {
     canAccessIndents,
     getCapabilitiesFromProfile,
 } from "@/lib/capabilities";
 import { formatINR } from "@/lib/format";
-import { useIndentsQuery } from "@/lib/queries";
+import { useIndentsQuery } from "@/lib/queries/useIndentsQuery";
 import { useRefreshWithFeedback } from "@/lib/useRefreshWithFeedback";
 import { useRouter } from "expo-router";
 import { Package } from "lucide-react-native";

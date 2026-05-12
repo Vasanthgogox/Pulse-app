@@ -14,7 +14,9 @@ import {
 } from "@/features/network/services/posts.service";
 import { type StoryViewRow } from "@/features/network/services/story-views.service";
 import { formatINR } from "@/lib/format";
-import { useNetworkFeedQuery, useAfterPostDeleted, useInvalidatePosts, useMyBidQuery, useStoryViewsQuery, useRecordStoryViewMutation } from "@/lib/queries";
+import { useNetworkFeedQuery, useAfterPostDeleted, useInvalidatePosts } from "@/lib/queries/usePostsQuery";
+import { useMyBidQuery } from "@/lib/queries/useBidsQuery";
+import { useStoryViewsQuery, useRecordStoryViewMutation } from "@/lib/queries/useStoryViewsQuery";
 import { confirmDialog } from "@/lib/confirmDialog";
 import { ROUTES } from "@/lib/routes";
 import { useLocalSearchParams, useRouter } from "expo-router";

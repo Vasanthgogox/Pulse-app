@@ -11,22 +11,20 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { LedgerReportModal } from "@/features/finance";
+import { LedgerReportModal } from "@/features/finance/components/LedgerReportModal";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
+import { buildTripHubPartyMetaByTripId } from "@/features/trips/utils/tripHubPartyMeta";
 import {
-  buildTripHubPartyMetaByTripId,
   summarizeTripLedgerForHub,
   TripsHubTripCard,
+  TripsHubTableView,
+  linkedOrgAvatarFields,
   tripFinanceAdjForHubLookup,
   tripHubCost,
   tripHubRevenue,
-} from "@/features/trips";
-import type { TripRow } from "@/features/trips/services/trips.service";
-import {
-  TripsHubTableView,
-  linkedOrgAvatarFields,
 } from "@/features/trips/components/TripsHubViews";
+import type { TripRow } from "@/features/trips/services/trips.service";
 import {
   classifyTripMetric,
   countTripsByMetric,
@@ -40,19 +38,21 @@ import { queryKeys } from "@/lib/queryKeys";
 import { shouldShowAggregateTripKindPill } from "@/lib/driverUtils";
 import type { TripHubPartyMeta } from "@/features/trips/utils/tripHubPartyMeta";
 import { formatLedgerDate } from "@/lib/format";
+import { useClientsQuery } from "@/lib/queries/useClientsQuery";
+import { useDriversQuery } from "@/lib/queries/useDriversQuery";
+import { useSuppliersQuery } from "@/lib/queries/useSuppliersQuery";
+import { useTransactionsQuery } from "@/lib/queries/useTransactionsQuery";
+import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
+import { useTripSubcontractsQuery } from "@/lib/queries/useFinanceEntityQueries";
 import {
   useAssignmentAuditQuery,
-  useClientsQuery,
-  useDriversQuery,
+  useShipperDisplayNamesQuery,
+  useTripsQuery,
+} from "@/lib/queries/useTripsQuery";
+import {
   useRealtimeTransactionsInvalidation,
   useRealtimeTripsInvalidation,
-  useShipperDisplayNamesQuery,
-  useSuppliersQuery,
-  useTransactionsQuery,
-  useTripFinanceAdjustmentsMap,
-  useTripSubcontractsQuery,
-  useTripsQuery,
-} from "@/lib/queries";
+} from "@/lib/queries/useRealtimeInvalidation";
 import { supabase } from "@/lib/supabase";
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import FontAwesome from "@expo/vector-icons/FontAwesome";

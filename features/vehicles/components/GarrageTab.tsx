@@ -6,7 +6,9 @@ import { LiquidFillPill } from "@/components/LiquidFillPill";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import Theme from "@/constants/Theme";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
-import type { EntityListFilter, FinancialRowData, LedgerRow } from "@/features/finance";
+import type { LedgerRow } from "@/features/finance/services/finance.service";
+import type { FinancialRowData } from "@/features/finance/components/FinancialRow";
+import type { EntityListFilter } from "@/features/finance/components/TreasurySummaryCard";
 import { DriverStatusDot } from "@/features/finance/components/FinancialRow";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import { getTripDisplayNumber } from "@/features/trips/services/trips.service";
@@ -32,7 +34,6 @@ import {
     buildVehiclePnLList,
     resolveVehicleIdForTrip,
     type GarragePeriodValue,
-    type TripPnLRow,
     type VehiclePnLRow,
 } from "../pnl";
 import type { VehicleRow } from "../services/vehicles.service";
@@ -173,21 +174,20 @@ export function GarrageTab({
   );
 
   const q = searchQuery.trim().toLowerCase();
-  const filteredList = useMemo(() => {
-    if (viewTab === "trips") {
-      let list = tripsList;
-      if (q) {
-        list = list.filter(
-          (r) =>
-            (r.missionId ?? "").toLowerCase().includes(q) ||
-            (r.clientName ?? "").toLowerCase().includes(q) ||
-            vehicleNameByTrip(r.trip)
-              .toLowerCase()
-              .includes(q),
-        );
-      }
-      return list;
+  const filteredTripsList = useMemo(() => {
+    let list = tripsList;
+    if (q) {
+      list = list.filter(
+        (r) =>
+          (r.missionId ?? "").toLowerCase().includes(q) ||
+          (r.clientName ?? "").toLowerCase().includes(q) ||
+          vehicleNameByTrip(r.trip).toLowerCase().includes(q),
+      );
     }
+    return list;
+  }, [tripsList, q, vehicles]);
+
+  const filteredVehiclesList = useMemo(() => {
     let list = vehiclesList;
     if (viewTab === "revenue")
       list = [...list].sort((a, b) => b.sales - a.sales);
@@ -203,17 +203,29 @@ export function GarrageTab({
     if (entityFilter === "has_due") list = list.filter((r) => r.expense > 0);
     if (entityFilter === "no_due") list = list.filter((r) => r.expense === 0);
     return list;
-  }, [vehiclesList, tripsList, viewTab, q, entityFilter, vehicles]);
+  }, [vehiclesList, viewTab, q, entityFilter]);
 
+  const activeFilteredLength =
+    viewTab === "trips" ? filteredTripsList.length : filteredVehiclesList.length;
   const garrageTableResetKey = useMemo(
     () =>
-      `${viewTab}|${period}|${q}|${entityFilter}|${filteredList.length}|${searchQuery}`,
-    [viewTab, period, q, entityFilter, filteredList.length, searchQuery],
+      `${viewTab}|${period}|${q}|${entityFilter}|${activeFilteredLength}|${searchQuery}`,
+    [viewTab, period, q, entityFilter, activeFilteredLength, searchQuery],
   );
   const {
-    visible: visibleGarrageRows,
-    onScroll: onGarrageTablePaginatedScroll,
-  } = usePaginatedScroll(filteredList, { resetKey: garrageTableResetKey });
+    visible: visibleTripRows,
+    onScroll: onTripTablePaginatedScroll,
+  } = usePaginatedScroll(viewTab === "trips" ? filteredTripsList : [], {
+    resetKey: garrageTableResetKey,
+    enabled: viewTab === "trips",
+  });
+  const {
+    visible: visibleVehicleRows,
+    onScroll: onVehicleTablePaginatedScroll,
+  } = usePaginatedScroll(viewTab !== "trips" ? filteredVehiclesList : [], {
+    resetKey: garrageTableResetKey,
+    enabled: viewTab !== "trips",
+  });
 
   const handleGarrageTableScroll = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -221,9 +233,15 @@ export function GarrageTab({
         onScroll?: (ev?: NativeSyntheticEvent<NativeScrollEvent>) => void;
       };
       p.onScroll?.(e);
-      onGarrageTablePaginatedScroll(e);
+      if (viewTab === "trips") onTripTablePaginatedScroll(e);
+      else onVehicleTablePaginatedScroll(e);
     },
-    [tabBarScrollProps, onGarrageTablePaginatedScroll],
+    [
+      tabBarScrollProps,
+      viewTab,
+      onTripTablePaginatedScroll,
+      onVehicleTablePaginatedScroll,
+    ],
   );
 
   useEffect(() => {
@@ -234,9 +252,9 @@ export function GarrageTab({
     return <Text style={styles.loading}>Loading…</Text>;
   }
 
-  const handleRowPress = (row: (typeof filteredList)[number]) => {
+  const handleRowPress = (row: VehiclePnLRow) => {
     if (!onRowSelect) return;
-    const vehicleRow = row as VehiclePnLRow;
+    const vehicleRow = row;
     const data: FinancialRowData = {
       id: row.id,
       name: "name" in vehicleRow ? vehicleRow.name : "",
@@ -324,12 +342,12 @@ export function GarrageTab({
         </View>
         <View style={styles.listCard}>
           {viewTab === "trips" ? (
-            filteredList.length === 0 ? (
+            filteredTripsList.length === 0 ? (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyText}>No trips in this period.</Text>
               </View>
             ) : (
-              (visibleGarrageRows as TripPnLRow[]).map((row) => (
+              visibleTripRows.map((row) => (
                 <TouchableOpacity
                   key={row.id}
                   style={styles.listRow}
@@ -373,14 +391,14 @@ export function GarrageTab({
                 </TouchableOpacity>
               ))
             )
-          ) : filteredList.length === 0 ? (
+          ) : filteredVehiclesList.length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyText}>
                 No vehicle activity in this period.
               </Text>
             </View>
           ) : (
-            (visibleGarrageRows as typeof vehiclesList).map((row) => (
+            visibleVehicleRows.map((row) => (
               <TouchableOpacity
                 key={row.id}
                 style={styles.listRow}
