@@ -872,6 +872,15 @@ export default function DriverDashboard() {
         ) ?? null
       : null);
 
+  /** Trip UI when org-linked or phone-preassigned before a `drivers` row exists. */
+  const showDriverTripDashboard = Boolean(
+    driver ||
+      activeMission ||
+      effectiveFirstIncoming != null ||
+      otpClaimTripId != null ||
+      assignmentFeedback != null,
+  );
+
   const openOtpClaim = useCallback((trip: tripsService.TripRow) => {
     setAcceptError(null);
     setOtpError(null);
@@ -2330,7 +2339,7 @@ export default function DriverDashboard() {
                                   ))}
                               </View>
                             )
-                          : !driver
+                          : !driver && !showDriverTripDashboard
                             ? (
                                 <View style={[styles.centerCardWrap, styles.noDriverWrap, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                                   <View style={[styles.offlineIconWrap, { backgroundColor: colors.whiteMuted }]}>
@@ -2680,7 +2689,9 @@ export default function DriverDashboard() {
                   ))}
               </View>
             )}
-            {!driver && invites.filter((i) => i.status === 'pending').length === 0 && (
+            {!driver &&
+              invites.filter((i) => i.status === 'pending').length === 0 &&
+              !showDriverTripDashboard && (
               <View style={[styles.centerCardWrap, styles.noDriverWrap, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                 <View style={[styles.offlineIconWrap, { backgroundColor: colors.whiteMuted }]}>
                   <FontAwesome name="envelope-open" size={40} color={colors.textMuted} />
@@ -2691,7 +2702,7 @@ export default function DriverDashboard() {
                 </Text>
               </View>
             )}
-            {driver ? (
+            {showDriverTripDashboard ? (
               activeMission ? (
           <DriverTripFlowCard
             trip={activeMission}
@@ -2709,7 +2720,7 @@ export default function DriverDashboard() {
               fetch();
             }}
           />
-        ) : !isOnline ? (
+        ) : !isOnline && !effectiveFirstIncoming ? (
           <View
             style={[
               styles.centerCardWrap,

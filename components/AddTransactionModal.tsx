@@ -57,6 +57,7 @@ import {
 import DateTimePicker from "@react-native-community/datetimepicker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, {
+  createElement,
   useCallback,
   useDeferredValue,
   useEffect,
@@ -804,6 +805,9 @@ export function AddTransactionModal({
   const [syncDateFieldFocused, setSyncDateFieldFocused] = useState(false);
   const [syncDateDraft, setSyncDateDraft] = useState("");
   const [ledgerSyncDatePickerVisible, setLedgerSyncDatePickerVisible] = useState(false);
+  /** Web HTML `input type="date"` value (`YYYY-MM-DD`) while the ledger sync date modal is open. */
+  const [ledgerWebDateDraft, setLedgerWebDateDraft] = useState("");
+  const ledgerWebHtmlDateInputRef = useRef<HTMLInputElement | null>(null);
   const [entryDate, setEntryDate] = useState<string>(
     () =>
       initialEntry?.transaction_date?.slice(0, 10) ??
@@ -2594,6 +2598,7 @@ export function AddTransactionModal({
 
   const handleClose = () => {
     setLedgerSubmitConfirmVisible(false);
+    setLedgerSyncDatePickerVisible(false);
     setShowPartyPicker(false);
     setShowTripPicker(false);
     setShowCategoryPicker(false);
@@ -2615,7 +2620,57 @@ export function AddTransactionModal({
     setShowDriverForSalaryPicker(false);
     setShowVehiclePicker(false);
     setShowPaymentPicker(false);
+    setLedgerSyncDatePickerVisible(false);
   };
+
+  const beginLedgerSyncDatePick = useCallback(() => {
+    Keyboard.dismiss();
+    if (Platform.OS === "web") {
+      setLedgerWebDateDraft(
+        /^\d{4}-\d{2}-\d{2}$/.test(entryDate)
+          ? entryDate
+          : ledgerIsoFromDate(new Date()),
+      );
+    }
+    setLedgerSyncDatePickerVisible(true);
+  }, [entryDate]);
+
+  const commitWebLedgerSyncDate = useCallback(() => {
+    const t = ledgerWebDateDraft.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(t)) {
+      setLedgerSyncDatePickerVisible(false);
+      return;
+    }
+    let iso = t;
+    const dt = ledgerDateFromIso(iso);
+    if (dt.getTime() < LEDGER_DATE_PICKER_MIN.getTime()) {
+      iso = ledgerIsoFromDate(LEDGER_DATE_PICKER_MIN);
+    } else if (dt.getTime() > LEDGER_DATE_PICKER_MAX.getTime()) {
+      iso = ledgerIsoFromDate(LEDGER_DATE_PICKER_MAX);
+    }
+    setEntryDate(iso);
+    setSyncDateFieldFocused(false);
+    setSyncDateDraft(formatLedgerDateDdMmYyyy(iso));
+    setLedgerSyncDatePickerVisible(false);
+  }, [ledgerWebDateDraft]);
+
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof window === "undefined") return;
+    if (!ledgerSyncDatePickerVisible) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setLedgerSyncDatePickerVisible(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [ledgerSyncDatePickerVisible]);
+
+  useEffect(() => {
+    if (Platform.OS !== "web" || !ledgerSyncDatePickerVisible) return;
+    const id = requestAnimationFrame(() => {
+      ledgerWebHtmlDateInputRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [ledgerSyncDatePickerVisible]);
 
   const handleSubmit = () => {
     if (!canSubmit) return;
@@ -3083,11 +3138,7 @@ export function AddTransactionModal({
             </Text>
             <TouchableOpacity
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              onPress={() => {
-                Keyboard.dismiss();
-                if (Platform.OS === "web") return;
-                setLedgerSyncDatePickerVisible(true);
-              }}
+              onPress={beginLedgerSyncDatePick}
               accessibilityRole="button"
               accessibilityLabel="Open calendar"
             >
@@ -3177,7 +3228,14 @@ export function AddTransactionModal({
                 keyboardType="numbers-and-punctuation"
                 maxLength={10}
               />
-              <CalendarDays size={18} color={Theme.primaryLight} strokeWidth={LEDGER_LUCIDE_STROKE} />
+              <TouchableOpacity
+                onPress={beginLedgerSyncDatePick}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                accessibilityRole="button"
+                accessibilityLabel="Pick sync date"
+              >
+                <CalendarDays size={18} color={Theme.primaryLight} strokeWidth={LEDGER_LUCIDE_STROKE} />
+              </TouchableOpacity>
             </View>
           ) : (
             <Pressable
@@ -3189,10 +3247,7 @@ export function AddTransactionModal({
                 pressed && styles.syncDateFieldWrapPressed,
                 entryDateError && styles.syncDateFieldWrapError,
               ]}
-              onPress={() => {
-                Keyboard.dismiss();
-                setLedgerSyncDatePickerVisible(true);
-              }}
+              onPress={beginLedgerSyncDatePick}
               accessibilityRole="button"
               accessibilityLabel="Pick sync date"
             >
@@ -3623,6 +3678,81 @@ export function AddTransactionModal({
         </Modal>
       ) : null;
 
+    const ledgerSyncWebPicker =
+      ledgerSyncDatePickerVisible && Platform.OS === "web" ? (
+        <Modal
+          transparent
+          visible
+          animationType="fade"
+          onRequestClose={() => setLedgerSyncDatePickerVisible(false)}
+        >
+          <View style={styles.ledgerWebDatePickerBackdrop}>
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              onPress={() => setLedgerSyncDatePickerVisible(false)}
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss date picker"
+            />
+            <View style={styles.ledgerWebDatePickerCard} pointerEvents="box-none">
+              <Text style={styles.ledgerWebDatePickerTitle}>Select sync date</Text>
+              <View style={styles.ledgerWebDateInputWrap} pointerEvents="auto">
+                {createElement("input", {
+                  ref: (node: HTMLInputElement | null) => {
+                    ledgerWebHtmlDateInputRef.current = node;
+                  },
+                  type: "date",
+                  value: ledgerWebDateDraft,
+                  min: ledgerIsoFromDate(LEDGER_DATE_PICKER_MIN),
+                  max: ledgerIsoFromDate(LEDGER_DATE_PICKER_MAX),
+                  onChange: (e: { target: { value: string } }) =>
+                    setLedgerWebDateDraft(e.target.value),
+                  onKeyDown: (e: { key: string; preventDefault: () => void }) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      commitWebLedgerSyncDate();
+                    }
+                  },
+                  style: {
+                    width: "100%",
+                    fontSize: 17,
+                    fontWeight: "600" as const,
+                    paddingVertical: 12,
+                    paddingHorizontal: 12,
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderStyle: "solid",
+                    borderColor: Theme.borderMedium,
+                    boxSizing: "border-box",
+                    color: Theme.textPrimaryDark,
+                    backgroundColor: Theme.surfaceForm,
+                  },
+                } as Record<string, unknown>)}
+              </View>
+              <View style={styles.ledgerWebDatePickerActions}>
+                <TouchableOpacity
+                  style={styles.ledgerWebDatePickerBtnGhost}
+                  onPress={() => setLedgerSyncDatePickerVisible(false)}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel date selection"
+                >
+                  <Text style={styles.ledgerWebDatePickerBtnGhostText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.ledgerWebDatePickerBtnPrimary}
+                  onPress={commitWebLedgerSyncDate}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel="Confirm sync date"
+                >
+                  <Text style={styles.ledgerWebDatePickerBtnPrimaryText}>Done</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      ) : null;
+
     return (
       <>
       <View
@@ -3777,6 +3907,7 @@ export function AddTransactionModal({
       </View>
       {ledgerSyncAndroidPicker}
       {ledgerSyncIosPicker}
+      {ledgerSyncWebPicker}
       </>
     );
   };
@@ -6259,6 +6390,65 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800",
     color: Theme.primary,
+  },
+  ledgerWebDatePickerBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  ledgerWebDatePickerCard: {
+    width: "100%",
+    maxWidth: 340,
+    zIndex: 1,
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 16,
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderMedium,
+  },
+  ledgerWebDatePickerTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    marginBottom: 14,
+  },
+  ledgerWebDateInputWrap: {
+    width: "100%",
+    marginBottom: 18,
+  },
+  ledgerWebDatePickerActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    gap: 12,
+  },
+  ledgerWebDatePickerBtnGhost: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: Theme.surfaceForm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+  },
+  ledgerWebDatePickerBtnGhostText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+  },
+  ledgerWebDatePickerBtnPrimary: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    backgroundColor: Theme.primary,
+  },
+  ledgerWebDatePickerBtnPrimaryText: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: Theme.screenBackground,
   },
   syncDateInput: {
     flex: 1,

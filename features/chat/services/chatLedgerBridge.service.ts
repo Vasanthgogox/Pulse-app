@@ -237,41 +237,15 @@ export async function acknowledgeLedgerEventMessage(
 ): Promise<void> {
   const acknowledgedAt = new Date().toISOString();
 
-  const { data: msg } = await supabase()
-    .from("trip_messages")
-    .select("metadata")
-    .eq("id", messageId)
-    .single();
+  const { error } = await supabase().rpc("acknowledge_ledger_messages_for_transaction", {
+    p_message_id: messageId,
+    p_conversation_id: conversationId,
+    p_acknowledged_at: acknowledgedAt,
+  });
 
-  if (!msg) return;
-
-  const updatedMeta = { ...(msg.metadata ?? {}), acknowledged_at: acknowledgedAt };
-
-  await supabase()
-    .from("trip_messages")
-    .update({ metadata: updatedMeta })
-    .eq("id", messageId);
-
-  // Also update mirror message in same conversation (same transaction_id)
-  const txId = (msg.metadata as LedgerEventMetadata)?.transaction_id;
-  if (!txId) return;
-
-  const { data: mirrors } = await supabase()
-    .from("trip_messages")
-    .select("id, metadata")
-    .eq("conversation_id", conversationId)
-    .eq("message_type", "ledger_event")
-    .neq("id", messageId)
-    .filter("metadata->>transaction_id", "eq", txId);
-
-  await Promise.all(
-    (mirrors ?? []).map((mirror) =>
-      supabase()
-        .from("trip_messages")
-        .update({ metadata: { ...mirror.metadata, acknowledged_at: acknowledgedAt } })
-        .eq("id", mirror.id)
-    )
-  );
+  if (error) {
+    throw new Error(error.message);
+  }
 }
 
 /**

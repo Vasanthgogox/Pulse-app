@@ -1403,6 +1403,14 @@ export default function DriverRadarScreen() {
     : null;
 
   const hasIncomingTrip = visibleIncomingTrips.length > 0;
+  /** Assign / OTP / trip-flow when org-linked or phone-preassigned before a `drivers` row exists. */
+  const showDriverTripDashboard = Boolean(
+    driver ||
+      activeMission ||
+      mergedIncomingTrips.length > 0 ||
+      otpClaimTripId ||
+      assignmentFeedback != null,
+  );
   const hasAssignableIncomingTrip = visibleAssignableIncomingTrips.length > 0;
   const hasSingleAssignableIncomingTrip =
     visibleAssignableIncomingTrips.length === 1;
@@ -3924,9 +3932,7 @@ export default function DriverRadarScreen() {
   const renderDriverDashboardTripInner = (mapSheet: boolean) => (
     <>
       {/* Only show separate OTP block when first pending OTP (non-roster) is not already the main assignment card */}
-      {!shouldShowMap &&
-        !hasIncomingTrip &&
-        pendingOtpTripsRequiringOtp.length > 0 &&
+      {pendingOtpTripsRequiringOtp.length > 0 &&
         !(
           effectiveFirstIncoming &&
           pendingOtpTripsRequiringOtp[0]?.id === effectiveFirstIncoming.id
@@ -3986,9 +3992,7 @@ export default function DriverRadarScreen() {
             </TouchableOpacity>
           </View>
         )}
-      {!shouldShowMap &&
-        !hasIncomingTrip &&
-        pendingOtpTripsRequiringOtp.length > 0 &&
+      {pendingOtpTripsRequiringOtp.length > 0 &&
         !(
           effectiveFirstIncoming &&
           pendingOtpTripsRequiringOtp[0]?.id === effectiveFirstIncoming.id
@@ -4096,7 +4100,9 @@ export default function DriverRadarScreen() {
             ))}
           </View>
         )}
-      {!driver && (
+      {!driver &&
+        invites.filter((i) => i.status === "pending").length === 0 &&
+        !showDriverTripDashboard && (
         <View
           style={[
             styles.centerCardWrap,
@@ -4130,7 +4136,7 @@ export default function DriverRadarScreen() {
           </Text>
         </View>
       )}
-      {driver ? (
+      {showDriverTripDashboard ? (
         activeMission ? (
           <>
             <DriverTripFlowCard
