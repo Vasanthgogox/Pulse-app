@@ -55,12 +55,17 @@ BEGIN
   );
 
   UPDATE public.trip_messages
-  SET    metadata = COALESCE(metadata, '{}'::jsonb)
-                    || jsonb_build_object(
-                         'rating',        to_jsonb(p_rating),
-                         'submitted_at',  to_jsonb(v_submitted),
-                         'submitted_score', to_jsonb(p_rating)
-                       )
+  SET    metadata =
+           jsonb_set(
+             COALESCE(metadata, '{}'::jsonb),
+             '{rating}',
+             to_jsonb(p_rating),
+             true
+           )
+           || jsonb_build_object(
+                'submitted_at',     to_jsonb(v_submitted),
+                'submitted_score', to_jsonb(p_rating)
+              )
   WHERE  id = p_msg_id
     AND  (metadata->>'submitted_at') IS NULL;
 
@@ -81,4 +86,4 @@ $$;
 GRANT EXECUTE ON FUNCTION public.confirm_trip_feedback(uuid, integer) TO authenticated;
 
 COMMENT ON FUNCTION public.confirm_trip_feedback(uuid, integer) IS
-  'One-tap chat feedback: sets metadata.rating (+ submitted_at) on the feedback_request row; no ratings table write.';
+  'One-tap chat feedback: jsonb_set(metadata,{rating}) plus submitted_at/submitted_score; no ratings table insert.';

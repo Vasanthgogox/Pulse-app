@@ -840,7 +840,8 @@ export async function seedTripConversationFeedbackPromptIfMissing(params: {
 }
 
 /**
- * Persists `ratings` row (org → rated party) and merges submit state into the chat message metadata.
+ * Atomic in-chat debrief: `confirm_trip_feedback` patches `trip_messages.metadata` (rating)
+ * — no new rows; rating is returned on the next windowed bootstrap read.
  */
 export async function submitTripChatFeedback(params: {
   ratingOrganizationId: string;
