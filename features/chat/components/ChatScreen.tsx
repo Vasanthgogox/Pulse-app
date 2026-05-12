@@ -1,28 +1,79 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { NativeScrollEvent, NativeSyntheticEvent } from "react-native";
+import { PartyAvatar } from "@/components/PartyAvatar";
+import Theme from "@/constants/Theme";
+import { useAuth } from "@/contexts/AuthContext";
+import { useOrganization } from "@/contexts/OrganizationContext";
+import { CHAT_ACCENT, CHAT_ACCENT_BORDER, CHAT_ACCENT_SOFT, CHAT_ICON_MUTED } from "@/features/chat/chatTheme";
+import { MessageTick } from "@/features/chat/components/MessageTick";
+import { SystemEventCard } from "@/features/chat/components/SystemEventCard";
 import {
-  ActivityIndicator,
-  Animated,
-  Alert,
-  Easing,
-  FlatList,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-  useWindowDimensions,
-} from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+  INTEGRATED_QUICK_MESSAGES,
+  IntegratedChat,
+  useIntegratedChat,
+  type NetworkPartner,
+} from "@/features/chat/contexts/IntegratedChatContext";
+import {
+  QUICK_MESSAGES,
+  TripConversation,
+  useTripChat,
+} from "@/features/chat/contexts/TripChatContext";
+import { useMarkSeen } from "@/features/chat/hooks/useMarkSeen";
+import {
+  getMessagesByConversation,
+  getTripsForCompose,
+  sendDocumentShareMessage,
+  TRIP_CHAT_HISTORY_PAGE,
+  type TripForCompose,
+} from "@/features/chat/services/chat.service";
+import {
+  confirmLedgerToAccountingBooks,
+  disputeLedgerEventMessage,
+} from "@/features/chat/services/chatLedgerBridge.service";
+import { chatStore, useConversation, useConversationsByTrip, useTripMeta } from "@/features/chat/store/chatStore";
+import {
+  resolveCounterpartyPartyTypeForViewer,
+  resolveOutgoingDeliveryStatus,
+  useChatStore,
+  type TripEntry,
+} from "@/features/chat/store/useChatStore";
+import { buildTripMessageListLayoutMeta } from "@/features/chat/utils/chatMessageListLayout";
+import { applyContractualHubPartyIsolation } from "@/features/chat/utils/contractHubPartyIsolation.util";
+import { dedupeTripStatusBroadcastsForLane } from "@/features/chat/utils/dedupeTripStatusBroadcastForLane.util";
+import {
+  dedupeFeedbackRequestMessages,
+  mergeTripChatMessagesWithFeedbackRatings,
+} from "@/features/chat/utils/mergeTripFeedbackMessages.util";
+import { formatChatPartyName } from "@/features/chat/utils/partyDisplay";
+import {
+  isTerminalTripStatus,
+  isTripFeedbackEligibleStatus,
+  parseTripIdSortKey,
+} from "@/features/chat/utils/tripConversationSort";
+import {
+  isRunningLateHealthStatus,
+  isTripStatusEligibleForLongHaulPings,
+  LONG_HAUL_STANDARD_PINGS,
+} from "@/features/driver/utils/long_haul_heartbeat.util";
+import { getRatingsForTrip } from "@/features/ratings/services/ratings.service";
+import type { RatingRow } from "@/features/ratings/types";
+import {
+  getTripDisplayNumber,
+  type TripRow,
+} from "@/features/trips/services/trips.service";
+import { isAggregateTrip } from "@/lib/driverUtils";
+import type { ActiveTripSummary } from "@/lib/globalSync/types";
+import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
+import {
+  clearLedgerBookPending,
+  markLedgerBookPending,
+} from "@/lib/ledgerBookPendingStore";
 import { LinearGradient } from "expo-linear-gradient";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   ArrowLeft,
   Briefcase,
   ChevronDown,
   ChevronRight,
+  FileType,
   Hash,
   MapPin,
   MessageSquare,
@@ -32,105 +83,54 @@ import {
   Send,
   Smile,
   Star,
-  FileType,
   Truck,
   User,
   Users,
   X,
 } from "lucide-react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { CHAT_ACCENT, CHAT_ACCENT_BORDER, CHAT_ACCENT_SOFT, CHAT_ICON_MUTED } from "@/features/chat/chatTheme";
-import { formatChatPartyName } from "@/features/chat/utils/partyDisplay";
-import Theme from "@/constants/Theme";
-import { applyContractualHubPartyIsolation } from "@/features/chat/utils/contractHubPartyIsolation.util";
-import { isAggregateTrip } from "@/lib/driverUtils";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { NativeScrollEvent, NativeSyntheticEvent } from "react-native";
 import {
-  getTripDisplayNumber,
-  type TripRow,
-} from "@/features/trips/services/trips.service";
-import {
-  QUICK_MESSAGES,
-  TripConversation,
-  useTripChat,
-} from "@/features/chat/contexts/TripChatContext";
-import { chatStore, useConversation, useConversationsByTrip, useTripMeta } from "@/features/chat/store/chatStore";
-import {
-  resolveCounterpartyPartyTypeForViewer,
-  resolveOutgoingDeliveryStatus,
-  type TripEntry,
-  useChatStore,
-} from "@/features/chat/store/useChatStore";
-import { MessageTick } from "@/features/chat/components/MessageTick";
-import { useMarkSeen } from "@/features/chat/hooks/useMarkSeen";
-import { SystemEventCard } from "@/features/chat/components/SystemEventCard";
-import {
-  INTEGRATED_QUICK_MESSAGES,
-  IntegratedChat,
-  useIntegratedChat,
-  type NetworkPartner,
-} from "@/features/chat/contexts/IntegratedChatContext";
-import { useOrganization } from "@/contexts/OrganizationContext";
-import {
-  getMessagesByConversation,
-  getTripsForCompose,
-  sendDocumentShareMessage,
-  TRIP_CHAT_HISTORY_PAGE,
-  type TripForCompose,
-} from "@/features/chat/services/chat.service";
-import { getRatingsForTrip } from "@/features/ratings/services/ratings.service";
-import type { RatingRow } from "@/features/ratings/types";
-import {
-  dedupeFeedbackRequestMessages,
-  mergeTripChatMessagesWithFeedbackRatings,
-} from "@/features/chat/utils/mergeTripFeedbackMessages.util";
-import { dedupeTripStatusBroadcastsForLane } from "@/features/chat/utils/dedupeTripStatusBroadcastForLane.util";
-import {
-  confirmLedgerToAccountingBooks,
-  disputeLedgerEventMessage,
-} from "@/features/chat/services/chatLedgerBridge.service";
-import { ChatSystemEventCard, ChatLedgerEventCard } from "./ChatEventCard";
-import { LateAlertCard, isLongHaulLateChatMessage } from "./LateAlertCard";
-import { LocationEventCard } from "./LocationEventCard";
-import { TripCard } from "./TripCard";
-import { parseSystemLogLocationData } from "../utils/locationLogPayload.util";
-import { ChatFeedbackCard } from "./ChatFeedbackCard";
-import { PingProgressBar } from "./PingProgressBar";
-import { countLongHaulPingsFromStream } from "../utils/longHaulPingCount.util";
-import {
-  isRunningLateHealthStatus,
-  isTripStatusEligibleForLongHaulPings,
-  LONG_HAUL_STANDARD_PINGS,
-} from "@/features/driver/utils/long_haul_heartbeat.util";
-import { DocumentShareCard } from "./DocumentShareCard";
-import { DocumentShareSheet } from "./DocumentShareSheet";
-import { isMessageVisibleInTab } from "../types/chat.types";
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Easing,
+  FlatList,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type {
   ConversationPartyType,
   LedgerEventMetadata,
   MessageDeliveryStatus,
   TripMessageRow,
 } from "../types/chat.types";
+import { isMessageVisibleInTab } from "../types/chat.types";
+import { commandPriorityScore } from "../utils/commandPriority.util";
 import { tripFeedbackRequestMatchesConversation } from "../utils/feedbackRequestMeta";
+import { ledgerEventInvolvesOrg } from "../utils/ledgerVisibility.util";
+import { parseSystemLogLocationData } from "../utils/locationLogPayload.util";
+import { countLongHaulPingsFromStream } from "../utils/longHaulPingCount.util";
 import {
   indentAllowsInChatFeedbackDebrief,
   tripMessageHistoryHasCompletedStatus,
 } from "../utils/tripFeedbackVisibility.util";
-import { commandPriorityScore } from "../utils/commandPriority.util";
-import { ledgerEventInvolvesOrg } from "../utils/ledgerVisibility.util";
-import { useAuth } from "@/contexts/AuthContext";
-import { PartyAvatar } from "@/components/PartyAvatar";
-import {
-  isTerminalTripStatus,
-  isTripFeedbackEligibleStatus,
-  parseTripIdSortKey,
-} from "@/features/chat/utils/tripConversationSort";
-import { buildTripMessageListLayoutMeta } from "@/features/chat/utils/chatMessageListLayout";
-import {
-  clearLedgerBookPending,
-  markLedgerBookPending,
-} from "@/lib/ledgerBookPendingStore";
-import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
-import type { ActiveTripSummary } from "@/lib/globalSync/types";
+import { ChatLedgerEventCard, ChatSystemEventCard } from "./ChatEventCard";
+import { ChatFeedbackCard } from "./ChatFeedbackCard";
+import { DocumentShareCard } from "./DocumentShareCard";
+import { DocumentShareSheet } from "./DocumentShareSheet";
+import { isLongHaulLateChatMessage, LateAlertCard } from "./LateAlertCard";
+import { LocationEventCard } from "./LocationEventCard";
+import { PingProgressBar } from "./PingProgressBar";
+import { TripCard } from "./TripCard";
 
 type TabId = "trips" | "indent" | "network";
 

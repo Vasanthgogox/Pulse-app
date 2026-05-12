@@ -1,3 +1,6 @@
+import { CHAT_ACCENT } from "@/features/chat/chatTheme";
+import type { ChatTripFlow } from "@/features/chat/types/chat.types";
+import { Bell, Network, Truck } from "lucide-react-native";
 import React from "react";
 import {
   StyleSheet,
@@ -5,9 +8,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { Bell, Network, Truck } from "lucide-react-native";
-import { CHAT_ACCENT } from "@/features/chat/chatTheme";
-import type { ChatTripFlow } from "@/features/chat/types/chat.types";
 
 export type TripCardProps = {
   tripActive: boolean;
