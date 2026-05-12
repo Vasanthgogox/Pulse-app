@@ -1674,8 +1674,13 @@ export default function TripDetailScreen({
   const otpLockedByTripProgress = ["in_progress", "in_transit"].includes(
     String(trip.status ?? "").toLowerCase(),
   );
+  // True when a driver row is assigned but hasn't claimed the trip yet (user_id = null).
+  // Dispatcher must share the OTP so the driver can self-link via the claim flow.
+  const driverIsUnlinked = hasDriverAssigned && !detail.driverLinked;
 
   const aggregateOtpState = (() => {
+    // Non-aggregate trip with an unlinked driver: show OTP so dispatcher can share it.
+    if (!isAggregate && driverIsUnlinked) return "otp_pending";
     if (!isAggregate) return null;
     if (!canGenerateAggregateOtp) return "not_required";
     const status = String(trip.status ?? "").toLowerCase();
@@ -1688,7 +1693,7 @@ export default function TripDetailScreen({
     if (
       !trip?.id ||
       otpResending ||
-      !canGenerateAggregateOtp ||
+      (!canGenerateAggregateOtp && !driverIsUnlinked) ||
       otpLockedByTripProgress
     )
       return;
@@ -4274,7 +4279,7 @@ export default function TripDetailScreen({
                         detail.setDisplayVehicleFromInput(normalized);
                       }}
                       inlineSection={
-                        isAggregate ? (
+                        (isAggregate || driverIsUnlinked) ? (
                           <AggregateTripOtpPanel
                             variant="inline"
                             tripNumber={getTripDisplayNumber(trip)}
@@ -4463,7 +4468,7 @@ export default function TripDetailScreen({
                     detail.setDisplayVehicleFromInput(normalized);
                   }}
                   inlineSection={
-                    isAggregate ? (
+                    (isAggregate || driverIsUnlinked) ? (
                       <AggregateTripOtpPanel
                         variant="sheet"
                         tripNumber={getTripDisplayNumber(trip)}
@@ -4991,7 +4996,7 @@ export default function TripDetailScreen({
                     detail.setDisplayVehicleFromInput(normalized);
                   }}
                   inlineSection={
-                    isAggregate ? (
+                    (isAggregate || driverIsUnlinked) ? (
                       <AggregateTripOtpPanel
                         variant="sheet"
                         tripNumber={getTripDisplayNumber(trip)}

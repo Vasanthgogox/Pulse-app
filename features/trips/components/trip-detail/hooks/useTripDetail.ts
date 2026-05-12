@@ -1226,7 +1226,15 @@ export function useTripDetail({
     const hasDriverAssigned = !!trip?.driver_id;
     const hasVehicleAssigned =
       !!trip?.vehicle_id || !!String(trip?.vehicle_display_number ?? "").trim();
-    if (!trip?.id || !isAggregateTrip(trip) || !hasDriverAssigned || !hasVehicleAssigned) {
+    const isAggregateTripFlag = isAggregateTrip(trip);
+    // Load OTP when:
+    //   A) aggregate trip with driver + vehicle assigned (original path), OR
+    //   B) any trip where the assigned driver row has no user_id yet (unlinked
+    //      tracking-only driver) — dispatcher needs the code to share with the driver.
+    const needsOtp =
+      (isAggregateTripFlag && hasDriverAssigned && hasVehicleAssigned) ||
+      (!isAggregateTripFlag && hasDriverAssigned && !driverLinked);
+    if (!trip?.id || !needsOtp) {
       setTripOtp(null);
       return;
     }
@@ -1234,7 +1242,7 @@ export function useTripDetail({
       if (error) setTripOtp(null);
       else setTripOtp({ code: code ?? null, expires_at: expires_at ?? null });
     });
-  }, [trip?.id, trip?.supplier_id, trip?.driver_id, trip?.vehicle_id, trip?.vehicle_display_number]);
+  }, [trip?.id, trip?.supplier_id, trip?.driver_id, trip?.vehicle_id, trip?.vehicle_display_number, driverLinked]);
 
   const loadTripDocuments = useCallback(() => {
     if (!tripId) return;
@@ -1917,16 +1925,14 @@ export function useTripDetail({
     loadTripDocuments();
   }, [selectedDoc, docPreviewStoragePath, tripId, loadTripDocuments]);
 
-  // OTP for aggregate trips
+  // OTP for aggregate trips and non-aggregate trips with unlinked (tracking-only) drivers
   useEffect(() => {
-    if (trip?.id && isAggregateTrip(trip)) {
-      // Keep OTP visible for aggregate trips even after assignment,
-      // so dispatch can share/verify immediately.
+    if (trip?.id && (isAggregateTrip(trip) || (!!trip.driver_id && !driverLinked))) {
       loadTripOtp();
     } else {
       setTripOtp(null);
     }
-  }, [trip?.id, trip?.supplier_id, loadTripOtp]);
+  }, [trip?.id, trip?.supplier_id, trip?.driver_id, driverLinked, loadTripOtp]);
 
   // Driver location load/polling (shared across web + native detail screens).
   useEffect(() => {

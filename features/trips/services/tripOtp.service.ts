@@ -134,7 +134,7 @@ export async function getPendingOtpTrips(): Promise<{
 }> {
   const { data, error } = await supabase().rpc('get_pending_otp_trips');
   if (error) return { error: new Error(error.message), trips: [] };
-  const rows = ((data ?? []) as PendingOtpTripRow[]).slice(0, 1);
+  const rows = (data ?? []) as PendingOtpTripRow[];
   // Ensure marker flag is set for all rows so UI can branch on it if needed.
   const trips = rows.map((row) => ({ ...row, requires_otp: row.requires_otp ?? true }));
   return { error: null, trips };

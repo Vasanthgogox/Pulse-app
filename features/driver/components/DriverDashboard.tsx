@@ -518,7 +518,10 @@ export default function DriverDashboard() {
       } else {
         setDriver(null);
         setAllTrips([]);
-        setPendingOtpTrips([]);
+        // Do NOT reset pendingOtpTrips here — a newly registered driver with no
+        // linked driver rows yet may still have phone-preassigned trips waiting
+        // for OTP claim. setPendingOtpTrips was already called above from the
+        // getPendingOtpTrips() result before this branch ran.
         setIsOnline(false);
         previousTripsRef.current = new Map();
         setLoading(false);
