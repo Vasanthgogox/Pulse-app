@@ -4,6 +4,9 @@
  * - Prefers **metadata.thumb_url** (or event_payload.thumb_url) — no Storage RPC on receive.
  * - Else **public render URL** `.../render/image/public/...?width=&quality=` (CDN/imgproxy, not Postgres).
  * - Else cached **signed transform** via resolveChatImageThumbnail (single flight + module TTL cache).
+ * - Lightbox: if the thumbnail already loaded from the public render URL, reuse CDN at full width
+ *   instead of calling Storage `createSignedUrl` again (cuts Storage/imgproxy load).
+ * - Resets lightbox state when `storagePath` changes so list virtualization cannot leak URLs across rows.
  * - **expo-image** disk+memory cache + optional **blurhash** / data-URI placeholder to avoid layout jump.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -36,6 +39,10 @@ import {
 import { extractThinImagePayload } from "../utils/thinImageMetadata";
 
 const PLACEHOLDER_TINT = "rgba(148, 163, 184, 0.35)";
+
+/** Lightbox max edge — keep in sync with {@link resolveChatImageFullDisplayUrl} default. */
+const FULL_DISPLAY_MAX_EDGE = 1280;
+const FULL_DISPLAY_QUALITY = 80;
 
 export interface SmartChatImageProps {
   storagePath: string;
@@ -95,6 +102,24 @@ export function SmartChatImage({
   const [publicFailed, setPublicFailed] = useState(false);
 
   const inFlightRef = useRef<string | null>(null);
+  /** Invalidates in-flight lightbox loads when `storagePath` changes (list recycle). */
+  const fullLightboxGenRef = useRef(0);
+
+  // List virtualization can reuse this row for a different message — reset lightbox
+  // state so we never show another row's URL or skip `createSignedUrl` incorrectly.
+  useEffect(() => {
+    fullLightboxGenRef.current += 1;
+    if (!storagePath) {
+      setFullUri(null);
+      setFullState("idle");
+      setModalVisible(false);
+      return;
+    }
+    const peekFull = peekChatImageFullDisplayUrl(storagePath, FULL_DISPLAY_MAX_EDGE, FULL_DISPLAY_QUALITY);
+    setFullUri(peekFull);
+    setFullState(peekFull ? "ready" : "idle");
+    setModalVisible(false);
+  }, [storagePath]);
 
   useEffect(() => {
     if (!storagePath) {
@@ -157,30 +182,53 @@ export function SmartChatImage({
   }, [thin.blurhash, thin.thumbhash, thin.thumbDataUri, thumbWidth, thumbHeight]);
 
   const loadFullSize = useCallback(async () => {
-    const instant = peekChatImageFullDisplayUrl(storagePath);
+    const gen = ++fullLightboxGenRef.current;
+    const instant = peekChatImageFullDisplayUrl(storagePath, FULL_DISPLAY_MAX_EDGE, FULL_DISPLAY_QUALITY);
     if (instant) {
       setFullUri(instant);
       setFullState("ready");
       setModalVisible(true);
       return;
     }
+
     setModalVisible(true);
-    if (fullUri) return;
     setFullState("loading");
+    setFullUri(null);
+
+    // Thumbnail already proved `…/render/image/public/…` works — reuse CDN for lightbox
+    // instead of hammering Storage `createSignedUrl` (reduces API / imgproxy pressure).
+    const thumbUsedPublicCdn =
+      Boolean(publicRenderThumb && thumbUri === publicRenderThumb && !publicFailed);
+    const publicFull =
+      thumbUsedPublicCdn &&
+      buildSupabaseRenderImagePublicUrl({
+        storagePath,
+        width: FULL_DISPLAY_MAX_EDGE,
+        quality: FULL_DISPLAY_QUALITY,
+      });
+    if (publicFull) {
+      if (gen !== fullLightboxGenRef.current) return;
+      setFullUri(publicFull);
+      setFullState("ready");
+      return;
+    }
+
     const transformed = await resolveChatImageFullDisplayUrl(storagePath);
+    if (gen !== fullLightboxGenRef.current) return;
     if (transformed) {
       setFullUri(transformed);
       setFullState("ready");
       return;
     }
     const raw = await resolveChatDocumentStorageUrl(storagePath);
+    if (gen !== fullLightboxGenRef.current) return;
     if (raw) {
       setFullUri(raw);
       setFullState("ready");
     } else {
       setFullState("error");
     }
-  }, [storagePath, fullUri]);
+  }, [storagePath, publicRenderThumb, thumbUri, publicFailed]);
 
   if (thumbState === "error") {
     return (
