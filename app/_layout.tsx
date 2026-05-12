@@ -1,4 +1,3 @@
-import { AlertSidebar } from '@/components/AlertSidebar';
 import { AppAlertHost } from '@/components/AppAlertHost';
 import { GlobalOperationsToast } from '@/components/GlobalOperationsToast';
 import { OperationsIsland } from '@/components/OperationsIsland';
@@ -327,33 +326,30 @@ function RootLayoutNav() {
       <DemoTabBarScrollProvider>
         <TripChatProvider isActive={isDispatcherChatRouteActive}>
           <IntegratedChatProvider isActive={isDispatcherChatRouteActive}>
-            <View style={{ flex: 1, flexDirection: 'row' }}>
-              {isDesktopWeb ? <AlertSidebar /> : null}
-              <View style={{ flex: 1 }}>
-                <GlobalOperationsToast />
-                <AppAlertHost />
-                <OperationsIsland />
-                <Stack screenOptions={{ headerShown: false }}>
-                  <Stack.Screen name="index" />
-                  <Stack.Screen name="welcome" options={{ animation: 'fade' }} />
-                  <Stack.Screen name="sign-in" options={{ animation: 'fade' }} />
-                  <Stack.Screen name="forgot-password" options={{ animation: 'fade' }} />
-                  <Stack.Screen name="auth/reset-password" options={{ animation: 'fade' }} />
-                  <Stack.Screen name="sign-up" options={{ animation: 'fade' }} />
-                  <Stack.Screen name="(tabs)" />
-                  <Stack.Screen name="(driver)" />
-                  <Stack.Screen name="add-trip" />
-                  <Stack.Screen name="network" />
-                  <Stack.Screen name="load-board" options={{ presentation: 'fullScreenModal' }} />
-                  <Stack.Screen name="create-indent" options={{ presentation: 'fullScreenModal' }} />
-                  <Stack.Screen name="log-incoming-pods" options={{ presentation: 'card', animation: 'slide_from_right' }} />
-                  <Stack.Screen name="invoicing-execute" options={{ presentation: 'card', animation: 'slide_from_right' }} />
-                  <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-                  <Stack.Screen name="(modals)" options={{ presentation: 'modal' }} />
-                </Stack>
-                <RootOverlayTabBar />
-                {isDesktopWeb ? <FloatingChatButton /> : null}
-              </View>
+            <View style={{ flex: 1 }}>
+              <GlobalOperationsToast />
+              <AppAlertHost />
+              <OperationsIsland />
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="index" />
+                <Stack.Screen name="welcome" options={{ animation: 'fade' }} />
+                <Stack.Screen name="sign-in" options={{ animation: 'fade' }} />
+                <Stack.Screen name="forgot-password" options={{ animation: 'fade' }} />
+                <Stack.Screen name="auth/reset-password" options={{ animation: 'fade' }} />
+                <Stack.Screen name="sign-up" options={{ animation: 'fade' }} />
+                <Stack.Screen name="(tabs)" />
+                <Stack.Screen name="(driver)" />
+                <Stack.Screen name="add-trip" />
+                <Stack.Screen name="network" />
+                <Stack.Screen name="load-board" options={{ presentation: 'fullScreenModal' }} />
+                <Stack.Screen name="create-indent" options={{ presentation: 'fullScreenModal' }} />
+                <Stack.Screen name="log-incoming-pods" options={{ presentation: 'card', animation: 'slide_from_right' }} />
+                <Stack.Screen name="invoicing-execute" options={{ presentation: 'card', animation: 'slide_from_right' }} />
+                <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+                <Stack.Screen name="(modals)" options={{ presentation: 'modal' }} />
+              </Stack>
+              <RootOverlayTabBar />
+              {isDesktopWeb ? <FloatingChatButton /> : null}
             </View>
           </IntegratedChatProvider>
         </TripChatProvider>

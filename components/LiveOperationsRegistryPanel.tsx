@@ -1,9 +1,7 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useWebLayoutWidth } from '@/lib/useWebLayoutWidth';
+import React, { useEffect, useMemo, useState } from 'react';
+import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { MotiView } from 'moti';
 import { AlertTriangle, CheckCircle2, Radio, Truck } from 'lucide-react-native';
-import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { useOptionalOrganization } from '@/contexts/OrganizationContext';
@@ -25,11 +23,11 @@ function countPendingFeedbackTripsForOrg(
   const seen = new Set<string>();
   for (const entry of Object.values(trips)) {
     if (!entry?.tripId) continue;
-    const ownerOrg = entry.tripOrganizationId?.trim() ?? "";
-    const isTripOwnerViewer = ownerOrg !== "" && ownerOrg === orgId;
+    const ownerOrg = entry.tripOrganizationId?.trim() ?? '';
+    const isTripOwnerViewer = ownerOrg !== '' && ownerOrg === orgId;
     for (const p of Object.values(entry.parties)) {
       if (!p) continue;
-      if (p.feedbackStatus !== "pending") continue;
+      if (p.feedbackStatus !== 'pending') continue;
       if (!isTripOwnerViewer && p.organizationId !== orgId) continue;
       if (seen.has(entry.tripId)) continue;
       seen.add(entry.tripId);
@@ -38,11 +36,16 @@ function countPendingFeedbackTripsForOrg(
   return seen.size;
 }
 
+export type LiveOperationsRegistryPanelProps = {
+  /** Merged into the root wrapper (e.g. margin / border for placement inside a popover). */
+  style?: StyleProp<ViewStyle>;
+};
+
 /**
- * Desktop “Live Operations” shelf — React Native Web. Sorted by priority; ledger rows glow on pulse.
+ * Live operations / critical monitor cards for the desktop **Alert Registry** bell dropdown.
+ * (Formerly rendered as a fixed right shelf.)
  */
-export function AlertSidebar() {
-  const layoutWidth = useWebLayoutWidth();
+export function LiveOperationsRegistryPanel({ style }: LiveOperationsRegistryPanelProps) {
   const org = useOptionalOrganization();
   const auth = useOptionalAuth();
   const orgId = org?.currentOrganization?.id ?? null;
@@ -71,27 +74,26 @@ export function AlertSidebar() {
     return () => clearTimeout(id);
   }, [ledgerPulseAtMs, ledgerPulseTripId]);
 
-  const isDesktopWeb = Platform.OS === 'web' && layoutWidth >= Layout.webDesktopMinWidth;
   const glowActive = useMemo(() => {
     const age = Date.now() - ledgerPulseAtMs;
-    return ledgerPulseTripId && age >= 0 && age < 4000;
+    return Boolean(ledgerPulseTripId && age >= 0 && age < 4000);
   }, [glowTick, ledgerPulseAtMs, ledgerPulseTripId]);
 
-  if (!isDesktopWeb || auth?.profile?.role === 'driver' || !orgId || bootstrapStatus !== 'ready') {
+  if (auth?.profile?.role === 'driver' || !orgId || bootstrapStatus !== 'ready') {
     return null;
   }
 
   return (
-    <View style={styles.sidebar} accessibilityLabel="Live operations sidebar">
+    <View style={[styles.wrap, style]} accessibilityLabel="Live operations in alert registry">
       <View style={styles.headerRow}>
-        <Text style={styles.header}>Live operations</Text>
+        <Text style={styles.header}>Operations</Text>
         {pendingFeedbackTrips > 0 ? (
           <View style={styles.feedbackBadge} accessibilityLabel="Pending trip feedback">
             <Text style={styles.feedbackBadgeText}>Feedback {pendingFeedbackTrips}</Text>
           </View>
         ) : null}
       </View>
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator>
+      <View style={styles.body}>
         {items.length === 0 ? (
           <Text style={styles.empty}>All clear — waiting for Realtime signals.</Text>
         ) : (
@@ -100,7 +102,7 @@ export function AlertSidebar() {
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Critical monitor</Text>
                 {criticalItems.map((item) => (
-                  <SidebarRow
+                  <OpsAlertRow
                     key={item.id}
                     item={item}
                     glow={Boolean(
@@ -118,7 +120,7 @@ export function AlertSidebar() {
                   <Text style={styles.sectionTitle}>Live operations</Text>
                 ) : null}
                 {routineItems.map((item) => (
-                  <SidebarRow
+                  <OpsAlertRow
                     key={item.id}
                     item={item}
                     glow={Boolean(
@@ -132,12 +134,12 @@ export function AlertSidebar() {
             ) : null}
           </>
         )}
-      </ScrollView>
+      </View>
     </View>
   );
 }
 
-function SidebarRow({ item, glow }: { item: GlobalOperationAlert; glow: boolean }) {
+function OpsAlertRow({ item, glow }: { item: GlobalOperationAlert; glow: boolean }) {
   const icon =
     item.kind === 'critical' ? (
       <AlertTriangle size={16} color="#dc2626" />
@@ -183,26 +185,26 @@ function SidebarRow({ item, glow }: { item: GlobalOperationAlert; glow: boolean 
 }
 
 const styles = StyleSheet.create({
-  sidebar: {
-    width: Layout.liveOpsShelfWidth,
-    borderRightWidth: 1,
-    borderRightColor: Theme.borderMedium,
-    backgroundColor: Theme.surface,
-    paddingTop: 12,
-    paddingBottom: 8,
+  wrap: {
+    width: '100%',
+    paddingTop: 10,
+    paddingBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    marginBottom: 6,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
-    paddingHorizontal: 14,
-    marginBottom: 10,
+    paddingHorizontal: 10,
+    marginBottom: 8,
   },
   header: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 1.2,
+    letterSpacing: 1,
     textTransform: 'uppercase',
     color: Theme.textSecondary,
     flex: 1,
@@ -223,34 +225,33 @@ const styles = StyleSheet.create({
     color: Theme.textPrimary,
     letterSpacing: 0.4,
   },
-  scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: 10, paddingBottom: 24, gap: 8 },
-  section: { gap: 8, marginBottom: 4 },
+  body: { gap: 8, paddingHorizontal: 6, paddingBottom: 8 },
+  section: { gap: 8, marginBottom: 2 },
   sectionTitle: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '900',
-    letterSpacing: 1.1,
+    letterSpacing: 1,
     textTransform: 'uppercase',
     color: Theme.textSecondary,
     paddingHorizontal: 4,
     marginBottom: 2,
   },
-  empty: { fontSize: 13, color: Theme.textSecondary, paddingHorizontal: 8, lineHeight: 20 },
+  empty: { fontSize: 12, color: Theme.textSecondary, paddingHorizontal: 6, lineHeight: 18 },
   rowCard: {
     borderRadius: 14,
     borderWidth: 1,
-    padding: 12,
+    padding: 10,
     backgroundColor: Theme.cardWhite,
     shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 3 },
   },
   rowCardGlow: {
     backgroundColor: 'rgba(240,253,244,0.95)',
   },
   rowTop: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
   iconWrap: {
-    width: 32,
-    height: 32,
+    width: 30,
+    height: 30,
     borderRadius: 10,
     backgroundColor: Theme.surfaceGray,
     alignItems: 'center',
@@ -258,14 +259,14 @@ const styles = StyleSheet.create({
   },
   rowBody: { flex: 1, minWidth: 0 },
   cat: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: '800',
     color: Theme.textSecondary,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
   },
-  rowTitle: { marginTop: 2, fontSize: 14, fontWeight: '800', color: Theme.textPrimary },
-  rowSub: { marginTop: 4, fontSize: 12, color: Theme.textRouteCard, lineHeight: 16 },
-  money: { marginTop: 6, fontSize: 15, fontWeight: '900', color: '#15803d' },
-  trip: { marginTop: 4, fontSize: 11, fontWeight: '700', color: Theme.textSecondary },
+  rowTitle: { marginTop: 2, fontSize: 13, fontWeight: '800', color: Theme.textPrimary },
+  rowSub: { marginTop: 3, fontSize: 11, color: Theme.textRouteCard, lineHeight: 15 },
+  money: { marginTop: 5, fontSize: 14, fontWeight: '900', color: '#15803d' },
+  trip: { marginTop: 3, fontSize: 10, fontWeight: '700', color: Theme.textSecondary },
 });

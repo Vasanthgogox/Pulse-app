@@ -3,6 +3,7 @@
  */
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import { LiveOperationsRegistryPanel } from "@/components/LiveOperationsRegistryPanel";
 import {
   DEFAULT_USER_2D_AVATAR_SEED,
   getUser2DAvatarUriForSeed,
@@ -801,6 +802,7 @@ export function DemoTabBar({
                     showsVerticalScrollIndicator
                     nestedScrollEnabled
                   >
+                    <LiveOperationsRegistryPanel />
                     {(notifTab === "active"
                       ? activeSalaryRequests.length + activeSharedNotifications.length
                       : historySalaryRequests.length + historySharedNotifications.length) === 0 ? (
@@ -1852,7 +1854,7 @@ const styles = StyleSheet.create({
     color: "#ffffff",
   },
   webPopoverScroll: {
-    maxHeight: 360,
+    maxHeight: 520,
   },
   webPopoverBody: {
     padding: 10,
