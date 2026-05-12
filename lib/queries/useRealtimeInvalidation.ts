@@ -54,6 +54,7 @@ export function useRealtimeTripsInvalidation(organizationId: string | null) {
         }
 
         qc.invalidateQueries({ queryKey: queryKeys.trips.shipperNamesForSupplier(organizationId) });
+        qc.invalidateQueries({ queryKey: queryKeys.trips.assignmentAuditRoot });
       },
     );
   }, [organizationId, qc]);

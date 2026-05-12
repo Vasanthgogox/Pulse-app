@@ -30,6 +30,10 @@ export const queryKeys = {
       ["q", "trips", "orgIsSupplier", orgId] as const,
     shipperNamesForSupplier: (orgId: string) =>
       ["q", "trips", "shipperNames", orgId] as const,
+    /** Prefix: `invalidateQueries` with this refetches every assignment-audit batch. */
+    assignmentAuditRoot: ["q", "trips", "assignment-audit"] as const,
+    assignmentAudit: (tripIdsKey: string) =>
+      ["q", "trips", "assignment-audit", tripIdsKey] as const,
   },
 
   transactions: {

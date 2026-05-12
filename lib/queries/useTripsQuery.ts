@@ -122,6 +122,7 @@ export function useTripStatusMutation(orgId: string | null) {
     onSettled: (_data, _err, { tripId }) => {
       qc.invalidateQueries({ queryKey: queryKeys.trips.detail(tripId) });
       if (orgId) qc.invalidateQueries({ queryKey: queryKeys.trips.all(orgId) });
+      qc.invalidateQueries({ queryKey: queryKeys.trips.assignmentAuditRoot });
     },
   });
 }
@@ -131,7 +132,7 @@ export function useAssignmentAuditQuery(tripIds: string[]) {
   const sorted = [...tripIds].sort();
   const key = sorted.join(',');
   return useQuery({
-    queryKey: ['q', 'trips', 'assignment-audit', key],
+    queryKey: queryKeys.trips.assignmentAudit(key),
     queryFn: async () => {
       const { getLatestAssignmentAuditByTripIds } = await import(
         '@/features/trips/services/trip-assignment-audit.service'
@@ -147,5 +148,8 @@ export function useAssignmentAuditQuery(tripIds: string[]) {
 
 export function useInvalidateTrips() {
   const qc = useQueryClient();
-  return (orgId: string) => qc.invalidateQueries({ queryKey: queryKeys.trips.all(orgId) });
+  return (orgId: string) => {
+    qc.invalidateQueries({ queryKey: queryKeys.trips.all(orgId) });
+    qc.invalidateQueries({ queryKey: queryKeys.trips.assignmentAuditRoot });
+  };
 }
