@@ -124,6 +124,12 @@ interface GlobalSyncStore {
     payload: ActiveTripLastKnownLocation,
   ) => void;
 
+  /** Latest hubometer / heartbeat row from chat `location_data` (3h adaptive ping path). */
+  applyActiveTripHeartbeatFromChat: (
+    tripId: string,
+    payload: { odometer_km: number; recorded_at: string },
+  ) => void;
+
   /** Bump ranking signal when any B2B chat row arrives for this trip (in-memory only). */
   touchActiveTripClientActivity: (tripId: string, atIso?: string) => void;
 
@@ -474,6 +480,20 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
       }));
     },
 
+    applyActiveTripHeartbeatFromChat: (tripId, payload) => {
+      set((s) => ({
+        activeTrips: s.activeTrips.map((t) =>
+          t.trip_id === tripId
+            ? {
+                ...t,
+                last_heartbeat_odometer_km: payload.odometer_km,
+                last_heartbeat_recorded_at: payload.recorded_at,
+              }
+            : t,
+        ),
+      }));
+    },
+
     touchActiveTripClientActivity: (tripId, atIso) => {
       const at = atIso?.trim() || new Date().toISOString();
       set((s) => ({
@@ -491,6 +511,7 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
         mt !== 'payment' &&
         mt !== 'ledger_update' &&
         mt !== 'system_log' &&
+        mt !== 'location_log' &&
         mt !== 'document_upload' &&
         mt !== 'assignment_update'
       ) {

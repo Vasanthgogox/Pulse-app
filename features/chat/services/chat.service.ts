@@ -1,23 +1,30 @@
 import type { RatedType, RatingRow } from "@/features/ratings/types";
 import { supabase } from "@/lib/supabase";
 import type {
-    ConversationPartyType,
-    DocumentShareMetadata,
-    MessageSenderRole,
-    MessageType,
-    NetworkConversation,
-    NetworkConversationRow,
-    NetworkMessageRow,
-    NetworkPartner,
-    TripConversation,
-    TripConversationRow,
-    TripMessageRow,
+  ChatTripFlow,
+  ConversationPartyType,
+  DocumentShareMetadata,
+  MessageSenderRole,
+  MessageType,
+  NetworkConversation,
+  NetworkConversationRow,
+  NetworkMessageRow,
+  NetworkPartner,
+  TripConversation,
+  TripConversationRow,
+  TripMessageRow,
 } from "../types/chat.types";
 import { parseFeedbackRequestMetadata } from "../utils/feedbackRequestMeta";
 import {
   extractTagsFromRatingComment,
   findTripRatingMatchingFeedbackMeta,
 } from "../utils/mergeTripFeedbackMessages.util";
+import type { ChatLanes } from "../utils/laneMultiplexer.util";
+import {
+  buildChatLanesFromConversations,
+  mergeMessagesByContextIntoLanes,
+  normalizeServerLanes,
+} from "../utils/laneMultiplexer.util";
 
 export interface TripForCompose {
   id: string;
@@ -1172,6 +1179,18 @@ function normalizeInitialStateRow(row: Record<string, unknown>): TripConversatio
   const tfs = row.trip_feedback_status;
   const trip_feedback_status =
     tfs === 'pending' || tfs === 'rated' || tfs === 'none' ? tfs : ('none' as const);
+  const indentRaw =
+    row.indent_id != null && String(row.indent_id).trim() !== ""
+      ? String(row.indent_id)
+      : null;
+  const ctRaw = row.conversation_type;
+  const ctStr = typeof ctRaw === "string" ? ctRaw.trim() : "";
+  const conversation_type: ChatTripFlow =
+    ctStr === "private_trip" || ctStr === "integrated_group"
+      ? ctStr
+      : indentRaw
+        ? "integrated_group"
+        : "private_trip";
   return {
     id:                      String(row.id ?? ''),
     organization_id:         String(row.organization_id ?? ''),
@@ -1196,6 +1215,12 @@ function normalizeInitialStateRow(row: Record<string, unknown>): TripConversatio
       row.trip_organization_id != null && String(row.trip_organization_id).trim() !== ""
         ? String(row.trip_organization_id)
         : null,
+    indent_id: indentRaw,
+    indent_status:
+      row.indent_status != null && String(row.indent_status).trim() !== ""
+        ? String(row.indent_status)
+        : null,
+    conversation_type,
     pickup_area:             String(row.pickup_area   ?? ''),
     drop_location:           String(row.drop_location ?? ''),
     trip_feedback_status,
@@ -1274,9 +1299,63 @@ export async function getUnifiedB2BChatBootstrap(
     throw error;
   }
 
-  const rows = (Array.isArray(data) ? data : []) as Array<Record<string, unknown>>;
+  const raw = data as unknown;
+  const rows = Array.isArray(raw)
+    ? (raw as Array<Record<string, unknown>>)
+    : raw != null && typeof raw === "object" && Array.isArray((raw as Record<string, unknown>).conversations)
+      ? ((raw as Record<string, unknown>).conversations as Array<Record<string, unknown>>)
+      : [];
   const conversations = rows.map(normalizeInitialStateRow);
   return resolveGenericPartyNamesForTrips(conversations);
+}
+
+/**
+ * Multi-lane bootstrap: `get_multi_lane_bootstrap` → conversations + lane maps.
+ * Falls back to {@link getUnifiedB2BChatBootstrap} + client-side {@link buildChatLanesFromConversations}.
+ */
+export async function fetchChatBootstrapPayload(organizationId: string): Promise<{
+  conversations: TripConversation[];
+  lanes: ChatLanes;
+}> {
+  const { data, error } = await supabase().rpc("get_multi_lane_bootstrap", {
+    p_organization_id: organizationId,
+    p_message_limit:   TRIP_CHAT_HISTORY_PAGE,
+  });
+
+  if (!error && data != null && typeof data === "object" && !Array.isArray(data)) {
+    const payload = data as Record<string, unknown>;
+    const rawConvs = payload.conversations;
+    const rows = (Array.isArray(rawConvs) ? rawConvs : []) as Array<Record<string, unknown>>;
+    let conversations = rows.map(normalizeInitialStateRow);
+    conversations = await resolveGenericPartyNamesForTrips(conversations);
+    const baseLanes =
+      normalizeServerLanes(payload.lanes as Record<string, unknown> | undefined) ??
+      buildChatLanesFromConversations(conversations);
+    const lanes = mergeMessagesByContextIntoLanes(
+      baseLanes,
+      payload.messages_by_context ?? payload.messagesByContext,
+    );
+    return { conversations, lanes };
+  }
+
+  const code = String(error?.code ?? "");
+  const msg = String(error?.message ?? "").toLowerCase();
+  const missing =
+    code === "42883" ||
+    code === "PGRST202" ||
+    msg.includes("get_multi_lane_bootstrap") ||
+    msg.includes("does not exist");
+
+  if (!missing && error) throw error;
+
+  const conversations = await getUnifiedB2BChatBootstrap(organizationId);
+  return {
+    conversations,
+    lanes: mergeMessagesByContextIntoLanes(
+      buildChatLanesFromConversations(conversations),
+      null,
+    ),
+  };
 }
 
 /**

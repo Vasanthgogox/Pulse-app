@@ -1,0 +1,28 @@
+import type { StatusChangeMetadata, TripConversation, TripMessageRow } from "../types/chat.types";
+
+/** Trip lane: show in-chat feedback card only after a completed status transition exists in history. */
+export function tripMessageHistoryHasCompletedStatus(messages: TripMessageRow[] | undefined): boolean {
+  if (!messages?.length) return false;
+  for (const m of messages) {
+    if (m.message_type !== "status_change") continue;
+    const meta = m.metadata as StatusChangeMetadata | undefined;
+    const ns = String(meta?.new_status ?? "").toLowerCase().trim();
+    if (ns === "completed") return true;
+  }
+  return false;
+}
+
+/**
+ * Integrated indents: require the indent row to be `completed` before showing the
+ * in-chat debrief card on client/supplier lanes. When `indent_status` is absent
+ * (legacy bootstrap), fall back to trip-history checks only.
+ */
+export function indentAllowsInChatFeedbackDebrief(
+  conv: Pick<TripConversation, "indent_id" | "indent_status">,
+): boolean {
+  const hasIndent = Boolean(conv.indent_id && String(conv.indent_id).trim());
+  if (!hasIndent) return true;
+  const st = String(conv.indent_status ?? "").trim().toLowerCase();
+  if (!st) return true;
+  return st === "completed";
+}

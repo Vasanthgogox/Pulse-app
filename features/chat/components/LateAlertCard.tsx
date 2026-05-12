@@ -1,36 +1,25 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { AlertTriangle } from "lucide-react-native";
-import Theme from "@/constants/Theme";
+import { Clock } from "lucide-react-native";
 import type { TripMessageRow } from "../types/chat.types";
+import {
+  isLongHaulLateChatMessage,
+  readLongHaulMetaFromMessage,
+} from "../utils/longHaulChat.util";
 
-export function isLongHaulLateChatMessage(message: TripMessageRow): boolean {
-  if (message.message_type !== "system_log") return false;
-  const m = message.metadata as Record<string, unknown> | null | undefined;
-  if (m?.long_haul_late === true) return true;
-  const ep =
-    m?.event_payload && typeof m.event_payload === "object" && !Array.isArray(m.event_payload)
-      ? (m.event_payload as Record<string, unknown>)
-      : null;
-  return String(ep?.event_tag ?? "").toUpperCase() === "LATE";
+export { isLongHaulLateChatMessage };
+
+export interface LateAlertCardProps {
+  message: TripMessageRow;
+  /** Live rolling ETA/health from chat store (updates after pings with forward metadata). */
+  liveRevisedEta?: string | null;
+  liveHealthStatus?: string | null;
 }
 
-function readLateMeta(message: TripMessageRow): { newEta: string | null; health: string | null } {
-  const m = message.metadata as Record<string, unknown> | null | undefined;
-  const ep =
-    m?.event_payload && typeof m.event_payload === "object" && !Array.isArray(m.event_payload)
-      ? (m.event_payload as Record<string, unknown>)
-      : null;
-  const newEta = typeof ep?.new_eta === "string" ? ep.new_eta.trim() : null;
-  const health = typeof ep?.health_status === "string" ? ep.health_status.trim() : null;
-  return { newEta: newEta || null, health: health || null };
-}
-
-/**
- * Long-haul schedule slip (`event_payload.event_tag === 'LATE'`) — distinct from generic system lines.
- */
-export function LateAlertCard({ message }: { message: TripMessageRow }) {
-  const { newEta, health } = readLateMeta(message);
+export function LateAlertCard({ message, liveRevisedEta, liveHealthStatus }: LateAlertCardProps) {
+  const fromMsg = readLongHaulMetaFromMessage(message);
+  const newEta = liveRevisedEta ?? fromMsg.newEta;
+  const health = liveHealthStatus ?? fromMsg.health;
   let displayTime = message.created_at;
   try {
     displayTime = new Date(message.created_at).toLocaleTimeString("en-IN", {
@@ -42,25 +31,27 @@ export function LateAlertCard({ message }: { message: TripMessageRow }) {
     // keep raw
   }
 
+  const bodyText = (message.content ?? "").trim();
+  const healthReadable = health ? health.replace(/_/g, " ") : null;
+
   return (
     <View style={s.card} accessibilityRole="text">
       <View style={s.iconWrap}>
-        <AlertTriangle size={18} color="#b91c1c" />
+        <Clock size={18} color="#5c6bc0" strokeWidth={2.1} />
       </View>
       <View style={s.body}>
-        <Text style={s.tag}>LATE</Text>
-        <Text style={s.title}>Vehicle behind schedule</Text>
+        <Text style={s.headline}>Vehicle behind schedule</Text>
         {newEta ? (
-          <Text style={s.sub}>
-            Revised ETA: <Text style={s.etaEm}>{newEta}</Text>
+          <Text style={s.detail}>
+            Revised ETA: <Text style={s.detailStrong}>{newEta}</Text>
           </Text>
         ) : null}
-        {health ? (
-          <Text style={s.muted}>
-            Health: {health.replace(/_/g, " ")}
+        {healthReadable ? (
+          <Text style={s.detail}>
+            Health: <Text style={s.detailStrong}>{healthReadable}</Text>
           </Text>
         ) : null}
-        <Text style={s.content}>{message.content}</Text>
+        {bodyText ? <Text style={s.detail}>{bodyText}</Text> : null}
         <Text style={s.time}>{displayTime}</Text>
       </View>
     </View>
@@ -71,40 +62,56 @@ const s = StyleSheet.create({
   card: {
     flexDirection: "row",
     alignItems: "flex-start",
+    alignSelf: "center",
     gap: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    backgroundColor: "#fef2f2",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#fecaca",
-    maxWidth: "100%",
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    maxWidth: "92%",
+    marginVertical: 6,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
   },
   iconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#fee2e2",
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: "#e8eaf6",
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
-  body: { flex: 1, minWidth: 0 },
-  tag: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#b91c1c",
-    letterSpacing: 1,
-    marginBottom: 2,
-  },
-  title: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: Theme.textPrimary,
+  body: { flex: 1, minWidth: 0, paddingTop: 1 },
+  headline: {
+    fontSize: 14,
+    color: "#1e293b",
+    fontWeight: "600",
+    lineHeight: 20,
+    letterSpacing: -0.1,
     marginBottom: 4,
   },
-  sub: { fontSize: 13, color: Theme.textSecondary, marginBottom: 2 },
-  etaEm: { fontWeight: "700", color: Theme.textPrimary },
-  muted: { fontSize: 12, color: Theme.textSecondary, marginBottom: 4 },
-  content: { fontSize: 13, color: Theme.textPrimary, lineHeight: 18 },
-  time: { fontSize: 11, color: Theme.textSecondary, marginTop: 6 },
+  detail: {
+    fontSize: 13,
+    color: "#64748b",
+    lineHeight: 19,
+    fontWeight: "500",
+    marginTop: 2,
+  },
+  detailStrong: {
+    color: "#334155",
+    fontWeight: "600",
+  },
+  time: {
+    fontSize: 11,
+    color: "#94a3b8",
+    marginTop: 6,
+    fontWeight: "600",
+    letterSpacing: 0.15,
+  },
 });

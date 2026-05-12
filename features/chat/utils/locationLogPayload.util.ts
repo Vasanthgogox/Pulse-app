@@ -6,11 +6,13 @@ export interface SystemLogLocationData {
   lat: number;
   lng: number;
   address_name?: string | null;
+  odometer_km?: number | null;
+  recorded_at?: string | null;
 }
 
 export function parseSystemLogLocationData(row: Partial<TripMessageRow>): SystemLogLocationData | null {
   const mt = row.message_type;
-  if (mt !== "system_log" && mt !== "system" && mt !== "update") return null;
+  if (mt !== "system_log" && mt !== "system" && mt !== "update" && mt !== "location_log") return null;
   const m = mergeMessageMetadataForEventPayload(row);
   if (!m) return null;
   const ep = m.event_payload as Record<string, unknown> | undefined;
@@ -23,5 +25,11 @@ export function parseSystemLogLocationData(row: Partial<TripMessageRow>): System
     typeof (ld as { address_name?: unknown }).address_name === "string"
       ? String((ld as { address_name: string }).address_name).trim() || null
       : null;
-  return { lat, lng, address_name };
+  const odoRaw = (ld as { odometer_km?: unknown }).odometer_km;
+  const odometer_km =
+    odoRaw != null && Number.isFinite(Number(odoRaw)) ? Number(odoRaw) : null;
+  const recRaw = (ld as { recorded_at?: unknown }).recorded_at;
+  const recorded_at =
+    typeof recRaw === "string" && recRaw.trim() ? recRaw.trim() : null;
+  return { lat, lng, address_name, odometer_km, recorded_at };
 }

@@ -20,7 +20,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useDriverChat } from "@/features/chat/contexts/DriverChatContext";
-import { ChatLedgerEventCard } from "@/features/chat/components/ChatEventCard";
 import { DocumentShareCard } from "@/features/chat/components/DocumentShareCard";
 import type { TripConversation, TripMessageRow } from "@/features/chat/types/chat.types";
 import {
@@ -273,16 +272,7 @@ function MessageThread({
       return <DocumentShareCard message={m} isOwn={m.sender_role === "driver"} />;
     }
     if (m.message_type === "ledger_event") {
-      return (
-        <ChatLedgerEventCard
-          message={m}
-          currentOrgId={conv.organization_id}
-          conversationPartyName={conv.party_name}
-          readOnly
-          onAddToBook={() => {}}
-          onDispute={() => {}}
-        />
-      );
+      return null;
     }
     return (
       <ChatBubble
