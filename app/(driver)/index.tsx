@@ -3229,9 +3229,13 @@ export default function DriverRadarScreen() {
     const MapCallout = Callout as ComponentType<Record<string, unknown>>;
     const mapInteractionsLocked = Boolean(otpClaimTripId);
     const controlsVariant = options?.controlsVariant ?? "modal";
-    /** Lock pan/zoom while GPS-tracking so the map stays on the driver + route leg. */
-    const mapViewportLocked =
-      mapInteractionsLocked || isFollowingLocation;
+    /**
+     * Only hard-lock pan/zoom for OTP entry (modal). When the driver is in follow mode
+     * (Head to Pickup, In-Transit, etc.) we keep gestures enabled and instead disable
+     * follow on the first pan/pinch — same UX as Google Maps / Uber. Without this,
+     * mobile drivers cannot zoom/scroll the map while a trip is active.
+     */
+    const mapViewportLocked = mapInteractionsLocked;
 
     const showLeaflet =
       Platform.OS === "web" || useLeafletFallback || leafLetForced;
@@ -3398,6 +3402,11 @@ export default function DriverRadarScreen() {
             pitchEnabled={!mapViewportLocked}
             moveOnMarkerPress={false}
             pointerEvents="auto"
+            onPanDrag={() => {
+              // Manual gesture: drop follow so we don't snap the camera back on the
+              // next GPS tick. Driver can re-engage via the "My location" pill.
+              if (isFollowingLocation) setIsFollowingLocation(false);
+            }}
             onMapReady={() => {
               // Native map became ready — clear "booting" so we don't fallback on next launch.
               void AsyncStorage.setItem(DRIVER_MAP_BOOT_KEY, "0").catch(
