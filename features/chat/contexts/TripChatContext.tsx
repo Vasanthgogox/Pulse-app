@@ -3,6 +3,7 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   type ReactNode,
 } from "react";
@@ -15,6 +16,7 @@ import * as chatService from "../services/chat.service";
 import { useConversations, useTotalUnreadCount } from "../store/chatStore";
 import {
   clearReadReceiptDebouncerForConversation,
+  pruneModuleLevelDedupeState,
   registerMarkMessagesSeenRpc,
   useChatStore,
 } from "../store/useChatStore";
@@ -147,6 +149,25 @@ export function TripChatProvider({
   const conversations    = useConversations();
   const totalUnreadCount = useTotalUnreadCount();
   const isLoading        = useChatStore(s => s.isLoading);
+
+  // Collect host-org IDs where the viewer is a linked supplier/client.
+  // These are orgs whose conversations appear in the store but belong to a
+  // different org than the viewer's own org (e.g. Deepak's org for nihas).
+  const linkedOrgIdsStr = useChatStore(s => {
+    if (!organizationId) return '';
+    const ids = new Set<string>();
+    for (const entry of Object.values(s.trips)) {
+      for (const party of Object.values(entry.parties)) {
+        const orgId = party?.organizationId;
+        if (orgId && orgId !== organizationId) ids.add(orgId);
+      }
+    }
+    return [...ids].sort().join(',');
+  });
+  const linkedOrgIds = useMemo(
+    () => (linkedOrgIdsStr ? linkedOrgIdsStr.split(',').filter(Boolean) : []),
+    [linkedOrgIdsStr],
+  );
 
   const bootstrappedOrgRef = useRef<string | null>(null);
   const isActiveRef = useRef(isActive);
@@ -358,6 +379,72 @@ export function TripChatProvider({
       unsub();
     };
   }, [organizationId, selfUid]);
+
+  // ── Realtime: linked-org trip_messages (viewer is linked supplier/client) ────
+  // When the viewer belongs to a supplier org (e.g. nihas / aiman logs) and views
+  // a host-org trip (e.g. Deepak's TRP011), the host's messages land with
+  // organization_id = host_org. The viewer's own subscription above only watches
+  // their own org — so host-org messages never fire for the viewer unless we add a
+  // second subscription per linked host org.
+  useEffect(() => {
+    if (!organizationId || !selfUid || linkedOrgIds.length === 0) return;
+    const unsubs = linkedOrgIds.map(hostOrgId =>
+      subscribeSharedPostgresChanges(
+        `trip_messages:linked:${hostOrgId}:for:${organizationId}`,
+        [
+          {
+            event:  "INSERT",
+            schema: "public",
+            table:  "trip_messages",
+            filter: `organization_id=eq.${hostOrgId}`,
+          },
+          {
+            event:  "UPDATE",
+            schema: "public",
+            table:  "trip_messages",
+            filter: `organization_id=eq.${hostOrgId}`,
+          },
+        ],
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            const row = payload.new as Partial<TripMessageRow> | null;
+            if (!row?.conversation_id) return;
+            // Skip echo from own sends.
+            if (row.sender_user_id && row.sender_user_id === selfUid) return;
+            const s = useChatStore.getState();
+            // Only process if we have this conversation in the store.
+            if (!s.convToTrip[row.conversation_id]) {
+              _enqueueUnknownConv(row.conversation_id, row, isActiveRef.current ? 'active' : 'background');
+              return;
+            }
+            const hubListOnly = getActiveTripMessageConversationId() !== row.conversation_id;
+            s.processIncomingEvent(row, isActiveRef.current ? 'active' : 'background', { hubListOnly });
+          } else if (payload.eventType === "UPDATE") {
+            const row = payload.new as TripMessageRow | null;
+            if (!row?.id || !row.conversation_id) return;
+            const patch: Partial<TripMessageRow> = {
+              is_delivered: row.is_delivered,
+              delivered_at: row.delivered_at,
+              is_read:      row.is_read,
+              read_at:      row.read_at,
+            };
+            if (row.metadata != null) patch.metadata = row.metadata;
+            ackBatchRef.current.push({ convId: row.conversation_id, msgId: row.id, patch });
+            if (ackRafRef.current == null) {
+              ackRafRef.current = requestAnimationFrame(() => { flushAckBatch(); });
+            }
+          }
+        },
+      )
+    );
+    return () => { unsubs.forEach(u => u()); };
+  }, [organizationId, selfUid, linkedOrgIds, _enqueueUnknownConv, flushAckBatch]);
+
+  // ── Prune module-level dedupe Maps (prevent unbounded growth in long sessions) ─
+  useEffect(() => {
+    const id = setInterval(pruneModuleLevelDedupeState, 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   // ── sendMessage: optimistic + persist + rollback ───────────────────────────
   const sendMessage = useCallback(

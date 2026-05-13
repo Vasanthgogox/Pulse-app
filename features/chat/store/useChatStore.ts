@@ -159,6 +159,20 @@ function consumeActionIdDedupe(row: Partial<TripMessageRow>): boolean {
 
 const BROADCAST_DEDUPE_WINDOW_MS = 120_000;
 
+/** Prune stale entries from module-level dedupe Maps (called by TripChatContext on interval). */
+export function pruneModuleLevelDedupeState(): void {
+  const now = Date.now();
+  for (const [k, t] of lastRealtimeInsertAt) {
+    if (now - t > 2000) lastRealtimeInsertAt.delete(k);
+  }
+  for (const [k, t] of lastRealtimeAckAt) {
+    if (now - t > 2000) lastRealtimeAckAt.delete(k);
+  }
+  for (const [k, t] of lastActionIdAt) {
+    if (now - t > 5000) lastActionIdAt.delete(k);
+  }
+}
+
 function broadcastStatusKeyFromRow(row: Partial<TripMessageRow>): string | null {
   const m = mergeMessageMetadataForEventPayload(row);
   if (!m) return null;
@@ -1946,11 +1960,17 @@ export const useChatStore = create<ChatState>()(
         party && messages.length > 0
           ? { ...entry.parties, [partyType]: { ...party, historyWindowLoaded: true } }
           : entry.parties;
+      const MAX_EVENT_STREAM_SIZE = 500;
+      const rawStream = mergeEvents(entry.event_stream, newEvts);
+      const cappedStream =
+        rawStream.length > MAX_EVENT_STREAM_SIZE
+          ? rawStream.slice(-MAX_EVENT_STREAM_SIZE)
+          : rawStream;
       const merged = clearEventStreamLazySkipIfFilled(
         withLongHaulFieldsFromStream({
           ...entry,
           parties,
-          event_stream: mergeEvents(entry.event_stream, newEvts),
+          event_stream: cappedStream,
         }),
       );
       set({
