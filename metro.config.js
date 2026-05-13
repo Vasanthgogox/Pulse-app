@@ -4,9 +4,11 @@ const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
 
+// Cache stored outside project tree so Watchman never sees Metro's own writes
+// and doesn't trigger a rebuild loop.
 config.cacheStores = [
   new FileStore({
-    root: path.join(__dirname, '.metro-cache'),
+    root: path.join(require('os').tmpdir(), 'q-web-metro-cache'),
   }),
 ];
 

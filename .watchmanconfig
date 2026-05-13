@@ -1,0 +1,9 @@
+{
+  "ignore_dirs": [
+    ".metro-cache",
+    ".expo",
+    "node_modules",
+    "dist",
+    ".git"
+  ]
+}

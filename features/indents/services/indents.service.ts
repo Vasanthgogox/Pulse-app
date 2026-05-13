@@ -91,6 +91,8 @@ export interface IndentRow {
   /** User who created this row. */
   created_by_user_id?: string | null;
   trip_number?: string | null;
+  assigned_supplier_id?: string | null;
+  assigned_supplier_rate?: number | null;
   [key: string]: unknown;
 }
 

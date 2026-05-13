@@ -520,16 +520,22 @@ export function LoadCenterView({
   const { data: quoteCounts = {}, refetch: refetchQuoteCounts } =
     useIndentOfferCountsQuery(orgId, giveLoadIds);
 
-  /** Indent ids where my org's quote is accepted (awarded to me). Used to exclude from Find Work and build Claimed list. */
-  const awardedToMeIndentIds = useMemo(
-    () =>
-      new Set(
-        myQuotes
-          .filter((q) => (q.status || "").toLowerCase() === "accepted")
-          .map((q) => q.indent_id),
-      ),
-    [myQuotes],
-  );
+  /** Indents awarded to my org: accepted direct quote OR shipper set assigned_supplier_id (Give Load / assign without quote row). */
+  const awardedToMeIndentIds = useMemo(() => {
+    const s = new Set(
+      myQuotes
+        .filter((q) => (q.status || "").toLowerCase() === "accepted")
+        .map((q) => q.indent_id),
+    );
+    const stAwarded = new Set(["awarded", "completed"]);
+    for (const i of marketIndents) {
+      const aid = i.assigned_supplier_id;
+      if (!orgId || String(aid ?? "") !== orgId) continue;
+      const st = (i.status || "").toLowerCase();
+      if (stAwarded.has(st)) s.add(i.id);
+    }
+    return s;
+  }, [myQuotes, marketIndents, orgId]);
 
   const awardedLoads = useMemo(
     () =>
