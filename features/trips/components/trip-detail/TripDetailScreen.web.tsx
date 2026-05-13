@@ -27,7 +27,7 @@ import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { MessageSquare } from "lucide-react-native";
+import { Activity, Check, MessageSquare, Zap } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
@@ -677,6 +677,32 @@ export default function TripDetailScreen({
       coordLine != null
         ? `Last GPS checkpoint ${coordLine}. Vehicle moving towards destination through planned route.`
         : "Vehicle moving towards destination through planned route.";
+    const statusLc = (tr.status ?? "").toLowerCase();
+    const driverAcceptedAtIso: string | null = (() => {
+      if (statusLc === "pending_acceptance" || statusLc === "draft") {
+        return null;
+      }
+      if (
+        tr.status_updated_role === "driver" ||
+        Number(tr.status_revision ?? 0) > 0
+      ) {
+        return tr.updated_at ?? tr.started_at ?? assignedAtIso ?? null;
+      }
+      if (
+        statusLc === "assigned" ||
+        statusLc === "in_progress" ||
+        statusLc === "picked_up" ||
+        statusLc === "pickup" ||
+        statusLc === "in_transit" ||
+        statusLc === "at_drop" ||
+        statusLc === "completed" ||
+        statusLc === "delivered" ||
+        statusLc === "done"
+      ) {
+        return tr.updated_at ?? assignedAtIso ?? tr.created_at ?? null;
+      }
+      return null;
+    })();
     return [
       {
         status: "Assigned",
@@ -688,6 +714,22 @@ export default function TripDetailScreen({
             })
           : "—",
         details: "Trip assigned and prepared for dispatch.",
+      },
+      {
+        status: "Driver Accepted",
+        location: tr.pickup_area?.trim() || "Awaiting driver",
+        time: driverAcceptedAtIso
+          ? new Date(driverAcceptedAtIso).toLocaleTimeString("en-IN", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          : "—",
+        details:
+          statusLc === "pending_acceptance"
+            ? "Driver has been invited; acceptance pending on device."
+            : statusLc === "draft"
+              ? "Assignment is still being prepared."
+              : "Driver confirmed the assignment and can proceed to pickup.",
       },
       {
         status: "Pickup",
@@ -1051,16 +1093,19 @@ export default function TripDetailScreen({
   const supplierName = supplierNameForParty.toUpperCase();
   const isIntegratedTrip = Boolean(trip.indent_id);
 
-  // Determine current step index (0=Assigned, 1=Pickup, 2=In-Transit, 3=Delivered)
+  // Manifest Pulse: 0=Assigned, 1=Driver Accepted, 2=Pickup, 3=In-Transit, 4=Delivered
+  const manifestPulseLastIndex = journeyLogs.length - 1;
   const currentStepIndex = (() => {
     const s = String(trip.status ?? "").toLowerCase();
     if (
       ["completed", "delivered", "done", "at_drop"].includes(s) ||
       !!trip.completed_at
     )
-      return 3;
-    if (s === "in_transit") return 2;
-    if (["in_progress", "picked_up", "pickup"].includes(s)) return 1;
+      return 4;
+    if (s === "in_transit") return 3;
+    if (["in_progress", "picked_up", "pickup"].includes(s)) return 2;
+    if (s === "assigned") return 1;
+    if (s === "pending_acceptance") return 0;
     return 0;
   })();
 
@@ -1072,6 +1117,14 @@ export default function TripDetailScreen({
     const driverLng = loc?.longitude ?? null;
     const driverLocLabel = detail.driverLocationAddress?.trim() || null;
     const now = new Date().toISOString();
+    if (s === "pending_acceptance")
+      return {
+        label: "Driver accepts assignment",
+        targetStatus: "assigned",
+        driverLat,
+        driverLng,
+        driverLocLabel,
+      };
     if (["draft", "assigned"].includes(s))
       return {
         label: "Driver arrived at pickup",
@@ -2924,17 +2977,19 @@ export default function TripDetailScreen({
                   <View style={neoStyles.journeyGrid}>
                     <View style={neoStyles.timelineCard}>
                       <View style={neoStyles.cardTitleRow}>
-                        <Feather name="activity" size={16} color="#4f46e5" />
-                        <Text style={neoStyles.cardTitleDark}>
-                          Manifest Pulse
-                        </Text>
+                        <View style={neoStyles.manifestPulseTitleGroup}>
+                          <Activity size={24} color="#5856D6" strokeWidth={2.5} />
+                          <Text style={neoStyles.cardTitleDark}>
+                            MANIFEST PULSE
+                          </Text>
+                        </View>
                         {nextSimulateStep && !tripCompleted ? (
                           <TouchableOpacity
                             style={neoStyles.simBtn}
                             onPress={() => setSimConfirmStep(nextSimulateStep)}
                             activeOpacity={0.85}
                           >
-                            <Feather name="zap" size={11} color="#f59e0b" />
+                            <Zap size={14} color="#f59e0b" fill="#f59e0b" />
                             <Text style={neoStyles.simBtnText}>
                               {nextSimulateStep.targetStatus === "completed"
                                 ? "Simulate Complete"
@@ -2946,14 +3001,21 @@ export default function TripDetailScreen({
                       {journeyLogs.map((log, index) => {
                         const expanded = expandedLog === index;
                         const isLast = index === journeyLogs.length - 1;
-                        const isReached = index <= currentStepIndex;
+                        const isPending = index > currentStepIndex;
                         const isCurrent =
-                          index === currentStepIndex && currentStepIndex < 3;
-                        // Find simulation log entries for this step
+                          index === currentStepIndex &&
+                          currentStepIndex < manifestPulseLastIndex;
+                        const phase: "completed" | "current" | "pending" =
+                          isPending
+                            ? "pending"
+                            : isCurrent
+                              ? "current"
+                              : "completed";
+                        // Find simulation log entries for this step (indices align with Manifest Pulse rows)
                         const stepStatusMap: Record<number, string[]> = {
-                          1: ["in_progress", "picked_up"],
-                          2: ["in_transit"],
-                          3: ["at_drop", "completed", "delivered", "done"],
+                          2: ["in_progress", "picked_up"],
+                          3: ["in_transit"],
+                          4: ["at_drop", "completed", "delivered", "done"],
                         };
                         const stepSimLogs = simLogEntries.filter((e) =>
                           (stepStatusMap[index] ?? []).includes(e.status),
@@ -2961,13 +3023,18 @@ export default function TripDetailScreen({
                         return (
                           <View
                             key={`${log.status}-${index}`}
-                            style={neoStyles.timelineItemWrap}
+                            style={[
+                              neoStyles.timelineItemWrap,
+                              !isLast && neoStyles.timelineItemWrapSpaced,
+                            ]}
                           >
                             {!isLast ? (
                               <View
                                 style={[
                                   neoStyles.timelineConnector,
-                                  isReached && { backgroundColor: "#4f46e5" },
+                                  index < currentStepIndex && {
+                                    backgroundColor: "#40B876",
+                                  },
                                 ]}
                               />
                             ) : null}
@@ -2981,37 +3048,35 @@ export default function TripDetailScreen({
                               }
                               activeOpacity={0.9}
                             >
-                              <View
-                                style={[
-                                  neoStyles.timelineDot,
-                                  isReached && { backgroundColor: "#10b981" },
-                                  isCurrent && { backgroundColor: "#4f46e5" },
-                                ]}
-                              >
-                                <FontAwesome
-                                  name={isCurrent ? "circle" : "check"}
-                                  size={isCurrent ? 6 : 10}
-                                  color="#fff"
-                                />
+                              <View style={neoStyles.manifestPulseIconColumn}>
+                                <ManifestPulseStepIcon phase={phase} />
                               </View>
                               <View style={neoStyles.timelineBody}>
                                 <View style={neoStyles.timelineTop}>
                                   <Text
                                     style={[
                                       neoStyles.timelineStatus,
-                                      !isReached && { opacity: 0.4 },
+                                      isPending &&
+                                        neoStyles.manifestPulseTitlePending,
                                     ]}
                                   >
                                     {log.status}
                                   </Text>
-                                  <Text style={neoStyles.timelineTime}>
+                                  <Text
+                                    style={[
+                                      neoStyles.timelineTime,
+                                      isPending &&
+                                        neoStyles.manifestPulseTimePending,
+                                    ]}
+                                  >
                                     {log.time}
                                   </Text>
                                 </View>
                                 <Text
                                   style={[
                                     neoStyles.timelineLocation,
-                                    !isReached && { opacity: 0.4 },
+                                    isPending &&
+                                      neoStyles.manifestPulseSubtitlePending,
                                   ]}
                                   numberOfLines={1}
                                 >
@@ -6213,6 +6278,93 @@ const dStyles = StyleSheet.create({
   },
 });
 
+/** Manifest Pulse step icon — matches reference (green check | purple ring | gray dot). */
+const manifestPulseStepStyles = StyleSheet.create({
+  completed: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#40B876",
+    borderWidth: 4,
+    borderColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  currentOuter: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 5,
+    borderColor: "#EEF2FF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  currentInner: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: "#5856D6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  currentDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#FFFFFF",
+  },
+  pendingOuter: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 4,
+    borderColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pendingInner: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: "#CBD5E1",
+  },
+});
+
+function ManifestPulseStepIcon({
+  phase,
+}: {
+  phase: "completed" | "current" | "pending";
+}) {
+  if (phase === "completed") {
+    return (
+      <View style={manifestPulseStepStyles.completed}>
+        <Check size={14} color="#FFFFFF" strokeWidth={3.5} />
+      </View>
+    );
+  }
+  if (phase === "current") {
+    return (
+      <View style={manifestPulseStepStyles.currentOuter}>
+        <View style={manifestPulseStepStyles.currentInner}>
+          <View style={manifestPulseStepStyles.currentDot} />
+        </View>
+      </View>
+    );
+  }
+  return (
+    <View style={manifestPulseStepStyles.pendingOuter}>
+      <View style={manifestPulseStepStyles.pendingInner} />
+    </View>
+  );
+}
+
 const neoStyles = StyleSheet.create({
   manifestNavLeft: {
     flexDirection: "row",
@@ -6587,64 +6739,75 @@ const neoStyles = StyleSheet.create({
   timelineCard: {
     flex: 5,
     minWidth: 300,
+    maxWidth: 480,
+    alignSelf: "stretch",
     backgroundColor: "#fff",
-    borderRadius: 44,
-    borderWidth: 1,
-    borderColor: "#f8fafc",
-    padding: 32,
-    shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: 12 },
+    borderRadius: 32,
+    borderWidth: 0,
+    paddingVertical: 32,
+    paddingHorizontal: 32,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.04,
-    shadowRadius: 28,
+    shadowRadius: 20,
+    elevation: 2,
   },
   cardTitleRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
+    justifyContent: "space-between",
     gap: 12,
-    marginBottom: 26,
+    marginBottom: 48,
+  },
+  manifestPulseTitleGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexShrink: 1,
+    minWidth: 0,
   },
   cardTitleDark: {
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: "900",
     fontStyle: "italic",
-    color: "#171a20",
+    color: "#0f172a",
     textTransform: "uppercase",
-    letterSpacing: -0.7,
+    letterSpacing: 0.5,
+    marginTop: 2,
   },
   timelineItemWrap: {
     position: "relative",
   },
+  timelineItemWrapSpaced: {
+    marginBottom: 48,
+  },
   timelineConnector: {
     position: "absolute",
     left: 13,
-    top: 40,
+    top: 32,
     width: 2,
-    bottom: -24,
-    backgroundColor: "#f1f5f9",
+    bottom: -8,
+    borderRadius: 1,
+    backgroundColor: "#EDF2F7",
+  },
+  manifestPulseIconColumn: {
+    width: 28,
+    alignItems: "center",
+    justifyContent: "flex-start",
+    marginTop: 2,
+    zIndex: 1,
   },
   timelineItem: {
     flexDirection: "row",
-    gap: 22,
-    padding: 16,
-    borderRadius: 28,
-    marginBottom: 24,
+    gap: 24,
+    paddingVertical: 4,
+    paddingHorizontal: 0,
+    borderRadius: 16,
+    marginBottom: 0,
   },
   timelineItemActive: {
     backgroundColor: "#f8fafc",
-  },
-  timelineDot: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#10b981",
-    borderWidth: 4,
-    borderColor: "#fff",
-    shadowColor: "#10b981",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
   },
   timelineBody: {
     flex: 1,
@@ -6652,27 +6815,36 @@ const neoStyles = StyleSheet.create({
   },
   timelineTop: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 12,
   },
   timelineStatus: {
-    color: "#0f172a",
-    fontSize: 11,
-    fontWeight: "900",
+    color: "#1E293B",
+    fontSize: 13,
+    fontWeight: "800",
     textTransform: "uppercase",
-    letterSpacing: 1.2,
+    letterSpacing: 1.6,
+  },
+  manifestPulseTitlePending: {
+    color: "#94a3b8",
   },
   timelineTime: {
-    color: "#cbd5e1",
-    fontSize: 10,
-    fontWeight: "800",
+    color: "#94a3b8",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  manifestPulseTimePending: {
+    color: "#CBD5E1",
   },
   timelineLocation: {
     color: "#64748b",
-    fontSize: 12,
-    marginTop: 5,
+    fontSize: 14,
+    marginTop: 4,
     fontWeight: "600",
+  },
+  manifestPulseSubtitlePending: {
+    color: "#CBD5E1",
   },
   timelineDetails: {
     color: "#94a3b8",
@@ -6684,20 +6856,21 @@ const neoStyles = StyleSheet.create({
     marginLeft: "auto",
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
-    backgroundColor: "rgba(245,158,11,0.12)",
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(255, 251, 235, 0.55)",
     borderWidth: 1,
-    borderColor: "rgba(245,158,11,0.3)",
+    borderColor: "#FDE68A",
   },
   simBtnText: {
     fontSize: 11,
     fontWeight: "800",
     color: "#f59e0b",
     textTransform: "uppercase",
-    letterSpacing: 0.5,
+    letterSpacing: 2,
+    marginTop: 1,
   },
   simLogBadge: {
     flexDirection: "row",
