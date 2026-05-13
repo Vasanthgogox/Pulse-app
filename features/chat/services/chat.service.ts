@@ -1245,6 +1245,10 @@ function normalizeInitialStateRow(row: Record<string, unknown>): TripConversatio
       row.trip_organization_id != null && String(row.trip_organization_id).trim() !== ""
         ? String(row.trip_organization_id)
         : null,
+    trip_organization_name:
+      row.trip_organization_name != null && String(row.trip_organization_name).trim() !== ""
+        ? String(row.trip_organization_name)
+        : null,
     indent_id: indentRaw,
     indent_status:
       row.indent_status != null && String(row.indent_status).trim() !== ""

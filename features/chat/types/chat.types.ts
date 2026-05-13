@@ -271,6 +271,8 @@ export interface TripConversationRow {
   organization_id: string;
   /** Trip owner fleet org (`trips.organization_id`); may differ from `organization_id` on mirrored lanes. */
   trip_organization_id?: string | null;
+  /** Display name of the trip fleet owner org (organizations.name). Populated by bootstrap. */
+  trip_organization_name?: string | null;
   trip_id: string;
   /** From `trips.indent_id` at bootstrap — commercial lane key for ledger isolation. */
   indent_id?: string | null;
