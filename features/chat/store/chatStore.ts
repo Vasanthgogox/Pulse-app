@@ -123,6 +123,7 @@ function _convFromEntry(
     trip_feedback_status:   party.feedbackStatus ?? "none",
     trip_organization_id:   entry.tripOrganizationId ?? null,
     trip_organization_name: entry.tripOrganizationName ?? null,
+    indent_creator_organization_name: entry.indentCreatorOrganizationName ?? null,
     indent_id:               entry.indentId ?? null,
     conversation_type:     entry.chatFlow,
     trip_source:             entry.tripSource ?? null,

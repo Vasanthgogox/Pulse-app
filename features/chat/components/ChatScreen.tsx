@@ -5224,12 +5224,18 @@ function TripConversationDetailLoaded({
     primaryLateMessageId,
   ]);
 
+  const indentShipperDisplayName = (liveConv.indent_creator_organization_name ?? "").trim();
+  const supplierFleetOwnsTrip =
+    String(currentOrgId ?? "").trim() === String(liveConv.trip_organization_id ?? "").trim();
+
   // When viewer is linked supplier viewing the supplier lane, that lane IS their CLIENT
-  // channel (with the indent owner). Show the trip owner org name (indent creator) instead
-  // of party_name, which would be the viewer's own org name stored in the supplier entity.
+  // channel (with the indent owner / shipper). Prefer bootstrap indent_creator_organization_name
+  // (same trip_number peer with indent) when mirror trip omits indent_id.
   const chatDetailSubtitle =
     linkedSupplierSuppressSupplierTab && liveConv.party_type === "supplier"
-      ? (formatChatPartyName(liveConv.trip_organization_name ?? null) ?? undefined)
+      ? (formatChatPartyName(
+          indentShipperDisplayName || liveConv.trip_organization_name || null,
+        ) ?? undefined)
       : formatChatPartyName(liveConv.party_name) ?? undefined;
 
   const viewerRelativeConvPartyLabel =
@@ -5301,12 +5307,16 @@ function TripConversationDetailLoaded({
             {missionBarPartyTypes.map((tab) => {
               const on = liveConv.party_type === tab.rowType;
               const hasConversation = Boolean(partyConversationMap[tab.rowType]);
-              // For relabeled tabs (supplier shown as CLIENT from carrier's perspective),
-              // show the trip owner's org name (indent creator) rather than party_name
-              // (which would be the viewer's own org name stored in the supplier lane).
-              const partyLine = tab.displayType !== tab.rowType
-                ? formatChatPartyName(liveConv.trip_organization_name ?? null)
-                : formatChatPartyName(displayPartyName(tab.rowType));
+              const relabeledClientTab = tab.displayType !== tab.rowType;
+              const partyLine = relabeledClientTab
+                ? formatChatPartyName(
+                    indentShipperDisplayName || liveConv.trip_organization_name || null,
+                  )
+                : tab.rowType === "client" &&
+                    supplierFleetOwnsTrip &&
+                    indentShipperDisplayName
+                  ? formatChatPartyName(indentShipperDisplayName)
+                  : formatChatPartyName(displayPartyName(tab.rowType));
               return (
                 <TouchableOpacity
                   key={tab.displayType}

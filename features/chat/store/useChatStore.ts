@@ -491,6 +491,8 @@ export interface TripEntry {
   tripOrganizationId:   string | null;
   /** Display name of the trip fleet owner org (organizations.name). Populated by bootstrap. */
   tripOrganizationName: string | null;
+  /** Indent / shipper org name for supplier-side Client tab when mirror trip omits indent_id. */
+  indentCreatorOrganizationName: string | null;
   // Party lanes (at most one per ConversationPartyType)
   parties:              Partial<Record<ConversationPartyType, PartyConv>>;
   // Unified event stream for ALL parties, sorted ASC by created_at.
@@ -775,6 +777,11 @@ function entryFromConv(conv: TripConversation): TripEntry {
       conv.trip_organization_name != null && String(conv.trip_organization_name).trim() !== ""
         ? String(conv.trip_organization_name)
         : null,
+    indentCreatorOrganizationName:
+      conv.indent_creator_organization_name != null &&
+      String(conv.indent_creator_organization_name).trim() !== ""
+        ? String(conv.indent_creator_organization_name)
+        : null,
     parties:              {},
     event_stream:         [],
     lastEventAt:          conv.last_message_at,
@@ -836,6 +843,7 @@ function convFromEntry(
     trip_feedback_status:   party.feedbackStatus ?? "none",
     trip_organization_id:   entry.tripOrganizationId ?? null,
     trip_organization_name: entry.tripOrganizationName ?? null,
+    indent_creator_organization_name: entry.indentCreatorOrganizationName ?? null,
     indent_id:                entry.indentId ?? null,
     conversation_type:      entry.chatFlow,
     trip_source:            entry.tripSource ?? null,
@@ -1032,6 +1040,18 @@ function ingestBootstrapConversations(
     const entry = trips[tripId];
     if (conv.indent_id != null && String(conv.indent_id).trim() !== "") {
       entry.indentId = String(conv.indent_id);
+    }
+    if (
+      conv.indent_creator_organization_name != null &&
+      String(conv.indent_creator_organization_name).trim() !== ""
+    ) {
+      entry.indentCreatorOrganizationName = String(conv.indent_creator_organization_name);
+    }
+    if (
+      conv.trip_organization_name != null &&
+      String(conv.trip_organization_name).trim() !== ""
+    ) {
+      entry.tripOrganizationName = String(conv.trip_organization_name);
     }
     if (conv.trip_source != null && String(conv.trip_source).trim() !== "") {
       entry.tripSource = String(conv.trip_source);

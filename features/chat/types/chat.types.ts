@@ -273,6 +273,8 @@ export interface TripConversationRow {
   trip_organization_id?: string | null;
   /** Display name of the trip fleet owner org (organizations.name). Populated by bootstrap. */
   trip_organization_name?: string | null;
+  /** Shipper / indent owner org name (same trip_number peer with indent, or this trip's indent). Supplier Client tab. */
+  indent_creator_organization_name?: string | null;
   trip_id: string;
   /** From `trips.indent_id` at bootstrap — commercial lane key for ledger isolation. */
   indent_id?: string | null;
