@@ -489,6 +489,8 @@ export interface TripEntry {
   longHaulHealthStatus: string | null;
   /** From `trips.organization_id` (bootstrap); used for debrief RPC org scope. */
   tripOrganizationId:   string | null;
+  /** Display name of the trip fleet owner org (organizations.name). Populated by bootstrap. */
+  tripOrganizationName: string | null;
   // Party lanes (at most one per ConversationPartyType)
   parties:              Partial<Record<ConversationPartyType, PartyConv>>;
   // Unified event stream for ALL parties, sorted ASC by created_at.
@@ -769,6 +771,10 @@ function entryFromConv(conv: TripConversation): TripEntry {
       conv.trip_organization_id != null && String(conv.trip_organization_id).trim() !== ""
         ? String(conv.trip_organization_id)
         : null,
+    tripOrganizationName:
+      conv.trip_organization_name != null && String(conv.trip_organization_name).trim() !== ""
+        ? String(conv.trip_organization_name)
+        : null,
     parties:              {},
     event_stream:         [],
     lastEventAt:          conv.last_message_at,
@@ -829,6 +835,7 @@ function convFromEntry(
     drop_location:           entry.dropLocation,
     trip_feedback_status:   party.feedbackStatus ?? "none",
     trip_organization_id:   entry.tripOrganizationId ?? null,
+    trip_organization_name: entry.tripOrganizationName ?? null,
     indent_id:                entry.indentId ?? null,
     conversation_type:      entry.chatFlow,
     trip_source:            entry.tripSource ?? null,
@@ -1705,7 +1712,7 @@ export const useChatStore = create<ChatState>()(
       const { trips, convToTrip } = get();
       const found = findTripFeedbackMessageInStore(trips, convToTrip, messageId);
       if (!found) return { error: "Message not found" };
-      const { convId, row, ratingOrganizationId, tripId } = found;
+      const { convId, tripId, row, ratingOrganizationId } = found;
       const preMeta = parseFeedbackRequestMetadata(row);
       if (!preMeta) return { error: "Invalid feedback message" };
       if (isFeedbackRequestAlreadyRatedMeta(preMeta)) return { error: null };
@@ -1895,7 +1902,7 @@ export const useChatStore = create<ChatState>()(
         return false;
       }
       const entry = trips[tripId];
-      if (!entry) return;
+      if (!entry) return false;
       const viewerOrg =
         get().bootstrappedOrg ?? entry.parties[partyType]?.organizationId ?? "";
       const newEvts: TripEvent[] = messages

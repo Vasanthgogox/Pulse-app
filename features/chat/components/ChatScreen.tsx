@@ -128,6 +128,12 @@ import { TripCard } from "./TripCard";
 
 type TabId = "trips" | "indent" | "network";
 
+/** Hub/mission-bar party tab: rowType finds the conversation row; displayType drives icon + label. */
+type HubPartyTab = {
+  rowType: ConversationPartyType;
+  displayType: ConversationPartyType;
+};
+
 function isTripStreamTab(tab: TabId): boolean {
   return tab === "trips" || tab === "indent";
 }
@@ -329,7 +335,7 @@ function hubCardPartyTypesForTripHub(args: {
   viewerOrgName: string | null | undefined;
   tripHostOrgId: string | null | undefined;
   tripIntegrated: boolean;
-}): ConversationPartyType[] {
+}): HubPartyTab[] {
   const {
     hubTrip,
     hubRows,
@@ -341,7 +347,7 @@ function hubCardPartyTypesForTripHub(args: {
     tripIntegrated,
   } = args;
   if (!tripIntegrated) {
-    return ["driver"];
+    return [{ rowType: "driver" as ConversationPartyType, displayType: "driver" as ConversationPartyType }];
   }
 
   const map = partyConversationMapFromHubRows(hubRows);
@@ -351,7 +357,7 @@ function hubCardPartyTypesForTripHub(args: {
   const driverId = map.driver?.driver_id ?? hubTrip?.driver_id ?? tripDriverId ?? null;
   const aggregateTrip = isAggregateTrip({ supplier_id: supplierId });
 
-  let visible = HUB_PARTY_ORDER.filter((p) => {
+  let rawVisible = HUB_PARTY_ORDER.filter((p) => {
     if (p === "client") {
       return Boolean(String(clientId ?? "").trim()) || Boolean(map.client);
     }
@@ -364,35 +370,39 @@ function hubCardPartyTypesForTripHub(args: {
     return Boolean(String(driverId ?? "").trim()) || Boolean(map.driver);
   });
 
+  let isLinkedClient = false;
+  let isLinkedSupplier = false;
   if (hubTrip && viewerOrgId.trim()) {
-    if (
-      viewerIsLinkedTripClientViewer({
-        clientLanePartyName: map.client?.party_name ?? hubTrip.client_name,
-        viewerOrgId,
-        viewerOrgName,
-        tripHostOrgId,
-        composeClientLinkedOrgId: hubTrip.client_linked_organization_id ?? null,
-      })
-    ) {
-      visible = visible.filter((p) => p !== "client");
-    }
-    if (
-      viewerIsLinkedTripSupplierViewer({
-        supplierLanePartyName: map.supplier?.party_name ?? hubTrip.supplier_name,
-        viewerOrgId,
-        viewerOrgName,
-        tripHostOrgId,
-        composeSupplierLinkedOrgId: hubTrip.supplier_linked_organization_id ?? null,
-      })
-    ) {
-      visible = visible.filter((p) => p !== "supplier");
-    }
+    isLinkedClient = viewerIsLinkedTripClientViewer({
+      clientLanePartyName: map.client?.party_name ?? hubTrip.client_name,
+      viewerOrgId,
+      viewerOrgName,
+      tripHostOrgId,
+      composeClientLinkedOrgId: hubTrip.client_linked_organization_id ?? null,
+    });
+    isLinkedSupplier = viewerIsLinkedTripSupplierViewer({
+      supplierLanePartyName: map.supplier?.party_name ?? hubTrip.supplier_name,
+      viewerOrgId,
+      viewerOrgName,
+      tripHostOrgId,
+      composeSupplierLinkedOrgId: hubTrip.supplier_linked_organization_id ?? null,
+    });
   }
 
-  return applyContractualHubPartyIsolation(visible, {
+  // Client viewer: hide their own "client" tab (they ARE the client — no need to show self).
+  if (isLinkedClient) rawVisible = rawVisible.filter((p) => p !== "client");
+
+  const isolated = applyContractualHubPartyIsolation(rawVisible, {
     viewerOrgId,
     lanes: hubRows,
     tripIntegrated,
+  });
+
+  // Supplier viewer: relabel the "supplier" tab as "CLIENT" — from the carrier's perspective
+  // the supplier lane is their communication channel with the indent owner (their client).
+  return isolated.map((p): HubPartyTab => {
+    if (p === "supplier" && isLinkedSupplier) return { rowType: "supplier", displayType: "client" };
+    return { rowType: p, displayType: p };
   });
 }
 
@@ -1886,17 +1896,16 @@ export function ChatScreen() {
                   const chatEntry = chatTrips[trip.tripId];
                   const partyIconRow = (
                     <>
-                      {hubPartyTypesRow.map((partyType) => {
-                        const row = trip.rows.find((r) => r.party_type === partyType);
+                      {hubPartyTypesRow.map((tab) => {
+                        const row = trip.rows.find((r) => r.party_type === tab.rowType);
                         const on = Boolean(row && selectedConvId === row.id);
-                        // Determine if the underlying entity exists so we can offer create-on-demand
                         const entityExists = hubTripForIcons
-                          ? isPartyLinkedForTripChat(hubTripForIcons, partyType)
+                          ? isPartyLinkedForTripChat(hubTripForIcons, tab.rowType)
                           : Boolean(row);
                         const isMissing = !row && !entityExists;
                         return (
                           <TouchableOpacity
-                            key={`${trip.tripId}-viewer-${partyType}`}
+                            key={`${trip.tripId}-viewer-${tab.displayType}`}
                             style={[
                               s.tripHubPartyIconBtn,
                               tripActive && !on && s.tripHubPartyIconBtnOnDarkCard,
@@ -1911,7 +1920,7 @@ export function ChatScreen() {
                               }
                               if (!hubTripForIcons || !entityExists) return;
                               const pr = getComposePartyRows(hubTripForIcons).find(
-                                (r) => r.kind === "selectable" && r.partyType === partyType,
+                                (r) => r.kind === "selectable" && r.partyType === tab.rowType,
                               );
                               if (!pr || pr.kind !== "selectable") return;
                               setInitiating(true);
@@ -1920,7 +1929,7 @@ export function ChatScreen() {
                                 tripNumber: hubTripForIcons.display_trip_id ?? hubTripForIcons.trip_number,
                                 pickupArea: hubTripForIcons.pickup_area,
                                 dropLocation: hubTripForIcons.drop_location,
-                                partyType,
+                                partyType: tab.rowType,
                                 partyName: pr.name,
                                 partyId: pr.id,
                               });
@@ -1933,7 +1942,7 @@ export function ChatScreen() {
                             activeOpacity={0.82}
                           >
                             <PartyIcon
-                              partyType={partyType}
+                              partyType={tab.displayType}
                               active={on}
                               tone="hub"
                               size={14}
@@ -4933,11 +4942,16 @@ function TripConversationDetailLoaded({
     ],
   );
 
-  const missionBarPartyTypes = useMemo(() => {
+  const missionBarPartyTypes = useMemo((): HubPartyTab[] => {
     let rows = detailVisiblePartyTypes;
+    // Client viewer hides their own "client" tab (they are the client — redundant self).
     if (linkedClientSuppressClientTab) rows = rows.filter((p) => p !== "client");
-    if (linkedSupplierSuppressSupplierTab) rows = rows.filter((p) => p !== "supplier");
-    return rows;
+    // Supplier viewer: keep "supplier" tab but relabel it as "CLIENT" — from the carrier's
+    // perspective this lane is communication with the indent owner (their client).
+    return rows.map((p): HubPartyTab => {
+      if (p === "supplier" && linkedSupplierSuppressSupplierTab) return { rowType: "supplier", displayType: "client" };
+      return { rowType: p, displayType: p };
+    });
   }, [
     linkedClientSuppressClientTab,
     linkedSupplierSuppressSupplierTab,
@@ -5210,8 +5224,18 @@ function TripConversationDetailLoaded({
     primaryLateMessageId,
   ]);
 
+  // When viewer is linked supplier viewing the supplier lane, that lane IS their CLIENT
+  // channel (with the indent owner). Show the trip owner org name (indent creator) instead
+  // of party_name, which would be the viewer's own org name stored in the supplier entity.
   const chatDetailSubtitle =
-    formatChatPartyName(liveConv.party_name) ?? undefined;
+    linkedSupplierSuppressSupplierTab && liveConv.party_type === "supplier"
+      ? (formatChatPartyName(liveConv.trip_organization_name ?? null) ?? undefined)
+      : formatChatPartyName(liveConv.party_name) ?? undefined;
+
+  const viewerRelativeConvPartyLabel =
+    linkedSupplierSuppressSupplierTab && liveConv.party_type === "supplier"
+      ? "CLIENT"
+      : partyLabel(liveConv.party_type);
 
   const partyTabIcon = (partyType: ConversationPartyType, selected: boolean) => (
     <View
@@ -5233,7 +5257,7 @@ function TripConversationDetailLoaded({
   return (
     <View style={s.detailPanel}>
       <ChatDetailHeader
-        title={`${liveConv.trip_number} · ${partyLabel(liveConv.party_type)}`}
+        title={`${liveConv.trip_number} · ${viewerRelativeConvPartyLabel}`}
         subtitle={chatDetailSubtitle}
         partyType={liveConv.party_type}
         counterpartyType={headerCounterparty}
@@ -5274,22 +5298,27 @@ function TripConversationDetailLoaded({
             style={s.detailMissionTabsScroller}
             contentContainerStyle={s.detailPartyTabs}
           >
-            {missionBarPartyTypes.map((partyType) => {
-              const on = liveConv.party_type === partyType;
-              const hasConversation = Boolean(partyConversationMap[partyType]);
-              const partyLine = formatChatPartyName(displayPartyName(partyType));
+            {missionBarPartyTypes.map((tab) => {
+              const on = liveConv.party_type === tab.rowType;
+              const hasConversation = Boolean(partyConversationMap[tab.rowType]);
+              // For relabeled tabs (supplier shown as CLIENT from carrier's perspective),
+              // show the trip owner's org name (indent creator) rather than party_name
+              // (which would be the viewer's own org name stored in the supplier lane).
+              const partyLine = tab.displayType !== tab.rowType
+                ? formatChatPartyName(liveConv.trip_organization_name ?? null)
+                : formatChatPartyName(displayPartyName(tab.rowType));
               return (
                 <TouchableOpacity
-                  key={partyType}
+                  key={tab.displayType}
                   style={[
                     s.detailPartyTab,
                     on && s.detailPartyTabOn,
                     !hasConversation && s.detailPartyTabOff,
                   ]}
-                  onPress={() => { void switchConversation(partyType); }}
+                  onPress={() => { void switchConversation(tab.rowType); }}
                   activeOpacity={0.82}
                 >
-                  {partyTabIcon(partyType, on)}
+                  {partyTabIcon(tab.displayType, on)}
                   <View style={s.detailPartyTabTextCol}>
                     {partyLine ? (
                       <Text
@@ -5308,7 +5337,7 @@ function TripConversationDetailLoaded({
                       ]}
                       numberOfLines={1}
                     >
-                      {partyLabel(partyType)}
+                      {partyLabel(tab.displayType)}
                     </Text>
                   </View>
                 </TouchableOpacity>
