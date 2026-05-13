@@ -12,6 +12,21 @@ const CACHE_TTL_MS = 50 * 60 * 1000;
 
 const BUCKET_TRY_ORDER = ['trip-documents', 'documents', 'pod-documents'] as const;
 
+type StorageBucketName = (typeof BUCKET_TRY_ORDER)[number];
+
+/** After a successful resolve for `path`, try that bucket first (avoids 2–3 failed createSignedUrl calls per open). */
+const preferredBucketByPath = new Map<string, StorageBucketName>();
+
+function bucketsToTry(path: string): StorageBucketName[] {
+  const hit = preferredBucketByPath.get(path);
+  if (!hit) return [...BUCKET_TRY_ORDER];
+  return [hit, ...BUCKET_TRY_ORDER.filter((b) => b !== hit)];
+}
+
+function rememberPreferredBucket(path: string, bucket: StorageBucketName) {
+  preferredBucketByPath.set(path, bucket);
+}
+
 const signedUrlCache = new Map<string, { url: string; expiresAt: number }>();
 
 /**
@@ -62,10 +77,11 @@ export async function resolveChatDocumentStorageUrl(storagePath: string): Promis
 
   let lastError: string | null = null;
 
-  for (const bucket of BUCKET_TRY_ORDER) {
+  for (const bucket of bucketsToTry(path)) {
     try {
       const { data, error } = await supabase().storage.from(bucket).createSignedUrl(path, SIGNED_EXPIRY_SEC);
       if (!error && data?.signedUrl) {
+        rememberPreferredBucket(path, bucket);
         signedUrlCache.set(path, { url: data.signedUrl, expiresAt: Date.now() + CACHE_TTL_MS });
         return data.signedUrl;
       }
@@ -162,7 +178,7 @@ export async function resolveChatImageThumbnail(
   const cached = thumbUrlCache.get(cacheKey);
   if (cached && Date.now() < cached.expiresAt) return cached.url;
 
-  for (const bucket of BUCKET_TRY_ORDER) {
+  for (const bucket of bucketsToTry(path)) {
     try {
       const { data, error } = await supabase()
         .storage
@@ -176,6 +192,7 @@ export async function resolveChatImageThumbnail(
           },
         });
       if (!error && data?.signedUrl) {
+        rememberPreferredBucket(path, bucket);
         thumbUrlCache.set(cacheKey, { url: data.signedUrl, expiresAt: Date.now() + CACHE_TTL_MS });
         return data.signedUrl;
       }
