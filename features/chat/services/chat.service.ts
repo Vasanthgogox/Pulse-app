@@ -224,6 +224,51 @@ async function resolveGenericPartyNamesForTrips(
   });
 }
 
+/**
+ * Fills `indent_creator_organization_name` when bootstrap omits it (supplier mirror trip).
+ * Uses SECURITY DEFINER RPC — plain `trips` select would not see the shipper row under RLS.
+ */
+async function enrichIndentCreatorOrganizationNamesForViewer(
+  viewerOrganizationId: string,
+  conversations: TripConversation[],
+): Promise<TripConversation[]> {
+  const viewer = viewerOrganizationId.trim();
+  if (!viewer || conversations.length === 0) return conversations;
+
+  const tripNumbersNeeding = new Set<string>();
+  for (const c of conversations) {
+    if ((c.indent_creator_organization_name ?? "").trim()) continue;
+    const tn = (c.trip_number ?? "").trim();
+    if (tn) tripNumbersNeeding.add(tn);
+  }
+  if (tripNumbersNeeding.size === 0) return conversations;
+
+  const tripNumberList = [...tripNumbersNeeding];
+  const { data, error } = await supabase().rpc("indent_creator_org_names_for_viewer", {
+    p_viewer_org: viewer,
+    p_trip_numbers: tripNumberList,
+  });
+  if (error || !Array.isArray(data) || data.length === 0) {
+    return conversations;
+  }
+
+  const labelByTripNumber = new Map<string, string>();
+  for (const row of data as { trip_number?: string; creator_org_name?: string }[]) {
+    const tn = String(row.trip_number ?? "").trim();
+    const nm = String(row.creator_org_name ?? "").trim();
+    if (tn && nm && !labelByTripNumber.has(tn)) labelByTripNumber.set(tn, nm);
+  }
+  if (labelByTripNumber.size === 0) return conversations;
+
+  return conversations.map((c) => {
+    if ((c.indent_creator_organization_name ?? "").trim()) return c;
+    const tn = (c.trip_number ?? "").trim();
+    const label = labelByTripNumber.get(tn);
+    if (!label) return c;
+    return { ...c, indent_creator_organization_name: label };
+  });
+}
+
 const TRIP_EMBED_FIELDS_FULL =
   "organization_id, trip_number, display_trip_id, status, pickup_area, drop_location, driver_id, supplier_id, created_at";
 const TRIP_EMBED_FIELDS_LEGACY =
@@ -343,7 +388,8 @@ export async function getConversationsByOrganization(
     };
   }) as unknown as TripConversation[];
 
-  return resolveGenericPartyNamesForTrips(conversations);
+  const resolved = await resolveGenericPartyNamesForTrips(conversations);
+  return enrichIndentCreatorOrganizationNamesForViewer(organizationId, resolved);
 }
 
 /**
@@ -408,7 +454,12 @@ export async function getTripConversationById(
   } as TripConversation;
 
   const [resolved] = await resolveGenericPartyNamesForTrips([base]);
-  return resolved ?? null;
+  const scope = String(resolved?.organization_id ?? "").trim();
+  if (!scope || !resolved) return resolved ?? null;
+  const [enriched] = await enrichIndentCreatorOrganizationNamesForViewer(scope, [
+    resolved,
+  ]);
+  return enriched ?? null;
 }
 
 export async function getOrCreateConversation(params: {
@@ -1299,7 +1350,8 @@ export async function getInitialChatState(
 
   // Resolve generic party names ("client" / "supplier" placeholders)
   // — reuses the same lookup already used by getConversationsByOrganization.
-  return resolveGenericPartyNamesForTrips(conversations);
+  const resolved = await resolveGenericPartyNamesForTrips(conversations);
+  return enrichIndentCreatorOrganizationNamesForViewer(organizationId, resolved);
 }
 
 /**
@@ -1319,7 +1371,8 @@ export async function getB2BChatBootstrap(
 
   const rows = (Array.isArray(data) ? data : []) as Array<Record<string, unknown>>;
   const conversations = rows.map(normalizeInitialStateRow);
-  return resolveGenericPartyNamesForTrips(conversations);
+  const resolved = await resolveGenericPartyNamesForTrips(conversations);
+  return enrichIndentCreatorOrganizationNamesForViewer(organizationId, resolved);
 }
 
 /**
@@ -1358,7 +1411,8 @@ export async function getUnifiedB2BChatBootstrap(
       ? ((raw as Record<string, unknown>).conversations as Array<Record<string, unknown>>)
       : [];
   const conversations = rows.map(normalizeInitialStateRow);
-  return resolveGenericPartyNamesForTrips(conversations);
+  const resolved = await resolveGenericPartyNamesForTrips(conversations);
+  return enrichIndentCreatorOrganizationNamesForViewer(organizationId, resolved);
 }
 
 function distinctTripCount(conversations: TripConversation[]): number {
@@ -1479,6 +1533,10 @@ export async function fetchChatBootstrapPayload(
     const rows = (Array.isArray(rawConvs) ? rawConvs : []) as Array<Record<string, unknown>>;
     let conversations = rows.map(normalizeInitialStateRow);
     conversations = await resolveGenericPartyNamesForTrips(conversations);
+    conversations = await enrichIndentCreatorOrganizationNamesForViewer(
+      organizationId,
+      conversations,
+    );
     const baseLanes =
       normalizeServerLanes(payload.lanes as Record<string, unknown> | undefined) ??
       buildChatLanesFromConversations(conversations);

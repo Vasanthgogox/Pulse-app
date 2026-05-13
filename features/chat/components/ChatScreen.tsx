@@ -5224,7 +5224,14 @@ function TripConversationDetailLoaded({
     primaryLateMessageId,
   ]);
 
-  const indentShipperDisplayName = (liveConv.indent_creator_organization_name ?? "").trim();
+  const indentShipperDisplayName = useMemo(() => {
+    const fromConv = (liveConv.indent_creator_organization_name ?? "").trim();
+    if (fromConv) return fromConv;
+    return (liveTripEntry?.indentCreatorOrganizationName ?? "").trim();
+  }, [
+    liveConv.indent_creator_organization_name,
+    liveTripEntry?.indentCreatorOrganizationName,
+  ]);
   const supplierFleetOwnsTrip =
     String(currentOrgId ?? "").trim() === String(liveConv.trip_organization_id ?? "").trim();
 
