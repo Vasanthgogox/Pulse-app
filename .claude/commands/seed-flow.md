@@ -59,10 +59,10 @@ INSERT INTO public.direct_quotes (
 ) VALUES (
   '<indent_id from step 2>',
   'b177c614-f146-4d1c-ae80-bcf7aca3f9cd',
-  '<user_id from step 3>',
   <amount e.g. 22000>,
   'pending'
 ) RETURNING id, amount, status;
+-- Note: direct_quotes has no bidder_user_id column
 ```
 
 ### Step 5 — Accept the quote (aiman logs accepts Deepak's bid)
@@ -74,9 +74,32 @@ RETURNING id, status;
 ```
 
 ### Step 6 — Create trip from the accepted quote
-Call the RPC (runs as service — passes auth check via SECURITY DEFINER):
+RPC requires auth.uid() — use manual insert instead when running as service role:
 ```sql
-SELECT * FROM public.create_trip_from_direct_quote('<quote_id from step 5>');
+-- Find or create suppliers row linking bidder org in shipper's org
+WITH upserted AS (
+  INSERT INTO public.suppliers (organization_id, linked_organization_id, name, is_active, is_verified)
+  SELECT '<shipper_org_id>', '<bidder_org_id>',
+         COALESCE(NULLIF(TRIM(o.name),''), 'Supplier'), true, false
+  FROM public.organizations o WHERE o.id = '<bidder_org_id>'
+  ON CONFLICT DO NOTHING RETURNING id
+)
+SELECT id FROM upserted
+UNION ALL
+SELECT id FROM public.suppliers
+WHERE organization_id = '<shipper_org_id>' AND linked_organization_id = '<bidder_org_id>'
+LIMIT 1;
+
+-- Then insert trip using supplier_id from above + data from indent/quote
+INSERT INTO public.trips (organization_id, owner_user_id, created_by_user_id,
+  trip_number, indent_id, source, pickup_area, drop_location, client_name,
+  client_price, supplier_rate, supplier_id, status, pickup_date, load_type,
+  platform_fee, driver_commission, payment_status, amount_paid)
+VALUES ('<shipper_org_id>', '<owner_user_id>', '<owner_user_id>',
+  '', '<indent_id>', 'direct_quote', '<pickup>', '<drop>', '<client_name>',
+  <client_price>, <quote_amount>, '<supplier_id from above>',
+  'assigned', CURRENT_DATE, '<load_type>', 0, 0, 'pending', 0)
+RETURNING id, trip_number, supplier_id;
 ```
 
 ### Step 7 — Verify the trip

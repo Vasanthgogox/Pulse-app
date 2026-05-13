@@ -14,6 +14,7 @@ import { checkExistingUserByPhone, setPendingOAuthMetadata } from '@/features/au
 import { validateEmail } from '@/lib/emailValidation';
 import { isPhoneValid, validatePhone } from '@/lib/phoneValidation';
 import { formatMobileNumber } from '@/lib/format';
+import { showAppAlert } from '@/lib/appAlert';
 import { supabase } from '@/lib/supabase';
 import { useSafeBack } from '@/lib/useSafeBack';
 import { VALIDATION, validatePassword } from '@/lib/validation';
@@ -307,39 +308,38 @@ export default function DriverSignUpScreen() {
 
   const validatePhoneStep = async () => {
     if (!phone.trim()) {
-      Alert.alert('Required', 'Enter your 10-digit mobile number.');
+      showAppAlert('Required', 'Enter your 10-digit mobile number.');
       return;
     }
     const err = getPhoneInlineError(phone);
     if (err) {
-      Alert.alert('Invalid', err);
+      showAppAlert('Invalid', err);
       return;
     }
     if (!isOnline) {
-      Alert.alert('No internet', 'Connect to the internet to continue.');
+      showAppAlert('No internet', 'Connect to the internet to continue.');
       return;
     }
     setLoading(true);
     const existing = await checkExistingUserByPhone(fullPhoneForApi);
     setLoading(false);
     if (existing.error) {
-      Alert.alert('Check failed', existing.error.message);
+      showAppAlert('Check failed', existing.error.message);
       return;
     }
     if (existing.exists && existing.email) {
-      Alert.alert(
-        'Account already exists',
-        existing.masked_email
-          ? `Sign in with ${existing.masked_email}. We've filled your email—enter your password.`
-          : 'An account with this phone already exists. Sign in below—we\'ve filled your email.',
-        [
-          {
-            text: 'OK',
-            onPress: () =>
-              router.replace(`/sign-in?email=${encodeURIComponent(existing.email!)}`),
-          },
-        ]
-      );
+      const dupBody = existing.masked_email
+        ? `Sign in with ${existing.masked_email}. We've filled your email—enter your password.`
+        : "An account with this phone already exists. Sign in below—we've filled your email.";
+      const signInPath = `/sign-in?email=${encodeURIComponent(existing.email!)}`;
+      if (Platform.OS === 'web') {
+        window.alert(`Account already exists\n\n${dupBody}`);
+        router.replace(signInPath);
+      } else {
+        Alert.alert('Account already exists', dupBody, [
+          { text: 'OK', onPress: () => router.replace(signInPath) },
+        ]);
+      }
       return;
     }
     goToPage(1);
@@ -347,7 +347,7 @@ export default function DriverSignUpScreen() {
 
   const handleGoogleDriverSignIn = async () => {
     if (!isOnline) {
-      Alert.alert("No internet", "Connect to the internet to continue.");
+      showAppAlert('No internet', 'Connect to the internet to continue.');
       return;
     }
     setLoading(true);
@@ -362,11 +362,11 @@ export default function DriverSignUpScreen() {
       router.replace("/");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Google sign in failed";
-      Alert.alert(
-        "Error",
-        msg.includes("Cannot reach server")
-          ? "Cannot reach server. Check your connection."
-          : msg
+      showAppAlert(
+        'Error',
+        msg.includes('Cannot reach server')
+          ? 'Cannot reach server. Check your connection.'
+          : msg,
       );
     } finally {
       setLoading(false);
@@ -392,33 +392,33 @@ export default function DriverSignUpScreen() {
   const confirmRegistry = () => {
     const name = callsign.trim();
     if (name.length === 0) {
-      Alert.alert('Required', 'Enter your full name.');
+      showAppAlert('Required', 'Enter your full name.');
       return;
     }
     if (name.length < NAME_MIN_LENGTH) {
-      Alert.alert('Invalid', `Full name must be at least ${NAME_MIN_LENGTH} characters.`);
+      showAppAlert('Invalid', `Full name must be at least ${NAME_MIN_LENGTH} characters.`);
       return;
     }
     if (name.length > NAME_MAX_LENGTH) {
-      Alert.alert('Invalid', `Full name must be at most ${NAME_MAX_LENGTH} characters.`);
+      showAppAlert('Invalid', `Full name must be at most ${NAME_MAX_LENGTH} characters.`);
       return;
     }
     if (!email.trim()) {
-      Alert.alert('Required', 'Enter your email.');
+      showAppAlert('Required', 'Enter your email.');
       return;
     }
     const emailErr = validateEmail(email);
     if (emailErr) {
-      Alert.alert('Invalid', emailErr);
+      showAppAlert('Invalid', emailErr);
       return;
     }
     const pwdErr = validatePassword(password);
     if (pwdErr) {
-      Alert.alert('Invalid', pwdErr);
+      showAppAlert('Invalid', pwdErr);
       return;
     }
     if (password !== confirmPassword) {
-      Alert.alert('Invalid', 'Passwords do not match.');
+      showAppAlert('Invalid', 'Passwords do not match.');
       return;
     }
     goToPage(3);
@@ -426,11 +426,11 @@ export default function DriverSignUpScreen() {
 
   const establishLink = async () => {
     if (!isOnline) {
-      Alert.alert('No internet', 'Connect to the internet to complete sign up.');
+      showAppAlert('No internet', 'Connect to the internet to complete sign up.');
       return;
     }
     if (!fullPhoneForApi) {
-      Alert.alert('Invalid', 'Enter a valid phone number to continue.');
+      showAppAlert('Invalid', 'Enter a valid phone number to continue.');
       return;
     }
     setLoading(true);
@@ -457,7 +457,7 @@ export default function DriverSignUpScreen() {
       if (signedInUser?.id) {
         const uploadResult = await uploadDriverDocuments(signedInUser.id);
         if (uploadResult.error) {
-          Alert.alert(
+          showAppAlert(
             'Documents saved partially',
             uploadResult.error.message ||
               'Your account is created, but one or more documents could not be uploaded. You can re-upload them from profile documents.',
@@ -468,7 +468,10 @@ export default function DriverSignUpScreen() {
       goToPage(7);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Sign up failed';
-      Alert.alert('Error', msg.includes('Cannot reach server') ? 'Cannot reach server. Check your connection.' : msg);
+      showAppAlert(
+        'Error',
+        msg.includes('Cannot reach server') ? 'Cannot reach server. Check your connection.' : msg,
+      );
     } finally {
       setLoading(false);
     }
@@ -510,13 +513,13 @@ export default function DriverSignUpScreen() {
       if (method === 'gallery') {
         const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!perm.granted) {
-          Alert.alert('Permission required', 'Photo library access is needed to upload this document.');
+          showAppAlert('Permission required', 'Photo library access is needed to upload this document.');
           return;
         }
       } else {
         const perm = await ImagePicker.requestCameraPermissionsAsync();
         if (!perm.granted) {
-          Alert.alert('Permission required', 'Camera access is needed to capture this document.');
+          showAppAlert('Permission required', 'Camera access is needed to capture this document.');
           return;
         }
       }
@@ -558,7 +561,7 @@ export default function DriverSignUpScreen() {
       } = await supabase().auth.getUser();
 
       if (!currentUser?.id) {
-        Alert.alert('Selected', `${doc.toUpperCase()} selected. It will upload when you tap Create account.`);
+        showAppAlert('Selected', `${doc.toUpperCase()} selected. It will upload when you tap Create account.`);
         return;
       }
 
@@ -570,7 +573,7 @@ export default function DriverSignUpScreen() {
       };
       const immediateUpload = await uploadSingleDriverDocument(currentUser.id, doc, immediateDoc);
       if (immediateUpload.error || !immediateUpload.path) {
-        Alert.alert('Selected', `${doc.toUpperCase()} selected. Upload will retry on Create account.`);
+        showAppAlert('Selected', `${doc.toUpperCase()} selected. Upload will retry on Create account.`);
         return;
       }
 
@@ -578,12 +581,12 @@ export default function DriverSignUpScreen() {
       setUploadedDocPaths(nextUploaded);
       const syncResult = await syncDriverDocumentMetadata(currentUser.id, { [doc]: immediateUpload.path });
       if (syncResult.error) {
-        Alert.alert('Uploaded with warning', `${doc.toUpperCase()} uploaded, but metadata sync failed.`);
+        showAppAlert('Uploaded with warning', `${doc.toUpperCase()} uploaded, but metadata sync failed.`);
         return;
       }
-      Alert.alert('Uploaded', `${doc.toUpperCase()} uploaded successfully.`);
+      showAppAlert('Uploaded', `${doc.toUpperCase()} uploaded successfully.`);
     } catch (e) {
-      Alert.alert('Upload failed', e instanceof Error ? e.message : 'Unable to pick document');
+      showAppAlert('Upload failed', e instanceof Error ? e.message : 'Unable to pick document');
     }
   };
 

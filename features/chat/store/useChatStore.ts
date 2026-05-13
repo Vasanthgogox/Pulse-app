@@ -718,6 +718,8 @@ export function resolveChatFlow(
 export function resolveCounterpartyPartyTypeForViewer(
   entry: Pick<TripEntry, "chatFlow" | "parties" | "indentId"> | null,
   viewerOrgId: string | null,
+  /** Active thread — required to disambiguate host trips where client+supplier rows share `organization_id`. */
+  activePartyType?: ConversationPartyType | null,
 ): "client" | "supplier" | null {
   if (!entry) return null;
   const integrated =
@@ -728,6 +730,13 @@ export function resolveCounterpartyPartyTypeForViewer(
   if (!v) return null;
   const c  = entry.parties.client?.organizationId?.trim();
   const su = entry.parties.supplier?.organizationId?.trim();
+  const bothLanes = Boolean(c && su);
+  const sharedHostOrg = bothLanes && c === su && v === c;
+  if (sharedHostOrg) {
+    if (activePartyType === "client") return "supplier";
+    if (activePartyType === "supplier") return "client";
+    return null;
+  }
   if (c && v === c && su) return "supplier";
   if (su && v === su && c) return "client";
   return null;

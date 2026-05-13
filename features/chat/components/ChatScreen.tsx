@@ -396,6 +396,7 @@ function hubCardPartyTypesForTripHub(args: {
     viewerOrgId,
     lanes: hubRows,
     tripIntegrated,
+    viewerIsLinkedSupplier: isLinkedSupplier,
   });
 
   // Supplier viewer: relabel the "supplier" tab as "CLIENT" — from the carrier's perspective
@@ -1083,13 +1084,21 @@ export function ChatScreen() {
 
   useEffect(() => {
     if (!isTripStreamTab(activeTab)) return;
+    if (!selectedConvId) return;
     const stream =
       activeTab === "indent" ? indentStreamConversations : tripStreamConversations;
-    if (!selectedConvId) return;
-    if (!stream.some((c) => c.id === selectedConvId)) {
-      setSelectedConvId(null);
-    }
-  }, [activeTab, indentStreamConversations, tripStreamConversations, selectedConvId]);
+    if (stream.some((c) => c.id === selectedConvId)) return;
+    // Hub streams exclude rows (party filters, manual vs integrated split). Selection is still valid
+    // if the conversation exists in the org store — do not clear (fixes CLIENT tab snapping back to driver).
+    if (conversations.some((c) => c.id === selectedConvId)) return;
+    setSelectedConvId(null);
+  }, [
+    activeTab,
+    indentStreamConversations,
+    tripStreamConversations,
+    conversations,
+    selectedConvId,
+  ]);
 
   useEffect(() => {
     const tabParamRaw = Array.isArray(params.tab) ? params.tab[0] : params.tab;
@@ -4860,8 +4869,6 @@ function TripConversationDetailLoaded({
     tripCompose?.driver_id ??
     null;
 
-  const aggregateTrip = isAggregateTrip({ supplier_id: supplierId });
-
   const detailVisiblePartyTypes = useMemo(
     () => {
       const base = !tripIsIntegrated
@@ -4874,23 +4881,33 @@ function TripConversationDetailLoaded({
               return Boolean(String(clientId ?? "").trim()) || Boolean(partyConversationMap.client);
             }
             if (p === "supplier") {
+              // Integrated supplier lane can exist (indent / conv) before `trips.supplier_id`
+              // is populated — do not gate on `isAggregateTrip` or the hub shows only Driver.
               return (
-                aggregateTrip &&
-                (Boolean(String(supplierId ?? "").trim()) ||
-                  Boolean(partyConversationMap.supplier))
+                Boolean(String(supplierId ?? "").trim()) ||
+                Boolean(partyConversationMap.supplier)
               );
             }
             return Boolean(String(driverId ?? "").trim()) || Boolean(partyConversationMap.driver);
           });
+      const isDetailLinkedSupplier =
+        Boolean(partyConversationMap.supplier) &&
+        viewerIsLinkedTripSupplierViewer({
+          supplierLanePartyName: partyConversationMap.supplier?.party_name,
+          viewerOrgId: currentOrgId,
+          viewerOrgName: currentOrganization?.name ?? null,
+          tripHostOrgId: liveConv.trip_organization_id ?? liveConv.organization_id,
+          composeSupplierLinkedOrgId: tripCompose?.supplier_linked_organization_id ?? null,
+        });
       return applyContractualHubPartyIsolation(base, {
         viewerOrgId: currentOrgId,
         lanes: sameTripConversations,
         tripIntegrated: tripIsIntegrated,
+        viewerIsLinkedSupplier: isDetailLinkedSupplier,
       });
     },
     [
       tripIsIntegrated,
-      aggregateTrip,
       clientId,
       supplierId,
       driverId,
@@ -4898,6 +4915,10 @@ function TripConversationDetailLoaded({
       partyConversationMap.supplier,
       partyConversationMap.driver,
       currentOrgId,
+      currentOrganization?.name,
+      liveConv.trip_organization_id,
+      liveConv.organization_id,
+      tripCompose?.supplier_linked_organization_id,
       sameTripConversations,
     ],
   );
@@ -5026,7 +5047,12 @@ function TripConversationDetailLoaded({
 
 
   useEffect(() => {
-    if (linkedClientSuppressClientTab && liveConv.party_type === "client") {
+    const clientLaneInMissionBar = missionBarPartyTypes.some((t) => t.rowType === "client");
+    if (
+      linkedClientSuppressClientTab &&
+      liveConv.party_type === "client" &&
+      !clientLaneInMissionBar
+    ) {
       const s = partyConversationMap.supplier;
       const d = partyConversationMap.driver;
       if (s?.id) {
@@ -5040,7 +5066,12 @@ function TripConversationDetailLoaded({
       }
       return;
     }
-    if (linkedSupplierSuppressSupplierTab && liveConv.party_type === "supplier") {
+    const supplierLaneInMissionBar = missionBarPartyTypes.some((t) => t.rowType === "supplier");
+    if (
+      linkedSupplierSuppressSupplierTab &&
+      liveConv.party_type === "supplier" &&
+      !supplierLaneInMissionBar
+    ) {
       const c = partyConversationMap.client;
       const d = partyConversationMap.driver;
       if (c?.id) {
@@ -5056,6 +5087,7 @@ function TripConversationDetailLoaded({
   }, [
     linkedClientSuppressClientTab,
     linkedSupplierSuppressSupplierTab,
+    missionBarPartyTypes,
     liveConv.trip_id,
     liveConv.party_type,
     partyConversationMap.supplier?.id,
@@ -5266,6 +5298,7 @@ function TripConversationDetailLoaded({
   const headerCounterparty = resolveCounterpartyPartyTypeForViewer(
     liveTripEntry,
     currentOrgId,
+    liveConv.party_type,
   );
   return (
     <View style={s.detailPanel}>
