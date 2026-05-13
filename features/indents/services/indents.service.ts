@@ -157,8 +157,9 @@ export async function getIndentsByOrganization(
 }
 
 /**
- * Partner shipper org → earliest ISO time the client↔supplier link became active (matches market_indents_for_org).
- * Uses organization_relations when present; otherwise suppliers.linked_organization_id + MIN(updated_at) per shipper.
+ * Partner shipper org → earliest ISO time the link became active (matches market_indents_for_org).
+ * Precedence per shipper: organization_relations; else suppliers (caller = linked_organization_id);
+ * else clients.linked_organization_id on caller's org.
  */
 async function fetchPartnerShipperLinkSinceMap(
   orgId: string,
@@ -192,22 +193,32 @@ async function fetchPartnerShipperLinkSinceMap(
     mergeMin(String(r.to_organization_id), r.created_at as string);
   }
 
-  if (map.size > 0) return map;
-
   const { data: suppliers } = await supabase()
     .from("suppliers")
     .select("organization_id, updated_at")
     .eq("linked_organization_id", orgId);
 
-  const minByOrg = new Map<string, string>();
   for (const s of suppliers ?? []) {
     const oid = s.organization_id as string | null;
     const ts = s.updated_at as string | null | undefined;
     if (!oid || oid === orgId || !ts) continue;
-    const cur = minByOrg.get(oid);
-    if (!cur || ts < cur) minByOrg.set(oid, ts);
+    if (map.has(oid)) continue;
+    mergeMin(oid, ts);
   }
-  minByOrg.forEach((ts, oid) => map.set(oid, ts));
+
+  const { data: linkedClients } = await supabase()
+    .from("clients")
+    .select("linked_organization_id, created_at")
+    .eq("organization_id", orgId)
+    .eq("status", "active");
+
+  for (const c of linkedClients ?? []) {
+    const lid = c.linked_organization_id as string | null;
+    if (!lid || lid === orgId) continue;
+    if (map.has(lid)) continue;
+    mergeMin(lid, c.created_at as string);
+  }
+
   return map;
 }
 
