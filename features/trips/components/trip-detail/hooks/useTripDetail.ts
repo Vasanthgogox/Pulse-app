@@ -61,7 +61,7 @@ import type * as ExpoLocationTypes from "expo-location";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert } from "react-native";
-import { useRealtimeTrip } from "../../../hooks/useRealtimeTrips";
+import { useRealtimeDriverLocations, useRealtimeTrip } from "../../../hooks/useRealtimeTrips";
 import {
     clearInitialTripForDetail,
     getInitialTripForDetail,
@@ -1950,6 +1950,20 @@ export function useTripDetail({
     if (!trip?.id || !effectiveDriverIdForLocation) return;
     void fetchDriverLocationFromDb();
   }, [trip?.updated_at, trip?.status_revision, trip?.status, effectiveDriverIdForLocation, fetchDriverLocationFromDb, trip?.id]);
+
+  /** Refetch when driver_locations rows arrive (read-only; does not change driver DB ping cadence). */
+  useRealtimeDriverLocations(trip?.id ?? null, effectiveDriverIdForLocation, () => {
+    void fetchDriverLocationFromDb();
+  });
+
+  /** Fallback poll while trip is active (Realtime covers the common case). */
+  useEffect(() => {
+    if (!trip?.id || tripCompleted) return;
+    const id = globalThis.setInterval(() => {
+      void fetchDriverLocationFromDb();
+    }, 60_000);
+    return () => globalThis.clearInterval(id);
+  }, [trip?.id, tripCompleted, fetchDriverLocationFromDb]);
 
   // Counterparty entries
   useEffect(() => {

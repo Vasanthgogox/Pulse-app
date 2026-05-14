@@ -958,6 +958,7 @@ export default function TripDetailScreen({
   const fetchDriverLocationFromDb = useCallback(async () => {
     if (!trip?.id) return;
     const driverId = effectiveDriverIdForLocation;
+    setDriverLocationLoading(true);
     try {
       const [latestRes, historyByTrip] = await Promise.all([
         driverLocationService.getLatestDriverLocationForTripOrDriver(trip.id, driverId),
@@ -988,42 +989,44 @@ export default function TripDetailScreen({
     }
   }, [trip?.id, effectiveDriverIdForLocation]);
 
-  /** When Live Tracking modal opens, fetch immediately and keep a light fallback poll. */
+  /**
+   * Latest driver location from DB while this screen is open (Tracking tab + modal).
+   * Realtime + optional poll refetch only; driver-side adaptive ping / DB insert cadence unchanged.
+   */
   useEffect(() => {
-    if (!showTrackingModal || !trip?.id) {
+    if (!trip?.id) {
       setDriverLocation(null);
       setTripLocationPoints([]);
       setDriverLocationLoading(false);
       return;
     }
-    setDriverLocation(null);
-    setTripLocationPoints([]);
-    setDriverLocationLoading(true);
-    fetchDriverLocationFromDb();
+    void fetchDriverLocationFromDb();
 
-    // 60s fallback; realtime subscription fires fetchDriverLocationFromDb on each update
+    if (tripCompleted) {
+      return () => {
+        setDriverLocationLoading(false);
+      };
+    }
+
     const interval = setInterval(() => {
-      setDriverLocationLoading(true);
-      fetchDriverLocationFromDb();
-    }, 60000);
+      void fetchDriverLocationFromDb();
+    }, 60_000);
 
     return () => {
       clearInterval(interval);
       setDriverLocationLoading(false);
-      setDriverLocation(null);
-      setTripLocationPoints([]);
     };
-  }, [showTrackingModal, trip?.id, fetchDriverLocationFromDb]);
+  }, [trip?.id, tripCompleted, fetchDriverLocationFromDb]);
 
-  useRealtimeDriverLocations(
-    showTrackingModal ? trip?.id ?? null : null,
-    showTrackingModal ? effectiveDriverIdForLocation : null,
-    () => {
-      if (!showTrackingModal) return;
-      setDriverLocationLoading(true);
-      void fetchDriverLocationFromDb();
-    },
-  );
+  useRealtimeDriverLocations(trip?.id ?? null, effectiveDriverIdForLocation, () => {
+    void fetchDriverLocationFromDb();
+  });
+
+  /** One immediate pull when opening the full-screen Live Tracking modal. */
+  useEffect(() => {
+    if (!showTrackingModal || !trip?.id) return;
+    void fetchDriverLocationFromDb();
+  }, [showTrackingModal, trip?.id, fetchDriverLocationFromDb]);
 
   /** Reverse-geocode driver location so we show address text (same as driver app). */
   useEffect(() => {
@@ -1834,7 +1837,7 @@ export default function TripDetailScreen({
               ? (driverLocationAddress
                   ? `${driverLocationAddress} · ${formatLocationUpdatedAt(driverLocation.recorded_at)}`
                   : `Current location (from DB): ${driverLocation.latitude.toFixed(5)}°, ${driverLocation.longitude.toFixed(5)}° · ${formatLocationUpdatedAt(driverLocation.recorded_at)}`)
-              : "Open map to see driver position"
+              : "No driver location saved yet"
           }
         />
 
@@ -2810,7 +2813,7 @@ export default function TripDetailScreen({
             ? (driverLocationAddress
                 ? `${driverLocationAddress} · ${formatLocationUpdatedAt(driverLocation.recorded_at)}`
                 : `Current location (from DB): ${driverLocation.latitude.toFixed(5)}°, ${driverLocation.longitude.toFixed(5)}° · ${formatLocationUpdatedAt(driverLocation.recorded_at)}`)
-            : "Open map to see driver position"
+            : "No driver location saved yet"
         }
       />
 
@@ -3617,7 +3620,7 @@ export default function TripDetailScreen({
                       ? (driverLocationAddress
                           ? `${driverLocationAddress} · ${formatLocationUpdatedAt(driverLocation.recorded_at)}`
                           : `Current location (from DB): ${driverLocation.latitude.toFixed(5)}°, ${driverLocation.longitude.toFixed(5)}° · ${formatLocationUpdatedAt(driverLocation.recorded_at)}`)
-                      : "Open map to see driver position"
+                      : "No driver location saved yet"
                   }
                 />
 

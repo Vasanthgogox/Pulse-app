@@ -8,6 +8,7 @@ import { useDriverAvatar } from '@/contexts/DriverAvatarContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { computeDriverCommissionForTrip } from '@/features/finance/aggregation/aggregateDrivers';
 import { useAdaptiveTripLocationPingLoop } from '@/features/driver/hooks/useAdaptiveTripLocationPingLoop';
+import { useDriverMapLivePositionWatch } from '@/features/driver/hooks/useDriverMapLivePositionWatch';
 import { claimTripByOtp, getPendingOtpTrips } from '@/features/trips/services/tripOtp.service';
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
 import { isAggregateTrip, isRosterTrip } from '@/lib/driverUtils';
@@ -1067,6 +1068,12 @@ export default function DriverDashboard() {
     source: 'background',
     reportLocationToDb: reportLocationToDbWithPins,
     onLocationFix: onPingLocationFix,
+  });
+
+  /** Map-only position stream; does not call `reportDriverLocation`. */
+  useDriverMapLivePositionWatch({
+    enabled: Boolean(driver && activeGuidanceTrip),
+    onFix: onPingLocationFix,
   });
 
   useEffect(() => {
