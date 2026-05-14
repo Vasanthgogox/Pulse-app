@@ -17,6 +17,7 @@ import {
 } from "@/contexts/DriverThemeContext";
 import { computeDriverCommissionForTrip } from "@/features/finance/aggregation/aggregateDrivers";
 import { useAdaptiveTripLocationPingLoop } from "@/features/driver/hooks/useAdaptiveTripLocationPingLoop";
+import { useDriverMapLivePositionWatch } from "@/features/driver/hooks/useDriverMapLivePositionWatch";
 import { claimTripByOtp, getPendingOtpTrips } from "@/features/trips/services/tripOtp.service";
 import { getLatestAssignmentAuditByTripIds } from "@/features/trips/services/trip-assignment-audit.service";
 import { useDriverAvatarUri } from "@/lib/avatarUpload";
@@ -2023,6 +2024,15 @@ export default function DriverRadarScreen() {
         (hasSingleAssignableIncomingTrip || hasAssignableIncomingTrip)) ||
       assignmentFeedback != null,
   );
+
+  /** Map-only GPS stream when not in full follow mode (follow mode has its own watch). DB cadence unchanged. */
+  useDriverMapLivePositionWatch({
+    enabled: Boolean(
+      driver && activeGuidanceTrip && shouldShowMap && !isFollowingLocation,
+    ),
+    onFix: onPingLocationFix,
+  });
+
   const activeGuidanceStep = activeGuidanceTrip
     ? deriveDriverGuidanceStep(activeGuidanceTrip)
     : null;
@@ -2276,7 +2286,9 @@ export default function DriverRadarScreen() {
     const showLeaflet =
       Platform.OS === "web" || useLeafletFallback || leafLetForced;
 
-    if (!showLeaflet && !mapRef.current) return;
+    const activeNativeMapRef = isFullMapVisible ? fullMapRef : mapRef;
+
+    if (!showLeaflet && !activeNativeMapRef.current) return;
 
     const now = Date.now();
     // Throttle to prevent over-animating on frequent GPS updates.
@@ -2305,7 +2317,7 @@ export default function DriverRadarScreen() {
     }
 
     try {
-      const map = mapRef.current;
+      const map = activeNativeMapRef.current;
       const heading = Number(youHeadingSv.value);
       map?.animateCamera?.(
         {
@@ -2326,6 +2338,10 @@ export default function DriverRadarScreen() {
     driverMapPosition?.longitude,
     shouldShowMap,
     isFollowingLocation,
+    isFullMapVisible,
+    leafLetForced,
+    useLeafletFallback,
+    youHeadingSv,
   ]);
 
   const [optimalRoute, setOptimalRoute] = useState<RouteResult | null>(null);
@@ -2994,6 +3010,9 @@ export default function DriverRadarScreen() {
   const handleFocusCurrentLocation = useCallback(async (): Promise<boolean> => {
     try {
       setIsFetchingLocation(true);
+      // Let the next follow pass center immediately (user explicitly asked to snap here).
+      lastCameraCenterRef.current = null;
+      lastCameraAnimTsRef.current = 0;
 
       // Fetch the latest accurate location
       const expoLocation = await getExpoLocation();
@@ -3037,35 +3056,46 @@ export default function DriverRadarScreen() {
       }
 
       const targetRef = isFullMapVisible ? fullMapRef : mapRef;
-      const map = targetRef.current;
-      if (!map) return true;
+      const runCamera = (): boolean => {
+        const map = targetRef.current;
+        if (!map) return false;
+        try {
+          if (map.animateCamera) {
+            map.animateCamera(
+              {
+                center: {
+                  latitude: currentPos.latitude,
+                  longitude: currentPos.longitude,
+                },
+                zoom: 18,
+                pitch: 0,
+                heading: Number(youHeadingSv.value) || 0,
+              },
+              { duration: 500 },
+            );
+          } else if (map.animateToRegion) {
+            map.animateToRegion(
+              {
+                latitude: currentPos.latitude,
+                longitude: currentPos.longitude,
+                latitudeDelta: 0.005,
+                longitudeDelta: 0.005,
+              },
+              500,
+            );
+          }
+        } catch {
+          return false;
+        }
+        return true;
+      };
 
-      // Try animateCamera first (smoother if supported)
-      if (map.animateCamera) {
-        map.animateCamera(
-          {
-            center: {
-              latitude: currentPos.latitude,
-              longitude: currentPos.longitude,
-            },
-            zoom: 18,
-            pitch: 0,
-            heading: Number(youHeadingSv.value) || 0,
-          },
-          { duration: 500 },
-        );
-      } else if (map.animateToRegion) {
-        // Fallback to animateToRegion which is universally supported
-        map.animateToRegion(
-          {
-            latitude: currentPos.latitude,
-            longitude: currentPos.longitude,
-            latitudeDelta: 0.005,
-            longitudeDelta: 0.005,
-          },
-          500,
-        );
+      if (!runCamera()) {
+        await new Promise<void>((r) => setTimeout(r, 120));
+        if (!runCamera()) return false;
       }
+      lastCameraCenterRef.current = currentPos;
+      lastCameraAnimTsRef.current = Date.now();
       return true;
     } catch {
       return false;
@@ -3214,6 +3244,13 @@ export default function DriverRadarScreen() {
             applyFollowPosition(pos.coords.latitude, pos.coords.longitude);
           },
         );
+
+        const snap = await ExpoLocation.getCurrentPositionAsync({
+          accuracy: ExpoLocation.Accuracy.High,
+        });
+        if (!cancelled) {
+          applyFollowPosition(snap.coords.latitude, snap.coords.longitude);
+        }
       } catch (e) {
         if (__DEV__) console.warn('[location] native watchPosition setup failed', e instanceof Error ? e.message : e);
       }
