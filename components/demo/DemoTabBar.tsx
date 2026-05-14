@@ -26,6 +26,8 @@ import {
 } from "@/lib/queries/useIndentsQuery";
 import { setMobileNetworkDockExpanded } from "@/lib/mobileDockState";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
+import { useOperationsShelfItems } from "@/lib/globalSync/useOperationsDerived";
+import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
 import { useIntegratedChat } from "@/features/chat/contexts/IntegratedChatContext";
 import { useTripChat } from "@/features/chat/contexts/TripChatContext";
 import {
@@ -256,7 +258,10 @@ export function DemoTabBar({
   const { profile } = useAuth();
   const { currentOrganization } = useOrganization();
   const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
-  const [notificationCount, setNotificationCount] = useState(0);
+  /** Operation shelf row ids the user has opened in the Alert Registry (session-only; badge excludes them). */
+  const [seenRegistryOperationIds, setSeenRegistryOperationIds] = useState<
+    Record<string, true>
+  >({});
   const [showNotifications, setShowNotifications] = useState(false);
   const [showInvitations, setShowInvitations] = useState(false);
   const [isNetworkExpanded, setIsNetworkExpanded] = useState(false);
@@ -274,6 +279,7 @@ export function DemoTabBar({
   /** Worklet-readable: sub-dock must fully hide when false (don’t let bar visibility opacity show it on other tabs). */
   const networkDockOpenSV = useSharedValue(false);
   const orgId = currentOrganization?.id ?? null;
+  const opsShelf = useOperationsShelfItems();
   const receivedQ = useConnectionRequestsReceivedQuery(orgId);
   const sentQ = useConnectionRequestsSentQuery(orgId);
   const dockIndentsQ = useIndentsQuery(orgId);
@@ -397,26 +403,43 @@ export function DemoTabBar({
   }, [profile?.avatar_url, profile?.avatar_seed]);
 
   useEffect(() => {
+    setSeenRegistryOperationIds({});
+  }, [currentOrganization?.id]);
+
+  /** Opening the registry counts as having seen current Live Operations rows for badge purposes. */
+  useEffect(() => {
+    if (!showNotifications || !orgId) return;
+    const items = useGlobalSyncStore.getState().getOperationsShelfItems();
+    if (items.length === 0) return;
+    setSeenRegistryOperationIds((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const { id } of items) {
+        if (!next[id]) {
+          next[id] = true;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [showNotifications, orgId]);
+
+  useEffect(() => {
     let cancelled = false;
-    const orgId = currentOrganization?.id ?? "";
-    if (!orgId) {
-      setNotificationCount(0);
+    const orgIdLocal = currentOrganization?.id ?? "";
+    if (!orgIdLocal) {
       setSalaryRequests([]);
       return;
     }
     const loadNotificationCount = async () => {
       const [{ requests }, sharedRes] = await Promise.all([
-        getSalaryRequestsByOrganization(orgId),
-        getSharedLedgerNotifications(orgId, "all"),
+        getSalaryRequestsByOrganization(orgIdLocal),
+        getSharedLedgerNotifications(orgIdLocal, "all"),
       ]);
       if (cancelled) return;
       setSalaryRequests(requests);
       const sharedRows = sharedRes.notifications ?? [];
       setSharedNotifications(sharedRows);
-      setNotificationCount(
-        requests.filter((r) => r.status === "pending").length +
-          sharedRows.filter((n) => n.status === "open").length,
-      );
     };
     void loadNotificationCount();
     return () => {
@@ -439,6 +462,19 @@ export function DemoTabBar({
     () => sharedNotifications.filter((n) => n.status !== "open"),
     [sharedNotifications],
   );
+  const notificationCount = useMemo(() => {
+    if (!orgId) return 0;
+    const salaryPending = salaryRequests.filter((r) => r.status === "pending").length;
+    const sharedOpen = sharedNotifications.filter((n) => n.status === "open").length;
+    const unseenOps = opsShelf.filter((i) => !seenRegistryOperationIds[i.id]).length;
+    return salaryPending + sharedOpen + unseenOps;
+  }, [
+    orgId,
+    opsShelf,
+    salaryRequests,
+    seenRegistryOperationIds,
+    sharedNotifications,
+  ]);
   const refreshSalaryRequests = async () => {
     if (!orgId) return;
     const [{ requests }, sharedRes] = await Promise.all([
@@ -448,10 +484,6 @@ export function DemoTabBar({
     setSalaryRequests(requests);
     const sharedRows = sharedRes.notifications ?? [];
     setSharedNotifications(sharedRows);
-    setNotificationCount(
-      requests.filter((r) => r.status === "pending").length +
-        sharedRows.filter((n) => n.status === "open").length,
-    );
   };
   const handleSalaryReject = async (requestId: string) => {
     setNotifActionId(requestId);
