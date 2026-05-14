@@ -1,11 +1,13 @@
 /** Format number as INR. */
 export function formatINR(value: number): string {
-  return new Intl.NumberFormat('en-IN', {
+  const formatted = new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
     maximumFractionDigits: 0,
     minimumFractionDigits: 0,
   }).format(value);
+  // Intl emits "₹78,000" with no gap — add a space after the symbol for readability.
+  return formatted.replace(/₹(?=\d)/g, '₹ ');
 }
 
 /** Short date for ledger e.g. "26 FEB". */

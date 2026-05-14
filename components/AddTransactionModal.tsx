@@ -2872,7 +2872,14 @@ export function AddTransactionModal({
           stackTripFinancialBand && styles.ledgerProtocolSplitWrapStack,
         ]}
       >
-        <View style={ledgerProtocolColStyle}>
+        <View
+          style={[
+            ledgerProtocolColStyle,
+            stackTripFinancialBand
+              ? styles.ledgerProtocolSplitColStackBottom
+              : styles.ledgerProtocolSplitColDividerRight,
+          ]}
+        >
           <View
             style={[
               styles.selectorHeaderRow,
@@ -2963,7 +2970,14 @@ export function AddTransactionModal({
           )}
         </View>
 
-        <View style={ledgerProtocolColStyle}>
+        <View
+          style={[
+            ledgerProtocolColStyle,
+            stackTripFinancialBand
+              ? styles.ledgerProtocolSplitColStackTop
+              : styles.ledgerProtocolSplitColPaddedLeft,
+          ]}
+        >
           <View
             style={[
               styles.selectorHeaderRow,
@@ -5623,7 +5637,7 @@ const styles = StyleSheet.create({
   ledgerProtocolSplitWrap: {
     flexDirection: "row",
     alignItems: "stretch",
-    gap: 10,
+    gap: 0,
     width: "100%",
     borderWidth: 1,
     borderColor: "rgba(0,0,0,0.06)",
@@ -5637,7 +5651,7 @@ const styles = StyleSheet.create({
     alignItems: "stretch",
     alignSelf: "stretch",
     flexGrow: 0,
-    gap: 10,
+    gap: 0,
   },
   ledgerProtocolSplitWrapTopBand: {
     alignSelf: "stretch",
@@ -5662,6 +5676,24 @@ const styles = StyleSheet.create({
     minWidth: 0,
     alignSelf: "stretch",
     overflow: "hidden",
+  },
+  /** Vertical split between MODE and PAYMENT TYPE (row layout). */
+  ledgerProtocolSplitColDividerRight: {
+    borderRightWidth: 1,
+    borderRightColor: Theme.borderMedium,
+    paddingRight: 12,
+  },
+  ledgerProtocolSplitColPaddedLeft: {
+    paddingLeft: 12,
+  },
+  /** Horizontal split when MODE / TYPE stack (narrow). */
+  ledgerProtocolSplitColStackBottom: {
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderMedium,
+    paddingBottom: 12,
+  },
+  ledgerProtocolSplitColStackTop: {
+    paddingTop: 12,
   },
   /** Stacked MODE / TYPE: height = content only (no `flex: 1` vertical steal). */
   ledgerProtocolSplitColNarrow: {

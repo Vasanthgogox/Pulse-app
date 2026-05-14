@@ -136,6 +136,45 @@ function adjustmentsCountingAsDeductions(adjustments: TripAdjustment[]) {
   );
 }
 
+/**
+ * Last manifest journey row to show (0–4): Assigned, Driver Accepted, Pickup,
+ * In-Transit, Delivered. Omits future rows until status / timestamps justify them.
+ */
+function maxVisibleManifestJourneyIndex(tr: TripRow | null | undefined): number {
+  if (!tr) return 0;
+  const s = String(tr.status ?? "").toLowerCase();
+  const started = Boolean(tr.started_at && String(tr.started_at).trim());
+  const completed = Boolean(tr.completed_at && String(tr.completed_at).trim());
+  const driverAccepted =
+    tr.status_updated_role === "driver" ||
+    Number(tr.status_revision ?? 0) > 0;
+
+  if (["completed", "delivered", "done"].includes(s)) return 4;
+  if (s === "at_drop") return 4;
+  if (
+    completed &&
+    !["assigned", "pending_acceptance", "draft"].includes(s)
+  ) {
+    return 4;
+  }
+  if (s === "in_transit") return 3;
+  if (
+    ["in_progress", "picked_up", "pickup", "arrived", "at_destination"].includes(
+      s,
+    )
+  ) {
+    if (!started) {
+      return driverAccepted ? 1 : 0;
+    }
+    return 2;
+  }
+  if (s === "assigned") {
+    return driverAccepted ? 1 : 0;
+  }
+  if (s === "pending_acceptance" || s === "draft") return 0;
+  return 0;
+}
+
 const FINANCE_PROTOCOL_CHIPS = [
   "Loading",
   "Unloading",
@@ -772,6 +811,24 @@ export default function TripDetailScreen({
     detail.driverLocationAddress,
   ]);
 
+  /** Highest journey row index that has occurred — do not list future stages. */
+  const maxVisibleJourneyLogIndex = useMemo(
+    () => maxVisibleManifestJourneyIndex(detail.trip),
+    [
+      detail.trip?.id,
+      detail.trip?.status,
+      detail.trip?.started_at,
+      detail.trip?.completed_at,
+      detail.trip?.status_updated_role,
+      detail.trip?.status_revision,
+    ],
+  );
+
+  const visibleJourneyLogs = useMemo(
+    () => journeyLogs.slice(0, maxVisibleJourneyLogIndex + 1),
+    [journeyLogs, maxVisibleJourneyLogIndex],
+  );
+
   if (detail.loading && !detail.trip) {
     return <CenteredLoadingView message="Loading trip…" />;
   }
@@ -1095,19 +1152,7 @@ export default function TripDetailScreen({
 
   // Manifest Pulse: 0=Assigned, 1=Driver Accepted, 2=Pickup, 3=In-Transit, 4=Delivered
   const manifestPulseLastIndex = journeyLogs.length - 1;
-  const currentStepIndex = (() => {
-    const s = String(trip.status ?? "").toLowerCase();
-    if (
-      ["completed", "delivered", "done", "at_drop"].includes(s) ||
-      !!trip.completed_at
-    )
-      return 4;
-    if (s === "in_transit") return 3;
-    if (["in_progress", "picked_up", "pickup"].includes(s)) return 2;
-    if (s === "assigned") return 1;
-    if (s === "pending_acceptance") return 0;
-    return 0;
-  })();
+  const currentStepIndex = maxVisibleManifestJourneyIndex(trip);
 
   // Next step the business can simulate
   const nextSimulateStep = (() => {
@@ -1291,7 +1336,8 @@ export default function TripDetailScreen({
     "—";
   const adjSales = adjustedRevenue(sales, detail.adjustments);
   const adjCost = adjustedCost(cost, detail.adjustments);
-  const netManifestYield = Math.max(0, adjSales - adjCost - totalExpenses);
+  /** Gross manifest P&L after voyage spend — can be negative (loss); do not clamp to zero. */
+  const netManifestYield = adjSales - adjCost - totalExpenses;
   const revenueSideDelta = adjSales - sales;
   const costSideDelta = adjCost - cost;
   const receivableAfterAdjustments = Math.max(
@@ -1443,7 +1489,12 @@ export default function TripDetailScreen({
   const financeManifestSummaryBlock = (
     <View style={[styles.refSettleCard, styles.refFinanceManifestHero]}>
       <Text style={styles.refSettleLabel}>Net Manifest Yield</Text>
-      <Text style={styles.refManifestNetHuge}>
+      <Text
+        style={[
+          styles.refManifestNetHuge,
+          netManifestYield < 0 && { color: Theme.negative },
+        ]}
+      >
         {formatINR(netManifestYield)}
       </Text>
       <Text style={styles.refSettleHint}>
@@ -2310,9 +2361,9 @@ export default function TripDetailScreen({
             {activeTab === "trip" ? (
               <View style={styles.refTrackWrap}>
                 <View style={styles.refTimelineCard}>
-                  {journeyLogs.map((log, index) => {
+                  {visibleJourneyLogs.map((log, index) => {
                     const expanded = expandedLog === index;
-                    const isLast = index === journeyLogs.length - 1;
+                    const isLast = index === visibleJourneyLogs.length - 1;
                     return (
                       <View
                         key={`${log.status}-${index}`}
@@ -2998,9 +3049,9 @@ export default function TripDetailScreen({
                           </TouchableOpacity>
                         ) : null}
                       </View>
-                      {journeyLogs.map((log, index) => {
+                      {visibleJourneyLogs.map((log, index) => {
                         const expanded = expandedLog === index;
-                        const isLast = index === journeyLogs.length - 1;
+                        const isLast = index === visibleJourneyLogs.length - 1;
                         const isPending = index > currentStepIndex;
                         const isCurrent =
                           index === currentStepIndex &&
