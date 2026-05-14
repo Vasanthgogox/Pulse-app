@@ -2,6 +2,8 @@
 -- The live view does a full GROUP BY aggregate scan on every load.
 -- The materialized view pre-computes per-org totals and refreshes on trips changes.
 
+ALTER TABLE public.trips ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+
 -- Drop the old live view
 DROP VIEW IF EXISTS public.dashboard_trip_metrics;
 

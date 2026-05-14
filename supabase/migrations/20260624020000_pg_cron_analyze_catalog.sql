@@ -6,16 +6,32 @@
 -- connection pool and trips the Supabase health check → UNHEALTHY.
 --
 -- This cron job keeps pg_catalog stats fresh so the planner always picks the fast path.
+-- Requires pg_cron (optional on some projects).
 
-SELECT cron.schedule(
-  'analyze-pg-catalog',
-  '*/10 * * * *',  -- every 10 minutes
-  $$
-    ANALYZE pg_catalog.pg_class;
-    ANALYZE pg_catalog.pg_constraint;
-    ANALYZE pg_catalog.pg_attribute;
-    ANALYZE pg_catalog.pg_namespace;
-    ANALYZE pg_catalog.pg_proc;
-    ANALYZE pg_catalog.pg_depend;
-  $$
-);
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+    BEGIN
+      EXECUTE $job$
+        SELECT cron.schedule(
+          'analyze-pg-catalog',
+          '*/10 * * * *',
+          $inner$
+            ANALYZE pg_catalog.pg_class;
+            ANALYZE pg_catalog.pg_constraint;
+            ANALYZE pg_catalog.pg_attribute;
+            ANALYZE pg_catalog.pg_namespace;
+            ANALYZE pg_catalog.pg_proc;
+            ANALYZE pg_catalog.pg_depend;
+          $inner$
+        )
+      $job$;
+    EXCEPTION
+      WHEN undefined_table OR undefined_function OR duplicate_object THEN
+        RAISE NOTICE 'pg_cron analyze-pg-catalog schedule skipped: %', SQLERRM;
+    END;
+  ELSE
+    RAISE NOTICE 'pg_cron not installed — skipping analyze-pg-catalog schedule';
+  END IF;
+END;
+$$;

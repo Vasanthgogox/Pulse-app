@@ -98,4 +98,41 @@ BEGIN
 END;
 $$;
 
+-- Initplan-safe auth.uid() (20260505062038 runs before this table may exist).
+ALTER POLICY "Drivers can read trip assignment audit for assigned trips" ON public.trip_assignment_audit
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.trips t
+      INNER JOIN public.drivers d ON d.id = t.driver_id AND d.user_id = (SELECT auth.uid())
+      WHERE t.id = trip_assignment_audit.trip_id
+    )
+  );
+
+ALTER POLICY "Org members can insert trip assignment audit" ON public.trip_assignment_audit
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM public.trips t
+      INNER JOIN public.organization_members om
+        ON om.organization_id = t.organization_id
+        AND om.user_id = (SELECT auth.uid())
+        AND COALESCE(om.status, 'active') = 'active'
+      WHERE t.id = trip_assignment_audit.trip_id
+    )
+  );
+
+ALTER POLICY "Org members can read trip assignment audit" ON public.trip_assignment_audit
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.trips t
+      INNER JOIN public.organization_members om
+        ON om.organization_id = t.organization_id
+        AND om.user_id = (SELECT auth.uid())
+        AND COALESCE(om.status, 'active') = 'active'
+      WHERE t.id = trip_assignment_audit.trip_id
+    )
+  );
+
 COMMENT ON TABLE public.trip_assignment_audit IS 'Per-trip audit: assignment, reassignment, completion; Private vs Shared UI and activity log.';

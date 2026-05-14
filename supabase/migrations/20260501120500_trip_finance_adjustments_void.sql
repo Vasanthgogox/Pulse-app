@@ -10,7 +10,9 @@ COMMENT ON COLUMN public.trip_finance_adjustments.void_reason IS
   'Operator-provided reason when voiding this adjustment line.';
 
 -- Extend Compare & Verify RPC to carry void state (both orgs see the same audit trail).
-CREATE OR REPLACE FUNCTION public.get_shared_trip_finance_adjustments(
+DROP FUNCTION IF EXISTS public.get_shared_trip_finance_adjustments(uuid, uuid);
+
+CREATE FUNCTION public.get_shared_trip_finance_adjustments(
   org_id uuid,
   partner_key uuid
 )

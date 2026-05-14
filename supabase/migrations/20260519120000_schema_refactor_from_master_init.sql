@@ -404,6 +404,11 @@ JOIN public.clients c ON c.id = t.client_id
 WHERE t.deleted_at IS NULL AND t.status = 'completed'
 GROUP BY t.organization_id, t.client_id, c.name;
 
+ALTER VIEW public.v_active_trips SET (security_invoker = true);
+ALTER VIEW public.v_open_indents SET (security_invoker = true);
+ALTER VIEW public.v_driver_balances SET (security_invoker = true);
+ALTER VIEW public.v_client_revenue SET (security_invoker = true);
+
 -- ============================================================
 -- STEP 7: RLS policies for driver_profiles
 -- ============================================================
@@ -448,6 +453,26 @@ BEGIN
   END IF;
 END;
 $$;
+
+-- Initplan-safe auth.uid() (same intent as 20260505062038; that migration runs before this table exists).
+ALTER POLICY drvprofile_insert_own ON public.driver_profiles
+  WITH CHECK (user_id = (SELECT auth.uid()));
+
+ALTER POLICY drvprofile_org_view ON public.driver_profiles
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.drivers d
+      JOIN public.organization_members om ON om.organization_id = d.organization_id
+      WHERE d.user_id = driver_profiles.user_id
+        AND om.user_id = (SELECT auth.uid()) AND om.status = 'active'
+    )
+  );
+
+ALTER POLICY drvprofile_select_own ON public.driver_profiles
+  USING (user_id = (SELECT auth.uid()));
+
+ALTER POLICY drvprofile_update_own ON public.driver_profiles
+  USING (user_id = (SELECT auth.uid()));
 
 -- ============================================================
 -- STEP 8: Storage buckets

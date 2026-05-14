@@ -36,9 +36,13 @@ DROP TRIGGER IF EXISTS trg_refresh_dashboard_trip_metrics ON public.trips;
 -- (SQLSTATE 42P13) — must DROP then CREATE.
 DO $$
 BEGIN
-  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron')
-     AND EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'refresh_dashboard_trip_metrics') THEN
-    PERFORM cron.unschedule('refresh_dashboard_trip_metrics');
+  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+    BEGIN
+      EXECUTE 'SELECT cron.unschedule(''refresh_dashboard_trip_metrics'')';
+    EXCEPTION
+      WHEN undefined_table OR undefined_function OR invalid_parameter_value THEN
+        NULL;
+    END;
   END IF;
 END;
 $$;
@@ -63,14 +67,19 @@ COMMENT ON FUNCTION public.refresh_dashboard_trip_metrics() IS
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
-    PERFORM cron.schedule(
-      'refresh_dashboard_trip_metrics',
-      '*/5 * * * *',   -- every 5 minutes
-      $cron$ SELECT public.refresh_dashboard_trip_metrics() $cron$
-    );
-
-    RAISE NOTICE 'pg_cron: refresh_dashboard_trip_metrics scheduled every 5 minutes';
-
+    BEGIN
+      EXECUTE $cron$
+        SELECT cron.schedule(
+          'refresh_dashboard_trip_metrics',
+          '*/5 * * * *',
+          $inner$ SELECT public.refresh_dashboard_trip_metrics() $inner$
+        )
+      $cron$;
+      RAISE NOTICE 'pg_cron: refresh_dashboard_trip_metrics scheduled every 5 minutes';
+    EXCEPTION
+      WHEN undefined_table OR undefined_function OR duplicate_object THEN
+        RAISE NOTICE 'pg_cron schedule skipped: %', SQLERRM;
+    END;
   ELSE
     RAISE NOTICE
       'pg_cron not installed. '
