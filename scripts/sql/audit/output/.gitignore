@@ -1,0 +1,3 @@
+# Timestamped audit captures — keep local / CI artifacts out of git.
+*
+!.gitignore

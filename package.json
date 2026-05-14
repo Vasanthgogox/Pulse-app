@@ -25,6 +25,7 @@
     "test:web:headed": "playwright test --headed",
     "test:web:report": "playwright show-report",
     "seed": "ts-node --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"node\"}' scripts/seed-test-data.ts",
+    "db:audit": "bash scripts/sql/audit/run-linked.sh",
     "db:push": "supabase db push",
     "db:push-both": "bash scripts/push-both-dbs.sh",
     "functions:deploy": "supabase functions deploy",
