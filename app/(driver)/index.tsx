@@ -474,6 +474,9 @@ export default function DriverRadarScreen() {
   const [assignerDisplayByTripId, setAssignerDisplayByTripId] = useState<
     Record<string, string>
   >({});
+  const [assignerTripOrgNameByTripId, setAssignerTripOrgNameByTripId] = useState<
+    Record<string, string>
+  >({});
   const [organizationNamesById, setOrganizationNamesById] = useState<
     Record<string, string>
   >({});
@@ -667,6 +670,15 @@ export default function DriverRadarScreen() {
         setPendingOtpTrips(
           pendingTripsRes?.error ? [] : (pendingTripsRes?.trips ?? []),
         );
+        // Failed driver lookup (network, timeout) returns `drivers: []` — do not clear
+        // linked driver or flip online; that made pull-to-refresh / refetch look like "went offline".
+        if (driversRes.error) {
+          setLoading(false);
+          initialLoadDoneRef.current = true;
+          isRefreshingRef.current = false;
+          setRefreshing(false);
+          return;
+        }
         const drivers = (driversRes.drivers ?? []).filter((d) => !d.left_at);
         if (drivers.length > 0) {
           const primaryDriver = drivers[0];
@@ -1492,6 +1504,8 @@ export default function DriverRadarScreen() {
           assignedByUserName,
           assignedByOrgName,
           assignerPersonDisplay,
+          assignerLinePrimary,
+          assignerLineSecondary,
           assignedByName,
         } = buildAssignerDisplayForTrip(
           trip,
@@ -1502,6 +1516,7 @@ export default function DriverRadarScreen() {
             assignerNamesByUserId,
             assignerOrgNameByUserId,
             assignerDisplayByTripId,
+            assignerTripOrgNameByTripId,
             organizationNamesById: mergedOrganizationNamesById,
           },
         );
@@ -1526,6 +1541,8 @@ export default function DriverRadarScreen() {
           assignedByUserName,
           assignedByOrgName,
           assignerPersonDisplay,
+          assignerLinePrimary,
+          assignerLineSecondary,
           requiresOtp,
           commissionForTrip,
         };
@@ -1538,6 +1555,7 @@ export default function DriverRadarScreen() {
       assignerNamesByUserId,
       assignerOrgNameByUserId,
       assignerDisplayByTripId,
+      assignerTripOrgNameByTripId,
       mergedOrganizationNamesById,
       effectiveAssignmentActorByTripId,
     ],
@@ -1555,6 +1573,8 @@ export default function DriverRadarScreen() {
         assignedByUserName: item.assignedByUserName,
         assignedByOrgName: item.assignedByOrgName,
         assignerPersonDisplay: item.assignerPersonDisplay,
+        assignerLinePrimary: item.assignerLinePrimary,
+        assignerLineSecondary: item.assignerLineSecondary,
         requiresOtp: item.requiresOtp,
         commissionForTrip: item.commissionForTrip,
       }));
@@ -1589,6 +1609,7 @@ export default function DriverRadarScreen() {
         assignerNamesByUserId,
         assignerOrgNameByUserId,
         assignerDisplayByTripId,
+        assignerTripOrgNameByTripId,
         organizationNamesById: mergedOrganizationNamesById,
       },
     ).assignedByName;
@@ -1601,6 +1622,7 @@ export default function DriverRadarScreen() {
     assignerNamesByUserId,
     assignerOrgNameByUserId,
     assignerDisplayByTripId,
+    assignerTripOrgNameByTripId,
     mergedOrganizationNamesById,
   ]);
   useEffect(() => {
@@ -1634,6 +1656,7 @@ export default function DriverRadarScreen() {
           setAssignerNamesByUserId({});
           setAssignerOrgNameByUserId({});
           setAssignerDisplayByTripId({});
+          setAssignerTripOrgNameByTripId({});
           setOrganizationNamesById({});
         }
         return;
@@ -1649,19 +1672,24 @@ export default function DriverRadarScreen() {
       const rpcAssignerUserIdByTrip: Record<string, string> = {};
       if (!cancelled && !assignerRpcError && Array.isArray(assignerRpcRows)) {
         const byTrip: Record<string, string> = {};
+        const orgByTrip: Record<string, string> = {};
         for (const row of assignerRpcRows as Array<{
           trip_id?: string;
           display_name?: string | null;
           assigner_user_id?: string | null;
+          assigning_organization_name?: string | null;
         }>) {
           const tid = row.trip_id != null ? String(row.trip_id) : "";
           const dn = String(row.display_name ?? "").trim();
           const uid = String(row.assigner_user_id ?? "").trim();
+          const orgName = String(row.assigning_organization_name ?? "").trim();
           if (tid && dn) byTrip[tid] = dn;
           if (tid && uid) rpcAssignerUserIdByTrip[tid] = uid;
+          if (tid && orgName) orgByTrip[tid] = orgName;
         }
         setAssignerDisplayByTripId(byTrip);
         setRpcAssignerUserIdByTripId(rpcAssignerUserIdByTrip);
+        setAssignerTripOrgNameByTripId(orgByTrip);
       }
 
       const userIds = Array.from(

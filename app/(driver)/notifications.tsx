@@ -14,6 +14,7 @@ import { computeDriverCommissionForTrip } from '@/features/finance/aggregation/a
 import { getPendingOtpTrips } from '@/features/trips/services/tripOtp.service';
 import { getLatestAssignmentAuditByTripIds } from '@/features/trips/services/trip-assignment-audit.service';
 import {
+    assignerPrimarySecondaryForDriver,
     buildAssignerDisplayForTrip,
     resolveAssignerUserId,
 } from '@/lib/driverAssignerDisplay';
@@ -82,6 +83,9 @@ export default function DriverNotificationsScreen() {
   const [assignerDisplayByTripId, setAssignerDisplayByTripId] = useState<
     Record<string, string>
   >({});
+  const [assignerTripOrgNameByTripId, setAssignerTripOrgNameByTripId] = useState<
+    Record<string, string>
+  >({});
   const [assignerNamesByUserId, setAssignerNamesByUserId] = useState<
     Record<string, string>
   >({});
@@ -97,6 +101,8 @@ export default function DriverNotificationsScreen() {
       trip: tripsService.TripRow;
       assignerPersonDisplay: string;
       assignedByOrgName: string;
+      assignerLinePrimary?: string;
+      assignerLineSecondary?: string;
       requiresOtp: boolean;
       commissionForTrip: number;
     }>
@@ -128,6 +134,8 @@ export default function DriverNotificationsScreen() {
             trip: tripsService.TripRow;
             assignerPersonDisplay: string;
             assignedByOrgName: string;
+            assignerLinePrimary?: string;
+            assignerLineSecondary?: string;
             requiresOtp: boolean;
             commissionForTrip: number;
           }>;
@@ -230,6 +238,7 @@ export default function DriverNotificationsScreen() {
           setAssignerNamesByUserId({});
           setAssignerOrgNameByUserId({});
           setAssignerDisplayByTripId({});
+          setAssignerTripOrgNameByTripId({});
           setOrganizationNamesById({});
         }
         return;
@@ -245,19 +254,24 @@ export default function DriverNotificationsScreen() {
       const rpcAssignerUserIdByTrip: Record<string, string> = {};
       if (!cancelled && !assignerRpcError && Array.isArray(assignerRpcRows)) {
         const byTrip: Record<string, string> = {};
+        const orgByTrip: Record<string, string> = {};
         for (const row of assignerRpcRows as Array<{
           trip_id?: string;
           display_name?: string | null;
           assigner_user_id?: string | null;
+          assigning_organization_name?: string | null;
         }>) {
           const tid = row.trip_id != null ? String(row.trip_id) : '';
           const dn = String(row.display_name ?? '').trim();
           const uid = String(row.assigner_user_id ?? '').trim();
+          const orgName = String(row.assigning_organization_name ?? '').trim();
           if (tid && dn) byTrip[tid] = dn;
           if (tid && uid) rpcAssignerUserIdByTrip[tid] = uid;
+          if (tid && orgName) orgByTrip[tid] = orgName;
         }
         setAssignerDisplayByTripId(byTrip);
         setRpcAssignerUserIdByTripId(rpcAssignerUserIdByTrip);
+        setAssignerTripOrgNameByTripId(orgByTrip);
       }
 
       const userIds = Array.from(
@@ -421,19 +435,24 @@ export default function DriverNotificationsScreen() {
   const rowsWithMeta = useMemo(
     () =>
       mergedIncomingTrips.map((trip) => {
-        const { assignedByOrgName, assignerPersonDisplay } =
-          buildAssignerDisplayForTrip(
-            trip,
-            invites,
-            driver?.organization_id,
-            {
-              assignmentActorByTripId: effectiveAssignmentActorByTripId,
-              assignerNamesByUserId,
-              assignerOrgNameByUserId,
-              assignerDisplayByTripId,
-              organizationNamesById: mergedOrganizationNamesById,
-            },
-          );
+        const {
+          assignedByOrgName,
+          assignerPersonDisplay,
+          assignerLinePrimary,
+          assignerLineSecondary,
+        } = buildAssignerDisplayForTrip(
+          trip,
+          invites,
+          driver?.organization_id,
+          {
+            assignmentActorByTripId: effectiveAssignmentActorByTripId,
+            assignerNamesByUserId,
+            assignerOrgNameByUserId,
+            assignerDisplayByTripId,
+            assignerTripOrgNameByTripId,
+            organizationNamesById: mergedOrganizationNamesById,
+          },
+        );
 
         const requiresOtp =
           !isRosterTrip(trip) &&
@@ -456,6 +475,8 @@ export default function DriverNotificationsScreen() {
           trip,
           assignerPersonDisplay,
           assignedByOrgName,
+          assignerLinePrimary,
+          assignerLineSecondary,
           requiresOtp,
           commissionForTrip,
         };
@@ -468,6 +489,7 @@ export default function DriverNotificationsScreen() {
       assignerNamesByUserId,
       assignerOrgNameByUserId,
       assignerDisplayByTripId,
+      assignerTripOrgNameByTripId,
       mergedOrganizationNamesById,
       effectiveAssignmentActorByTripId,
     ],
@@ -530,7 +552,19 @@ export default function DriverNotificationsScreen() {
     rowsWithMeta.length > 0
       ? rowsWithMeta
       : notifyOnlyAfterMission
-        ? postMissionSnapshotRows
+        ? postMissionSnapshotRows.map((row) => {
+            const lines =
+              row.assignerLinePrimary != null && row.assignerLineSecondary != null
+                ? {
+                    assignerLinePrimary: row.assignerLinePrimary,
+                    assignerLineSecondary: row.assignerLineSecondary,
+                  }
+                : assignerPrimarySecondaryForDriver(
+                    row.assignedByOrgName,
+                    row.assignerPersonDisplay,
+                  );
+            return { ...row, ...lines };
+          })
         : [];
 
   const listIntroSubtitle =
@@ -638,11 +672,11 @@ export default function DriverNotificationsScreen() {
                     Assigned by{' '}
                   </Text>
                   <Text style={[styles.assignedName, { color: colors.text }]}>
-                    {item.assignerPersonDisplay}
+                    {item.assignerLinePrimary}
                   </Text>
                   <Text style={[styles.assignedOrg, { color: colors.textMuted }]}>
                     {' '}
-                    · {item.assignedByOrgName}
+                    · {item.assignerLineSecondary}
                   </Text>
                 </Text>
                 <Text style={[styles.meta, { color: colors.textMuted }]}>

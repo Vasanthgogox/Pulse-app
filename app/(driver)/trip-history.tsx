@@ -475,6 +475,9 @@ export default function DriverTripsScreen() {
   const [assignerDisplayByTripId, setAssignerDisplayByTripId] = useState<
     Record<string, string>
   >({});
+  const [assignerTripOrgNameByTripId, setAssignerTripOrgNameByTripId] = useState<
+    Record<string, string>
+  >({});
   const [loading, setLoading] = useState(true);
   const [, setRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
@@ -706,6 +709,7 @@ export default function DriverTripsScreen() {
           setAssignerNamesByUserId({});
           setAssignerOrgNameByUserId({});
           setAssignerDisplayByTripId({});
+          setAssignerTripOrgNameByTripId({});
         }
         return;
       }
@@ -717,19 +721,24 @@ export default function DriverTripsScreen() {
       const rpcAssignerUserIdByTrip: Record<string, string> = {};
       if (!cancelled && !assignerRpcError && Array.isArray(assignerRpcRows)) {
         const byTrip: Record<string, string> = {};
+        const orgByTrip: Record<string, string> = {};
         for (const row of assignerRpcRows as Array<{
           trip_id?: string;
           display_name?: string | null;
           assigner_user_id?: string | null;
+          assigning_organization_name?: string | null;
         }>) {
           const tid = row.trip_id != null ? String(row.trip_id) : "";
           const dn = normalizeAssignerName(row.display_name ?? "");
           const uid = String(row.assigner_user_id ?? "").trim();
+          const orgName = String(row.assigning_organization_name ?? "").trim();
           if (tid && dn) byTrip[tid] = dn;
           if (tid && uid) rpcAssignerUserIdByTrip[tid] = uid;
+          if (tid && orgName) orgByTrip[tid] = orgName;
         }
         setAssignerDisplayByTripId(byTrip);
         setRpcAssignerUserIdByTripId(rpcAssignerUserIdByTrip);
+        setAssignerTripOrgNameByTripId(orgByTrip);
       }
 
       const userIds = Array.from(
@@ -862,6 +871,7 @@ export default function DriverTripsScreen() {
           assignerNamesByUserId,
           assignerOrgNameByUserId,
           assignerDisplayByTripId,
+          assignerTripOrgNameByTripId,
           organizationNamesById,
         },
       ).assignedByName;
@@ -874,6 +884,7 @@ export default function DriverTripsScreen() {
     assignerNamesByUserId,
     assignerOrgNameByUserId,
     assignerDisplayByTripId,
+    assignerTripOrgNameByTripId,
     invites,
     organizationNamesById,
   ]);

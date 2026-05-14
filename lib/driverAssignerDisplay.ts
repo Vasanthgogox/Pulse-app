@@ -66,6 +66,8 @@ export type AssignerResolutionDeps = {
   assignerNamesByUserId: Record<string, string>;
   assignerOrgNameByUserId?: Record<string, string>;
   assignerDisplayByTripId: Record<string, string>;
+  /** SECURITY DEFINER RPC: fleet name for trips.organization_id (drivers may lack org SELECT). */
+  assignerTripOrgNameByTripId?: Record<string, string>;
   organizationNamesById: Record<string, string>;
 };
 
@@ -73,8 +75,35 @@ export type AssignerDisplayResult = {
   assignedByUserName: string | null;
   assignedByOrgName: string;
   assignerPersonDisplay: string;
+  /** Bold / leading segment for driver UI: fleet when known, else person. */
+  assignerLinePrimary: string;
+  /** Muted / trailing segment: dispatcher when fleet leads, else fleet label. */
+  assignerLineSecondary: string;
   assignedByName: string;
 };
+
+/** Cross-fleet placeholder when the assigning org name cannot be resolved client-side. */
+export const DRIVER_ASSIGNING_FLEET_UNKNOWN_LABEL = "Assigning fleet";
+
+/**
+ * Driver-facing “Assigned by” line: lead with organization when we know it;
+ * when the org is unknown, keep the person first so the line stays informative.
+ */
+export function assignerPrimarySecondaryForDriver(
+  assignedByOrgName: string,
+  assignerPersonDisplay: string,
+): Pick<AssignerDisplayResult, "assignerLinePrimary" | "assignerLineSecondary"> {
+  const unknownPeerOrg = assignedByOrgName === DRIVER_ASSIGNING_FLEET_UNKNOWN_LABEL;
+  return unknownPeerOrg
+    ? {
+        assignerLinePrimary: assignerPersonDisplay,
+        assignerLineSecondary: assignedByOrgName,
+      }
+    : {
+        assignerLinePrimary: assignedByOrgName,
+        assignerLineSecondary: assignerPersonDisplay,
+      };
+}
 
 /**
  * Dispatcher / fleet attribution for a trip (not cargo-party client/supplier names).
@@ -112,6 +141,7 @@ export function buildAssignerDisplayForTrip(
    * so `from_org_name` is the owning fleet — not the aggregate `supplier_id` party.
    */
   const tripAssignedByOrgNameCandidates = [
+    deps.assignerTripOrgNameByTripId?.[String(trip.id).trim()] ?? null,
     deps.assignerOrgNameByUserId?.[assignerUserId] ?? null,
     deps.organizationNamesById[(trip.organization_id ?? "").trim()] ?? null,
     inviteForTrip?.from_org_name ?? null,
@@ -141,17 +171,21 @@ export function buildAssignerDisplayForTrip(
     ((trip.organization_id ?? "").trim() ===
     (driverOrganizationId ?? "").trim()
       ? "Your fleet"
-      : "Assigning fleet");
+      : DRIVER_ASSIGNING_FLEET_UNKNOWN_LABEL);
 
   const assignerPersonDisplay =
     (assignedByUserName ?? "").trim() || "Fleet dispatcher";
 
-  const assignedByName = `${assignerPersonDisplay} · ${assignedByOrgName}`;
+  const { assignerLinePrimary, assignerLineSecondary } =
+    assignerPrimarySecondaryForDriver(assignedByOrgName, assignerPersonDisplay);
+  const assignedByName = `${assignerLinePrimary} · ${assignerLineSecondary}`;
 
   return {
     assignedByUserName,
     assignedByOrgName,
     assignerPersonDisplay,
+    assignerLinePrimary,
+    assignerLineSecondary,
     assignedByName,
   };
 }
