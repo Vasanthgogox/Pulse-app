@@ -594,15 +594,9 @@ export function AddTripFormFields({
           >
             <View style={styles.cardHead}>
               <View style={styles.stepBadge}>
-                <Text style={[styles.stepBadgeText, styles.stepBadgeTextInk]}>01</Text>
+                <Text style={styles.stepBadgeText}>01</Text>
               </View>
-              <Text
-                style={[
-                  styles.cardTitle,
-                  isCompactMobile && styles.cardTitleCompact,
-                  styles.cardTitleInk,
-                ]}
-              >
+              <Text style={[styles.cardTitle, isCompactMobile && styles.cardTitleCompact]}>
                 Route Details
               </Text>
             </View>
@@ -2620,17 +2614,14 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 7,
-    backgroundColor: "rgba(2, 6, 23, 0.06)",
+    backgroundColor: Theme.darkBackground,
     alignItems: "center",
     justifyContent: "center",
   },
   stepBadgeText: {
     fontSize: 9,
-    fontWeight: "700",
-    color: Theme.textSecondary,
-  },
-  stepBadgeTextInk: {
-    color: Theme.darkBackground,
+    fontWeight: "800",
+    color: Theme.textOnPrimary,
   },
   cardTitle: {
     flex: 1,
@@ -2638,15 +2629,13 @@ const styles = StyleSheet.create({
     ...FinanceTxnTypography.partyTitle,
     fontSize: 9,
     letterSpacing: 0.3,
-    color: Theme.textSecondary,
+    fontStyle: "normal",
+    fontWeight: "800",
+    color: Theme.darkBackground,
   },
   cardTitleCompact: {
     fontSize: 9,
     letterSpacing: 0.45,
-  },
-  /** Card 01 only — strong black headline. */
-  cardTitleInk: {
-    color: Theme.darkBackground,
   },
   gridRow: { gap: 10 },
   /** Extra gap when driver + vehicle stack vertically so sections don’t feel glued. */
