@@ -2008,6 +2008,7 @@ export default function SupplierDetailScreen({
               expandedRowId={expandedCashFlowRowId}
               expandedRowData={expandedCashFlowRowData}
               highlightId={expandedCashFlowRowId}
+              expandedDesktopThreeColumn
               tripDetailsMap={supplierTripDetailsMap}
               tripOptions={tripOptions.map((t) => ({
                 id: t.id,

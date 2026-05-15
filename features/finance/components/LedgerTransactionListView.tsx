@@ -508,6 +508,11 @@ export interface LedgerTransactionListViewProps {
   expandedRowId?: string | null;
   /** Precomputed FinancialRowData for the expanded row (table-style detail: trip + same-trip transactions). */
   expandedRowData?: FinancialRowData | null;
+  /**
+   * Web desktop (≥1024): render expanded row as three columns (Ledger | Trip | Settlement/history).
+   * Enable only on party-detail transaction surfaces — leave false for main Finance Cash ledger.
+   */
+  expandedDesktopThreeColumn?: boolean;
   /** Optional row id to highlight. */
   highlightId?: string | null;
   /** Show section title above the list. Default true. */
@@ -554,6 +559,7 @@ export function LedgerTransactionListView({
   onRowPress,
   expandedRowId,
   expandedRowData,
+  expandedDesktopThreeColumn = false,
   highlightId,
   showTitle = true,
   tripDetailsMap,
@@ -1707,6 +1713,9 @@ export function LedgerTransactionListView({
                                         expandedRowId === row.id ? (
                                           <LedgerExpandedCardFromData
                                             data={expandedRowData}
+                                            enableDesktopThreeColumn={
+                                              expandedDesktopThreeColumn
+                                            }
                                           />
                                         ) : (
                                           <TransactionRowDetail row={row} />
@@ -1891,6 +1900,9 @@ export function LedgerTransactionListView({
                                     expandedRowId === row.id ? (
                                       <LedgerExpandedCardFromData
                                         data={expandedRowData}
+                                        enableDesktopThreeColumn={
+                                          expandedDesktopThreeColumn
+                                        }
                                       />
                                     ) : (
                                       <TransactionRowDetail row={row} />
@@ -2266,6 +2278,9 @@ export function LedgerTransactionListView({
                                   ) : expandedRowData != null ? (
                                     <LedgerExpandedCardFromData
                                       data={expandedRowData}
+                                      enableDesktopThreeColumn={
+                                        expandedDesktopThreeColumn
+                                      }
                                     />
                                   ) : (
                                     <TransactionRowDetail row={row} />

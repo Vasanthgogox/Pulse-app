@@ -1743,6 +1743,7 @@ export function EntityDetailOverlay({
               <LedgerTransactionListView
                 transactions={selectedEntityTransactions}
                 highlightId={expandedEntityLedgerRowId}
+                expandedDesktopThreeColumn
                 showTitle={false}
                 driverRows={ledgerDriverRowsForAvatars}
               />
@@ -1935,7 +1936,14 @@ export function EntityDetailOverlay({
                     tripPaymentSummary: tripPaymentSummary ?? undefined,
                     sameTripTransactions: sameTripTransactions ?? undefined,
                   };
-                  return <FinancialRow key={tx.id} type="ledger" data={data} />;
+                  return (
+                    <FinancialRow
+                      key={tx.id}
+                      type="ledger"
+                      data={data}
+                      ledgerExpandedDesktopThreeColumn
+                    />
+                  );
                 })
               )}
             </View>

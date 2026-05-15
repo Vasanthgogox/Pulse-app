@@ -1,21 +1,29 @@
 /**
  * Place search for pickup/drop: API-driven (India), returns display name + lat/lon on select.
+ * Location modal matches Create Trip pickers (FleetEntityPickerModal — centered sheet, search, rich rows).
  */
+import { CreateTripSheetSearchInput } from "@/components/CreateTripSheetSearchInput";
+import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { addToPlacesCache, getPopularPlacesInIndia, searchPlacesInIndia, type PlaceResult } from "@/lib/placesService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { MapPin, X } from "lucide-react-native";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
+  Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  type TextStyle,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View,
+  useWindowDimensions,
+  type ViewStyle,
 } from "react-native";
 
 export interface PlaceCoords {
@@ -30,6 +38,8 @@ export interface LocationSearchFieldProps {
   onChangeText: (val: string) => void;
   /** When user selects a place from API results, called with display name and coords. */
   onSelectPlace?: (displayName: string, coords: PlaceCoords) => void;
+  /** Optional icon inside the field (e.g. MapPin / Navigation), left-aligned like other form rows. */
+  leadingIcon?: ReactNode;
   inputStyle?: object;
   labelStyle?: object;
   onDropdownOpenChange?: (open: boolean) => void;
@@ -44,10 +54,17 @@ export function LocationSearchField({
   value,
   onChangeText,
   onSelectPlace,
+  leadingIcon,
   inputStyle,
   labelStyle,
   onDropdownOpenChange,
 }: LocationSearchFieldProps) {
+  const { width: winW } = useWindowDimensions();
+  const horizontalPad = Layout.screenPaddingHorizontal * 2;
+  /** Explicit width avoids RN Web % layout quirks so the sheet stays visually centered on mobile. */
+  const sheetWidth = Math.min(winW - horizontalPad, 520);
+  const webCursor =
+    Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null;
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [draft, setDraft] = useState(value);
   const [results, setResults] = useState<PlaceResult[]>([]);
@@ -163,33 +180,46 @@ export function LocationSearchField({
       {!loading && listToShow.length > 0 && (
         <>
           <Text style={styles.sectionLabel}>
-            {isPopularList ? (query ? "Suggestions" : "Popular places — tap or type to search") : "Suggestions"}
+            {isPopularList
+              ? query
+                ? "Suggestions"
+                : "Popular places — tap or type to search"
+              : "Suggestions"}
           </Text>
-          {listToShow.map((place) => (
-            <TouchableOpacity
-              key={place.placeId}
-              style={[styles.listItem, draft === place.displayName && styles.listItemActive]}
-              onPress={() => handleSelect(place)}
-              activeOpacity={0.7}
-            >
-              <Text
-                style={[styles.listItemText, { color: Theme.textPrimary }]}
-                numberOfLines={2}
+          {listToShow.map((place) => {
+            const selected = draft === place.displayName;
+            return (
+              <TouchableOpacity
+                key={place.placeId}
+                style={[
+                  styles.placeRow,
+                  selected && styles.placeRowSelected,
+                  webCursor,
+                ]}
+                onPress={() => handleSelect(place)}
+                activeOpacity={0.75}
               >
-                {place.displayName}
-              </Text>
-            </TouchableOpacity>
-          ))}
+                <View style={styles.rowIconCircle}>
+                  <MapPin size={18} color={Theme.iconPrimary} />
+                </View>
+                <Text style={styles.placeRowText} numberOfLines={3}>
+                  {place.displayName}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </>
       )}
       {showCustomOption && (
         <TouchableOpacity
-          style={styles.createRow}
+          style={[styles.customAddressRow, webCursor]}
           onPress={handleUseCustom}
-          activeOpacity={0.7}
+          activeOpacity={0.75}
         >
-          <FontAwesome name="map-marker" size={14} color={Theme.primary} />
-          <Text style={[styles.createRowText, { color: Theme.primary }]}>
+          <View style={[styles.rowIconCircle, styles.customIconCircle]}>
+            <MapPin size={18} color={Theme.primary} />
+          </View>
+          <Text style={styles.customAddressText}>
             Use "{draft.trim()}" as custom address
           </Text>
         </TouchableOpacity>
@@ -201,10 +231,20 @@ export function LocationSearchField({
     <View style={styles.wrapper} collapsable={false}>
       <Text style={labelStyle}>{label}</Text>
       <View style={styles.inputRow}>
+        {leadingIcon ? (
+          <View style={styles.leadingIconWrap} pointerEvents="none">
+            {leadingIcon}
+          </View>
+        ) : null}
         <TouchableOpacity
           activeOpacity={0.85}
           onPress={openDropdown}
-          style={[styles.input, inputStyle, styles.inputPressable]}
+          style={[
+            styles.input,
+            inputStyle,
+            styles.inputPressable,
+            leadingIcon ? styles.inputWithLeadingIcon : null,
+          ]}
         >
           <Text
             style={[
@@ -239,55 +279,69 @@ export function LocationSearchField({
         )}
       </View>
       {dropdownOpen && (
-        <Modal visible transparent animationType="fade" statusBarTranslucent>
-          <View style={styles.modalOverlay}>
-            <TouchableWithoutFeedback onPress={closeDropdown}>
-              <View style={StyleSheet.absoluteFill} />
-            </TouchableWithoutFeedback>
-            <View
-              style={styles.dropdownModalCard}
-              onStartShouldSetResponder={() => true}
-            >
-              <Text style={styles.dropdownModalTitle}>Pick a place in India</Text>
-              <View style={styles.modalSearchRow}>
-                <FontAwesome name="search" size={14} color={Theme.textMuted} />
-                <TextInput
+        <Modal
+          visible
+          transparent
+          animationType="fade"
+          statusBarTranslucent
+          onRequestClose={closeDropdown}
+        >
+          <View style={styles.modalRoot} accessibilityViewIsModal>
+            <Pressable style={styles.backdropPress} onPress={closeDropdown}>
+              <View style={styles.backdropDim} />
+            </Pressable>
+            <View style={styles.centerWrap} pointerEvents="box-none">
+              <View
+                style={[
+                  styles.sheet,
+                  { width: sheetWidth, maxWidth: sheetWidth, alignSelf: "center" },
+                ]}
+              >
+                <View style={styles.sheetHead}>
+                  <View style={styles.sheetTitles}>
+                    <Text style={styles.sheetTitle}>Pick a place in India</Text>
+                    <Text style={styles.sheetSubtitle}>
+                      Search cities, areas, or landmarks
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={closeDropdown}
+                    style={[styles.closeBtn, webCursor]}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Close"
+                  >
+                    <X size={18} color={Theme.primary} strokeWidth={2.5} />
+                  </TouchableOpacity>
+                </View>
+
+                <CreateTripSheetSearchInput
                   ref={modalInputRef}
-                  style={styles.modalSearchInput}
                   value={draft}
                   onChangeText={(t) => {
                     setDraft(t);
                     onChangeText(t);
                   }}
                   placeholder={placeholder}
-                  placeholderTextColor={Theme.placeholder}
                   autoCapitalize="words"
-                  autoCorrect={false}
                   spellCheck={false}
                   autoComplete="off"
                   autoFocus
+                  compactChat
+                  shellStyle={styles.searchShell}
+                  accessibilityLabel="Search places"
                 />
-                {draft.trim().length > 0 ? (
-                  <TouchableOpacity
-                    onPress={() => {
-                      setDraft("");
-                      onChangeText("");
-                    }}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <FontAwesome name="times-circle" size={18} color={Theme.textMuted} />
-                  </TouchableOpacity>
-                ) : null}
+
+                <ScrollView
+                  style={styles.sheetScroll}
+                  contentContainerStyle={styles.sheetScrollContent}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator
+                  bounces
+                >
+                  {dropdownListContent}
+                </ScrollView>
               </View>
-              <ScrollView
-                style={styles.dropdownScroll}
-                contentContainerStyle={styles.dropdownScrollContent}
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator
-                bounces
-              >
-                {dropdownListContent}
-              </ScrollView>
             </View>
           </View>
         </Modal>
@@ -306,21 +360,37 @@ const styles = StyleSheet.create({
     position: "relative",
     marginBottom: 4,
   },
+  leadingIconWrap: {
+    position: "absolute",
+    left: 14,
+    top: 0,
+    bottom: 0,
+    justifyContent: "center",
+    zIndex: 1,
+  },
+  inputWithLeadingIcon: {
+    paddingLeft: 44,
+  },
   input: {
-    borderWidth: 2,
     borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    minHeight: 48,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 12,
+    fontWeight: "500",
+    fontStyle: "italic",
+    minHeight: 44,
     paddingRight: 44,
+    ...Platform.select({
+      web: { outlineStyle: "none" } as TextStyle,
+    }),
   },
   inputPressable: {
     justifyContent: "center",
   },
   inputValueText: {
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 12,
+    fontWeight: "500",
+    fontStyle: "italic",
   },
   clearBtn: {
     position: "absolute",
@@ -336,101 +406,156 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: "center",
   },
-  modalOverlay: {
+  modalRoot: {
+    flex: 1,
+    ...Platform.select({
+      web: {
+        width: "100%",
+        minHeight: "100%",
+        alignSelf: "center",
+      } as ViewStyle,
+      default: {},
+    }),
+  },
+  backdropPress: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  backdropDim: {
     flex: 1,
     backgroundColor: Theme.overlayBackdrop,
-    justifyContent: "center",
-    paddingHorizontal: Layout.screenPaddingHorizontal,
   },
-  dropdownModalCard: {
-    alignSelf: "stretch",
-    backgroundColor: Theme.screenBackground,
-    borderRadius: 12,
-    maxHeight: 380,
+  centerWrap: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    ...Platform.select({
+      web: {
+        width: "100%",
+        left: 0,
+        right: 0,
+      } as ViewStyle,
+      default: {},
+    }),
+  },
+  sheet: {
+    maxHeight: "82%",
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 20,
     overflow: "hidden",
     shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
-    elevation: 12,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    elevation: 16,
   },
-  dropdownModalTitle: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: Theme.textMutedDemo,
-    letterSpacing: 1,
-    textTransform: "uppercase",
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: Layout.headerPaddingBelowInset - 2,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
+  sheetHead: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 12,
   },
-  modalSearchRow: {
+  sheetTitles: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  sheetTitle: {
+    ...FinanceTxnTypography.partyTitle,
+    fontSize: 12,
+    letterSpacing: 0.25,
+    color: Theme.textPrimaryDark,
+  },
+  sheetSubtitle: {
+    ...FinanceTxnTypography.routeWhy,
+    fontSize: 9,
+    marginTop: 3,
+    color: Theme.textMuted,
+  },
+  closeBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: Theme.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.cardWhite,
+  },
+  searchShell: {
+    marginHorizontal: 20,
+    marginBottom: 12,
+  },
+  sheetScroll: {
+    maxHeight: 340,
+    minHeight: 120,
+  },
+  sheetScrollContent: {
+    paddingBottom: 16,
+  },
+  placeRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
-    backgroundColor: Theme.surface,
+    gap: 12,
   },
-  modalSearchInput: {
+  placeRowSelected: {
+    backgroundColor: Theme.surfaceLight,
+  },
+  rowIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Theme.surfaceGray,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  customIconCircle: {
+    backgroundColor: Theme.positiveMuted,
+  },
+  placeRowText: {
     flex: 1,
     minWidth: 0,
-    paddingVertical: 8,
-    fontSize: 16,
-    color: Theme.textPrimary,
+    ...FinanceTxnTypography.fieldValue,
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: "500",
+    color: Theme.textPrimaryDark,
   },
-  dropdownScroll: {
-    maxHeight: 300,
+  customAddressRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    marginTop: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceLight,
   },
-  dropdownScrollContent: {
-    paddingVertical: 8,
-    paddingBottom: Layout.screenPaddingHorizontal,
+  customAddressText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "700",
+    color: Theme.primary,
   },
   loadingWrap: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingVertical: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
   },
   loadingText: {
     fontSize: 13,
     color: Theme.textSecondary,
   },
-  listItem: {
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.surfaceBorder,
-  },
-  listItemActive: {
-    backgroundColor: Theme.positiveMuted,
-  },
-  listItemText: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  createRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingVertical: 14,
-    borderTopWidth: 1,
-    borderTopColor: Theme.surfaceBorder,
-    backgroundColor: Theme.surface,
-  },
-  createRowText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: Theme.primary,
-  },
   emptyListWrap: {
-    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingHorizontal: 20,
     paddingVertical: 14,
   },
   emptyListText: {
@@ -443,13 +568,15 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   sectionLabel: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 6,
-    paddingBottom: 6,
+    ...FinanceTxnTypography.columnTitle,
+    fontSize: 9,
+    fontWeight: "600",
+    letterSpacing: 0.35,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 8,
+    backgroundColor: Theme.surfaceGray,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderLight,
   },
 });

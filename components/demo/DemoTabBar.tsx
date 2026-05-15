@@ -43,12 +43,11 @@ import {
 } from "@/services/connectionRequestsService";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Image,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -67,6 +66,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ShellFooterStrip } from "@/components/ShellFooterStrip";
 
 function AnimatedPress({
   children,
@@ -462,8 +462,9 @@ export function DemoTabBar({
       .join("") || "US";
 
   const dockBottom = insets.bottom;
-  const verticalPad = Math.max(dockBottom / 4, 4);
-  const bottomPad = verticalPad + 6;
+  /** Tighter dock padding — extra vertical space lives in `ShellFooterStrip` instead. */
+  const footerPadTop = 4;
+  const footerPadBottom = Math.max(Math.round(dockBottom * 0.35), 10);
   const mobileNavItems: Array<{
     id: Extract<DemoTabId, "finance" | "trips">;
     label: string;
@@ -612,6 +613,7 @@ export function DemoTabBar({
     ];
 
     return (
+      <Fragment>
       <View style={[styles.webTopShell, Platform.OS === "web" && ({ backdropFilter: "blur(24px)" } as unknown as ViewStyle)]}>
         <View style={styles.webHeaderRow}>
           <View style={styles.webBrandWrap}>
@@ -739,6 +741,8 @@ export function DemoTabBar({
           </View>
         </View>
       </View>
+      <ShellFooterStrip variant="desktopFixed" />
+      </Fragment>
     );
   }
 
@@ -747,7 +751,7 @@ export function DemoTabBar({
       style={[
         styles.footerWrap,
         styles.commandFooterWrap,
-        { paddingTop: verticalPad, paddingBottom: bottomPad },
+        { paddingTop: footerPadTop, paddingBottom: footerPadBottom },
       ]}
       pointerEvents="box-none"
     >
@@ -935,6 +939,8 @@ export function DemoTabBar({
         </View>
 
       </View>
+
+      <ShellFooterStrip variant="embedded" bleedHorizontal={10} />
     </View>
   );
 }
@@ -1971,26 +1977,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     letterSpacing: 2,
     marginTop: 0,
-  },
-  shellFooter: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingTop: 2,
-    paddingBottom: 8,
-  },
-  shellFooterBrand: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 1.2,
-    textTransform: "uppercase",
-    color: Theme.textMutedDemo,
-  },
-  shellFooterMeta: {
-    marginTop: 2,
-    fontSize: 9,
-    fontWeight: "600",
-    letterSpacing: 1,
-    textTransform: "uppercase",
-    color: Theme.textSecondary,
   },
 });

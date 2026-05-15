@@ -3606,75 +3606,75 @@ export function AddTransactionModal({
     );
 
     const ledgerSyncDatePanel = (
-      <View
-        style={[
+        <View
+          style={[
           styles.ledgerSyncDateCard,
           mob && styles.ledgerMobDateCard,
-          ledgerSyncHeroStack && styles.syncHeroCardFullWidth,
-          stackTripFinancialBand && styles.syncDateCardMobileAlign,
+            ledgerSyncHeroStack && styles.syncHeroCardFullWidth,
+            stackTripFinancialBand && styles.syncDateCardMobileAlign,
           ledgerTripDesktopSplit && styles.syncDateCardDesktopFull,
           entryDateError && styles.ledgerSyncDateCardError,
         ]}
       >
         <Text style={[styles.ledgerFieldEyebrow, mob && styles.ledgerMobFieldEyebrow]}>
           Sync Date
-        </Text>
+            </Text>
         <View style={styles.ledgerSyncDatePresetRow}>
-          <TouchableOpacity
-            style={[
+            <TouchableOpacity
+              style={[
               styles.ledgerSyncDatePresetPill,
               mob && styles.ledgerMobDatePreset,
               entryDate === todayIso && styles.ledgerSyncDatePresetPillOn,
-            ]}
-            onPress={() => {
-              setLedgerSyncDatePickerVisible(false);
-              setEntryDate(todayIso);
-            }}
-            activeOpacity={0.85}
-          >
-            <Text
-              style={[
+              ]}
+              onPress={() => {
+                setLedgerSyncDatePickerVisible(false);
+                setEntryDate(todayIso);
+              }}
+              activeOpacity={0.85}
+            >
+              <Text
+                style={[
                 styles.ledgerSyncDatePresetText,
                 mob && styles.ledgerMobDatePresetText,
                 entryDate === todayIso && styles.ledgerSyncDatePresetTextOn,
-              ]}
-            >
-              Today
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
+                ]}
+              >
+                Today
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
               styles.ledgerSyncDatePresetPill,
               mob && styles.ledgerMobDatePreset,
               entryDate === yesterdayIso && styles.ledgerSyncDatePresetPillOn,
-            ]}
-            onPress={() => {
-              setLedgerSyncDatePickerVisible(false);
-              setEntryDate(yesterdayIso);
-            }}
-            activeOpacity={0.85}
-          >
-            <Text
-              style={[
+              ]}
+              onPress={() => {
+                setLedgerSyncDatePickerVisible(false);
+                setEntryDate(yesterdayIso);
+              }}
+              activeOpacity={0.85}
+            >
+              <Text
+                style={[
                 styles.ledgerSyncDatePresetText,
                 mob && styles.ledgerMobDatePresetText,
                 entryDate === yesterdayIso && styles.ledgerSyncDatePresetTextOn,
-              ]}
-            >
-              Yesterday
-            </Text>
-          </TouchableOpacity>
-        </View>
-        <Pressable
-          style={({ pressed }) => [
+                ]}
+              >
+                Yesterday
+              </Text>
+            </TouchableOpacity>
+          </View>
+            <Pressable
+              style={({ pressed }) => [
             styles.ledgerSyncDateField,
             mob && styles.ledgerMobDateField,
             Platform.OS === "web" && styles.ledgerSyncDateFieldWeb,
             pressed && Platform.OS !== "web" && styles.ledgerSyncDateFieldPressed,
           ]}
           onPress={Platform.OS === "web" ? undefined : beginLedgerSyncDatePick}
-          accessibilityRole="button"
-          accessibilityLabel="Pick sync date"
+              accessibilityRole="button"
+              accessibilityLabel="Pick sync date"
         >
           {Platform.OS === "web" ? (
             <LedgerWebDateField
@@ -3688,18 +3688,18 @@ export function AddTransactionModal({
           <View
             style={styles.ledgerSyncDateFieldInner}
             pointerEvents={Platform.OS === "web" ? "none" : "auto"}
-          >
-            <Text
-              style={[styles.ledgerSyncDateFieldText, mob && styles.ledgerMobDateFieldText]}
-              numberOfLines={1}
             >
-              {formatLedgerDateDdMmYyyy(entryDate)}
-            </Text>
+              <Text
+              style={[styles.ledgerSyncDateFieldText, mob && styles.ledgerMobDateFieldText]}
+                numberOfLines={1}
+              >
+                {formatLedgerDateDdMmYyyy(entryDate)}
+              </Text>
             <FontAwesome name="calendar" size={mob ? 12 : 14} color={Theme.textMutedDemo} />
           </View>
-        </Pressable>
-        {entryDateError ? <Text style={styles.fieldErrorText}>{entryDateError}</Text> : null}
-      </View>
+            </Pressable>
+          {entryDateError ? <Text style={styles.fieldErrorText}>{entryDateError}</Text> : null}
+        </View>
     );
 
     const ledgerSyncHeroDateRow = (
@@ -3871,7 +3871,7 @@ export function AddTransactionModal({
           <View style={[styles.missionToolbarRow, mob && styles.missionToolbarRowMob]}>
             {missionTripSearchExpanded || tripSearch.length > 0 ? (
               <View
-                style={[
+            style={[
                   styles.missionSearchExpandWrap,
                   mob && styles.missionSearchExpandWrapMob,
                 ]}
@@ -3881,14 +3881,14 @@ export function AddTransactionModal({
                   color={LedgerSyncPalette.muted}
                   strokeWidth={LEDGER_LUCIDE_STROKE}
                 />
-                <TextInput
+            <TextInput
                   ref={missionTripSearchInputRef}
-                  style={[
+              style={[
                     styles.missionSearchExpandInput,
                     mob && styles.missionSearchExpandInputMob,
-                  ]}
-                  value={tripSearch}
-                  onChangeText={setTripSearch}
+              ]}
+              value={tripSearch}
+              onChangeText={setTripSearch}
                   placeholder="Voyage ID..."
                   placeholderTextColor={LedgerSyncPalette.muted}
                   autoCorrect={false}
@@ -4053,7 +4053,7 @@ export function AddTransactionModal({
                 })}
               </View>
             </View>
-            </ScrollView>
+          </ScrollView>
           </View>
         ) : null}
         {tripLocked ? (
@@ -4295,29 +4295,29 @@ export function AddTransactionModal({
             removeClippedSubviews={false}
           >
             {!ledgerTripFocusMode ? (
-              <View style={styles.missionTripBlock}>
-                <TouchableOpacity
-                  style={[
-                    styles.missionTripRowCompact,
-                    selectedTripIds.length === 0 && styles.missionTripRowCompactOn,
-                  ]}
+            <View style={styles.missionTripBlock}>
+              <TouchableOpacity
+                style={[
+                  styles.missionTripRowCompact,
+                  selectedTripIds.length === 0 && styles.missionTripRowCompactOn,
+                ]}
                   onPress={() => {
                     if (fullPage) setLedgerMissionRegistryExpanded(false);
                     selectMissionTrip(null);
                   }}
-                  activeOpacity={0.85}
-                >
-                  <View style={styles.missionTripIconPlaceholder}>
-                    <FontAwesome name="unlink" size={12} color={Theme.textMutedDemo} />
-                  </View>
-                  <Text style={styles.missionTripRouteInline} numberOfLines={1}>
-                    No associated trip
-                  </Text>
-                  {selectedTripIds.length === 0 ? (
-                    <FontAwesome name="check" size={12} color={accent} />
-                  ) : null}
-                </TouchableOpacity>
-              </View>
+                activeOpacity={0.85}
+              >
+                <View style={styles.missionTripIconPlaceholder}>
+                  <FontAwesome name="unlink" size={12} color={Theme.textMutedDemo} />
+                </View>
+                <Text style={styles.missionTripRouteInline} numberOfLines={1}>
+                  No associated trip
+                </Text>
+                {selectedTripIds.length === 0 ? (
+                  <FontAwesome name="check" size={12} color={accent} />
+                ) : null}
+              </TouchableOpacity>
+            </View>
             ) : null}
             {missionTripsFiltered.length === 0 && missionTrips.length > 0 ? (
               <Text style={styles.missionFilterEmpty}>No trips match these filters.</Text>
@@ -4400,7 +4400,7 @@ export function AddTransactionModal({
                             numberOfLines={1}
                           >
                             {t.trip_number}
-                          </Text>
+                    </Text>
                           <Text
                             style={[
                               styles.missionTripProtocolRouteCompact,
@@ -4423,55 +4423,55 @@ export function AddTransactionModal({
                         </Text>
                       </View>
                     </View>
-                    {pendingChips.length > 0 ? (
+                  {pendingChips.length > 0 ? (
                       <View
                         style={[
                           styles.missionTripChipsInline,
                           mob && styles.ledgerMobPendingChipsRow,
                         ]}
                       >
-                        {pendingChips.map((c) => (
-                          <TouchableOpacity
-                            key={`${c.tag}-${c.disabled ? "d" : "a"}`}
-                            style={[
-                              styles.missionTripPendingChip,
+                      {pendingChips.map((c) => (
+                        <TouchableOpacity
+                          key={`${c.tag}-${c.disabled ? "d" : "a"}`}
+                          style={[
+                            styles.missionTripPendingChip,
                               mob && styles.ledgerMobPendingChip,
-                              c.disabled && styles.missionTripPendingChipDisabled,
-                            ]}
-                            onPress={() => {
-                              if (c.disabled) {
-                                if (c.tag === "client") {
-                                  Alert.alert(
-                                    "Different party · Cash IN",
-                                    "Client receipts use Cash IN. Switch to IN to record money from the client.",
-                                  );
-                                } else {
-                                  Alert.alert(
-                                    "Different party · Cash OUT",
-                                    "Supplier and driver payments use Cash OUT. Switch to OUT to record this payment.",
-                                  );
-                                }
-                                return;
+                            c.disabled && styles.missionTripPendingChipDisabled,
+                          ]}
+                          onPress={() => {
+                            if (c.disabled) {
+                              if (c.tag === "client") {
+                                Alert.alert(
+                                  "Different party · Cash IN",
+                                  "Client receipts use Cash IN. Switch to IN to record money from the client.",
+                                );
+                              } else {
+                                Alert.alert(
+                                  "Different party · Cash OUT",
+                                  "Supplier and driver payments use Cash OUT. Switch to OUT to record this payment.",
+                                );
                               }
-                              applyTripSmartTag(t, c.tag);
-                            }}
-                            activeOpacity={0.85}
-                            accessibilityRole="button"
-                            accessibilityLabel={c.label}
-                          >
-                            <Text
-                              style={[
-                                styles.missionTripPendingChipText,
+                              return;
+                            }
+                            applyTripSmartTag(t, c.tag);
+                          }}
+                          activeOpacity={0.85}
+                          accessibilityRole="button"
+                          accessibilityLabel={c.label}
+                        >
+                          <Text
+                            style={[
+                              styles.missionTripPendingChipText,
                                 mob && styles.ledgerMobPendingChipText,
-                                c.disabled && styles.missionTripPendingChipTextDisabled,
-                              ]}
-                              numberOfLines={1}
-                            >
-                              {c.label}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
+                              c.disabled && styles.missionTripPendingChipTextDisabled,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {c.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
                     ) : showNoDueTag ? (
                       <View
                         style={[
@@ -4547,7 +4547,7 @@ export function AddTransactionModal({
           <View style={styles.ledgerDatePickerBackdrop}>
             <Pressable
               style={StyleSheet.absoluteFill}
-              onPress={() => setLedgerSyncDatePickerVisible(false)}
+            onPress={() => setLedgerSyncDatePickerVisible(false)}
               accessibilityRole="button"
               accessibilityLabel="Dismiss date picker"
             />
@@ -4597,11 +4597,11 @@ export function AddTransactionModal({
           ]}
         >
           <View style={styles.ledgerV2HeaderLeft}>
-            <TouchableOpacity
+                <TouchableOpacity
               style={[styles.ledgerV2BackBtn, mob && styles.ledgerMobBackBtn]}
               onPress={onClose}
               activeOpacity={0.88}
-              accessibilityRole="button"
+                  accessibilityRole="button"
               accessibilityLabel="Go back"
             >
               <ChevronLeft
@@ -4609,9 +4609,9 @@ export function AddTransactionModal({
                 color={LedgerSyncPalette.ink}
                 strokeWidth={2.5}
               />
-            </TouchableOpacity>
+                </TouchableOpacity>
             <View style={[styles.ledgerV2HeaderDivider, mob && styles.ledgerMobHeaderDivider]} />
-            <View style={styles.ledgerV2HeaderTitleBlock}>
+          <View style={styles.ledgerV2HeaderTitleBlock}>
               <Text style={[styles.ledgerV2Title, mob && styles.ledgerMobTitle]}>
                 {isEditMode ? "Edit Ledger Entry" : "Ledger Sync Protocol"}
               </Text>
@@ -4619,11 +4619,11 @@ export function AddTransactionModal({
                 {ledgerWorkspaceSubtitle ??
                   (headerPartyName
                     ? `PARTY · ${headerPartyName.toUpperCase()}`
-                    : entryContextLabel
+                : entryContextLabel
                       ? `CONTEXT · ${entryContextLabel.toUpperCase()}`
                       : "OPERATIONAL COMMAND")}
-              </Text>
-            </View>
+            </Text>
+          </View>
           </View>
           <View style={[styles.toggleWrap, styles.toggleWrapLedgerPulse]}>
             <TouchableOpacity
@@ -4697,8 +4697,8 @@ export function AddTransactionModal({
           </View>
         </View>
 
-        <View
-          style={[
+            <View
+              style={[
             styles.ledgerV2Grid,
             isLedgerWide && styles.ledgerV2GridWide,
             ledgerTripDesktopSplit && styles.ledgerV2GridDesktopCompact,
@@ -6033,9 +6033,9 @@ export function AddTransactionModal({
           isEditMode={isEditMode}
           onClose={() => setLedgerSubmitConfirmVisible(false)}
           onConfirm={() => {
-            setLedgerSubmitConfirmVisible(false);
-            commitLedgerSubmit();
-          }}
+                      setLedgerSubmitConfirmVisible(false);
+                      commitLedgerSubmit();
+                    }}
         />
       </>
     );

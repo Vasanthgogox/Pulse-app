@@ -2435,6 +2435,7 @@ export default function ClientDetailScreen({
               expandedRowId={expandedCashFlowRowId}
               expandedRowData={expandedCashFlowRowData}
               highlightId={expandedCashFlowRowId}
+              expandedDesktopThreeColumn
               tripDetailsMap={clientTripDetailsMap}
               tripOptions={tripOptions.map((t) => ({
                 id: t.id,

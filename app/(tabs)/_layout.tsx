@@ -159,7 +159,12 @@ export default function TabLayout() {
           headerShown: false,
           tabBarShowLabel: false,
           tabBarStyle: { display: 'none' },
-          sceneStyle: isDesktopWeb ? { paddingTop: Layout.desktopTopNavOffset } : undefined,
+          sceneStyle: isDesktopWeb
+            ? {
+                paddingTop: Layout.desktopTopNavOffset,
+                paddingBottom: Layout.desktopShellFooterStripReserve,
+              }
+            : undefined,
         }}
       >
         <Tabs.Screen name="index" options={{ title: 'Home' }} />

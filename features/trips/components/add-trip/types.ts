@@ -98,10 +98,23 @@ export interface AddTripSuccessDetails {
   routeLabel: string;
 }
 
+/** Snapshot for OTP success UI (filled client-side in AddTripModal). */
+export interface AddTripOtpScreenContext {
+  driverName?: string;
+  pickupArea: string;
+  dropLocation: string;
+  clientName?: string;
+  tons?: string;
+  supplierDisplayName?: string;
+  routeLine?: string;
+}
+
 export interface AddTripCompleteResult {
-  trip: { id: string };
+  trip: { id: string; vehicle_display_number?: string | null };
   otp: { code: string; expires_at: string } | null;
   successDetails?: AddTripSuccessDetails;
+  /** Route/driver chips on the post-create OTP screen. */
+  otpScreenContext?: AddTripOtpScreenContext;
 }
 
 export interface AddTripModalProps {

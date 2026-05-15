@@ -66,10 +66,18 @@ export const Layout = {
    */
   desktopTopNavOffset: 84,
   /**
+   * Desktop web: reserve space for the fixed `ShellFooterStrip` (pulse / registered tag).
+   */
+  desktopShellFooterStripReserve: 40,
+  /**
+   * Approx height of `ShellFooterStrip` + gap under dock (driver shell clearance math).
+   */
+  shellFooterStripApproxHeight: 32,
+  /**
    * Vertical space to reserve for the floating demo tab bar (dock + margin) when it is
    * docked at the bottom — use for scroll content paddingBottom and FAB offset.
    */
-  demoTabBarScrollBottomInset: 56 + 32,
+  demoTabBarScrollBottomInset: 56 + 32 + 22,
   /** Bottom corner radius of demo tab bar (matches device curve) */
   tabBarBorderRadiusBottom: 20,
   /** Radius of each tab pill (FISCAL / OPS / TRIPS) */

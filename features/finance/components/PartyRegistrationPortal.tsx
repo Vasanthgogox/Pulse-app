@@ -1,7 +1,9 @@
 /**
- * Desktop-only fullscreen party addition flow (Finance). Native: no-op.
- * Two steps: fill form → review and confirm → calls Finance entity handlers.
+ * Web fullscreen party addition flow (Finance). Native: no-op.
+ * Steps: fill form → review and confirm → Finance entity handlers.
+ * Single light-column layout (header + scroll body).
  */
+import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import Theme from "@/constants/Theme";
 import type {
   AddClientFormData,
@@ -34,6 +36,7 @@ import {
 } from "@/lib/phoneValidation";
 import { validateIndianVehicleNumber } from "@/lib/validation";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import Svg, { Circle, Path, Rect } from "react-native-svg";
 import {
   ArrowLeftRight,
   ArrowRight,
@@ -41,7 +44,6 @@ import {
   Building2,
   Check,
   ChevronLeft,
-  Cpu,
   Key,
   Layers,
   Mail,
@@ -84,6 +86,35 @@ export type PartyRegistrationKind =
   | "driver"
   | "vehicle";
 
+/** Tiranga chip beside +91 (matches onboarding reference UI). */
+function IndiaFlagIcon({
+  width = 20,
+  height = 15,
+}: {
+  width?: number;
+  height?: number;
+}) {
+  const spokes = [...Array(24)].map((_, i) => (
+    <Path
+      key={i}
+      transform={`rotate(${i * 15} 450 300)`}
+      d="M450 208L444 300L456 300Z"
+      fill="#000080"
+    />
+  ));
+  return (
+    <Svg width={width} height={height} viewBox="0 0 900 600">
+      <Rect width={900} height={600} fill="#FF9933" />
+      <Rect width={900} height={400} y={200} fill="#FFFFFF" />
+      <Rect width={900} height={200} y={400} fill="#138808" />
+      <Circle cx={450} cy={300} r={92.5} fill="#000080" />
+      <Circle cx={450} cy={300} r={80} fill="#FFFFFF" />
+      <Circle cx={450} cy={300} r={16} fill="#000080" />
+      {spokes}
+    </Svg>
+  );
+}
+
 /** Web modal routes and Finance use the same portal above this width (px). */
 export const PARTY_REGISTRATION_PORTAL_WEB_MIN_WIDTH = 900;
 
@@ -122,8 +153,6 @@ export interface PartyRegistrationPortalProps {
 
 const DL_CLEAN = /[\s-]/g;
 
-/** Stacked layout uses full width below 720px; sheet rounding/shadow only below this for nicer tablet-stacked. */
-const PARTY_PORTAL_STACKED_SHEET_MAX_WIDTH = 640;
 const DL_FORMAT = /^[A-Z]{2}[0-9]{2}[0-9]{4}[0-9]{7}$/;
 
 const MIN_PHONE_LENGTH_FOR_SEARCH = 8;
@@ -295,11 +324,6 @@ function PartyRegistrationPortalInner(
     Boolean(searchInviteeByPhone && onSendSupplierInvitation);
   const showPhoneInviteeUi = hasClientInviteSearch || hasSupplierInviteSearch;
   const inviteeIsDriver = inviteeProfileIsDriver(inviteeMatch?.profile_role);
-
-  const stackedSheetVisuals =
-    !layoutWide &&
-    viewportW > 0 &&
-    viewportW < PARTY_PORTAL_STACKED_SHEET_MAX_WIDTH;
 
   useEffect(() => {
     if (Platform.OS !== "web" || !visible || typeof window === "undefined") {
@@ -662,19 +686,6 @@ function PartyRegistrationPortalInner(
             : "Vehicle",
     [kind],
   );
-
-  const sideKindSubtitle = useMemo(() => {
-    switch (kind) {
-      case "client":
-        return "Billing, contact, and phone — saved only as this customer.";
-      case "supplier":
-        return "Company and contact — saved only as this supplier.";
-      case "driver":
-        return "Name, phone, and licence — saved only as this driver.";
-      default:
-        return "Registration and specs — saved only as this vehicle.";
-    }
-  }, [kind]);
 
   const phoneE164Hint = useMemo(() => {
     const n = normalizeIndianPhoneForMetadata(phoneDigits);
@@ -1104,9 +1115,10 @@ function PartyRegistrationPortalInner(
           900,
         )
       : undefined;
+  /** Narrow sheet like ledger / transaction column density on desktop. */
   const shellMaxWidth = layoutWide
-    ? 1040
-    : Math.min(560, Math.max(280, viewportW - 16));
+    ? Math.min(540, Math.max(400, viewportW - 48))
+    : Math.max(280, viewportW - 24);
   const keyboardInset =
     !layoutWide &&
     viewportH > 0 &&
@@ -1125,10 +1137,27 @@ function PartyRegistrationPortalInner(
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      <View style={[styles.overlay, !layoutWide && styles.overlayCompact]}>
+      <View
+        style={[
+          styles.overlay,
+          !layoutWide && styles.overlayCompactMobile,
+          !layoutWide && {
+            paddingTop: Math.max(insets.top, 10),
+            paddingBottom: Math.max(insets.bottom, 10),
+            paddingHorizontal: 12,
+          },
+        ]}
+      >
+        <Pressable
+          style={styles.overlayDismissHit}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+        />
         <View
           style={[
             styles.shell,
+            layoutWide && styles.shellWideDesktop,
             !layoutWide && styles.shellStacked,
             !layoutWide && styles.shellNarrowWeb,
             {
@@ -1139,45 +1168,26 @@ function PartyRegistrationPortalInner(
             },
           ]}
         >
-          {/* Sidebar — single entity only (no switching). */}
-          <View
-            style={[styles.sidebar, !layoutWide && styles.sidebarNarrow]}
-          >
-            <Pressable style={styles.backBtn} onPress={onClose} hitSlop={12} testID="party-close-btn">
-              <ChevronLeft size={22} color="#fff" strokeWidth={2.5} />
-            </Pressable>
-            <View style={styles.sideIconWrap}>
-              <Cpu size={28} color="#93c5fd" strokeWidth={2} />
-            </View>
-            <Text style={styles.sideTitle}>Add to your business</Text>
-            {step === "form" ? (
-              <>
-                <Text style={styles.sideSubtitle}>{sideKindSubtitle}</Text>
-                <View style={styles.sideKindPillWrap}>
-                  <Text style={styles.sideKindPillLabel}>Adding</Text>
-                  <View style={styles.sideKindPill}>
-                    <Text style={styles.sideKindPillText}>{headline}</Text>
-                  </View>
-                </View>
-              </>
-            ) : (
-              <Text style={styles.sideSubtitle}>
-                Check the summary looks right, then tap Save.
-              </Text>
-            )}
-          </View>
-
-          {/* Main */}
           <ScrollView
-            style={[styles.mainScroll, stackedSheetVisuals && styles.mainScrollSheet]}
+            style={styles.mainScroll}
             contentContainerStyle={[
               styles.mainScrollContent,
-              stackedSheetVisuals && styles.mainScrollContentSheet,
               keyboardInset > 0 && { paddingBottom: 40 + keyboardInset },
             ]}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
+            <View style={styles.portalHeaderMinimal}>
+              <Pressable
+                style={styles.backBtnLight}
+                onPress={onClose}
+                hitSlop={12}
+                testID="party-close-btn"
+              >
+                <ChevronLeft size={22} color="#0f172a" strokeWidth={2.5} />
+              </Pressable>
+            </View>
+
             {!organizationId ? (
               <View style={styles.banner}>
                 <FontAwesome name="warning" size={16} color="#92400e" />
@@ -1286,7 +1296,10 @@ function PartyRegistrationPortalInner(
                       <View style={layoutWide ? styles.row2Grow : undefined}>
                         <Field label="Phone">
                           <View style={styles.phoneOuter}>
-                            <Text style={styles.phoneCc}>🇮🇳 +91</Text>
+                            <View style={styles.phoneCcWrap}>
+                              <IndiaFlagIcon width={20} height={15} />
+                              <Text style={styles.phoneCc}>+91</Text>
+                            </View>
                             <TextInput
                               style={[styles.input, styles.phoneInput]}
                               placeholder="10-digit mobile"
@@ -1395,7 +1408,10 @@ function PartyRegistrationPortalInner(
                       <View style={layoutWide ? styles.row2Grow : undefined}>
                         <Field label="Mobile">
                           <View style={[styles.phoneOuter, styles.inputIconRow]}>
-                            <Text style={styles.phoneCc}>🇮🇳 +91</Text>
+                            <View style={styles.phoneCcWrap}>
+                              <IndiaFlagIcon width={20} height={15} />
+                              <Text style={styles.phoneCc}>+91</Text>
+                            </View>
                             <TextInput
                               style={[styles.input, styles.phoneInput]}
                               keyboardType="phone-pad"
@@ -1882,7 +1898,7 @@ function PartyRegistrationPortalInner(
                 testID="party-continue-btn"
               >
                 <Text style={styles.primaryBtnText}>Continue</Text>
-                <ArrowRight size={22} color="#fff" strokeWidth={2.5} />
+                <ArrowRight size={18} color="#fff" strokeWidth={2.5} />
               </Pressable>
             ) : (
               <View style={[styles.reviewActionsBar, layoutWide && styles.reviewActionsBarWide]}>
@@ -2118,7 +2134,7 @@ function Field(props: {
   children: ReactNode;
 }) {
   return (
-    <View style={{ marginBottom: 16 }}>
+    <View style={{ marginBottom: 12 }}>
       <View style={styles.fieldLabelRow}>
         <Text style={styles.fieldLabel}>{props.label}</Text>
         {props.optionalHint ? (
@@ -2183,13 +2199,22 @@ function SummaryDetailRow({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(15,23,42,0.94)",
+    backgroundColor:
+      Platform.OS === "web"
+        ? "rgba(15, 23, 42, 0.52)"
+        : "rgba(15, 23, 42, 0.88)",
     justifyContent: "center",
     alignItems: "center",
     padding: 18,
+    position: "relative",
     ...(Platform.OS === "web"
       ? ({ overflow: "auto" } as unknown as ViewStyle)
       : ({} as ViewStyle)),
+  },
+  /** Full-area tap target behind the card (does not steal taps from the shell). */
+  overlayDismissHit: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 0,
   },
   overlayCompact: {
     padding: 12,
@@ -2197,17 +2222,24 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     alignItems: "stretch",
   },
+  /** Mobile web: avoid generic padding so safe-area + horizontal inset can apply cleanly. */
+  overlayCompactMobile: {
+    justifyContent: "flex-start",
+    alignItems: "stretch",
+  },
   shell: {
-    flexDirection: "row",
+    flexDirection: "column",
     width: "100%",
     maxHeight: 760,
-    minHeight: 480,
+    minHeight: 0,
     backgroundColor: "#fff",
-    borderRadius: 40,
+    borderRadius: 22,
     overflow: "hidden",
+    zIndex: 1,
     ...(Platform.OS === "web"
       ? ({
-          boxShadow: "0 40px 120px rgba(0,0,0,0.35)",
+          boxShadow:
+            "0 40px 100px -24px rgba(15,23,42,0.12), 0 1px 0 rgba(255,255,255,0.8)",
         } as ViewStyle)
       : ({
           shadowColor: "#000",
@@ -2217,119 +2249,53 @@ const styles = StyleSheet.create({
           elevation: 12,
         } as ViewStyle)),
   },
+  shellWideDesktop: {
+    maxHeight: 800,
+    minHeight: 0,
+    ...(Platform.OS === "web"
+      ? ({
+          boxShadow:
+            "0 80px 160px -40px rgba(15,23,42,0.14), 0 1px 0 rgba(255,255,255,0.06)",
+        } as ViewStyle)
+      : ({} as ViewStyle)),
+  },
   shellStacked: {
-    flexDirection: "column",
     maxHeight: 900,
   },
   /** Narrow / mobile web: avoid forcing tall min-height so the card fits the viewport. */
   shellNarrowWeb: {
     minHeight: 0,
-    alignSelf: "center",
-  },
-  sidebar: {
-    width: 300,
-    backgroundColor: "#0f172a",
-    padding: 26,
-    paddingTop: 24,
-    justifyContent: "flex-start",
-  },
-  /** Stacked (narrow web / mobile web): dark band + sheet below — no horizontal wrap. */
-  sidebarNarrow: {
+    alignSelf: "stretch",
     width: "100%",
-    paddingVertical: 18,
+    flex: 1,
+  },
+  portalHeaderMinimal: {
+    marginHorizontal: -20,
     paddingHorizontal: 20,
-    paddingBottom: 22,
+    paddingTop: 8,
+    paddingBottom: 4,
   },
-  backBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.06)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
-  },
-  sideIconWrap: {
-    width: 56,
-    height: 56,
-    borderRadius: 18,
-    backgroundColor: "rgba(59,130,246,0.22)",
+  backBtnLight: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "#f1f5f9",
     borderWidth: 1,
-    borderColor: "rgba(59,130,246,0.35)",
+    borderColor: "#e8ecf1",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 16,
-  },
-  sideTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#fff",
-    letterSpacing: -0.5,
-    marginBottom: 8,
-  },
-  sideSubtitle: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: "rgba(248,250,252,0.62)",
-    lineHeight: 17,
-    marginBottom: 18,
-  },
-  sideKindPillWrap: {
-    marginTop: 4,
-  },
-  sideKindPillLabel: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "rgba(248,250,252,0.45)",
-    textTransform: "uppercase",
-    letterSpacing: 1.2,
-    marginBottom: 8,
-  },
-  sideKindPill: {
     alignSelf: "flex-start",
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 999,
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.9)",
-  },
-  sideKindPillText: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#0f172a",
-    letterSpacing: -0.2,
   },
   mainScroll: {
     flex: 1,
     minWidth: 0,
-    backgroundColor: "#f8fafc",
-  },
-  mainScrollSheet: {
-    marginTop: -8,
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    overflow: "hidden",
-    ...Platform.select({
-      web: {
-        boxShadow: "0 -12px 40px rgba(15, 23, 42, 0.08)",
-      },
-      default: {
-        shadowColor: "#0f172a",
-        shadowOffset: { width: 0, height: -6 },
-        shadowOpacity: 0.07,
-        shadowRadius: 20,
-        elevation: 8,
-      },
-    }),
+    backgroundColor: "#ffffff",
   },
   mainScrollContent: {
-    padding: 28,
-    paddingBottom: 40,
+    paddingHorizontal: 20,
+    paddingTop: 0,
+    paddingBottom: 28,
     flexGrow: 1,
-  },
-  mainScrollContentSheet: {
-    paddingTop: 24,
   },
   banner: {
     flexDirection: "row",
@@ -2338,6 +2304,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fef3c7",
     padding: 12,
     borderRadius: 14,
+    marginTop: 16,
     marginBottom: 16,
     borderWidth: 1,
     borderColor: "#fcd34d",
@@ -2364,8 +2331,9 @@ const styles = StyleSheet.create({
   formHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    marginBottom: 6,
+    gap: 8,
+    marginTop: 4,
+    marginBottom: 4,
   },
   liveDot: {
     width: 8,
@@ -2374,17 +2342,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#22c55e",
   },
   formHeaderTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#0f172a",
-    letterSpacing: -0.3,
+    ...FinanceTxnTypography.partyTitle,
+    flexShrink: 1,
   },
   formHeaderHint: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: Theme.textMuted,
-    marginBottom: 18,
-    lineHeight: 18,
+    ...FinanceTxnTypography.routeWhy,
+    fontSize: 9,
+    lineHeight: 14,
+    marginBottom: 12,
   },
   errorBar: {
     backgroundColor: "#fee2e2",
@@ -2420,9 +2385,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   vehicleChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 12,
     backgroundColor: "#f8fafc",
     borderWidth: 1,
     borderColor: "#e2e8f0",
@@ -2433,8 +2398,9 @@ const styles = StyleSheet.create({
     borderColor: "#0f172a",
   },
   vehicleChipText: {
-    fontSize: 11,
-    fontWeight: "700",
+    ...FinanceTxnTypography.chipLabel,
+    fontSize: 9,
+    fontStyle: "italic",
     color: "#334155",
     maxWidth: 200,
   },
@@ -2443,31 +2409,31 @@ const styles = StyleSheet.create({
   },
   presetFieldPress: {
     justifyContent: "center",
-    minHeight: 50,
+    minHeight: 44,
   },
   presetFieldValue: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#0f172a",
+    ...FinanceTxnTypography.fieldValue,
+    fontSize: 12,
+    fontWeight: "500",
+    color: Theme.textPrimaryDark,
   },
   presetFieldPlaceholder: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#94a3b8",
+    ...FinanceTxnTypography.routeWhy,
+    fontSize: 11,
   },
   presetLinkWrap: {
     marginTop: 8,
     alignSelf: "flex-start",
   },
   presetLinkText: {
-    fontSize: 13,
-    fontWeight: "700",
+    ...FinanceTxnTypography.fieldValue,
+    fontSize: 10,
+    fontWeight: "600",
     color: Theme.buttonPrimary,
   },
   specHintText: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: "#64748b",
+    ...FinanceTxnTypography.routeWhy,
+    fontSize: 9,
     marginTop: 6,
     lineHeight: 15,
   },
@@ -2547,29 +2513,24 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 8,
+    marginBottom: 6,
   },
   fieldLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
+    ...FinanceTxnTypography.fieldLabel,
   },
   optionalPill: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: "#94a3b8",
+    ...FinanceTxnTypography.noDueChip,
   },
   input: {
     borderWidth: 1,
     borderColor: "#e2e8f0",
-    borderRadius: 18,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    fontSize: 14,
+    borderRadius: 12,
+    paddingVertical: 11,
+    paddingHorizontal: 13,
+    fontSize: 12,
     fontWeight: "500",
-    color: "#0f172a",
+    fontStyle: "italic",
+    color: Theme.textPrimaryDark,
     backgroundColor: "#fff",
     ...Platform.select({
       web: { outlineStyle: "none" } as object,
@@ -2581,58 +2542,72 @@ const styles = StyleSheet.create({
   },
   inputLeadingIcon: {
     position: "absolute",
-    left: 14,
-    top: 15,
+    left: 12,
+    top: 13,
     zIndex: 1,
   },
   inputPadded: {
-    paddingLeft: 42,
+    paddingLeft: 38,
   },
   phoneOuter: {
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
     borderColor: "#e2e8f0",
-    borderRadius: 18,
+    borderRadius: 12,
     backgroundColor: "#fff",
-    paddingLeft: 12,
+    paddingLeft: 10,
     paddingRight: 8,
     gap: 8,
-    minHeight: 50,
+    minHeight: 44,
     position: "relative",
   },
+  phoneCcWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingRight: 12,
+    marginRight: 4,
+    borderRightWidth: 1,
+    borderRightColor: "#f1f5f9",
+  },
   phoneCc: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#334155",
+    ...FinanceTxnTypography.dateLine,
+    fontWeight: "600",
   },
   phoneInput: {
     flex: 1,
     borderWidth: 0,
-    paddingVertical: 12,
+    paddingVertical: 10,
     paddingHorizontal: 4,
     minWidth: 0,
+    fontSize: 12,
+    fontWeight: "500",
+    fontStyle: "italic",
+    color: Theme.textPrimaryDark,
   },
   phoneIcon: {
     marginRight: 8,
   },
   primaryBtn: {
-    marginTop: 20,
+    marginTop: 14,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
+    gap: 8,
     backgroundColor: "#0f172a",
-    paddingVertical: 18,
-    borderRadius: 22,
+    paddingVertical: 14,
+    borderRadius: 14,
   },
   primaryBtnDisabled: {
     opacity: 0.45,
   },
   primaryBtnText: {
-    fontSize: 16,
-    fontWeight: "800",
+    ...FinanceTxnTypography.buttonLabel,
+    fontSize: 11,
+    fontWeight: "700",
     color: "#fff",
+    letterSpacing: 0.75,
   },
   ghostBtn: {
     marginTop: 12,
@@ -2641,23 +2616,26 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   ghostBtnText: {
-    fontSize: 14,
-    fontWeight: "700",
+    ...FinanceTxnTypography.fieldValue,
+    fontSize: 11,
+    fontWeight: "600",
     color: Theme.buttonPrimary,
   },
   confirmBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
+    gap: 8,
     backgroundColor: Theme.buttonPrimary,
-    paddingVertical: 18,
-    borderRadius: 22,
+    paddingVertical: 14,
+    borderRadius: 14,
   },
   confirmBtnText: {
-    fontSize: 16,
-    fontWeight: "800",
+    ...FinanceTxnTypography.buttonLabel,
+    fontSize: 11,
+    fontWeight: "700",
     color: "#fff",
+    letterSpacing: 0.75,
   },
   confirmBtnFlexible: {
     flex: 1,
@@ -2692,6 +2670,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e2e8f0",
     overflow: "hidden",
+    marginTop: 12,
     marginBottom: 12,
     ...Platform.select({
       web: {
@@ -2720,12 +2699,8 @@ const styles = StyleSheet.create({
     gap: 0,
   },
   summaryDetailsHeading: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#64748b",
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    marginBottom: 14,
+    ...FinanceTxnTypography.columnTitle,
+    marginBottom: 10,
   },
 
   summaryDetailRow: {
@@ -2763,37 +2738,30 @@ const styles = StyleSheet.create({
   summaryDetailCopy: {
     flex: 1,
     justifyContent: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 14,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
     minWidth: 0,
   },
   summaryDetailLabel: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#94a3b8",
-    textTransform: "uppercase",
-    letterSpacing: 0.7,
-    marginBottom: 4,
+    ...FinanceTxnTypography.fieldLabel,
+    marginBottom: 3,
   },
   summaryDetailValue: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#0f172a",
-    letterSpacing: -0.2,
-    lineHeight: 21,
+    ...FinanceTxnTypography.fieldValue,
+    fontSize: 11,
+    lineHeight: 15,
   },
   summaryDetailValueEmphasis: {
-    fontSize: 17,
-    fontWeight: "800",
-    letterSpacing: -0.3,
-    color: "#0f172a",
+    ...FinanceTxnTypography.partyTitle,
+    fontSize: 12,
+    color: Theme.textPrimaryDark,
+    lineHeight: 16,
   },
   summaryDetailValueProse: {
-    fontSize: 13,
-    fontWeight: "600",
-    letterSpacing: 0,
-    lineHeight: 20,
-    color: "#334155",
+    ...FinanceTxnTypography.fieldValue,
+    fontSize: 10,
+    lineHeight: 15,
+    color: Theme.textSecondary,
   },
 
   importContactsWrap: {
@@ -2824,26 +2792,28 @@ const styles = StyleSheet.create({
     opacity: 0.55,
   },
   importContactsBtnText: {
-    fontSize: 13,
-    fontWeight: "700",
+    ...FinanceTxnTypography.buttonLabel,
+    fontSize: 9,
+    fontWeight: "600",
     color: "#2563eb",
+    letterSpacing: 0.45,
   },
   importContactsBtnTextMuted: {
     color: Theme.textMuted,
     fontWeight: "500",
   },
   importContactsHint: {
-    fontSize: 11,
-    fontWeight: "500",
+    ...FinanceTxnTypography.routeWhy,
+    fontSize: 9,
     color: Theme.textMuted,
     marginTop: 6,
     marginLeft: 2,
     lineHeight: 16,
   },
   clientPhoneLookupHint: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: "#64748b",
+    ...FinanceTxnTypography.routeWhy,
+    fontSize: 9,
+    color: Theme.textSecondary,
     marginTop: 4,
     marginBottom: 8,
     lineHeight: 17,
@@ -2855,9 +2825,9 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   clientLookupLoadingText: {
-    fontSize: 13,
-    fontWeight: "600",
+    ...FinanceTxnTypography.dateLine,
     color: "#2563eb",
+    fontWeight: "600",
   },
   clientInviteeCard: {
     backgroundColor: "#eff6ff",
@@ -2868,23 +2838,19 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   clientInviteeLabel: {
-    fontSize: 10,
-    fontWeight: "800",
+    ...FinanceTxnTypography.tripId,
     color: "#1d4ed8",
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-    marginBottom: 6,
+    marginBottom: 4,
   },
   clientInviteeName: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: "#0f172a",
-    marginBottom: 6,
+    ...FinanceTxnTypography.partyTitle,
+    fontSize: 12,
+    marginBottom: 4,
   },
   clientInviteeHint: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: "#475569",
+    ...FinanceTxnTypography.routeWhy,
+    fontSize: 9,
+    color: Theme.textSecondary,
     lineHeight: 17,
     marginBottom: 8,
   },
@@ -2893,8 +2859,9 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   clientOfflineLinkText: {
-    fontSize: 13,
-    fontWeight: "700",
+    ...FinanceTxnTypography.fieldValue,
+    fontSize: 10,
+    fontWeight: "600",
     color: "#2563eb",
   },
   reviewDriverOfflineLinkWrap: {
@@ -2902,9 +2869,9 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   clientNoMatchHint: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: "#64748b",
+    ...FinanceTxnTypography.routeWhy,
+    fontSize: 9,
+    color: Theme.textMuted,
     marginBottom: 4,
     lineHeight: 17,
   },

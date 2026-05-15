@@ -127,6 +127,14 @@ export const Theme = {
   /** Partner column label on dark mirror cells (shared ledger hub). */
   ledgerPartnerLabelOnDark: "#A5B4FC",
 
+  /** Create Trip: dark party / price selection rows on light section shells */
+  tripSelectionSurface: "#121212",
+  tripSelectionSurfaceActive: "#191919",
+  tripSelectionBorder: "rgba(248,250,252,0.14)",
+  tripSelectionBorderActive: "rgba(248,250,252,0.45)",
+  tripSelectionInsetBg: "rgba(255,255,255,0.09)",
+  tripSelectionInsetBorder: "rgba(255,255,255,0.18)",
+
   /** Finance table: integrated party icon (link) — green = synced */
   integratedIcon: "#15803D",
   /** Finance table: non-integrated party icon (unlink) — red = not linked */

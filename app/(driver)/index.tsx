@@ -388,11 +388,13 @@ export default function DriverRadarScreen() {
   const insets = useSafeAreaInsets();
   const { isDark, mapTheme } = useDriverTheme();
   const colors = useDriverThemeColors();
-  const tabBarVerticalPad = Math.max(insets.bottom / 4, 4);
+  const footerPadTop = 4;
+  const footerPadBottom = Math.max(Math.round(insets.bottom * 0.35), 10);
   const driverTabBarClearance =
-    // Reserve only the actual footer tab bar area (not extra modal padding),
-    // so the map stays full-bleed but bottom-sheet/content stops above tabs.
-    Layout.tabBarDockHeight + tabBarVerticalPad + (tabBarVerticalPad + 6);
+    Layout.tabBarDockHeight +
+    footerPadTop +
+    footerPadBottom +
+    Layout.shellFooterStripApproxHeight;
   // Driver home previously used a hardcoded dark map for contrast.
   // Now it respects the "Map Style" user setting (light, dark, or auto-sync with theme).
   const mapIsDark = mapTheme === "auto" ? isDark : mapTheme === "dark";

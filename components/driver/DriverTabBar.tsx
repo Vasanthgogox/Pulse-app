@@ -1,3 +1,4 @@
+import { ShellFooterStrip } from '@/components/ShellFooterStrip';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import Typography from '@/constants/Typography';
@@ -56,15 +57,15 @@ export function DriverTabBar({ state, navigation }: BottomTabBarProps) {
 
   const handlePress = (routeName: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    navigation.navigate(routeName as any);
+    navigation.navigate(routeName as never);
   };
 
   const dockBottom = insets.bottom;
-  const verticalPad = Math.max(dockBottom / 4, 4);
-  const bottomPad = verticalPad + 6;
+  const footerPadTop = 4;
+  const footerPadBottom = Math.max(Math.round(dockBottom * 0.35), 10);
 
   return (
-    <View style={[styles.footerWrap, { paddingTop: verticalPad, paddingBottom: bottomPad }]}>
+    <View style={[styles.footerWrap, { paddingTop: footerPadTop, paddingBottom: footerPadBottom }]}>
       <View
         style={[
           styles.glassDock,
@@ -128,6 +129,7 @@ export function DriverTabBar({ state, navigation }: BottomTabBarProps) {
           );
         })}
       </View>
+      <ShellFooterStrip variant="embedded" bleedHorizontal={Layout.screenPaddingHorizontal} />
     </View>
   );
 }

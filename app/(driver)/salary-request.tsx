@@ -131,8 +131,13 @@ export default function SalaryRequestScreen() {
    * DriverTabBar is absolutely positioned at the bottom on all platforms.
    * Reserve space so NEXT / SUBMIT never sit under the glass dock (web + iOS + Android).
    */
+  const footerPadTop = 4;
+  const footerPadBottom = Math.max(Math.round(insets.bottom * 0.35), 10);
   const tabBarClearance =
-    Layout.tabBarHeight + 5 + Math.max(insets.bottom, 10) + Math.max(Math.ceil(insets.bottom / 4), 4) + 8;
+    Layout.tabBarDockHeight +
+    footerPadTop +
+    footerPadBottom +
+    Layout.shellFooterStripApproxHeight;
 
   const [loading, setLoading] = useState(true);
   const [linkedDrivers, setLinkedDrivers] = useState<driversService.DriverRow[]>([]);

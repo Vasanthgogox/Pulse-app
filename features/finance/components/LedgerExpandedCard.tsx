@@ -117,6 +117,11 @@ export interface LedgerExpandedCardProps {
   formatNumSignedFn?: (n: number) => string;
   /** Id of the current ledger entry (expanded row); this transaction is highlighted in the list. */
   highlightTransactionId?: string | null;
+  /**
+   * Desktop web three-column layout (Ledger | Trip | Settlement/history).
+   * Use only in party-detail transaction contexts — main Finance cash/ledger row expand stays stacked.
+   */
+  enableDesktopThreeColumn?: boolean;
   /** Optional: called when user taps "Download Trip Protocol". */
   onDownloadPress?: () => void;
   /** Whether the counterparty (client/supplier) is integrated. When false, the reconciliation hero shows an offline empty state. */
@@ -245,11 +250,13 @@ export function LedgerExpandedCard({
   formatNumSignedFn = defaultFormatNumSigned,
   highlightTransactionId,
   onDownloadPress,
+  enableDesktopThreeColumn = false,
 }: LedgerExpandedCardProps) {
   const { width: windowWidth } = useWindowDimensions();
-  /** Align with Finance cash Kanban / desktop split (FinanceTabBody). */
-  const isDesktopExpandedLayout =
-    Platform.OS === "web" && windowWidth >= 1024;
+  const useDesktopThreeColumnLayout =
+    Platform.OS === "web" &&
+    windowWidth >= 1024 &&
+    enableDesktopThreeColumn;
 
   const showSummaryBar =
     showReceivablesRow || showPayablesRow || showDriverRow || showVehicleRow || hasSameTx;
@@ -262,7 +269,7 @@ export function LedgerExpandedCard({
     setDesktopTripIntrinsicHeight(0);
     setDesktopLedgerIntrinsicHeight(0);
   }, [
-    isDesktopExpandedLayout,
+    useDesktopThreeColumnLayout,
     hasMergedDetails,
     hasTripDetail,
     tripNumber,
@@ -350,7 +357,7 @@ export function LedgerExpandedCard({
           <Text style={styles.detailLabel}>Note</Text>
           <Text
             style={[styles.detailValue, styles.detailNoteValue]}
-            numberOfLines={isDesktopExpandedLayout ? 4 : 2}
+            numberOfLines={useDesktopThreeColumnLayout ? 4 : 2}
           >
             {note}
           </Text>
@@ -568,7 +575,10 @@ export function LedgerExpandedCard({
   const downloadBtnEl =
     onDownloadPress != null ? (
       <TouchableOpacity
-        style={[styles.downloadBtn, isDesktopExpandedLayout && styles.downloadBtnDesktop]}
+        style={[
+          styles.downloadBtn,
+          useDesktopThreeColumnLayout && styles.downloadBtnDesktop,
+        ]}
         onPress={onDownloadPress}
         activeOpacity={0.8}
       >
@@ -577,7 +587,7 @@ export function LedgerExpandedCard({
       </TouchableOpacity>
     ) : null;
 
-  if (isDesktopExpandedLayout) {
+  if (useDesktopThreeColumnLayout) {
     /** Third column needs at least summary chrome (or placeholder); tx list scrolls inside remainder. */
     const desktopTxStripMinHeight = showSummaryBar ? 156 : 44;
     const desktopRowHeight =
