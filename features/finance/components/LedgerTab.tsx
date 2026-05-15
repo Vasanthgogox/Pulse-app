@@ -520,8 +520,8 @@ export function LedgerTab({
             tripOptions={tripOptionsForRow}
             recommendedTripIds={recommendedTripIds}
             onMissionChange={onMissionChange}
-            expandedRowId={null}
-            onExpandedChange={undefined}
+            expandedRowId={expandedLedgerRowId}
+            onExpandedChange={setExpandedLedgerRowId}
           />
         );
       })
