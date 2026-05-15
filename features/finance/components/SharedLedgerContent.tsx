@@ -3,6 +3,7 @@
  * Shows Trip | Sales (My Book / Partner) | Paid (My Book / Partner) with expandable
  * reconciliation statement and Raise Dispute. Matches reference UX; uses Theme and app terms.
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { getClientById } from "@/features/clients/services/clients.service";
@@ -43,7 +44,6 @@ import {
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    ActivityIndicator,
     Alert,
     Modal,
     Platform,
@@ -2118,7 +2118,7 @@ export function SharedLedgerContent({
 
         {inviteeStatus === "loading" && (
           <View style={styles.notIntegratedLoading}>
-            <ActivityIndicator size="small" color={Theme.primary} />
+            <LoadingIndicator size="small" color={Theme.primary} />
             <Text style={styles.notIntegratedLoadingText}>
               Checking if {entity.name} is on Pulse…
             </Text>
@@ -2177,7 +2177,7 @@ export function SharedLedgerContent({
                 activeOpacity={0.8}
               >
                 {requestInviteLoading && !onRequestInvite && !onRequestConnection ? (
-                  <ActivityIndicator size="small" color={Theme.textOnDark} />
+                  <LoadingIndicator size="small" color={Theme.textOnDark} />
                 ) : (
                   <Text style={styles.notIntegratedBtnText}>
                     Request shared ledger
@@ -2217,7 +2217,7 @@ export function SharedLedgerContent({
     >
       {loadingShared ? (
         <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={Theme.primary} />
+          <LoadingIndicator size="large" color={Theme.primary} />
           <Text style={styles.loadingText}>Loading shared data…</Text>
         </View>
       ) : (
@@ -2559,7 +2559,7 @@ export function SharedLedgerContent({
                   activeOpacity={0.8}
                 >
                   {actionLoading ? (
-                    <ActivityIndicator
+                    <LoadingIndicator
                       size="small"
                       color={Theme.textOnPrimary}
                     />

@@ -1,4 +1,5 @@
 import Layout from '@/constants/Layout';
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useIsOnline } from '@/contexts/NetworkContext';
@@ -10,7 +11,6 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -291,7 +291,7 @@ export default function SignIn() {
           disabled={loading || waitingForAuthState || !isOnline}
         >
           {loading || waitingForAuthState ? (
-            <ActivityIndicator color={Theme.textOnPrimary} />
+            <LoadingIndicator color={Theme.textOnPrimary} />
           ) : (
             <Text style={styles.primaryBtnText}>Enter Dashboard</Text>
           )}
@@ -303,7 +303,7 @@ export default function SignIn() {
           disabled={googleLoading || loading || waitingForAuthState || !isOnline}
         >
           {googleLoading ? (
-            <ActivityIndicator color={Theme.textPrimaryDark} />
+            <LoadingIndicator color={Theme.textPrimaryDark} />
           ) : (
             <>
               <FontAwesome name="google" size={14} color={Theme.textPrimaryDark} />

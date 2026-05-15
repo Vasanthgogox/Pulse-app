@@ -1,8 +1,8 @@
 /**
  * Suppliers service — Supabase only (mobile). Same DB as Q-unified-base.
  */
-import { supabase } from '@/lib/supabase';
 import { DEFAULT_PAGE_SIZE, type PageOpts } from '@/lib/pagination';
+import { supabase } from '@/lib/supabase';
 
 export interface SupplierRow {
   id: string;

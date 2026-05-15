@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import {
-  ActivityIndicator,
   FlatList,
   Modal,
   StyleSheet,
@@ -76,7 +76,7 @@ export function DocumentShareSheet({
 
           {loading ? (
             <View style={s.center}>
-              <ActivityIndicator color={CHAT_ACCENT} />
+              <LoadingIndicator color={CHAT_ACCENT} />
             </View>
           ) : docs.length === 0 ? (
             <View style={s.center}>

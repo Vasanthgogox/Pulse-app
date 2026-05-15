@@ -1,72 +1,71 @@
 /**
  * Unified shell footer + bottom nav (Q-unified-base aligned).
  */
-import Layout from "@/constants/Layout";
-import Theme from "@/constants/Theme";
 import { AlertRegistryPanel } from "@/components/AlertRegistryPanel";
 import { InboundProtocolPanel } from "@/components/InboundProtocolPanel";
+import Layout from "@/constants/Layout";
+import Theme from "@/constants/Theme";
 import {
-  DEFAULT_USER_2D_AVATAR_SEED,
-  getUser2DAvatarUriForSeed,
+    DEFAULT_USER_2D_AVATAR_SEED,
+    getUser2DAvatarUriForSeed,
 } from "@/constants/UserAvatars";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  useDemoTabBarScrollHideVersion,
-  useDemoTabBarVisibilityProgressOptional,
+    useDemoTabBarScrollHideVersion,
+    useDemoTabBarVisibilityProgressOptional,
 } from "@/contexts/DemoTabBarScrollContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import {
-  useConnectionRequestsReceivedQuery,
-  useConnectionRequestsSentQuery,
-} from "@/lib/queries/useNetworkQueries";
-import {
-  useIndentsQuery,
-  useMarketIndentsQuery,
-  useMyDirectQuotesQuery,
-} from "@/lib/queries/useIndentsQuery";
-import { setMobileNetworkDockExpanded } from "@/lib/mobileDockState";
-import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { useIntegratedChat } from "@/features/chat/contexts/IntegratedChatContext";
 import { useTripChat } from "@/features/chat/contexts/TripChatContext";
+import { getSignedAvatarUrl } from "@/lib/avatarUpload";
+import type { InboundProtocolInviteItem } from "@/lib/globalSync/inboundProtocol.types";
 import { useAlertRegistryNotifications } from "@/lib/globalSync/useAlertRegistryNotifications";
 import { useInboundProtocolInvites } from "@/lib/globalSync/useInboundProtocolInvites";
+import { setMobileNetworkDockExpanded } from "@/lib/mobileDockState";
+import {
+    useIndentsQuery,
+    useMarketIndentsQuery,
+    useMyDirectQuotesQuery,
+} from "@/lib/queries/useIndentsQuery";
+import {
+    useConnectionRequestsReceivedQuery,
+    useConnectionRequestsSentQuery,
+} from "@/lib/queries/useNetworkQueries";
 import { resolveSharedActionKind } from "@/lib/sharedLedger/registryLabels";
+import {
+    approveConnectionRequest,
+    cancelConnectionRequest,
+    cancelPendingConnectionRequestsForPartnerOwner,
+    rejectConnectionRequest,
+} from "@/services/connectionRequestsService";
 import type { SalaryRequestWithDriverRow } from "@/services/salaryRequestsService";
 import type { SharedLedgerNotificationRow } from "@/services/sharedLedgerNotificationsService";
-import type { InboundProtocolInviteItem } from "@/lib/globalSync/inboundProtocol.types";
-import {
-  approveConnectionRequest,
-  cancelConnectionRequest,
-  cancelPendingConnectionRequestsForPartnerOwner,
-  rejectConnectionRequest,
-} from "@/services/connectionRequestsService";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { useRouter } from "expo-router";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Image,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  type StyleProp,
-  type ViewStyle,
-  useWindowDimensions,
-  View,
+    Image,
+    Platform,
+    Pressable,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
+    type StyleProp,
+    type ViewStyle,
 } from "react-native";
 import Animated, {
-  Easing,
-  interpolate,
-  useAnimatedStyle,
-  useDerivedValue,
-  useSharedValue,
-  withSpring,
-  withTiming,
+    Easing,
+    interpolate,
+    useAnimatedStyle,
+    useDerivedValue,
+    useSharedValue,
+    withSpring,
+    withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ShellFooterStrip } from "@/components/ShellFooterStrip";
 
 function AnimatedPress({
   children,
@@ -462,7 +461,7 @@ export function DemoTabBar({
       .join("") || "US";
 
   const dockBottom = insets.bottom;
-  /** Tighter dock padding — extra vertical space lives in `ShellFooterStrip` instead. */
+  /** Tighter dock padding — bottom safe area handled by footer wrap. */
   const footerPadTop = 4;
   const footerPadBottom = Math.max(Math.round(dockBottom * 0.35), 10);
   const mobileNavItems: Array<{
@@ -741,7 +740,6 @@ export function DemoTabBar({
           </View>
         </View>
       </View>
-      <ShellFooterStrip variant="desktopFixed" />
       </Fragment>
     );
   }
@@ -939,8 +937,6 @@ export function DemoTabBar({
         </View>
 
       </View>
-
-      <ShellFooterStrip variant="embedded" bleedHorizontal={10} />
     </View>
   );
 }

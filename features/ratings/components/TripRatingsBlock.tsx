@@ -4,57 +4,57 @@
  * - Aggregate (OTP): Client→Supplier (clients.id or org when no client_id), Client→Driver (when client_id), Supplier→Driver, Org→Driver (when no client_id)
  * - Indent-based: Client→Supplier, Client→Driver, Supplier→Driver
  */
-import Theme from '@/constants/Theme';
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { TripFeedbackModal } from '@/components/TripFeedbackModal';
+import Theme from '@/constants/Theme';
+import { useOrganization } from '@/contexts/OrganizationContext';
 import {
-  getClientById,
-  getClientDetails,
-  getLinkedOrgProfile,
+    getClientById,
+    getClientDetails,
+    getLinkedOrgProfile,
 } from '@/features/clients/services/clients.service';
 import {
-  getSupplierById,
-  getSupplierDetails,
-  getLinkedOrgProfileForSupplier,
-} from '@/features/suppliers/services/suppliers.service';
-import {
-  getDriverById,
-  getDriversByOrganization,
+    getDriverById,
+    getDriversByOrganization,
 } from '@/features/drivers/services/drivers.service';
+import {
+    getLinkedOrgProfileForSupplier,
+    getSupplierById,
+    getSupplierDetails,
+} from '@/features/suppliers/services/suppliers.service';
+import type { TripRow } from '@/features/trips/services/trips.service';
 import { getSignedAvatarUrl } from '@/lib/avatarUpload';
 import { VALIDATION } from '@/lib/validation';
-import { useOrganization } from '@/contexts/OrganizationContext';
+import Feather from '@expo/vector-icons/Feather';
+import FontAwesome from '@expo/vector-icons/FontAwesome';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Animated,
-  Alert,
-  Easing,
-  Image,
-  Platform,
-  StyleSheet,
-  Text,
-  type TextStyle,
-  TextInput,
-  TouchableOpacity,
-  useWindowDimensions,
-  View,
-  type ViewStyle,
+    Alert,
+    Animated,
+    Easing,
+    Image,
+    Platform,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
+    type TextStyle,
+    type ViewStyle,
 } from 'react-native';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
-import Feather from '@expo/vector-icons/Feather';
-import type { TripRow } from '@/features/trips/services/trips.service';
 import {
-  createRating,
-  getRatingsForTrip,
-  getRatingsForClient,
-  getRatingsForDriver,
-  getRatingsForSupplier,
-  averageScore,
-  resolveRatedClientIdForTrip,
-  type RatingRow,
+    averageScore,
+    createRating,
+    getRatingsForClient,
+    getRatingsForDriver,
+    getRatingsForSupplier,
+    getRatingsForTrip,
+    resolveRatedClientIdForTrip,
+    type RatingRow,
 } from '../services/ratings.service';
-import type { RaterType, RatedType } from '../types';
+import type { RatedType, RaterType } from '../types';
 
 export interface TripRatingsBlockProps {
   trip: TripRow;
@@ -1348,7 +1348,7 @@ export function TripRatingsBlock({
       <View style={[styles.card, isWidePanel && styles.wsCard]}>
         {loading ? (
           <View style={styles.loading}>
-            <ActivityIndicator size="small" color={Theme.textMuted} />
+            <LoadingIndicator size="small" color={Theme.textMuted} />
             <Text style={styles.loadingText}>Loading…</Text>
           </View>
         ) : (
@@ -1768,7 +1768,7 @@ export function TripRatingsBlock({
                         activeOpacity={0.85}
                       >
                         {submitting ? (
-                          <ActivityIndicator size="small" color={Theme.textOnPrimary} />
+                          <LoadingIndicator size="small" color={Theme.textOnPrimary} />
                         ) : (
                           <>
                             <Text style={styles.modalSubmitTextPulse}>Post review</Text>
@@ -1956,7 +1956,7 @@ export function TripRatingsBlock({
                 activeOpacity={0.85}
               >
                 {clientSubmitting ? (
-                  <ActivityIndicator size="small" color={Theme.textOnPrimary} />
+                  <LoadingIndicator size="small" color={Theme.textOnPrimary} />
                 ) : (
                   <>
                     <Text style={styles.modalSubmitTextPulse}>Submit</Text>

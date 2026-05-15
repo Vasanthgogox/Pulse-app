@@ -1,10 +1,10 @@
 /**
  * Invoice Preview & Configuration Modal — wrapping InvoicePreviewPanel
  */
-import { Modal, StyleSheet, View } from 'react-native';
 import Theme from '@/constants/Theme';
-import type { InvoicingTripView } from '@/features/invoicing/services/invoicing.service';
 import { InvoicePreviewPanel } from '@/features/invoicing/components/InvoicePreviewPanel';
+import type { InvoicingTripView } from '@/features/invoicing/services/invoicing.service';
+import { Modal, StyleSheet, View } from 'react-native';
 
 export interface InvoicePreviewModalProps {
   visible: boolean;

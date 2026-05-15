@@ -2,6 +2,7 @@
  * ShareLoadSheet — dark bottom sheet to broadcast an indent to the Q Pulse network.
  * Story broadcast (24h) + optional WhatsApp share with public story-detail URL (bidding page).
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from '@/constants/Theme';
 import { type IndentRow } from '@/features/indents';
 import { createPost } from '@/features/network/services/posts.service';
@@ -19,7 +20,6 @@ import {
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Animated,
   Easing,
   Keyboard,
@@ -372,7 +372,7 @@ export function ShareLoadSheet({
                     disabled={loading}
                   >
                     {loading ? (
-                      <ActivityIndicator color="#0F172A" />
+                      <LoadingIndicator color="#0F172A" />
                     ) : (
                       <>
                         <Zap size={16} color="#0F172A" fill="#0F172A" />

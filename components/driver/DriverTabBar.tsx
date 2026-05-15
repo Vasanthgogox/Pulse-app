@@ -1,4 +1,3 @@
-import { ShellFooterStrip } from '@/components/ShellFooterStrip';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import Typography from '@/constants/Typography';
@@ -129,7 +128,6 @@ export function DriverTabBar({ state, navigation }: BottomTabBarProps) {
           );
         })}
       </View>
-      <ShellFooterStrip variant="embedded" bleedHorizontal={Layout.screenPaddingHorizontal} />
     </View>
   );
 }

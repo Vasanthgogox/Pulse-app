@@ -1,4 +1,5 @@
 import { SearchBar } from '@/components/SearchBar';
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { ThemedConfirmModal } from '@/components/ThemedConfirmModal';
 import {
     driverBodyPrimary,
@@ -39,7 +40,6 @@ import * as Sharing from 'expo-sharing';
 import { Sparkles, Wallet } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
     Alert,
     Image,
     Linking,
@@ -1460,7 +1460,7 @@ export default function DriverWalletScreen() {
   if (loading) {
     return (
       <View style={[styles.loadingWrap, { paddingTop: insets.top, backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.emerald} />
+        <LoadingIndicator size="large" color={colors.emerald} />
         <Text style={[styles.loadingText, { color: colors.textMuted }]}>Loading…</Text>
       </View>
     );

@@ -19,22 +19,22 @@ import {
     TripsHubMetricGroupRail,
 } from "@/features/trips/components/TripsHubBentoMetrics";
 import {
-    linkedOrgAvatarFields,
+  linkedOrgAvatarFields,
     summarizeTripLedgerForHub,
-    tripFinanceAdjForHubLookup,
-    tripHubCost,
-    tripHubRevenue,
+  tripFinanceAdjForHubLookup,
+  tripHubCost,
+  tripHubRevenue,
     TripsHubTableView,
     TripsHubTripCard,
 } from "@/features/trips/components/TripsHubViews";
 import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import {
-    classifyTripMetric,
-    countTripsByMetric,
-    isTripCancelledForHub,
-    TRIP_METRIC_ORDER,
-    type TripMetricId,
+  classifyTripMetric,
+  countTripsByMetric,
+  isTripCancelledForHub,
+  TRIP_METRIC_ORDER,
+  type TripMetricId,
 } from "@/features/trips/utils/tripHubMetrics";
 import type { TripHubPartyMeta } from "@/features/trips/utils/tripHubPartyMeta";
 import { buildTripHubPartyMetaByTripId } from "@/features/trips/utils/tripHubPartyMeta";
@@ -53,9 +53,9 @@ import { useSuppliersQuery } from "@/lib/queries/useSuppliersQuery";
 import { useTransactionsQuery } from "@/lib/queries/useTransactionsQuery";
 import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
 import {
-    useAssignmentAuditQuery,
-    useShipperDisplayNamesQuery,
-    useTripsQuery,
+  useAssignmentAuditQuery,
+  useShipperDisplayNamesQuery,
+  useTripsQuery,
 } from "@/lib/queries/useTripsQuery";
 import { queryKeys } from "@/lib/queryKeys";
 import { supabase } from "@/lib/supabase";

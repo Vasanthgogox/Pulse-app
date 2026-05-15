@@ -1,4 +1,5 @@
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { SemanticAddIcon } from "@/components/SemanticAddIcon";
 import { TeslaHeader } from "@/components/TeslaHeader";
 import { ThemedAlertModal } from "@/components/ThemedAlertModal";
@@ -56,7 +57,6 @@ import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { MessageSquare, ReceiptText } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    ActivityIndicator,
     Alert,
     Dimensions,
     Image,
@@ -3538,7 +3538,7 @@ export default function TripDetailScreen({
                       disabled={manualAdvanceLoading}
                     >
                       {manualAdvanceLoading ? (
-                        <ActivityIndicator size="small" color={Theme.primary} />
+                        <LoadingIndicator size="small" color={Theme.primary} />
                       ) : (
                         <FontAwesome name="forward" size={16} color={Theme.primary} />
                       )}
@@ -4085,7 +4085,7 @@ export default function TripDetailScreen({
           <View style={styles.docModalContent}>
             {docPreviewLoading ? (
               <View style={styles.docModalPlaceholder}>
-                <ActivityIndicator size="large" color={Theme.primary} />
+                <LoadingIndicator size="large" color={Theme.primary} />
                 <Text style={styles.docModalPlaceholderText}>Loading preview…</Text>
               </View>
             ) : isVehicleGalleryDoc ? (

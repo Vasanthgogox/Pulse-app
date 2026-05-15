@@ -334,6 +334,8 @@ export function LoadCenterView({
 
   const useGridLayout = width >= 1024;
   const isMobileView = width < 820;
+  /** Narrow cards: stack bid meta + actions so CTAs stay on a clean second row. */
+  const compactIndentFooter = width < 520;
 
   useEffect(() => {
     if (!highlightedIndentId || useGridLayout) return;
@@ -1473,7 +1475,7 @@ export function LoadCenterView({
     return isClaimedTab ? [] : STATUS_TABS;
   }, [isClaimedTab]);
 
-  /** Vehicle / weight / load: one header row, one detail row (lighter type). */
+  /** Vehicle | load | weight — weight column right-aligned under route destination. */
   const renderLoadCardSpecsColumns = useCallback(
     (vehicleDetail: string, weightDetail: string, loadTypeDetail: string) => (
       <View style={styles.loadCardSpecsGrid}>
@@ -1482,10 +1484,18 @@ export function LoadCenterView({
             <Text style={styles.loadCardSpecLabel}>Vehicle</Text>
           </View>
           <View style={[styles.loadCardSpecCell, styles.loadCardSpecDivider]}>
-            <Text style={styles.loadCardSpecLabel}>Weight</Text>
-          </View>
-          <View style={[styles.loadCardSpecCell, styles.loadCardSpecDivider]}>
             <Text style={styles.loadCardSpecLabel}>Load</Text>
+          </View>
+          <View
+            style={[
+              styles.loadCardSpecCell,
+              styles.loadCardSpecDivider,
+              styles.loadCardSpecCellRight,
+            ]}
+          >
+            <Text style={[styles.loadCardSpecLabel, styles.loadCardSpecLabelRight]}>
+              Weight
+            </Text>
           </View>
         </View>
         <View style={styles.loadCardSpecsValuesRow}>
@@ -1496,12 +1506,21 @@ export function LoadCenterView({
           </View>
           <View style={[styles.loadCardSpecCell, styles.loadCardSpecDivider]}>
             <Text style={styles.loadCardSpecValue} numberOfLines={2}>
-              {weightDetail}
+              {loadTypeDetail}
             </Text>
           </View>
-          <View style={[styles.loadCardSpecCell, styles.loadCardSpecDivider]}>
-            <Text style={styles.loadCardSpecValue} numberOfLines={2}>
-              {loadTypeDetail}
+          <View
+            style={[
+              styles.loadCardSpecCell,
+              styles.loadCardSpecDivider,
+              styles.loadCardSpecCellRight,
+            ]}
+          >
+            <Text
+              style={[styles.loadCardSpecValue, styles.loadCardSpecValueRight]}
+              numberOfLines={2}
+            >
+              {weightDetail}
             </Text>
           </View>
         </View>
@@ -1578,9 +1597,15 @@ export function LoadCenterView({
           style={[
             styles.loadCardFooter,
             stretchInGrid && styles.loadCardFooterGrid,
+            compactIndentFooter && styles.loadCardFooterCompact,
           ]}
         >
-          <View style={styles.loadCardMeta}>
+          <View
+            style={[
+              styles.loadCardMeta,
+              compactIndentFooter && styles.loadCardMetaCompact,
+            ]}
+          >
             <View style={styles.bidMetaWrap}>
               <View
                 style={[
@@ -1601,47 +1626,54 @@ export function LoadCenterView({
               </Text>
             </View>
           </View>
-          <View style={styles.loadCardActions}>
-            <TouchableOpacity
-              style={styles.shareIndentIconBtn}
-              onPress={() => handleShareIndent(load)}
-              activeOpacity={0.88}
-              accessibilityLabel="Share load"
-            >
-              <Share2 size={18} color={Theme.textMuted} strokeWidth={2.2} />
-            </TouchableOpacity>
-            {isDone ? (
+          <View
+            style={[
+              styles.loadCardActions,
+              compactIndentFooter && styles.loadCardActionsCompact,
+            ]}
+          >
+            <View style={styles.loadCardActionCluster}>
               <TouchableOpacity
-                style={styles.reviewBidsBtn}
-                onPress={() => onIndentPress(load)}
-                activeOpacity={0.9}
+                style={styles.shareIndentIconBtn}
+                onPress={() => handleShareIndent(load)}
+                activeOpacity={0.88}
+                accessibilityLabel="Share load"
               >
-                <Text style={styles.reviewBidsBtnText}>View detail</Text>
+                <Share2 size={18} color={Theme.textMuted} strokeWidth={2.2} />
               </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={styles.reviewBidsBtn}
-                onPress={() => {
-                  setAssignDriverId(null);
-                  setAssignVehicleId(undefined);
-                  setAssignVehicleRegistration("");
-                  setUseAdHocDriver(false);
-                  setDeployOtpCode(null);
-                  setDeployOtpExpiresAt(null);
-                  setDeployTripIdForOtp(null);
-                  setStaffHandshakeAssignLater(false);
-                  setLoadAction({ type: "ASSIGN", load });
-                }}
-                activeOpacity={0.9}
-                disabled={assigningTripId === load.id}
-              >
-                <Text style={styles.reviewBidsBtnText}>
-                  {assigningTripId === load.id
-                    ? "Authorizing…"
-                    : "Assign & deploy"}
-                </Text>
-              </TouchableOpacity>
-            )}
+              {isDone ? (
+                <TouchableOpacity
+                  style={styles.reviewBidsBtn}
+                  onPress={() => onIndentPress(load)}
+                  activeOpacity={0.9}
+                >
+                  <Text style={styles.reviewBidsBtnText}>View detail</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.reviewBidsBtn}
+                  onPress={() => {
+                    setAssignDriverId(null);
+                    setAssignVehicleId(undefined);
+                    setAssignVehicleRegistration("");
+                    setUseAdHocDriver(false);
+                    setDeployOtpCode(null);
+                    setDeployOtpExpiresAt(null);
+                    setDeployTripIdForOtp(null);
+                    setStaffHandshakeAssignLater(false);
+                    setLoadAction({ type: "ASSIGN", load });
+                  }}
+                  activeOpacity={0.9}
+                  disabled={assigningTripId === load.id}
+                >
+                  <Text style={styles.reviewBidsBtnText}>
+                    {assigningTripId === load.id
+                      ? "Authorizing…"
+                      : "Assign & deploy"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         </View>
       </TouchableOpacity>
@@ -2104,9 +2136,16 @@ export function LoadCenterView({
                             style={[
                               styles.loadCardFooter,
                               useGridLayout && styles.loadCardFooterGrid,
+                              compactIndentFooter && styles.loadCardFooterCompact,
                             ]}
                           >
-                            <View style={styles.loadCardMeta}>
+                            <View
+                              style={[
+                                styles.loadCardMeta,
+                                compactIndentFooter &&
+                                  styles.loadCardMetaCompact,
+                              ]}
+                            >
                               {isDone ? (
                                 <View style={styles.bidMetaWrap}>
                                   <View
@@ -2175,70 +2214,83 @@ export function LoadCenterView({
                                       />
                                     )}
                                   </View>
-                                  <Text style={styles.loadCardMetaText}>
+                                  <Text
+                                    style={styles.loadCardMetaText}
+                                    numberOfLines={1}
+                                  >
                                     {bidCount} bids received
                                   </Text>
                                 </View>
                               )}
                             </View>
-                            <View style={styles.loadCardActions}>
-                              <TouchableOpacity
-                                style={styles.shareIndentIconBtn}
-                                onPress={() =>
-                                  isDone || isAwardedPendingTrip
-                                    ? onIndentPress(load)
-                                    : handleShareIndent(load)
-                                }
-                                activeOpacity={0.88}
-                                accessibilityLabel={
-                                  isDone || isAwardedPendingTrip
-                                    ? "View detail"
-                                    : "Share indent"
-                                }
-                              >
-                                <Share2
-                                  size={18}
-                                  color={Theme.textMuted}
-                                  strokeWidth={2.2}
-                                />
-                              </TouchableOpacity>
-                              {showPulseToNetwork && onShareToNetwork ? (
+                            <View
+                              style={[
+                                styles.loadCardActions,
+                                compactIndentFooter &&
+                                  styles.loadCardActionsCompact,
+                              ]}
+                            >
+                              <View style={styles.loadCardActionCluster}>
                                 <TouchableOpacity
-                                  style={styles.broadcastNetworkBtn}
-                                  onPress={() => onShareToNetwork(load)}
-                                  activeOpacity={0.85}
-                                  accessibilityLabel="Broadcast indent to Pulse network as story"
+                                  style={styles.shareIndentIconBtn}
+                                  onPress={() =>
+                                    isDone || isAwardedPendingTrip
+                                      ? onIndentPress(load)
+                                      : handleShareIndent(load)
+                                  }
+                                  activeOpacity={0.88}
+                                  accessibilityLabel={
+                                    isDone || isAwardedPendingTrip
+                                      ? "View detail"
+                                      : "Share indent"
+                                  }
                                 >
-                                  <Zap size={13} color="#fff" fill="#fff" />
-                                  <Text style={styles.broadcastNetworkBtnText}>
-                                    Pulse
-                                  </Text>
+                                  <Share2
+                                    size={18}
+                                    color={Theme.textMuted}
+                                    strokeWidth={2.2}
+                                  />
                                 </TouchableOpacity>
-                              ) : null}
-                              {isDone ? null : isAwaitingSupplierDeploy ? (
-                                <View style={styles.deployPendingWrap}>
-                                  <Text style={styles.deployPendingText}>
-                                    Pending
-                                  </Text>
-                                </View>
-                              ) : (
-                                <TouchableOpacity
-                                  style={styles.reviewBidsBtn}
-                                  onPress={() => {
-                                    if (isDraft) {
-                                      handleBroadcastDraft(load);
-                                      return;
-                                    }
-                                    setSelectedQuoteId(null);
-                                    setLoadAction({ type: "AWARD", load });
-                                  }}
-                                  activeOpacity={0.9}
-                                >
-                                  <Text style={styles.reviewBidsBtnText}>
-                                    {isDraft ? "Broadcast" : "Review Hub"}
-                                  </Text>
-                                </TouchableOpacity>
-                              )}
+                                {showPulseToNetwork && onShareToNetwork ? (
+                                  <TouchableOpacity
+                                    style={styles.broadcastNetworkBtn}
+                                    onPress={() => onShareToNetwork(load)}
+                                    activeOpacity={0.85}
+                                    accessibilityLabel="Broadcast indent to Pulse network as story"
+                                  >
+                                    <Zap size={13} color="#fff" fill="#fff" />
+                                    <Text
+                                      style={styles.broadcastNetworkBtnText}
+                                    >
+                                      Pulse
+                                    </Text>
+                                  </TouchableOpacity>
+                                ) : null}
+                                {isDone ? null : isAwaitingSupplierDeploy ? (
+                                  <View style={styles.deployPendingWrap}>
+                                    <Text style={styles.deployPendingText}>
+                                      Pending
+                                    </Text>
+                                  </View>
+                                ) : (
+                                  <TouchableOpacity
+                                    style={styles.reviewBidsBtn}
+                                    onPress={() => {
+                                      if (isDraft) {
+                                        handleBroadcastDraft(load);
+                                        return;
+                                      }
+                                      setSelectedQuoteId(null);
+                                      setLoadAction({ type: "AWARD", load });
+                                    }}
+                                    activeOpacity={0.9}
+                                  >
+                                    <Text style={styles.reviewBidsBtnText}>
+                                      {isDraft ? "Broadcast" : "Review Hub"}
+                                    </Text>
+                                  </TouchableOpacity>
+                                )}
+                              </View>
                             </View>
                           </View>
                         </TouchableOpacity>
@@ -2515,9 +2567,15 @@ export function LoadCenterView({
                           style={[
                             styles.loadCardFooter,
                             useGridLayout && styles.loadCardFooterGrid,
+                            compactIndentFooter && styles.loadCardFooterCompact,
                           ]}
                         >
-                          <View style={styles.loadCardMeta}>
+                          <View
+                            style={[
+                              styles.loadCardMeta,
+                              compactIndentFooter && styles.loadCardMetaCompact,
+                            ]}
+                          >
                             <View style={styles.bidMetaWrap}>
                               <View
                                 style={[
@@ -2545,34 +2603,42 @@ export function LoadCenterView({
                               </Text>
                             </View>
                           </View>
-                          <View style={styles.loadCardActions}>
-                            <TouchableOpacity
-                              style={styles.shareIndentIconBtn}
-                              onPress={() => handleShareIndent(load)}
-                              activeOpacity={0.88}
-                              accessibilityLabel="Share load"
-                            >
-                              <Share2
-                                size={18}
-                                color={Theme.textMuted}
-                                strokeWidth={2.2}
-                              />
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              style={styles.reviewBidsBtn}
-                              onPress={
-                                isAccepted
-                                  ? isDoneOutcome
-                                    ? () => onIndentPress(load)
-                                    : () => setLoadSubTab("AWARDED")
-                                  : openBidModal
-                              }
-                              activeOpacity={0.9}
-                            >
-                              <Text style={styles.reviewBidsBtnText}>
-                                {ctaLabel}
-                              </Text>
-                            </TouchableOpacity>
+                          <View
+                            style={[
+                              styles.loadCardActions,
+                              compactIndentFooter &&
+                                styles.loadCardActionsCompact,
+                            ]}
+                          >
+                            <View style={styles.loadCardActionCluster}>
+                              <TouchableOpacity
+                                style={styles.shareIndentIconBtn}
+                                onPress={() => handleShareIndent(load)}
+                                activeOpacity={0.88}
+                                accessibilityLabel="Share load"
+                              >
+                                <Share2
+                                  size={18}
+                                  color={Theme.textMuted}
+                                  strokeWidth={2.2}
+                                />
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={styles.reviewBidsBtn}
+                                onPress={
+                                  isAccepted
+                                    ? isDoneOutcome
+                                      ? () => onIndentPress(load)
+                                      : () => setLoadSubTab("AWARDED")
+                                    : openBidModal
+                                }
+                                activeOpacity={0.9}
+                              >
+                                <Text style={styles.reviewBidsBtnText}>
+                                  {ctaLabel}
+                                </Text>
+                              </TouchableOpacity>
+                            </View>
                           </View>
                         </View>
                       </TouchableOpacity>
@@ -4903,7 +4969,7 @@ const styles = StyleSheet.create({
   loadCardHeroRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
+    alignItems: "center",
     marginBottom: 10,
     zIndex: 1,
   },
@@ -4988,14 +5054,15 @@ const styles = StyleSheet.create({
   loadCardSpecDivider: {
     borderLeftWidth: 1,
     borderLeftColor: Theme.borderMedium,
-    paddingLeft: 10,
-    marginLeft: 4,
+    paddingLeft: 12,
+    marginLeft: 0,
   },
   bidMetaWrap: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
     minWidth: 0,
   },
   bidIconCircle: {
@@ -5023,15 +5090,19 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
   broadcastNetworkBtn: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 5,
     backgroundColor: "#6366f1",
-    borderRadius: 10,
+    borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    minHeight: 44,
+    paddingVertical: 0,
+    flexShrink: 0,
     shadowColor: "#6366f1",
     shadowOpacity: 0.35,
     shadowRadius: 6,
@@ -5068,11 +5139,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    flexWrap: "nowrap",
+    gap: 10,
     marginTop: 4,
     paddingTop: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
     zIndex: 1,
+  },
+  loadCardFooterCompact: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    flexWrap: "wrap",
+    rowGap: 12,
+    columnGap: 0,
   },
   loadCardMeta: {
     flex: 1,
@@ -5081,6 +5161,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
+  loadCardMetaCompact: {
+    flexGrow: 0,
+    flexShrink: 1,
+    alignSelf: "stretch",
+  },
   loadCardMetaText: {
     fontSize: 10,
     fontWeight: "800",
@@ -5088,12 +5173,30 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.6,
     flex: 1,
+    minWidth: 0,
   },
   loadCardActions: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "flex-end",
+    marginLeft: 10,
+    flexShrink: 0,
+    flexGrow: 0,
+    minWidth: 0,
+  },
+  loadCardActionsCompact: {
+    marginLeft: 0,
+    alignSelf: "stretch",
+    justifyContent: "flex-end",
+    width: "100%",
+  },
+  loadCardActionCluster: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    flexWrap: "nowrap",
     gap: 8,
-    marginLeft: 8,
+    flexGrow: 0,
     flexShrink: 0,
   },
   shareIndentBtn: {
@@ -5124,12 +5227,13 @@ const styles = StyleSheet.create({
   },
   reviewBidsBtn: {
     backgroundColor: TESLA_BLACK,
-    paddingHorizontal: 22,
+    paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 16,
     minHeight: 44,
     justifyContent: "center",
     alignItems: "center",
+    flexShrink: 0,
   },
   reviewBidsBtnText: {
     fontSize: 10,
@@ -5140,7 +5244,7 @@ const styles = StyleSheet.create({
   },
   deployPendingWrap: {
     paddingHorizontal: 12,
-    minHeight: 30,
+    minHeight: 44,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -5236,18 +5340,21 @@ const styles = StyleSheet.create({
   loadCardSpecsLabelsRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
+    justifyContent: "flex-start",
+    gap: 0,
   },
   loadCardSpecsValuesRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 8,
+    justifyContent: "flex-start",
+    gap: 0,
   },
   loadCardSpecCell: {
     flex: 1,
     minWidth: 0,
+  },
+  loadCardSpecCellRight: {
+    alignItems: "flex-end",
   },
   loadCardSpecLabel: {
     fontSize: 8,
@@ -5265,6 +5372,14 @@ const styles = StyleSheet.create({
       android: { includeFontPadding: false as const },
       default: {},
     }),
+  },
+  loadCardSpecLabelRight: {
+    textAlign: "right",
+    alignSelf: "stretch",
+  },
+  loadCardSpecValueRight: {
+    textAlign: "right",
+    alignSelf: "stretch",
   },
   quoteBtn: {
     flexDirection: "row",

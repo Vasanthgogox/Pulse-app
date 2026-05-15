@@ -1,6 +1,7 @@
 /**
  * Connection cards for Network hub (reference: nested white card, grey inner band, role pills, handshake).
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from "@/constants/Theme";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
@@ -15,7 +16,6 @@ import {
 } from "lucide-react-native";
 import React from "react";
 import {
-    ActivityIndicator,
     Animated,
     Pressable,
     StyleSheet,
@@ -273,7 +273,7 @@ export function HubConnectionListCard({
               disabled={!canPressAction}
             >
               {item.actionLoading ? (
-                <ActivityIndicator size={12} color={Theme.textPrimaryDark} />
+                <LoadingIndicator size={12} color={Theme.textPrimaryDark} />
               ) : (
                 <Send
                   size={12}

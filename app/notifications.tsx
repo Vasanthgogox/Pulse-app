@@ -1,4 +1,5 @@
 import { getAvatarUriForSeed } from "@/constants/DriverLevels";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
@@ -18,7 +19,6 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
-    ActivityIndicator,
     Alert,
     Image,
     ScrollView,
@@ -197,7 +197,7 @@ export default function NotificationsScreen() {
     <View style={styles.root}>
       {loading ? (
         <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={Theme.primary} />
+          <LoadingIndicator size="large" color={Theme.primary} />
         </View>
       ) : (
         <ScrollView

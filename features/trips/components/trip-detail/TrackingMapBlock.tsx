@@ -2,10 +2,10 @@
  * Live tracking map rendered via shared LeafletMap wrapper:
  * MapLibre on web/native (with Expo Go fallback).
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   StyleSheet,
   Text,
   View,
@@ -547,7 +547,7 @@ export function TrackingMapBlock({
 
       {driverLocationLoading ? (
         <View style={styles.mapLoadingOverlay} pointerEvents="none">
-          <ActivityIndicator size="small" color={Theme.primary} />
+          <LoadingIndicator size="small" color={Theme.primary} />
         </View>
       ) : null}
 

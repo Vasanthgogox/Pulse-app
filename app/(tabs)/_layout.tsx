@@ -162,7 +162,6 @@ export default function TabLayout() {
           sceneStyle: isDesktopWeb
             ? {
                 paddingTop: Layout.desktopTopNavOffset,
-                paddingBottom: Layout.desktopShellFooterStripReserve,
               }
             : undefined,
         }}

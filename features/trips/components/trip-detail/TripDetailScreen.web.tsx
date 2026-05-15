@@ -3,6 +3,7 @@
  * "Tracking" tab (default): TripInfo + Assignment + Timeline + Map + LR Docs
  * "Finance" tab: Expenses + Finance Overview + Receivables
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import { ThemedAlertModal } from "@/components/ThemedAlertModal";
@@ -30,7 +31,6 @@ import { useRouter } from "expo-router";
 import { Activity, Check, MessageSquare, Zap } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    ActivityIndicator,
     Alert,
     Image,
     Linking,
@@ -2757,7 +2757,7 @@ export default function TripDetailScreen({
                           disabled={isUploadingThis}
                         >
                           {isUploadingThis ? (
-                            <ActivityIndicator size="small" color="#64748b" />
+                            <LoadingIndicator size="small" color="#64748b" />
                           ) : (
                             <>
                               <Feather
@@ -3201,7 +3201,7 @@ export default function TripDetailScreen({
                                 activeOpacity={0.85}
                               >
                                 {simulating ? (
-                                  <ActivityIndicator
+                                  <LoadingIndicator
                                     size="small"
                                     color="#fff"
                                   />
@@ -3711,7 +3711,7 @@ export default function TripDetailScreen({
                             disabled={isUploadingThis}
                           >
                             {isUploadingThis ? (
-                              <ActivityIndicator size="small" color="#fff" />
+                              <LoadingIndicator size="small" color="#fff" />
                             ) : (
                               <>
                                 <Feather
@@ -5147,7 +5147,7 @@ export default function TripDetailScreen({
             <View style={styles.docModalBody}>
               {detail.docPreviewLoading ? (
                 <View style={styles.docModalCenter}>
-                  <ActivityIndicator size="large" color={Theme.primary} />
+                  <LoadingIndicator size="large" color={Theme.primary} />
                   <Text style={styles.docModalHint}>Loading preview…</Text>
                 </View>
               ) : detail.isVehicleGalleryDoc ? (

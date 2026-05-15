@@ -6,8 +6,9 @@
  * caches are peeked synchronously on first paint — no blob download and no
  * storage client calls during render.
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Image, StyleSheet, View } from "react-native";
+import { Image, StyleSheet, View } from "react-native";
 import type { ImageStyle, StyleProp } from "react-native";
 import {
   peekChatImageThumbnailUrl,
@@ -79,7 +80,7 @@ export function ChatImage({ storagePath, style, thumbnail }: ChatImageProps) {
   if (loading) {
     return (
       <View style={[s.placeholder, thumbnail && s.thumbnailPlaceholder, style as object]}>
-        <ActivityIndicator size="small" color="#94a3b8" />
+        <LoadingIndicator size="small" color="#94a3b8" />
       </View>
     );
   }

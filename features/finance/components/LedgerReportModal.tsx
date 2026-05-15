@@ -2,11 +2,12 @@
  * Ledger report preview: table of transactions with Print, Share (WhatsApp), and Download.
  * Shown when user taps Report icon on Treasury or entity detail.
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
 import * as XLSX from 'xlsx';
-import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView, Share, Alert, Linking, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView, Share, Alert, Linking,  Platform } from 'react-native';
 import { useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
@@ -564,7 +565,7 @@ export function LedgerReportModal({
               disabled={downloadInProgress}
             >
               {downloadInProgress ? (
-                <ActivityIndicator size="small" color={Theme.textPrimary} />
+                <LoadingIndicator size="small" color={Theme.textPrimary} />
               ) : (
                 <FontAwesome name="download" size={16} color={Theme.textPrimary} />
               )}

@@ -2,6 +2,7 @@
  * Network — Invitations: incoming (accept / reject) and sent (withdraw pending).
  * Reference layout: white cards, pill labels (SENT / role / status), inner grey band, relative time.
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from "@/constants/Theme";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import Typography from "@/constants/Typography";
@@ -20,7 +21,6 @@ import {
 import { Check, Clock3, Search, Send, UserPlus2, X } from "lucide-react-native";
 import React, { useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   Pressable,
   RefreshControl,
@@ -157,7 +157,7 @@ function HubCardIncoming({
             </Pressable>
           </View>
         ) : busy ? (
-          <ActivityIndicator size="small" color={Theme.teslaRed} />
+          <LoadingIndicator size="small" color={Theme.teslaRed} />
         ) : null}
       </View>
     </View>
@@ -258,7 +258,7 @@ function HubCardSent({
             style={({ pressed }) => [hubStyles.withdrawBtn, pressed && { opacity: 0.9 }]}
           >
             {busy ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <LoadingIndicator size="small" color="#fff" />
             ) : (
               <Text style={hubStyles.withdrawBtnTxt}>WITHDRAW</Text>
             )}
@@ -413,7 +413,7 @@ export function InvitationsView({
   if (receivedQ.isLoading && sentQ.isLoading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator color={Theme.teslaRed} />
+        <LoadingIndicator color={Theme.teslaRed} />
       </View>
     );
   }

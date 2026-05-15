@@ -1,6 +1,6 @@
 import React, { useSyncExternalStore } from "react";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import {
-  ActivityIndicator,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -407,7 +407,7 @@ export function ChatLedgerEventCard({
             activeOpacity={0.8}
           >
             {addingToBook ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <LoadingIndicator size="small" color="#fff" />
             ) : (
               <Text style={s.ledgerAddBtnText}>Add to book</Text>
             )}

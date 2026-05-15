@@ -16,6 +16,7 @@ import {
 } from "@/services/connectionRequestsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { ThemedAlertModal } from "@/components/ThemedAlertModal";
+import { partyAddModalChromeStyles } from "@/components/PartyAddModalChrome";
 import { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
@@ -468,16 +469,19 @@ export function AddClientModal({
 
   if (visible === true) {
     const windowHeight = Dimensions.get("window").height;
-    const panelHeight = Math.min(
+    const windowWidth = Dimensions.get("window").width;
+    const shellMaxH = Math.min(
       windowHeight * Layout.ledgerPanelHeightRatio,
       Layout.ledgerPanelMaxHeight,
+      windowHeight * 0.92,
     );
+    const shellMaxW = Math.min(540, Math.max(280, windowWidth - 36));
     return (
       <>
         <Modal
           visible
           transparent
-          animationType="slide"
+          animationType="fade"
           onRequestClose={onClose}
           presentationStyle="overFullScreen"
         >
@@ -486,26 +490,34 @@ export function AddClientModal({
             behavior={Platform.OS === "ios" ? "padding" : "padding"}
             keyboardVerticalOffset={insets.top + 16}
           >
-            <View style={styles.backdrop}>
-              <TouchableOpacity
-                style={StyleSheet.absoluteFill}
+            <View style={partyAddModalChromeStyles.overlay}>
+              <Pressable
+                style={partyAddModalChromeStyles.overlayDismissHit}
                 onPress={onClose}
-                activeOpacity={1}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
               />
               <View
                 style={[
-                  styles.ledgerPanel,
+                  partyAddModalChromeStyles.shell,
                   {
-                    paddingBottom: insets.bottom + Layout.modalBottomPadding,
-                    height: panelHeight,
-                    maxHeight: panelHeight,
+                    maxWidth: shellMaxW,
+                    maxHeight: shellMaxH,
                   },
                 ]}
               >
                 <ScrollView
                   keyboardShouldPersistTaps="handled"
                   showsVerticalScrollIndicator={false}
-                  contentContainerStyle={styles.ledgerPanelScrollContent}
+                  style={{ maxHeight: shellMaxH }}
+                  contentContainerStyle={[
+                    styles.ledgerPanelScrollContent,
+                    {
+                      paddingHorizontal: 24,
+                      paddingTop: 24,
+                      paddingBottom: insets.bottom + Layout.modalBottomPadding,
+                    },
+                  ]}
                 >
                   {ledgerFormContent}
                 </ScrollView>
@@ -792,19 +804,7 @@ export function AddClientModal({
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    justifyContent: "flex-end",
-    backgroundColor: "rgba(0,0,0,0.3)",
-  },
-  /* Ledger (Add Entry) exact layout */
-  ledgerPanel: {
-    backgroundColor: Theme.screenBackground,
-    borderTopWidth: 1,
-    borderTopColor: Theme.surfaceLight,
-    paddingHorizontal: 24,
-    paddingTop: 24,
-  },
+  /* Ledger (Add Entry) field layout — used inside centered party-add shell */
   ledgerPanelScrollContent: {
     gap: 24,
     paddingBottom: 8,

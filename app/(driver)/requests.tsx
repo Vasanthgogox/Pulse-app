@@ -1,4 +1,5 @@
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { getFleetAvatarUriForOrg } from '@/lib/fleetAvatar';
 import {
   buildDriverTripNumberMap,
@@ -22,7 +23,6 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   AppState,
   Image,
@@ -912,7 +912,7 @@ export default function DriverRequestsScreen() {
 
       {loading ? (
         <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={colors.emerald} />
+          <LoadingIndicator size="large" color={colors.emerald} />
         </View>
       ) : (
         <ScrollView
@@ -1223,7 +1223,7 @@ export default function DriverRequestsScreen() {
                         activeOpacity={1}
                       >
                         {isLeaving ? (
-                          <ActivityIndicator size="small" color={colors.textMuted} />
+                          <LoadingIndicator size="small" color={colors.textMuted} />
                         ) : (
                           <>
                             <FontAwesome

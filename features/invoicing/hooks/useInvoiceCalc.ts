@@ -1,5 +1,5 @@
+import type { InvoiceConfig, InvoicingTripView } from '@/features/invoicing/services/invoicing.service';
 import { useMemo } from 'react';
-import type { AdditionalCharge, InvoiceConfig, InvoicingTripView } from '@/features/invoicing/services/invoicing.service';
 
 export function useInvoiceCalc(selectedTrips: InvoicingTripView[], config: InvoiceConfig) {
   const baseFreightTotal = useMemo(

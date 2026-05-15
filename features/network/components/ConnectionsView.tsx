@@ -2,6 +2,7 @@
  * Connections tab — clients, suppliers, and fleet drivers.
  * `hubMode`: Network screen layout (nested cards, shared header search/filters in parent).
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from "@/constants/Theme";
 import {
     HUB_CAROUSEL_MIN_HEIGHT,
@@ -39,7 +40,6 @@ import {
 } from "lucide-react-native";
 import React, { useEffect, useMemo, useState } from "react";
 import {
-    ActivityIndicator,
     Alert,
     Animated,
     FlatList,
@@ -893,7 +893,7 @@ export function ConnectionsView({
   const embeddedBody = useHubLayout ? (
     isLoading ? (
       <View style={styles.embeddedLoading}>
-        <ActivityIndicator color={Theme.primary} size="small" />
+        <LoadingIndicator color={Theme.primary} size="small" />
         <Text style={styles.embeddedLoadingText}>Loading your network…</Text>
       </View>
     ) : connections.length === 0 ? (
@@ -925,7 +925,7 @@ export function ConnectionsView({
     )
   ) : isLoading ? (
     <View style={styles.embeddedLoading}>
-      <ActivityIndicator color={Theme.primary} size="small" />
+      <LoadingIndicator color={Theme.primary} size="small" />
       <Text style={styles.embeddedLoadingText}>Loading your network…</Text>
     </View>
   ) : connections.length === 0 ? (
@@ -1046,7 +1046,7 @@ export function ConnectionsView({
       {embedded ? (
         embeddedBody
       ) : isLoading ? (
-        <ActivityIndicator color={Theme.primary} style={{ marginTop: 48 }} />
+        <LoadingIndicator color={Theme.primary} style={{ marginTop: 48 }} />
       ) : useHubLayout ? (
         <FlatList
           key="hub-list"

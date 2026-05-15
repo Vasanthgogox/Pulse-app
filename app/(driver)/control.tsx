@@ -1,4 +1,5 @@
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
@@ -31,7 +32,6 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { type Href, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
     Image,
     Linking,
     Modal,
@@ -755,7 +755,7 @@ export default function DriverControlScreen() {
                   Proof of delivery (POD)
                 </Text>
                 {podLoading ? (
-                  <ActivityIndicator size="small" color={colors.emerald} />
+                  <LoadingIndicator size="small" color={colors.emerald} />
                 ) : (
                   <Text style={[styles.cardMeta, { color: colors.text }]}>
                     {podDocuments.length} file
@@ -1024,7 +1024,7 @@ export default function DriverControlScreen() {
                   activeOpacity={0.8}
                 >
                   {podUploading ? (
-                    <ActivityIndicator
+                    <LoadingIndicator
                       size="small"
                       color={Theme.textOnPrimary}
                     />
@@ -1260,7 +1260,7 @@ export default function DriverControlScreen() {
                     Proof of delivery (POD)
                   </Text>
                   {podLoading ? (
-                    <ActivityIndicator size="small" color={colors.emerald} />
+                    <LoadingIndicator size="small" color={colors.emerald} />
                   ) : (
                     <Text
                       style={[styles.podListTitle, { color: colors.textMuted }]}
@@ -1392,7 +1392,7 @@ export default function DriverControlScreen() {
             </TouchableOpacity>
             {viewingPodLoading ? (
               <View style={styles.podModalImage}>
-                <ActivityIndicator size="large" color={colors.emerald} />
+                <LoadingIndicator size="large" color={colors.emerald} />
                 <Text
                   style={[
                     styles.podModalLoadingText,

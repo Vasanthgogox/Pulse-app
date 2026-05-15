@@ -2,6 +2,7 @@
  * Indent detail — single indent view. Hero card aligns with Load Center cards
  * (pills, route row, indent id, specs slab); freight card, Live Bids, footer follow.
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { LoadCardRouteRow } from "@/components/LoadCardRouteRow";
 import Layout from "@/constants/Layout";
@@ -32,7 +33,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    ActivityIndicator,
     Alert,
     Modal,
     Platform,
@@ -835,7 +835,7 @@ export function IndentDetailScreen({
                 disabled={isBroadcasting || sharingDraft}
               >
                 {isBroadcasting || sharingDraft ? (
-                  <ActivityIndicator size="small" color={Theme.textOnPrimary} />
+                  <LoadingIndicator size="small" color={Theme.textOnPrimary} />
                 ) : (
                   <>
                     <FontAwesome
@@ -924,7 +924,7 @@ export function IndentDetailScreen({
                   activeOpacity={0.9}
                 >
                   {awarding ? (
-                    <ActivityIndicator size="small" color={Theme.textOnDark} />
+                    <LoadingIndicator size="small" color={Theme.textOnDark} />
                   ) : (
                     <Text style={styles.awardSelectedBtnText}>
                       Award selected
@@ -1137,7 +1137,7 @@ export function IndentDetailScreen({
                 disabled={sharingDraft}
               >
                 {sharingDraft ? (
-                  <ActivityIndicator size="small" color={Theme.textOnDark} />
+                  <LoadingIndicator size="small" color={Theme.textOnDark} />
                 ) : (
                   <Text style={styles.shareConfirmShareText}>Share now</Text>
                 )}
@@ -1237,7 +1237,7 @@ export function IndentDetailScreen({
                 disabled={submittingQuote}
               >
                 {submittingQuote ? (
-                  <ActivityIndicator size="small" color={Theme.textOnDark} />
+                  <LoadingIndicator size="small" color={Theme.textOnDark} />
                 ) : (
                   <Text style={styles.shareConfirmShareText}>
                     {hasMyPendingQuote ? "Update bid" : "Submit bid"}

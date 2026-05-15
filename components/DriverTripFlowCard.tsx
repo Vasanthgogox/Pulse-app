@@ -1,4 +1,5 @@
 import Theme from '@/constants/Theme';
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { useDriverChat } from '@/features/chat/contexts/DriverChatContext';
@@ -17,7 +18,6 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
     Alert,
     Image,
     Linking,
@@ -240,7 +240,7 @@ function PodDocumentRow({
             accessibilityLabel={`Delete ${doc.file_name || 'POD'}`}
           >
             {podDeletingId === doc.id ? (
-              <ActivityIndicator size="small" color={Theme.negative} />
+              <LoadingIndicator size="small" color={Theme.negative} />
             ) : (
               <FontAwesome name="trash-o" size={14} color={Theme.negative} />
             )}
@@ -856,7 +856,7 @@ export function DriverTripFlowCard({
               accessibilityLabel={step === 'reached' ? 'Upload proof of delivery' : 'Send photo to trip chat'}
             >
               {stagePhotoUploading || podUploading ? (
-                <ActivityIndicator size="small" color={Theme.textPrimaryDark} />
+                <LoadingIndicator size="small" color={Theme.textPrimaryDark} />
               ) : (
                 <FontAwesome name="camera" size={20} color={Theme.textPrimaryDark} />
               )}
@@ -907,7 +907,7 @@ export function DriverTripFlowCard({
             <View style={styles.podHeaderRow}>
               <Text style={[styles.podTitle, { color: Theme.textPrimaryDark }]}>Proof of delivery (POD)</Text>
               {podLoading ? (
-                <ActivityIndicator size="small" color={colors.emerald} />
+                <LoadingIndicator size="small" color={colors.emerald} />
               ) : (
                 <Text style={[styles.podCount, { color: Theme.textMuted }]}>
                   {podDocuments.length} file{podDocuments.length === 1 ? '' : 's'}
@@ -1007,7 +1007,7 @@ export function DriverTripFlowCard({
             <View style={styles.podHeaderRow}>
               <Text style={[styles.podTitle, { color: Theme.textPrimaryDark }]}>Proof of delivery (POD)</Text>
               {podLoading ? (
-                <ActivityIndicator size="small" color={colors.emerald} />
+                <LoadingIndicator size="small" color={colors.emerald} />
               ) : (
                 <Text style={[styles.podCount, { color: Theme.textMuted }]}>
                   {podDocuments.length} file{podDocuments.length === 1 ? '' : 's'}
@@ -1079,7 +1079,7 @@ export function DriverTripFlowCard({
             </TouchableOpacity>
             {viewingPodLoading ? (
               <View style={styles.podModalImage}>
-                <ActivityIndicator size="large" color={colors.emerald} />
+                <LoadingIndicator size="large" color={colors.emerald} />
                 <Text style={[styles.podModalLoadingText, { color: Theme.textMuted }]}>Loading...</Text>
               </View>
             ) : viewingPodUrl ? (

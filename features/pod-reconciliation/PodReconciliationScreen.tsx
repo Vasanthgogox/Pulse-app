@@ -1,6 +1,7 @@
 /**
  * POD Reconciliation Screen — adapted from cashflow PodReconciliation.tsx.
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -13,7 +14,6 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-    ActivityIndicator,
     Alert,
     FlatList,
     Modal,
@@ -953,7 +953,7 @@ export function PodReconciliationScreen() {
             <View style={styles.mainColumn}>
               <View style={styles.contentArea}>
                 {isLoading && !isRefetching ? (
-                  <ActivityIndicator
+                  <LoadingIndicator
                     size="large"
                     color={Theme.primary}
                     style={{ marginTop: 40 }}

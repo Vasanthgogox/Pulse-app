@@ -132,10 +132,18 @@ export function BroadcastPickIndentCard({
               <Text style={styles.loadCardSpecLabel}>Vehicle</Text>
             </View>
             <View style={[styles.loadCardSpecCell, styles.loadCardSpecDivider]}>
-              <Text style={styles.loadCardSpecLabel}>Weight</Text>
-            </View>
-            <View style={[styles.loadCardSpecCell, styles.loadCardSpecDivider]}>
               <Text style={styles.loadCardSpecLabel}>Load</Text>
+            </View>
+            <View
+              style={[
+                styles.loadCardSpecCell,
+                styles.loadCardSpecDivider,
+                styles.loadCardSpecCellRight,
+              ]}
+            >
+              <Text style={[styles.loadCardSpecLabel, styles.loadCardSpecLabelRight]}>
+                Weight
+              </Text>
             </View>
           </View>
           <View style={styles.loadCardSpecsValuesRow}>
@@ -146,12 +154,21 @@ export function BroadcastPickIndentCard({
             </View>
             <View style={[styles.loadCardSpecCell, styles.loadCardSpecDivider]}>
               <Text style={styles.loadCardSpecValue} numberOfLines={2}>
-                {weightDetail}
+                {loadTypeDetail}
               </Text>
             </View>
-            <View style={[styles.loadCardSpecCell, styles.loadCardSpecDivider]}>
-              <Text style={styles.loadCardSpecValue} numberOfLines={2}>
-                {loadTypeDetail}
+            <View
+              style={[
+                styles.loadCardSpecCell,
+                styles.loadCardSpecDivider,
+                styles.loadCardSpecCellRight,
+              ]}
+            >
+              <Text
+                style={[styles.loadCardSpecValue, styles.loadCardSpecValueRight]}
+                numberOfLines={2}
+              >
+                {weightDetail}
               </Text>
             </View>
           </View>
@@ -292,16 +309,19 @@ const styles = StyleSheet.create({
   loadCardSpecsLabelsRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
+    justifyContent: "flex-start",
+    gap: 0,
   },
   loadCardSpecsValuesRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 8,
+    justifyContent: "flex-start",
+    gap: 0,
   },
   loadCardSpecCell: { flex: 1, minWidth: 0 },
+  loadCardSpecCellRight: {
+    alignItems: "flex-end",
+  },
   loadCardSpecDivider: {
     borderLeftWidth: 1,
     borderLeftColor: Theme.borderMedium,
@@ -324,6 +344,14 @@ const styles = StyleSheet.create({
       android: { includeFontPadding: false as const },
       default: {},
     }),
+  },
+  loadCardSpecLabelRight: {
+    textAlign: "right",
+    alignSelf: "stretch",
+  },
+  loadCardSpecValueRight: {
+    textAlign: "right",
+    alignSelf: "stretch",
   },
   pickerHintRow: {
     marginTop: 4,

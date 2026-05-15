@@ -1,4 +1,5 @@
 import { CenteredLoadingView } from '@/components/CenteredLoadingView';
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -11,7 +12,6 @@ import * as Linking from 'expo-linking';
 import { useRouter, useRootNavigationState, type Href } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -266,7 +266,7 @@ export default function AuthResetPassword() {
         disabled={submitting}
       >
         {submitting ? (
-          <ActivityIndicator color={Theme.textOnPrimary} />
+          <LoadingIndicator color={Theme.textOnPrimary} />
         ) : (
           <Text style={styles.primaryBtnText}>{t('saveNewPassword')}</Text>
         )}

@@ -2,9 +2,9 @@
  * Evidence upload for POD logging — maps files to LRs and uploads to pod-documents bucket.
  * Logic aligned with cashflow PodAttachmentModal.
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { useCallback, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Image,
   Modal,
@@ -375,7 +375,7 @@ export function PodAttachmentModal({
               disabled={isUploading || validFilesCount === 0}
             >
               {isUploading ? (
-                <ActivityIndicator color="#fff" />
+                <LoadingIndicator color="#fff" />
               ) : (
                 <Text style={styles.primaryBtnText}>
                   {stats.allDone ? 'Upload & link' : `Link ${stats.mappedCount}/${stats.totalRequired}`}

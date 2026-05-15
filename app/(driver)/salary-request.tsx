@@ -134,10 +134,7 @@ export default function SalaryRequestScreen() {
   const footerPadTop = 4;
   const footerPadBottom = Math.max(Math.round(insets.bottom * 0.35), 10);
   const tabBarClearance =
-    Layout.tabBarDockHeight +
-    footerPadTop +
-    footerPadBottom +
-    Layout.shellFooterStripApproxHeight;
+    Layout.tabBarDockHeight + footerPadTop + footerPadBottom;
 
   const [loading, setLoading] = useState(true);
   const [linkedDrivers, setLinkedDrivers] = useState<driversService.DriverRow[]>([]);

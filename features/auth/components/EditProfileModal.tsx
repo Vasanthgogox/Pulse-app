@@ -3,6 +3,7 @@
  * Driver layout matches reference: hero avatar + sectioned form + primary Save; avatar tap opens action sheet.
  * Avatar: profile.avatar_url (signed) or preset (driver / user-2d). Colors from Theme only.
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
@@ -12,7 +13,7 @@ import {
   StyleSheet,
   Modal,
   ScrollView,
-  ActivityIndicator,
+  
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -447,7 +448,7 @@ export function EditProfileModal({
               accessibilityLabel="Save profile"
             >
               {saving ? (
-                <ActivityIndicator size="small" color={Theme.driverEmerald} />
+                <LoadingIndicator size="small" color={Theme.driverEmerald} />
               ) : (
                 <Text style={styles.driverHeaderSavePillText}>Save</Text>
               )}
@@ -513,7 +514,7 @@ export function EditProfileModal({
                           <Image source={{ uri: avatarUri }} style={styles.driverAvatarImageSq} resizeMode="cover" />
                           {photoUploading ? (
                             <View style={styles.driverAvatarLoading}>
-                              <ActivityIndicator color={Theme.textOnPrimary} size="large" />
+                              <LoadingIndicator color={Theme.textOnPrimary} size="large" />
                             </View>
                           ) : null}
                         </View>
@@ -705,7 +706,7 @@ export function EditProfileModal({
                 accessibilityLabel="Save changes"
               >
                 {saving ? (
-                  <ActivityIndicator size="small" color={Theme.textOnPrimary} />
+                  <LoadingIndicator size="small" color={Theme.textOnPrimary} />
                 ) : (
                   <Text style={styles.driverSaveChangesBtnText}>UPDATE PROFILE INFORMATION</Text>
                 )}
@@ -748,7 +749,7 @@ export function EditProfileModal({
                       <Image source={{ uri: avatarUri }} style={styles.avatarPreview} />
                       {photoUploading ? (
                         <View style={styles.avatarPreviewLoading}>
-                          <ActivityIndicator size="small" color={Theme.textOnPrimary} />
+                          <LoadingIndicator size="small" color={Theme.textOnPrimary} />
                         </View>
                       ) : null}
                     </View>
@@ -877,7 +878,7 @@ export function EditProfileModal({
               activeOpacity={0.8}
             >
               {saving ? (
-                <ActivityIndicator size="small" color={Theme.textOnPrimary} />
+                <LoadingIndicator size="small" color={Theme.textOnPrimary} />
               ) : (
                 <Text style={styles.saveBtnText}>Save</Text>
               )}

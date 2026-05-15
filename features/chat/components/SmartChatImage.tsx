@@ -9,9 +9,9 @@
  * - Resets lightbox state when `storagePath` changes so list virtualization cannot leak URLs across rows.
  * - **expo-image** disk+memory cache + optional **blurhash** / data-URI placeholder to avoid layout jump.
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Modal,
   Platform,
   Pressable,
@@ -254,7 +254,7 @@ export function SmartChatImage({
           {showBlurMatte ? <View style={s.blurMatte} pointerEvents="none" /> : null}
           {thumbState === "loading" || thumbState === "idle" ? (
             <View style={s.loaderOverlay}>
-              <ActivityIndicator size="small" color={isOwn ? "#e0e7ff" : "#64748b"} />
+              <LoadingIndicator size="small" color={isOwn ? "#e0e7ff" : "#64748b"} />
             </View>
           ) : null}
           {thumbUri ? (
@@ -295,7 +295,7 @@ export function SmartChatImage({
 
           {fullState === "loading" && (
             <View style={s.modalLoading}>
-              <ActivityIndicator size="large" color="#fff" />
+              <LoadingIndicator size="large" color="#fff" />
               <Text style={s.modalLoadingText}>Loading full image…</Text>
             </View>
           )}

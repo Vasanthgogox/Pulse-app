@@ -1,3 +1,4 @@
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import {
     driverBodyPrimary,
     driverBodySecondary,
@@ -56,7 +57,6 @@ import {
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-    ActivityIndicator,
     AppState,
     FlatList,
     Image,
@@ -1861,7 +1861,7 @@ export default function DriverTripsScreen() {
                     ]}
                   >
                     {detailPodLoading ? (
-                      <ActivityIndicator
+                      <LoadingIndicator
                         style={{ paddingVertical: 22 }}
                         color={colors.emerald}
                       />
@@ -2227,7 +2227,7 @@ export default function DriverTripsScreen() {
                   </TouchableOpacity>
                   {podPreviewLoading ? (
                     <View style={styles.podPreviewImageBox}>
-                      <ActivityIndicator size="large" color={colors.emerald} />
+                      <LoadingIndicator size="large" color={colors.emerald} />
                       <Text style={{ color: colors.textMuted, marginTop: 12 }}>
                         Loading…
                       </Text>

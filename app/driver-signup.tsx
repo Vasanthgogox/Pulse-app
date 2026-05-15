@@ -6,6 +6,7 @@
  * Step 4: Choose avatar
  * Step 5: Success, go to app
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { ALL_PRESET_AVATARS, getAvatarUriForSeed } from '@/constants/DriverLevels';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -24,7 +25,6 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
     Alert,
     Image,
     KeyboardAvoidingView,
@@ -1158,7 +1158,7 @@ export default function DriverSignUpScreen() {
               activeOpacity={0.8}
             >
               {loading ? (
-                <ActivityIndicator color={Theme.textOnPrimary} />
+                <LoadingIndicator color={Theme.textOnPrimary} />
               ) : (
                 <Text style={styles.primaryBtnText}>Create account</Text>
               )}

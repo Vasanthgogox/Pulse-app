@@ -2,6 +2,7 @@
  * Post detail modal — shows full post with bids list.
  * Load owner sees bids and can accept/reject. Others can bid from here too.
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from '@/constants/Theme';
 import { BidSheet } from '@/features/network/components/BidSheet';
 import { useNetworkFeedQuery, useAfterPostDeleted } from '@/lib/queries/usePostsQuery';
@@ -31,7 +32,6 @@ import {
 } from 'lucide-react-native';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Pressable,
   ScrollView,
@@ -195,7 +195,7 @@ export default function PostDetailScreen() {
             <ArrowLeft size={20} color={Theme.textPrimary} />
           </Pressable>
         </View>
-        <ActivityIndicator color={Theme.primary} style={{ marginTop: 60 }} />
+        <LoadingIndicator color={Theme.primary} style={{ marginTop: 60 }} />
       </View>
     );
   }
@@ -314,7 +314,7 @@ export default function PostDetailScreen() {
               <Text style={styles.bidsSectionTitle}>
                 {isOwner ? 'BIDS RECEIVED' : 'BIDS'} ({bids.length})
               </Text>
-              {bidsQ.isLoading && <ActivityIndicator size={12} color={Theme.primary} />}
+              {bidsQ.isLoading && <LoadingIndicator size={12} color={Theme.primary} />}
             </View>
 
             {bids.length === 0 && !bidsQ.isLoading && (

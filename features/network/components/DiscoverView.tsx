@@ -3,6 +3,7 @@
  * Smart recommendations: scored by mutual connections, location match, lane overlap.
  * Shows "WHY" reason chips per card. Sort: recommended first, then alphabetical.
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { PartyAvatar } from '@/components/PartyAvatar';
@@ -39,7 +40,6 @@ import {
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Animated,
   FlatList,
@@ -313,7 +313,7 @@ function OrgCard({ org, locationFallback, onConnect, onCancel, loading, onOpenPr
               accessibilityLabel={`Cancel request to ${org.name}`}
             >
               {loading ? (
-                <ActivityIndicator size={11} color={Theme.textPrimaryDark} />
+                <LoadingIndicator size={11} color={Theme.textPrimaryDark} />
               ) : (
                 <X size={13} color={Theme.textPrimaryDark} strokeWidth={2.7} />
               )}
@@ -328,7 +328,7 @@ function OrgCard({ org, locationFallback, onConnect, onCancel, loading, onOpenPr
             disabled={loading}
           >
             {loading ? (
-              <ActivityIndicator size={12} color={Theme.textPrimaryDark} />
+              <LoadingIndicator size={12} color={Theme.textPrimaryDark} />
             ) : (
               <>
                 <UserPlus size={13} color={Theme.textPrimaryDark} strokeWidth={2.5} />
@@ -753,11 +753,11 @@ export function DiscoverView({
             returnKeyType="search"
             autoCapitalize="words"
           />
-          {loading && <ActivityIndicator size={14} color={Theme.primary} />}
+          {loading && <LoadingIndicator size={14} color={Theme.primary} />}
         </View>
       ) : loading ? (
         <View style={styles.inlineLoading}>
-          <ActivityIndicator size={14} color={Theme.primary} />
+          <LoadingIndicator size={14} color={Theme.primary} />
         </View>
       ) : null}
 
@@ -785,7 +785,7 @@ export function DiscoverView({
             </View>
           ) : listData.length === 0 && loading ? (
             <View style={styles.embeddedGridLoading}>
-              <ActivityIndicator size="small" color={Theme.primary} />
+              <LoadingIndicator size="small" color={Theme.primary} />
             </View>
           ) : embeddedScrollable ? (
             <ScrollView
@@ -917,7 +917,7 @@ export function DiscoverView({
               disabled={Boolean(connecting)}
             >
               {connecting ? (
-                <ActivityIndicator size={14} color={Theme.textPrimaryDark} />
+                <LoadingIndicator size={14} color={Theme.textPrimaryDark} />
               ) : (
                 <Text style={styles.requestRoleCancelText}>Cancel</Text>
               )}

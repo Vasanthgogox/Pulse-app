@@ -2,6 +2,7 @@
  * Passbook detail — trip and revenue details for one fleet (organization).
  * Data from trips + driver_ledger for the current user's driver link to this org.
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import Typography from '@/constants/Typography';
@@ -31,7 +32,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     Alert,
-    ActivityIndicator,
+    
     Image,
     Linking,
     Modal,
@@ -815,7 +816,7 @@ export default function DriverPassbookDetailScreen() {
   if (loading) {
     return (
       <View style={[styles.loadingWrap, { paddingTop: insets.top, backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.emerald} />
+        <LoadingIndicator size="large" color={colors.emerald} />
         <Text style={[styles.loadingText, { color: colors.textMuted }]}>Loading passbook…</Text>
       </View>
     );
@@ -1179,7 +1180,7 @@ export default function DriverPassbookDetailScreen() {
                                 activeOpacity={0.9}
                               >
                                 {markPaidLoadingTripId === trip.id ? (
-                                  <ActivityIndicator size="small" color={Theme.textOnPrimary} />
+                                  <LoadingIndicator size="small" color={Theme.textOnPrimary} />
                                 ) : (
                                   <>
                                     <FontAwesome name="check-circle" size={13} color={Theme.textOnPrimary} />

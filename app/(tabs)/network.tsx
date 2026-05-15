@@ -2,6 +2,7 @@
  * Network tab — Allies hub (stories, connections, discover) and embedded Load center.
  * Full-width layout; top bar switches Network ↔ Load (no left sidebar on web).
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
@@ -66,7 +67,6 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocalSearchParams } from "expo-router";
 import {
-  ActivityIndicator,
   Alert,
   Modal,
   Platform,
@@ -151,7 +151,7 @@ function NetworkStoryStrip({
   if (feedLoading && storyPosts.length === 0) {
     return (
       <View style={styles.storyLoading}>
-        <ActivityIndicator color={Theme.teslaRed} />
+        <LoadingIndicator color={Theme.teslaRed} />
         <Text style={styles.storyLoadingLabel}>Syncing stories…</Text>
       </View>
     );
@@ -577,7 +577,7 @@ function NetworkScreenInner() {
     if (orgLoading) {
       return (
         <View style={[styles.container, { paddingTop: insets.top }]}>
-          <ActivityIndicator color={Theme.teslaRed} style={{ marginTop: 60 }} />
+          <LoadingIndicator color={Theme.teslaRed} style={{ marginTop: 60 }} />
         </View>
       );
     }
@@ -851,7 +851,7 @@ function NetworkScreenInner() {
                           style={styles.requestsAcceptBtn}
                         >
                           {isBusy ? (
-                            <ActivityIndicator size={12} color={Theme.textOnPrimary} />
+                            <LoadingIndicator size={12} color={Theme.textOnPrimary} />
                           ) : (
                             <Check size={12} color={Theme.textOnPrimary} />
                           )}
@@ -868,7 +868,7 @@ function NetworkScreenInner() {
                         style={styles.requestsRecallBtn}
                       >
                         {isBusy ? (
-                          <ActivityIndicator size={12} color={Theme.textOnPrimary} />
+                          <LoadingIndicator size={12} color={Theme.textOnPrimary} />
                         ) : (
                           <Clock size={12} color={Theme.textOnPrimary} />
                         )}

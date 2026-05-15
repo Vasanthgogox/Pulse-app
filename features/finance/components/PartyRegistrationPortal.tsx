@@ -27,6 +27,7 @@ import {
   getModelSelectOptions,
   normalizeBodyLengthKey,
 } from "@/features/vehicles/utils/vehicleFormOptions.util";
+import { partyAddModalChromeStyles } from "@/components/PartyAddModalChrome";
 import { showAppAlert } from "@/lib/appAlert";
 import { validateEmail } from "@/lib/emailValidation";
 import { formatIndianVehicleNumberInput, formatMobileNumber } from "@/lib/format";
@@ -1139,7 +1140,7 @@ function PartyRegistrationPortalInner(
     >
       <View
         style={[
-          styles.overlay,
+          partyAddModalChromeStyles.overlay,
           !layoutWide && styles.overlayCompactMobile,
           !layoutWide && {
             paddingTop: Math.max(insets.top, 10),
@@ -1149,14 +1150,14 @@ function PartyRegistrationPortalInner(
         ]}
       >
         <Pressable
-          style={styles.overlayDismissHit}
+          style={partyAddModalChromeStyles.overlayDismissHit}
           onPress={onClose}
           accessibilityRole="button"
           accessibilityLabel="Close"
         />
         <View
           style={[
-            styles.shell,
+            partyAddModalChromeStyles.shell,
             layoutWide && styles.shellWideDesktop,
             !layoutWide && styles.shellStacked,
             !layoutWide && styles.shellNarrowWeb,
@@ -2197,57 +2198,10 @@ function SummaryDetailRow({
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor:
-      Platform.OS === "web"
-        ? "rgba(15, 23, 42, 0.52)"
-        : "rgba(15, 23, 42, 0.88)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 18,
-    position: "relative",
-    ...(Platform.OS === "web"
-      ? ({ overflow: "auto" } as unknown as ViewStyle)
-      : ({} as ViewStyle)),
-  },
-  /** Full-area tap target behind the card (does not steal taps from the shell). */
-  overlayDismissHit: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 0,
-  },
-  overlayCompact: {
-    padding: 12,
-    justifyContent: "flex-start",
-    paddingTop: 16,
-    alignItems: "stretch",
-  },
   /** Mobile web: avoid generic padding so safe-area + horizontal inset can apply cleanly. */
   overlayCompactMobile: {
     justifyContent: "flex-start",
     alignItems: "stretch",
-  },
-  shell: {
-    flexDirection: "column",
-    width: "100%",
-    maxHeight: 760,
-    minHeight: 0,
-    backgroundColor: "#fff",
-    borderRadius: 22,
-    overflow: "hidden",
-    zIndex: 1,
-    ...(Platform.OS === "web"
-      ? ({
-          boxShadow:
-            "0 40px 100px -24px rgba(15,23,42,0.12), 0 1px 0 rgba(255,255,255,0.8)",
-        } as ViewStyle)
-      : ({
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: 24 },
-          shadowOpacity: 0.35,
-          shadowRadius: 40,
-          elevation: 12,
-        } as ViewStyle)),
   },
   shellWideDesktop: {
     maxHeight: 800,

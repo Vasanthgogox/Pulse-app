@@ -338,10 +338,7 @@ export default function DriverDashboard() {
   const footerPadTop = 4;
   const footerPadBottom = Math.max(Math.round(insets.bottom * 0.35), 10);
   const driverTabBarClearance =
-    Layout.tabBarDockHeight +
-    footerPadTop +
-    footerPadBottom +
-    Layout.shellFooterStripApproxHeight;
+    Layout.tabBarDockHeight + footerPadTop + footerPadBottom;
   // Driver home previously used a hardcoded dark map for contrast.
   // Now it respects the "Map Style" user setting (light, dark, or auto-sync with theme).
   const mapIsDark = mapTheme === 'auto' ? isDark : mapTheme === 'dark';

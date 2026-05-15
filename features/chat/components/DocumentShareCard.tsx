@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import {
-  ActivityIndicator,
   Alert,
   Linking,
   Platform,
@@ -142,7 +142,7 @@ export function DocumentShareCard({ message, isOwn }: DocumentShareCardProps) {
         activeOpacity={0.8}
       >
         {opening ? (
-          <ActivityIndicator size="small" color={isOwn ? CHAT_ACCENT : "#fff"} />
+          <LoadingIndicator size="small" color={isOwn ? CHAT_ACCENT : "#fff"} />
         ) : (
           <>
             <ExternalLink size={12} color={isOwn ? CHAT_ACCENT : "#fff"} />

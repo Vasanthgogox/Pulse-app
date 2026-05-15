@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import {
-  ActivityIndicator,
   StyleSheet,
   Text,
   TextInput,
@@ -258,7 +258,7 @@ export function ChatFeedbackCard({
 
       {phase === "submitting" ? (
         <View style={s.inlineSpinner}>
-          <ActivityIndicator size="small" color={CHAT_ACCENT} />
+          <LoadingIndicator size="small" color={CHAT_ACCENT} />
           <Text style={s.submittingLabel}>Submitting…</Text>
         </View>
       ) : null}

@@ -1,6 +1,7 @@
 /**
  * Recently added — avatars, role, status, and connect / on Pulse (matches network hub semantics).
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -10,7 +11,6 @@ import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
 import { UserPlus2, Zap } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Animated,
   Pressable,
   StyleSheet,
@@ -191,7 +191,7 @@ export function RecentAddedStrip({ orgId, items, onAfterInAppSuccess, layout = "
                         hitSlop={4}
                       >
                         {busy ? (
-                          <ActivityIndicator size="small" color={Theme.textOnDark} />
+                          <LoadingIndicator size="small" color={Theme.textOnDark} />
                         ) : (
                           <Text style={styles.connectBtnText}>Send invite</Text>
                         )}

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { StyleSheet, View, Text, Platform, ActivityIndicator } from 'react-native';
+import { LoadingIndicator } from "@/components/LoadingIndicator";
+import { StyleSheet, View, Text, Platform} from 'react-native';
 import { LeafletMap } from '@/components/driver/LeafletMap';
 import MapView, {
   Marker,
@@ -92,7 +93,7 @@ export const OptimalRouteMap: React.FC<OptimalRouteMapProps> = ({
         />
         {loading && (
           <View style={styles.loadingOverlay}>
-            <ActivityIndicator size="large" color={Theme.primary} />
+            <LoadingIndicator size="large" color={Theme.primary} />
             <Text style={styles.loadingText}>Calculating optimal route...</Text>
           </View>
         )}
@@ -176,7 +177,7 @@ export const OptimalRouteMap: React.FC<OptimalRouteMapProps> = ({
 
       {loading && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color={Theme.primary} />
+          <LoadingIndicator size="large" color={Theme.primary} />
           <Text style={styles.loadingText}>Calculating optimal route...</Text>
         </View>
       )}

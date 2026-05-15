@@ -1,4 +1,5 @@
 import Layout from '@/constants/Layout';
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from '@/constants/Theme';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useIsOnline } from '@/contexts/NetworkContext';
@@ -9,7 +10,6 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -109,7 +109,7 @@ export default function ForgotPassword() {
             disabled={loading || !isOnline}
           >
             {loading ? (
-              <ActivityIndicator color={Theme.textOnPrimary} />
+              <LoadingIndicator color={Theme.textOnPrimary} />
             ) : (
               <Text style={styles.primaryBtnText}>{t('sendResetLink')}</Text>
             )}
