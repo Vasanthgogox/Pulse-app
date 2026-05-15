@@ -5,8 +5,6 @@
 import { ALL_LEDGER_CATEGORY_VALUES } from "@/components/AddTransactionModal";
 import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { formatIndianVehicleNumber } from "@/lib/format";
-import { useTransactionsQuery } from "@/lib/queries";
 import { EntityIdentityAvatar } from "@/components/EntityIdentityAvatar";
 import {
   type LedgerIdentityContext,
@@ -14,35 +12,27 @@ import {
 } from "@/lib/entityIdentity";
 import type { LinkedOrgDisplay } from "@/lib/useLinkedOrgProfileMap";
 import { useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { getDoubleEntryDisplayLabel } from "../accounting/accountingModel";
 import * as financeService from "../services/finance.service";
 import { getProfileImageBatch } from "../services/finance.service";
-import { resolveAvatarPublicUrl } from "@/lib/avatarUpload";
 import { FinancialRow, type FinancialRowData } from "./FinancialRow";
 import { FinanceEntryDetailScreen } from "./FinanceEntryDetailScreen";
 import { LedgerTransactionListView } from "./LedgerTransactionListView";
 import type { ClientRow } from "@/features/clients/services/clients.service";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
-import { useDisputeMapQuery } from "@/lib/queries";
-
+import { useDisputeMapQuery, useTransactionsQuery } from "@/lib/queries";
+import {
+  buildFinancialRowDataForLedgerRow,
+  formatLedgerEntryDate,
+  formatLedgerRoute,
+  formatLedgerTripDateForDisplay,
+  resolveLedgerPartyName,
+} from "@/features/finance/components/ledger/buildFinancialRowDataForLedgerRow";
 
 export type LedgerViewMode = "table" | "transaction";
-
-function isPlaceholderLedgerPartyName(name: string | null | undefined): boolean {
-  const n = (name ?? "").trim().toLowerCase();
-  if (!n || n === "—" || n === "-") return true;
-  return (
-    n === "supplier" ||
-    n === "client" ||
-    n === "driver" ||
-    n === "unknown client" ||
-    n === "misc / unlinked" ||
-    n.startsWith("misc /")
-  );
-}
 
 export interface LedgerTabProps {
   organizationId: string | null;
@@ -162,55 +152,16 @@ export function LedgerTab({
     null,
   );
 
-  const getResolvedPartyName = (row: financeService.LedgerRow): string => {
-    const contactType = row.contact_type;
-    const tripId = row.trip_id;
-    
-    if (contactType === 'client' && row.contact_id) {
-      return clientById.get(row.contact_id)?.name || row.party_name || "—";
-    }
-    if (contactType === 'supplier' && row.contact_id) {
-      const direct = supplierById.get(row.contact_id)?.name;
-      if (direct) return direct;
-      if (tripId && tripPartyMap[tripId]?.supplier_id) {
-        const viaTrip = supplierById.get(tripPartyMap[tripId]!.supplier_id!)?.name;
-        if (viaTrip) return viaTrip;
-      }
-      const detailNm =
-        tripId && tripDetailsMap[tripId]?.supplier_display_name
-          ? tripDetailsMap[tripId]!.supplier_display_name!.trim()
-          : "";
-      if (detailNm) return detailNm;
-      const pn = row.party_name;
-      if (pn && !isPlaceholderLedgerPartyName(pn)) return pn;
-      return "—";
-    }
-    if (contactType === 'driver') {
-      return row.driver_name || row.party_name || "—";
-    }
-
-    if (tripId && tripPartyMap[tripId]) {
-      const pm = tripPartyMap[tripId];
-      if (row.amount_in && pm.client_id) {
-        return clientById.get(pm.client_id)?.name || row.party_name || "—";
-      }
-      if (row.amount_out && pm.supplier_id) {
-        const nm = supplierById.get(pm.supplier_id)?.name;
-        if (nm) return nm;
-      }
-    }
-
-    if (tripId && tripDetailsMap[tripId]) {
-      const d = tripDetailsMap[tripId];
-      if ((row.amount_out ?? 0) > 0 && d.supplier_display_name?.trim()) {
-        return d.supplier_display_name.trim();
-      }
-    }
-
-    const fallbackPn = row.party_name;
-    if (fallbackPn && !isPlaceholderLedgerPartyName(fallbackPn)) return fallbackPn;
-    return "—";
-  };
+  const getResolvedPartyName = useCallback(
+    (row: financeService.LedgerRow) =>
+      resolveLedgerPartyName(row, {
+        clientById,
+        supplierById,
+        tripPartyMap,
+        tripDetailsMap,
+      }),
+    [clientById, supplierById, tripPartyMap, tripDetailsMap],
+  );
 
   const {
     data: cachedTransactions = [],
@@ -279,297 +230,25 @@ export function LedgerTab({
 
   const tripOptionIds = new Set((tripOptions ?? []).map((t) => t.id));
 
-  /** Entry date for kahta-style: show when the money came in or went out (e.g. "5 Mar 2025"). */
-  function formatEntryDate(iso: string | undefined | null): string {
-    if (!iso) return "—";
-    try {
-      const s = iso.slice(0, 10);
-      const [y, m, day] = s.split("-");
-      const monthNames = [
-        "Jan",
-        "Feb",
-        "Mar",
-        "Apr",
-        "May",
-        "Jun",
-        "Jul",
-        "Aug",
-        "Sep",
-        "Oct",
-        "Nov",
-        "Dec",
-      ];
-      const mi = parseInt(m ?? "0", 10) - 1;
-      return mi >= 0 && mi < 12 ? `${day} ${monthNames[mi]} ${y}` : s;
-    } catch {
-      return iso.slice(0, 10);
-    }
-  }
-
-  function formatRoute(
-    d:
-      | {
-          drop_location?: string;
-          pickup_area?: string;
-          client_name?: string;
-          pickup_date?: string | null;
-        }
-      | undefined,
-  ): string | null {
-    if (!d) return null;
-    if (d.pickup_area && d.drop_location)
-      return `${d.pickup_area} → ${d.drop_location}`;
-    if (d.drop_location) return d.drop_location;
-    if (d.client_name) return d.client_name;
-    if (d.pickup_date) {
-      try {
-        const [, m, day] = d.pickup_date.split("-");
-        const monthNames = [
-          "Jan",
-          "Feb",
-          "Mar",
-          "Apr",
-          "May",
-          "Jun",
-          "Jul",
-          "Aug",
-          "Sep",
-          "Oct",
-          "Nov",
-          "Dec",
-        ];
-        const mi = parseInt(m, 10) - 1;
-        return mi >= 0 && mi < 12 ? `${day} ${monthNames[mi]}` : d.pickup_date;
-      } catch {
-        return d.pickup_date;
-      }
-    }
-    return null;
-  }
-
-  function formatTripDateForDisplay(
-    iso: string | null | undefined,
-  ): string | null {
-    if (!iso || typeof iso !== "string") return null;
-    try {
-      const s = iso.slice(0, 10);
-      const [y, m, day] = s.split("-");
-      const monthNames = [
-        "Jan",
-        "Feb",
-        "Mar",
-        "Apr",
-        "May",
-        "Jun",
-        "Jul",
-        "Aug",
-        "Sep",
-        "Oct",
-        "Nov",
-        "Dec",
-      ];
-      const mi = parseInt(m ?? "0", 10) - 1;
-      return mi >= 0 && mi < 12 ? `${day} ${monthNames[mi]} ${y}` : s;
-    } catch {
-      return iso.slice(0, 10);
-    }
-  }
-
-  /** Build FinancialRowData for a ledger row (same shape as table row expand). */
   function buildFinancialRowDataForRow(
     row: financeService.LedgerRow,
   ): FinancialRowData {
-    const isDriverPayment =
-      row.contact_type === "driver" ||
-      (row.driver_name ?? "").trim() !== "";
-    const isClientOrSupplier =
-      row.contact_type === "client" || row.contact_type === "supplier";
-    const vehicleNum =
-      row.vehicle_number ??
-      (row.trip_id != null && !isDriverPayment
-        ? (getVehicleNumberForTripId?.(row.trip_id) ?? null)
-        : null);
-    const entityName = getResolvedPartyName(row);
-    const tripDetail =
-      row.trip_id != null && tripDetailsMap[row.trip_id]
-        ? tripDetailsMap[row.trip_id]
-        : null;
-    const tripPaymentSummary =
-      row.trip_id != null
-        ? (() => {
-            const sameTrip = rows.filter(
-              (r) => r.trip_id != null && r.trip_id === row.trip_id,
-            );
-            return {
-              received: sameTrip.reduce((s, r) => s + (r.amount_in ?? 0), 0),
-              paid: sameTrip.reduce((s, r) => s + (r.amount_out ?? 0), 0),
-              entryCount: sameTrip.length,
-            };
-          })()
-        : undefined;
-    const sameTripTransactions =
-      row.trip_id != null
-        ? rows
-            .filter(
-              (r) => r.trip_id != null && r.trip_id === row.trip_id,
-            )
-            .map((r) => {
-              const isDr =
-                r.contact_type === "driver" ||
-                (r.driver_name ?? "").trim() !== "";
-              const isCS =
-                r.contact_type === "client" || r.contact_type === "supplier";
-              const vn =
-                r.vehicle_number ??
-                (r.trip_id && !isDr
-                  ? (getVehicleNumberForTripId?.(r.trip_id) ?? null)
-                  : null);
-              const party = getResolvedPartyName(r);
-              return {
-                id: r.id,
-                date: formatEntryDate(r.transaction_date),
-                typeLabel: getDoubleEntryDisplayLabel(r) ?? "—",
-                in: r.amount_in ?? 0,
-                out: r.amount_out ?? 0,
-                party,
-              };
-            })
-        : undefined;
-
-    let derivedPartyType = row.contact_type;
-    if (!derivedPartyType && row.trip_id && tripPartyMap[row.trip_id]) {
-      const pm = tripPartyMap[row.trip_id];
-      if (row.amount_in && pm.client_id) derivedPartyType = 'client';
-      if (row.amount_out && pm.supplier_id) derivedPartyType = 'supplier';
-    }
-
-    const ledgerPartyType =
-      derivedPartyType === "client"
-        ? "client"
-        : derivedPartyType === "supplier"
-          ? "supplier"
-          : isDriverPayment
-            ? "driver"
-            : "vehicle";
-
-    let profileImageUrl: string | null = null;
-    let avatarSeedForRow: string | null | undefined = undefined;
-    let organizationImageUrl: string | null = null;
-    let organizationAvatarSeed: string | null = null;
-
-    let counterpartyIntegrated: boolean | null = null;
-    let counterpartyId: string | null = null;
-
-    if (ledgerPartyType === "client") {
-      counterpartyId =
-        row.contact_id ??
-        (row.trip_id ? tripPartyMap[row.trip_id]?.client_id ?? null : null);
-      const client = counterpartyId ? clientById.get(counterpartyId) ?? null : null;
-      counterpartyIntegrated = client
-        ? Boolean(client.is_integrated || client.linked_organization_id)
-        : false;
-      if (client) {
-        const oid = (client.linked_organization_id ?? "").trim();
-        if (oid && linkedOrgDisplayMap[oid]) {
-          organizationImageUrl =
-            (linkedOrgDisplayMap[oid].avatarUrl ?? "").trim() || null;
-          organizationAvatarSeed =
-            (linkedOrgDisplayMap[oid].avatarSeed ?? "").trim() || null;
-        }
-        const cid = (row.contact_id ?? "").trim();
-        profileImageUrl =
-          resolveAvatarPublicUrl(client.avatar_url) ??
-          (cid ? profileImages[cid] ?? null : null);
-        const s = (client.avatar_seed ?? "").trim();
-        avatarSeedForRow = s || undefined;
-      } else if (row.contact_id) {
-        profileImageUrl = profileImages[row.contact_id] ?? null;
-      }
-    } else if (ledgerPartyType === "supplier") {
-      counterpartyId =
-        row.contact_id ??
-        (row.trip_id ? tripPartyMap[row.trip_id]?.supplier_id ?? null : null);
-      const supplier = counterpartyId ? supplierById.get(counterpartyId) ?? null : null;
-      counterpartyIntegrated = supplier
-        ? Boolean(
-            supplier.linked_organization_id ||
-              (supplier as { supplier_type?: string | null })
-                .supplier_type === "integrated",
-          )
-        : false;
-      if (supplier) {
-        const oid = (supplier.linked_organization_id ?? "").trim();
-        if (oid && linkedOrgDisplayMap[oid]) {
-          organizationImageUrl =
-            (linkedOrgDisplayMap[oid].avatarUrl ?? "").trim() || null;
-          organizationAvatarSeed =
-            (linkedOrgDisplayMap[oid].avatarSeed ?? "").trim() || null;
-        }
-        const cid = (row.contact_id ?? "").trim();
-        profileImageUrl =
-          resolveAvatarPublicUrl(supplier.avatar_url) ??
-          (cid ? profileImages[cid] ?? null : null);
-        const s = (supplier.avatar_seed ?? "").trim();
-        avatarSeedForRow = s || undefined;
-      } else if (row.contact_id) {
-        profileImageUrl = profileImages[row.contact_id] ?? null;
-      }
-    } else if (ledgerPartyType === "driver") {
-      if (row.contact_id) {
-        const drv = driverById.get(row.contact_id);
-        profileImageUrl =
-          (drv?.avatar_url ?? "").trim() ||
-          driverProfileImageUrls[row.contact_id] ||
-          profileImages[row.contact_id] ||
-          null;
-        const s = (drv?.avatar_seed ?? "").trim();
-        avatarSeedForRow = s || undefined;
-      }
-    } else if (row.contact_id) {
-      profileImageUrl = profileImages[row.contact_id] ?? null;
-    }
-    const categoryBase = row.primary_category ?? row.description ?? "";
-    const categoryLabel = ALL_LEDGER_CATEGORY_VALUES.includes(categoryBase)
-      ? categoryBase
-      : "GENERAL";
-    return {
-      id: row.id,
-      name: entityName,
-      subline: "",
-      category: categoryLabel,
-      desc: row.description,
-      tripId: row.trip_id ?? null,
-      msn:
-        (row.trip_number ?? "").trim() || (row.trip_id ? "Trip" : "General"),
-      tripDetail: tripDetail ?? undefined,
-      vehicleNumber: isDriverPayment ? null : vehicleNum,
-      driverName: row.driver_name ?? undefined,
-      ledgerPartyType,
-      in: row.amount_in ?? 0,
-      out: row.amount_out ?? 0,
-      transaction_date: row.transaction_date,
-      transactionTypeLabel: getDoubleEntryDisplayLabel(row) ?? undefined,
-      tripPaymentSummary: tripPaymentSummary ?? undefined,
-      sameTripTransactions: sameTripTransactions ?? undefined,
-      profileImageUrl: profileImageUrl,
-      avatarSeed: avatarSeedForRow,
-      organizationImageUrl,
-      organizationAvatarSeed,
-      paymentMode: row.payment_mode ?? undefined,
-      paymentReference: row.payment_reference ?? undefined,
-      reconciliationStatus: row.reconciliation_status ?? undefined,
-      reconciliationLabel: row.reconciliation_label ?? undefined,
-      reconciliationActionLabel: row.reconciliation_action_label ?? undefined,
-      reconciliationHelperText: row.reconciliation_helper_text ?? undefined,
-      counterpartyIntegrated,
-      counterpartyId,
-      disputeStatus: row.trip_id && disputesByTripId[row.trip_id]
-        ? disputesByTripId[row.trip_id].status
-        : null,
-      disputeDirection: row.trip_id && disputesByTripId[row.trip_id]
-        ? disputesByTripId[row.trip_id].direction
-        : null,
-    };
+    return buildFinancialRowDataForLedgerRow(row, {
+      allRows: rows,
+      tripDetailsMap,
+      tripPartyMap,
+      clientById,
+      supplierById,
+      driverById,
+      getVehicleNumberForTripId,
+      linkedOrgDisplayMap,
+      profileImages,
+      driverProfileImageUrls: {
+        ...driverProfileImageUrls,
+        ...profileImages,
+      },
+      disputesByTripId,
+    });
   }
 
   function openLedgerDetail(row: financeService.LedgerRow) {
@@ -654,7 +333,7 @@ export function LedgerTab({
         // Party column: show person name for client/supplier/driver; show vehicle only for vehicle expense (no contact).
         const entityName = getResolvedPartyName(row);
         const tripDisplay = (row.trip_number ?? "").trim() || null;
-        const entryDateStr = formatEntryDate(row.transaction_date);
+        const entryDateStr = formatLedgerEntryDate(row.transaction_date);
         const restSublineDriver =
           isDriverPayment && tripDisplay
             ? `${tripDisplay} · ${categoryLabel}`
@@ -706,11 +385,11 @@ export function LedgerTab({
                   return {
                     id: t.id,
                     trip_number: t.trip_number,
-                    route: formatRoute(detail),
+                    route: formatLedgerRoute(detail),
                     trip_date:
                       (t as { trip_date?: string | null }).trip_date ??
                       (detail?.pickup_date
-                        ? formatTripDateForDisplay(detail.pickup_date)
+                        ? formatLedgerTripDateForDisplay(detail.pickup_date)
                         : null),
                     vehicle_number:
                       detail?.vehicle_number ??
@@ -772,7 +451,7 @@ export function LedgerTab({
                         : getResolvedPartyName(r) || "—";
                   return {
                     id: r.id,
-                    date: formatEntryDate(r.transaction_date),
+                    date: formatLedgerEntryDate(r.transaction_date),
                     typeLabel: getDoubleEntryDisplayLabel(r) ?? "—",
                     in: r.amount_in ?? 0,
                     out: r.amount_out ?? 0,

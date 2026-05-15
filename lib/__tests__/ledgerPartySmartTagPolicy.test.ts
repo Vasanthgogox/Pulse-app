@@ -1,6 +1,8 @@
 import {
   buildMissionTripPendingChips,
   isTripSmartTagSelectable,
+  ledgerLockedPartyFlowGuard,
+  ledgerLockedPartyPreferredFlow,
   ledgerTripDueWeightForContext,
   ledgerTripNoDueTagLabel,
 } from "@/lib/ledgerPartySmartTagPolicy";
@@ -71,6 +73,51 @@ describe("ledgerPartySmartTagPolicy", () => {
 
   it("labels no client due for locked client cash in", () => {
     expect(ledgerTripNoDueTagLabel("in", "CLIENT")).toBe("No client due");
+  });
+
+  it("guides CLIENT away from Cash OUT", () => {
+    const guard = ledgerLockedPartyFlowGuard("out", "CLIENT", "client-a");
+    expect(guard).not.toBeNull();
+    expect(guard?.title).toContain("Client");
+    expect(guard?.message).toMatch(/Cash IN/i);
+    expect(guard?.message).toMatch(/Adjust payment/i);
+    expect(ledgerLockedPartyPreferredFlow("CLIENT")).toBe("in");
+  });
+
+  it("guides SUPPLIER away from Cash IN", () => {
+    expect(ledgerLockedPartyFlowGuard("in", "SUPPLIER", "supplier-b")).not.toBeNull();
+    expect(ledgerLockedPartyPreferredFlow("SUPPLIER")).toBe("out");
+  });
+
+  it("shows supplier chip for locked SUPPLIER when raw payable exists on asset-classified trip", () => {
+    const fin = {
+      client_receivable: 0,
+      supplier_payable: 0,
+      driver_payable: 5000,
+      supplier_payable_raw: 12000,
+      driver_payable_raw: 5000,
+    };
+    const chips = buildMissionTripPendingChips(
+      "out",
+      fin,
+      "asset",
+      (n) => `₹${n}`,
+      "SUPPLIER",
+      "supplier-b",
+      parties,
+    );
+    expect(chips.some((c) => c.tag === "supplier")).toBe(true);
+    expect(
+      ledgerTripDueWeightForContext(
+        "out",
+        fin,
+        "asset",
+        "SUPPLIER",
+        "supplier-b",
+        parties,
+        "supplier-b",
+      ),
+    ).toBe(12000);
   });
 
   it("returns zero due weight for wrong flow when party is locked", () => {

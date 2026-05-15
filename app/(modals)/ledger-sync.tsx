@@ -1147,7 +1147,15 @@ export default function LedgerSyncScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    minHeight: 0,
     backgroundColor: "#FBFBFB",
+    ...Platform.select({
+      web: {
+        width: "100%",
+        alignSelf: "stretch",
+        minHeight: "100vh",
+      } as object,
+    }),
   },
   header: {
     flexDirection: "row",

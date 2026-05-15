@@ -59,8 +59,14 @@ export interface TripEntryFinancialSnapshot {
   driver_id: string | null;
   financials: {
     client_receivable: number;
+    /** Lane-masked: supplier payable only when trip is market. */
     supplier_payable: number;
+    /** Lane-masked: driver payable only when trip is asset. */
     driver_payable: number;
+    /** Cost − supplier payments, before market/asset UI mask (supplier party / chips). */
+    supplier_payable_raw: number;
+    /** Commission target − driver payments, before lane mask (driver party / chips). */
+    driver_payable_raw: number;
   };
   lines: TripPartyFinancialLines;
 }
@@ -176,6 +182,8 @@ export function computeTripEntryFinancialSnapshot(
       client_receivable,
       supplier_payable,
       driver_payable,
+      supplier_payable_raw,
+      driver_payable_raw,
     },
     lines,
   };

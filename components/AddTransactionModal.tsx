@@ -23,6 +23,11 @@ import {
   buildMissionTripPendingChips,
   deriveLedgerLockedEntityType,
   isTripSmartTagSelectable,
+  ledgerDisplayClientDue,
+  ledgerDisplayDriverDue,
+  ledgerDisplaySupplierDue,
+  ledgerLockedPartyFlowGuard,
+  ledgerLockedPartyPreferredFlow,
   ledgerTripDueWeightForContext,
   ledgerTripNoDueHeroMessage,
   ledgerTripNoDueTagLabel,
@@ -286,6 +291,7 @@ function resolveDefaultTripSmartTag(
     effectivePartyId?: string | null;
     localSupplierId?: string | null;
     driverId?: string | null;
+    lockedEntityType?: LedgerLockedEntityType | null;
   },
 ): TripLedgerSmartTag | null {
   if (!preview) return null;
@@ -294,29 +300,29 @@ function resolveDefaultTripSmartTag(
   if (flowType === "in") {
     return f.client_receivable > 0 ? "client" : null;
   }
+  const locked = opts?.lockedEntityType ?? null;
+  const supDue =
+    locked === "SUPPLIER"
+      ? Math.max(0, f.supplier_payable_raw ?? f.supplier_payable)
+      : Math.max(0, f.supplier_payable);
+  const drvDue =
+    locked === "DRIVER"
+      ? Math.max(0, f.driver_payable_raw ?? f.driver_payable)
+      : Math.max(0, f.driver_payable);
+
   const effectivePartyId = opts?.effectivePartyId ?? null;
   const localSupplierId = opts?.localSupplierId ?? null;
   const driverId = opts?.driverId ?? null;
-  if (
-    effectivePartyId &&
-    localSupplierId &&
-    effectivePartyId === localSupplierId &&
-    f.supplier_payable > 0
-  ) {
+  if (effectivePartyId && localSupplierId && effectivePartyId === localSupplierId && supDue > 0) {
     return "supplier";
   }
-  if (
-    effectivePartyId &&
-    driverId &&
-    effectivePartyId === driverId &&
-    f.driver_payable > 0
-  ) {
+  if (effectivePartyId && driverId && effectivePartyId === driverId && drvDue > 0) {
     return "driver";
   }
-  if (tripPayType === "asset" && f.driver_payable > 0) return "driver";
-  if (tripPayType === "market" && f.supplier_payable > 0) return "supplier";
-  if (f.supplier_payable > 0) return "supplier";
-  if (f.driver_payable > 0) return "driver";
+  if (tripPayType === "asset" && drvDue > 0) return "driver";
+  if (tripPayType === "market" && supDue > 0) return "supplier";
+  if (supDue > 0) return "supplier";
+  if (drvDue > 0) return "driver";
   return null;
 }
 
@@ -637,15 +643,22 @@ export interface TripOption {
   completed_at?: string | null;
 }
 
-/** Pending due for the active ledger direction — matches mission due chips & payout lane masking. */
+/** Pending due for the active ledger direction — matches mission due chips & party lock (raw supplier/driver when locked). */
 function tripFinancialSnapshotHasRelevantDue(
   snap: ReturnType<typeof computeTripEntryFinancialSnapshot> | null | undefined,
   ledgerFlow: "in" | "out",
+  lockedEntityType?: LedgerLockedEntityType | null,
 ): boolean {
   if (!snap) return false;
   const f = snap.financials;
   if (ledgerFlow === "in") {
     return f.client_receivable > 0;
+  }
+  if (lockedEntityType === "SUPPLIER") {
+    return (f.supplier_payable_raw ?? f.supplier_payable) > 0;
+  }
+  if (lockedEntityType === "DRIVER") {
+    return (f.driver_payable_raw ?? f.driver_payable) > 0;
   }
   return f.supplier_payable > 0 || f.driver_payable > 0;
 }
@@ -798,6 +811,8 @@ export function AddTransactionModal({
   const insets = useSafeAreaInsets();
   const winW = useLedgerViewportWidth();
   const stackTripFinancialBand = winW < LEDGER_STACK_TRIP_BAND_BREAKPOINT;
+  /** Desktop full-page: flex viewport (header + split band + footer), no outer page scroll. */
+  const ledgerFullPageViewportFit = fullPage && !stackTripFinancialBand;
   const isLedgerWide = winW >= 900;
   /** Full-page ledger horizontal padding — tighter on phones so all cards stay readable. */
   const ledgerFullPagePadH =
@@ -880,6 +895,12 @@ export function AddTransactionModal({
   const [missionTripFilterLifecycle, setMissionTripFilterLifecycle] = useState<
     "all" | "active" | "completed"
   >("all");
+  /**
+   * Full-page ledger: after user picks a voyage (or explicitly "No associated trip"),
+   * hide filters + list — same as desktop focus mode (mobile was missing this).
+   */
+  const [ledgerMissionRegistryExpanded, setLedgerMissionRegistryExpanded] =
+    useState(true);
   /** Full-page ledger: show reconciliation summary in a confirm overlay before save. */
   const [ledgerSubmitConfirmVisible, setLedgerSubmitConfirmVisible] =
     useState(false);
@@ -909,6 +930,22 @@ export function AddTransactionModal({
         isPartyLocked,
       ),
     [lockedEntityTypeProp, partyContext, isPartyLocked],
+  );
+  const requestLedgerFlowType = useCallback(
+    (next: "in" | "out") => {
+      if (next === type) return;
+      const guard = ledgerLockedPartyFlowGuard(
+        next,
+        ledgerLockedEntityType,
+        lockedPartyId,
+      );
+      if (guard) {
+        Alert.alert(guard.title, guard.message);
+        return;
+      }
+      setType(next);
+    },
+    [type, ledgerLockedEntityType, lockedPartyId],
   );
   const effectivePartyId = isPartyLocked ? lockedPartyId : partyId;
 
@@ -1087,8 +1124,10 @@ export function AddTransactionModal({
     if (!visible) {
       setLedgerSubmitConfirmVisible(false);
       setMissionTripSearchExpanded(false);
+    } else if (fullPage) {
+      setLedgerMissionRegistryExpanded(true);
     }
-  }, [visible]);
+  }, [visible, fullPage]);
 
   useEffect(() => {
     if (!fullPage || !visible) {
@@ -1223,12 +1262,12 @@ export function AddTransactionModal({
       const snap = tripFinancialPreviewByTripId[t.id];
       if (
         missionTripFilterDue === "has_due" &&
-        !tripFinancialSnapshotHasRelevantDue(snap, type)
+        !tripFinancialSnapshotHasRelevantDue(snap, type, ledgerLockedEntityType)
       )
         return false;
       if (
         missionTripFilterDue === "no_due" &&
-        tripFinancialSnapshotHasRelevantDue(snap, type)
+        tripFinancialSnapshotHasRelevantDue(snap, type, ledgerLockedEntityType)
       )
         return false;
 
@@ -1252,6 +1291,7 @@ export function AddTransactionModal({
     missionTripFilterPayout,
     missionTripFilterLifecycle,
     type,
+    ledgerLockedEntityType,
   ]);
 
   const resolveLocalClientPartyIdFromTrip = useCallback(
@@ -1349,6 +1389,7 @@ export function AddTransactionModal({
         effectivePartyId,
         localSupplierId: parties.localSupplierId,
         driverId: parties.driverId,
+        lockedEntityType: ledgerLockedEntityType,
       });
       if (!tag) return null;
       if (
@@ -1547,7 +1588,7 @@ export function AddTransactionModal({
       setSmartTagSuggestedAmount(null);
 
       const noDue =
-        preview != null && !tripFinancialSnapshotHasRelevantDue(preview, type);
+        preview != null && !tripFinancialSnapshotHasRelevantDue(preview, type, ledgerLockedEntityType);
       if (!noDue) return;
 
       if (
@@ -1584,7 +1625,7 @@ export function AddTransactionModal({
     const tid = selectedTripIds[0];
     if (!tid || !fullPage) return null;
     const preview = tripFinancialPreviewByTripId[tid];
-    if (!preview || tripFinancialSnapshotHasRelevantDue(preview, type)) {
+    if (!preview || tripFinancialSnapshotHasRelevantDue(preview, type, ledgerLockedEntityType)) {
       return null;
     }
     return ledgerTripNoDueHeroMessage(
@@ -1616,6 +1657,7 @@ export function AddTransactionModal({
         selectLedgerTrip(null);
         return;
       }
+      if (fullPage) setLedgerMissionRegistryExpanded(false);
       if (isEditMode || lockedAmount != null) {
         selectLedgerTrip(trip.id);
         return;
@@ -1629,6 +1671,7 @@ export function AddTransactionModal({
       isEditMode,
       lockedAmount,
       fillLedgerAmountFromTripDue,
+      fullPage,
     ],
   );
 
@@ -2199,7 +2242,23 @@ export function AddTransactionModal({
       setCategory(desc && (EXPENSE_CATEGORIES as readonly string[]).includes(desc) ? desc : null);
     } else {
       if (defaultTripId != null) setSelectedTripIds([defaultTripId]);
-      if (defaultType != null) setType(defaultType);
+      if (defaultType != null) {
+        const lockedType = deriveLedgerLockedEntityType(
+          lockedEntityTypeProp,
+          partyContext,
+          lockedPartyId != null,
+        );
+        const flowGuard = ledgerLockedPartyFlowGuard(
+          defaultType,
+          lockedType,
+          lockedPartyId,
+        );
+        setType(
+          flowGuard && lockedType
+            ? ledgerLockedPartyPreferredFlow(lockedType)
+            : defaultType,
+        );
+      }
       if (defaultContactId != null) {
         setPartyId(defaultContactId);
       } else if (lockedPartyId != null) {
@@ -2562,6 +2621,15 @@ export function AddTransactionModal({
 
   const commitLedgerSubmit = () => {
     if (!canSubmit) return;
+    const flowGuard = ledgerLockedPartyFlowGuard(
+      type,
+      ledgerLockedEntityType,
+      lockedPartyId,
+    );
+    if (flowGuard) {
+      Alert.alert(flowGuard.title, flowGuard.message);
+      return;
+    }
     // When tripLocked, derive party from trip (no party field shown).
     let derivedContactId: string | null = null;
     let derivedContactType: AddTransactionData["contactType"] = null;
@@ -3008,6 +3076,10 @@ export function AddTransactionModal({
 
     /** Full-page ledger on desktop split layout. */
     const ledgerTripDesktopSplit = fullPage && !stackTripFinancialBand;
+    /** Stacked mobile/tablet: cap list height; desktop split fills the matched pane height. */
+    const missionListMaxHeight = stackTripFinancialBand
+      ? Math.min(240, Math.max(140, Math.floor(Dimensions.get("window").height * 0.26)))
+      : 320;
     const selectedLedgerTripId = selectedTripIds[0] ?? null;
     const activeLedgerTrip =
       selectedLedgerTripId != null
@@ -3015,8 +3087,14 @@ export function AddTransactionModal({
           missionTrips.find((t) => t.id === selectedLedgerTripId) ??
           null)
         : null;
+    /** Minimize voyage registry after selection (all full-page widths; previously desktop-only). */
     const ledgerTripFocusMode =
-      ledgerTripDesktopSplit && !!selectedLedgerTripId && !tripLocked;
+      fullPage && !!selectedLedgerTripId && !tripLocked;
+    const ledgerNoTripMinimized =
+      fullPage &&
+      !tripLocked &&
+      selectedLedgerTripId == null &&
+      !ledgerMissionRegistryExpanded;
 
     /** Split desktop band: always stack sync value + date vertically; stacked mobile band uses width rule. */
     const ledgerSyncHeroStack =
@@ -3450,6 +3528,7 @@ export function AddTransactionModal({
             styles.syncAmountCardSide,
             styles.syncHeroBandCard,
             styles.syncAmountCardPulse,
+            ledgerTripDesktopSplit && styles.syncAmountCardPulseDesktop,
             mob && styles.ledgerMobSyncAmount,
             ledgerSyncHeroStack && styles.syncHeroCardFullWidth,
             stackTripFinancialBand && styles.syncAmountCardMobileAlign,
@@ -3685,9 +3764,10 @@ export function AddTransactionModal({
     const renderMissionTripDuePills = (
       clientDue: string | null,
       supplierDue: string | null,
+      driverDue: string | null,
       onDark = false,
     ) => {
-      if (!clientDue && !supplierDue) return null;
+      if (!clientDue && !supplierDue && !driverDue) return null;
       return (
         <View style={styles.missionTripDuePillsRow}>
           {clientDue ? (
@@ -3731,6 +3811,27 @@ export function AddTransactionModal({
               </Text>
             </View>
           ) : null}
+          {driverDue ? (
+            <View
+              style={[
+                styles.missionTripDuePill,
+                styles.missionTripDuePillRed,
+                mob && styles.ledgerMobDuePill,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.missionTripDuePillText,
+                  styles.missionTripDuePillTextRed,
+                  mob && styles.ledgerMobDuePillText,
+                  onDark && styles.missionTripDuePillTextOnDark,
+                ]}
+                numberOfLines={1}
+              >
+                {driverDue}
+              </Text>
+            </View>
+          ) : null}
         </View>
       );
     };
@@ -3740,17 +3841,25 @@ export function AddTransactionModal({
         style={[
           styles.missionCard,
           stackTripFinancialBand && styles.missionCardTripBandStack,
+          ledgerTripDesktopSplit && styles.missionCardTripPaneFill,
         ]}
       >
         <View style={[styles.missionHead, mob && styles.ledgerMobMissionHead]}>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={[styles.missionTitle, mob && styles.ledgerMobMissionTitle]}>
-              {ledgerTripFocusMode ? "Focused Node" : "Select Voyage Registry"}
+              {ledgerTripFocusMode
+                ? "Focused Node"
+                : ledgerNoTripMinimized
+                  ? "No voyage linked"
+                  : "Select Voyage Registry"}
             </Text>
           </View>
-          {ledgerTripFocusMode ? (
+          {ledgerTripFocusMode || ledgerNoTripMinimized ? (
             <TouchableOpacity
-              onPress={() => selectMissionTrip(null)}
+              onPress={() => {
+                setLedgerMissionRegistryExpanded(true);
+                if (selectedLedgerTripId) selectMissionTrip(null);
+              }}
               activeOpacity={0.85}
               hitSlop={8}
             >
@@ -3758,7 +3867,7 @@ export function AddTransactionModal({
             </TouchableOpacity>
           ) : null}
         </View>
-        {!tripLocked && !ledgerTripFocusMode ? (
+        {!tripLocked && !ledgerTripFocusMode && !ledgerNoTripMinimized ? (
           <View style={[styles.missionToolbarRow, mob && styles.missionToolbarRowMob]}>
             {missionTripSearchExpanded || tripSearch.length > 0 ? (
               <View
@@ -3832,7 +3941,7 @@ export function AddTransactionModal({
             >
             <View style={styles.missionFilterSegment}>
               <Text style={[styles.missionFilterLabelInline, mob && styles.ledgerMobFilterLabel]}>
-                Due
+                DUE
               </Text>
               <View style={styles.missionFilterChipsRowInline}>
                 {(
@@ -3870,7 +3979,7 @@ export function AddTransactionModal({
             </View>
             <View style={styles.missionFilterSegment}>
               <Text style={[styles.missionFilterLabelInline, mob && styles.ledgerMobFilterLabel]}>
-                Type
+                TYPE
               </Text>
               <View style={styles.missionFilterChipsRowInline}>
                 {(
@@ -3908,7 +4017,7 @@ export function AddTransactionModal({
             </View>
             <View style={styles.missionFilterSegment}>
               <Text style={[styles.missionFilterLabelInline, mob && styles.ledgerMobFilterLabel]}>
-                Status
+                STATUS
               </Text>
               <View style={styles.missionFilterChipsRowInline}>
                 {(
@@ -3966,14 +4075,23 @@ export function AddTransactionModal({
               !ledgerLockedEntityType || ledgerLockedEntityType === "CLIENT";
             const showSupplierDuePill =
               !ledgerLockedEntityType || ledgerLockedEntityType === "SUPPLIER";
-            const clientDue =
-              fin && fin.client_receivable > 0 && showClientDuePill
-                ? formatINR(fin.client_receivable)
-                : null;
-            const supplierDue =
-              fin && fin.supplier_payable > 0 && showSupplierDuePill
-                ? formatINR(fin.supplier_payable)
-                : null;
+            const showDriverDuePill =
+              !ledgerLockedEntityType || ledgerLockedEntityType === "DRIVER";
+            const clientDueAmt =
+              fin && showClientDuePill
+                ? ledgerDisplayClientDue(fin, type, ledgerLockedEntityType)
+                : 0;
+            const clientDue = clientDueAmt > 0 ? formatINR(clientDueAmt) : null;
+            const supplierDueAmt =
+              fin && showSupplierDuePill
+                ? ledgerDisplaySupplierDue(fin, type, tripPayType, ledgerLockedEntityType)
+                : 0;
+            const supplierDue = supplierDueAmt > 0 ? formatINR(supplierDueAmt) : null;
+            const driverDueAmt =
+              fin && showDriverDuePill
+                ? ledgerDisplayDriverDue(fin, type, tripPayType, ledgerLockedEntityType)
+                : 0;
+            const driverDue = driverDueAmt > 0 ? formatINR(driverDueAmt) : null;
             const focusedPendingChips = buildMissionTripPendingChips(
               type,
               fin,
@@ -3986,7 +4104,7 @@ export function AddTransactionModal({
             );
             const showNoDueTag =
               preview != null &&
-              !tripFinancialSnapshotHasRelevantDue(preview, type);
+              !tripFinancialSnapshotHasRelevantDue(preview, type, ledgerLockedEntityType);
             const noDueTagLabel = ledgerTripNoDueTagLabel(type, ledgerLockedEntityType);
             return (
               <View style={[styles.ledgerFocusedTripCard, mob && styles.ledgerMobFocusedCard]}>
@@ -4017,7 +4135,7 @@ export function AddTransactionModal({
                   >
                     {routeLine}
                   </Text>
-                  {(clientDue || supplierDue || showNoDueTag) && (
+                  {(clientDue || supplierDue || driverDue || showNoDueTag) && (
                     <View style={styles.ledgerFocusedTripDues}>
                       {clientDue ? (
                         <View style={styles.ledgerFocusedTripDueRow}>
@@ -4038,6 +4156,17 @@ export function AddTransactionModal({
                       ) : showNoDueTag && type === "out" && showSupplierDuePill ? (
                         <View style={styles.ledgerFocusedTripDueRow}>
                           <Text style={styles.ledgerFocusedTripDueLabel}>Supply Node</Text>
+                          <Text style={styles.ledgerFocusedTripNoDueVal}>{noDueTagLabel}</Text>
+                        </View>
+                      ) : null}
+                      {driverDue ? (
+                        <View style={styles.ledgerFocusedTripDueRow}>
+                          <Text style={styles.ledgerFocusedTripDueLabel}>Driver</Text>
+                          <Text style={styles.ledgerFocusedTripDueOut}>{driverDue}</Text>
+                        </View>
+                      ) : showNoDueTag && type === "out" && showDriverDuePill ? (
+                        <View style={styles.ledgerFocusedTripDueRow}>
+                          <Text style={styles.ledgerFocusedTripDueLabel}>Driver</Text>
                           <Text style={styles.ledgerFocusedTripNoDueVal}>{noDueTagLabel}</Text>
                         </View>
                       ) : null}
@@ -4116,15 +4245,45 @@ export function AddTransactionModal({
               </View>
             );
           })()
+        ) : ledgerNoTripMinimized ? (
+          <View
+            style={[styles.ledgerFocusedTripCard, mob && styles.ledgerMobFocusedCard]}
+          >
+            <View style={styles.ledgerFocusedTripInner}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  paddingVertical: 4,
+                }}
+              >
+                <View style={styles.missionTripIconPlaceholder}>
+                  <FontAwesome
+                    name="unlink"
+                    size={12}
+                    color={Theme.textMutedDemo}
+                  />
+                </View>
+                <Text
+                  style={[
+                    styles.missionTripRouteInline,
+                    { flex: 1, marginHorizontal: 10 },
+                  ]}
+                  numberOfLines={1}
+                >
+                  No associated trip
+                </Text>
+                <FontAwesome name="check" size={12} color={accent} />
+              </View>
+            </View>
+          </View>
         ) : (
           <ScrollView
             style={[
               styles.missionList,
               ledgerTripDesktopSplit
-                ? styles.missionListDesktopFlex
-                : styles.missionListDesktopStandard,
-              stackTripFinancialBand && styles.missionListTripBandStack,
-              mob && styles.ledgerMobList,
+                ? styles.missionListDesktopFill
+                : { maxHeight: missionListMaxHeight },
             ]}
             contentContainerStyle={[
               styles.missionListContentCompact,
@@ -4142,7 +4301,10 @@ export function AddTransactionModal({
                     styles.missionTripRowCompact,
                     selectedTripIds.length === 0 && styles.missionTripRowCompactOn,
                   ]}
-                  onPress={() => selectMissionTrip(null)}
+                  onPress={() => {
+                    if (fullPage) setLedgerMissionRegistryExpanded(false);
+                    selectMissionTrip(null);
+                  }}
                   activeOpacity={0.85}
                 >
                   <View style={styles.missionTripIconPlaceholder}>
@@ -4172,14 +4334,23 @@ export function AddTransactionModal({
                 !ledgerLockedEntityType || ledgerLockedEntityType === "CLIENT";
               const showSupplierDuePill =
                 !ledgerLockedEntityType || ledgerLockedEntityType === "SUPPLIER";
-              const clientDue =
-                fin && fin.client_receivable > 0 && showClientDuePill
-                  ? formatINR(fin.client_receivable)
-                  : null;
-              const supplierDue =
-                fin && fin.supplier_payable > 0 && showSupplierDuePill
-                  ? formatINR(fin.supplier_payable)
-                  : null;
+              const showDriverDuePill =
+                !ledgerLockedEntityType || ledgerLockedEntityType === "DRIVER";
+              const clientDueAmt =
+                fin && showClientDuePill
+                  ? ledgerDisplayClientDue(fin, type, ledgerLockedEntityType)
+                  : 0;
+              const clientDue = clientDueAmt > 0 ? formatINR(clientDueAmt) : null;
+              const supplierDueAmt =
+                fin && showSupplierDuePill
+                  ? ledgerDisplaySupplierDue(fin, type, tripPayType, ledgerLockedEntityType)
+                  : 0;
+              const supplierDue = supplierDueAmt > 0 ? formatINR(supplierDueAmt) : null;
+              const driverDueAmt =
+                fin && showDriverDuePill
+                  ? ledgerDisplayDriverDue(fin, type, tripPayType, ledgerLockedEntityType)
+                  : 0;
+              const driverDue = driverDueAmt > 0 ? formatINR(driverDueAmt) : null;
               const pendingChips = buildMissionTripPendingChips(
                 type,
                 fin,
@@ -4192,7 +4363,7 @@ export function AddTransactionModal({
               );
               const showNoDueTag =
                 preview != null &&
-                !tripFinancialSnapshotHasRelevantDue(preview, type);
+                !tripFinancialSnapshotHasRelevantDue(preview, type, ledgerLockedEntityType);
               const noDueTagLabel = ledgerTripNoDueTagLabel(type, ledgerLockedEntityType);
               const showListSelection = selected && !ledgerTripFocusMode;
               return (
@@ -4321,7 +4492,7 @@ export function AddTransactionModal({
                         </View>
                       </View>
                     ) : (
-                      renderMissionTripDuePills(clientDue, supplierDue)
+                      renderMissionTripDuePills(clientDue, supplierDue, driverDue)
                     )}
                   </TouchableOpacity>
                 </View>
@@ -4337,7 +4508,7 @@ export function AddTransactionModal({
         style={[
           styles.ledgerProvisionCard,
           mob && styles.ledgerMobProvision,
-          ledgerTripDesktopSplit && styles.ledgerProvisionCardFill,
+          ledgerTripDesktopSplit && styles.ledgerProvisionCardPaneFill,
         ]}
       >
         {ledgerModeCategoryTopBand}
@@ -4418,7 +4589,13 @@ export function AddTransactionModal({
           ledgerTripDesktopSplit && styles.ledgerV2ShellFill,
         ]}
       >
-        <View style={[styles.ledgerV2HeaderLedger, mob && styles.ledgerMobHeader]}>
+        <View
+          style={[
+            styles.ledgerV2HeaderLedger,
+            mob && styles.ledgerMobHeader,
+            ledgerTripDesktopSplit && styles.ledgerV2HeaderLedgerShrink,
+          ]}
+        >
           <View style={styles.ledgerV2HeaderLeft}>
             <TouchableOpacity
               style={[styles.ledgerV2BackBtn, mob && styles.ledgerMobBackBtn]}
@@ -4455,7 +4632,7 @@ export function AddTransactionModal({
                 mob && styles.ledgerMobToggle,
                 type === "in" && styles.toggleBtnPulseIn,
               ]}
-              onPress={() => setType("in")}
+              onPress={() => requestLedgerFlowType("in")}
               activeOpacity={0.85}
             >
               <Text
@@ -4474,7 +4651,7 @@ export function AddTransactionModal({
                 mob && styles.ledgerMobToggle,
                 type === "out" && styles.toggleBtnPulseOut,
               ]}
-              onPress={() => setType("out")}
+              onPress={() => requestLedgerFlowType("out")}
               activeOpacity={0.85}
             >
               <Text
@@ -4520,7 +4697,13 @@ export function AddTransactionModal({
           </View>
         </View>
 
-        <View style={[styles.ledgerV2Grid, isLedgerWide && styles.ledgerV2GridWide]}>
+        <View
+          style={[
+            styles.ledgerV2Grid,
+            isLedgerWide && styles.ledgerV2GridWide,
+            ledgerTripDesktopSplit && styles.ledgerV2GridDesktopCompact,
+          ]}
+        >
           <View style={styles.ledgerV2Col}>
             {!tripLocked && !isPartyLocked ? (
               <TouchableOpacity
@@ -4616,6 +4799,7 @@ export function AddTransactionModal({
         style={[
           styles.panel,
           fullPage && styles.panelFullPage,
+          ledgerFullPageViewportFit && styles.panelFullPageColumn,
           fullPage && { paddingHorizontal: ledgerFullPagePadH },
           {
             paddingBottom: fullPage
@@ -4627,6 +4811,18 @@ export function AddTransactionModal({
           },
         ]}
       >
+        {ledgerFullPageViewportFit ? (
+          <View style={[styles.panelScroll, styles.panelScrollViewportFit]}>
+            <View
+              style={[
+                styles.panelScrollInner,
+                styles.panelScrollInnerFullPageLedger,
+              ]}
+            >
+              {renderLedgerSyncV2()}
+            </View>
+          </View>
+        ) : (
         <ScrollView
           ref={scrollRef}
           keyboardShouldPersistTaps="handled"
@@ -4698,7 +4894,7 @@ export function AddTransactionModal({
                       styles.toggleBtn,
                       type === "in" && styles.toggleBtnIn,
                     ]}
-                    onPress={() => setType("in")}
+                    onPress={() => requestLedgerFlowType("in")}
                     activeOpacity={0.8}
                     accessibilityLabel={
                       type === "in"
@@ -4721,7 +4917,7 @@ export function AddTransactionModal({
                       styles.toggleBtn,
                       type === "out" && styles.toggleBtnOut,
                     ]}
-                    onPress={() => setType("out")}
+                    onPress={() => requestLedgerFlowType("out")}
                     activeOpacity={0.8}
                     accessibilityLabel={
                       type === "out"
@@ -5640,11 +5836,13 @@ export function AddTransactionModal({
             {!fullPage && submitButton}
           </View>
         </ScrollView>
+        )}
 
         {fullPage && (
           <View
             style={[
               styles.fullPageFooter,
+              ledgerFullPageViewportFit && styles.fullPageFooterPinned,
               { paddingBottom: insets.bottom + 16 },
             ]}
           >
@@ -5888,6 +6086,13 @@ const styles = StyleSheet.create({
   },
   keyboardAvoidFullPage: {
     flex: 1,
+    minHeight: 0,
+    ...Platform.select({
+      web: {
+        height: "100%",
+        maxHeight: "100%",
+      } as object,
+    }),
   },
   panel: {
     backgroundColor: Theme.screenBackground,
@@ -5898,10 +6103,18 @@ const styles = StyleSheet.create({
   },
   panelFullPage: {
     flex: 1,
+    minHeight: 0,
     borderTopWidth: 0,
     paddingHorizontal: 20,
     paddingTop: 12,
     backgroundColor: LedgerSyncPalette.page,
+  },
+  panelFullPageColumn: {
+    flexDirection: "column",
+  },
+  panelScrollViewportFit: {
+    flex: 1,
+    minHeight: 0,
   },
   fullPageFooter: {
     paddingHorizontal: 20,
@@ -5914,6 +6127,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.04,
     shadowRadius: 8,
     elevation: 4,
+  },
+  fullPageFooterPinned: {
+    flexShrink: 0,
   },
   hintText: {
     fontSize: 12,
@@ -5951,10 +6167,19 @@ const styles = StyleSheet.create({
   },
   ledgerMobSearchInput: { fontSize: 12, paddingVertical: 8 },
   ledgerMobFilterStrip: { marginBottom: 6 },
-  ledgerMobFilterChip: { paddingVertical: 3, paddingHorizontal: 8 },
-  ledgerMobFilterChipText: { fontSize: 9 },
-  ledgerMobFilterLabel: { fontSize: 7 },
-  ledgerMobList: { maxHeight: 148 },
+  ledgerMobFilterChip: {
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    minHeight: 28,
+  },
+  ledgerMobFilterChipText: {
+    fontSize: 7,
+    letterSpacing: 0.45,
+  },
+  ledgerMobFilterLabel: {
+    fontSize: 7,
+    letterSpacing: 0.45,
+  },
   ledgerMobListContent: { flexGrow: 0, gap: 6, paddingBottom: 8 },
   ledgerMobTripCard: {
     paddingVertical: 8,
@@ -6035,7 +6260,7 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingBottom: 6,
     paddingTop: 6,
-    backgroundColor: Theme.surface,
+    backgroundColor: LedgerSyncPalette.page,
   },
   flowCard: {
     backgroundColor: Theme.surface,
@@ -6750,6 +6975,8 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   ledgerV2Shell: {
+    flexDirection: "column",
+    alignItems: "stretch",
     gap: 16,
     paddingBottom: 8,
     width: "100%",
@@ -6757,6 +6984,12 @@ const styles = StyleSheet.create({
   ledgerV2ShellFill: {
     flex: 1,
     minHeight: 0,
+    gap: 12,
+    paddingBottom: 4,
+    justifyContent: "flex-start",
+  },
+  ledgerV2HeaderLedgerShrink: {
+    flexShrink: 0,
   },
   ledgerV2ShellMobileTablet: {
     gap: 14,
@@ -6808,9 +7041,11 @@ const styles = StyleSheet.create({
   },
   ledgerTripPaneCardLeftRegistry: {
     flex: 5,
+    flexDirection: "column",
   },
   ledgerTripPaneCardRightWide: {
     flex: 7,
+    flexDirection: "column",
   },
   ledgerV2HeaderLedger: {
     flexDirection: "row",
@@ -6913,9 +7148,12 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     elevation: 2,
   },
-  ledgerProvisionCardFill: {
+  /** Fills the right pane; inner sections stay top-aligned, amount hero can grow. */
+  ledgerProvisionCardPaneFill: {
     flex: 1,
     minHeight: 0,
+    width: "100%",
+    alignSelf: "stretch",
     justifyContent: "flex-start",
   },
   ledgerSyncDateCard: {
@@ -7098,6 +7336,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 20,
+  },
+  ledgerV2GridDesktopCompact: {
+    marginTop: 4,
+    gap: 10,
   },
   ledgerV2Col: {
     flex: 1,
@@ -7607,18 +7849,17 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     flexBasis: "auto",
   },
-  missionListTripBandStack: {
-    maxHeight: 148,
-  },
-  /** Desktop full-page split: trip list fills left pane (no max-height clip). */
-  missionListDesktopFlex: {
+  missionCardTripPaneFill: {
     flex: 1,
-    maxHeight: undefined,
+    flexGrow: 1,
     minHeight: 0,
   },
-  missionListDesktopStandard: {
-    maxHeight: 360,
+  /** Desktop split: trip list scrolls inside pane matched to provision card height. */
+  missionListDesktopFill: {
     flex: 1,
+    flexGrow: 1,
+    minHeight: 0,
+    maxHeight: undefined,
   },
   missionChangeTripBtn: {
     fontSize: 9,
@@ -7630,6 +7871,7 @@ const styles = StyleSheet.create({
   missionCard: {
     flex: 1,
     minHeight: 0,
+    flexDirection: "column",
     backgroundColor: "transparent",
     paddingVertical: 0,
     paddingHorizontal: 0,
@@ -7700,37 +7942,40 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   missionFilterLabelInline: {
-    fontSize: 8,
-    fontWeight: "800",
-    color: Theme.textSecondary,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
+    ...FinanceTxnTypography.chatFilterGroupLabel,
   },
   missionFilterChipsRowInline: {
     flexDirection: "row",
     alignItems: "center",
     flexShrink: 0,
-    gap: 6,
+    gap: 5,
   },
   missionFilterChip: {
-    paddingVertical: 4,
+    paddingVertical: 7,
     paddingHorizontal: 10,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.surfaceGray,
+    borderColor: "#e8ecf1",
+    backgroundColor: Theme.screenBackground,
+    minHeight: 30,
+    alignItems: "center",
+    justifyContent: "center",
   },
   missionFilterChipOn: {
-    borderColor: LedgerSyncPalette.ink,
-    backgroundColor: LedgerSyncPalette.ink,
+    borderColor: LedgerSyncPalette.slate,
+    backgroundColor: LedgerSyncPalette.slate,
+    shadowColor: LedgerSyncPalette.slate,
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
   },
   missionFilterChipText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: Theme.textSecondary,
+    ...FinanceTxnTypography.chatFilterPill,
+    textAlign: "center",
   },
   missionFilterChipTextOn: {
-    color: Theme.textOnDark,
+    ...FinanceTxnTypography.chatFilterPillOn,
   },
   missionFilterEmpty: {
     fontSize: 12,
@@ -7740,8 +7985,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   missionList: {
-    maxHeight: 280,
-    flexGrow: 1,
+    flexGrow: 0,
+    flexShrink: 1,
     minHeight: 0,
   },
   missionListContentFit: {
@@ -8122,9 +8367,9 @@ const styles = StyleSheet.create({
   syncAmountCardDesktopHero: {
     width: "100%",
     alignSelf: "stretch",
-    minHeight: 148,
-    paddingVertical: 26,
-    paddingHorizontal: 20,
+    minHeight: 168,
+    paddingVertical: 22,
+    paddingHorizontal: 18,
     justifyContent: "center",
   },
   syncAmountCardNoDueHighlight: {
@@ -8157,34 +8402,39 @@ const styles = StyleSheet.create({
     color: LedgerSyncPalette.muted,
   },
   syncAmountRowHeroDesktop: {
-    alignItems: "baseline",
+    alignItems: "center",
     justifyContent: "center",
     gap: 10,
-    paddingVertical: 4,
+    paddingVertical: 8,
+    minHeight: 56,
   },
   syncAmountHeroRupeeDesktop: {
-    fontSize: 34,
+    fontSize: 28,
     fontWeight: "800",
     fontStyle: "italic",
     color: "rgba(226,232,240,0.55)",
-    paddingBottom: 4,
+    paddingBottom: 0,
+    lineHeight: 34,
   },
   syncAmountHeroInputDesktop: {
     flex: 1,
     flexGrow: 1,
     flexShrink: 1,
     minWidth: 96,
-    fontSize: 46,
+    minHeight: 48,
+    fontSize: 32,
     fontWeight: "800",
     fontStyle: "italic",
-    lineHeight: 52,
-    letterSpacing: -0.5,
+    lineHeight: 40,
+    letterSpacing: -0.4,
     color: Theme.textOnDark,
-    paddingVertical: 0,
+    paddingVertical: 6,
     marginVertical: 0,
+    textAlign: "center",
     ...Platform.select({
       web: {
         outlineStyle: "none",
+        boxSizing: "border-box" as const,
       } as object,
       default: {},
     }),
@@ -8354,6 +8604,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     overflow: "hidden",
     position: "relative",
+  },
+  /** Desktop hero: do not clip large tabular figures (web TextInput). */
+  syncAmountCardPulseDesktop: {
+    overflow: "visible",
   },
   syncAmountGlow: {
     position: "absolute",

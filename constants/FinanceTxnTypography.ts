@@ -102,4 +102,24 @@ export const FinanceTxnTypography = {
     letterSpacing: 1,
     textTransform: "uppercase" as const,
   },
+  /** Chat scope pills — ACTIVE / HISTORY / MANUAL tabs (`ChatScreen` tripChatScopePill). */
+  chatFilterPill: {
+    fontSize: 8,
+    fontWeight: "600" as const,
+    fontStyle: "normal" as const,
+    color: "#64748b",
+    letterSpacing: 0.5,
+    textTransform: "uppercase" as const,
+  },
+  chatFilterPillOn: {
+    color: "#ffffff",
+  },
+  chatFilterGroupLabel: {
+    fontSize: 8,
+    fontWeight: "600" as const,
+    fontStyle: "normal" as const,
+    color: "#64748b",
+    letterSpacing: 0.5,
+    textTransform: "uppercase" as const,
+  },
 } as const;
