@@ -45,6 +45,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -1044,19 +1045,25 @@ export default function LedgerSyncScreen() {
   /** Vehicle sync uses the same full-page AddTransactionModal as drivers/clients/suppliers, with vehicle locked. */
   const isVehicleEntity = params.entityType === "VEHICLE" && Boolean(params.entityId);
 
+  const ledgerWorkspaceSubtitle = currentOrganization?.name
+    ? `OPERATIONAL COMMAND · ${currentOrganization.name.toUpperCase()}`
+    : "OPERATIONAL COMMAND";
+
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={handleClose} style={styles.backBtn} hitSlop={8} accessibilityLabel={t("back")}>
-          <FontAwesome name="chevron-left" size={18} color={Theme.textPrimaryDark} />
-        </TouchableOpacity>
-        <View style={styles.headerTitleWrap}>
-          <Text style={styles.headerTitle}>{entryContextLabel ? t("addEntry") : t("ledgerSync")}</Text>
-          {entryContextLabel ? (
-            <Text style={styles.headerSubtitle} numberOfLines={1}>{entryContextLabel}</Text>
-          ) : null}
+    <View style={[styles.container, { paddingTop: Platform.OS === "web" ? 0 : insets.top }]}>
+      {Platform.OS !== "web" ? (
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleClose} style={styles.backBtn} hitSlop={8} accessibilityLabel={t("back")}>
+            <FontAwesome name="chevron-left" size={18} color={Theme.textPrimaryDark} />
+          </TouchableOpacity>
+          <View style={styles.headerTitleWrap}>
+            <Text style={styles.headerTitle}>{entryContextLabel ? t("addEntry") : t("ledgerSync")}</Text>
+            {entryContextLabel ? (
+              <Text style={styles.headerSubtitle} numberOfLines={1}>{entryContextLabel}</Text>
+            ) : null}
+          </View>
         </View>
-      </View>
+      ) : null}
       <AddTransactionModal
         visible
         fullPage
@@ -1087,6 +1094,13 @@ export default function LedgerSyncScreen() {
           params.entityType === "CLIENT" || params.entityType === "SUPPLIER" || params.entityType === "DRIVER"
             ? (resolvedModalPartyName ?? undefined)
             : undefined
+        }
+        lockedEntityType={
+          params.entityType === "CLIENT" ||
+          params.entityType === "SUPPLIER" ||
+          params.entityType === "DRIVER"
+            ? params.entityType
+            : null
         }
         lockedVehicleId={isVehicleEntity ? (params.entityId ?? null) : null}
         lockedVehicleNumber={isVehicleEntity ? lockedVehicleNumber : null}
@@ -1124,6 +1138,7 @@ export default function LedgerSyncScreen() {
         dueAmountOut={effectiveDueAmountOut}
         ledgerTransactions={transactions}
         driverOffersByDriverId={driverOffers}
+        ledgerWorkspaceSubtitle={ledgerWorkspaceSubtitle}
       />
     </View>
   );
@@ -1132,7 +1147,7 @@ export default function LedgerSyncScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Theme.surface,
+    backgroundColor: "#FBFBFB",
   },
   header: {
     flexDirection: "row",
