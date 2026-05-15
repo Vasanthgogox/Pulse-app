@@ -3,10 +3,8 @@
  * Thin container; logic lives in useAddTripForm and useClientsForTrip.
  * Waits for onComplete (e.g. createTrip) to finish before closing so lists refetch with new data.
  */
-import { normalizeIndianPhoneForMetadata } from "@/lib/phoneValidation";
-import { useFocusEffect } from "expo-router";
-import { useCallback, useState } from "react";
-import { Alert, Platform, View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { useState } from "react";
+import { Alert, View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { AddTripFormFields } from "./AddTripFormFields";
 import { AddTripModalLayout } from "./AddTripModalLayout";
@@ -16,107 +14,39 @@ import { useClientsForTrip } from "./useClientsForTrip";
 import Theme from "@/constants/Theme";
 import Layout from "@/constants/Layout";
 import { regenerateTripOtp } from "@/features/trips/services/tripOtp.service";
-import { getDriverAvailabilityByPhoneGlobal } from "@/features/trips/services/trips.service";
-import { ThemedAlertModal } from "@/components/ThemedAlertModal";
-import { useWindowDimensions } from "react-native";
 
 export function AddTripModal({
   organizationId,
   onClose,
   onComplete,
 }: AddTripModalProps) {
-  const { width: windowWidth } = useWindowDimensions();
-  const showStickyFooter = windowWidth < 480;
   const form = useAddTripForm();
   const [submitting, setSubmitting] = useState(false);
   const [createdResult, setCreatedResult] = useState<AddTripCompleteResult | null>(null);
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [successDetails, setSuccessDetails] = useState<{
-    tripNumber: string;
-    routeLabel: string;
-  } | null>(null);
   const [regenerating, setRegenerating] = useState(false);
-  const [submitAttempted, setSubmitAttempted] = useState(false);
   const {
     clients,
     loading: clientsLoading,
     refetch: refetchClients,
   } = useClientsForTrip(organizationId);
-  const validationMessage = form.getValidationError();
-  const canCreateTrip = form.canSubmit;
-
-  useFocusEffect(
-    useCallback(() => {
-      setSubmitAttempted(false);
-    }, []),
-  );
 
   const handleSubmit = async () => {
-    if (submitting) return;
-    const isAggregateImmediateAssignment =
-      form.state.supplySource === "aggregate" && !form.state.assignLater;
-    const rawDriverPhone = form.state.driverPhone.trim();
-    const normalized =
-      rawDriverPhone.length > 0
-        ? normalizeIndianPhoneForMetadata(rawDriverPhone)
-        : null;
-    const normalizedDriver = (normalized ?? rawDriverPhone) || undefined;
-
-    // Hard guard at submit-time to avoid debounce/race gaps from field-level lookup.
-    if (isAggregateImmediateAssignment && normalizedDriver) {
-      const { error: availabilityError, result } =
-        await getDriverAvailabilityByPhoneGlobal(normalizedDriver, {
-          anyOpenTripBlocks: true,
-          requireAuthoritativeRpc: true,
-        });
-      if (availabilityError) {
-        Alert.alert("Unable to validate driver", availabilityError.message);
-        return;
-      }
-      if (result.isBusy) {
-        form.setters.setDriverPhoneTripConflict(
-          true,
-          result.ongoingTripLabel ?? null,
-        );
-        form.setters.setDriverPhoneConfirmed(false);
-        const who = form.state.driverPhoneName?.trim() || "Driver";
-        Alert.alert(
-          "Driver busy",
-          `${who} is already assigned to ${result.ongoingTripLabel ?? "another active trip"}. Complete or unassign that trip first.`,
-        );
-        return;
-      }
-      form.setters.setDriverPhoneTripConflict(false, null);
-    }
-
-    if (!form.canSubmit) {
-      setSubmitAttempted(true);
-      const errNow = form.getValidationError();
-      if (Platform.OS !== "web" && errNow) {
-        Alert.alert("Missing required details", errNow);
-      }
+    if (!form.canSubmit || submitting) return;
+    const validationErr = form.getValidationError();
+    if (validationErr) {
+      Alert.alert("Invalid input", validationErr);
       return;
     }
     setSubmitting(true);
     try {
       const options: AddTripCompleteOptions = {
         supplySource: form.state.supplySource,
-        driverPhone: normalizedDriver,
+        driverPhone: form.state.driverPhone.trim() || undefined,
       };
       const result = await Promise.resolve(onComplete(form.buildPayload(), options));
       const typed = result as AddTripCompleteResult | undefined;
-      if (typed?.trip) {
-        if (typed.otp) {
-          setCreatedResult(typed);
-          return;
-        }
-        setSuccessDetails(
-          typed.successDetails ?? {
-            tripNumber: typed.trip.id,
-            routeLabel: `${form.state.pickupArea} -> ${form.state.dropLocation}`,
-          },
-        );
-        setShowSuccessModal(true);
+      if (typed?.trip && typed?.otp) {
+        setCreatedResult(typed);
         return;
       }
       onClose();
@@ -146,12 +76,6 @@ export function AddTripModal({
     onClose();
   };
 
-  const handleSuccessOk = () => {
-    setShowSuccessModal(false);
-    setSuccessDetails(null);
-    onClose();
-  };
-
   if (createdResult?.trip && createdResult?.otp) {
     const expiresAt = new Date(createdResult.otp.expires_at);
     const expiresStr = expiresAt.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
@@ -164,7 +88,6 @@ export function AddTripModal({
         submitLabel="Done"
         canSubmit={true}
         submitting={false}
-        primaryActionMode="footer"
         onClose={handleDone}
         onSubmit={handleDone}
       >
@@ -191,46 +114,23 @@ export function AddTripModal({
   }
 
   return (
-    <>
-      <AddTripModalLayout
-        title="Create Trip"
-        submitLabel="Create Trip"
-        canSubmit={canCreateTrip}
-        lockPrimaryUntilValid={false}
-        validationMessage={submitAttempted ? validationMessage : null}
-        submitting={submitting}
-        primaryActionMode={showStickyFooter ? "footer" : "content"}
-        onClose={onClose}
-        onSubmit={handleSubmit}
-      >
-        <AddTripFormFields
-          state={form.state}
-          setters={form.setters}
-          clients={clients}
-          clientsLoading={clientsLoading}
-          organizationId={organizationId}
-          refetchClients={refetchClients}
-          onSubmit={handleSubmit}
-          canSubmit={canCreateTrip}
-          validationMessage={validationMessage}
-          validationIssues={submitAttempted ? form.validationIssues : []}
-          submitting={submitting}
-          showInlineCta={!showStickyFooter}
-          enablePrimaryWhenInvalid
-        />
-      </AddTripModalLayout>
-
-      <ThemedAlertModal
-        visible={showSuccessModal}
-        title="Trip Created Successfully"
-        message={`Trip Number: ${successDetails?.tripNumber ?? "Trip"}\nRoute: ${successDetails?.routeLabel ?? "Route details unavailable"}`}
-        okText="OK"
-        onOk={handleSuccessOk}
-        onRequestClose={handleSuccessOk}
-        variant="neutral"
-        okVariant="primary"
+    <AddTripModalLayout
+      title="Create Trip"
+      submitLabel="Create Trip"
+      canSubmit={form.canSubmit}
+      submitting={submitting}
+      onClose={onClose}
+      onSubmit={handleSubmit}
+    >
+      <AddTripFormFields
+        state={form.state}
+        setters={form.setters}
+        clients={clients}
+        clientsLoading={clientsLoading}
+        organizationId={organizationId}
+        refetchClients={refetchClients}
       />
-    </>
+    </AddTripModalLayout>
   );
 }
 

@@ -1,28 +1,21 @@
 /**
  * Place search for pickup/drop: API-driven (India), returns display name + lat/lon on select.
- * Location modal matches Create Trip pickers (FleetEntityPickerModal — centered sheet, search, rich rows).
  */
-import { CreateTripSheetSearchInput } from "@/components/CreateTripSheetSearchInput";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { addToPlacesCache, getPopularPlacesInIndia, searchPlacesInIndia, type PlaceResult } from "@/lib/placesService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { MapPin, X } from "lucide-react-native";
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
-  Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
-  type TextStyle,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
-  useWindowDimensions,
-  type ViewStyle,
 } from "react-native";
 
 export interface PlaceCoords {
@@ -37,8 +30,6 @@ export interface LocationSearchFieldProps {
   onChangeText: (val: string) => void;
   /** When user selects a place from API results, called with display name and coords. */
   onSelectPlace?: (displayName: string, coords: PlaceCoords) => void;
-  /** Optional icon inside the field (e.g. MapPin / Navigation), left-aligned like other form rows. */
-  leadingIcon?: ReactNode;
   inputStyle?: object;
   labelStyle?: object;
   onDropdownOpenChange?: (open: boolean) => void;
@@ -53,17 +44,10 @@ export function LocationSearchField({
   value,
   onChangeText,
   onSelectPlace,
-  leadingIcon,
   inputStyle,
   labelStyle,
   onDropdownOpenChange,
 }: LocationSearchFieldProps) {
-  const { width: winW } = useWindowDimensions();
-  const horizontalPad = Layout.screenPaddingHorizontal * 2;
-  /** Explicit width avoids RN Web % layout quirks so the sheet stays visually centered on mobile. */
-  const sheetWidth = Math.min(winW - horizontalPad, 520);
-  const webCursor =
-    Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null;
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [draft, setDraft] = useState(value);
   const [results, setResults] = useState<PlaceResult[]>([]);
@@ -179,46 +163,33 @@ export function LocationSearchField({
       {!loading && listToShow.length > 0 && (
         <>
           <Text style={styles.sectionLabel}>
-            {isPopularList
-              ? query
-                ? "Suggestions"
-                : "Popular places — tap or type to search"
-              : "Suggestions"}
+            {isPopularList ? (query ? "Suggestions" : "Popular places — tap or type to search") : "Suggestions"}
           </Text>
-          {listToShow.map((place) => {
-            const selected = draft === place.displayName;
-            return (
-              <TouchableOpacity
-                key={place.placeId}
-                style={[
-                  styles.placeRow,
-                  selected && styles.placeRowSelected,
-                  webCursor,
-                ]}
-                onPress={() => handleSelect(place)}
-                activeOpacity={0.75}
+          {listToShow.map((place) => (
+            <TouchableOpacity
+              key={place.placeId}
+              style={[styles.listItem, draft === place.displayName && styles.listItemActive]}
+              onPress={() => handleSelect(place)}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[styles.listItemText, { color: Theme.textPrimary }]}
+                numberOfLines={2}
               >
-                <View style={styles.rowIconCircle}>
-                  <MapPin size={18} color={Theme.iconPrimary} />
-                </View>
-                <Text style={styles.placeRowText} numberOfLines={3}>
-                  {place.displayName}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+                {place.displayName}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </>
       )}
       {showCustomOption && (
         <TouchableOpacity
-          style={[styles.customAddressRow, webCursor]}
+          style={styles.createRow}
           onPress={handleUseCustom}
-          activeOpacity={0.75}
+          activeOpacity={0.7}
         >
-          <View style={[styles.rowIconCircle, styles.customIconCircle]}>
-            <MapPin size={18} color={Theme.primary} />
-          </View>
-          <Text style={styles.customAddressText}>
+          <FontAwesome name="map-marker" size={14} color={Theme.primary} />
+          <Text style={[styles.createRowText, { color: Theme.primary }]}>
             Use "{draft.trim()}" as custom address
           </Text>
         </TouchableOpacity>
@@ -230,20 +201,10 @@ export function LocationSearchField({
     <View style={styles.wrapper} collapsable={false}>
       <Text style={labelStyle}>{label}</Text>
       <View style={styles.inputRow}>
-        {leadingIcon ? (
-          <View style={styles.leadingIconWrap} pointerEvents="none">
-            {leadingIcon}
-          </View>
-        ) : null}
         <TouchableOpacity
           activeOpacity={0.85}
           onPress={openDropdown}
-          style={[
-            styles.input,
-            inputStyle,
-            styles.inputPressable,
-            leadingIcon ? styles.inputWithLeadingIcon : null,
-          ]}
+          style={[styles.input, inputStyle, styles.inputPressable]}
         >
           <Text
             style={[
@@ -278,68 +239,55 @@ export function LocationSearchField({
         )}
       </View>
       {dropdownOpen && (
-        <Modal
-          visible
-          transparent
-          animationType="fade"
-          statusBarTranslucent
-          onRequestClose={closeDropdown}
-        >
-          <View style={styles.modalRoot} accessibilityViewIsModal>
-            <Pressable style={styles.backdropPress} onPress={closeDropdown}>
-              <View style={styles.backdropDim} />
-            </Pressable>
-            <View style={styles.centerWrap} pointerEvents="box-none">
-              <View
-                style={[
-                  styles.sheet,
-                  { width: sheetWidth, maxWidth: sheetWidth, alignSelf: "center" },
-                ]}
-              >
-                <View style={styles.sheetHead}>
-                  <View style={styles.sheetTitles}>
-                    <Text style={styles.sheetTitle}>Pick a place in India</Text>
-                    <Text style={styles.sheetSubtitle}>
-                      Search cities, areas, or landmarks
-                    </Text>
-                  </View>
-                  <TouchableOpacity
-                    onPress={closeDropdown}
-                    style={[styles.closeBtn, webCursor]}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    accessibilityRole="button"
-                    accessibilityLabel="Close"
-                  >
-                    <X size={18} color={Theme.primary} strokeWidth={2.5} />
-                  </TouchableOpacity>
-                </View>
-
-                <CreateTripSheetSearchInput
+        <Modal visible transparent animationType="fade" statusBarTranslucent>
+          <View style={styles.modalOverlay}>
+            <TouchableWithoutFeedback onPress={closeDropdown}>
+              <View style={StyleSheet.absoluteFill} />
+            </TouchableWithoutFeedback>
+            <View
+              style={styles.dropdownModalCard}
+              onStartShouldSetResponder={() => true}
+            >
+              <Text style={styles.dropdownModalTitle}>Pick a place in India</Text>
+              <View style={styles.modalSearchRow}>
+                <FontAwesome name="search" size={14} color={Theme.textMuted} />
+                <TextInput
                   ref={modalInputRef}
+                  style={styles.modalSearchInput}
                   value={draft}
                   onChangeText={(t) => {
                     setDraft(t);
                     onChangeText(t);
                   }}
                   placeholder={placeholder}
+                  placeholderTextColor={Theme.placeholder}
                   autoCapitalize="words"
+                  autoCorrect={false}
                   spellCheck={false}
                   autoComplete="off"
                   autoFocus
-                  shellStyle={styles.searchShell}
-                  accessibilityLabel="Search places"
                 />
-
-                <ScrollView
-                  style={styles.sheetScroll}
-                  contentContainerStyle={styles.sheetScrollContent}
-                  keyboardShouldPersistTaps="handled"
-                  showsVerticalScrollIndicator
-                  bounces
-                >
-                  {dropdownListContent}
-                </ScrollView>
+                {draft.trim().length > 0 ? (
+                  <TouchableOpacity
+                    onPress={() => {
+                      setDraft("");
+                      onChangeText("");
+                    }}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <FontAwesome name="times-circle" size={18} color={Theme.textMuted} />
+                  </TouchableOpacity>
+                ) : null}
               </View>
+              <ScrollView
+                style={styles.dropdownScroll}
+                contentContainerStyle={styles.dropdownScrollContent}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator
+                bounces
+              >
+                {dropdownListContent}
+              </ScrollView>
             </View>
           </View>
         </Modal>
@@ -358,27 +306,14 @@ const styles = StyleSheet.create({
     position: "relative",
     marginBottom: 4,
   },
-  leadingIconWrap: {
-    position: "absolute",
-    left: 14,
-    top: 0,
-    bottom: 0,
-    justifyContent: "center",
-    zIndex: 1,
-  },
-  inputWithLeadingIcon: {
-    paddingLeft: 44,
-  },
   input: {
+    borderWidth: 2,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 16,
     minHeight: 48,
     paddingRight: 44,
-    ...Platform.select({
-      web: { outlineStyle: "none" } as TextStyle,
-    }),
   },
   inputPressable: {
     justifyContent: "center",
@@ -401,155 +336,101 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: "center",
   },
-  modalRoot: {
-    flex: 1,
-    ...Platform.select({
-      web: {
-        width: "100%",
-        minHeight: "100%",
-        alignSelf: "center",
-      } as ViewStyle,
-      default: {},
-    }),
-  },
-  backdropPress: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  backdropDim: {
+  modalOverlay: {
     flex: 1,
     backgroundColor: Theme.overlayBackdrop,
-  },
-  centerWrap: {
-    ...StyleSheet.absoluteFillObject,
     justifyContent: "center",
-    alignItems: "center",
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    ...Platform.select({
-      web: {
-        width: "100%",
-        left: 0,
-        right: 0,
-      } as ViewStyle,
-      default: {},
-    }),
   },
-  sheet: {
-    maxHeight: "82%",
-    backgroundColor: Theme.cardWhite,
-    borderRadius: 20,
+  dropdownModalCard: {
+    alignSelf: "stretch",
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 12,
+    maxHeight: 380,
     overflow: "hidden",
     shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.18,
-    shadowRadius: 24,
-    elevation: 16,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 12,
   },
-  sheetHead: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 12,
-  },
-  sheetTitles: {
-    flex: 1,
-    paddingRight: 12,
-  },
-  sheetTitle: {
-    fontSize: 20,
+  dropdownModalTitle: {
+    fontSize: 11,
     fontWeight: "800",
-    color: Theme.textPrimaryDark,
-    letterSpacing: -0.3,
+    color: Theme.textMutedDemo,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: Layout.headerPaddingBelowInset - 2,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
   },
-  sheetSubtitle: {
-    marginTop: 4,
-    fontSize: 14,
-    fontWeight: "500",
-    color: Theme.textMuted,
-  },
-  closeBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: Theme.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Theme.cardWhite,
-  },
-  searchShell: {
-    marginHorizontal: 20,
-    marginBottom: 16,
-  },
-  sheetScroll: {
-    maxHeight: 340,
-    minHeight: 120,
-  },
-  sheetScrollContent: {
-    paddingBottom: 16,
-  },
-  placeRow: {
+  modalSearchRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 10,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
-    gap: 12,
+    backgroundColor: Theme.surface,
   },
-  placeRowSelected: {
-    backgroundColor: Theme.surfaceLight,
-  },
-  rowIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Theme.surfaceGray,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  customIconCircle: {
-    backgroundColor: Theme.positiveMuted,
-  },
-  placeRowText: {
+  modalSearchInput: {
     flex: 1,
     minWidth: 0,
-    fontSize: 15,
-    fontWeight: "700",
-    color: Theme.textPrimaryDark,
-    lineHeight: 20,
+    paddingVertical: 8,
+    fontSize: 16,
+    color: Theme.textPrimary,
   },
-  customAddressRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    marginTop: 4,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.borderLight,
-    backgroundColor: Theme.surfaceLight,
+  dropdownScroll: {
+    maxHeight: 300,
   },
-  customAddressText: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: "700",
-    color: Theme.primary,
+  dropdownScrollContent: {
+    paddingVertical: 8,
+    paddingBottom: Layout.screenPaddingHorizontal,
   },
   loadingWrap: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    paddingHorizontal: 20,
-    paddingVertical: 20,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingVertical: 16,
   },
   loadingText: {
     fontSize: 13,
     color: Theme.textSecondary,
   },
+  listItem: {
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.surfaceBorder,
+  },
+  listItemActive: {
+    backgroundColor: Theme.positiveMuted,
+  },
+  listItemText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  createRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: Theme.surfaceBorder,
+    backgroundColor: Theme.surface,
+  },
+  createRowText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: Theme.primary,
+  },
   emptyListWrap: {
-    paddingHorizontal: 20,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingVertical: 14,
   },
   emptyListText: {
@@ -563,15 +444,12 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     fontSize: 10,
-    fontWeight: "800",
+    fontWeight: "700",
     color: Theme.textMuted,
     textTransform: "uppercase",
-    letterSpacing: 1,
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 8,
-    backgroundColor: Theme.surfaceGray,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderLight,
+    letterSpacing: 0.8,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 6,
+    paddingBottom: 6,
   },
 });
