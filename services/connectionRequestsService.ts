@@ -16,7 +16,9 @@
  *
  * Edge cases:
  * - Duplicate invite (same from_org → to_org): UNIQUE(from_organization_id, to_organization_id) causes insert 23505;
- *   createConnectionRequest returns alreadyInvited.
+ *   createConnectionRequest merges role flags on the existing pending row and returns alreadyInvited.
+ * - Same contact, different org shells (duplicate sign-ups): blocked while another pending invite exists to any
+ *   org owned by that user; UI collapses multiple pending rows per owner in Inbound Protocol.
  * - Mutual invites (A→B and B→A): two separate rows; each approval creates one directional relationship.
  * - Re-invite after existing connection: duplicate insert prevented as above; existing client/supplier rows are updated by trigger when linked_organization_id already exists.
  */
@@ -250,6 +252,89 @@ async function selectConnectionRequestIdForOrgPair(
   return (data as { id: string }).id;
 }
 
+/** Merge role flags on an existing pending request (e.g. client invite then supplier to same org). */
+async function mergeConnectionRequestRoles(
+  requestId: string,
+  options: { requestShipperClient: boolean; requestCarrierSupplier: boolean },
+): Promise<{ error: Error | null }> {
+  const { data, error } = await supabase()
+    .from("connection_requests")
+    .select("id, status, request_shipper_client, request_carrier_supplier")
+    .eq("id", requestId)
+    .maybeSingle();
+  if (error) return { error: new Error(error.message) };
+  if (!data || typeof (data as { id?: string }).id !== "string") {
+    return { error: new Error("Connection request not found") };
+  }
+  const row = data as {
+    status: string;
+    request_shipper_client: boolean;
+    request_carrier_supplier: boolean;
+  };
+  if (row.status !== "pending") return { error: null };
+
+  const nextClient = row.request_shipper_client || options.requestShipperClient;
+  const nextSupplier =
+    row.request_carrier_supplier || options.requestCarrierSupplier;
+  if (!nextClient && !nextSupplier) {
+    return {
+      error: new Error(
+        "At least one of requestShipperClient or requestCarrierSupplier must be true",
+      ),
+    };
+  }
+  if (
+    row.request_shipper_client === nextClient &&
+    row.request_carrier_supplier === nextSupplier
+  ) {
+    return { error: null };
+  }
+
+  const { error: updateError } = await supabase()
+    .from("connection_requests")
+    .update({
+      request_shipper_client: nextClient,
+      request_carrier_supplier: nextSupplier,
+    })
+    .eq("id", requestId)
+    .eq("status", "pending");
+  return { error: updateError ? new Error(updateError.message) : null };
+}
+
+/**
+ * Pending invite to another org owned by the same user (SECURITY DEFINER — RLS hides partner orgs).
+ */
+async function findPendingSentToPartnerOwner(
+  fromOrgId: string,
+  toOrgId: string,
+): Promise<{ requestId: string; samePair: boolean } | null> {
+  const { data, error } = await supabase().rpc(
+    "find_pending_sent_connection_to_partner_owner",
+    { p_from_org_id: fromOrgId, p_to_org_id: toOrgId },
+  );
+  if (error) {
+    const msg = (error.message ?? "").toLowerCase();
+    if (
+      msg.includes("function") &&
+      (msg.includes("does not exist") || msg.includes("not found"))
+    ) {
+      return null;
+    }
+    return null;
+  }
+  const row = Array.isArray(data) && data.length > 0 ? data[0] : null;
+  if (!row || typeof (row as { request_id?: string }).request_id !== "string") {
+    return null;
+  }
+  return {
+    requestId: (row as { request_id: string }).request_id,
+    samePair: Boolean((row as { same_pair?: boolean }).same_pair),
+  };
+}
+
+const PENDING_INVITE_SAME_CONTACT_MESSAGE =
+  "You already have a pending invitation to this contact. Recall it from Sent invites before sending another.";
+
 /**
  * Create a connection request (invite another org as client and/or supplier).
  * Validates at least one role and rejects self-invite. On duplicate insert returns alreadyInvited (no error).
@@ -277,10 +362,25 @@ export async function createConnectionRequest(
       alreadyInvited: false,
     };
 
-  // Preflight: if a row already exists, skip insert (avoids a redundant 409 in DevTools and races with duplicate handling).
+  // Preflight: same org pair — merge roles on existing pending row (client + supplier to one org).
   const existingId = await selectConnectionRequestIdForOrgPair(fromOrgId, toOrgId);
   if (existingId) {
-    return { error: null, requestId: existingId, alreadyInvited: true };
+    const merged = await mergeConnectionRequestRoles(existingId, options);
+    return {
+      error: merged.error,
+      requestId: existingId,
+      alreadyInvited: true,
+    };
+  }
+
+  // Block a second pending invite to a different org owned by the same person.
+  const ownerPending = await findPendingSentToPartnerOwner(fromOrgId, toOrgId);
+  if (ownerPending && !ownerPending.samePair) {
+    return {
+      error: new Error(PENDING_INVITE_SAME_CONTACT_MESSAGE),
+      requestId: ownerPending.requestId,
+      alreadyInvited: true,
+    };
   }
 
   const { data, error } = await supabase()
@@ -298,7 +398,12 @@ export async function createConnectionRequest(
     // After any insert failure, prefer a read probe: handles duplicate + odd client error shapes.
     const afterErrorId = await selectConnectionRequestIdForOrgPair(fromOrgId, toOrgId);
     if (afterErrorId) {
-      return { error: null, requestId: afterErrorId, alreadyInvited: true };
+      const merged = await mergeConnectionRequestRoles(afterErrorId, options);
+      return {
+        error: merged.error,
+        requestId: afterErrorId,
+        alreadyInvited: true,
+      };
     }
     if (isDuplicateConnectionRequestInsertError(error)) {
       return { error: null, requestId: null, alreadyInvited: true };
@@ -485,4 +590,44 @@ export async function cancelPendingConnectionRequestByOrgPair(
   if (error) return { error: new Error(error.message), deleted: false };
   const deleted = Array.isArray(data) && data.length > 0;
   return { error: null, deleted };
+}
+
+/**
+ * Withdraw all pending sent invites to orgs owned by the same user (cleans duplicate-contact shells).
+ */
+export async function cancelPendingConnectionRequestsForPartnerOwner(
+  fromOrgId: string,
+  partnerOwnerId: string,
+): Promise<{ error: Error | null; deleted: boolean; deletedIds: string[] }> {
+  const { data, error } = await supabase().rpc(
+    "cancel_pending_sent_connections_to_partner_owner",
+    {
+      p_from_org_id: fromOrgId,
+      p_partner_owner_id: partnerOwnerId,
+    },
+  );
+  if (error) {
+    const msg = (error.message ?? "").toLowerCase();
+    if (
+      msg.includes("function") &&
+      (msg.includes("does not exist") || msg.includes("not found"))
+    ) {
+      return {
+        error: new Error(
+          "System update required: cannot recall duplicate-contact invites. Apply latest database migrations.",
+        ),
+        deleted: false,
+        deletedIds: [],
+      };
+    }
+    return { error: new Error(error.message), deleted: false, deletedIds: [] };
+  }
+  const deletedIds = Array.isArray(data)
+    ? data.filter((id): id is string => typeof id === "string" && id.length > 0)
+    : [];
+  return {
+    error: null,
+    deleted: deletedIds.length > 0,
+    deletedIds,
+  };
 }

@@ -33,3 +33,11 @@ export {
   useOperationsShelfItems,
   useVehicleIdleToastAlert,
 } from './useOperationsDerived';
+export { useAlertRegistryNotifications } from './useAlertRegistryNotifications';
+export { useInboundProtocolInvites } from './useInboundProtocolInvites';
+export { useRegistryFeed } from './useRegistryFeed';
+export {
+  REGISTRY_PAGE_SIZE,
+  REGISTRY_BOOTSTRAP_SALARY_LIMIT,
+  REGISTRY_LOAD_MORE_SALARY_LIMIT,
+} from './registryFeed.constants';

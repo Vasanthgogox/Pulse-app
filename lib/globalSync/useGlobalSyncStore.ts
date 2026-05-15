@@ -17,9 +17,10 @@
  *   alerts         — Actionable operational alerts requiring user attention.
  *   network        — Organization link counts and partner org list.
  *
- * BOOTSTRAP MODEL (one DB call):
- *   bootstrap(orgId) → get_global_app_bootstrap RPC → populates all slices.
+ * BOOTSTRAP MODEL (fetch once, sync forever):
+ *   bootstrap(orgId) → get_global_app_bootstrap + registry finance slices in parallel.
  *   After that: only Realtime CDC events via routeRealtimeEvent() update state.
+ *   Registry actions patch local slices first, then write DB (WhatsApp-style).
  *
  * REALTIME:
  *   The GlobalSyncContext mounts a single Supabase Realtime channel and routes
@@ -30,6 +31,28 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { supabase } from '@/lib/supabase';
+import { fetchInboundProtocolSnapshot } from '@/lib/globalSync/inboundProtocol.util';
+import type { InboundPartnerDisplay } from '@/lib/globalSync/inboundProtocol.types';
+import { mapSharedLedgerRow } from '@/lib/globalSync/mapSharedLedgerRow';
+import {
+  REGISTRY_BOOTSTRAP_SALARY_LIMIT,
+  REGISTRY_LOAD_MORE_SALARY_LIMIT,
+} from '@/lib/globalSync/registryFeed.constants';
+import {
+  getSalaryRequestsByOrganization,
+  updateSalaryRequestStatus,
+  type SalaryRequestWithDriverRow,
+} from '@/services/salaryRequestsService';
+import {
+  getSharedLedgerNotifications,
+  markSharedLedgerNotificationRead,
+  type SharedLedgerNotificationRow,
+} from '@/services/sharedLedgerNotificationsService';
+import {
+  getConnectionRequestsReceived,
+  getConnectionRequestsSent,
+  type ConnectionRequestRow,
+} from '@/services/connectionRequestsService';
 import type {
   ActiveTripLastKnownLocation,
   ActiveTripSummary,
@@ -82,6 +105,11 @@ interface GlobalSyncStore {
   // ── Notifications slice ─────────────────────────────────────────────────
   notificationRows:         GlobalNotificationRow[];
   notificationUnreadCount:  number;
+  /** Registry finance cards (bootstrap + Realtime; avoids tab-scoped SELECT polls). */
+  salaryRequestRows:        SalaryRequestWithDriverRow[];
+  /** True when bootstrap / load-more returned a full salary page (more may exist). */
+  salaryRequestsHasMore:    boolean;
+  sharedLedgerRows:         SharedLedgerNotificationRow[];
 
   // ── Alerts slice ────────────────────────────────────────────────────────
   alertRows: GlobalAlertRow[];
@@ -89,9 +117,33 @@ interface GlobalSyncStore {
   // ── Network slice ───────────────────────────────────────────────────────
   networkStatus: GlobalNetworkStatus;
 
+  // ── Inbound Protocol (connection invites) ───────────────────────────────
+  connectionRequestsReceived: ConnectionRequestRow[];
+  connectionRequestsSent:     ConnectionRequestRow[];
+  partnerDisplayByOrgId:      Record<string, InboundPartnerDisplay>;
+  partnerAvatarUriByOrgId:    Record<string, string | null>;
+  partnerOwnerIdByOrgId:      Record<string, string>;
+
   // ── Root actions ─────────────────────────────────────────────────────────
-  bootstrap: (orgId: string) => Promise<void>;
+  bootstrap: (orgId: string, options?: { force?: boolean }) => Promise<void>;
   reset:     () => void;
+
+  /** Patch salary + unified notification slices locally (WhatsApp-style, before DB). */
+  patchSalaryRequestStatusLocal: (requestId: string, status: string) => void;
+  patchSharedLedgerStatusLocal: (
+    notificationId: string,
+    status: SharedLedgerNotificationRow['status'],
+  ) => void;
+  /** Optimistic reject → DB update → Realtime confirms (no list re-fetch). */
+  rejectSalaryRequest: (requestId: string, orgId: string) => Promise<{ error: Error | null }>;
+  markSharedLedgerRead: (
+    notificationId: string,
+    orgId: string,
+  ) => Promise<{ error: Error | null }>;
+  /** Append next salary page for registry “load more” (bounded SELECT). */
+  loadMoreSalaryRequests: (orgId: string) => Promise<{ error: Error | null }>;
+  /** Re-hydrate connection invites + partner avatars (2 RPCs + 1 batch). */
+  refreshInboundProtocol: (orgId: string) => Promise<void>;
 
   // ── Unified Realtime router ──────────────────────────────────────────────
   // Single entry point for all Postgres CDC events. New features add a new
@@ -229,6 +281,90 @@ function upsertById<T extends { id: string }>(list: T[], item: T): T[] {
   return next;
 }
 
+function mergeSalaryRowIntoCache(
+  list: SalaryRequestWithDriverRow[],
+  row: Record<string, unknown>,
+): SalaryRequestWithDriverRow[] {
+  const id = String(row.id ?? '');
+  if (!id) return list;
+  const existing = list.find((r) => r.id === id);
+  const tripIds = Array.isArray(row.trip_ids)
+    ? (row.trip_ids as string[])
+    : (existing?.trip_ids ?? []);
+  const merged: SalaryRequestWithDriverRow = {
+    id,
+    organization_id: String(row.organization_id ?? existing?.organization_id ?? ''),
+    driver_id: String(row.driver_id ?? existing?.driver_id ?? ''),
+    request_type: String(row.request_type ?? existing?.request_type ?? 'advance'),
+    amount:
+      row.amount != null
+        ? Number(row.amount)
+        : (existing?.amount ?? 0),
+    currency: String(row.currency ?? existing?.currency ?? 'INR'),
+    status: String(row.status ?? existing?.status ?? 'pending'),
+    note:
+      row.note === undefined
+        ? (existing?.note ?? null)
+        : row.note == null
+          ? null
+          : String(row.note),
+    trip_ids: tripIds,
+    cash_entry_id:
+      row.cash_entry_id === undefined
+        ? (existing?.cash_entry_id ?? null)
+        : row.cash_entry_id == null
+          ? null
+          : String(row.cash_entry_id),
+    salary_month:
+      row.salary_month === undefined
+        ? (existing?.salary_month ?? null)
+        : row.salary_month == null
+          ? null
+          : String(row.salary_month),
+    created_at: String(row.created_at ?? existing?.created_at ?? new Date().toISOString()),
+    updated_at: String(row.updated_at ?? existing?.updated_at ?? new Date().toISOString()),
+    created_by:
+      row.created_by === undefined
+        ? (existing?.created_by ?? null)
+        : row.created_by == null
+          ? null
+          : String(row.created_by),
+    drivers: existing?.drivers ?? null,
+  };
+  return upsertById(list, merged);
+}
+
+function applySalaryStatusToSlices(
+  state: Pick<
+    GlobalSyncStore,
+    'salaryRequestRows' | 'notificationRows' | 'alertRows'
+  >,
+  requestId: string,
+  status: string,
+): Pick<
+  GlobalSyncStore,
+  'salaryRequestRows' | 'notificationRows' | 'notificationUnreadCount' | 'alertRows'
+> {
+  const salaryRequestRows = state.salaryRequestRows.map((r) =>
+    r.id === requestId ? { ...r, status } : r,
+  );
+  const notifId = `salary_${requestId}`;
+  const isPending = status === 'pending';
+  const notificationRows = state.notificationRows.map((n) =>
+    n.id === notifId ? { ...n, is_read: !isPending } : n,
+  );
+  const alertId = `salary_${requestId}`;
+  const alertRows = isPending
+    ? state.alertRows
+    : state.alertRows.filter((a) => a.id !== alertId);
+  return {
+    salaryRequestRows,
+    notificationRows,
+    notificationUnreadCount: countUnread(notificationRows),
+    alertRows,
+  };
+}
+
 // ── Store ─────────────────────────────────────────────────────────────────────
 
 export const useGlobalSyncStore = create<GlobalSyncStore>()(
@@ -246,27 +382,74 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
     ledgerBookSuccessAtMs:    0,
     notificationRows:         [],
     notificationUnreadCount:  0,
+    salaryRequestRows:        [],
+    salaryRequestsHasMore:    false,
+    sharedLedgerRows:         [],
+    connectionRequestsReceived: [],
+    connectionRequestsSent:     [],
+    partnerDisplayByOrgId:      {},
+    partnerAvatarUriByOrgId:    {},
+    partnerOwnerIdByOrgId:      {},
     alertRows:                [],
     networkStatus:            { ...DEFAULT_NETWORK_STATUS },
 
+    refreshInboundProtocol: async (orgId) => {
+      const [receivedRes, sentRes] = await Promise.all([
+        getConnectionRequestsReceived(orgId),
+        getConnectionRequestsSent(orgId),
+      ]);
+      const received = receivedRes.error ? [] : receivedRes.requests;
+      const sent = sentRes.error ? [] : sentRes.requests;
+      const { partnerDisplayByOrgId, partnerAvatarUriByOrgId, partnerOwnerIdByOrgId } =
+        await fetchInboundProtocolSnapshot(orgId, received, sent);
+      set({
+        connectionRequestsReceived: received,
+        connectionRequestsSent: sent,
+        partnerDisplayByOrgId,
+        partnerAvatarUriByOrgId,
+        partnerOwnerIdByOrgId,
+      });
+    },
+
     // ── bootstrap ────────────────────────────────────────────────────────────
-    bootstrap: async (orgId) => {
-      if (get().bootstrappedOrgId === orgId && get().bootstrapStatus === 'ready') return;
+    bootstrap: async (orgId, options) => {
+      const force = options?.force === true;
+      if (
+        !force &&
+        get().bootstrappedOrgId === orgId &&
+        get().bootstrapStatus === 'ready'
+      ) {
+        return;
+      }
 
       set({ bootstrapStatus: 'loading', bootstrapError: null });
       const t0 = Date.now();
 
       try {
-        const { data, error } = await supabase().rpc('get_global_app_bootstrap', {
-          p_org_id: orgId,
-        });
+        const [bootstrapRes, salaryRes, sharedRes, receivedRes, sentRes] =
+          await Promise.all([
+            supabase().rpc('get_global_app_bootstrap', { p_org_id: orgId }),
+            getSalaryRequestsByOrganization(orgId, {
+              limit: REGISTRY_BOOTSTRAP_SALARY_LIMIT,
+              offset: 0,
+            }),
+            getSharedLedgerNotifications(orgId, 'all'),
+            getConnectionRequestsReceived(orgId),
+            getConnectionRequestsSent(orgId),
+          ]);
 
-        if (error) throw error;
+        if (bootstrapRes.error) throw bootstrapRes.error;
 
-        const payload = data as GlobalAppBootstrapPayload;
+        const payload = bootstrapRes.data as GlobalAppBootstrapPayload;
+        const received = receivedRes.error ? [] : receivedRes.requests;
+        const sent = sentRes.error ? [] : sentRes.requests;
+        const { partnerDisplayByOrgId, partnerAvatarUriByOrgId, partnerOwnerIdByOrgId } =
+          await fetchInboundProtocolSnapshot(orgId, received, sent);
         const duration = Date.now() - t0;
 
-        const notifRows: GlobalNotificationRow[] = Array.isArray(payload?.notifications?.rows)
+        const notifRows: GlobalNotificationRow[] = Array.isArray(
+          payload?.notifications?.rows,
+        )
           ? payload.notifications.rows
           : [];
 
@@ -283,6 +466,15 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
           ledgerBookSuccessAtMs:   0,
           notificationRows:        notifRows,
           notificationUnreadCount: payload?.notifications?.unread_count ?? countUnread(notifRows),
+          salaryRequestRows:       salaryRes.error ? [] : salaryRes.requests,
+          salaryRequestsHasMore:   !salaryRes.error &&
+            salaryRes.requests.length >= REGISTRY_BOOTSTRAP_SALARY_LIMIT,
+          sharedLedgerRows:        sharedRes.notifications ?? [],
+          connectionRequestsReceived: received,
+          connectionRequestsSent:     sent,
+          partnerDisplayByOrgId,
+          partnerAvatarUriByOrgId,
+          partnerOwnerIdByOrgId,
           alertRows:               Array.isArray(payload?.global_alerts)  ? payload.global_alerts  : [],
           networkStatus:           payload?.network_status ?? { ...DEFAULT_NETWORK_STATUS },
         });
@@ -310,9 +502,73 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
         ledgerBookSuccessAtMs:   0,
         notificationRows:        [],
         notificationUnreadCount: 0,
+        salaryRequestRows:       [],
+        salaryRequestsHasMore:   false,
+        sharedLedgerRows:        [],
+        connectionRequestsReceived: [],
+        connectionRequestsSent:     [],
+        partnerDisplayByOrgId:      {},
+        partnerAvatarUriByOrgId:    {},
+        partnerOwnerIdByOrgId:      {},
         alertRows:               [],
         networkStatus:           { ...DEFAULT_NETWORK_STATUS },
       }),
+
+    patchSalaryRequestStatusLocal: (requestId, status) => {
+      set((s) => applySalaryStatusToSlices(s, requestId, status));
+    },
+
+    patchSharedLedgerStatusLocal: (notificationId, status) => {
+      set((s) => ({
+        sharedLedgerRows: s.sharedLedgerRows.map((n) =>
+          n.id === notificationId ? { ...n, status } : n,
+        ),
+      }));
+    },
+
+    rejectSalaryRequest: async (requestId, orgId) => {
+      get().patchSalaryRequestStatusLocal(requestId, 'rejected');
+      const { error } = await updateSalaryRequestStatus(requestId, 'rejected');
+      if (error) {
+        void get().bootstrap(orgId, { force: true });
+        return { error };
+      }
+      return { error: null };
+    },
+
+    markSharedLedgerRead: async (notificationId, orgId) => {
+      get().patchSharedLedgerStatusLocal(notificationId, 'read');
+      const { error } = await markSharedLedgerNotificationRead(
+        notificationId,
+        orgId,
+      );
+      if (error) {
+        void get().bootstrap(orgId, { force: true });
+        return { error };
+      }
+      return { error: null };
+    },
+
+    loadMoreSalaryRequests: async (orgId) => {
+      const offset = get().salaryRequestRows.length;
+      const { error, requests } = await getSalaryRequestsByOrganization(orgId, {
+        limit: REGISTRY_LOAD_MORE_SALARY_LIMIT,
+        offset,
+      });
+      if (error) return { error };
+
+      set((s) => {
+        const merged = [...s.salaryRequestRows];
+        for (const row of requests) {
+          if (!merged.some((r) => r.id === row.id)) merged.push(row);
+        }
+        return {
+          salaryRequestRows: merged,
+          salaryRequestsHasMore: requests.length >= REGISTRY_LOAD_MORE_SALARY_LIMIT,
+        };
+      });
+      return { error: null };
+    },
 
     // ── routeRealtimeEvent ────────────────────────────────────────────────────
     routeRealtimeEvent: (table, event, row, orgId) => {
@@ -323,6 +579,8 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
         const notif   = salaryRowToNotification(row);
         const isPending = String(row.status ?? 'pending') === 'pending';
 
+        const salaryCache = mergeSalaryRowIntoCache(state.salaryRequestRows, row);
+
         if (event === 'INSERT') {
           const nextNotifs = upsertById(state.notificationRows, notif);
           const nextAlerts = isPending
@@ -332,6 +590,7 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
             notificationRows:        nextNotifs,
             notificationUnreadCount: countUnread(nextNotifs),
             alertRows:               nextAlerts,
+            salaryRequestRows:       salaryCache,
           });
         } else if (event === 'UPDATE') {
           const nextNotifs = upsertById(state.notificationRows, notif);
@@ -343,8 +602,30 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
             notificationRows:        nextNotifs,
             notificationUnreadCount: countUnread(nextNotifs),
             alertRows:               nextAlerts,
+            salaryRequestRows:       salaryCache,
           });
         }
+        return;
+      }
+
+      // ── shared_ledger_notifications ───────────────────────────────────────
+      if (table === 'shared_ledger_notifications') {
+        const oid = String(row.organization_id ?? '');
+        if (oid !== orgId) return;
+
+        if (event === 'DELETE') {
+          const id = String(row.id ?? '');
+          if (!id) return;
+          set((s) => ({
+            sharedLedgerRows: s.sharedLedgerRows.filter((n) => n.id !== id),
+          }));
+          return;
+        }
+
+        const mapped = mapSharedLedgerRow(row);
+        set((s) => ({
+          sharedLedgerRows: upsertById(s.sharedLedgerRows, mapped),
+        }));
         return;
       }
 

@@ -16,6 +16,11 @@ import type { LedgerRow } from "@/features/finance/services/finance.service";
 import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
 import { buildTripHubPartyMetaByTripId } from "@/features/trips/utils/tripHubPartyMeta";
 import {
+  TripsHubBentoMetrics,
+  TripsHubMetricGroupRail,
+  tripsHubMetricGroupLabelStyle,
+} from "@/features/trips/components/TripsHubBentoMetrics";
+import {
   summarizeTripLedgerForHub,
   TripsHubTripCard,
   TripsHubTableView,
@@ -1174,44 +1179,59 @@ export default function TripsScreen() {
       ({
         all: {
           icon: "th-large",
-          gradient: [Theme.darkBackground, "#111827"] as [string, string],
+          gradient: [Theme.financeHeroBg, Theme.financeCardSlateTo] as [
+            string,
+            string,
+          ],
           accent: Theme.primary,
           micro: tr("active"),
         },
         unassigned: {
           icon: "user-times",
-          gradient: [Theme.darkBackground, "#0f172a"] as [string, string],
-          accent: "#94A3B8",
+          gradient: [Theme.financeCardSlateFrom, "#1e293b"] as [string, string],
+          accent: Theme.textSecondary,
           micro: tr("tripMetricHintUnassigned"),
         },
         assigned: {
           icon: "check-circle",
-          gradient: [Theme.darkBackground, "#14223f"] as [string, string],
-          accent: Theme.primary,
+          gradient: [Theme.primary, Theme.financeCardBlueTo] as [
+            string,
+            string,
+          ],
+          accent: Theme.primaryLight,
           micro: tr("tripMetricHintAssigned"),
         },
         loading: {
           icon: "upload",
-          gradient: [Theme.darkBackground, "#162746"] as [string, string],
-          accent: "#F59E0B",
+          gradient: [Theme.financeCardOrangeFrom, Theme.financeCardOrangeTo] as [
+            string,
+            string,
+          ],
+          accent: Theme.warning,
           micro: tr("tripMetricHintLoading"),
         },
         in_transit: {
           icon: "paper-plane",
-          gradient: [Theme.darkBackground, "#18304f"] as [string, string],
-          accent: "#38BDF8",
+          gradient: [Theme.financeCardBlueFrom, Theme.financeCardCashTo] as [
+            string,
+            string,
+          ],
+          accent: "#38bdf8",
           micro: tr("tripMetricHintInTransit"),
         },
         unloading: {
           icon: "map-marker",
-          gradient: [Theme.darkBackground, "#1b3554"] as [string, string],
-          accent: "#A78BFA",
+          gradient: ["#5b21b6", "#312e81"] as [string, string],
+          accent: "#a78bfa",
           micro: tr("tripMetricHintUnloading"),
         },
         delivered_docs_pending: {
           icon: "flag-checkered",
-          gradient: [Theme.darkBackground, "#1f3b5c"] as [string, string],
-          accent: "#34D399",
+          gradient: [Theme.financeCardGreenFrom, Theme.financeCardGreenTo] as [
+            string,
+            string,
+          ],
+          accent: Theme.positive,
           micro: tr("tripMetricHintDeliveredDocsPending"),
         },
       }) satisfies Record<
@@ -1226,10 +1246,6 @@ export default function TripsScreen() {
     [tr],
   );
 
-  const activeInMotionIds = useMemo(
-    () => TRIP_METRIC_ORDER.filter((id) => id !== "unassigned"),
-    [],
-  );
   const activeMetricIdsForRail = useMemo(
     () => ["all" as const, ...TRIP_METRIC_ORDER],
     [],
@@ -1317,12 +1333,28 @@ export default function TripsScreen() {
       >
         {active ? (
           <LinearGradient
-            colors={[Theme.darkBackground, "#1e293b"]}
+            colors={[Theme.financeHeroBg, Theme.financeCardSlateTo]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={StyleSheet.absoluteFill}
           />
-        ) : null}
+        ) : (
+          <View
+            style={[StyleSheet.absoluteFill, { backgroundColor: Theme.cardWhite }]}
+          />
+        )}
+        <View
+          style={[
+            styles.historyMetricAccentBar,
+            isReceivablePrimary && { backgroundColor: Theme.positive },
+            isPayableDue && { backgroundColor: Theme.teslaRed },
+            (isReceivableCleared || isPayableCleared) && {
+              backgroundColor: Theme.primary,
+            },
+            active && styles.historyMetricAccentBarActive,
+          ]}
+          pointerEvents="none"
+        />
         <View style={styles.historyMetricWatermarkOrbs} pointerEvents="none">
           {isReceivablePrimary ? (
             <>
@@ -2016,379 +2048,25 @@ export default function TripsScreen() {
                   })}
                 </ScrollView>
               ) : (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={[
-                  styles.tripMetricsGrid,
-                  isLargeScreen && styles.tripMetricsGridWeb,
-                ]}
-                style={styles.tripMetricsScroll}
-              >
-                <View
-                  style={[
-                    styles.tripMetricsGroupColumn,
-                    isLargeScreen && styles.tripMetricsGroupColumnIntakeWeb,
+                <TripsHubBentoMetrics
+                  metricOrder={activeMetricIdsForRail}
+                  activeMetricTab={activeMetricTab}
+                  onSelectMetric={setActiveMetricTab}
+                  getCount={(id) =>
+                    id === "all" ? activeAllCount : metricCounts[id]
+                  }
+                  getTitle={(id) => tripMetricCopy[id].title}
+                  getSubtitle={(id) => tripMetricVisual[id].micro}
+                  getIcon={(id) => tripMetricVisual[id].icon}
+                  missionPulseLabel={tr("tripsHubMissionStatus")}
+                  sectionLabels={[
+                    tr("all"),
+                    tr("tripsHubMetricGroupIntake"),
+                    tr("tripsHubMetricGroupInMotion"),
                   ]}
-                >
-                  <Text
-                    style={styles.metricGroupLabel}
-                    accessibilityRole="header"
-                  >
-                    {tr("all")}
-                  </Text>
-                  <View
-                    style={[
-                      styles.tripMetricsBundleRail,
-                      isLargeScreen && styles.tripMetricsBundleRailWeb,
-                    ]}
-                  >
-                    {(["all"] as const).map((metricId) => {
-                      const count = activeAllCount;
-                      const active = activeMetricTab === metricId;
-                      const copy = tripMetricCopy[metricId];
-                      const visual = tripMetricVisual[metricId];
-                      return (
-                        <TouchableOpacity
-                          key={metricId}
-                          style={[
-                            styles.tripMetricTile,
-                            styles.tripMetricBento,
-                            styles.tripMetricTileShrinkNone,
-                            isLargeScreen && styles.tripMetricTileWeb,
-                            active && styles.tripMetricBentoActive,
-                            !active && styles.tripMetricBentoInactive,
-                          ]}
-                          onPress={() => setActiveMetricTab(metricId)}
-                          activeOpacity={0.85}
-                          accessibilityRole="button"
-                          accessibilityState={{ selected: active }}
-                          accessibilityLabel={`${copy.title}, ${count} trips`}
-                        >
-                          {active ? (
-                            <LinearGradient
-                              colors={visual.gradient}
-                              start={{ x: 0, y: 0 }}
-                              end={{ x: 1, y: 1 }}
-                              style={StyleSheet.absoluteFill}
-                            />
-                          ) : null}
-                          <View
-                            style={styles.historyMetricWatermarkOrbs}
-                            pointerEvents="none"
-                          >
-                            <View
-                              style={
-                                active
-                                  ? styles.historyWmHeroBlobA
-                                  : styles.historyWmLightBlobA
-                              }
-                            />
-                            <View
-                              style={
-                                active
-                                  ? styles.historyWmHeroBlobB
-                                  : styles.historyWmLightBlobB
-                              }
-                            />
-                          </View>
-                          <View style={styles.historyMetricInner}>
-                            <View style={styles.metricBentoHeadRow}>
-                              <Text
-                                style={[
-                                  styles.metricBentoValue,
-                                  active
-                                    ? styles.tripMetricCountActive
-                                    : styles.metricBentoValueOnLight,
-                                ]}
-                              >
-                                {count}
-                              </Text>
-                              <View
-                                style={[
-                                  styles.metricBentoIconWrap,
-                                  !active && styles.metricBentoIconWrapLight,
-                                ]}
-                              >
-                                <FontAwesome
-                                  name={visual.icon}
-                                  size={11}
-                                  color={active ? visual.accent : Theme.textSecondary}
-                                />
-                              </View>
-                            </View>
-                            <Text
-                              style={[
-                                styles.metricBentoLabel,
-                                active
-                                  ? styles.metricBentoLabelOnDarkActive
-                                  : styles.metricBentoLabelOnLight,
-                              ]}
-                              numberOfLines={2}
-                            >
-                              {copy.title}
-                            </Text>
-                            <Text
-                              style={[
-                                styles.metricBentoSubtext,
-                                active
-                                  ? styles.metricBentoSubtextOnDark
-                                  : styles.metricBentoSubtextOnLight,
-                                styles.metricCardHintAtBottom,
-                              ]}
-                              numberOfLines={3}
-                            >
-                              {visual.micro}
-                            </Text>
-                          </View>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </View>
-                <View
-                  style={[
-                    styles.tripMetricsGroupColumn,
-                    isLargeScreen && styles.tripMetricsGroupColumnIntakeWeb,
-                  ]}
-                >
-                  <Text
-                    style={styles.metricGroupLabel}
-                    accessibilityRole="header"
-                  >
-                    {tr("tripsHubMetricGroupIntake")}
-                  </Text>
-                  <View
-                    style={[
-                      styles.tripMetricsBundleRail,
-                      isLargeScreen && styles.tripMetricsBundleRailWeb,
-                    ]}
-                  >
-                    {TRIP_METRIC_ORDER.slice(0, 1).map((metricId) => {
-                  const count = metricCounts[metricId];
-                  const active = activeMetricTab === metricId;
-                  const copy = tripMetricCopy[metricId];
-                  const visual = tripMetricVisual[metricId];
-                  return (
-                    <TouchableOpacity
-                      key={metricId}
-                      style={[
-                        styles.tripMetricTile,
-                            styles.tripMetricBento,
-                            styles.tripMetricTileShrinkNone,
-                        isLargeScreen && styles.tripMetricTileWeb,
-                            active && styles.tripMetricBentoActive,
-                            !active && styles.tripMetricBentoInactive,
-                      ]}
-                      onPress={() => setActiveMetricTab(metricId)}
-                      activeOpacity={0.85}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: active }}
-                      accessibilityLabel={`${copy.title}, ${count} trips`}
-                    >
-                          {active ? (
-                            <LinearGradient
-                              colors={visual.gradient}
-                              start={{ x: 0, y: 0 }}
-                              end={{ x: 1, y: 1 }}
-                              style={StyleSheet.absoluteFill}
-                            />
-                          ) : null}
-                          <View
-                            style={styles.historyMetricWatermarkOrbs}
-                            pointerEvents="none"
-                          >
-                            <View
-                              style={
-                                active
-                                  ? styles.historyWmHeroBlobA
-                                  : styles.historyWmLightBlobA
-                              }
-                            />
-                            <View
-                              style={
-                                active
-                                  ? styles.historyWmHeroBlobB
-                                  : styles.historyWmLightBlobB
-                              }
-                            />
-                          </View>
-                          <View style={styles.historyMetricInner}>
-                            <View style={styles.metricBentoHeadRow}>
-                              <Text
-                                style={[
-                                  styles.metricBentoValue,
-                                  active
-                                    ? styles.tripMetricCountActive
-                                    : styles.metricBentoValueOnLight,
-                                ]}
-                              >
-                                {count}
-                              </Text>
-                              <View
-                                style={[
-                                  styles.metricBentoIconWrap,
-                                  !active && styles.metricBentoIconWrapLight,
-                                ]}
-                              >
-                                <FontAwesome
-                                  name={visual.icon}
-                                  size={11}
-                                  color={active ? visual.accent : Theme.textSecondary}
-                                />
-                              </View>
-                            </View>
-                      <Text
-                        style={[
-                                styles.metricBentoLabel,
-                                active
-                                  ? styles.metricBentoLabelOnDarkActive
-                                  : styles.metricBentoLabelOnLight,
-                        ]}
-                        numberOfLines={2}
-                      >
-                        {copy.title}
-                      </Text>
-                            <Text
-                              style={[
-                                styles.metricBentoSubtext,
-                                active
-                                  ? styles.metricBentoSubtextOnDark
-                                  : styles.metricBentoSubtextOnLight,
-                                styles.metricCardHintAtBottom,
-                              ]}
-                              numberOfLines={3}
-                            >
-                        {visual.micro}
-                      </Text>
-                          </View>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-                </View>
-                <View
-                  style={[
-                    styles.tripMetricsGroupColumn,
-                    isLargeScreen && styles.tripMetricsGroupColumnInMotionWeb,
-                  ]}
-                >
-                  <Text
-                    style={styles.metricGroupLabel}
-                    accessibilityRole="header"
-                  >
-                    {tr("tripsHubMetricGroupInMotion")}
-                  </Text>
-                  <View
-                    style={[
-                      styles.tripMetricsBundleRail,
-                      isLargeScreen && styles.tripMetricsBundleRailWeb,
-                    ]}
-                  >
-                    {activeInMotionIds.map((metricId) => {
-                      const count = metricCounts[metricId];
-                      const active = activeMetricTab === metricId;
-                      const copy = tripMetricCopy[metricId];
-                      const visual = tripMetricVisual[metricId];
-                      return (
-                        <TouchableOpacity
-                          key={metricId}
-                          style={[
-                            styles.tripMetricTile,
-                            styles.tripMetricBento,
-                            styles.tripMetricTileShrinkNone,
-                            isLargeScreen && styles.tripMetricTileWeb,
-                            active && styles.tripMetricBentoActive,
-                            !active && styles.tripMetricBentoInactive,
-                          ]}
-                          onPress={() => setActiveMetricTab(metricId)}
-                          activeOpacity={0.85}
-                          accessibilityRole="button"
-                          accessibilityState={{ selected: active }}
-                          accessibilityLabel={`${copy.title}, ${count} trips`}
-                        >
-                          {active ? (
-                            <LinearGradient
-                              colors={visual.gradient}
-                              start={{ x: 0, y: 0 }}
-                              end={{ x: 1, y: 1 }}
-                              style={StyleSheet.absoluteFill}
-                            />
-                          ) : null}
-                          <View
-                            style={styles.historyMetricWatermarkOrbs}
-                            pointerEvents="none"
-                          >
-                            <View
-                              style={
-                                active
-                                  ? styles.historyWmHeroBlobA
-                                  : styles.historyWmLightBlobA
-                              }
-                            />
-                            <View
-                              style={
-                                active
-                                  ? styles.historyWmHeroBlobB
-                                  : styles.historyWmLightBlobB
-                              }
-                            />
-                          </View>
-                          <View style={styles.historyMetricInner}>
-                            <View style={styles.metricBentoHeadRow}>
-                              <Text
-                                style={[
-                                  styles.metricBentoValue,
-                                  active
-                                    ? styles.tripMetricCountActive
-                                    : styles.metricBentoValueOnLight,
-                                ]}
-                              >
-                                {count}
-                              </Text>
-                              <View
-                                style={[
-                                  styles.metricBentoIconWrap,
-                                  !active && styles.metricBentoIconWrapLight,
-                                ]}
-                              >
-                                <FontAwesome
-                                  name={visual.icon}
-                                  size={11}
-                                  color={active ? visual.accent : Theme.textSecondary}
-                                />
-                              </View>
-                            </View>
-                            <Text
-                              style={[
-                                styles.metricBentoLabel,
-                                active
-                                  ? styles.metricBentoLabelOnDarkActive
-                                  : styles.metricBentoLabelOnLight,
-                              ]}
-                              numberOfLines={2}
-                            >
-                              {copy.title}
-                            </Text>
-                            <Text
-                              style={[
-                                styles.metricBentoSubtext,
-                                active
-                                  ? styles.metricBentoSubtextOnDark
-                                  : styles.metricBentoSubtextOnLight,
-                                styles.metricCardHintAtBottom,
-                              ]}
-                              numberOfLines={3}
-                            >
-                              {visual.micro}
-                            </Text>
-                          </View>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </View>
-              </ScrollView>
+                  isDesktop={isLargeScreen}
+                  style={styles.tripMetricsScroll}
+                />
               )
             ) : isMobile ? (
               <View style={styles.tripHistoryMobileTabsWrap}>
@@ -2455,21 +2133,16 @@ export default function TripsScreen() {
                   ]}
                 >
                   <Text
-                    style={styles.metricGroupLabel}
+                    style={tripsHubMetricGroupLabelStyle}
                     accessibilityRole="header"
                   >
                     {tr("tripsHubMetricGroupReceivable")}
                   </Text>
-                  <View
-                    style={[
-                      styles.tripHistoryPairRail,
-                      isLargeScreen && styles.tripHistoryPairRailWeb,
-                    ]}
-                  >
+                  <TripsHubMetricGroupRail isLargeScreen={isLargeScreen}>
                     {historyReceivableIds.map((id) =>
                       renderHistoryMetricButton(id),
                     )}
-                  </View>
+                  </TripsHubMetricGroupRail>
                 </View>
                 <View
                   style={[
@@ -2478,21 +2151,16 @@ export default function TripsScreen() {
                   ]}
                 >
                   <Text
-                    style={styles.metricGroupLabel}
+                    style={tripsHubMetricGroupLabelStyle}
                     accessibilityRole="header"
                   >
                     {tr("tripsHubMetricGroupPayable")}
                   </Text>
-                  <View
-                    style={[
-                      styles.tripHistoryPairRail,
-                      isLargeScreen && styles.tripHistoryPairRailWeb,
-                    ]}
-                  >
+                  <TripsHubMetricGroupRail isLargeScreen={isLargeScreen}>
                     {historyPayableIds.map((id) =>
                       renderHistoryMetricButton(id),
                     )}
-                  </View>
+                  </TripsHubMetricGroupRail>
                 </View>
               </ScrollView>
             )}
@@ -3791,12 +3459,12 @@ const styles = StyleSheet.create({
   tripMetricsGrid: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 10,
-    paddingBottom: 12,
-    paddingRight: 8,
+    gap: 8,
+    paddingBottom: 8,
+    paddingRight: 4,
   },
   tripMetricsScroll: {
-    marginBottom: 10,
+    marginBottom: 8,
     paddingBottom: 2,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
@@ -3942,8 +3610,10 @@ const styles = StyleSheet.create({
   },
   tripMetricsGridWeb: {
     justifyContent: "flex-start",
-    gap: 12,
+    alignItems: "stretch",
+    gap: 8,
     width: "100%" as const,
+    paddingRight: 0,
   },
   tripMetricsGroupColumn: {
     flexDirection: "column",
@@ -3956,13 +3626,20 @@ const styles = StyleSheet.create({
     minWidth: 0,
     marginRight: 0,
   },
-  tripMetricsGroupColumnIntakeWeb: {
-    flex: 1.1,
+  tripMetricsGroupColumnAllWeb: {
+    flex: 0.85,
     minWidth: 0,
+    maxWidth: "12%" as const,
+    marginRight: 0,
+  },
+  tripMetricsGroupColumnIntakeWeb: {
+    flex: 1,
+    minWidth: 0,
+    maxWidth: "14%" as const,
     marginRight: 0,
   },
   tripMetricsGroupColumnInMotionWeb: {
-    flex: 4.9,
+    flex: 5,
     minWidth: 0,
     marginRight: 0,
   },
@@ -4023,8 +3700,38 @@ const styles = StyleSheet.create({
     transform: [{ translateY: -2 }],
   },
   tripMetricBentoInactive: {
-    backgroundColor: Theme.surface,
-    borderColor: "rgba(15,23,42,0.14)",
+    backgroundColor: Theme.cardWhite,
+    borderColor: Theme.cinematicCardBorder,
+    ...Platform.select({
+      web: {
+        boxShadow: "0 1px 2px rgba(15,23,42,0.06), 0 4px 12px rgba(15,23,42,0.04)",
+      },
+      default: {
+        shadowColor: Theme.shadow,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 6,
+        elevation: 2,
+      },
+    }),
+  },
+  historyMetricAccentBar: {
+    position: "absolute",
+    left: 0,
+    top: 12,
+    bottom: 12,
+    width: 3,
+    borderTopRightRadius: 3,
+    borderBottomRightRadius: 3,
+    backgroundColor: Theme.primary,
+    opacity: 0.85,
+    zIndex: 2,
+  },
+  historyMetricAccentBarActive: {
+    opacity: 1,
+    top: 10,
+    bottom: 10,
+    width: 4,
   },
   tripMetricTileShrinkNone: {
     flexShrink: 0,
@@ -4102,7 +3809,8 @@ const styles = StyleSheet.create({
     minWidth: 0,
     minHeight: 0,
     paddingVertical: 14,
-    paddingHorizontal: 14,
+    paddingHorizontal: 15,
+    paddingLeft: 18,
     zIndex: 1,
     width: "100%" as const,
     flexDirection: "column",

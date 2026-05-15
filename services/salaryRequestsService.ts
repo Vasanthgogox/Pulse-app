@@ -98,16 +98,32 @@ export interface SalaryRequestWithDriverRow extends SalaryRequestRow {
 /**
  * List salary requests for an organization (fleet/dispatcher view). RLS: org members can read for their org.
  */
+export type SalaryRequestsListOptions = {
+  status?: 'pending' | 'approved' | 'rejected' | 'paid';
+  /** Page size for registry bootstrap / load-more (keeps DB reads bounded). */
+  limit?: number;
+  offset?: number;
+};
+
 export async function getSalaryRequestsByOrganization(
   organizationId: string,
-  status?: 'pending' | 'approved' | 'rejected' | 'paid'
+  statusOrOptions?: 'pending' | 'approved' | 'rejected' | 'paid' | SalaryRequestsListOptions,
 ): Promise<{ error: Error | null; requests: SalaryRequestWithDriverRow[] }> {
+  const options: SalaryRequestsListOptions =
+    typeof statusOrOptions === 'string' || statusOrOptions === undefined
+      ? { status: statusOrOptions }
+      : statusOrOptions;
+
   let q = supabase()
     .from('driver_salary_requests')
     .select('*, drivers(name, user_id)')
     .eq('organization_id', organizationId)
     .order('created_at', { ascending: false });
-  if (status) q = q.eq('status', status);
+  if (options.status) q = q.eq('status', options.status);
+  if (options.limit != null && options.limit > 0) {
+    const offset = Math.max(0, options.offset ?? 0);
+    q = q.range(offset, offset + options.limit - 1);
+  }
   const { data, error } = await q;
   if (error) return { error: new Error(error.message), requests: [] };
   return { error: null, requests: (data ?? []) as SalaryRequestWithDriverRow[] };
