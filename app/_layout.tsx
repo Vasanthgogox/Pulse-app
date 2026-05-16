@@ -1,6 +1,5 @@
 import { AppAlertHost } from '@/components/AppAlertHost';
 import { GlobalOperationsToast } from '@/components/GlobalOperationsToast';
-import { OperationsIsland } from '@/components/OperationsIsland';
 import { FloatingChatButton } from '@/components/FloatingChatButton';
 import { DemoTabBar, type DemoTabId } from '@/components/demo';
 import Layout from '@/constants/Layout';
@@ -52,7 +51,8 @@ function isNetworkError(error: Error): boolean {
   const msg = error.message;
   return (
     msg === 'Network request failed' ||
-    /network|fetch.*failed/i.test(msg) ||
+    msg === 'Failed to fetch' ||
+    /network|failed to fetch|fetch failed|load failed/i.test(msg) ||
     /AuthRetryableFetchError|network request failed/i.test(msg)
   );
 }
@@ -308,8 +308,8 @@ function RootLayoutNav() {
     !isDriverRole &&
     (pathname === ROUTES.TABS.TRIPS ||
       pathname === ROUTES.TABS.NETWORK ||
-      pathname === '/chat' ||
-      pathname.startsWith('/chat/'));
+      pathname === ROUTES.CHAT ||
+      pathname.startsWith('/chat'));
 
   useEffect(() => {
     installForegroundPruning();
@@ -329,7 +329,6 @@ function RootLayoutNav() {
             <View style={{ flex: 1 }}>
               <GlobalOperationsToast />
               <AppAlertHost />
-              <OperationsIsland />
               <Stack screenOptions={{ headerShown: false }}>
                 <Stack.Screen name="index" />
                 <Stack.Screen name="welcome" options={{ animation: 'fade' }} />
@@ -342,6 +341,10 @@ function RootLayoutNav() {
                 <Stack.Screen name="add-trip" />
                 <Stack.Screen name="network" />
                 <Stack.Screen name="load-board" options={{ presentation: 'fullScreenModal' }} />
+                <Stack.Screen
+                  name="chat"
+                  options={{ presentation: 'fullScreenModal', animation: 'slide_from_right', headerShown: false }}
+                />
                 <Stack.Screen name="create-indent" options={{ presentation: 'fullScreenModal' }} />
                 <Stack.Screen name="log-incoming-pods" options={{ presentation: 'card', animation: 'slide_from_right' }} />
                 <Stack.Screen name="invoicing-execute" options={{ presentation: 'card', animation: 'slide_from_right' }} />

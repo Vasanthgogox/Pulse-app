@@ -29,6 +29,7 @@ import {
   type ConnectionRequestRow,
 } from "@/services/connectionRequestsService";
 import { getOrCreateNetworkConversation } from "@/features/chat/services/chat.service";
+import { ROUTES } from "@/lib/routes";
 import { useClientsQuery } from "@/lib/queries/useClientsQuery";
 import {
   useConnectionRequestsReceivedQuery,
@@ -1018,7 +1019,7 @@ function NetworkScreenInner() {
       });
       setSelectedProfileNode(null);
       router.push({
-        pathname: "/(modals)/chat",
+        pathname: ROUTES.CHAT,
         params: {
           tab: "network",
           conversationId: conversation.id,

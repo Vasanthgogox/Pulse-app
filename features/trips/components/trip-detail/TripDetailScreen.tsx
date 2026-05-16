@@ -20,6 +20,7 @@ import type { LedgerRow } from "@/features/finance/services/finance.service";
 import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntries";
 import { TripRatingsBlock } from "@/features/ratings/components/TripRatingsBlock";
 import { averageScore, getRatingsForTrip } from "@/features/ratings/services/ratings.service";
+import { ROUTES } from "@/lib/routes";
 import {
     getSupplierById,
     getSupplierDetails,
@@ -2560,7 +2561,7 @@ export default function TripDetailScreen({
       return;
     }
     router.push({
-      pathname: "/(modals)/chat",
+      pathname: ROUTES.CHAT,
       params: {
         tab: "trips",
         conversationId: id,

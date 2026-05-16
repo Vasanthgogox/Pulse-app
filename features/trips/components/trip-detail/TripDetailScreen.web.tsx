@@ -17,6 +17,7 @@ import { computePartnerIndentFreightCost } from "@/features/finance/utils/partne
 import { resolveTripLedgerTripType } from "@/features/finance/utils/tripLedgerPayoutMode.util";
 import { TripRatingsBlock } from "@/features/ratings/components/TripRatingsBlock";
 import { isAggregateTrip } from "@/lib/driverUtils";
+import { ROUTES } from "@/lib/routes";
 import { formatINR, formatIndianVehicleNumber } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
 import { notifyTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
@@ -395,7 +396,7 @@ export default function TripDetailScreen({
       return;
     }
     router.push({
-      pathname: "/(modals)/chat",
+      pathname: ROUTES.CHAT,
       params: {
         tab: "trips",
         conversationId: id,

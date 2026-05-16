@@ -1,6 +1,8 @@
 import { PartyAvatar } from "@/components/PartyAvatar";
 import { LoadingIndicator } from "@/components/LoadingIndicator";
+import { chatFilterChromeStyles } from "@/constants/ChatFilterChrome";
 import Theme from "@/constants/Theme";
+import { ROUTES } from "@/lib/routes";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { CHAT_ACCENT, CHAT_ACCENT_BORDER, CHAT_ACCENT_SOFT, CHAT_ICON_MUTED } from "@/features/chat/chatTheme";
@@ -707,8 +709,8 @@ export function ChatScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
-  /** Trip hub cards (alerts + party row): desktop always; all web viewports so mobile browser matches. */
-  const useGroupedTripHub = isDesktop || Platform.OS === "web";
+  /** Trip hub cards (alerts + party row) on every viewport — one list UX for native + web. */
+  const useGroupedTripHub = true;
   const allowNewTripConversation = false;
   /** Web: anchored compose/search UX from tablet width up (avoids sheet on iPad / large phones in browser). */
   const isWebAnchoredPanels = Platform.OS === "web" && (isDesktop || width >= 900);
@@ -753,6 +755,7 @@ export function ChatScreen() {
   const activeTripsForCommandPriority = useGlobalSyncStore((s) => s.activeTrips);
   const [visibleTripCount, setVisibleTripCount] = useState(10);
   const [tripSidebarSearch, setTripSidebarSearch] = useState("");
+  const [hubSearchOpen, setHubSearchOpen] = useState(false);
   const [showTripFilterModal, setShowTripFilterModal] = useState(false);
   const detailEnterProgress = useRef(new Animated.Value(1)).current;
   const [tripPartyFilters, setTripPartyFilters] = useState<ConversationPartyType[]>([
@@ -1075,6 +1078,10 @@ export function ChatScreen() {
   useEffect(() => {
     setVisibleTripCount(10);
   }, [tripChatScope, activeTab]);
+
+  useEffect(() => {
+    if (tripSidebarSearch.trim().length > 0) setHubSearchOpen(true);
+  }, [tripSidebarSearch]);
 
   useEffect(() => {
     if (tripChatScope !== "history" || !organizationId || !bootstrapDone) return;
@@ -1591,20 +1598,48 @@ export function ChatScreen() {
     return (
       <View style={s.listPanel}>
         <View style={s.listHeader}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
             <TouchableOpacity
-              onPress={() => router.canGoBack() ? router.back() : router.replace("/(tabs)")}
+              onPress={() =>
+                router.canGoBack() ? router.back() : router.replace(ROUTES.TABS.TRIPS)
+              }
               hitSlop={10}
               style={s.backBtn}
             >
               <ArrowLeft size={18} color="#fff" />
             </TouchableOpacity>
-            <Text style={s.brandTitle}>
+            <Text style={s.brandTitle} numberOfLines={1}>
               pulse chat
               <Text style={s.brandDot}>.</Text>
             </Text>
           </View>
-          <View />
+          {!isDesktop && isTripStreamTab(activeTab) ? (
+            <TouchableOpacity
+              onPress={() => {
+                if (hubSearchOpen) {
+                  setHubSearchOpen(false);
+                  setTripSidebarSearch("");
+                } else {
+                  setHubSearchOpen(true);
+                }
+              }}
+              hitSlop={10}
+              style={[
+                s.headerSearchBtn,
+                (hubSearchOpen || tripSidebarSearch.length > 0) && s.headerSearchBtnActive,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={hubSearchOpen ? "Close search" : "Search trips"}
+            >
+              {hubSearchOpen ? (
+                <X size={16} color="#fff" />
+              ) : (
+                <Search size={16} color="#94a3b8" />
+              )}
+            </TouchableOpacity>
+          ) : (
+            <View />
+          )}
         </View>
 
         <View style={s.tabRow}>
@@ -1639,85 +1674,148 @@ export function ChatScreen() {
           })}
         </View>
 
-        {isTripStreamTab(activeTab) && (
-          <View style={s.tripSearchScopeStrip}>
-            <View style={s.tripSearchScopeSearchWrap}>
-              <Search size={12} color="#94a3b8" style={{ marginRight: 5 }} />
-              <TextInput
-                style={s.sidebarSearchInput}
-                value={tripSidebarSearch}
-                onChangeText={setTripSidebarSearch}
-                placeholder="Search trip, route…"
-                placeholderTextColor="#94a3b8"
-                autoCapitalize="none"
-              />
-              {tripSidebarSearch.length > 0 && (
-                <TouchableOpacity onPress={() => setTripSidebarSearch("")} hitSlop={8}>
-                  <X size={12} color="#94a3b8" />
-                </TouchableOpacity>
-              )}
-            </View>
-            <View style={s.tripSearchScopeSegment}>
-              <TouchableOpacity
-                style={[
-                  s.tripChatScopePillStrip,
-                  tripChatScope === "active" && s.tripChatScopePillOn,
-                ]}
-                onPress={() => setTripChatScope("active")}
-                activeOpacity={0.82}
-              >
-                <Text
-                  style={[
-                    s.tripChatScopePillTextStrip,
-                    tripChatScope === "active" && s.tripChatScopePillTextOn,
-                  ]}
-                  numberOfLines={1}
-                >
-                  Active
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  s.tripChatScopePillStrip,
-                  tripChatScope === "history" && s.tripChatScopePillOn,
-                ]}
-                onPress={() => setTripChatScope("history")}
-                activeOpacity={0.82}
-              >
-                <Text
-                  style={[
-                    s.tripChatScopePillTextStrip,
-                    tripChatScope === "history" && s.tripChatScopePillTextOn,
-                  ]}
-                  numberOfLines={1}
-                >
-                  History
-                </Text>
-              </TouchableOpacity>
-              {Platform.OS === "web" && isDesktop ? (
+        {isTripStreamTab(activeTab) &&
+          (isDesktop ? (
+            <View style={s.tripSearchScopeStrip}>
+              <View style={s.tripSearchScopeSearchWrap}>
+                <Search size={12} color="#94a3b8" style={{ marginRight: 5 }} />
+                <TextInput
+                  style={s.sidebarSearchInput}
+                  value={tripSidebarSearch}
+                  onChangeText={setTripSidebarSearch}
+                  placeholder="Search trip, route…"
+                  placeholderTextColor="#94a3b8"
+                  autoCapitalize="none"
+                />
+                {tripSidebarSearch.length > 0 && (
+                  <TouchableOpacity onPress={() => setTripSidebarSearch("")} hitSlop={8}>
+                    <X size={12} color="#94a3b8" />
+                  </TouchableOpacity>
+                )}
+              </View>
+              <View style={s.tripSearchScopeSegment}>
                 <TouchableOpacity
                   style={[
                     s.tripChatScopePillStrip,
-                    webCommandPriorityFilter && s.tripChatScopePillOn,
-                    { marginLeft: 8 },
+                    tripChatScope === "active" && s.tripChatScopePillOn,
                   ]}
-                  onPress={() => setWebCommandPriorityFilter((v) => !v)}
+                  onPress={() => setTripChatScope("active")}
                   activeOpacity={0.82}
                 >
                   <Text
                     style={[
                       s.tripChatScopePillTextStrip,
-                      webCommandPriorityFilter && s.tripChatScopePillTextOn,
+                      tripChatScope === "active" && s.tripChatScopePillTextOn,
                     ]}
                     numberOfLines={1}
                   >
-                    Priority
+                    Active
                   </Text>
                 </TouchableOpacity>
-              ) : null}
+                <TouchableOpacity
+                  style={[
+                    s.tripChatScopePillStrip,
+                    tripChatScope === "history" && s.tripChatScopePillOn,
+                  ]}
+                  onPress={() => setTripChatScope("history")}
+                  activeOpacity={0.82}
+                >
+                  <Text
+                    style={[
+                      s.tripChatScopePillTextStrip,
+                      tripChatScope === "history" && s.tripChatScopePillTextOn,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    History
+                  </Text>
+                </TouchableOpacity>
+                {Platform.OS === "web" ? (
+                  <TouchableOpacity
+                    style={[
+                      s.tripChatScopePillStrip,
+                      webCommandPriorityFilter && s.tripChatScopePillOn,
+                      { marginLeft: 8 },
+                    ]}
+                    onPress={() => setWebCommandPriorityFilter((v) => !v)}
+                    activeOpacity={0.82}
+                  >
+                    <Text
+                      style={[
+                        s.tripChatScopePillTextStrip,
+                        webCommandPriorityFilter && s.tripChatScopePillTextOn,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      Priority
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
             </View>
-          </View>
-        )}
+          ) : (
+            <View style={s.tripSearchScopeBlock}>
+              {hubSearchOpen ? (
+                <View style={[chatFilterChromeStyles.searchWrap, s.tripSearchScopeSearchMobile]}>
+                  <Search size={12} color="#94a3b8" style={{ marginRight: 5 }} />
+                  <TextInput
+                    style={chatFilterChromeStyles.searchInput}
+                    value={tripSidebarSearch}
+                    onChangeText={setTripSidebarSearch}
+                    placeholder="Search trip, route…"
+                    placeholderTextColor="#94a3b8"
+                    autoCapitalize="none"
+                    autoFocus
+                  />
+                  {tripSidebarSearch.length > 0 && (
+                    <TouchableOpacity onPress={() => setTripSidebarSearch("")} hitSlop={8}>
+                      <X size={12} color="#94a3b8" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ) : null}
+              <View style={s.tripSearchScopeStripMobile}>
+                <TouchableOpacity
+                  style={[
+                    s.tripChatScopePillStrip,
+                    s.tripChatScopePillStripMobile,
+                    tripChatScope === "active" && s.tripChatScopePillOn,
+                  ]}
+                  onPress={() => setTripChatScope("active")}
+                  activeOpacity={0.82}
+                >
+                  <Text
+                    style={[
+                      s.tripChatScopePillTextStrip,
+                      tripChatScope === "active" && s.tripChatScopePillTextOn,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    Active
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    s.tripChatScopePillStrip,
+                    s.tripChatScopePillStripMobile,
+                    tripChatScope === "history" && s.tripChatScopePillOn,
+                  ]}
+                  onPress={() => setTripChatScope("history")}
+                  activeOpacity={0.82}
+                >
+                  <Text
+                    style={[
+                      s.tripChatScopePillTextStrip,
+                      tripChatScope === "history" && s.tripChatScopePillTextOn,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    History
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))}
 
         {isTripStreamTab(activeTab) && isWebAnchoredPanels && showCompose && (
           <View style={s.composePopoverLayer} pointerEvents="box-none">
@@ -1790,7 +1888,7 @@ export function ChatScreen() {
               contentContainerStyle={s.tripHubScrollContent}
               showsVerticalScrollIndicator={false}
               scrollEventThrottle={16}
-              onScroll={Platform.OS === "web" && !isDesktop ? onTripStreamListScroll : undefined}
+              onScroll={!isDesktop ? onTripStreamListScroll : undefined}
             >
               {groupedTripRows.length === 0 ? (
                 <EmptyList
@@ -3007,6 +3105,35 @@ const s = StyleSheet.create({
     color: "#0f172a",
     letterSpacing: -0.4,
     fontStyle: "italic",
+  },
+  headerSearchBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  headerSearchBtnActive: {
+    backgroundColor: "rgba(255,255,255,0.2)",
+  },
+  tripSearchScopeBlock: {
+    marginHorizontal: 18,
+    marginBottom: 12,
+    gap: 8,
+  },
+  tripSearchScopeSearchMobile: {
+    width: "100%",
+  },
+  tripSearchScopeStripMobile: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 8,
+    width: "100%",
+  },
+  tripChatScopePillStripMobile: {
+    flex: 1,
+    minWidth: 0,
   },
   /** Single row: search (flex) + Active / History — inset matches tabRow padding so edges line up. */
   tripSearchScopeStrip: {

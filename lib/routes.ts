@@ -34,9 +34,13 @@ export const ROUTES = {
 
   DRIVER_ROOT: '/(driver)' as const,
 
+  /** Full-screen Pulse Chat (root stack — preferred entry). */
+  CHAT: '/chat' as const,
+
   MODALS: {
     TEAM:           '/(modals)/team'           as const,
     INVITE_MEMBER:  '/(modals)/invite-member'  as const,
+    /** @deprecated Use {@link ROUTES.CHAT}; kept for deep links — redirects to `/chat`. */
     CHAT:           '/(modals)/chat'           as const,
   },
 

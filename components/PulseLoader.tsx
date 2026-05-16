@@ -8,9 +8,9 @@ import { MotiView } from "moti";
 import { StyleSheet, Text, View } from "react-native";
 import Theme from "@/constants/Theme";
 
-const INDIGO = "#4F46E5";
-const INDIGO_RING = "rgba(79, 70, 229, 0.22)";
-const INDIGO_RING_SOFT = "rgba(99, 102, 241, 0.12)";
+const INDIGO = Theme.pulseIndigo;
+const INDIGO_RING = Theme.pulseIndigoRing;
+const INDIGO_RING_SOFT = Theme.pulseIndigoWash;
 
 export type PulseLoaderVariant = "compact" | "medium" | "full";
 

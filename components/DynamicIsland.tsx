@@ -7,8 +7,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
-import { AlertTriangle, CheckCircle2, ChevronDown, MapPin, Radio, Truck } from 'lucide-react-native';
+import { CheckCircle2, MapPin } from 'lucide-react-native';
 import Theme from '@/constants/Theme';
+import { ROUTES } from '@/lib/routes';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { useOptionalOrganization } from '@/contexts/OrganizationContext';
 import { useChatStore } from '@/features/chat/store/useChatStore';
@@ -129,7 +130,7 @@ export function DynamicIsland() {
     const cid = firstTripConversationId(tripId);
     if (!cid) return;
     router.push({
-      pathname: '/(modals)/chat',
+      pathname: ROUTES.CHAT,
       params: {
         tab:              'trips',
         conversationId:   cid,
@@ -233,85 +234,25 @@ export function DynamicIsland() {
 
             {!pillExpanded ? (
               <View style={styles.collapsedRow}>
-                <MotiView
-                  animate={{
-                    scale: alert.kind === 'critical' ? 1.08 : alert.kind === 'warning' ? 1.05 : 1,
-                  }}
-                  transition={{
-                    type: 'timing',
-                    duration: alert.kind === 'critical' ? 700 : 900,
-                    loop: alert.kind === 'critical' || alert.kind === 'warning',
-                    repeatReverse: true,
-                  }}
-                  style={[
-                    styles.iconBlobSm,
-                    alert.kind === 'critical' && { backgroundColor: 'rgba(239,68,68,0.18)' },
-                    alert.kind === 'warning' && { backgroundColor: 'rgba(249,115,22,0.2)' },
-                    alert.kind === 'success' && { backgroundColor: 'rgba(34,197,94,0.2)' },
-                    alert.kind === 'neutral' && { backgroundColor: 'rgba(26,35,126,0.1)' },
-                  ]}
-                >
-                  {alert.kind === 'critical' ? (
-                    <AlertTriangle size={15} color="#dc2626" />
-                  ) : alert.kind === 'warning' ? (
-                    <Radio size={15} color="#ea580c" />
-                  ) : alert.kind === 'success' ? (
-                    <CheckCircle2 size={15} color="#16a34a" />
-                  ) : (
-                    <Truck size={15} color="#1a237e" />
-                  )}
-                </MotiView>
                 <Text style={styles.collapsedTitle} numberOfLines={1}>
                   {alert.title}
                 </Text>
-                <ChevronDown size={16} color={Theme.textSecondary} />
               </View>
             ) : (
               <>
-                <View style={styles.row}>
-                  <MotiView
-                    animate={{
-                      scale: alert.kind === 'critical' ? 1.1 : alert.kind === 'warning' ? 1.06 : 1,
-                    }}
-                    transition={{
-                      type: 'timing',
-                      duration: alert.kind === 'critical' ? 720 : alert.kind === 'warning' ? 900 : 240,
-                      loop: alert.kind === 'critical' || alert.kind === 'warning',
-                      repeatReverse: true,
-                    }}
-                    style={[
-                      styles.iconBlob,
-                      alert.kind === 'critical' && { backgroundColor: 'rgba(239,68,68,0.18)' },
-                      alert.kind === 'warning' && { backgroundColor: 'rgba(249,115,22,0.2)' },
-                      alert.kind === 'success' && { backgroundColor: 'rgba(34,197,94,0.2)' },
-                      alert.kind === 'neutral' && { backgroundColor: 'rgba(26,35,126,0.1)' },
-                    ]}
-                  >
-                    {alert.kind === 'critical' ? (
-                      <AlertTriangle size={18} color="#dc2626" />
-                    ) : alert.kind === 'warning' ? (
-                      <Radio size={18} color="#ea580c" />
-                    ) : alert.kind === 'success' ? (
-                      <CheckCircle2 size={18} color="#16a34a" />
-                    ) : (
-                      <Truck size={18} color="#1a237e" />
-                    )}
-                  </MotiView>
-
-                  <View style={styles.textCol}>
-                    <Text style={styles.kicker}>{catLabel}</Text>
-                    <Text style={styles.title} numberOfLines={2}>
-                      {alert.title}
+                <View style={styles.textCol}>
+                  <Text style={styles.kicker}>{catLabel}</Text>
+                  <Text style={styles.title} numberOfLines={2}>
+                    {alert.title}
+                  </Text>
+                  {alert.subtitle ? (
+                    <Text style={styles.sub} numberOfLines={paymentExpanded ? 4 : 2}>
+                      {alert.subtitle}
                     </Text>
-                    {alert.subtitle ? (
-                      <Text style={styles.sub} numberOfLines={paymentExpanded ? 4 : 2}>
-                        {alert.subtitle}
-                      </Text>
-                    ) : null}
-                    <Text style={styles.tripMeta} numberOfLines={1}>
-                      {tripLine}
-                    </Text>
-                  </View>
+                  ) : null}
+                  <Text style={styles.tripMeta} numberOfLines={1}>
+                    {tripLine}
+                  </Text>
                 </View>
 
                 {paymentExpanded && money ? (
@@ -471,37 +412,17 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.7)',
   },
   collapsedRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    minHeight: 36,
-  },
-  iconBlobSm: {
-    width: 32,
-    height: 32,
-    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 36,
+    paddingHorizontal: 4,
   },
   collapsedTitle: {
-    flex: 1,
-    minWidth: 0,
     fontSize: 14,
     fontWeight: '800',
     color: Theme.textPrimary,
     letterSpacing: -0.2,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  iconBlob: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
+    textAlign: 'center',
   },
   textCol: { flex: 1, minWidth: 0 },
   kicker: {

@@ -3,7 +3,16 @@
  * Header "Load Center" / "Find or Hire Work", three sub-tabs, cards, modals.
  */
 import { LoadCardRouteRow } from "@/components/LoadCardRouteRow";
+import { LoadCardSpecsRow } from "@/components/LoadCardSpecsRow";
 import { FinanceFAB } from "@/components/FinanceFAB";
+import {
+  LoadCenterHubMobileIndentCard,
+  LoadCenterHubMobileListCanvas,
+} from "@/features/network/components/LoadCenterHubMobileIndentCard";
+import {
+  LOADS_HUB_PAGE_BG,
+  LoadCenterHubMobileShell,
+} from "@/features/network/components/LoadCenterHubMobileShell";
 import { SemanticAddIcon } from "@/components/SemanticAddIcon";
 import { getAvatarUriForSeed } from "@/constants/DriverLevels";
 import Layout from "@/constants/Layout";
@@ -334,8 +343,9 @@ export function LoadCenterView({
 
   const useGridLayout = width >= 1024;
   const isMobileView = width < 820;
-  /** Narrow cards: stack bid meta + actions so CTAs stay on a clean second row. */
+  /** Narrow / grid cards: stack bid meta + actions so CTAs stay aligned and tappable. */
   const compactIndentFooter = width < 520;
+  const stackIndentCardFooter = compactIndentFooter || useGridLayout;
 
   useEffect(() => {
     if (!highlightedIndentId || useGridLayout) return;
@@ -1468,65 +1478,137 @@ export function LoadCenterView({
     Layout.fabStackOffset;
   const paddingBottom = useMemo(() => {
     const base = 24 + Layout.demoTabBarScrollBottomInset + insets.bottom + 24;
-    if (loadSubTab !== "GIVE_LOAD") return base;
+    if (isMobileView || loadSubTab !== "GIVE_LOAD") return base;
     return hirePartnerFabBottom + Layout.fabSize + Layout.fabBottomOffset;
-  }, [hirePartnerFabBottom, insets.bottom, loadSubTab]);
+  }, [hirePartnerFabBottom, insets.bottom, isMobileView, loadSubTab]);
   const statusTabsForRole = useMemo(() => {
     return isClaimedTab ? [] : STATUS_TABS;
   }, [isClaimedTab]);
 
-  /** Vehicle | load | weight — weight column right-aligned under route destination. */
-  const renderLoadCardSpecsColumns = useCallback(
-    (vehicleDetail: string, weightDetail: string, loadTypeDetail: string) => (
-      <View style={styles.loadCardSpecsGrid}>
-        <View style={styles.loadCardSpecsLabelsRow}>
-          <View style={styles.loadCardSpecCell}>
-            <Text style={styles.loadCardSpecLabel}>Vehicle</Text>
-          </View>
-          <View style={[styles.loadCardSpecCell, styles.loadCardSpecDivider]}>
-            <Text style={styles.loadCardSpecLabel}>Load</Text>
-          </View>
-          <View
-            style={[
-              styles.loadCardSpecCell,
-              styles.loadCardSpecDivider,
-              styles.loadCardSpecCellRight,
-            ]}
-          >
-            <Text style={[styles.loadCardSpecLabel, styles.loadCardSpecLabelRight]}>
-              Weight
-            </Text>
-          </View>
-        </View>
-        <View style={styles.loadCardSpecsValuesRow}>
-          <View style={styles.loadCardSpecCell}>
-            <Text style={styles.loadCardSpecValue} numberOfLines={2}>
-              {vehicleDetail}
-            </Text>
-          </View>
-          <View style={[styles.loadCardSpecCell, styles.loadCardSpecDivider]}>
-            <Text style={styles.loadCardSpecValue} numberOfLines={2}>
-              {loadTypeDetail}
-            </Text>
-          </View>
-          <View
-            style={[
-              styles.loadCardSpecCell,
-              styles.loadCardSpecDivider,
-              styles.loadCardSpecCellRight,
-            ]}
-          >
-            <Text
-              style={[styles.loadCardSpecValue, styles.loadCardSpecValueRight]}
-              numberOfLines={2}
-            >
-              {weightDetail}
-            </Text>
-          </View>
-        </View>
-      </View>
-    ),
-    [],
+  const mobileStatusTabs = useMemo(
+    () =>
+      statusTabsForRole.map((tab) => ({
+        id: tab.id,
+        label:
+          loadSubTab === "GIVE_LOAD" && tab.id === "OPEN" ? "Created" : tab.label,
+        count: statusTabCounts[tab.id],
+      })),
+    [statusTabsForRole, loadSubTab, statusTabCounts],
+  );
+
+  const renderGiveLoadMobileCard = useCallback(
+    (load: IndentRow) => {
+      const status = (load.status || "").toLowerCase();
+      const bidCount = quoteCounts[load.id] ?? 0;
+      const terminalForQuotePill =
+        status === "awarded" || statusMatchesFilter(status, "DONE");
+      const displayStatus =
+        !terminalForQuotePill && bidCount > 0 ? "quoted" : status;
+      const vehicleDetail = (load.vehicle_type || "—").toUpperCase();
+      const loadTypeDetail = (load.load_type || "General").toUpperCase();
+      const clientName = (load.client_name || "—").trim() || "—";
+      return (
+        <LoadCenterHubMobileIndentCard
+          key={load.id}
+          indent={load}
+          titleName={clientName}
+          statusLabel={displayStatus}
+          origin={load.pickup_area || "—"}
+          dest={load.drop_location || "—"}
+          pickupIso={load.pickup_date}
+          leftFooterLabel={vehicleDetail}
+          rightFooterLabel={
+            bidCount > 0
+              ? `${bidCount} bid${bidCount === 1 ? "" : "s"}`
+              : loadTypeDetail
+          }
+          onPress={() => onIndentPress(load)}
+        />
+      );
+    },
+    [onIndentPress, quoteCounts],
+  );
+
+  const renderGetLoadMobileCard = useCallback(
+    (load: IndentRow) => {
+      const existingQuote = myQuoteByIndentId.get(load.id);
+      const quoteStatus = (existingQuote?.status ?? "").toLowerCase();
+      const isPending = quoteStatus === "pending";
+      const isRejected = quoteStatus === "rejected";
+      const isAccepted = quoteStatus === "accepted";
+      const vehicleDetail = (load.vehicle_type || "—").toUpperCase();
+      const loadTypeDetail = (load.load_type || "—").toUpperCase();
+      const clientLabel = (
+        load.creator_organization_name ||
+        load.client_name ||
+        "Partner"
+      ).trim();
+      const statusLabel = isAccepted
+        ? "awarded"
+        : isRejected
+          ? "declined"
+          : isPending
+            ? "quoted"
+            : "open";
+      const rightFooter = isPending
+        ? `Quote ${formatINR(Number(existingQuote?.amount ?? 0))}`
+        : isAccepted
+          ? "Awarded"
+          : loadTypeDetail;
+      return (
+        <LoadCenterHubMobileIndentCard
+          key={load.id}
+          indent={load}
+          titleName={clientLabel}
+          statusLabel={statusLabel}
+          origin={load.pickup_area || "—"}
+          dest={load.drop_location || "—"}
+          pickupIso={load.pickup_date}
+          leftFooterLabel={vehicleDetail}
+          rightFooterLabel={rightFooter}
+          avatarUrl={loadAvatarByIndentId[load.id]}
+          onPress={() => onIndentPress(load)}
+        />
+      );
+    },
+    [loadAvatarByIndentId, myQuoteByIndentId, onIndentPress],
+  );
+
+  const renderClaimedMobileCard = useCallback(
+    (load: IndentRow, isDone: boolean) => {
+      const acceptedQuote = myQuotes.find(
+        (q) =>
+          (q.status || "").toLowerCase() === "accepted" &&
+          q.indent_id === load.id,
+      );
+      const supplierRate =
+        acceptedQuote?.amount != null
+          ? Number(acceptedQuote.amount)
+          : Number(load.client_price || 0);
+      const clientLabel = (
+        load.creator_organization_name ||
+        load.client_name ||
+        "Claimed load"
+      ).trim();
+      return (
+        <LoadCenterHubMobileIndentCard
+          key={load.id}
+          indent={load}
+          titleName={clientLabel}
+          statusLabel={isDone ? "completed" : "claimed"}
+          origin={load.pickup_area || "—"}
+          dest={load.drop_location || "—"}
+          pickupIso={load.pickup_date}
+          leftFooterLabel={(load.vehicle_type || "—").toUpperCase()}
+          rightFooterLabel={
+            isDone ? "On books" : formatINR(supplierRate)
+          }
+          avatarUrl={loadAvatarByIndentId[load.id]}
+          onPress={() => onIndentPress(load)}
+        />
+      );
+    },
+    [loadAvatarByIndentId, myQuotes, onIndentPress],
   );
 
   const renderClaimedLoadCard = (
@@ -1582,11 +1664,11 @@ export function LoadCenterView({
           compact={stretchInGrid}
         />
         <View style={styles.loadCardSpecsPanel}>
-          {renderLoadCardSpecsColumns(
-            vehicleDetail,
-            weightDetail,
-            loadTypeDetail,
-          )}
+          <LoadCardSpecsRow
+            vehicle={vehicleDetail}
+            weight={weightDetail}
+            loadType={loadTypeDetail}
+          />
           <View style={styles.loadCardQuoteHint}>
             <Text style={styles.loadCardQuoteHintText}>
               Agreed rate {formatINR(supplierRate)}
@@ -1597,13 +1679,13 @@ export function LoadCenterView({
           style={[
             styles.loadCardFooter,
             stretchInGrid && styles.loadCardFooterGrid,
-            compactIndentFooter && styles.loadCardFooterCompact,
+            stackIndentCardFooter && styles.loadCardFooterCompact,
           ]}
         >
           <View
             style={[
               styles.loadCardMeta,
-              compactIndentFooter && styles.loadCardMetaCompact,
+              stackIndentCardFooter && styles.loadCardMetaCompact,
             ]}
           >
             <View style={styles.bidMetaWrap}>
@@ -1629,10 +1711,15 @@ export function LoadCenterView({
           <View
             style={[
               styles.loadCardActions,
-              compactIndentFooter && styles.loadCardActionsCompact,
+              stackIndentCardFooter && styles.loadCardActionsCompact,
             ]}
           >
-            <View style={styles.loadCardActionCluster}>
+            <View
+              style={[
+                styles.loadCardActionCluster,
+                stackIndentCardFooter && styles.loadCardActionClusterStacked,
+              ]}
+            >
               <TouchableOpacity
                 style={styles.shareIndentIconBtn}
                 onPress={() => handleShareIndent(load)}
@@ -1681,8 +1768,43 @@ export function LoadCenterView({
   };
 
   return (
-    <View style={[styles.container, { paddingTop: contentTopPadding }]}>
-      {/* Dark header: sub-tabs + status filters — reference UI */}
+    <View
+      style={[
+        styles.container,
+        isMobileView && styles.containerMobileHub,
+        { paddingTop: contentTopPadding },
+      ]}
+    >
+      {isMobileView ? (
+        <LoadCenterHubMobileShell
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          mainTabs={[
+            {
+              key: "GIVE_LOAD",
+              label: "Give load",
+              count: hirePartnerLoads.length,
+            },
+            {
+              key: "GET_LOAD",
+              label: "Get load",
+              count: findWorkLoads.length,
+            },
+            {
+              key: "AWARDED",
+              label: "Claimed",
+              count: awardedLoads.length,
+            },
+          ]}
+          activeMainTab={loadSubTab}
+          onMainTabChange={setLoadSubTab}
+          statusTabs={mobileStatusTabs}
+          activeStatusTab={statusFilterTab}
+          onStatusTabChange={(id) => setStatusFilterTab(id as StatusFilterTab)}
+          showStatusTabs={!isClaimedTab}
+          onCreateIndentPress={onCreateIndentPress}
+        />
+      ) : (
       <View
         style={[
           styles.loadDarkHeader,
@@ -1934,12 +2056,14 @@ export function LoadCenterView({
           </View>
         ) : null}
       </View>
+      )}
 
       {/* Content area: rounded top, light bg — reference overlap */}
       <View
         style={[
           styles.loadContentWrap,
           isClaimedTab && styles.loadContentWrapClaimed,
+          isMobileView && styles.loadContentWrapMobileHub,
         ]}
       >
         <ScrollView
@@ -1947,6 +2071,7 @@ export function LoadCenterView({
           contentContainerStyle={[
             styles.scrollContent,
             isClaimedTab && styles.scrollContentClaimed,
+            isMobileView && styles.scrollContentMobileHub,
             { paddingBottom },
           ]}
           showsVerticalScrollIndicator={false}
@@ -1999,6 +2124,12 @@ export function LoadCenterView({
                           : "Awarded loads will appear here."}
                   </Text>
                 </View>
+              ) : isMobileView ? (
+                <LoadCenterHubMobileListCanvas>
+                  {filteredHirePartnerLoads.map((load) =>
+                    renderGiveLoadMobileCard(load),
+                  )}
+                </LoadCenterHubMobileListCanvas>
               ) : (
                 <View style={useGridLayout ? styles.gridList : undefined}>
                   <View style={styles.loadSectionHeaderBlock}>
@@ -2117,11 +2248,11 @@ export function LoadCenterView({
                             {getIndentDisplayNumber(load)}
                           </Text>
                           <View style={styles.loadCardSpecsPanel}>
-                            {renderLoadCardSpecsColumns(
-                              vehicleDetail,
-                              weightDetail,
-                              loadTypeDetail,
-                            )}
+                            <LoadCardSpecsRow
+                              vehicle={vehicleDetail}
+                              weight={weightDetail}
+                              loadType={loadTypeDetail}
+                            />
                             {(isAwaitingSupplierDeploy ||
                               status === "awarded") &&
                             awardedAmount != null ? (
@@ -2136,13 +2267,13 @@ export function LoadCenterView({
                             style={[
                               styles.loadCardFooter,
                               useGridLayout && styles.loadCardFooterGrid,
-                              compactIndentFooter && styles.loadCardFooterCompact,
+                              stackIndentCardFooter && styles.loadCardFooterCompact,
                             ]}
                           >
                             <View
                               style={[
                                 styles.loadCardMeta,
-                                compactIndentFooter &&
+                                stackIndentCardFooter &&
                                   styles.loadCardMetaCompact,
                               ]}
                             >
@@ -2226,11 +2357,17 @@ export function LoadCenterView({
                             <View
                               style={[
                                 styles.loadCardActions,
-                                compactIndentFooter &&
+                                stackIndentCardFooter &&
                                   styles.loadCardActionsCompact,
                               ]}
                             >
-                              <View style={styles.loadCardActionCluster}>
+                              <View
+                                style={[
+                                  styles.loadCardActionCluster,
+                                  stackIndentCardFooter &&
+                                    styles.loadCardActionClusterStacked,
+                                ]}
+                              >
                                 <TouchableOpacity
                                   style={styles.shareIndentIconBtn}
                                   onPress={() =>
@@ -2351,6 +2488,12 @@ export function LoadCenterView({
                   an integrated supplier to see loads from shippers.
                 </Text>
               </View>
+            ) : isMobileView ? (
+              <LoadCenterHubMobileListCanvas>
+                {filteredFindWorkList.map((load) =>
+                  renderGetLoadMobileCard(load),
+                )}
+              </LoadCenterHubMobileListCanvas>
             ) : (
               <View style={useGridLayout ? styles.gridList : undefined}>
                 <View style={styles.loadSectionRow}>
@@ -2545,11 +2688,11 @@ export function LoadCenterView({
                           {getIndentDisplayNumber(load)}
                         </Text>
                         <View style={styles.loadCardSpecsPanel}>
-                          {renderLoadCardSpecsColumns(
-                            vehicleDetail,
-                            weightDetail,
-                            loadTypeDetail,
-                          )}
+                          <LoadCardSpecsRow
+                            vehicle={vehicleDetail}
+                            weight={weightDetail}
+                            loadType={loadTypeDetail}
+                          />
                           <View style={styles.loadCardQuoteHint}>
                             <Text style={styles.loadCardQuoteHintText}>
                               Target{" "}
@@ -2567,13 +2710,13 @@ export function LoadCenterView({
                           style={[
                             styles.loadCardFooter,
                             useGridLayout && styles.loadCardFooterGrid,
-                            compactIndentFooter && styles.loadCardFooterCompact,
+                            stackIndentCardFooter && styles.loadCardFooterCompact,
                           ]}
                         >
                           <View
                             style={[
                               styles.loadCardMeta,
-                              compactIndentFooter && styles.loadCardMetaCompact,
+                              stackIndentCardFooter && styles.loadCardMetaCompact,
                             ]}
                           >
                             <View style={styles.bidMetaWrap}>
@@ -2606,11 +2749,17 @@ export function LoadCenterView({
                           <View
                             style={[
                               styles.loadCardActions,
-                              compactIndentFooter &&
+                              stackIndentCardFooter &&
                                 styles.loadCardActionsCompact,
                             ]}
                           >
-                            <View style={styles.loadCardActionCluster}>
+                            <View
+                              style={[
+                                styles.loadCardActionCluster,
+                                stackIndentCardFooter &&
+                                  styles.loadCardActionClusterStacked,
+                              ]}
+                            >
                               <TouchableOpacity
                                 style={styles.shareIndentIconBtn}
                                 onPress={() => handleShareIndent(load)}
@@ -2663,6 +2812,12 @@ export function LoadCenterView({
                   Claimed loads will appear here.
                 </Text>
               </View>
+            ) : isMobileView ? (
+              <LoadCenterHubMobileListCanvas>
+                {filteredClaimedLoads.map((load) =>
+                  renderClaimedMobileCard(load, false),
+                )}
+              </LoadCenterHubMobileListCanvas>
             ) : (
               <View style={styles.securedSection}>
                 <View style={styles.loadSectionRow}>
@@ -2712,39 +2867,31 @@ export function LoadCenterView({
               </View>
             ))}
         </ScrollView>
-        {loadSubTab === "GIVE_LOAD" ? (
+        {loadSubTab === "GIVE_LOAD" && !isMobileView ? (
           <View
             style={[
               styles.hirePartnerFabWrap,
               { bottom: hirePartnerFabBottom, pointerEvents: "box-none" },
             ]}
           >
-            {isMobileView ? (
-              <FinanceFAB
-                onPress={onCreateIndentPress}
-                accessibilityLabel="Broadcast New Indent"
-                icon="package"
+            <TouchableOpacity
+              style={styles.hirePartnerFab}
+              onPress={onCreateIndentPress}
+              activeOpacity={0.9}
+              accessibilityLabel="Broadcast New Indent"
+            >
+              <SemanticAddIcon
+                IconComponent={Package}
+                iconSize={20}
+                iconColor={Theme.textOnPrimary}
+                badgeSize={18}
+                badgeIconSize={13}
+                badgeBackgroundColor="#FFFFFF"
+                badgeIconColor={Theme.darkBackground}
+                badgeOffsetX={-7}
+                badgeOffsetY={-6}
               />
-            ) : (
-              <TouchableOpacity
-                style={styles.hirePartnerFab}
-                onPress={onCreateIndentPress}
-                activeOpacity={0.9}
-                accessibilityLabel="Broadcast New Indent"
-              >
-                <SemanticAddIcon
-                  IconComponent={Package}
-                  iconSize={20}
-                  iconColor={Theme.textOnPrimary}
-                  badgeSize={18}
-                  badgeIconSize={13}
-                  badgeBackgroundColor="#FFFFFF"
-                  badgeIconColor={Theme.darkBackground}
-                  badgeOffsetX={-7}
-                  badgeOffsetY={-6}
-                />
-              </TouchableOpacity>
-            )}
+            </TouchableOpacity>
           </View>
         ) : null}
       </View>
@@ -4385,6 +4532,9 @@ const LOAD_BROADCAST_MUTED = "#829ab1";
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Theme.darkBackground },
+  containerMobileHub: {
+    backgroundColor: LOADS_HUB_PAGE_BG,
+  },
   loadDarkHeader: {
     backgroundColor: Theme.screenBackground,
     paddingHorizontal: Layout.screenPaddingHorizontal,
@@ -4650,10 +4800,20 @@ const styles = StyleSheet.create({
   loadContentWrapClaimed: {
     marginTop: 0,
   },
+  loadContentWrapMobileHub: {
+    backgroundColor: LOADS_HUB_PAGE_BG,
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    marginTop: 0,
+  },
   scroll: { flex: 1 },
   scrollContent: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 12,
+  },
+  scrollContentMobileHub: {
+    paddingHorizontal: 0,
+    paddingTop: 8,
   },
   loadSectionRow: {
     flexDirection: "row",
@@ -5151,7 +5311,7 @@ const styles = StyleSheet.create({
     flexDirection: "column",
     alignItems: "stretch",
     flexWrap: "wrap",
-    rowGap: 12,
+    rowGap: 10,
     columnGap: 0,
   },
   loadCardMeta: {
@@ -5189,6 +5349,7 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     justifyContent: "flex-end",
     width: "100%",
+    maxWidth: "100%",
   },
   loadCardActionCluster: {
     flexDirection: "row",
@@ -5198,6 +5359,13 @@ const styles = StyleSheet.create({
     gap: 8,
     flexGrow: 0,
     flexShrink: 0,
+  },
+  loadCardActionClusterStacked: {
+    flexWrap: "wrap",
+    rowGap: 8,
+    flexShrink: 1,
+    maxWidth: "100%",
+    alignSelf: "flex-end",
   },
   shareIndentBtn: {
     flexDirection: "row",

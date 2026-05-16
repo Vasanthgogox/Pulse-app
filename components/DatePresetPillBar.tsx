@@ -1,10 +1,10 @@
 /**
- * Horizontal date preset pills (Treasury / Finance / detail trip lists).
+ * Horizontal date preset pills (Finance, entity detail, load board).
+ * Light variant matches Trips hub date chips (compact tray + black active pill).
  */
 import Theme from "@/constants/Theme";
 import type { FinancePeriodFilter } from "@/features/finance/types";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { useMemo } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -13,13 +13,20 @@ import {
   View,
 } from "react-native";
 
-const PRESETS: { id: FinancePeriodFilter; label: string }[] = [
+const LIGHT_PRESETS: { id: FinancePeriodFilter; label: string }[] = [
+  { id: "RANGE", label: "All" },
   { id: "TODAY", label: "Today" },
   { id: "YESTERDAY", label: "Yesterday" },
-  { id: "WEEK", label: "This week" },
-  { id: "MONTH", label: "This month" },
+  { id: "WEEK", label: "Week" },
+  { id: "MONTH", label: "Month" },
+];
+
+const DARK_PRESETS: { id: FinancePeriodFilter; label: string }[] = [
   { id: "RANGE", label: "All" },
-  { id: "CUSTOM", label: "Custom" },
+  { id: "TODAY", label: "Today" },
+  { id: "YESTERDAY", label: "Yesterday" },
+  { id: "WEEK", label: "Week" },
+  { id: "MONTH", label: "Month" },
 ];
 
 export interface DatePresetPillBarProps {
@@ -29,105 +36,90 @@ export interface DatePresetPillBarProps {
   onCustomRangePress: () => void;
   customFrom?: string | null;
   customTo?: string | null;
-  /** Dark background (Finance header) vs light card. */
+  /** Dark background (legacy headers) vs light card (Finance / Trips parity). */
   variant?: "onDark" | "onLight";
-}
-
-function formatShortRange(from: string, to: string): string {
-  const a = from.slice(0, 10);
-  const b = to.slice(0, 10);
-  if (!a || !b) return "Custom";
-  try {
-    const da = new Date(a + "T12:00:00");
-    const db = new Date(b + "T12:00:00");
-    const fa = da.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
-    const fb = db.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
-    return fa === fb ? fa : `${fa}–${fb}`;
-  } catch {
-    return "Custom";
-  }
 }
 
 export function DatePresetPillBar({
   period,
   onPeriodChange,
   onCustomRangePress,
-  customFrom,
-  customTo,
+  customFrom: _customFrom,
+  customTo: _customTo,
   variant = "onDark",
 }: DatePresetPillBarProps) {
-  const onDark = variant === "onDark";
-  const customSummary = useMemo(() => {
-    if (period !== "CUSTOM" || !customFrom || !customTo) return null;
-    return formatShortRange(customFrom, customTo);
-  }, [period, customFrom, customTo]);
+  const onLight = variant === "onLight";
+  const presets = onLight ? LIGHT_PRESETS : DARK_PRESETS;
+  const customActive = period === "CUSTOM";
 
   return (
     <View style={styles.wrap}>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={[
+          onLight ? styles.lightTrayScroll : styles.darkScrollContent,
+          onLight && styles.lightTrayScrollInner,
+        ]}
+        style={onLight ? styles.lightTrayScrollView : undefined}
       >
-        {PRESETS.map(({ id, label }) => {
-          const isCustom = id === "CUSTOM";
-          const active =
-            period === id ||
-            (isCustom && period === "CUSTOM" && !!customFrom && !!customTo);
-          const displayLabel =
-            isCustom && customSummary ? customSummary : label;
-          return (
-            <TouchableOpacity
-              key={id}
-              style={[
-                styles.pill,
-                onDark ? styles.pillDark : styles.pillLight,
-                active &&
-                  (onDark ? styles.pillActiveDark : styles.pillActiveLight),
-              ]}
-              onPress={() => {
-                if (isCustom) {
-                  onCustomRangePress();
-                  return;
-                }
-                onPeriodChange(id);
-              }}
-              activeOpacity={0.85}
-              accessibilityRole="button"
-              accessibilityLabel={displayLabel}
-            >
-              <Text
+        <View style={onLight ? styles.lightTray : styles.darkTray}>
+          {presets.map(({ id, label }) => {
+            const active = period === id;
+            return (
+              <TouchableOpacity
+                key={id}
                 style={[
-                  styles.pillText,
-                  onDark ? styles.pillTextDark : styles.pillTextLight,
+                  onLight ? styles.lightChip : styles.darkPill,
                   active &&
-                    (onDark
-                      ? styles.pillTextActiveDark
-                      : styles.pillTextActiveLight),
+                    (onLight ? styles.lightChipActive : styles.darkPillActive),
                 ]}
-                numberOfLines={1}
+                onPress={() => onPeriodChange(id)}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={label}
               >
-                {displayLabel}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-        <TouchableOpacity
-          style={[
-            styles.iconPill,
-            onDark ? styles.pillDark : styles.pillLight,
-          ]}
-          onPress={onCustomRangePress}
-          activeOpacity={0.85}
-          accessibilityRole="button"
-          accessibilityLabel="Pick date range"
-        >
-          <FontAwesome
-            name="calendar"
-            size={14}
-            color={onDark ? Theme.textOnDark : Theme.textSecondary}
-          />
-        </TouchableOpacity>
+                <Text
+                  style={[
+                    onLight ? styles.lightChipText : styles.darkPillText,
+                    active &&
+                      (onLight
+                        ? styles.lightChipTextActive
+                        : styles.darkPillTextActive),
+                  ]}
+                  numberOfLines={1}
+                >
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+          <TouchableOpacity
+            style={[
+              onLight ? styles.lightIconBtn : styles.darkIconPill,
+              customActive &&
+                (onLight ? styles.lightChipActive : styles.darkPillActive),
+            ]}
+            onPress={onCustomRangePress}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Pick custom date range"
+          >
+            <FontAwesome
+              name="calendar"
+              size={12}
+              color={
+                customActive
+                  ? Theme.textOnPrimary
+                  : onLight
+                    ? Theme.textRouteCard
+                    : Theme.textOnDarkMuted
+              }
+            />
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </View>
   );
@@ -135,64 +127,121 @@ export function DatePresetPillBar({
 
 const styles = StyleSheet.create({
   wrap: {
-    marginHorizontal: -2,
+    marginHorizontal: 0,
     marginBottom: 0,
   },
-  scrollContent: {
+  lightTrayScrollView: {
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  lightTrayScroll: {
+    flexGrow: 1,
+    flexShrink: 1,
+  },
+  lightTrayScrollInner: {
+    paddingRight: 4,
+  },
+  lightTray: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingVertical: 6,
+    gap: 4,
+    paddingVertical: 3,
+    paddingHorizontal: 3,
+    borderRadius: 14,
+    backgroundColor: Theme.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+  },
+  lightChip: {
+    minHeight: 28,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  lightChipActive: {
+    borderColor: Theme.iconPrimary,
+    backgroundColor: Theme.iconPrimary,
+    shadowColor: Theme.shadow,
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
+  },
+  lightChipText: {
+    fontSize: 9,
+    fontWeight: "600",
+    color: Theme.textRouteCard,
+    letterSpacing: 0.35,
+    textTransform: "uppercase",
+    textAlign: "center",
+  },
+  lightChipTextActive: {
+    color: Theme.textOnPrimary,
+  },
+  lightIconBtn: {
+    minHeight: 28,
+    minWidth: 28,
+    paddingHorizontal: 7,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  darkScrollContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 4,
     paddingHorizontal: 2,
   },
-  pill: {
-    minHeight: 40,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
+  darkTray: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  darkPill: {
+    minHeight: 32,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: 999,
     borderWidth: 1,
+    backgroundColor: Theme.driverSurfaceElevated,
+    borderColor: "rgba(255,255,255,0.18)",
     alignItems: "center",
     justifyContent: "center",
   },
-  iconPill: {
-    width: 42,
-    height: 40,
-    borderRadius: 999,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  pillDark: {
-    backgroundColor: "#17191f",
-    borderColor: "rgba(255,255,255,0.14)",
-  },
-  pillLight: {
-    backgroundColor: Theme.screenBackground,
-    borderColor: Theme.surfaceBorder,
-  },
-  pillActiveDark: {
+  darkPillActive: {
     backgroundColor: Theme.textOnDark,
     borderColor: Theme.textOnDark,
   },
-  pillActiveLight: {
-    backgroundColor: Theme.iconPrimary,
-    borderColor: Theme.iconPrimary,
-  },
-  pillText: {
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 0.1,
-  },
-  pillTextDark: {
+  darkPillText: {
+    fontSize: 10,
+    fontWeight: "600",
     color: Theme.textOnDarkMuted,
+    letterSpacing: 0.2,
+    textTransform: "uppercase",
   },
-  pillTextLight: {
-    color: Theme.textSecondary,
-  },
-  pillTextActiveDark: {
+  darkPillTextActive: {
     color: Theme.darkBackground,
+    fontWeight: "700",
   },
-  pillTextActiveLight: {
-    color: Theme.screenBackground,
+  darkIconPill: {
+    width: 32,
+    height: 32,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
+    backgroundColor: Theme.driverSurfaceElevated,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

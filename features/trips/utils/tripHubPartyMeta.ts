@@ -19,6 +19,7 @@ export function isUuidLikeString(value: string | null | undefined): boolean {
 
 export type TripHubPartyMeta = {
   displaySupplierName: string;
+  displayDriverName: string;
   clientAvatarUrl: string | null;
   clientAvatarSeed: string | null;
   supplierAvatarUrl: string | null;
@@ -92,6 +93,18 @@ function resolveSupplierName(
   return "";
 }
 
+function resolveDriverName(
+  t: TripRow,
+  driverById: Map<string, DriverRow>,
+): string {
+  const fromTrip = (t.driver_display_name ?? "").trim();
+  if (fromTrip && !isUuidLikeString(fromTrip)) return fromTrip;
+  const did = (t.driver_id ?? "").trim().toLowerCase();
+  if (!did) return "";
+  const row = driverById.get(did);
+  return (row?.name ?? "").trim();
+}
+
 /** Supplier / client / driver avatar fields for hub cards and table (org logos resolved in UI via linked-org map). */
 export function buildTripHubPartyMetaByTripId(
   tripsList: TripRow[],
@@ -151,6 +164,7 @@ export function buildTripHubPartyMetaByTripId(
 
     meta.set(t.id, {
       displaySupplierName,
+      displayDriverName: resolveDriverName(t, driverById),
       clientAvatarUrl: (clientRow?.avatar_url ?? "").trim() || null,
       clientAvatarSeed: (clientRow?.avatar_seed ?? "").trim() || null,
       supplierAvatarUrl: (supplierRow?.avatar_url ?? "").trim() || null,

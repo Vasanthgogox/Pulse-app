@@ -3,11 +3,12 @@
  * to broadcast as a 24h story (create-post).
  */
 import { LoadCardRouteRow } from "@/components/LoadCardRouteRow";
+import { LoadCardSpecsRow } from "@/components/LoadCardSpecsRow";
 import Theme from "@/constants/Theme";
 import { BidReceivedHammer, getIndentDisplayNumber, type IndentRow } from "@/features/indents";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Check } from "lucide-react-native";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 function giveLoadStatusPillStyles(status: string): { pill: object; text: object } {
   const s = (status || "").toLowerCase();
@@ -126,53 +127,11 @@ export function BroadcastPickIndentCard({
         {getIndentDisplayNumber(load)}
       </Text>
       <View style={styles.loadCardSpecsPanel}>
-        <View style={styles.loadCardSpecsGrid}>
-          <View style={styles.loadCardSpecsLabelsRow}>
-            <View style={styles.loadCardSpecCell}>
-              <Text style={styles.loadCardSpecLabel}>Vehicle</Text>
-            </View>
-            <View style={[styles.loadCardSpecCell, styles.loadCardSpecDivider]}>
-              <Text style={styles.loadCardSpecLabel}>Load</Text>
-            </View>
-            <View
-              style={[
-                styles.loadCardSpecCell,
-                styles.loadCardSpecDivider,
-                styles.loadCardSpecCellRight,
-              ]}
-            >
-              <Text style={[styles.loadCardSpecLabel, styles.loadCardSpecLabelRight]}>
-                Weight
-              </Text>
-            </View>
-          </View>
-          <View style={styles.loadCardSpecsValuesRow}>
-            <View style={styles.loadCardSpecCell}>
-              <Text style={styles.loadCardSpecValue} numberOfLines={2}>
-                {vehicleDetail}
-              </Text>
-            </View>
-            <View style={[styles.loadCardSpecCell, styles.loadCardSpecDivider]}>
-              <Text style={styles.loadCardSpecValue} numberOfLines={2}>
-                {loadTypeDetail}
-              </Text>
-            </View>
-            <View
-              style={[
-                styles.loadCardSpecCell,
-                styles.loadCardSpecDivider,
-                styles.loadCardSpecCellRight,
-              ]}
-            >
-              <Text
-                style={[styles.loadCardSpecValue, styles.loadCardSpecValueRight]}
-                numberOfLines={2}
-              >
-                {weightDetail}
-              </Text>
-            </View>
-          </View>
-        </View>
+        <LoadCardSpecsRow
+          vehicle={vehicleDetail}
+          weight={weightDetail}
+          loadType={loadTypeDetail}
+        />
       </View>
       <View style={styles.pickerHintRow}>
         <View style={styles.bidMetaWrap}>
@@ -304,54 +263,6 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
     marginBottom: 4,
     zIndex: 1,
-  },
-  loadCardSpecsGrid: { gap: 6 },
-  loadCardSpecsLabelsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-start",
-    gap: 0,
-  },
-  loadCardSpecsValuesRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "flex-start",
-    gap: 0,
-  },
-  loadCardSpecCell: { flex: 1, minWidth: 0 },
-  loadCardSpecCellRight: {
-    alignItems: "flex-end",
-  },
-  loadCardSpecDivider: {
-    borderLeftWidth: 1,
-    borderLeftColor: Theme.borderMedium,
-    paddingLeft: 10,
-    marginLeft: 4,
-  },
-  loadCardSpecLabel: {
-    fontSize: 8,
-    fontWeight: "600",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  loadCardSpecValue: {
-    fontSize: 8,
-    fontWeight: "500",
-    color: Theme.textSecondary,
-    lineHeight: 12,
-    ...Platform.select({
-      android: { includeFontPadding: false as const },
-      default: {},
-    }),
-  },
-  loadCardSpecLabelRight: {
-    textAlign: "right",
-    alignSelf: "stretch",
-  },
-  loadCardSpecValueRight: {
-    textAlign: "right",
-    alignSelf: "stretch",
   },
   pickerHintRow: {
     marginTop: 4,
