@@ -784,6 +784,7 @@ export default function VehicleDetailScreen({
               showHistoryHeader={false}
               showGridFooter={false}
               embedInParentScroll={true}
+              expandedDesktopThreeColumn
               driverRows={driverRowsForLedger}
             />
           </View>

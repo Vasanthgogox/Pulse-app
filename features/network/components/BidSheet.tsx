@@ -1,36 +1,36 @@
 /**
  * BidSheet — bottom sheet for submitting or editing a bid on a load post.
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from '@/constants/Theme';
 import { createDirectQuote } from '@/features/indents/services/direct-quotes.service';
 import { type BidRow } from '@/features/network/services/bids.service';
 import { type PostRow } from '@/features/network/services/posts.service';
+import { formatINR } from '@/lib/format';
 import { useSubmitBidMutation, useUpdateBidMutation } from '@/lib/queries';
 import { queryKeys } from '@/lib/queryKeys';
-import { formatINR } from '@/lib/format';
+import { useQueryClient } from '@tanstack/react-query';
 import {
-  Edit3,
-  MessageSquare,
-  ThumbsUp,
-  Truck,
-  X,
+    Edit3,
+    MessageSquare,
+    ThumbsUp,
+    Truck,
+    X,
 } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-  type TextStyle,
+    Alert,
+    Animated,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    Pressable,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
+    type TextStyle,
 } from 'react-native';
-import { useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface BidSheetProps {
@@ -247,7 +247,7 @@ export function BidSheet({ visible, post, orgId, existingBid, onClose, onSuccess
                   disabled={!canSubmit}
                 >
                   {isPending ? (
-                    <ActivityIndicator color="#fff" />
+                    <LoadingIndicator color="#fff" />
                   ) : (
                     <>
                       {isEditMode ? <Edit3 size={16} color="#fff" /> : <ThumbsUp size={16} color="#fff" />}

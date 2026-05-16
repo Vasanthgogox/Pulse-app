@@ -1,4 +1,5 @@
-import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import type { ChatReportData } from "@/services/opsAgentService";
 import type { OpsRef } from "../types";
@@ -89,7 +90,7 @@ export function OpsAgentReportCard({
         disabled={isDownloading}
       >
         {isDownloading ? (
-          <ActivityIndicator size="small" color={REF.amber} />
+          <LoadingIndicator size="small" color={REF.amber} />
         ) : (
           <FontAwesome name="file-pdf-o" size={16} color={REF.amber} />
         )}

@@ -9,6 +9,7 @@
  *  - Double-tap guard: buttons are disabled while an operation is in-flight.
  *  - Rollback: if DB update fails after storage write, orphan file is cleaned up (in service).
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
@@ -17,7 +18,6 @@ import * as Linking from 'expo-linking';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Image,
   Modal,
@@ -423,7 +423,7 @@ export function VehicleDocumentsSection({
                       disabled={isBusy}
                     >
                       {busy ? (
-                        <ActivityIndicator size="small" color={Theme.primary} />
+                        <LoadingIndicator size="small" color={Theme.primary} />
                       ) : (
                         <FontAwesome name="refresh" size={12} color={Theme.primary} />
                       )}
@@ -436,7 +436,7 @@ export function VehicleDocumentsSection({
                       disabled={isBusy}
                     >
                       {busy ? (
-                        <ActivityIndicator size="small" color={Theme.teslaRed} />
+                        <LoadingIndicator size="small" color={Theme.teslaRed} />
                       ) : (
                         <FontAwesome name="trash-o" size={12} color={Theme.teslaRed} />
                       )}
@@ -451,7 +451,7 @@ export function VehicleDocumentsSection({
                     hitSlop={Layout.touchTargetHitSlop}
                   >
                     {busy ? (
-                      <ActivityIndicator size="small" color={Theme.textOnPrimary} />
+                      <LoadingIndicator size="small" color={Theme.textOnPrimary} />
                     ) : (
                       <>
                         <FontAwesome name="cloud-upload" size={14} color={Theme.textOnPrimary} />
@@ -539,7 +539,7 @@ export function VehicleDocumentsSection({
                 disabled={!!busyType || !pendingFile || !expiryModalType}
               >
                 {busyType ? (
-                  <ActivityIndicator size="small" color={Theme.textOnPrimary} />
+                  <LoadingIndicator size="small" color={Theme.textOnPrimary} />
                 ) : (
                   <Text style={styles.modalConfirmText}>Upload & Save</Text>
                 )}
@@ -586,7 +586,7 @@ export function VehicleDocumentsSection({
               </View>
               <View style={styles.previewBody}>
                 {previewLoading ? (
-                  <ActivityIndicator size="large" color={Theme.primary} />
+                  <LoadingIndicator size="large" color={Theme.primary} />
                 ) : previewUrl ? (
                   <Image
                     source={{ uri: previewUrl }}

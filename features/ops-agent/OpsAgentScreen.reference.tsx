@@ -3,6 +3,7 @@
  * Conversational commands via Gemini (e.g. "Add a client"); in-chat confirmation cards, report PDF.
  * Used by app/(tabs)/index (tab) and can be used by other routes.
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { getClientsByOrganization, updateClient } from "@/features/clients";
@@ -35,7 +36,6 @@ import { useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   Image,
   Keyboard,
@@ -1218,7 +1218,7 @@ export default function OpsAgentScreen() {
                             disabled={pdfDownloadingTitle === msg.reportData?.title}
                           >
                             {pdfDownloadingTitle === msg.reportData?.title ? (
-                              <ActivityIndicator size="small" color={REF.amber} />
+                              <LoadingIndicator size="small" color={REF.amber} />
                             ) : (
                               <FontAwesome name="file-pdf-o" size={16} color={REF.amber} />
                             )}

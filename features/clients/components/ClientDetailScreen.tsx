@@ -9,6 +9,7 @@ import { DateRangePickerModal } from "@/components/DateRangePickerModal";
 import { entityCompanionCardStyles as ecc } from "@/components/entityCompanionCard.styles";
 import { entityHeroScorecardStyles as ehs } from "@/components/entityHeroScorecard.styles";
 import { FinanceFAB } from "@/components/FinanceFAB";
+import { EntityIdentityAvatar } from "@/components/EntityIdentityAvatar";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -24,12 +25,19 @@ import {
     type LedgerRow,
 } from "@/features/finance";
 import { LedgerTransactionListView } from "@/features/finance/components/LedgerTransactionListView";
+import {
+  buildFinancialRowDataForLedgerRow,
+  resolveLedgerPartyName,
+  type LedgerTripDetailsMap,
+  type LedgerTripPartyMap,
+} from "@/features/finance/components/ledger/buildFinancialRowDataForLedgerRow";
 import { TreasuryDetailLayout } from "@/features/finance/components/TreasuryDetailLayout";
 import { ledgerDayMatchesPeriod } from "@/features/finance/lib/filterLedgerByPeriod";
 import {
     getTripSubcontracts,
     type TripSubcontractRow,
 } from "@/features/finance/services/tripSubcontracts.service";
+import { getProfileImageBatch } from "@/features/finance/services/finance.service";
 import type { FinancePeriodFilter } from "@/features/finance/types";
 import { allocateAmountsToLargestDueTrips } from "@/features/finance/utils/allocateToLargestDue";
 import { averageScore } from "@/features/ratings";
@@ -55,6 +63,11 @@ import {
 } from "@/lib/capabilities";
 import { tripDayIso } from "@/lib/dateRangePresets";
 import { formatINR, formatLedgerDate } from "@/lib/format";
+import {
+  type LedgerIdentityContext,
+  resolveLedgerRowPartyIdentity,
+} from "@/lib/entityIdentity";
+import { useDisputeMapQuery } from "@/lib/queries";
 import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import { useQueryClient } from "@tanstack/react-query";
@@ -250,6 +263,18 @@ export default function ClientDetailScreen({
   >({});
   const fetchedPartnerOrgIdsRef = useRef<Set<string>>(new Set());
   const [transactions, setTransactions] = useState<LedgerRow[]>([]);
+  /** Full org ledger for same-trip payment summary in Cash Flow expand (matches Finance Cash). */
+  const [allOrgTransactions, setAllOrgTransactions] = useState<LedgerRow[]>([]);
+  const [organizationClients, setOrganizationClients] = useState<ClientRow[]>(
+    [],
+  );
+  const [expandedCashFlowRowId, setExpandedCashFlowRowId] = useState<
+    string | null
+  >(null);
+  /** Storage-resolved driver avatar URLs for Cash Flow (Finance Cash / LedgerTab parity). */
+  const [cashFlowDriverProfileUrls, setCashFlowDriverProfileUrls] = useState<
+    Record<string, string>
+  >({});
   const [, setOrgTrips] = useState<TripRow[]>([]);
   const [showReportModal, setShowReportModal] = useState(false);
   /** Bumps SharedLedgerContent to open PDF/Excel (Shared tab) from header download. */
@@ -433,6 +458,10 @@ export default function ClientDetailScreen({
             clientsRes.error ? [] : (clientsRes.clients ?? []),
           );
           const allTx = txRes.error ? [] : (txRes.transactions ?? []);
+          setOrganizationClients(
+            clientsRes.error ? [] : (clientsRes.clients ?? []),
+          );
+          setAllOrgTransactions(allTx);
           // Include trips by client_id/name OR by any client transaction (so DUE shows even if trip.client_id is wrong)
           const tripIdsFromClientTx = new Set(
             allTx
@@ -525,6 +554,43 @@ export default function ClientDetailScreen({
     client ? [client] : [],
     suppliers,
   );
+
+  const { disputesByTripId } = useDisputeMapQuery(
+    currentOrganization?.id ?? null,
+  );
+
+  /** Fetch signed driver avatar URLs for ledger rows (same as LedgerTab / Finance cash). */
+  useEffect(() => {
+    const collectDriverIds = (rows: LedgerRow[]) => {
+      const out: string[] = [];
+      const seen = new Set<string>();
+      for (const row of rows) {
+        if (row.contact_type !== "driver" || !row.contact_id) continue;
+        const id = String(row.contact_id).trim();
+        if (!id || seen.has(id)) continue;
+        if (cashFlowDriverProfileUrls[id]) continue;
+        seen.add(id);
+        out.push(id);
+      }
+      return out;
+    };
+    const driverIds = [
+      ...new Set([
+        ...collectDriverIds(allOrgTransactions),
+        ...collectDriverIds(transactions),
+      ]),
+    ];
+    if (driverIds.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      const fetched = await getProfileImageBatch(driverIds);
+      if (cancelled || Object.keys(fetched).length === 0) return;
+      setCashFlowDriverProfileUrls((prev) => ({ ...prev, ...fetched }));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [transactions, allOrgTransactions, cashFlowDriverProfileUrls]);
 
   /** Supplier-typed ledger rows often carry the human supplier name when the trip row omits it. */
   const supplierPartyNameByTripId = useMemo(() => {
@@ -837,29 +903,129 @@ export default function ClientDetailScreen({
     [trips],
   );
 
-  /** Trip details map for Cash Flow list (same shape as Finance Cash page). */
+  /** Trip details map for Cash Flow list (same shape as Finance Cash page — includes vehicle + rates for expanded card). */
   const clientTripDetailsMap = useMemo(() => {
-    const m: Record<
-      string,
-      {
-        trip_number: string;
-        drop_location?: string;
-        pickup_area?: string;
-        client_name?: string;
-        pickup_date?: string | null;
-      }
-    > = {};
+    const m: LedgerTripDetailsMap = {};
     trips.forEach((t) => {
+      const supId = String(t.supplier_id ?? "").trim();
+      const supRow = supId
+        ? suppliers.find((s) => String(s.id).trim() === supId)
+        : undefined;
       m[t.id] = {
         trip_number: getTripDisplayNumber(t),
         drop_location: t.drop_location ?? undefined,
         pickup_area: t.pickup_area ?? undefined,
         client_name: t.client_name ?? undefined,
         pickup_date: t.pickup_date ?? undefined,
+        vehicle_number:
+          (t as { vehicle_display_number?: string | null }).vehicle_display_number ??
+          undefined,
+        client_price: t.client_price != null ? Number(t.client_price) : null,
+        supplier_rate: t.supplier_rate != null ? Number(t.supplier_rate) : null,
+        driver_commission:
+          t.driver_commission != null ? Number(t.driver_commission) : null,
+        supplier_id: t.supplier_id ?? null,
+        supplier_display_name:
+          (supRow?.name ?? supRow?.company_name ?? "").trim() || undefined,
       };
     });
     return m;
+  }, [trips, suppliers]);
+
+  const tripPartyMapForCash = useMemo((): LedgerTripPartyMap => {
+    const m: LedgerTripPartyMap = {};
+    for (const t of trips) {
+      m[t.id] = {
+        client_id: t.client_id ?? null,
+        supplier_id: t.supplier_id ?? null,
+        driver_id: t.driver_id ?? null,
+      };
+    }
+    return m;
   }, [trips]);
+
+  const getVehicleNumberForTripId = useCallback(
+    (tripId: string | null) => {
+      if (!tripId) return null;
+      const t = trips.find((x) => String(x.id) === String(tripId));
+      const v = (t as { vehicle_display_number?: string | null } | undefined)
+        ?.vehicle_display_number;
+      return (v ?? "").trim() || null;
+    },
+    [trips],
+  );
+
+  const clientByIdForLedger = useMemo(
+    () => new Map(organizationClients.map((c) => [c.id, c])),
+    [organizationClients],
+  );
+
+  const supplierByIdForLedger = useMemo(
+    () => new Map(suppliers.map((s) => [s.id, s])),
+    [suppliers],
+  );
+
+  const driverByIdForCashExpand = useMemo(
+    () => new Map(drivers.map((d) => [d.id, d])),
+    [drivers],
+  );
+
+  const cashFlowTransactionRows = useMemo(() => {
+    const partyParams = {
+      clientById: clientByIdForLedger,
+      supplierById: supplierByIdForLedger,
+      tripPartyMap: tripPartyMapForCash,
+      tripDetailsMap: clientTripDetailsMap,
+    };
+    return transactions.map((r) => ({
+      ...r,
+      party_name: resolveLedgerPartyName(r, partyParams),
+    }));
+  }, [
+    transactions,
+    clientByIdForLedger,
+    supplierByIdForLedger,
+    tripPartyMapForCash,
+    clientTripDetailsMap,
+  ]);
+
+  const expandedCashFlowRowData = useMemo(() => {
+    if (!expandedCashFlowRowId) return null;
+    const row = cashFlowTransactionRows.find(
+      (r) => r.id === expandedCashFlowRowId,
+    );
+    if (!row) return null;
+    return buildFinancialRowDataForLedgerRow(row, {
+      allRows: allOrgTransactions,
+      tripDetailsMap: clientTripDetailsMap,
+      tripPartyMap: tripPartyMapForCash,
+      clientById: clientByIdForLedger,
+      supplierById: supplierByIdForLedger,
+      driverById: driverByIdForCashExpand,
+      getVehicleNumberForTripId,
+      linkedOrgDisplayMap,
+      profileImages: cashFlowDriverProfileUrls,
+      driverProfileImageUrls: cashFlowDriverProfileUrls,
+      disputesByTripId,
+    });
+  }, [
+    expandedCashFlowRowId,
+    cashFlowTransactionRows,
+    allOrgTransactions,
+    clientTripDetailsMap,
+    tripPartyMapForCash,
+    clientByIdForLedger,
+    supplierByIdForLedger,
+    driverByIdForCashExpand,
+    getVehicleNumberForTripId,
+    linkedOrgDisplayMap,
+    cashFlowDriverProfileUrls,
+    disputesByTripId,
+  ]);
+
+  useEffect(() => {
+    if (detailSubTab !== "cash") setExpandedCashFlowRowId(null);
+  }, [detailSubTab]);
 
   const triggerSuccess = useCallback((title = "NODE_SYNCED") => {
     setSuccessTitle(title);
@@ -2262,7 +2428,14 @@ export default function ClientDetailScreen({
         {detailSubTab === "cash" && (
           <View style={styles.cashSection}>
             <LedgerTransactionListView
-              transactions={transactions}
+              transactions={cashFlowTransactionRows}
+              onRowPress={(id) => {
+                setExpandedCashFlowRowId((prev) => (prev === id ? null : id));
+              }}
+              expandedRowId={expandedCashFlowRowId}
+              expandedRowData={expandedCashFlowRowData}
+              highlightId={expandedCashFlowRowId}
+              expandedDesktopThreeColumn
               tripDetailsMap={clientTripDetailsMap}
               tripOptions={tripOptions.map((t) => ({
                 id: t.id,
@@ -2277,6 +2450,34 @@ export default function ClientDetailScreen({
               showGridFooter={false}
               embedInParentScroll={true}
               driverRows={drivers}
+              driverProfileImageUrls={cashFlowDriverProfileUrls}
+              renderPartyAvatar={(row) => {
+                const name = resolveLedgerPartyName(row, {
+                  clientById: clientByIdForLedger,
+                  supplierById: supplierByIdForLedger,
+                  tripPartyMap: tripPartyMapForCash,
+                  tripDetailsMap: clientTripDetailsMap,
+                });
+                const ctx: LedgerIdentityContext = {
+                  clientById: clientByIdForLedger,
+                  supplierById: supplierByIdForLedger,
+                  driverById: driverByIdForCashExpand,
+                  linkedOrgDisplayMap,
+                  profileImages: cashFlowDriverProfileUrls,
+                  driverProfileImageUrls: cashFlowDriverProfileUrls,
+                  tripPartyMap: tripPartyMapForCash,
+                  partyDisplayName: name,
+                };
+                const identity = resolveLedgerRowPartyIdentity(row, ctx);
+                if (!identity) return null;
+                return (
+                  <EntityIdentityAvatar
+                    identity={identity}
+                    size="md"
+                    showIntegrationBadge
+                  />
+                );
+              }}
             />
           </View>
         )}

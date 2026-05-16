@@ -417,8 +417,9 @@ export default function DriverChatScreen() {
   const router = useRouter();
   /** Match `app/(driver)/index.tsx` — tab bar is `position: 'absolute'`, so content must clear the glass dock. */
   const driverTabBarClearance = useMemo(() => {
-    const tabBarVerticalPad = Math.max(insets.bottom / 4, 4);
-    return Layout.tabBarDockHeight + tabBarVerticalPad + (tabBarVerticalPad + 6);
+    const footerPadTop = 4;
+    const footerPadBottom = Math.max(Math.round(insets.bottom * 0.35), 10);
+    return Layout.tabBarDockHeight + footerPadTop + footerPadBottom;
   }, [insets.bottom]);
   const screenPadding = useMemo(
     () => ({ paddingTop: insets.top, paddingBottom: driverTabBarClearance }),

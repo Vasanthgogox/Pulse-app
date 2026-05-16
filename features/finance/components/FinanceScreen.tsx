@@ -1,3 +1,4 @@
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import type {
     DriverPaymentType,
     PartyOption,
@@ -59,7 +60,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    ActivityIndicator,
     Platform,
     Text,
     View,
@@ -1408,7 +1408,7 @@ export function FinanceScreen() {
     return (
       <View style={[styles.container, { paddingTop: screenTopPad }]}>
         <View style={[styles.centered, { flex: 1, paddingTop: 24 }]}>
-          <ActivityIndicator size="large" color={Theme.primary} />
+          <LoadingIndicator size="large" color={Theme.primary} />
         </View>
       </View>
     );

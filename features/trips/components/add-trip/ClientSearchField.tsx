@@ -3,6 +3,7 @@
  * Dropdown is always in a Modal so the list scrolls reliably on both iOS and Android.
  * Includes "Create new client" at bottom (opens sub-modal).
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { CreateTripSheetSearchInput } from "@/components/CreateTripSheetSearchInput";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -10,7 +11,6 @@ import type { ClientRow } from "@/features/clients/services/clients.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
-    ActivityIndicator,
     Modal,
     Platform,
     ScrollView,
@@ -150,7 +150,7 @@ export function ClientSearchField({
       <Text style={labelStyle}>Client *</Text>
       {loading ? (
         <View style={styles.loaderRow}>
-          <ActivityIndicator size="small" color={Theme.primary} />
+          <LoadingIndicator size="small" color={Theme.primary} />
         </View>
       ) : null}
       <View style={styles.inputRow}>

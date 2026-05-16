@@ -2,9 +2,9 @@
  * Full-screen centered loading state that respects safe area.
  * Use on any screen that shows a spinner before content (e.g. detail pages).
  */
-import { View, ActivityIndicator, Text, StyleSheet } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Theme from '@/constants/Theme';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface CenteredLoadingViewProps {
   message?: string;

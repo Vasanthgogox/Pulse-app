@@ -1,3 +1,4 @@
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
@@ -9,7 +10,6 @@ import type {
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useCallback, useState } from "react";
 import {
-    ActivityIndicator,
     Modal,
     Platform,
     Pressable,
@@ -712,7 +712,7 @@ export function InvoicePreviewPanel({
           disabled={isFinalizing || selectedTrips.length === 0}
         >
           {isFinalizing ? (
-            <ActivityIndicator color={Theme.buttonPrimaryText} size="small" />
+            <LoadingIndicator color={Theme.buttonPrimaryText} size="small" />
           ) : (
             <>
               <FontAwesome

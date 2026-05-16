@@ -26,7 +26,8 @@ import {
 import { partyAvatarHasRenderableOutput } from "@/lib/partyAvatarDisplay";
 import type { LinkedOrgDisplay } from "@/lib/useLinkedOrgProfileMap";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Search, X } from "lucide-react-native";
+import { useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import {
     LayoutAnimation,
     Modal,
@@ -897,6 +898,10 @@ export type TripsHubTableViewProps = {
       | "custom",
   ) => void;
   onOpenDateRangePicker?: () => void;
+  /** When set, table body shows one page of rows after hub search/sort (full list still in `trips`). */
+  pagination?: { page: number; pageSize: number };
+  /** Fired with count of trips matching toolbar search/sort (full unpaginated length). */
+  onDisplayedTripsLengthChange?: (n: number) => void;
 };
 
 function txnAmount(row: LedgerRow): number {
@@ -961,6 +966,8 @@ export function TripsHubTableView({
   dateRangeFilter = "all",
   onDateRangeFilterChange,
   onOpenDateRangePicker,
+  pagination,
+  onDisplayedTripsLengthChange,
 }: TripsHubTableViewProps) {
   const insets = useSafeAreaInsets();
   const { width: layoutWidth } = useWindowDimensions();
@@ -1057,6 +1064,16 @@ export function TripsHubTableView({
     financeAdjustmentsByTripId,
   ]);
 
+  const rowsForTableBody = useMemo(() => {
+    if (!pagination) return displayedTrips;
+    const start = pagination.page * pagination.pageSize;
+    return displayedTrips.slice(start, start + pagination.pageSize);
+  }, [displayedTrips, pagination]);
+
+  useLayoutEffect(() => {
+    onDisplayedTripsLengthChange?.(displayedTrips.length);
+  }, [displayedTrips.length, onDisplayedTripsLengthChange]);
+
   const sortLabel =
     sortKey === "recent" ? "Recent" : sortKey === "due_desc" ? "Due" : "Sales";
 
@@ -1090,15 +1107,11 @@ export function TripsHubTableView({
     return "pending";
   };
 
-  const templateTrips = useMemo(() => {
-    return displayedTrips;
-  }, [displayedTrips]);
-
   return (
     <View style={styles.auditTableWrap}>
       <View style={styles.auditToolbar}>
         <Text style={styles.auditToolbarCount}>
-          Showing {templateTrips.length} of {trips.length} trips
+          Showing {rowsForTableBody.length} of {displayedTrips.length} trips
         </Text>
         <View
           style={[
@@ -1113,7 +1126,8 @@ export function TripsHubTableView({
                 showsHorizontalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
                 contentContainerStyle={[
-                  styles.auditDatePresetRow,
+                  styles.auditDatePresetTray,
+                  styles.auditDatePresetTrayScroll,
                   styles.auditDatePresetRowMobile,
                 ]}
                 style={[
@@ -1170,8 +1184,8 @@ export function TripsHubTableView({
                       size={12}
                       color={
                         dateRangeFilter === "custom"
-                          ? Theme.textPrimaryDark
-                          : Theme.textMuted
+                          ? "#ffffff"
+                          : "#64748b"
                       }
                     />
                   </TouchableOpacity>
@@ -1183,76 +1197,70 @@ export function TripsHubTableView({
                   accessibilityRole="button"
                   accessibilityLabel="Cycle table sort"
                 >
-                  <FontAwesome
-                    name="sort"
-                    size={13}
-                    color={Theme.textSecondary}
-                  />
+                  <FontAwesome name="sort" size={11} color="#64748b" />
                   <Text style={styles.auditToolbarText}>Sort: {sortLabel}</Text>
-                  <FontAwesome
-                    name="chevron-down"
-                    size={10}
-                    color={Theme.textMuted}
-                  />
+                  <FontAwesome name="chevron-down" size={9} color="#64748b" />
                 </TouchableOpacity>
               </ScrollView>
             ) : (
-              <View style={styles.auditDatePresetRow}>
-                {(
-                  [
-                    { id: "all" as const, label: "ALL" },
-                    { id: "today" as const, label: "TODAY" },
-                    { id: "yesterday" as const, label: "YESTERDAY" },
-                    { id: "this_week" as const, label: "THIS WEEK" },
-                    { id: "this_month" as const, label: "THIS MONTH" },
-                  ] as const
-                ).map(({ id, label }) => (
-                  <TouchableOpacity
-                    key={id}
-                    style={[
-                      styles.auditDateChip,
-                      dateRangeFilter === id && styles.auditDateChipActive,
-                    ]}
-                    onPress={() => onDateRangeFilterChange(id)}
-                    activeOpacity={0.85}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: dateRangeFilter === id }}
-                  >
-                    <Text
+              <View style={styles.auditDatePresetTray}>
+                <View style={styles.auditDatePresetRowInner}>
+                  {(
+                    [
+                      { id: "all" as const, label: "ALL" },
+                      { id: "today" as const, label: "TODAY" },
+                      { id: "yesterday" as const, label: "YESTERDAY" },
+                      { id: "this_week" as const, label: "THIS WEEK" },
+                      { id: "this_month" as const, label: "THIS MONTH" },
+                    ] as const
+                  ).map(({ id, label }) => (
+                    <TouchableOpacity
+                      key={id}
                       style={[
-                        styles.auditDateChipText,
-                        dateRangeFilter === id &&
-                          styles.auditDateChipTextActive,
+                        styles.auditDateChip,
+                        dateRangeFilter === id && styles.auditDateChipActive,
                       ]}
-                      numberOfLines={1}
+                      onPress={() => onDateRangeFilterChange(id)}
+                      activeOpacity={0.85}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: dateRangeFilter === id }}
                     >
-                      {label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-                {onOpenDateRangePicker ? (
-                  <TouchableOpacity
-                    style={[
-                      styles.auditDateIconBtn,
-                      dateRangeFilter === "custom" &&
-                        styles.auditDateChipActive,
-                    ]}
-                    onPress={onOpenDateRangePicker}
-                    activeOpacity={0.8}
-                    accessibilityRole="button"
-                    accessibilityLabel="Open custom date range"
-                  >
-                    <FontAwesome
-                      name="calendar"
-                      size={12}
-                      color={
-                        dateRangeFilter === "custom"
-                          ? Theme.textPrimaryDark
-                          : Theme.textMuted
-                      }
-                    />
-                  </TouchableOpacity>
-                ) : null}
+                      <Text
+                        style={[
+                          styles.auditDateChipText,
+                          dateRangeFilter === id &&
+                            styles.auditDateChipTextActive,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                  {onOpenDateRangePicker ? (
+                    <TouchableOpacity
+                      style={[
+                        styles.auditDateIconBtn,
+                        dateRangeFilter === "custom" &&
+                          styles.auditDateChipActive,
+                      ]}
+                      onPress={onOpenDateRangePicker}
+                      activeOpacity={0.8}
+                      accessibilityRole="button"
+                      accessibilityLabel="Open custom date range"
+                    >
+                      <FontAwesome
+                        name="calendar"
+                        size={12}
+                        color={
+                          dateRangeFilter === "custom"
+                            ? "#ffffff"
+                            : "#64748b"
+                        }
+                      />
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
               </View>
             )
           ) : null}
@@ -1264,13 +1272,9 @@ export function TripsHubTableView({
               accessibilityRole="button"
               accessibilityLabel="Cycle table sort"
             >
-              <FontAwesome name="sort" size={13} color={Theme.textSecondary} />
+              <FontAwesome name="sort" size={11} color="#64748b" />
               <Text style={styles.auditToolbarText}>Sort: {sortLabel}</Text>
-              <FontAwesome
-                name="chevron-down"
-                size={10}
-                color={Theme.textMuted}
-              />
+              <FontAwesome name="chevron-down" size={9} color="#64748b" />
             </TouchableOpacity>
           ) : null}
           <View
@@ -1279,12 +1283,13 @@ export function TripsHubTableView({
               useMobileToolbarLayout && styles.auditSearchWrapMobile,
             ]}
           >
-            <FontAwesome name="search" size={12} color={Theme.textSecondary} />
+            <Search size={12} color="#94a3b8" style={{ marginRight: 5 }} />
             <TextInput
               value={tableQuery}
               onChangeText={setTableQuery}
               placeholder="Search trip / client / supplier"
-              placeholderTextColor={Theme.textMuted}
+              placeholderTextColor="#94a3b8"
+              autoCapitalize="none"
               style={styles.auditSearchInput}
             />
             {tableQuery ? (
@@ -1294,11 +1299,7 @@ export function TripsHubTableView({
                 accessibilityRole="button"
                 accessibilityLabel="Clear table search"
               >
-                <FontAwesome
-                  name="times-circle"
-                  size={14}
-                  color={Theme.textMuted}
-                />
+                <X size={12} color="#94a3b8" />
               </Pressable>
             ) : null}
           </View>
@@ -1306,7 +1307,7 @@ export function TripsHubTableView({
       </View>
 
       {renderBody ? (
-        renderBody(templateTrips)
+        renderBody(displayedTrips)
       ) : (
         <>
           <View style={styles.manifestHeaderRow}>
@@ -1373,7 +1374,7 @@ export function TripsHubTableView({
             </View>
           </View>
 
-          {templateTrips.map((t) => {
+          {rowsForTableBody.map((t) => {
             const entries = transactionsByTripId.get(t.id) ?? [];
             const rowAdj = tripFinanceAdjForHubLookup(
               financeAdjustmentsByTripId,
@@ -2981,58 +2982,84 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   auditSearchWrap: {
-    height: 34,
-    minWidth: 260,
-    maxWidth: 380,
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 180,
+    maxWidth: 420,
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 10,
-    borderRadius: 9,
+    backgroundColor: "#f8fafc",
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: Theme.surfaceBorder,
-    backgroundColor: Theme.surface,
+    borderColor: "#e8ecf1",
+    paddingHorizontal: 10,
+    paddingVertical: 7,
   },
   auditSearchWrapMobile: {
     width: "100%",
     minWidth: 0,
     maxWidth: "100%",
+    flexBasis: "100%",
   },
   auditSearchInput: {
     flex: 1,
-    minWidth: 100,
+    minWidth: 0,
     paddingVertical: 0,
-    color: Theme.textPrimaryDark,
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 11,
+    fontWeight: "500",
+    color: "#334155",
+    ...Platform.select({
+      web: { outlineStyle: "none" } as object,
+      default: {},
+    }),
   },
   auditToolbarBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    minHeight: 32,
-    paddingVertical: 6,
+    minHeight: 34,
+    paddingVertical: 7,
     paddingHorizontal: 10,
-    borderRadius: 9,
+    borderRadius: 999,
     borderWidth: 1,
-    borderColor: Theme.surfaceBorder,
-    backgroundColor: Theme.surface,
+    borderColor: "#e8ecf1",
+    backgroundColor: "#ffffff",
   },
   auditToolbarText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: Theme.textSecondary,
-    letterSpacing: 0.3,
+    fontSize: 8,
+    fontWeight: "600",
+    color: "#64748b",
+    letterSpacing: 0.55,
+    textTransform: "uppercase",
   },
-  auditDatePresetRow: {
+  /** Matches Chat `tabRow` — date presets + calendar (+ mobile sort) live inside this tray. */
+  auditDatePresetTray: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    flexWrap: "wrap",
+    gap: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+    borderRadius: 18,
+    backgroundColor: "#f1f5f9",
+    borderWidth: 1,
+    borderColor: "#e8ecf1",
+  },
+  auditDatePresetTrayScroll: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  auditDatePresetRowInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexWrap: "nowrap",
+    flexShrink: 1,
+    minWidth: 0,
   },
   auditDatePresetRowMobile: {
     flexWrap: "nowrap",
-    paddingRight: 2,
+    paddingRight: 8,
   },
   auditDatePresetScroll: {
     minWidth: 0,
@@ -3042,40 +3069,48 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     flexShrink: 1,
   },
+  /** Matches Chat `tabPill` / `tabPillActive` / labels. */
   auditDateChip: {
-    minHeight: 32,
+    minHeight: 34,
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 7,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.surfaceGray,
+    borderColor: "#e8ecf1",
+    backgroundColor: "#ffffff",
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
   },
   auditDateChipActive: {
-    backgroundColor: Theme.screenBackground,
-    borderColor: Theme.textPrimaryDark,
+    borderColor: "#0f172a",
+    backgroundColor: "#0f172a",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
   },
   auditDateChipText: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: Theme.textMuted,
+    fontSize: 8,
+    fontWeight: "600",
+    color: "#64748b",
+    letterSpacing: 0.55,
     textTransform: "uppercase",
-    letterSpacing: 0.6,
+    textAlign: "center",
   },
   auditDateChipTextActive: {
-    color: Theme.textPrimaryDark,
+    color: "#ffffff",
   },
   auditDateIconBtn: {
-    minHeight: 32,
-    minWidth: 32,
-    paddingHorizontal: 9,
-    paddingVertical: 6,
+    minHeight: 34,
+    minWidth: 34,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.surfaceGray,
+    borderColor: "#e8ecf1",
+    backgroundColor: "#ffffff",
     alignItems: "center",
     justifyContent: "center",
   },

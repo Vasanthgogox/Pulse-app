@@ -3,6 +3,7 @@
  * Location modal matches Create Trip pickers (FleetEntityPickerModal — centered sheet, search, rich rows).
  */
 import { CreateTripSheetSearchInput } from "@/components/CreateTripSheetSearchInput";
+import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { addToPlacesCache, getPopularPlacesInIndia, searchPlacesInIndia, type PlaceResult } from "@/lib/placesService";
@@ -326,6 +327,7 @@ export function LocationSearchField({
                   spellCheck={false}
                   autoComplete="off"
                   autoFocus
+                  compactChat
                   shellStyle={styles.searchShell}
                   accessibilityLabel="Search places"
                 />
@@ -371,10 +373,12 @@ const styles = StyleSheet.create({
   },
   input: {
     borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    minHeight: 48,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 12,
+    fontWeight: "500",
+    fontStyle: "italic",
+    minHeight: 44,
     paddingRight: 44,
     ...Platform.select({
       web: { outlineStyle: "none" } as TextStyle,
@@ -384,8 +388,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   inputValueText: {
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 12,
+    fontWeight: "500",
+    fontStyle: "italic",
   },
   clearBtn: {
     position: "absolute",
@@ -457,15 +462,15 @@ const styles = StyleSheet.create({
     paddingRight: 12,
   },
   sheetTitle: {
-    fontSize: 20,
-    fontWeight: "800",
+    ...FinanceTxnTypography.partyTitle,
+    fontSize: 12,
+    letterSpacing: 0.25,
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.3,
   },
   sheetSubtitle: {
-    marginTop: 4,
-    fontSize: 14,
-    fontWeight: "500",
+    ...FinanceTxnTypography.routeWhy,
+    fontSize: 9,
+    marginTop: 3,
     color: Theme.textMuted,
   },
   closeBtn: {
@@ -480,7 +485,7 @@ const styles = StyleSheet.create({
   },
   searchShell: {
     marginHorizontal: 20,
-    marginBottom: 16,
+    marginBottom: 12,
   },
   sheetScroll: {
     maxHeight: 340,
@@ -515,10 +520,11 @@ const styles = StyleSheet.create({
   placeRowText: {
     flex: 1,
     minWidth: 0,
-    fontSize: 15,
-    fontWeight: "700",
+    ...FinanceTxnTypography.fieldValue,
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: "500",
     color: Theme.textPrimaryDark,
-    lineHeight: 20,
   },
   customAddressRow: {
     flexDirection: "row",
@@ -562,11 +568,10 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   sectionLabel: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 1,
+    ...FinanceTxnTypography.columnTitle,
+    fontSize: 9,
+    fontWeight: "600",
+    letterSpacing: 0.35,
     paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 8,

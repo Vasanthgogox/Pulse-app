@@ -4,6 +4,7 @@
  */
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import type { ReactNode } from "react";
 import {
@@ -236,20 +237,19 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   topBarTitle: {
-    fontSize: 20,
-    fontWeight: "900",
+    ...FinanceTxnTypography.partyTitle,
+    fontSize: 12,
+    letterSpacing: 0.3,
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.45,
-    textTransform: "uppercase",
-    fontStyle: "italic",
   },
   topBarSubtitle: {
-    marginTop: 3,
-    fontSize: 9,
+    ...FinanceTxnTypography.routeWhy,
+    fontSize: 11,
     fontWeight: "700",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 1.2,
+    fontStyle: "normal",
+    marginTop: 3,
+    letterSpacing: 0.25,
+    color: Theme.textSecondary,
   },
   topBarActions: {
     flexDirection: "row",
@@ -303,8 +303,13 @@ const styles = StyleSheet.create({
   body: {
     flex: 1,
     minHeight: 0,
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 12,
+    ...Platform.select({
+      web: { paddingHorizontal: 0, paddingTop: 6 },
+      default: {
+        paddingHorizontal: Layout.screenPaddingHorizontal,
+        paddingTop: 12,
+      },
+    }),
   },
   bodyCompact: {
     paddingHorizontal: 12,

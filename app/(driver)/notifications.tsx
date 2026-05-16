@@ -2,6 +2,7 @@
  * Lists trips awaiting accept / OTP (same sources as dashboard incoming list).
  * Tapping a row returns to the dashboard with that trip selected.
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import {
     DRIVER_DETAIL_HORIZONTAL_PAD,
     DriverSubScreenHeader,
@@ -43,7 +44,6 @@ import { useFocusEffect } from '@react-navigation/native';
 import { type Href, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
     RefreshControl,
     ScrollView,
     StyleSheet,
@@ -584,7 +584,7 @@ export default function DriverNotificationsScreen() {
 
       {loading ? (
         <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={colors.emerald} />
+          <LoadingIndicator size="large" color={colors.emerald} />
         </View>
       ) : (
         <ScrollView

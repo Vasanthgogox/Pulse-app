@@ -1,6 +1,6 @@
 /**
  * Create Indent — Deploy New Load.
- * Layout aligned with Create Trip (AddTripModalLayout + section cards + floating summary).
+ * Layout aligned with Create Trip (AddTripModalLayout + section cards).
  */
 import { CreateTripSheetSearchInput } from "@/components/CreateTripSheetSearchInput";
 import { PartyAvatar } from "@/components/PartyAvatar";
@@ -8,6 +8,7 @@ import { ThemedAlertModal } from "@/components/ThemedAlertModal";
 import { ThemedConfirmModal } from "@/components/ThemedConfirmModal";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { getClientsByOrganization, type ClientRow } from "@/features/clients/services/clients.service";
@@ -59,7 +60,6 @@ import {
     Navigation,
     Package,
     PlusCircle,
-    Share2,
     Truck,
     X,
 } from "lucide-react-native";
@@ -167,6 +167,34 @@ function compactLocationLabel(value: string): string {
   return `${compact.slice(0, MAX_LEN - 1).trimEnd()}…`;
 }
 
+function formatIndentMoneyLine(raw: string, label: string): string {
+  const s = (raw ?? "").trim();
+  if (!s) return `${label}: —`;
+  return `${label}: ${s}`;
+}
+
+/** Multiline summary for confirm dialogs (draft / share). */
+function buildIndentSummaryMessage(form: FormState): string {
+  const pickup = compactLocationLabel(form.pickup_area) || "—";
+  const drop = compactLocationLabel(form.drop_location) || "—";
+  const client = (form.client_name ?? "").trim() || "—";
+  const date = (form.pickup_date ?? "").trim() || "—";
+  const tons = (form.weight ?? "").trim() || "—";
+  const vehicle = (form.vehicle_type ?? "").trim() || "—";
+  const loadType = (form.load_type ?? "").trim() || "—";
+  return [
+    `Pickup: ${pickup}`,
+    `Drop: ${drop}`,
+    `Client: ${client}`,
+    `Trip date: ${date}`,
+    `Tons: ${tons}`,
+    `Vehicle: ${vehicle}`,
+    `Load type: ${loadType}`,
+    formatIndentMoneyLine(form.client_price, "Client price"),
+    formatIndentMoneyLine(form.supplier_target, "Supplier target"),
+  ].join("\n");
+}
+
 const initialFormState: FormState = {
   client_name: "",
   client_id: null,
@@ -235,10 +263,8 @@ export default function CreateIndentScreen() {
   const [loadTypePickerOpen, setLoadTypePickerOpen] = useState(false);
   const [vehiclePickerQuery, setVehiclePickerQuery] = useState("");
   const [loadTypePickerQuery, setLoadTypePickerQuery] = useState("");
-  /** Hover / keyboard focus: which primary action’s help copy to show above the buttons. */
-  const [actionHelpHint, setActionHelpHint] = useState<
-    null | "draft" | "share"
-  >(null);
+  /** Hover / keyboard focus: Save Draft help copy above the button. */
+  const [actionHelpHint, setActionHelpHint] = useState<null | "draft">(null);
   const actionHintBlurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -286,38 +312,21 @@ export default function CreateIndentScreen() {
     setActionHelpHint("draft");
   }, [cancelActionHintBlurTimer]);
 
-  const onShareActionFocus = useCallback(() => {
-    cancelActionHintBlurTimer();
-    setActionHelpHint("share");
-  }, [cancelActionHintBlurTimer]);
-
   useEffect(
     () => () => cancelActionHintBlurTimer(),
     [cancelActionHintBlurTimer],
   );
 
   const isWide = windowWidth >= 720;
-  const isCompactPhone = windowWidth < 420;
-  /** Narrow phones/tablets: stack route fields and keep quick-date chips on one row */
-  const isRouteStacked = !isWide;
-  const isDesktopPreview = windowWidth >= 1180;
-  const showFloatingPreview = windowWidth >= 480 && !isDesktopPreview;
-  const floatingPreviewWidth = Math.min(336, Math.max(280, windowWidth - 24));
-  const collapsePreviewByDefault = windowWidth < 560;
-  const stackActionButtons = windowWidth < 760;
-  const [mobilePreviewExpanded, setMobilePreviewExpanded] = useState(
-    !collapsePreviewByDefault,
-  );
-
-  useEffect(() => {
-    if (!showFloatingPreview) return;
-    // On compact phones, keep form-first UX by default.
-    setMobilePreviewExpanded(!collapsePreviewByDefault);
-  }, [showFloatingPreview, collapsePreviewByDefault]);
+  const isCompactMobile = windowWidth < 480;
+  /** Web only: same wide shell as Create Trip (`AddTripFormFields`). */
+  const desktopFormGrid =
+    Platform.OS === "web" && windowWidth >= 1080 && !isCompactMobile;
+  const desktopFormMaxWidth = Math.min(windowWidth - 28, 1680);
 
   const webCursor =
     Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null;
-  const pickerCardMaxW = Math.min(windowWidth - 48, 520);
+  const pickerCardMaxW = Math.min(windowWidth - 32, 440);
 
   const vehicleQueryNorm = vehiclePickerQuery.trim().toLowerCase();
   const filteredVehicleCategories = useMemo(() => {
@@ -700,6 +709,14 @@ export default function CreateIndentScreen() {
       );
       return;
     }
+    const summary = buildIndentSummaryMessage(form);
+    const shouldSaveDraft = await confirmDialog(
+      "Save draft?",
+      `${summary}\n\nSave this indent as a draft? You can keep editing until you share it to the network.`,
+      "Save draft",
+    );
+    if (!shouldSaveDraft) return;
+
     const payload = buildPayload();
     setSubmitting(true);
     try {
@@ -763,6 +780,7 @@ export default function CreateIndentScreen() {
     invalidateIndents,
     router,
     showDialog,
+    confirmDialog,
   ]);
 
   const handleSubmit = useCallback(async () => {
@@ -776,9 +794,10 @@ export default function CreateIndentScreen() {
     const errs = validateForm(form);
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
+    const summary = buildIndentSummaryMessage(form);
     const shouldShare = await confirmDialog(
-      "Share with Network?",
-      "Once shared, this indent becomes read-only and cannot be edited.",
+      "Share to network?",
+      `${summary}\n\nOnce shared, this indent becomes read-only and cannot be edited.`,
       "Share now",
     );
     if (!shouldShare) return;
@@ -888,7 +907,7 @@ export default function CreateIndentScreen() {
   const canSaveDraft =
     Boolean(orgId) && !submitting && hasIndentDraftProgress(form);
 
-  const baseInputArr = [styles.tripInput, inputStyle];
+  const baseInputArr = [styles.formFieldInput, inputStyle];
   const webPointer =
     Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null;
   /** Web TextInputs pick up a default focus ring; strip outline without widening Touchable styles. */
@@ -905,7 +924,7 @@ export default function CreateIndentScreen() {
         submitLabel="Share to Network"
         canSubmit={canSubmit}
         submitting={submitting}
-        primaryActionMode="content"
+        validationMessage="Fill route, client, commercials, and load details to share"
         onClose={handleBackPress}
         onSubmit={handleSubmit}
       >
@@ -914,13 +933,18 @@ export default function CreateIndentScreen() {
             style={styles.scroll}
             contentContainerStyle={[
               styles.scrollContent,
-              { paddingBottom: insets.bottom + 160 },
+              {
+                paddingBottom:
+                  Layout.sectionSpacing +
+                  insets.bottom +
+                  (desktopFormGrid ? 52 : isWide ? 68 : 108),
+              },
             ]}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode={
               Platform.OS === "ios" ? "interactive" : "on-drag"
             }
-            showsVerticalScrollIndicator={false}
+            showsVerticalScrollIndicator
             scrollEnabled={
               !pickupDropdownOpen &&
               !dropDropdownOpen &&
@@ -932,29 +956,43 @@ export default function CreateIndentScreen() {
               style={[
                 styles.contentMax,
                 {
-                  paddingHorizontal: isWide
+                  maxWidth: desktopFormGrid
+                    ? desktopFormMaxWidth
+                    : isWide
+                      ? 1000
+                      : 960,
+                  paddingHorizontal: desktopFormGrid
                     ? 24
-                    : isCompactPhone
-                      ? 12
-                      : Layout.screenPaddingHorizontal,
+                    : isWide
+                      ? 16
+                      : isCompactMobile
+                        ? 0
+                        : Layout.screenPaddingHorizontal,
                 },
               ]}
             >
+              <View style={styles.mainGrid}>
+                <View style={styles.formColumn}>
+                  <View
+                    style={[
+                      styles.formFieldsGridShell,
+                      desktopFormGrid && styles.formColumnGridWeb,
+                    ]}
+                  >
+              {/* 01 Route */}
               <View
                 style={[
-                  styles.mainGrid,
-                  isDesktopPreview && styles.mainGridDesktop,
+                  styles.card,
+                  isCompactMobile && styles.cardCompact,
+                  desktopFormGrid && styles.cardGridRouteWeb,
                 ]}
               >
-                <View style={styles.formColumn}>
-              {/* 01 Route */}
-              <View style={[styles.card, isCompactPhone && styles.cardCompact]}>
                 <View style={styles.cardHead}>
                   <View style={styles.stepBadge}>
                     <Text style={styles.stepBadgeText}>01</Text>
                   </View>
                   <Text
-                    style={[styles.cardTitle, isCompactPhone && styles.cardTitleCompact]}
+                    style={[styles.cardTitle, isCompactMobile && styles.cardTitleCompact]}
                   >
                     Route Details
                   </Text>
@@ -978,7 +1016,7 @@ export default function CreateIndentScreen() {
                         setPickupLat(coords.lat);
                         setPickupLon(coords.lon);
                       }}
-                      leadingIcon={<MapPin size={18} color={Theme.iconMuted} />}
+                      leadingIcon={<MapPin size={14} color={Theme.iconMuted} />}
                       inputStyle={[
                         ...baseInputArr,
                         webTextInputOutline,
@@ -1009,7 +1047,7 @@ export default function CreateIndentScreen() {
                         setDropLon(coords.lon);
                       }}
                       leadingIcon={
-                        <Navigation size={18} color={Theme.iconMuted} />
+                        <Navigation size={14} color={Theme.iconMuted} />
                       }
                       inputStyle={[
                         ...baseInputArr,
@@ -1028,22 +1066,13 @@ export default function CreateIndentScreen() {
                 </View>
 
                 <View
-                  style={[
-                    styles.gridRow,
-                    isWide && styles.gridRowWide,
-                    isRouteStacked && styles.gridRowRouteStacked,
-                  ]}
+                  style={[styles.gridRow, isWide && styles.gridRowWide]}
                 >
-                  <View style={[styles.gridCol, isRouteStacked && styles.gridColFullWidth]}>
+                  <View style={styles.gridCol}>
                     <Text style={[styles.fieldLabel, labelStyle]}>
                       Trip start date
                     </Text>
-                    <View
-                      style={[
-                        styles.quickDateRow,
-                        isRouteStacked && styles.quickDateRowSingleLine,
-                      ]}
-                    >
+                    <View style={styles.quickDateRow}>
                       {[
                         { label: "Today", get: getToday },
                         { label: "Tomorrow", get: getTomorrow },
@@ -1056,7 +1085,6 @@ export default function CreateIndentScreen() {
                             key={label}
                             style={[
                               styles.quickDateChip,
-                              isRouteStacked && styles.quickDateChipEqual,
                               isActive && styles.quickDateChipActive,
                             ]}
                             onPress={() => update({ pickup_date: iso })}
@@ -1074,125 +1102,125 @@ export default function CreateIndentScreen() {
                         );
                       })}
                     </View>
-                    {Platform.OS === "web" ? (
-                      <TextInput
-                        style={[
-                          styles.tripInput,
-                          webTextInputOutline,
-                          errors.pickup_date && styles.inputError,
-                        ]}
-                        placeholder="YYYY-MM-DD"
-                        placeholderTextColor={Theme.placeholder}
-                        value={form.pickup_date}
-                        onChangeText={(t) => update({ pickup_date: t })}
-                        autoCorrect={false}
-                      />
-                    ) : (
-                      <>
-                        <TouchableOpacity
+                    <View
+                      style={isWide ? styles.routeDateInputCapWeb : undefined}
+                    >
+                      {Platform.OS === "web" ? (
+                        <TextInput
                           style={[
-                            styles.tripInput,
-                            styles.dateTouchable,
+                            styles.formFieldInput,
+                            webTextInputOutline,
                             errors.pickup_date && styles.inputError,
                           ]}
-                          onPress={() => setShowDatePicker(true)}
-                          activeOpacity={0.85}
-                        >
-                          <Text
-                            style={
-                              form.pickup_date
-                                ? styles.dateTouchableText
-                                : styles.dateTouchablePlaceholder
-                            }
+                          placeholder="YYYY-MM-DD"
+                          placeholderTextColor={Theme.placeholder}
+                          value={form.pickup_date}
+                          onChangeText={(t) => update({ pickup_date: t })}
+                          autoCorrect={false}
+                        />
+                      ) : (
+                        <>
+                          <TouchableOpacity
+                            style={[
+                              styles.formFieldShell,
+                              styles.dateTouchable,
+                              errors.pickup_date && styles.inputError,
+                            ]}
+                            onPress={() => setShowDatePicker(true)}
+                            activeOpacity={0.85}
                           >
-                            {form.pickup_date
-                              ? new Date(
-                                  form.pickup_date + "T12:00:00",
-                                ).toLocaleDateString("en-IN", {
-                                  weekday: "short",
-                                  day: "numeric",
-                                  month: "short",
-                                  year: "numeric",
-                                })
-                              : "Tap to pick date"}
-                          </Text>
-                        </TouchableOpacity>
-                        {showDatePicker &&
-                          (Platform.OS === "android" ? (
-                            <DateTimePicker
-                              value={
+                            <Text
+                              style={
                                 form.pickup_date
-                                  ? new Date(form.pickup_date + "T12:00:00")
-                                  : new Date()
+                                  ? styles.dateTouchableText
+                                  : styles.dateTouchablePlaceholder
                               }
-                              mode="date"
-                              display="default"
-                              minimumDate={new Date()}
-                              onChange={(e, date) => {
-                                setShowDatePicker(false);
-                                if (e.type === "set" && date)
-                                  update({ pickup_date: toISODate(date) });
-                              }}
-                            />
-                          ) : (
-                            <Modal visible transparent animationType="slide">
-                              <TouchableOpacity
-                                style={styles.datePickerBackdrop}
-                                activeOpacity={1}
-                                onPress={() => setShowDatePicker(false)}
-                              >
-                                <View
-                                  style={styles.datePickerSheet}
-                                  onStartShouldSetResponder={() => true}
+                            >
+                              {form.pickup_date
+                                ? new Date(
+                                    form.pickup_date + "T12:00:00",
+                                  ).toLocaleDateString("en-IN", {
+                                    weekday: "short",
+                                    day: "numeric",
+                                    month: "short",
+                                    year: "numeric",
+                                  })
+                                : "Tap to pick date"}
+                            </Text>
+                          </TouchableOpacity>
+                          {showDatePicker &&
+                            (Platform.OS === "android" ? (
+                              <DateTimePicker
+                                value={
+                                  form.pickup_date
+                                    ? new Date(form.pickup_date + "T12:00:00")
+                                    : new Date()
+                                }
+                                mode="date"
+                                display="default"
+                                minimumDate={new Date()}
+                                onChange={(e, date) => {
+                                  setShowDatePicker(false);
+                                  if (e.type === "set" && date)
+                                    update({ pickup_date: toISODate(date) });
+                                }}
+                              />
+                            ) : (
+                              <Modal visible transparent animationType="slide">
+                                <TouchableOpacity
+                                  style={styles.datePickerBackdrop}
+                                  activeOpacity={1}
+                                  onPress={() => setShowDatePicker(false)}
                                 >
-                                  <View style={styles.datePickerHeader}>
-                                    <Text style={styles.datePickerTitle}>
-                                      Pick date
-                                    </Text>
-                                    <TouchableOpacity
-                                      onPress={() => setShowDatePicker(false)}
-                                      hitSlop={12}
-                                    >
-                                      <Text style={styles.datePickerDone}>
-                                        Done
+                                  <View
+                                    style={styles.datePickerSheet}
+                                    onStartShouldSetResponder={() => true}
+                                  >
+                                    <View style={styles.datePickerHeader}>
+                                      <Text style={styles.datePickerTitle}>
+                                        Pick date
                                       </Text>
-                                    </TouchableOpacity>
+                                      <TouchableOpacity
+                                        onPress={() => setShowDatePicker(false)}
+                                        hitSlop={12}
+                                      >
+                                        <Text style={styles.datePickerDone}>
+                                          Done
+                                        </Text>
+                                      </TouchableOpacity>
+                                    </View>
+                                    <DateTimePicker
+                                      value={
+                                        form.pickup_date
+                                          ? new Date(
+                                              form.pickup_date + "T12:00:00",
+                                            )
+                                          : new Date()
+                                      }
+                                      mode="date"
+                                      display="spinner"
+                                      minimumDate={new Date()}
+                                      onChange={(_, date) =>
+                                        date &&
+                                        update({ pickup_date: toISODate(date) })
+                                      }
+                                    />
                                   </View>
-                                  <DateTimePicker
-                                    value={
-                                      form.pickup_date
-                                        ? new Date(form.pickup_date + "T12:00:00")
-                                        : new Date()
-                                    }
-                                    mode="date"
-                                    display="spinner"
-                                    minimumDate={new Date()}
-                                    onChange={(_, date) =>
-                                      date &&
-                                      update({ pickup_date: toISODate(date) })
-                                    }
-                                  />
-                                </View>
-                              </TouchableOpacity>
-                            </Modal>
-                          ))}
-                      </>
-                    )}
+                                </TouchableOpacity>
+                              </Modal>
+                            ))}
+                        </>
+                      )}
+                    </View>
                     {errors.pickup_date ? (
                       <Text style={styles.errorText}>{errors.pickup_date}</Text>
                     ) : null}
                   </View>
-                  <View
-                    style={[
-                      styles.gridCol,
-                      isRouteStacked && styles.gridColFullWidth,
-                      isRouteStacked && styles.gridColAfterDateBlock,
-                    ]}
-                  >
+                  <View style={styles.gridCol}>
                     <Text style={[styles.fieldLabel, labelStyle]}>Tons</Text>
                     <TextInput
                       style={[
-                        styles.tripInput,
+                        styles.formFieldInput,
                         webTextInputOutline,
                         errors.weight && styles.inputError,
                       ]}
@@ -1217,9 +1245,9 @@ export default function CreateIndentScreen() {
                   <View style={styles.routePreviewPanel}>
                     <View style={styles.routePreviewHero}>
                       <ArrowRight
-                        size={20}
+                        size={16}
                         color={Theme.teslaRed}
-                        strokeWidth={2.5}
+                        strokeWidth={2}
                       />
                       <Text
                         style={styles.routePreviewHeroText}
@@ -1257,18 +1285,26 @@ export default function CreateIndentScreen() {
               </View>
 
               {/* 02 Commercial */}
-              <View style={[styles.card, isCompactPhone && styles.cardCompact]}>
+              <View
+                style={[
+                  styles.card,
+                  isCompactMobile && styles.cardCompact,
+                  desktopFormGrid && styles.cardGridClientWeb,
+                ]}
+              >
                 <View style={styles.cardHead}>
                   <View style={styles.stepBadge}>
                     <Text style={styles.stepBadgeText}>02</Text>
                   </View>
                   <Text
-                    style={[styles.cardTitle, isCompactPhone && styles.cardTitleCompact]}
+                    style={[styles.cardTitle, isCompactMobile && styles.cardTitleCompact]}
                   >
                     Client & Commercials
                   </Text>
                 </View>
-                <View style={[styles.gridRow, isWide && styles.gridRowWide]}>
+                <View
+                  style={[styles.gridRow, isWide && styles.gridRowWide]}
+                >
                   <View
                     style={[
                       styles.gridCol,
@@ -1334,7 +1370,7 @@ export default function CreateIndentScreen() {
                       !clientListExpanded &&
                       selectedClientRow ? (
                       <TouchableOpacity
-                        style={[styles.clientCard, styles.clientCardOn]}
+                        style={[styles.clientCard, styles.selectionSummaryCard]}
                         onPress={() => setClientListExpanded(true)}
                         activeOpacity={0.85}
                       >
@@ -1365,14 +1401,14 @@ export default function CreateIndentScreen() {
                           />
                           <View style={{ flex: 1, minWidth: 0 }}>
                             <Text
-                              style={[styles.clientName, styles.clientNameOn]}
+                              style={styles.selectionSummaryTitle}
                               numberOfLines={1}
                             >
                               {selectedClientRow.name}
                             </Text>
                             {selectedClientRow.address ? (
                               <Text
-                                style={styles.clientSub}
+                                style={styles.selectionSummarySub}
                                 numberOfLines={1}
                               >
                                 {selectedClientRow.address}
@@ -1380,8 +1416,8 @@ export default function CreateIndentScreen() {
                             ) : null}
                           </View>
                         </View>
-                        <View style={styles.changeSelectionPill}>
-                          <Text style={styles.changeSelectionPillText}>
+                        <View style={styles.selectionSummaryPill}>
+                          <Text style={styles.selectionSummaryPillText}>
                             Change
                           </Text>
                         </View>
@@ -1399,7 +1435,7 @@ export default function CreateIndentScreen() {
                               key={client.id}
                               style={[
                                 styles.clientCard,
-                                selected && styles.clientCardOn,
+                                selected && styles.clientCardRowSelected,
                                 Platform.OS === "web"
                                   ? ({ cursor: "pointer" } as ViewStyle)
                                   : null,
@@ -1465,7 +1501,7 @@ export default function CreateIndentScreen() {
                                 {selected ? (
                                   <CheckCircle2
                                     size={16}
-                                    color={Theme.iconPrimary}
+                                    color={Theme.darkGreen}
                                   />
                                 ) : null}
                               </View>
@@ -1483,17 +1519,29 @@ export default function CreateIndentScreen() {
                     <Text style={[styles.fieldLabel, labelStyle]}>
                       Client sales price (₹) *
                     </Text>
-                    <View style={styles.priceWrap}>
+                    <View
+                      style={[
+                        styles.priceShell,
+                        form.client_id &&
+                          !errors.client_price &&
+                          styles.priceShellSelected,
+                        errors.client_price && styles.priceShellError,
+                      ]}
+                    >
                       <IndianRupee
-                        size={20}
-                        color={Theme.iconMuted}
-                        style={styles.rupeeIcon}
+                        size={14}
+                        color={
+                          form.client_id && !errors.client_price
+                            ? Theme.iconPrimary
+                            : Theme.iconMuted
+                        }
+                        style={styles.priceRupeeInline}
                       />
                       <TextInput
                         style={[
                           styles.priceInput,
                           webTextInputOutline,
-                          isCompactPhone && styles.priceInputCompact,
+                          isCompactMobile && styles.priceInputCompact,
                           errors.client_price && styles.inputError,
                         ]}
                         value={form.client_price}
@@ -1533,17 +1581,17 @@ export default function CreateIndentScreen() {
                       <Text style={styles.estBadgeText}>Est. target</Text>
                     </View>
                   </View>
-                  <View style={styles.priceWrap}>
+                  <View style={styles.priceShell}>
                     <IndianRupee
-                      size={20}
+                      size={14}
                       color={Theme.primary}
-                      style={styles.rupeeIcon}
+                      style={styles.priceRupeeInline}
                     />
                       <TextInput
                         style={[
                           styles.priceInput,
                           webTextInputOutline,
-                          isCompactPhone && styles.priceInputCompact,
+                          isCompactMobile && styles.priceInputCompact,
                           styles.supplierPriceInput,
                           errors.supplier_target && styles.inputError,
                         ]}
@@ -1551,7 +1599,7 @@ export default function CreateIndentScreen() {
                       onChangeText={(t) => update({ supplier_target: t })}
                       ref={supplierTargetInputRef}
                       placeholder="0"
-                      placeholderTextColor={Theme.textMuted}
+                      placeholderTextColor={Theme.placeholder}
                       keyboardType="decimal-pad"
                       autoCorrect={false}
                       returnKeyType="next"
@@ -1568,13 +1616,19 @@ export default function CreateIndentScreen() {
               </View>
 
               {/* 03 Load */}
-              <View style={[styles.card, isCompactPhone && styles.cardCompact]}>
+              <View
+                style={[
+                  styles.card,
+                  isCompactMobile && styles.cardCompact,
+                  desktopFormGrid && styles.cardGridLoadWeb,
+                ]}
+              >
                 <View style={styles.cardHead}>
                   <View style={styles.stepBadge}>
                     <Text style={styles.stepBadgeText}>03</Text>
                   </View>
                   <Text
-                    style={[styles.cardTitle, isCompactPhone && styles.cardTitleCompact]}
+                    style={[styles.cardTitle, isCompactMobile && styles.cardTitleCompact]}
                   >
                     Load Specifics
                   </Text>
@@ -1595,7 +1649,7 @@ export default function CreateIndentScreen() {
                         value={form.vehicle_type}
                         onChangeText={(t) => update({ vehicle_type: t })}
                         placeholder="Type vehicle"
-                        placeholderTextColor={Theme.textMuted}
+                        placeholderTextColor={Theme.placeholder}
                         returnKeyType="next"
                         onSubmitEditing={openLoadTypePickerNext}
                       />
@@ -1667,6 +1721,7 @@ export default function CreateIndentScreen() {
                 </View>
 
               </View>
+                </View>
 
               {vehicleTypePickerOpen ? (
                 <Modal
@@ -1709,7 +1764,7 @@ export default function CreateIndentScreen() {
                             accessibilityLabel="Close"
                           >
                             <X
-                              size={18}
+                              size={16}
                               color={Theme.primary}
                               strokeWidth={2.5}
                             />
@@ -1721,6 +1776,7 @@ export default function CreateIndentScreen() {
                           onChangeText={setVehiclePickerQuery}
                           placeholder="Search categories or presets…"
                           shellStyle={styles.pickerSearchShell}
+                          compactChat
                           accessibilityLabel="Search vehicle types"
                         />
 
@@ -1765,7 +1821,7 @@ export default function CreateIndentScreen() {
                                   >
                                     <View style={styles.pickerIconCircle}>
                                       <Truck
-                                        size={18}
+                                        size={14}
                                         color={Theme.iconPrimary}
                                       />
                                     </View>
@@ -1781,7 +1837,7 @@ export default function CreateIndentScreen() {
                                     </Text>
                                     {selected ? (
                                       <CheckCircle2
-                                        size={22}
+                                        size={16}
                                         color={Theme.primary}
                                         strokeWidth={2.5}
                                       />
@@ -1821,7 +1877,7 @@ export default function CreateIndentScreen() {
                                   >
                                     <View style={styles.pickerIconCircle}>
                                       <Truck
-                                        size={18}
+                                        size={14}
                                         color={Theme.iconPrimary}
                                       />
                                     </View>
@@ -1837,7 +1893,7 @@ export default function CreateIndentScreen() {
                                     </Text>
                                     {selected ? (
                                       <CheckCircle2
-                                        size={22}
+                                        size={16}
                                         color={Theme.primary}
                                         strokeWidth={2.5}
                                       />
@@ -1866,7 +1922,7 @@ export default function CreateIndentScreen() {
                             activeOpacity={0.75}
                           >
                             <View style={styles.pickerIconCircle}>
-                              <Truck size={18} color={Theme.iconPrimary} />
+                              <Truck size={14} color={Theme.iconPrimary} />
                             </View>
                             <Text
                               style={[
@@ -1880,7 +1936,7 @@ export default function CreateIndentScreen() {
                             </Text>
                             {vehicleTypeIsOther ? (
                               <CheckCircle2
-                                size={22}
+                                size={16}
                                 color={Theme.primary}
                                 strokeWidth={2.5}
                               />
@@ -1936,7 +1992,7 @@ export default function CreateIndentScreen() {
                             accessibilityLabel="Close"
                           >
                             <X
-                              size={18}
+                              size={16}
                               color={Theme.primary}
                               strokeWidth={2.5}
                             />
@@ -1948,6 +2004,7 @@ export default function CreateIndentScreen() {
                           onChangeText={setLoadTypePickerQuery}
                           placeholder="Search load type…"
                           shellStyle={styles.pickerSearchShell}
+                          compactChat
                           accessibilityLabel="Search load types"
                         />
 
@@ -1981,7 +2038,7 @@ export default function CreateIndentScreen() {
                                 >
                                   <View style={styles.pickerIconCircle}>
                                     <Package
-                                      size={18}
+                                      size={14}
                                       color={Theme.iconPrimary}
                                     />
                                   </View>
@@ -1997,7 +2054,7 @@ export default function CreateIndentScreen() {
                                   </Text>
                                   {selected ? (
                                     <CheckCircle2
-                                      size={22}
+                                      size={16}
                                       color={Theme.primary}
                                       strokeWidth={2.5}
                                     />
@@ -2027,22 +2084,16 @@ export default function CreateIndentScreen() {
                       accessibilityLiveRegion="polite"
                     >
                       <Text style={styles.actionHelpTooltipTitle}>
-                        {actionHelpHint === "draft"
-                          ? "Save Draft"
-                          : "Share to Network"}
+                        Save Draft
                       </Text>
                       <Text style={styles.actionHelpTooltipText}>
-                        {actionHelpHint === "draft"
-                          ? "Indent stays editable. You can save updates again and share later."
-                          : "Shared indents are broadcast and become read-only."}
+                        Indent stays editable. You can save updates again and share
+                        later.
                       </Text>
                     </View>
                   ) : null}
                   <View
-                    style={[
-                      styles.actionButtonsRow,
-                      stackActionButtons && styles.actionButtonsRowStacked,
-                    ]}
+                    style={styles.actionButtonsRow}
                     {...(Platform.OS === "web"
                       ? {
                           onMouseLeave: () => {
@@ -2066,10 +2117,7 @@ export default function CreateIndentScreen() {
                       : {})}
                   >
                     <View
-                      style={[
-                        styles.actionBtnHoverCell,
-                        stackActionButtons && styles.actionBtnHoverCellStacked,
-                      ]}
+                      style={styles.actionBtnHoverCell}
                       {...(Platform.OS === "web"
                         ? {
                             onMouseEnter: () => setActionHelpHint("draft"),
@@ -2079,7 +2127,6 @@ export default function CreateIndentScreen() {
                       <TouchableOpacity
                         style={[
                           styles.draftBtn,
-                          stackActionButtons && styles.actionBtnStacked,
                           (!canSaveDraft || submitting) &&
                             styles.submitBtnDisabled,
                         ]}
@@ -2098,278 +2145,20 @@ export default function CreateIndentScreen() {
                           />
                         ) : (
                           <View style={styles.actionBtnInner}>
-                            <FileEdit size={18} color={Theme.textPrimaryDark} />
+                            <FileEdit size={16} color={Theme.textPrimaryDark} />
                             <Text style={styles.draftBtnText}>Save Draft</Text>
                           </View>
                         )}
                       </TouchableOpacity>
                     </View>
-                    <View
-                      style={[
-                        styles.actionBtnHoverCell,
-                        stackActionButtons && styles.actionBtnHoverCellStacked,
-                      ]}
-                      {...(Platform.OS === "web"
-                        ? {
-                            onMouseEnter: () => setActionHelpHint("share"),
-                          }
-                        : {})}
-                    >
-                      <TouchableOpacity
-                        style={[
-                          styles.submitBtn,
-                          stackActionButtons && styles.actionBtnStacked,
-                          (!canSubmit || submitting) &&
-                            styles.submitBtnDisabled,
-                        ]}
-                        onPress={handleSubmit}
-                        disabled={!canSubmit || submitting}
-                        activeOpacity={0.8}
-                        focusable
-                        onFocus={onShareActionFocus}
-                        onBlur={scheduleClearActionHelpHint}
-                        accessibilityHint="Shared indents are broadcast and become read-only."
-                      >
-                        {submitting ? (
-                          <ActivityIndicator
-                            size="small"
-                            color={Theme.buttonPrimaryText}
-                          />
-                        ) : (
-                          <View style={styles.actionBtnInner}>
-                            <Share2
-                              size={18}
-                              color={Theme.buttonMatteBlackText}
-                            />
-                            <Text style={styles.submitBtnText}>
-                              Share to Network
-                            </Text>
-                          </View>
-                        )}
-                      </TouchableOpacity>
-                    </View>
                   </View>
                 </View>
               </View>
                 </View>
 
-                {isDesktopPreview ? (
-                  <View style={styles.previewColumn}>
-                    <View style={[styles.previewCard, styles.previewCardDesktop]}>
-                      <View style={styles.previewHead}>
-                        <Text style={styles.previewHeadTitle}>
-                          Indent Preview
-                        </Text>
-                        <View style={styles.livePill}>
-                          <Text style={styles.livePillText}>Live</Text>
-                        </View>
-                      </View>
-                      <View style={styles.previewBody}>
-                        <View style={styles.previewLine}>
-                          <Text style={styles.previewLab}>Pickup</Text>
-                          <Text style={styles.previewVal} numberOfLines={2}>
-                            {(form.pickup_area ?? "").trim() || "—"}
-                          </Text>
-                        </View>
-                        <View style={styles.previewLine}>
-                          <Text style={styles.previewLab}>Drop</Text>
-                          <Text style={styles.previewVal} numberOfLines={2}>
-                            {(form.drop_location ?? "").trim() || "—"}
-                          </Text>
-                        </View>
-                        {form.pickup_area.trim() && form.drop_location.trim() ? (
-                          <View style={styles.previewRow2}>
-                            <View style={styles.previewCell}>
-                              <Text style={styles.previewLab}>Distance</Text>
-                              <Text style={styles.previewVal}>
-                                {routeLoading
-                                  ? "…"
-                                  : routeDistanceKm != null
-                                    ? `${routeDistanceKm} km`
-                                    : "—"}
-                              </Text>
-                            </View>
-                            <View style={styles.previewCell}>
-                              <Text style={styles.previewLab}>ETA</Text>
-                              <Text style={styles.previewVal}>
-                                {routeLoading ? "…" : (routeEtaLabel ?? "—")}
-                              </Text>
-                            </View>
-                          </View>
-                        ) : null}
-                        <View style={styles.previewDivider} />
-                        <View style={styles.previewRow2}>
-                          <View style={styles.previewCell}>
-                            <Text style={styles.previewLab}>Client</Text>
-                            <Text style={styles.previewVal} numberOfLines={1}>
-                              {(form.client_name ?? "").trim() || "—"}
-                            </Text>
-                          </View>
-                          <View style={styles.previewCell}>
-                            <Text style={styles.previewLab}>Revenue</Text>
-                            <Text
-                              style={[
-                                styles.previewValStrong,
-                                { color: Theme.darkGreen },
-                              ]}
-                            >
-                              ₹{form.client_price.trim() || "0"}
-                            </Text>
-                          </View>
-                        </View>
-                        <View style={styles.previewRow2}>
-                          <View style={styles.previewCell}>
-                            <Text style={styles.previewLab}>Target pay</Text>
-                            <Text
-                              style={[
-                                styles.previewValStrong,
-                                { color: Theme.negative },
-                              ]}
-                            >
-                              ₹{form.supplier_target.trim() || "0"}
-                            </Text>
-                          </View>
-                          <View style={styles.previewCell}>
-                            <Text style={styles.previewLab}>Vehicle</Text>
-                            <Text style={styles.previewVal} numberOfLines={1}>
-                              {form.vehicle_type.trim() || "—"}
-                            </Text>
-                          </View>
-                        </View>
-                        <View style={styles.previewFoot}>
-                          <Text style={styles.previewFootLeft}>
-                            {(form.load_type ?? "").trim() || "Load"}
-                          </Text>
-                          <Text style={styles.previewFootRight} numberOfLines={1}>
-                            {form.weight.trim() ? `${form.weight.trim()} T` : "—"}
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-                  </View>
-                ) : null}
               </View>
             </View>
           </ScrollView>
-
-          {showFloatingPreview ? (
-            mobilePreviewExpanded ? (
-            <View
-              style={[
-                styles.previewCard,
-                {
-                  width: floatingPreviewWidth,
-                  bottom: insets.bottom + 16,
-                  right: Math.max(16, insets.right + 8),
-                },
-              ]}
-              pointerEvents="box-none"
-            >
-              <View style={styles.previewHead}>
-                <Text style={styles.previewHeadTitle}>Indent Preview</Text>
-                <View style={styles.previewHeadRight}>
-                  <View style={styles.livePill}>
-                    <Text style={styles.livePillText}>Live</Text>
-                  </View>
-                  <TouchableOpacity
-                    onPress={() => setMobilePreviewExpanded(false)}
-                    style={styles.previewCollapseBtn}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.previewCollapseBtnText}>˅</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-              <View style={styles.previewBody}>
-                <View style={styles.previewLine}>
-                  <Text style={styles.previewLab}>Pickup</Text>
-                  <Text style={styles.previewVal} numberOfLines={2}>
-                    {(form.pickup_area ?? "").trim() || "—"}
-                  </Text>
-                </View>
-                <View style={styles.previewLine}>
-                  <Text style={styles.previewLab}>Drop</Text>
-                  <Text style={styles.previewVal} numberOfLines={2}>
-                    {(form.drop_location ?? "").trim() || "—"}
-                  </Text>
-                </View>
-                {form.pickup_area.trim() && form.drop_location.trim() ? (
-                  <View style={styles.previewRow2}>
-                    <View style={styles.previewCell}>
-                      <Text style={styles.previewLab}>Distance</Text>
-                      <Text style={styles.previewVal}>
-                        {routeLoading
-                          ? "…"
-                          : routeDistanceKm != null
-                            ? `${routeDistanceKm} km`
-                            : "—"}
-                      </Text>
-                    </View>
-                    <View style={styles.previewCell}>
-                      <Text style={styles.previewLab}>ETA</Text>
-                      <Text style={styles.previewVal}>
-                        {routeLoading ? "…" : (routeEtaLabel ?? "—")}
-                      </Text>
-                    </View>
-                  </View>
-                ) : null}
-                <View style={styles.previewDivider} />
-                <View style={styles.previewRow2}>
-                  <View style={styles.previewCell}>
-                    <Text style={styles.previewLab}>Client</Text>
-                    <Text style={styles.previewVal} numberOfLines={1}>
-                      {(form.client_name ?? "").trim() || "—"}
-                    </Text>
-                  </View>
-                  <View style={styles.previewCell}>
-                    <Text style={styles.previewLab}>Revenue</Text>
-                    <Text style={[styles.previewValStrong, { color: Theme.darkGreen }]}>
-                      ₹{form.client_price.trim() || "0"}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.previewRow2}>
-                  <View style={styles.previewCell}>
-                    <Text style={styles.previewLab}>Target pay</Text>
-                    <Text style={[styles.previewValStrong, { color: Theme.negative }]}>
-                      ₹{form.supplier_target.trim() || "0"}
-                    </Text>
-                  </View>
-                  <View style={styles.previewCell}>
-                    <Text style={styles.previewLab}>Vehicle</Text>
-                    <Text style={styles.previewVal} numberOfLines={1}>
-                      {form.vehicle_type.trim() || "—"}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.previewFoot}>
-                  <Text style={styles.previewFootLeft}>
-                    {(form.load_type ?? "").trim() || "Load"}
-                  </Text>
-                  <Text style={styles.previewFootRight} numberOfLines={1}>
-                    {form.weight.trim() ? `${form.weight.trim()} T` : "—"}
-                  </Text>
-                </View>
-              </View>
-            </View>
-            ) : (
-              <TouchableOpacity
-                style={[
-                  styles.previewCollapsedChip,
-                  {
-                    bottom: insets.bottom + 16,
-                    right: Math.max(16, insets.right + 8),
-                  },
-                ]}
-                onPress={() => setMobilePreviewExpanded(true)}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.previewCollapsedChipText}>
-                  Indent Preview
-                </Text>
-              </TouchableOpacity>
-            )
-          ) : null}
 
           <View style={styles.blobA} pointerEvents="none" />
           <View style={styles.blobB} pointerEvents="none" />
@@ -2416,7 +2205,7 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: {
     flexGrow: 1,
-    paddingTop: 4,
+    paddingTop: 12,
   },
   sheet: {
     gap: 12,
@@ -2463,8 +2252,9 @@ const styles = StyleSheet.create({
   },
   sheetGrid: {
     flexDirection: "row",
-    gap: 12,
-    marginBottom: 12,
+    gap: 10,
+    marginBottom: 8,
+    alignItems: "stretch",
   },
   sheetGridStacked: {
     flexDirection: "column",
@@ -2478,19 +2268,19 @@ const styles = StyleSheet.create({
     color: Theme.textMutedDemo,
     textTransform: "uppercase",
     letterSpacing: 1.1,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   sheetInput: {
     backgroundColor: Theme.surfaceForm,
     borderWidth: 1,
     borderColor: Theme.borderInput,
-    borderRadius: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    fontSize: 14,
+    borderRadius: 11,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    fontSize: 10,
     fontWeight: "500",
     color: Theme.textPrimary,
-    minHeight: 52,
+    minHeight: 40,
   },
   commercialHighlight: {
     backgroundColor: Theme.surfaceLight,
@@ -2683,47 +2473,34 @@ const styles = StyleSheet.create({
   },
   quickDateRow: {
     flexDirection: "row",
-    gap: 8,
-    marginBottom: 10,
     flexWrap: "wrap",
-  },
-  /** Three chips stay on one row with equal width (mobile / stacked route). */
-  quickDateRowSingleLine: {
-    flexWrap: "nowrap",
     gap: 6,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   quickDateChip: {
-    flex: 1,
-    minHeight: 44,
-    minWidth: 110,
-    paddingVertical: 9,
-    paddingHorizontal: 8,
-    borderRadius: 12,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 999,
     borderWidth: 1,
-    borderColor: Theme.borderInput,
-    backgroundColor: Theme.screenBackground,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
     alignItems: "center",
     justifyContent: "center",
   },
-  quickDateChipEqual: {
-    flex: 1,
-    minWidth: 0,
-    minHeight: 40,
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-  },
   quickDateChipActive: {
-    borderColor: Theme.textPrimaryDark,
-    backgroundColor: Theme.surface,
+    borderColor: Theme.iconPrimary,
+    backgroundColor: Theme.surfaceLight,
   },
   quickDateChipText: {
-    fontSize: 11,
+    ...FinanceTxnTypography.chatFilterPill,
+    fontSize: 8,
+    letterSpacing: 0.45,
     fontWeight: "600",
-    color: Theme.textSecondary,
+    color: Theme.textMuted,
+    fontStyle: "italic",
   },
   quickDateChipTextActive: {
-    color: Theme.textPrimaryDark,
+    color: Theme.iconPrimary,
   },
   dateTouchable: {
     flexDirection: "row",
@@ -2731,21 +2508,21 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   dateTouchableText: {
-    fontSize: 14,
+    fontSize: 10,
     fontWeight: "600",
     color: Theme.textPrimaryDark,
   },
   dateTouchablePlaceholder: {
-    fontSize: 14,
+    fontSize: 10,
     color: Theme.textMuted,
   },
   dropdownTouchableText: {
-    fontSize: 14,
+    fontSize: 10,
     fontWeight: "600",
     color: Theme.textPrimaryDark,
   },
   dropdownTouchablePlaceholder: {
-    fontSize: 14,
+    fontSize: 10,
     color: Theme.textMuted,
   },
   pickerModalRoot: {
@@ -2763,73 +2540,80 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: Layout.screenPaddingHorizontal,
+    ...Platform.select({
+      web: {
+        width: "100%" as const,
+        left: 0,
+        right: 0,
+      } as ViewStyle,
+      default: {},
+    }),
   },
   pickerSheet: {
     width: "100%",
     maxHeight: "82%",
     backgroundColor: Theme.cardWhite,
-    borderRadius: 20,
+    borderRadius: 18,
     overflow: "hidden",
     shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.18,
-    shadowRadius: 24,
-    elevation: 16,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.16,
+    shadowRadius: 20,
+    elevation: 14,
   },
   pickerSheetHead: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 12,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 10,
   },
   pickerSheetTitles: {
     flex: 1,
-    paddingRight: 12,
+    paddingRight: 10,
   },
   pickerSheetTitle: {
-    fontSize: 20,
-    fontWeight: "800",
+    ...FinanceTxnTypography.partyTitle,
+    fontSize: 12,
+    letterSpacing: 0.25,
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.3,
   },
   pickerSheetSubtitle: {
-    marginTop: 4,
-    fontSize: 14,
-    fontWeight: "500",
+    ...FinanceTxnTypography.routeWhy,
+    fontSize: 9,
+    marginTop: 3,
     color: Theme.textMuted,
   },
   pickerCloseBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 2,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1.5,
     borderColor: Theme.primary,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.cardWhite,
   },
   pickerSearchShell: {
-    marginHorizontal: 20,
-    marginBottom: 16,
+    marginHorizontal: 16,
+    marginBottom: 10,
   },
   pickerScroll: {
-    maxHeight: 340,
-    minHeight: 120,
+    maxHeight: 320,
+    minHeight: 100,
   },
   pickerScrollContent: {
-    paddingBottom: 16,
+    paddingBottom: 12,
   },
   pickerSectionLabel: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 8,
+    ...FinanceTxnTypography.columnTitle,
+    fontSize: 9,
+    fontWeight: "600",
+    letterSpacing: 0.35,
+    paddingHorizontal: 16,
+    paddingTop: 6,
+    paddingBottom: 6,
     backgroundColor: Theme.surfaceGray,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
@@ -2837,19 +2621,19 @@ const styles = StyleSheet.create({
   pickerRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
-    gap: 12,
+    gap: 10,
   },
   pickerRowSelected: {
     backgroundColor: Theme.surfaceLight,
   },
   pickerIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: Theme.surfaceGray,
     alignItems: "center",
     justifyContent: "center",
@@ -2857,25 +2641,26 @@ const styles = StyleSheet.create({
   pickerRowPrimary: {
     flex: 1,
     minWidth: 0,
-    fontSize: 15,
-    fontWeight: "600",
+    ...FinanceTxnTypography.fieldValue,
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: "500",
     color: Theme.textPrimaryDark,
-    lineHeight: 20,
   },
   pickerRowPrimarySelected: {
     fontWeight: "800",
     color: Theme.primary,
   },
   pickerRowEndSpacer: {
-    width: 22,
-    height: 22,
+    width: 18,
+    height: 18,
   },
   pickerEmptyText: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: "600",
     color: Theme.textMuted,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   switchToPresetLink: {
     marginTop: 6,
@@ -2904,17 +2689,17 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingVertical: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
   },
   datePickerTitle: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
   },
   datePickerDone: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "700",
     color: Theme.primary,
   },
@@ -2929,9 +2714,9 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: "100%",
-    marginBottom: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    marginBottom: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Theme.borderLight,
@@ -2964,30 +2749,19 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  actionBtnHoverCellStacked: {
-    flex: 0,
-    width: "100%",
-  },
   actionButtonsRow: {
     flexDirection: "row",
     gap: 10,
   },
   actionFooterBar: {
-    marginTop: 12,
-    paddingTop: 8,
+    marginTop: 8,
+    paddingTop: 4,
     borderTopWidth: 1,
     borderTopColor: Theme.borderLight,
     backgroundColor: Theme.surface,
-    borderRadius: 16,
-    paddingHorizontal: 8,
-    paddingBottom: 8,
-  },
-  actionButtonsRowStacked: {
-    flexDirection: "column",
-  },
-  actionBtnStacked: {
-    flex: 0,
-    width: "100%",
+    borderRadius: 12,
+    paddingHorizontal: 4,
+    paddingBottom: 4,
   },
   actionBtnInner: {
     flexDirection: "row",
@@ -2996,46 +2770,24 @@ const styles = StyleSheet.create({
   },
   draftBtn: {
     flex: 1,
-    marginTop: 12,
-    minHeight: Layout.minTouchTargetSize + 12,
-    paddingVertical: 12,
+    marginTop: 0,
+    minHeight: Layout.minTouchTargetSize,
+    paddingVertical: 10,
     borderWidth: 1,
     borderColor: Theme.borderInput,
     backgroundColor: Theme.surface,
-    borderRadius: 16,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
   draftBtnText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
-  submitBtn: {
-    flex: 1,
-    marginTop: 12,
-    minHeight: Layout.minTouchTargetSize + 12,
-    paddingVertical: 12,
-    backgroundColor: Theme.buttonMatteBlack,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: Theme.buttonMatteBlack,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.16,
-    shadowRadius: 10,
-    elevation: 3,
-  },
   submitBtnDisabled: { opacity: 0.6 },
-  submitBtnText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: Theme.buttonMatteBlackText,
-    textTransform: "uppercase",
-    letterSpacing: 1.2,
-  },
   pageWrap: {
     flex: 1,
     minHeight: 0,
@@ -3044,33 +2796,53 @@ const styles = StyleSheet.create({
   },
   contentMax: {
     width: "100%",
-    maxWidth: 1400,
+    maxWidth: 960,
     alignSelf: "center",
   },
   mainGrid: {
     width: "100%",
   },
-  mainGridDesktop: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 24,
-  },
   formColumn: {
-    flex: 1,
+    width: "100%",
     minWidth: 0,
   },
-  previewColumn: {
-    width: 360,
-    paddingTop: 4,
-    alignSelf: "stretch",
+  /** Wraps cards 01–03; desktop web uses same 2-col grid as Create Trip. */
+  formFieldsGridShell: {
+    width: "100%",
+    minWidth: 0,
   },
+  formColumnGridWeb: Platform.select<ViewStyle>({
+    web: {
+      display: "grid",
+      gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+      gap: 16,
+      alignItems: "start",
+      gridAutoRows: "min-content",
+    } as unknown as ViewStyle,
+    default: {},
+  }),
+  /** Row 1 col 1 — Route */
+  cardGridRouteWeb: Platform.select<ViewStyle>({
+    web: { gridColumn: 1, gridRow: 1 } as unknown as ViewStyle,
+    default: {},
+  }),
+  /** Row 1 col 2 — Client & commercials */
+  cardGridClientWeb: Platform.select<ViewStyle>({
+    web: { gridColumn: 2, gridRow: 1 } as unknown as ViewStyle,
+    default: {},
+  }),
+  /** Row 2 full width — Load */
+  cardGridLoadWeb: Platform.select<ViewStyle>({
+    web: { gridColumn: "1 / -1", gridRow: 2 } as unknown as ViewStyle,
+    default: {},
+  }),
   card: {
     backgroundColor: Theme.cardWhite,
-    borderRadius: 18,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    padding: 16,
-    marginBottom: 16,
+    padding: 14,
+    marginBottom: 10,
     ...Platform.select<ViewStyle>({
       web: {
         boxShadow: "0 1px 3px rgba(15,23,42,0.06)",
@@ -3092,76 +2864,84 @@ const styles = StyleSheet.create({
   cardHead: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 6,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
-    paddingBottom: 11,
-    marginBottom: 14,
+    paddingBottom: 6,
+    marginBottom: 8,
   },
   cardTitle: {
-    fontSize: 21,
+    flex: 1,
+    minWidth: 0,
+    ...FinanceTxnTypography.partyTitle,
+    fontSize: 9,
+    letterSpacing: 0.3,
+    fontStyle: "normal",
     fontWeight: "800",
-    color: Theme.textPrimaryDark,
-    letterSpacing: -0.45,
-    fontStyle: "italic",
-    textTransform: "uppercase",
+    color: Theme.darkBackground,
   },
   cardTitleCompact: {
-    fontSize: 18,
-    letterSpacing: -0.25,
+    fontSize: 9,
+    letterSpacing: 0.45,
   },
   stepBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: "rgba(0, 0, 0, 0.08)",
+    width: 22,
+    height: 22,
+    borderRadius: 7,
+    backgroundColor: Theme.darkBackground,
     alignItems: "center",
     justifyContent: "center",
   },
   stepBadgeText: {
-    fontSize: 11,
+    fontSize: 9,
     fontWeight: "800",
-    color: Theme.iconPrimary,
+    color: Theme.textOnPrimary,
   },
   fieldLabel: {
-    fontSize: 9,
-    fontWeight: "700",
-    marginBottom: 8,
-    letterSpacing: 1.1,
-    textTransform: "uppercase",
+    ...FinanceTxnTypography.fieldLabel,
+    marginBottom: 3,
+    color: Theme.textMutedDemo,
   },
-  tripInput: {
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 14,
-    fontWeight: "500",
-    minHeight: 52,
-    marginBottom: 10,
+  formFieldShell: {
+    borderRadius: 11,
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+    minHeight: 36,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: Theme.borderInput,
+    backgroundColor: Theme.surfaceForm,
+  },
+  formFieldInput: {
+    borderRadius: 11,
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+    fontSize: 10,
+    fontWeight: "400",
+    fontStyle: "italic",
+    minHeight: 36,
+    marginBottom: 6,
     borderWidth: 1,
     borderColor: Theme.borderInput,
     backgroundColor: Theme.surfaceForm,
     color: Theme.textPrimary,
   },
-  gridRow: { gap: 14 },
-  gridRowWide: { flexDirection: "row", alignItems: "flex-start", gap: 20 },
-  /** Trip date + tons: vertical rhythm when stacked so labels never collide */
-  gridRowRouteStacked: {
-    gap: 18,
-  },
+  gridRow: { gap: 10 },
+  gridRowWide: { flexDirection: "row", alignItems: "flex-start", gap: 14 },
   gridCol: { flex: 1, minWidth: 0 },
-  gridColFullWidth: {
-    width: "100%",
-    flexBasis: "auto",
-  },
-  gridColAfterDateBlock: {
-    marginTop: 10,
-    paddingTop: 4,
-  },
+  /** Wide web: keep ISO date field from stretching across the whole column (tons stays aligned with drop). */
+  routeDateInputCapWeb: Platform.select<ViewStyle>({
+    web: {
+      maxWidth: 300,
+      width: "100%",
+      alignSelf: "flex-start",
+    },
+    default: {},
+  }),
   routePreviewPanel: {
-    marginTop: 6,
-    marginBottom: 14,
-    borderRadius: 14,
+    marginTop: 4,
+    marginBottom: 10,
+    borderRadius: 12,
     overflow: "hidden",
     borderWidth: 1,
     borderColor: Theme.borderLight,
@@ -3182,9 +2962,9 @@ const styles = StyleSheet.create({
   routePreviewHero: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
     backgroundColor: Theme.surfaceGray,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
@@ -3192,11 +2972,11 @@ const styles = StyleSheet.create({
   routePreviewHeroText: {
     flex: 1,
     minWidth: 0,
-    fontSize: 12,
-    fontWeight: "500",
-    fontStyle: "italic",
-    letterSpacing: -0.25,
-    lineHeight: 20,
+    ...FinanceTxnTypography.partyTitle,
+    fontSize: 10,
+    lineHeight: 14,
+    letterSpacing: 0.2,
+    fontStyle: "normal",
     color: Theme.textPrimaryDark,
   },
   routePreviewMetrics: {
@@ -3208,26 +2988,22 @@ const styles = StyleSheet.create({
   routePreviewMetricCol: {
     flex: 1,
     minWidth: 0,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
   },
   routePreviewMetricDivider: {
     width: StyleSheet.hairlineWidth,
     backgroundColor: Theme.borderLight,
   },
   routeMetricLab: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.65,
-    marginBottom: 4,
+    ...FinanceTxnTypography.fieldLabel,
+    color: Theme.textMutedDemo,
+    marginBottom: 3,
   },
   routeMetricVal: {
-    fontSize: 16,
-    fontWeight: "800",
-    letterSpacing: -0.35,
-    color: Theme.textPrimaryDark,
+    ...FinanceTxnTypography.fieldValue,
+    fontSize: 9,
+    lineHeight: 13,
   },
   mutedSmall: {
     fontSize: 12,
@@ -3238,18 +3014,50 @@ const styles = StyleSheet.create({
   clientCard: {
     flexDirection: "row",
     alignItems: "center",
-    minHeight: 70,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    minHeight: 60,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: 15,
     borderWidth: 1.5,
     borderColor: Theme.borderLight,
     marginBottom: 10,
     backgroundColor: Theme.cardWhite,
   },
-  clientCardOn: {
-    borderColor: Theme.textPrimaryDark,
+  clientCardRowSelected: {
+    borderColor: Theme.darkGreen,
     backgroundColor: Theme.cardWhite,
+  },
+  /** Minimized selected client — matches Create Trip summary chip. */
+  selectionSummaryCard: {
+    backgroundColor: Theme.tripSelectionSurface,
+    borderColor: Theme.darkGreen,
+  },
+  selectionSummaryTitle: {
+    ...FinanceTxnTypography.partyTitle,
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textOnDark,
+  },
+  selectionSummarySub: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: Theme.textOnDarkMuted,
+    marginTop: 2,
+  },
+  selectionSummaryPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Theme.tripSelectionInsetBorder,
+    backgroundColor: Theme.tripSelectionInsetBg,
+  },
+  selectionSummaryPillText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textOnDark,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
   },
   clientMain: {
     flex: 1,
@@ -3264,14 +3072,14 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Theme.textPrimaryDark,
   },
-  clientNameOn: { color: Theme.iconPrimary },
+  clientNameOn: { color: Theme.darkGreen },
   clientAvatar: {
     borderWidth: 1.5,
     borderColor: Theme.borderLight,
   },
   clientAvatarOn: {
     borderWidth: 2,
-    borderColor: Theme.textPrimaryDark,
+    borderColor: Theme.darkGreen,
   },
   clientMetaRow: {
     flexDirection: "row",
@@ -3290,39 +3098,74 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 14,
     borderWidth: 2,
-    borderColor: Theme.borderInput,
+    borderColor: Theme.borderLight,
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
+    backgroundColor: Theme.surfaceForm,
   },
   radioOuterOn: {
-    borderColor: Theme.darkBackground,
-    backgroundColor: Theme.screenBackground,
+    borderColor: Theme.darkGreen,
+    backgroundColor: Theme.cardWhite,
   },
-  priceWrap: {
-    position: "relative",
-    marginBottom: 12,
+  priceShell: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 52,
+    paddingHorizontal: 12,
+    gap: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+    marginBottom: 6,
+    alignSelf: "stretch",
+    minWidth: 0,
+    ...Platform.select<ViewStyle>({
+      web: {
+        width: "100%" as const,
+        maxWidth: "100%" as const,
+        boxSizing: "border-box" as const,
+      },
+      default: {},
+    }),
   },
-  rupeeIcon: {
-    position: "absolute",
-    left: 14,
-    top: 18,
-    zIndex: 1,
+  priceShellSelected: {
+    borderColor: Theme.darkGreen,
+  },
+  priceShellError: {
+    borderColor: Theme.destructive,
+    borderWidth: 2,
+  },
+  priceRupeeInline: {
+    flexShrink: 0,
   },
   priceInput: {
-    borderRadius: 16,
-    paddingLeft: 44,
-    paddingRight: 16,
-    paddingVertical: 16,
-    fontSize: 24,
-    fontWeight: "800",
-    borderWidth: 2,
-    borderColor: "transparent",
-    backgroundColor: Theme.surfaceForm,
+    flex: 1,
+    minWidth: 0,
+    borderRadius: 12,
+    borderWidth: 0,
+    paddingHorizontal: 0,
+    paddingVertical: 8,
+    fontSize: 12,
+    fontWeight: "600",
+    minHeight: 36,
+    backgroundColor: "transparent",
     color: Theme.textPrimaryDark,
+    letterSpacing: 0.2,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none" as const,
+        width: "100%" as const,
+        maxWidth: "100%" as const,
+        boxSizing: "border-box" as const,
+      },
+      default: {},
+    }),
   },
   priceInputCompact: {
-    fontSize: 20,
-    paddingVertical: 14,
+    fontSize: 16,
+    paddingVertical: 12,
   },
   supplierPriceInput: {
     color: Theme.primary,
@@ -3330,23 +3173,25 @@ const styles = StyleSheet.create({
   },
   infoCallout: {
     flexDirection: "row",
-    gap: 10,
-    padding: 14,
-    borderRadius: 12,
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    marginTop: 6,
+    borderRadius: 10,
     backgroundColor: "rgba(0, 0, 0, 0.04)",
     borderWidth: 1,
     borderColor: Theme.borderLight,
   },
   infoCalloutText: {
     flex: 1,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "600",
     color: Theme.textPrimaryDark,
-    lineHeight: 16,
+    lineHeight: 14,
   },
   supplierSection: {
-    marginTop: 8,
-    paddingTop: 14,
+    marginTop: 6,
+    paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: Theme.borderLight,
   },
@@ -3354,7 +3199,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 8,
+    marginBottom: 6,
   },
   estBadge: {
     backgroundColor: "rgba(59, 130, 246, 0.12)",
@@ -3368,172 +3213,6 @@ const styles = StyleSheet.create({
     color: Theme.primary,
     textTransform: "uppercase",
     letterSpacing: 0.6,
-  },
-  previewCard: {
-    position: "absolute",
-    width: 336,
-    backgroundColor: Theme.cardWhite,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    overflow: "hidden",
-    zIndex: 50,
-    ...Platform.select<ViewStyle>({
-      web: {
-        boxShadow: "0 12px 40px rgba(15,23,42,0.15)",
-      },
-      default: {
-        shadowColor: Theme.shadow,
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.15,
-        shadowRadius: 16,
-        elevation: 10,
-      },
-    }),
-  },
-  previewCardDesktop: {
-    position: "relative",
-    width: "100%",
-    right: undefined,
-    bottom: undefined,
-    marginTop: 4,
-    ...Platform.select<ViewStyle>({
-      web: {
-        position: "sticky" as const,
-        top: 20,
-      },
-      default: {},
-    }),
-  },
-  previewHead: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: Theme.darkSurface,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  previewHeadRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  previewHeadTitle: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 1,
-    textTransform: "uppercase",
-    color: Theme.textOnDark,
-  },
-  livePill: {
-    backgroundColor: Theme.darkBackground,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
-  },
-  livePillText: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: Theme.textOnPrimary,
-    textTransform: "uppercase",
-  },
-  previewCollapseBtn: {
-    width: 22,
-    height: 22,
-    borderRadius: 999,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.14)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.24)",
-  },
-  previewCollapseBtnText: {
-    fontSize: 13,
-    color: Theme.textOnPrimary,
-    fontWeight: "700",
-    lineHeight: 14,
-  },
-  previewBody: { padding: 12, gap: 8 },
-  previewLine: { gap: 4 },
-  previewLab: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-  },
-  previewVal: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: Theme.textPrimaryDark,
-  },
-  previewDivider: {
-    height: 1,
-    backgroundColor: Theme.borderLight,
-    marginVertical: 4,
-  },
-  previewRow2: { flexDirection: "row", gap: 12 },
-  previewCell: {
-    flex: 1,
-    minWidth: 0,
-    gap: 2,
-  },
-  previewValStrong: {
-    fontSize: 14,
-    fontWeight: "700",
-    letterSpacing: -0.2,
-    color: Theme.textPrimaryDark,
-  },
-  previewFoot: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 10,
-    borderRadius: 12,
-    backgroundColor: Theme.surfaceLight,
-    marginTop: 4,
-  },
-  previewFootLeft: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-  },
-  previewFootRight: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: Theme.textPrimaryDark,
-    maxWidth: 140,
-    textAlign: "right",
-  },
-  previewCollapsedChip: {
-    position: "absolute",
-    zIndex: 60,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: Theme.darkSurface,
-    borderRadius: 999,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    ...Platform.select<ViewStyle>({
-      web: { boxShadow: "0 10px 24px rgba(15,23,42,0.2)" },
-      default: {
-        shadowColor: Theme.shadow,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.16,
-        shadowRadius: 10,
-        elevation: 4,
-      },
-    }),
-  },
-  previewCollapsedChipText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: Theme.textOnPrimary,
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
   },
   blobA: {
     position: "absolute",

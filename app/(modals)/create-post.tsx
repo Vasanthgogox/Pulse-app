@@ -2,6 +2,7 @@
  * Create story — LOAD (from an existing indent or manual) or VEHICLE AVAILABILITY.
  * Expires in 24h. No social updates.
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from "@/constants/Theme";
 import Layout from "@/constants/Layout";
 import { useAuth } from "@/contexts/AuthContext";
@@ -26,7 +27,6 @@ import {
 } from "lucide-react-native";
 import React, { useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -281,7 +281,7 @@ export default function CreatePostScreen() {
           disabled={!canSubmit || submitting}
         >
           {submitting ? (
-            <ActivityIndicator size={14} color="#fff" />
+            <LoadingIndicator size={14} color="#fff" />
           ) : (
             <Text style={styles.publishBtnText}>Deploy</Text>
           )}
@@ -385,7 +385,7 @@ export default function CreatePostScreen() {
 
               {indentsLoading ? (
                 <View style={styles.loadListLoading}>
-                  <ActivityIndicator size="small" color={Theme.primary} />
+                  <LoadingIndicator size="small" color={Theme.primary} />
                   <Text style={styles.loadListLoadingText}>Loading your indents…</Text>
                 </View>
               ) : broadcastableIndents.length === 0 ? (
@@ -627,7 +627,7 @@ export default function CreatePostScreen() {
                   <Text style={styles.sectionTitle}>IDLE VEHICLES *</Text>
                   {vehiclesLoading ? (
                     <View style={styles.loadListLoading}>
-                      <ActivityIndicator size="small" color={Theme.primary} />
+                      <LoadingIndicator size="small" color={Theme.primary} />
                       <Text style={styles.loadListLoadingText}>Loading idle vehicles…</Text>
                     </View>
                   ) : idleVehicles.length === 0 ? (

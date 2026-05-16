@@ -54,7 +54,7 @@ export function GlobalSyncProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(() => {
     if (!orgId) return;
-    void useGlobalSyncStore.getState().bootstrap(orgId);
+    void useGlobalSyncStore.getState().bootstrap(orgId, { force: true });
   }, [orgId]);
 
   // ── Unified Realtime Multiplexer ──────────────────────────────────────────
@@ -99,6 +99,26 @@ export function GlobalSyncProvider({ children }: { children: ReactNode }) {
           table:  'b2b_operations_dismissals',
           filter: `organization_id=eq.${orgId}`,
         },
+        // Shared-ledger bell rows (registry finance section).
+        {
+          event:  '*',
+          schema: 'public',
+          table:  'shared_ledger_notifications',
+          filter: `organization_id=eq.${orgId}`,
+        },
+        // Inbound Protocol — connection invites (from / to this org).
+        {
+          event:  '*',
+          schema: 'public',
+          table:  'connection_requests',
+          filter: `from_organization_id=eq.${orgId}`,
+        },
+        {
+          event:  '*',
+          schema: 'public',
+          table:  'connection_requests',
+          filter: `to_organization_id=eq.${orgId}`,
+        },
       ],
       (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
         const table     = payload.table;
@@ -110,6 +130,11 @@ export function GlobalSyncProvider({ children }: { children: ReactNode }) {
           const raised  = row.raised_by_org_id as string | undefined;
           const partner = row.partner_org_id   as string | undefined;
           if (raised !== orgId && partner !== orgId) return;
+        }
+
+        if (table === 'connection_requests') {
+          void useGlobalSyncStore.getState().refreshInboundProtocol(orgId);
+          return;
         }
 
         useGlobalSyncStore.getState().routeRealtimeEvent(table, eventType, row, orgId);

@@ -3,6 +3,7 @@
  * Tabs: Dashboard, Trip, History, Earnings. Trip chat opens from trip detail (hidden route).
  * Not to be confused with app/driver/ which is for dispatchers (e.g. /driver/[id] = driver detail).
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { DriverTabBar } from '@/components/driver/DriverTabBar';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -20,7 +21,7 @@ import {
 } from '@expo-google-fonts/plus-jakarta-sans';
 import { Tabs, usePathname, useRouter } from 'expo-router';
 import { useEffect } from 'react';
-import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 
 function DriverTabsNavigator() {
   return (
@@ -122,7 +123,7 @@ export default function DriverAppLayout() {
   if (gate) {
     return (
       <View style={styles.gate}>
-        <ActivityIndicator size="large" color={Theme.primary} />
+        <LoadingIndicator size="large" color={Theme.primary} />
       </View>
     );
   }

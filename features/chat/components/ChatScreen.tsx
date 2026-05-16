@@ -1,4 +1,5 @@
 import { PartyAvatar } from "@/components/PartyAvatar";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
@@ -87,7 +88,6 @@ import {
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { NativeScrollEvent, NativeSyntheticEvent } from "react-native";
 import {
-  ActivityIndicator,
   Alert,
   Animated,
   Easing,
@@ -1791,7 +1791,7 @@ export function ChatScreen() {
             // After bootstrap has run once, the list is always rendered from
             // in-memory Zustand state — no spinner on subsequent refreshes.
             <View style={{ paddingTop: 40, alignItems: "center" }}>
-              <ActivityIndicator color={CHAT_ACCENT} />
+              <LoadingIndicator color={CHAT_ACCENT} />
             </View>
           ) : useGroupedTripHub ? (
             <ScrollView
@@ -2015,7 +2015,7 @@ export function ChatScreen() {
                         >
                           <View style={s.loadMoreLinkInner}>
                             {isAppendingBootstrap ? (
-                              <ActivityIndicator size="small" color="#94a3b8" />
+                              <LoadingIndicator size="small" color="#94a3b8" />
                             ) : null}
                             <Text style={s.loadMoreLinkText}>
                               {isAppendingBootstrap
@@ -2062,7 +2062,7 @@ export function ChatScreen() {
         {activeTab === "network" &&
           (netLoading && netChats.length === 0 ? (
             <View style={{ paddingTop: 40, alignItems: "center" }}>
-              <ActivityIndicator color={CHAT_ACCENT} />
+              <LoadingIndicator color={CHAT_ACCENT} />
             </View>
           ) : (
             <FlatList
@@ -2174,7 +2174,7 @@ export function ChatScreen() {
                           <Text style={cm.tripNumber}>{p.name}</Text>
                         </View>
                         {initiating ? (
-                          <ActivityIndicator size="small" color={CHAT_ACCENT} />
+                          <LoadingIndicator size="small" color={CHAT_ACCENT} />
                         ) : (
                           <Plus size={14} color={CHAT_ACCENT} />
                         )}
@@ -2296,7 +2296,7 @@ export function ChatScreen() {
 
         {composeLoading ? (
           <View style={{ paddingTop: 48, alignItems: "center" }}>
-            <ActivityIndicator color={CHAT_ACCENT} />
+            <LoadingIndicator color={CHAT_ACCENT} />
           </View>
         ) : composeTripListIssue === "no_org" ? (
           <View style={{ paddingTop: 48, alignItems: "center", gap: 8, paddingHorizontal: 24 }}>
@@ -2409,7 +2409,7 @@ export function ChatScreen() {
                               ) : null}
                             </View>
                             {initiating ? (
-                              <ActivityIndicator size="small" color={CHAT_ACCENT} />
+                              <LoadingIndicator size="small" color={CHAT_ACCENT} />
                             ) : (
                               <Plus size={14} color={CHAT_ACCENT} />
                             )}
@@ -5420,7 +5420,7 @@ function TripConversationDetailLoaded({
             />
             {loadingOlder ? (
               <View style={{ paddingVertical: 10, alignItems: "center" }}>
-                <ActivityIndicator size="small" color={CHAT_ACCENT} />
+                <LoadingIndicator size="small" color={CHAT_ACCENT} />
                 <Text style={{ marginTop: 6, fontSize: 11, color: "#94a3b8" }}>Loading earlier messages…</Text>
               </View>
             ) : hasMoreOlder && displayMessages.length > 0 ? (
@@ -5465,7 +5465,7 @@ function TripConversationDetailLoaded({
                       <Text style={{ color: "#fff", fontSize: 13, fontWeight: "600" }}>Load history</Text>
                     </TouchableOpacity>
                   ) : (
-                    <ActivityIndicator size="small" color={CHAT_ACCENT} />
+                    <LoadingIndicator size="small" color={CHAT_ACCENT} />
                   )}
                 </View>
               ) : (

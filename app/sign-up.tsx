@@ -1,4 +1,5 @@
 import Theme from '@/constants/Theme';
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { useAuth } from '@/contexts/AuthContext';
 import { useIsOnline } from '@/contexts/NetworkContext';
 import {
@@ -22,7 +23,6 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   FlatList,
   KeyboardAvoidingView,
@@ -537,7 +537,7 @@ export default function SignUp() {
                   onPress={continuePhone}
                   disabled={!isPhoneValid(phone) || loading || googleLoading}
                 >
-                  {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Send OTP</Text>}
+                  {loading ? <LoadingIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Send OTP</Text>}
                 </TouchableOpacity>
 
                 <View style={styles.altRow}>
@@ -550,7 +550,7 @@ export default function SignUp() {
                   disabled={loading || googleLoading || !isOnline}
                 >
                   {googleLoading ? (
-                    <ActivityIndicator color={C.text} />
+                    <LoadingIndicator color={C.text} />
                   ) : (
                     <>
                       <FontAwesome name="google" size={14} color={C.text} />
@@ -625,7 +625,7 @@ export default function SignUp() {
                   />
                   {orgCheck?.loading ? (
                     <View style={styles.orgStatusRow}>
-                      <ActivityIndicator size="small" color={C.muted} />
+                      <LoadingIndicator size="small" color={C.muted} />
                       <Text style={styles.fieldHint}>Checking availability...</Text>
                     </View>
                   ) : orgCheck?.taken ? (
@@ -890,7 +890,7 @@ export default function SignUp() {
                   onPress={createAccount}
                   disabled={loading || googleLoading}
                 >
-                  {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Create account</Text>}
+                  {loading ? <LoadingIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Create account</Text>}
                 </TouchableOpacity>
 
                 <View style={styles.altRow}>
@@ -903,7 +903,7 @@ export default function SignUp() {
                   disabled={loading || googleLoading}
                 >
                   {googleLoading ? (
-                    <ActivityIndicator color={C.text} />
+                    <LoadingIndicator color={C.text} />
                   ) : (
                     <>
                       <FontAwesome name="google" size={14} color={C.text} />

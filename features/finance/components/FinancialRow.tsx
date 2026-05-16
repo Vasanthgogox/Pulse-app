@@ -319,10 +319,12 @@ export function LedgerExpandedCardFromData({
   data,
   onDownloadPress,
   onOpenCompareVerify: onOpenCompareVerifyProp,
+  enableDesktopThreeColumn = false,
 }: {
   data: FinancialRowData;
   onDownloadPress?: () => void;
   onOpenCompareVerify?: () => void;
+  enableDesktopThreeColumn?: boolean;
 }) {
   const router = useRouter();
   const defaultOpenCompareVerify = useCallback(() => {
@@ -461,6 +463,7 @@ export function LedgerExpandedCardFromData({
       onOpenCompareVerify={onOpenCompareVerify}
       disputeStatus={data.disputeStatus}
       disputeDirection={data.disputeDirection}
+      enableDesktopThreeColumn={enableDesktopThreeColumn}
     />
   );
 }
@@ -486,6 +489,11 @@ interface FinancialRowProps {
   expandedRowId?: string | null;
   /** Ledger only: called when user toggles expansion. Use with expandedRowId for single-expand behavior. */
   onExpandedChange?: (id: string | null) => void;
+  /**
+   * Ledger only: web desktop three-column expanded detail (Ledger | Trip | History).
+   * Use on party-detail overlays only — main Finance ledger rows stay stacked.
+   */
+  ledgerExpandedDesktopThreeColumn?: boolean;
 }
 
 export function FinancialRow({
@@ -498,6 +506,7 @@ export function FinancialRow({
   onMissionChange,
   expandedRowId,
   onExpandedChange,
+  ledgerExpandedDesktopThreeColumn = false,
 }: FinancialRowProps) {
   const { t } = useLanguage();
   const [showTripPicker, setShowTripPicker] = useState(false);
@@ -1070,7 +1079,10 @@ export function FinancialRow({
 
   const expandedDetail =
     type === "ledger" && expanded ? (
-      <LedgerExpandedCardFromData data={data} />
+      <LedgerExpandedCardFromData
+        data={data}
+        enableDesktopThreeColumn={ledgerExpandedDesktopThreeColumn}
+      />
     ) : null;
 
   if (type === "ledger") {

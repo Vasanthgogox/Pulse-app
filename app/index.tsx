@@ -1,4 +1,5 @@
 import Layout from '@/constants/Layout';
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -9,7 +10,6 @@ import { useIsFocused } from '@react-navigation/native';
 import { usePathname, useRouter } from 'expo-router';
 import { useEffect, useMemo } from 'react';
 import {
-  ActivityIndicator,
   Platform,
   StyleSheet,
   Text,
@@ -87,7 +87,7 @@ export default function Index() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-      <ActivityIndicator size="large" color={Theme.primary} />
+      <LoadingIndicator size="large" color={Theme.primary} />
       <Text style={styles.splashTitle} accessibilityRole="text">
         {splashMessage}
       </Text>

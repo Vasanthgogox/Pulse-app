@@ -1,4 +1,5 @@
 import { LEVELS_CONFIG } from "@/constants/DriverLevels";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
@@ -42,7 +43,6 @@ import {
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-    ActivityIndicator,
     Alert,
     Image,
     Linking,
@@ -728,7 +728,7 @@ export default function ProfileScreen() {
                     </View>
                   ) : statMiddleLoading ? (
                     <View style={[styles.ratingPillMuted, styles.ratingPillPartner]}>
-                      <ActivityIndicator size="small" color="rgba(255,255,255,0.6)" />
+                      <LoadingIndicator size="small" color="rgba(255,255,255,0.6)" />
                     </View>
                   ) : (
                     <View style={[styles.ratingPillMuted, styles.ratingPillPartner]}>
@@ -874,7 +874,7 @@ export default function ProfileScreen() {
                       </View>
                       <View style={styles.orgLogoPreviewWrap}>
                         {orgLogoUploading ? (
-                          <ActivityIndicator size="small" color={Theme.primary} />
+                          <LoadingIndicator size="small" color={Theme.primary} />
                         ) : orgLogoUri ? (
                           <Image source={{ uri: orgLogoUri }} style={styles.orgLogoPreview} />
                         ) : (

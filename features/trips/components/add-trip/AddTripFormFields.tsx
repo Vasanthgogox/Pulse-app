@@ -1,9 +1,9 @@
 /**
- * Create Trip — layout inspired by web mock (sections, segmented supply, preview card).
- * Wired to useAddTripForm / org services; Theme tokens only (no Tailwind).
+ * Create Trip — sectioned form (route, client, allocation); Theme tokens only.
  */
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import { type ClientRow } from "@/features/clients/services/clients.service";
 import {
@@ -49,11 +49,12 @@ import {
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFocusEffect, useRouter } from "expo-router";
-import type { ViewStyle } from "react-native";
+import type { TextStyle, ViewStyle } from "react-native";
 import {
     ActivityIndicator,
     Modal,
     Platform,
+    Pressable,
     ScrollView,
     StyleSheet,
     Switch,
@@ -116,6 +117,7 @@ const inputStyle = {
   color: Theme.textPrimary,
   backgroundColor: Theme.surfaceForm,
 };
+/** Transaction-row label tint on Create Trip (FinanceTxnTypography.fieldLabel uses textSecondary). */
 const labelStyle = { color: Theme.textMutedDemo };
 const TRIP_TERMINAL_STATUSES = new Set([
   "completed",
@@ -173,24 +175,18 @@ export function AddTripFormFields({
 
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { width: winW, height: winH } = useWindowDimensions();
+  const { width: winW } = useWindowDimensions();
   const isCompactMobile = winW < 480;
-  const isDesktopPreview = winW >= 1180;
-  const renderValidationChecklist = (
-    placement: "pageTop" | "belowPreview" | "belowFloating",
-  ) => {
+  const renderValidationChecklist = () => {
     if (validationIssues.length === 0) return null;
     return (
       <View
         style={[
           styles.validationChecklist,
-          placement === "belowPreview" && styles.validationChecklistBelowPreview,
-          placement === "belowFloating" && styles.validationChecklistBelowFloating,
-          placement === "pageTop" &&
-            !showInlineCta && {
-              marginHorizontal: isCompactMobile ? 16 : 0,
-              marginBottom: 12,
-            },
+          !showInlineCta && {
+            marginHorizontal: isCompactMobile ? 16 : 0,
+            marginBottom: 12,
+          },
         ]}
       >
         <View style={styles.validationChecklistHead}>
@@ -221,24 +217,33 @@ export function AddTripFormFields({
    * Higher than `allocationWideLayout` so laptops ~1024–1100px don’t split those fields in half.
    */
   const driverVehicleSideBySide = winW >= 1100;
-  const showFloatingPreview = winW >= 480 && !isDesktopPreview;
-  /** Cap height so the fixed bottom-right panel + validation can scroll instead of clipping off-screen. */
-  const floatingPreviewMaxHeight = Math.max(
-    220,
-    winH - insets.top - insets.bottom - 48,
-  );
-  const floatingPreviewWidth = Math.min(336, Math.max(280, winW - 24));
-  const collapsePreviewByDefault = winW < 560;
+  /** Web only: CSS grid — row1 route|client; row2 supply full width; row3 CTA (notes via modal). */
+  const desktopFormGrid =
+    Platform.OS === "web" && winW >= 1080 && !isCompactMobile;
+  /** Desktop form shell: use viewport minus padding, capped so ultra-wide stays readable. */
+  const desktopFormMaxWidth = Math.min(winW - 28, 1680);
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
-  const [mobilePreviewExpanded, setMobilePreviewExpanded] = useState(
-    !collapsePreviewByDefault,
-  );
-  const [clientListExpanded, setClientListExpanded] = useState(true);
-  const [driverListExpanded, setDriverListExpanded] = useState(true);
-  const [vehicleListExpanded, setVehicleListExpanded] = useState(true);
-  const [partnerListExpanded, setPartnerListExpanded] = useState(true);
+  /** Expanded picker vs minimized summary chip — start collapsed when a value is already set. */
+  const [clientListExpanded, setClientListExpanded] = useState(() => !state.clientId);
+  const [driverListExpanded, setDriverListExpanded] = useState(() => !state.driverId);
+  const [vehicleListExpanded, setVehicleListExpanded] = useState(() => !state.vehicleId);
+  const [partnerListExpanded, setPartnerListExpanded] = useState(() => !state.supplierId);
+
+  useEffect(() => {
+    if (!state.clientId) setClientListExpanded(true);
+  }, [state.clientId]);
+  useEffect(() => {
+    if (!state.driverId) setDriverListExpanded(true);
+  }, [state.driverId]);
+  useEffect(() => {
+    if (!state.vehicleId) setVehicleListExpanded(true);
+  }, [state.vehicleId]);
+  useEffect(() => {
+    if (!state.supplierId) setPartnerListExpanded(true);
+  }, [state.supplierId]);
   const [pickupDropdownOpen, setPickupDropdownOpen] = useState(false);
   const [dropDropdownOpen, setDropDropdownOpen] = useState(false);
+  const [notesModalOpen, setNotesModalOpen] = useState(false);
   const [drivers, setDrivers] = useState<DriverRow[]>([]);
   const [driverIdsOnActiveTrip, setDriverIdsOnActiveTrip] = useState<string[]>(
     [],
@@ -256,7 +261,7 @@ export function AddTripFormFields({
   const aggregateDriverNameInputRef = useRef<TextInput>(null);
   const driverPhoneInputRef = useRef<TextInput>(null);
   const aggregateVehicleInputRef = useRef<TextInput>(null);
-  const notesInputRef = useRef<TextInput>(null);
+  const notesModalInputRef = useRef<TextInput>(null);
 
   const focusField = useCallback((ref: { current: TextInput | null }) => {
     requestAnimationFrame(() => {
@@ -275,6 +280,17 @@ export function AddTripFormFields({
     },
     [focusField],
   );
+
+  const openNotesModal = useCallback(() => {
+    setNotesModalOpen(true);
+  }, []);
+
+  useEffect(() => {
+    if (!notesModalOpen) return;
+    focusField(notesModalInputRef);
+    const t = setTimeout(() => notesModalInputRef.current?.focus(), 160);
+    return () => clearTimeout(t);
+  }, [notesModalOpen, focusField]);
 
   const openPickerNext = useCallback((_type: "driver" | "vehicle") => {}, []);
 
@@ -328,12 +344,6 @@ export function AddTripFormFields({
   useEffect(() => {
     if (organizationId) fetchFleet();
   }, [organizationId, fetchFleet]);
-
-  useEffect(() => {
-    if (!showFloatingPreview) return;
-    // On compact phones, keep form-first UX by default.
-    setMobilePreviewExpanded(!collapsePreviewByDefault);
-  }, [showFloatingPreview, collapsePreviewByDefault]);
 
   useEffect(() => {
     if (
@@ -499,38 +509,14 @@ export function AddTripFormFields({
   const selectedVehicleRow =
     vehicleOptions.find((v) => v.id === state.vehicleId) ?? null;
 
-  const scrollBlocked = pickupDropdownOpen || dropDropdownOpen;
+  const scrollBlocked =
+    pickupDropdownOpen || dropDropdownOpen || notesModalOpen;
 
   const supplyIsAsset = state.supplySource === "asset";
   const selectedClientRow = clients.find((c) => c.id === state.clientId) ?? null;
   const selectedSupplierRow = suppliers.find((s) => s.id === state.supplierId) ?? null;
   const selectedPartnerName =
     suppliers.find((s) => s.id === state.supplierId)?.name?.trim() ?? "";
-  const selectedAssetDriverName =
-    state.driverId != null
-      ? drivers.find((d) => d.id === state.driverId)?.name?.trim() ?? ""
-      : "";
-  const selectedAssetVehicleNumber =
-    state.vehicleId != null
-      ? formatIndianVehicleNumber(
-          vehicles.find((v) => v.id === state.vehicleId)?.vehicle_number ?? "",
-        ) || ""
-      : "";
-  const aggregateDriverDisplay =
-    state.aggregateDriverName?.trim() ||
-    state.driverPhoneName?.trim() ||
-    state.driverPhone.trim();
-  const previewFooterValue = supplyIsAsset
-    ? state.assignLater
-      ? "Assign later"
-      : [selectedAssetDriverName, selectedAssetVehicleNumber]
-          .filter((part) => part.length > 0)
-          .join(" - ") || "—"
-    : state.assignLater
-      ? "Assign later"
-      : [aggregateDriverDisplay, state.aggregateVehicleText.trim()]
-          .filter((part) => part.length > 0)
-          .join(" - ") || "—";
   const busyFleetHintAsset =
     supplyIsAsset &&
     !state.assignLater &&
@@ -560,42 +546,59 @@ export function AddTripFormFields({
           styles.scrollContent,
           {
             paddingBottom:
-              Layout.sectionSpacing + insets.bottom + (isWide ? 100 : 140),
+              Layout.sectionSpacing +
+              insets.bottom +
+              (desktopFormGrid ? 52 : isWide ? 68 : 108),
           },
         ]}
         showsVerticalScrollIndicator
         keyboardShouldPersistTaps="handled"
-        scrollEnabled={isCompactMobile ? true : !scrollBlocked}
+        scrollEnabled={
+          Platform.OS === "web" ? true : isCompactMobile ? true : !scrollBlocked
+        }
       >
         <View
           style={[
             styles.contentMax,
             {
-              paddingHorizontal: isWide
+              maxWidth: desktopFormGrid
+                ? desktopFormMaxWidth
+                : isWide
+                  ? 1000
+                  : 960,
+              paddingHorizontal: desktopFormGrid
                 ? 24
-                : isCompactMobile
-                  ? 0
-                  : Layout.screenPaddingHorizontal,
+                : isWide
+                  ? 16
+                  : isCompactMobile
+                    ? 0
+                    : Layout.screenPaddingHorizontal,
             },
           ]}
         >
-          {!isDesktopPreview &&
-            !(showFloatingPreview && mobilePreviewExpanded) &&
-            renderValidationChecklist("pageTop")}
-          <View style={[styles.mainGrid, isDesktopPreview && styles.mainGridDesktop]}>
+          {renderValidationChecklist()}
+          <View style={styles.mainGrid}>
             <View
               style={[
                 styles.formColumn,
-                isDesktopPreview && styles.formColumnDesktop,
+                desktopFormGrid && styles.formColumnGridWeb,
               ]}
             >
           {/* 01 Route */}
-          <View style={[styles.card, isCompactMobile && styles.cardCompact]}>
+          <View
+            style={[
+              styles.card,
+              isCompactMobile && styles.cardCompact,
+              desktopFormGrid && styles.cardGridRouteWeb,
+            ]}
+          >
             <View style={styles.cardHead}>
               <View style={styles.stepBadge}>
                 <Text style={styles.stepBadgeText}>01</Text>
               </View>
-              <Text style={[styles.cardTitle, isCompactMobile && styles.cardTitleCompact]}>Route Details</Text>
+              <Text style={[styles.cardTitle, isCompactMobile && styles.cardTitleCompact]}>
+                Route Details
+              </Text>
             </View>
 
             <View style={[styles.gridRow, isWide && styles.gridRowWide]}>
@@ -608,7 +611,7 @@ export function AddTripFormFields({
                   onSelectPlace={(_name, coords) =>
                     setters.setPickupCoords(coords.lat, coords.lon)
                   }
-                  leadingIcon={<MapPin size={18} color={Theme.iconMuted} />}
+                  leadingIcon={<MapPin size={14} color={Theme.iconMuted} />}
                   inputStyle={[styles.input, inputStyle, outlineErr("pickup")]}
                   labelStyle={[styles.label, labelStyle]}
                   onDropdownOpenChange={setPickupDropdownOpen}
@@ -623,7 +626,7 @@ export function AddTripFormFields({
                   onSelectPlace={(_name, coords) =>
                     setters.setDropCoords(coords.lat, coords.lon)
                   }
-                  leadingIcon={<Navigation size={18} color={Theme.iconMuted} />}
+                  leadingIcon={<Navigation size={14} color={Theme.iconMuted} />}
                   inputStyle={[styles.input, inputStyle, outlineErr("drop")]}
                   labelStyle={[styles.label, labelStyle]}
                   onDropdownOpenChange={setDropDropdownOpen}
@@ -635,22 +638,28 @@ export function AddTripFormFields({
               <View style={styles.gridCol}>
                 <Text style={[styles.label, labelStyle]}>Trip start date</Text>
                 <View style={styles.quickDateRow}>
-                  {[
-                    { label: "Today", get: getToday },
-                    { label: "Tomorrow", get: getTomorrow },
-                    { label: "Day after", get: getDayAfter },
-                  ].map(({ label, get }) => {
+                  {(
+                    [
+                      { label: "Today", get: getToday },
+                      { label: "Tomorrow", get: getTomorrow },
+                      { label: "Day after", get: getDayAfter },
+                    ] as const
+                  ).map(({ label, get }) => {
                     const iso = get();
                     const isActive = state.tripStartDate === iso;
                     return (
-                      <TouchableOpacity
+                      <Pressable
                         key={label}
-                        style={[
+                        style={({ pressed }) => [
                           styles.quickDateChip,
                           isActive && styles.quickDateChipActive,
+                          pressed && styles.quickDateChipPressed,
+                          Platform.OS === "web" &&
+                            ({ cursor: "pointer" } as ViewStyle),
                         ]}
                         onPress={() => setters.setTripStartDate(iso)}
-                        activeOpacity={0.8}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: isActive }}
                       >
                         <Text
                           style={[
@@ -660,7 +669,7 @@ export function AddTripFormFields({
                         >
                           {label}
                         </Text>
-                      </TouchableOpacity>
+                      </Pressable>
                     );
                   })}
                 </View>
@@ -789,9 +798,9 @@ export function AddTripFormFields({
               <View style={styles.routePreviewPanel}>
                 <View style={styles.routePreviewHero}>
                   <ArrowRight
-                    size={20}
+                    size={16}
                     color={Theme.teslaRed}
-                    strokeWidth={2.5}
+                    strokeWidth={2}
                   />
                   <Text style={styles.routePreviewHeroText} numberOfLines={2}>
                     {routePreviewLine(state.pickupArea)} →{" "}
@@ -830,7 +839,13 @@ export function AddTripFormFields({
           </View>
 
           {/* 02 Client & Commercials */}
-          <View style={[styles.card, isCompactMobile && styles.cardCompact]}>
+          <View
+            style={[
+              styles.card,
+              isCompactMobile && styles.cardCompact,
+              desktopFormGrid && styles.cardGridClientWeb,
+            ]}
+          >
             <View style={styles.cardHead}>
               <View style={styles.stepBadge}>
                 <Text style={styles.stepBadgeText}>02</Text>
@@ -845,38 +860,47 @@ export function AddTripFormFields({
                   invalid("client") && styles.fieldGroupRing,
                 ]}
               >
-                <View style={styles.sectionLabelRow}>
-                  <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
-                    Select client
-                  </Text>
-                  <View style={styles.sectionLabelActions}>
-                    {state.clientId ? (
+                <View
+                  style={isWide ? styles.clientCommercialsHeaderBand : undefined}
+                >
+                  <View
+                    style={[
+                      styles.sectionLabelRow,
+                      isWide && styles.sectionLabelRowFlush,
+                    ]}
+                  >
+                    <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
+                      Select client
+                    </Text>
+                    <View style={styles.sectionLabelActions}>
+                      {state.clientId ? (
+                        <TouchableOpacity
+                          style={styles.changeSelectionBtn}
+                          onPress={() => setClientListExpanded((p) => !p)}
+                          activeOpacity={0.85}
+                        >
+                          <Text style={styles.changeSelectionBtnText}>
+                            {clientListExpanded ? "Collapse" : "Change"}
+                          </Text>
+                          <FontAwesome
+                            name={clientListExpanded ? "chevron-up" : "chevron-down"}
+                            size={11}
+                            color={Theme.iconPrimary}
+                          />
+                        </TouchableOpacity>
+                      ) : null}
                       <TouchableOpacity
-                        style={styles.changeSelectionBtn}
-                        onPress={() => setClientListExpanded((p) => !p)}
+                        style={[
+                          styles.addClientBtn,
+                          Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null,
+                        ]}
+                        onPress={handleAddClientShortcut}
                         activeOpacity={0.85}
                       >
-                        <Text style={styles.changeSelectionBtnText}>
-                          {clientListExpanded ? "Collapse" : "Change"}
-                        </Text>
-                        <FontAwesome
-                          name={clientListExpanded ? "chevron-up" : "chevron-down"}
-                          size={11}
-                          color={Theme.iconPrimary}
-                        />
+                        <PlusCircle size={14} color={Theme.iconPrimary} />
+                        <Text style={styles.addClientBtnText}>Add client</Text>
                       </TouchableOpacity>
-                    ) : null}
-                    <TouchableOpacity
-                      style={[
-                        styles.addClientBtn,
-                        Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null,
-                      ]}
-                      onPress={handleAddClientShortcut}
-                      activeOpacity={0.85}
-                    >
-                      <PlusCircle size={14} color={Theme.iconPrimary} />
-                      <Text style={styles.addClientBtnText}>Add client</Text>
-                    </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
                 {clientsLoading ? (
@@ -887,7 +911,11 @@ export function AddTripFormFields({
                   </Text>
                 ) : state.clientId && !clientListExpanded && selectedClientRow ? (
                   <TouchableOpacity
-                    style={[styles.clientCard, styles.clientCardOn]}
+                    style={[
+                      styles.clientCard,
+                      styles.selectionSummaryCard,
+                      isWide && styles.clientCardWideBesidePrice,
+                    ]}
                     onPress={() => setClientListExpanded(true)}
                     activeOpacity={0.85}
                   >
@@ -905,18 +933,18 @@ export function AddTripFormFields({
                         borderStyle={styles.clientAvatarOn}
                       />
                       <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text style={[styles.clientName, styles.clientNameOn]} numberOfLines={1}>
+                        <Text style={styles.selectionSummaryTitle} numberOfLines={1}>
                           {selectedClientRow.name}
                         </Text>
                         {selectedClientRow.address ? (
-                          <Text style={styles.clientSub} numberOfLines={1}>
+                          <Text style={styles.selectionSummarySub} numberOfLines={1}>
                             {selectedClientRow.address}
                           </Text>
                         ) : null}
                       </View>
                     </View>
-                    <View style={styles.changeSelectionPill}>
-                      <Text style={styles.changeSelectionPillText}>Change</Text>
+                    <View style={styles.selectionSummaryPill}>
+                      <Text style={styles.selectionSummaryPillText}>Change</Text>
                     </View>
                   </TouchableOpacity>
                 ) : (
@@ -932,7 +960,7 @@ export function AddTripFormFields({
                           key={c.id}
                           style={[
                             styles.clientCard,
-                            selected && styles.clientCardOn,
+                            selected && styles.clientCardRowSelected,
                             Platform.OS === "web"
                               ? ({ cursor: "pointer" } as ViewStyle)
                               : null,
@@ -985,7 +1013,7 @@ export function AddTripFormFields({
                             {selected ? (
                               <CheckCircle2
                                 size={16}
-                                color={Theme.iconPrimary}
+                                color={Theme.darkGreen}
                               />
                             ) : null}
                           </View>
@@ -997,19 +1025,38 @@ export function AddTripFormFields({
               </View>
 
               <View style={styles.gridCol}>
-                <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
-                  Client sales price (₹) *
-                </Text>
-                <View style={styles.priceWrap}>
+                <View
+                  style={isWide ? styles.clientCommercialsHeaderBand : undefined}
+                >
+                  <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
+                    Client sales price (₹) *
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.priceWrapShell,
+                    isWide && styles.priceWrapShellWideColumn,
+                    state.clientId &&
+                      !invalid("clientPrice") &&
+                      styles.priceWrapShellSelected,
+                    invalid("clientPrice") && styles.priceWrapShellError,
+                  ]}
+                >
                   <IndianRupee
-                    size={20}
-                    color={Theme.iconMuted}
-                    style={styles.rupeeIcon}
+                    size={16}
+                    color={
+                      state.clientId && !invalid("clientPrice")
+                        ? Theme.iconPrimary
+                        : Theme.iconMuted
+                    }
+                    style={styles.priceRupeeIcon}
                   />
                   <TextInput
                     style={[
                       styles.priceInput,
-                      invalid("clientPrice") && styles.priceInputError,
+                      isCompactMobile &&
+                        Platform.OS === "web" &&
+                        styles.mobileWebNoZoomInput,
                     ]}
                     placeholder="0"
                     placeholderTextColor={Theme.placeholder}
@@ -1022,7 +1069,7 @@ export function AddTripFormFields({
                     onSubmitEditing={() => {
                       if (supplyIsAsset) {
                         if (state.assignLater) {
-                          focusField(notesInputRef);
+                          openNotesModal();
                         } else {
                           openPickerNext("driver");
                         }
@@ -1032,112 +1079,179 @@ export function AddTripFormFields({
                     }}
                   />
                 </View>
-                <View style={styles.infoCallout}>
-                  <Info size={16} color={Theme.iconPrimary} />
-                  <Text style={styles.infoCalloutText}>
-                    Revenue should match what you bill this client for this
-                    lane. Adjust if this trip differs.
-                  </Text>
-                </View>
+                {!isWide ? (
+                  <View style={styles.infoCallout}>
+                    <Info size={16} color={Theme.iconPrimary} />
+                    <Text style={styles.infoCalloutText}>
+                      Revenue should match what you bill this client for this
+                      lane. Adjust if this trip differs.
+                    </Text>
+                  </View>
+                ) : null}
               </View>
             </View>
+            {isWide ? (
+              <View style={styles.infoCalloutWideSpan}>
+                <Info size={16} color={Theme.iconPrimary} />
+                <Text style={styles.infoCalloutText}>
+                  Revenue should match what you bill this client for this lane.
+                  Adjust if this trip differs.
+                </Text>
+              </View>
+            ) : null}
           </View>
 
           {/* 03 Supply & Allocation */}
-          <View style={[styles.card, isCompactMobile && styles.cardCompact]}>
-            <View style={styles.cardHead}>
-              <View style={styles.stepBadge}>
-                <Text style={styles.stepBadgeText}>03</Text>
+          <View
+            style={[
+              styles.card,
+              isCompactMobile && styles.cardCompact,
+              desktopFormGrid && styles.cardGridSupplyWeb,
+            ]}
+          >
+            <View style={[styles.cardHead, styles.cardHeadWithTrailingAction]}>
+              <View style={styles.cardHeadTitleCluster}>
+                <View style={styles.stepBadge}>
+                  <Text style={styles.stepBadgeText}>03</Text>
+                </View>
+                <Text
+                  style={[styles.cardTitle, isCompactMobile && styles.cardTitleCompact]}
+                  numberOfLines={1}
+                >
+                  Supply & Allocation
+                </Text>
               </View>
-              <Text style={[styles.cardTitle, isCompactMobile && styles.cardTitleCompact]}>Supply & Allocation</Text>
-            </View>
-
-            <View style={styles.segment}>
               <TouchableOpacity
                 style={[
-                  styles.segmentBtn,
-                  supplyIsAsset && styles.segmentBtnOn,
-                  Platform.OS === "web"
-                    ? ({ cursor: "pointer" } as ViewStyle)
-                    : null,
+                  styles.notesQuickBtn,
+                  invalid("notes") ? styles.notesQuickBtnInvalid : null,
+                  Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null,
                 ]}
-                onPress={() => setters.setSupplySource("asset")}
+                onPress={openNotesModal}
                 activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  state.notes.trim().length > 0
+                    ? "Edit trip notes"
+                    : "Add trip notes"
+                }
               >
-                <Truck
-                  size={16}
-                  color={supplyIsAsset ? Theme.textOnPrimary : "rgba(255,255,255,0.7)"}
-                />
-                <Text
-                  style={[
-                    styles.segmentLab,
-                    supplyIsAsset && styles.segmentLabOn,
-                  ]}
-                >
-                  Asset
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.segmentBtn,
-                  !supplyIsAsset && styles.segmentBtnOn,
-                  Platform.OS === "web"
-                    ? ({ cursor: "pointer" } as ViewStyle)
-                    : null,
-                ]}
-                onPress={() => setters.setSupplySource("aggregate")}
-                activeOpacity={0.85}
-              >
-                <Building2
-                  size={16}
-                  color={!supplyIsAsset ? Theme.textOnPrimary : "rgba(255,255,255,0.7)"}
-                />
-                <Text
-                  style={[
-                    styles.segmentLab,
-                    !supplyIsAsset && styles.segmentLabOn,
-                  ]}
-                >
-                  Aggregate
-                </Text>
+                <FileText size={17} color={Theme.iconPrimary} />
+                {state.notes.trim().length > 0 ? (
+                  <View style={styles.notesQuickBtnDot} />
+                ) : null}
               </TouchableOpacity>
             </View>
 
             <View
               style={[
-                styles.assignLaterCard,
-                { marginBottom: 16 },
-                assignLaterSwitchDisabled && styles.assignLaterCardDisabled,
+                styles.supplyModeRow,
+                isCompactMobile && styles.supplyModeRowStack,
               ]}
             >
-              <View style={styles.assignLaterCardLeft}>
+              <View
+                style={[
+                  styles.assignLaterCard,
+                  isCompactMobile && styles.assignLaterCardStacked,
+                  assignLaterSwitchDisabled && styles.assignLaterCardDisabled,
+                ]}
+              >
                 <View style={styles.assignLaterIconCircle}>
                   <ListChecks size={18} color={Theme.iconPrimary} />
                 </View>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.assignLaterTitle}>Assign later</Text>
-                  <Text style={styles.assignLaterSub}>
-                    {supplyIsAsset
-                      ? "(vehicle & driver from trip detail)"
-                      : "(vehicle & driver phone from trip detail)"}
-                  </Text>
-                  {assignLaterSwitchDisabled ? (
-                    <Text style={styles.assignLaterLockedHint}>
-                      Remove driver or vehicle assignment to enable assign later.
+                <View style={styles.assignLaterMergedWrap}>
+                  <Text
+                    style={styles.assignLaterMergedText}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
+                    <Text style={styles.assignLaterTitleInline}>Assign later </Text>
+                    <Text style={styles.assignLaterSubInline}>
+                      {supplyIsAsset
+                        ? "(vehicle & driver from trip detail)"
+                        : "(vehicle & driver phone from trip detail)"}
                     </Text>
-                  ) : null}
+                  </Text>
+                </View>
+                <View style={styles.assignLaterSwitchWrap}>
+                  <Switch
+                    value={state.assignLater}
+                    onValueChange={setters.setAssignLater}
+                    disabled={assignLaterSwitchDisabled}
+                    trackColor={{
+                      false: Theme.borderInput,
+                      true: Theme.darkBackground,
+                    }}
+                    thumbColor={Theme.screenBackground}
+                  />
                 </View>
               </View>
-              <Switch
-                value={state.assignLater}
-                onValueChange={setters.setAssignLater}
-                disabled={assignLaterSwitchDisabled}
-                trackColor={{
-                  false: Theme.borderInput,
-                  true: Theme.darkBackground,
-                }}
-                thumbColor={Theme.screenBackground}
-              />
+
+              <View
+                style={[
+                  styles.segmentWrap,
+                  isCompactMobile && styles.segmentWrapCentered,
+                ]}
+              >
+                <View style={styles.segment}>
+                  <TouchableOpacity
+                    style={[
+                      styles.segmentBtn,
+                      supplyIsAsset && styles.segmentBtnOn,
+                      Platform.OS === "web"
+                        ? ({ cursor: "pointer" } as ViewStyle)
+                        : null,
+                    ]}
+                    onPress={() => setters.setSupplySource("asset")}
+                    activeOpacity={0.85}
+                  >
+                    <Truck
+                      size={16}
+                      color={supplyIsAsset ? Theme.textOnPrimary : "rgba(255,255,255,0.7)"}
+                    />
+                    <Text
+                      style={[
+                        styles.segmentLab,
+                        supplyIsAsset && styles.segmentLabOn,
+                      ]}
+                    >
+                      Asset
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.segmentBtn,
+                      !supplyIsAsset && styles.segmentBtnOn,
+                      Platform.OS === "web"
+                        ? ({ cursor: "pointer" } as ViewStyle)
+                        : null,
+                    ]}
+                    onPress={() => setters.setSupplySource("aggregate")}
+                    activeOpacity={0.85}
+                  >
+                    <Building2
+                      size={16}
+                      color={!supplyIsAsset ? Theme.textOnPrimary : "rgba(255,255,255,0.7)"}
+                    />
+                    <Text
+                      style={[
+                        styles.segmentLab,
+                        !supplyIsAsset && styles.segmentLabOn,
+                      ]}
+                    >
+                      Aggregate
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+
+            <View style={{ marginBottom: assignLaterSwitchDisabled ? 12 : 0 }}>
+              {assignLaterSwitchDisabled ? (
+                <Text style={styles.assignLaterLockedHintBelow}>
+                  Remove driver or vehicle assignment to enable assign later.
+                </Text>
+              ) : null}
             </View>
             {state.assignLater ? (
               <Text style={styles.warningText}>
@@ -1187,6 +1301,8 @@ export function AddTripFormFields({
                         invalid("assetDriver") && styles.fieldGroupRing,
                       ]}
                     >
+                      <View style={styles.fleetPickColumnWrap}>
+                        <View style={styles.fleetPickColumnInner}>
                       <View
                         style={[
                           styles.sectionLabelRow,
@@ -1241,7 +1357,7 @@ export function AddTripFormFields({
                             </View>
                           ) : state.driverId && !driverListExpanded && selectedDriverRow ? (
                             <TouchableOpacity
-                              style={[styles.clientCard, styles.clientCardOn]}
+                              style={[styles.clientCard, styles.selectionSummaryCard]}
                               onPress={() => setDriverListExpanded(true)}
                               activeOpacity={0.85}
                             >
@@ -1255,16 +1371,16 @@ export function AddTripFormFields({
                                   borderStyle={styles.clientAvatarOn}
                                 />
                                 <View style={{ flex: 1, minWidth: 0 }}>
-                                  <Text style={[styles.clientName, styles.clientNameOn]} numberOfLines={1}>
+                                  <Text style={styles.selectionSummaryTitle} numberOfLines={1}>
                                     {selectedDriverRow.name || "—"}
                                   </Text>
-                                  <Text style={styles.clientSub} numberOfLines={1}>
+                                  <Text style={styles.selectionSummarySub} numberOfLines={1}>
                                     {[selectedDriverRow.phone, selectedDriverRow.email].filter(Boolean).join(" · ")}
                                   </Text>
                                 </View>
                               </View>
-                              <View style={styles.changeSelectionPill}>
-                                <Text style={styles.changeSelectionPillText}>Change</Text>
+                              <View style={styles.selectionSummaryPill}>
+                                <Text style={styles.selectionSummaryPillText}>Change</Text>
                               </View>
                             </TouchableOpacity>
                           ) : (
@@ -1278,7 +1394,7 @@ export function AddTripFormFields({
                                     styles.clientCard,
                                     styles.clientCardMobile,
                                     d.isBusy && styles.clientCardDisabled,
-                                    selected && styles.clientCardOn,
+                                    selected && styles.clientCardRowSelected,
                                     Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null,
                                   ]}
                                   onPress={() => {
@@ -1311,7 +1427,7 @@ export function AddTripFormFields({
                                   </View>
                                 ) : (
                                   <View style={[styles.radioOuter, selected && styles.radioOuterOn]}>
-                                    {selected ? <CheckCircle2 size={16} color={Theme.iconPrimary} /> : null}
+                                    {selected ? <CheckCircle2 size={16} color={Theme.darkGreen} /> : null}
                                   </View>
                                 )}
                                 </TouchableOpacity>
@@ -1319,6 +1435,34 @@ export function AddTripFormFields({
                             })
                           )}
                         </View>
+                      ) : state.driverId && !driverListExpanded && selectedDriverRow ? (
+                        <TouchableOpacity
+                          style={[styles.clientCard, styles.selectionSummaryCard]}
+                          onPress={() => setDriverListExpanded(true)}
+                          activeOpacity={0.85}
+                        >
+                          <View style={styles.clientMain}>
+                            <PartyAvatar
+                              name={selectedDriverRow.name ?? "Driver"}
+                              avatarUrl={(selectedDriverRow as { avatar_url?: string | null }).avatar_url ?? null}
+                              avatarSeed={(selectedDriverRow as { avatar_seed?: string | null }).avatar_seed ?? null}
+                              entityType="driver"
+                              size={38}
+                              borderStyle={styles.clientAvatarOn}
+                            />
+                            <View style={{ flex: 1, minWidth: 0 }}>
+                              <Text style={styles.selectionSummaryTitle} numberOfLines={1}>
+                                {selectedDriverRow.name || "—"}
+                              </Text>
+                              <Text style={styles.selectionSummarySub} numberOfLines={1}>
+                                {[selectedDriverRow.phone, selectedDriverRow.email].filter(Boolean).join(" · ")}
+                              </Text>
+                            </View>
+                          </View>
+                          <View style={styles.selectionSummaryPill}>
+                            <Text style={styles.selectionSummaryPillText}>Change</Text>
+                          </View>
+                        </TouchableOpacity>
                       ) : (
                         <ScrollView
                           style={[
@@ -1339,12 +1483,13 @@ export function AddTripFormFields({
                                 style={[
                                   styles.clientCard,
                                   d.isBusy && styles.clientCardDisabled,
-                                  selected && styles.clientCardOn,
+                                  selected && styles.clientCardRowSelected,
                                   Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null,
                                 ]}
                                 onPress={() => {
                                   if (d.isBusy) return;
                                   setters.setDriverId(selected ? null : d.id);
+                                  setDriverListExpanded(false);
                                 }}
                                 disabled={d.isBusy}
                                 activeOpacity={0.85}
@@ -1371,7 +1516,7 @@ export function AddTripFormFields({
                                   </View>
                                 ) : (
                                   <View style={[styles.radioOuter, selected && styles.radioOuterOn]}>
-                                    {selected ? <CheckCircle2 size={16} color={Theme.iconPrimary} /> : null}
+                                    {selected ? <CheckCircle2 size={16} color={Theme.darkGreen} /> : null}
                                   </View>
                                 )}
                               </TouchableOpacity>
@@ -1379,6 +1524,8 @@ export function AddTripFormFields({
                           })}
                         </ScrollView>
                       )}
+                        </View>
+                      </View>
                     </View>
                     <View
                       style={[
@@ -1388,6 +1535,8 @@ export function AddTripFormFields({
                         invalid("assetVehicle") && styles.fieldGroupRing,
                       ]}
                     >
+                      <View style={styles.fleetPickColumnWrap}>
+                        <View style={styles.fleetPickColumnInner}>
                       <View
                         style={[
                           styles.sectionLabelRow,
@@ -1442,19 +1591,19 @@ export function AddTripFormFields({
                             </View>
                           ) : state.vehicleId && !vehicleListExpanded && selectedVehicleRow ? (
                             <TouchableOpacity
-                              style={[styles.clientCard, styles.clientCardOn]}
+                              style={[styles.clientCard, styles.selectionSummaryCard]}
                               onPress={() => setVehicleListExpanded(true)}
                               activeOpacity={0.85}
                             >
                               <View style={styles.clientMain}>
-                                <View style={styles.vehicleCardIcon}>
-                                  <Truck size={18} color={Theme.iconPrimary} />
+                                <View style={styles.vehicleCardIconSummary}>
+                                  <Truck size={18} color={Theme.textOnDarkMuted} />
                                 </View>
                                 <View style={{ flex: 1, minWidth: 0 }}>
-                                  <Text style={[styles.clientName, styles.clientNameOn]} numberOfLines={1}>
+                                  <Text style={styles.selectionSummaryTitle} numberOfLines={1}>
                                     {formatIndianVehicleNumber(selectedVehicleRow.vehicle_number || "") || "—"}
                                   </Text>
-                                  <Text style={styles.clientSub} numberOfLines={1}>
+                                  <Text style={styles.selectionSummarySub} numberOfLines={1}>
                                     {[
                                       selectedVehicleRow.vehicle_body_type || selectedVehicleRow.vehicle_type,
                                       [selectedVehicleRow.vehicle_size, selectedVehicleRow.vehicle_axle].filter(Boolean).join(" "),
@@ -1465,8 +1614,8 @@ export function AddTripFormFields({
                                   </Text>
                                 </View>
                               </View>
-                              <View style={styles.changeSelectionPill}>
-                                <Text style={styles.changeSelectionPillText}>Change</Text>
+                              <View style={styles.selectionSummaryPill}>
+                                <Text style={styles.selectionSummaryPillText}>Change</Text>
                               </View>
                             </TouchableOpacity>
                           ) : (
@@ -1481,7 +1630,7 @@ export function AddTripFormFields({
                                     styles.clientCard,
                                     styles.clientCardMobile,
                                     v.isBusy && styles.clientCardDisabled,
-                                    selected && styles.clientCardOn,
+                                    selected && styles.clientCardRowSelected,
                                     Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null,
                                   ]}
                                   onPress={() => {
@@ -1509,7 +1658,7 @@ export function AddTripFormFields({
                                   </View>
                                 ) : (
                                   <View style={[styles.radioOuter, selected && styles.radioOuterOn]}>
-                                    {selected ? <CheckCircle2 size={16} color={Theme.iconPrimary} /> : null}
+                                    {selected ? <CheckCircle2 size={16} color={Theme.darkGreen} /> : null}
                                   </View>
                                 )}
                                 </TouchableOpacity>
@@ -1517,6 +1666,35 @@ export function AddTripFormFields({
                             })
                           )}
                         </View>
+                      ) : state.vehicleId && !vehicleListExpanded && selectedVehicleRow ? (
+                        <TouchableOpacity
+                          style={[styles.clientCard, styles.selectionSummaryCard]}
+                          onPress={() => setVehicleListExpanded(true)}
+                          activeOpacity={0.85}
+                        >
+                          <View style={styles.clientMain}>
+                            <View style={styles.vehicleCardIconSummary}>
+                              <Truck size={18} color={Theme.textOnDarkMuted} />
+                            </View>
+                            <View style={{ flex: 1, minWidth: 0 }}>
+                              <Text style={styles.selectionSummaryTitle} numberOfLines={1}>
+                                {formatIndianVehicleNumber(selectedVehicleRow.vehicle_number || "") || "—"}
+                              </Text>
+                              <Text style={styles.selectionSummarySub} numberOfLines={1}>
+                                {[
+                                  selectedVehicleRow.vehicle_body_type || selectedVehicleRow.vehicle_type,
+                                  [selectedVehicleRow.vehicle_size, selectedVehicleRow.vehicle_axle].filter(Boolean).join(" "),
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · ")
+                                  .toUpperCase()}
+                              </Text>
+                            </View>
+                          </View>
+                          <View style={styles.selectionSummaryPill}>
+                            <Text style={styles.selectionSummaryPillText}>Change</Text>
+                          </View>
+                        </TouchableOpacity>
                       ) : (
                         <ScrollView
                           style={[
@@ -1538,12 +1716,13 @@ export function AddTripFormFields({
                                 style={[
                                   styles.clientCard,
                                   v.isBusy && styles.clientCardDisabled,
-                                  selected && styles.clientCardOn,
+                                  selected && styles.clientCardRowSelected,
                                   Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null,
                                 ]}
                                 onPress={() => {
                                   if (v.isBusy) return;
                                   setters.setVehicleId(selected ? null : v.id);
+                                  setVehicleListExpanded(false);
                                 }}
                                 disabled={v.isBusy}
                                 activeOpacity={0.85}
@@ -1565,7 +1744,7 @@ export function AddTripFormFields({
                                   </View>
                                 ) : (
                                   <View style={[styles.radioOuter, selected && styles.radioOuterOn]}>
-                                    {selected ? <CheckCircle2 size={16} color={Theme.iconPrimary} /> : null}
+                                    {selected ? <CheckCircle2 size={16} color={Theme.darkGreen} /> : null}
                                   </View>
                                 )}
                               </TouchableOpacity>
@@ -1573,6 +1752,8 @@ export function AddTripFormFields({
                           })}
                         </ScrollView>
                       )}
+                        </View>
+                      </View>
                     </View>
                   </View>
                 ) : null}
@@ -1594,7 +1775,22 @@ export function AddTripFormFields({
                   >
                 <View
                   style={[
+                    allocationWideLayout
+                      ? styles.aggregatePaneWideInner
+                      : assignmentShellStyles.tripAssignSurfaceCard,
+                    !allocationWideLayout && styles.aggregateSplitSurface,
+                    allocationWideLayout && styles.aggregateAssignSurfaceWide,
+                  ]}
+                >
+                <View
+                  style={[
+                    allocationWideLayout ? styles.clientCommercialsHeaderBand : undefined,
+                  ]}
+                >
+                <View
+                  style={[
                     styles.sectionLabelRow,
+                    allocationWideLayout && styles.sectionLabelRowFlush,
                     !allocationWideLayout && styles.sectionLabelRowFleetStack,
                   ]}
                 >
@@ -1634,6 +1830,7 @@ export function AddTripFormFields({
                     </TouchableOpacity>
                   </View>
                 </View>
+                </View>
                 {suppliersLoading ? (
                   <ActivityIndicator color={Theme.iconPrimary} />
                 ) : suppliers.length === 0 ? (
@@ -1642,7 +1839,7 @@ export function AddTripFormFields({
                   </Text>
                 ) : state.supplierId && !partnerListExpanded && selectedSupplierRow ? (
                   <TouchableOpacity
-                    style={[styles.clientCard, styles.clientCardOn]}
+                    style={[styles.clientCard, styles.selectionSummaryCard]}
                     onPress={() => setPartnerListExpanded(true)}
                     activeOpacity={0.85}
                   >
@@ -1658,16 +1855,16 @@ export function AddTripFormFields({
                         borderStyle={styles.clientAvatarOn}
                       />
                       <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text style={[styles.clientName, styles.clientNameOn]} numberOfLines={1}>
+                        <Text style={styles.selectionSummaryTitle} numberOfLines={1}>
                           {selectedSupplierRow.company_name?.trim() || selectedSupplierRow.name?.trim() || "—"}
                         </Text>
-                        <Text style={styles.clientSub} numberOfLines={1}>
+                        <Text style={styles.selectionSummarySub} numberOfLines={1}>
                           {[selectedSupplierRow.supplier_type, selectedSupplierRow.phone, selectedSupplierRow.email].filter(Boolean).join(" · ")}
                         </Text>
                       </View>
                     </View>
-                    <View style={styles.changeSelectionPill}>
-                      <Text style={styles.changeSelectionPillText}>Change</Text>
+                    <View style={styles.selectionSummaryPill}>
+                      <Text style={styles.selectionSummaryPillText}>Change</Text>
                     </View>
                   </TouchableOpacity>
                 ) : (
@@ -1679,7 +1876,11 @@ export function AddTripFormFields({
                       return (
                         <TouchableOpacity
                           key={s.id}
-                          style={[styles.clientCard, selected && styles.clientCardOn, Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null]}
+                          style={[
+                            styles.clientCard,
+                            selected && styles.clientCardRowSelected,
+                            Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null,
+                          ]}
                           onPress={() => {
                             if (selected) {
                               setters.setSupplierSelection(null);
@@ -1702,20 +1903,31 @@ export function AddTripFormFields({
                               borderStyle={selected ? styles.clientAvatarOn : styles.clientAvatar}
                             />
                             <View style={{ flex: 1, minWidth: 0 }}>
-                              <Text style={[styles.clientName, selected && styles.clientNameOn]} numberOfLines={1}>
+                              <Text
+                                style={[
+                                  styles.aggregatePartnerName,
+                                  selected && styles.aggregatePartnerNameOn,
+                                ]}
+                                numberOfLines={1}
+                              >
                                 {primary}
                               </Text>
-                              {secondary ? <Text style={styles.clientSub} numberOfLines={1}>{secondary}</Text> : null}
+                              {secondary ? (
+                                <Text style={styles.aggregatePartnerMeta} numberOfLines={1}>
+                                  {secondary}
+                                </Text>
+                              ) : null}
                             </View>
                           </View>
                           <View style={[styles.radioOuter, selected && styles.radioOuterOn]}>
-                            {selected ? <CheckCircle2 size={16} color={Theme.iconPrimary} /> : null}
+                            {selected ? <CheckCircle2 size={16} color={Theme.darkGreen} /> : null}
                           </View>
                         </TouchableOpacity>
                       );
                     })}
                   </ScrollView>
                 )}
+                </View>
                   </View>
                   <View
                     style={[
@@ -1723,7 +1935,85 @@ export function AddTripFormFields({
                       allocationWideLayout && styles.aggregatePaneWide,
                     ]}
                   >
-                <View style={assignmentShellStyles.tripAssignSurfaceCard}>
+                <View
+                  style={[
+                    allocationWideLayout
+                      ? styles.aggregatePaneWideInner
+                      : assignmentShellStyles.tripAssignSurfaceCard,
+                    !allocationWideLayout && styles.aggregateSplitSurface,
+                    allocationWideLayout && styles.aggregateAssignSurfaceWide,
+                  ]}
+                >
+                {allocationWideLayout ? (
+                  <>
+                    <View style={styles.clientCommercialsHeaderBand}>
+                      <View style={[styles.gridRow, styles.gridRowWide]}>
+                        <View style={styles.gridCol}>
+                          <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
+                            Partner rate (₹) *
+                          </Text>
+                        </View>
+                        <View style={styles.gridCol}>
+                          <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
+                            Advance paid (₹)
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                    <View style={[styles.gridRow, styles.gridRowWide]}>
+                      <View style={styles.gridCol}>
+                        <TextInput
+                          style={[
+                            styles.input,
+                            inputStyle,
+                            styles.inputMatchSelectionCard,
+                            styles.aggregateRateInputFlush,
+                            outlineErr("partnerRate"),
+                            state.supplierId &&
+                              !invalid("partnerRate") &&
+                              styles.inputMatchSelectionCardSelected,
+                          ]}
+                          placeholder="0"
+                          placeholderTextColor={Theme.placeholder}
+                          value={state.supplierRate}
+                          onChangeText={setters.setSupplierRate}
+                          ref={supplierRateInputRef}
+                          keyboardType="decimal-pad"
+                          returnKeyType="next"
+                          onSubmitEditing={() => focusField(advancePaidInputRef)}
+                        />
+                      </View>
+                      <View style={styles.gridCol}>
+                        <TextInput
+                          style={[
+                            styles.input,
+                            inputStyle,
+                            styles.inputMatchSelectionCard,
+                            styles.aggregateRateInputFlush,
+                            outlineErr("advancePaid"),
+                            state.supplierId &&
+                              !invalid("advancePaid") &&
+                              styles.inputMatchSelectionCardSelected,
+                          ]}
+                          placeholder="Optional"
+                          placeholderTextColor={Theme.placeholder}
+                          value={state.advancePaid}
+                          onChangeText={setters.setAdvancePaid}
+                          ref={advancePaidInputRef}
+                          keyboardType="decimal-pad"
+                          returnKeyType="next"
+                          onSubmitEditing={() => {
+                            if (state.assignLater) {
+                              openNotesModal();
+                            } else {
+                              focusField(aggregateDriverNameInputRef);
+                            }
+                          }}
+                        />
+                      </View>
+                    </View>
+                  </>
+                ) : (
                 <View
                   style={[
                     styles.gridRow,
@@ -1738,7 +2028,11 @@ export function AddTripFormFields({
                       style={[
                         styles.input,
                         inputStyle,
+                        styles.inputMatchSelectionCard,
                         outlineErr("partnerRate"),
+                        state.supplierId &&
+                          !invalid("partnerRate") &&
+                          styles.inputMatchSelectionCardSelected,
                       ]}
                       placeholder="0"
                       placeholderTextColor={Theme.placeholder}
@@ -1758,7 +2052,11 @@ export function AddTripFormFields({
                       style={[
                         styles.input,
                         inputStyle,
+                        styles.inputMatchSelectionCard,
                         outlineErr("advancePaid"),
+                        state.supplierId &&
+                          !invalid("advancePaid") &&
+                          styles.inputMatchSelectionCardSelected,
                       ]}
                       placeholder="Optional"
                       placeholderTextColor={Theme.placeholder}
@@ -1769,7 +2067,7 @@ export function AddTripFormFields({
                       returnKeyType="next"
                       onSubmitEditing={() => {
                         if (state.assignLater) {
-                          focusField(notesInputRef);
+                          openNotesModal();
                         } else {
                           focusField(aggregateDriverNameInputRef);
                         }
@@ -1777,46 +2075,50 @@ export function AddTripFormFields({
                     />
                   </View>
                 </View>
+                )}
 
                 {!state.assignLater ? (
                   <>
-                    <View style={styles.aggregateTrackingFieldBlock}>
-                      <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
-                        Driver name (tracking) *
-                      </Text>
-                      <View style={styles.iconField}>
-                        <User
-                          size={18}
-                          color={Theme.iconMuted}
-                          style={styles.iconInField}
-                        />
-                        <TextInput
-                          style={[
-                            styles.iconInput,
-                            inputStyle,
-                            outlineErr("driverName"),
-                          ]}
-                          placeholder="e.g. Suresh Kumar"
-                          placeholderTextColor={Theme.placeholder}
-                          value={state.aggregateDriverName}
-                          onChangeText={setters.setAggregateDriverName}
-                          ref={aggregateDriverNameInputRef}
-                          autoCapitalize="words"
-                          returnKeyType="next"
-                          onSubmitEditing={() =>
-                            focusField(driverPhoneInputRef)
-                          }
-                        />
-                      </View>
-                    </View>
-
                     <View
                       style={[
                         styles.gridRow,
                         styles.gridRowFleet,
+                        styles.aggregateTrackingFieldsGrid,
                         driverVehicleSideBySide && styles.gridRowWide,
                       ]}
                     >
+                      <View style={styles.gridCol}>
+                        <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
+                          Driver name (tracking) *
+                        </Text>
+                        <View style={styles.iconField}>
+                          <User
+                            size={16}
+                            color={Theme.iconMuted}
+                            style={styles.iconInField}
+                          />
+                          <TextInput
+                            style={[
+                              styles.iconInput,
+                              inputStyle,
+                              outlineErr("driverName"),
+                              isCompactMobile &&
+                                Platform.OS === "web" &&
+                                styles.mobileWebNoZoomInput,
+                            ]}
+                            placeholder="e.g. Suresh Kumar"
+                            placeholderTextColor={Theme.placeholder}
+                            value={state.aggregateDriverName}
+                            onChangeText={setters.setAggregateDriverName}
+                            ref={aggregateDriverNameInputRef}
+                            autoCapitalize="words"
+                            returnKeyType="next"
+                            onSubmitEditing={() =>
+                              focusField(driverPhoneInputRef)
+                            }
+                          />
+                        </View>
+                      </View>
                       <View style={styles.gridCol}>
                         <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
                           Driver phone (tracking) *
@@ -1835,7 +2137,12 @@ export function AddTripFormFields({
                           </Text>
                           <Text style={styles.inPhoneCc}>+91</Text>
                           <TextInput
-                            style={styles.inPhoneInput}
+                            style={[
+                              styles.inPhoneInput,
+                              isCompactMobile &&
+                                Platform.OS === "web" &&
+                                styles.mobileWebNoZoomInput,
+                            ]}
                             placeholder="98765 43210"
                             placeholderTextColor={Theme.placeholder}
                             value={state.driverPhone}
@@ -1875,7 +2182,7 @@ export function AddTripFormFields({
                         </Text>
                         <View style={styles.iconField}>
                           <Truck
-                            size={18}
+                            size={16}
                             color={Theme.iconMuted}
                             style={styles.iconInField}
                           />
@@ -1884,10 +2191,10 @@ export function AddTripFormFields({
                               styles.iconInput,
                               inputStyle,
                               outlineErr("vehicleNumber"),
-                              {
-                                fontFamily:
-                                  Platform.OS === "ios" ? "Menlo" : "monospace",
-                              },
+                              styles.iconInputVehicleMono,
+                              isCompactMobile &&
+                                Platform.OS === "web" &&
+                                styles.mobileWebNoZoomInput,
                             ]}
                             placeholder="e.g. TN 67 GH 7654"
                             placeholderTextColor={Theme.placeholder}
@@ -1900,7 +2207,7 @@ export function AddTripFormFields({
                             autoCapitalize="characters"
                             ref={aggregateVehicleInputRef}
                             returnKeyType="next"
-                            onSubmitEditing={() => focusField(notesInputRef)}
+                            onSubmitEditing={() => openNotesModal()}
                           />
                         </View>
                       </View>
@@ -1963,9 +2270,8 @@ export function AddTripFormFields({
                             <Text
                               style={[
                                 styles.driverConfirmMain,
-                                state.driverPhoneConfirmed && {
-                                  color: Theme.darkGreen,
-                                },
+                                state.driverPhoneConfirmed &&
+                                  styles.driverConfirmMainOnDark,
                               ]}
                               numberOfLines={1}
                             >
@@ -1973,7 +2279,13 @@ export function AddTripFormFields({
                                 ? `Confirmed: ${state.driverPhoneName}`
                                 : `Found: ${state.driverPhoneName}`}
                             </Text>
-                            <Text style={styles.driverConfirmSub}>
+                            <Text
+                              style={[
+                                styles.driverConfirmSub,
+                                state.driverPhoneConfirmed &&
+                                  styles.driverConfirmSubOnDark,
+                              ]}
+                            >
                               {state.driverPhoneConfirmed
                                 ? "Tap again to change"
                                 : "Tap to confirm before creating the trip"}
@@ -1983,7 +2295,7 @@ export function AddTripFormFields({
                             size={18}
                             color={
                               state.driverPhoneConfirmed
-                                ? Theme.darkGreen
+                                ? Theme.textOnPrimary
                                 : Theme.iconPrimary
                             }
                           />
@@ -2007,39 +2319,10 @@ export function AddTripFormFields({
 
           </View>
 
-          {/* 04 Notes */}
-          <View style={[styles.card, isCompactMobile && styles.cardCompact]}>
-            <View style={styles.cardHead}>
-              <View style={styles.stepBadge}>
-                <Text style={styles.stepBadgeText}>04</Text>
-              </View>
-              <Text style={[styles.cardTitle, isCompactMobile && styles.cardTitleCompact]}>Notes & Instructions</Text>
-            </View>
-            <View style={styles.iconField}>
-              <FileText
-                size={18}
-                color={Theme.iconMuted}
-                style={styles.iconInField}
-              />
-              <TextInput
-                style={[
-                  styles.notesInput,
-                  inputStyle,
-                  { paddingLeft: 44 },
-                  outlineErr("notes"),
-                ]}
-                placeholder="Any specific delivery instructions or cargo details…"
-                placeholderTextColor={Theme.placeholder}
-                value={state.notes}
-                onChangeText={setters.setNotes}
-                ref={notesInputRef}
-                multiline
-              />
-            </View>
-          </View>
-
           {showInlineCta ? (
-            <View style={styles.ctaBlock}>
+            <View
+              style={[styles.ctaBlock, desktopFormGrid && styles.ctaGridSpanWeb]}
+            >
               <TouchableOpacity
                 style={[
                   styles.primaryCta,
@@ -2056,7 +2339,7 @@ export function AddTripFormFields({
                   <ActivityIndicator color={Theme.textOnPrimary} />
                 ) : (
                   <>
-                    <CheckCircle2 size={22} color={Theme.textOnPrimary} />
+                    <CheckCircle2 size={18} color={Theme.textOnPrimary} />
                     <Text style={styles.primaryCtaText}>Create Trip Now</Text>
                   </>
                 )}
@@ -2073,236 +2356,55 @@ export function AddTripFormFields({
             </View>
           ) : null}
             </View>
-
-            {isDesktopPreview ? (
-              <View style={styles.previewColumn}>
-                <View style={styles.previewStickyWrap}>
-                  <View style={[styles.previewCard, styles.previewCardDesktop]} pointerEvents="none">
-                  <View style={styles.previewHead}>
-                    <Text style={styles.previewHeadTitle}>Trip Preview</Text>
-                    <View style={styles.livePill}>
-                      <Text style={styles.livePillText}>Live</Text>
-                    </View>
-                  </View>
-                  <View style={styles.previewBody}>
-                    <View style={styles.previewLine}>
-                      <Text style={styles.previewLab}>Pickup</Text>
-                      <Text style={styles.previewVal} numberOfLines={2}>
-                        {routePreviewLine(state.pickupArea)}
-                      </Text>
-                    </View>
-                    <View style={styles.previewLine}>
-                      <Text style={styles.previewLab}>Drop</Text>
-                      <Text style={styles.previewVal} numberOfLines={2}>
-                        {routePreviewLine(state.dropLocation)}
-                      </Text>
-                    </View>
-                    {state.pickupArea.trim() && state.dropLocation.trim() ? (
-                      <View style={styles.previewRow2}>
-                        <View style={styles.previewCell}>
-                          <Text style={styles.previewLab}>Distance</Text>
-                          <Text style={styles.previewVal}>
-                            {state.routeLoading
-                              ? "…"
-                              : state.routeDistanceKm != null
-                                ? `${state.routeDistanceKm} km`
-                                : "—"}
-                          </Text>
-                        </View>
-                        <View style={styles.previewCell}>
-                          <Text style={styles.previewLab}>ETA</Text>
-                          <Text style={styles.previewVal}>
-                            {state.routeLoading
-                              ? "…"
-                              : state.routeEtaLabel != null
-                                ? state.routeEtaLabel
-                                : "—"}
-                          </Text>
-                        </View>
-                      </View>
-                    ) : null}
-                    <View style={styles.previewDivider} />
-                    {!supplyIsAsset ? (
-                      <View style={styles.previewRow2}>
-                        <View style={styles.previewCell}>
-                          <Text style={styles.previewLab}>Partner</Text>
-                          <Text style={styles.previewVal} numberOfLines={1}>
-                            {selectedPartnerName || "—"}
-                          </Text>
-                        </View>
-                        <View style={styles.previewCell}>
-                          <Text style={styles.previewLab}>Partner rate</Text>
-                          <Text style={[styles.previewValStrong, { color: Theme.negative }]}>
-                            ₹{state.supplierRate.trim() || "0"}
-                          </Text>
-                        </View>
-                      </View>
-                    ) : null}
-                    <View style={styles.previewRow2}>
-                      <View style={styles.previewCell}>
-                        <Text style={styles.previewLab}>Client</Text>
-                        <Text style={styles.previewVal} numberOfLines={1}>
-                          {state.clientName.trim() || "—"}
-                        </Text>
-                      </View>
-                      <View style={styles.previewCell}>
-                        <Text style={styles.previewLab}>Revenue</Text>
-                        <Text style={[styles.previewValStrong, { color: Theme.darkGreen }]}>
-                          ₹{state.clientPrice.trim() || "0"}
-                        </Text>
-                      </View>
-                    </View>
-                    <View style={styles.previewFoot}>
-                      <Text style={styles.previewFootLeft}>
-                        {supplyIsAsset ? "Asset" : "Aggregate"}
-                      </Text>
-                      <Text style={styles.previewFootRight} numberOfLines={1}>
-                        {previewFooterValue}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-                {renderValidationChecklist("belowPreview")}
-                </View>
-              </View>
-            ) : null}
           </View>
         </View>
       </ScrollView>
 
-      {/* Floating preview — hidden on very narrow widths to avoid blocking the form */}
-      {showFloatingPreview ? (
-        mobilePreviewExpanded ? (
-          <View
-            style={[
-              styles.previewCard,
-              {
-                width: floatingPreviewWidth,
-                bottom: insets.bottom + 16,
-                right: Math.max(16, insets.right + 8),
-              },
-            ]}
-            pointerEvents="box-none"
-          >
-            <ScrollView
-              style={{ maxHeight: floatingPreviewMaxHeight }}
-              contentContainerStyle={styles.previewFloatingScrollContent}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator
-              nestedScrollEnabled
-            >
-            <View style={styles.previewHead}>
-              <Text style={styles.previewHeadTitle}>Trip Preview</Text>
-              <View style={styles.previewHeadRight}>
-                <View style={styles.livePill}>
-                  <Text style={styles.livePillText}>Live</Text>
-                </View>
-                <TouchableOpacity
-                  onPress={() => setMobilePreviewExpanded(false)}
-                  style={styles.previewCollapseBtn}
-                  activeOpacity={0.8}
-                >
-                  <FontAwesome name="chevron-down" size={10} color={Theme.textOnPrimary} />
-                </TouchableOpacity>
-              </View>
+      <Modal
+        visible={notesModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setNotesModalOpen(false)}
+      >
+        <View style={styles.notesModalBackdrop}>
+          <Pressable
+            style={StyleSheet.absoluteFillObject}
+            onPress={() => setNotesModalOpen(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss"
+          />
+          <View style={styles.notesModalSheet}>
+            <View style={styles.notesModalHeader}>
+              <Text style={styles.notesModalTitle}>Trip notes</Text>
+              <TouchableOpacity
+                onPress={() => setNotesModalOpen(false)}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                accessibilityRole="button"
+                accessibilityLabel="Done"
+              >
+                <Text style={styles.notesModalDone}>Done</Text>
+              </TouchableOpacity>
             </View>
-            <View style={styles.previewBody}>
-            <View style={styles.previewLine}>
-              <Text style={styles.previewLab}>Pickup</Text>
-              <Text style={styles.previewVal} numberOfLines={2}>
-                {routePreviewLine(state.pickupArea)}
-              </Text>
-            </View>
-            <View style={styles.previewLine}>
-              <Text style={styles.previewLab}>Drop</Text>
-              <Text style={styles.previewVal} numberOfLines={2}>
-                {routePreviewLine(state.dropLocation)}
-              </Text>
-            </View>
-            {state.pickupArea.trim() && state.dropLocation.trim() ? (
-              <View style={styles.previewRow2}>
-                <View style={styles.previewCell}>
-                  <Text style={styles.previewLab}>Distance</Text>
-                  <Text style={styles.previewVal}>
-                    {state.routeLoading
-                      ? "…"
-                      : state.routeDistanceKm != null
-                        ? `${state.routeDistanceKm} km`
-                        : "—"}
-                  </Text>
-                </View>
-                <View style={styles.previewCell}>
-                  <Text style={styles.previewLab}>ETA</Text>
-                  <Text style={styles.previewVal}>
-                    {state.routeLoading
-                      ? "…"
-                      : state.routeEtaLabel != null
-                        ? state.routeEtaLabel
-                        : "—"}
-                  </Text>
-                </View>
-              </View>
-            ) : null}
-            <View style={styles.previewDivider} />
-            {!supplyIsAsset ? (
-              <View style={styles.previewRow2}>
-                <View style={styles.previewCell}>
-                  <Text style={styles.previewLab}>Partner</Text>
-                  <Text style={styles.previewVal} numberOfLines={1}>
-                    {selectedPartnerName || "—"}
-                  </Text>
-                </View>
-                <View style={styles.previewCell}>
-                  <Text style={styles.previewLab}>Partner rate</Text>
-                  <Text style={[styles.previewValStrong, { color: Theme.negative }]}>
-                    ₹{state.supplierRate.trim() || "0"}
-                  </Text>
-                </View>
-              </View>
-            ) : null}
-            <View style={styles.previewRow2}>
-              <View style={styles.previewCell}>
-                <Text style={styles.previewLab}>Client</Text>
-                <Text style={styles.previewVal} numberOfLines={1}>
-                  {state.clientName.trim() || "—"}
-                </Text>
-              </View>
-              <View style={styles.previewCell}>
-                <Text style={styles.previewLab}>Revenue</Text>
-                <Text style={[styles.previewValStrong, { color: Theme.darkGreen }]}>
-                  ₹{state.clientPrice.trim() || "0"}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.previewFoot}>
-              <Text style={styles.previewFootLeft}>
-                {supplyIsAsset ? "Asset" : "Aggregate"}
-              </Text>
-              <Text style={styles.previewFootRight} numberOfLines={1}>
-                {previewFooterValue}
-              </Text>
-            </View>
-            </View>
-            {renderValidationChecklist("belowFloating")}
-            </ScrollView>
+            <Text style={[styles.label, labelStyle, styles.notesModalHint]}>
+              Instructions & cargo details (optional)
+            </Text>
+            <TextInput
+              style={[
+                styles.notesModalInput,
+                inputStyle,
+                outlineErr("notes"),
+              ]}
+              placeholder="Any specific delivery instructions or cargo details…"
+              placeholderTextColor={Theme.placeholder}
+              value={state.notes}
+              onChangeText={setters.setNotes}
+              ref={notesModalInputRef}
+              multiline
+              textAlignVertical="top"
+            />
           </View>
-        ) : (
-          <TouchableOpacity
-            style={[
-              styles.previewCollapsedChip,
-              {
-                bottom: insets.bottom + 16,
-                right: Math.max(16, insets.right + 8),
-              },
-            ]}
-            onPress={() => setMobilePreviewExpanded(true)}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.previewCollapsedChipText}>Trip Preview</Text>
-            <FontAwesome name="chevron-up" size={11} color={Theme.textOnPrimary} />
-          </TouchableOpacity>
-        )
-      ) : null}
+        </View>
+      </Modal>
 
       <View style={styles.blobA} pointerEvents="none" />
       <View style={styles.blobB} pointerEvents="none" />
@@ -2318,53 +2420,169 @@ const styles = StyleSheet.create({
   scroll: { flex: 1, minHeight: 0 },
   scrollContent: {
     flexGrow: 1,
-    paddingTop: 4,
+    paddingTop: 12,
   },
   contentMax: {
     width: "100%",
-    maxWidth: 1400,
+    maxWidth: 960,
     alignSelf: "center",
   },
   mainGrid: {
     width: "100%",
   },
-  mainGridDesktop: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 24,
-  },
   formColumn: {
     width: "100%",
     minWidth: 0,
   },
-  /** Side-by-side with preview column — only here use flex so the column doesn’t fight ScrollView height. */
-  formColumnDesktop: {
+  /** Desktop web: row1 route|client; row2 supply full width; row3 CTA. */
+  formColumnGridWeb: Platform.select<ViewStyle>({
+    web: {
+      display: "grid",
+      gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+      gap: 16,
+      alignItems: "start",
+      gridAutoRows: "min-content",
+    },
+    default: {},
+  }),
+  ctaGridSpanWeb: Platform.select<ViewStyle>({
+    web: {
+      gridColumn: "1 / -1",
+      gridRow: 3,
+    },
+    default: {},
+  }),
+  /** Desktop grid: route|client row1; supply spans row2 (notes via modal). */
+  cardGridRouteWeb: Platform.select<ViewStyle>({
+    web: { gridColumn: 1, gridRow: 1 },
+    default: {},
+  }),
+  cardGridClientWeb: Platform.select<ViewStyle>({
+    web: { gridColumn: 2, gridRow: 1 },
+    default: {},
+  }),
+  cardGridSupplyWeb: Platform.select<ViewStyle>({
+    web: { gridColumn: "1 / -1", gridRow: 2 },
+    default: {},
+  }),
+  cardHeadWithTrailingAction: {
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+  },
+  cardHeadTitleCluster: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     flex: 1,
+    minWidth: 0,
   },
-  previewColumn: {
-    width: 360,
-    paddingTop: 4,
-    alignSelf: "stretch",
+  notesQuickBtn: {
+    position: "relative",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceForm,
+    justifyContent: "center",
+    alignItems: "center",
   },
-  /** Web: sticky wrapper so Trip Preview + validation scroll together (not only the card). */
-  previewStickyWrap: {
+  notesQuickBtnInvalid: {
+    borderColor: Theme.destructive,
+    borderWidth: 2,
+  },
+  notesQuickBtnDot: {
+    position: "absolute",
+    top: 5,
+    right: 5,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: Theme.iconPrimary,
+  },
+  notesModalBackdrop: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 24,
+    backgroundColor: "rgba(15, 23, 42, 0.52)",
+  },
+  notesModalSheet: {
     width: "100%",
+    maxWidth: 440,
+    maxHeight: "82%",
+    zIndex: 1,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+    paddingHorizontal: 14,
+    paddingBottom: 16,
+    paddingTop: 4,
     ...Platform.select<ViewStyle>({
       web: {
-        position: "sticky" as const,
-        top: 20,
-        alignSelf: "flex-start",
+        boxShadow: "0 16px 48px rgba(15,23,42,0.22)",
       },
+      default: {
+        shadowColor: Theme.shadow,
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.18,
+        shadowRadius: 24,
+        elevation: 12,
+      },
+    }),
+  },
+  notesModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderLight,
+    marginBottom: 10,
+  },
+  notesModalTitle: {
+    ...FinanceTxnTypography.partyTitle,
+    fontSize: 11,
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.35,
+  },
+  notesModalDone: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.iconPrimary,
+  },
+  notesModalHint: {
+    marginBottom: 8,
+  },
+  notesModalInput: {
+    width: "100%",
+    minHeight: 120,
+    maxHeight: 260,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    paddingVertical: 10,
+    fontSize: 11,
+    fontWeight: "400",
+    fontStyle: "italic",
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+        boxSizing: "border-box",
+      } as any,
       default: {},
     }),
   },
   card: {
     backgroundColor: Theme.cardWhite,
-    borderRadius: 20,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    padding: 18,
-    marginBottom: 18,
+    padding: 14,
+    marginBottom: 12,
     ...Platform.select<ViewStyle>({
       web: {
         boxShadow: "0 1px 3px rgba(15,23,42,0.06)",
@@ -2380,49 +2598,51 @@ const styles = StyleSheet.create({
   },
   cardCompact: {
     padding: 14,
-    borderRadius: 16,
-    marginBottom: 14,
+    borderRadius: 14,
+    marginBottom: 12,
   },
   cardHead: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 6,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
-    paddingBottom: 11,
-    marginBottom: 14,
+    paddingBottom: 6,
+    marginBottom: 8,
   },
   stepBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: "rgba(2, 6, 23, 0.08)",
+    width: 22,
+    height: 22,
+    borderRadius: 7,
+    backgroundColor: Theme.darkBackground,
     alignItems: "center",
     justifyContent: "center",
   },
   stepBadgeText: {
-    fontSize: 11,
+    fontSize: 9,
     fontWeight: "800",
-    color: Theme.iconPrimary,
+    color: Theme.textOnPrimary,
   },
   cardTitle: {
-    fontSize: 21,
+    flex: 1,
+    minWidth: 0,
+    ...FinanceTxnTypography.partyTitle,
+    fontSize: 9,
+    letterSpacing: 0.3,
+    fontStyle: "normal",
     fontWeight: "800",
-    color: Theme.textPrimaryDark,
-    letterSpacing: -0.45,
-    fontStyle: "italic",
-    textTransform: "uppercase",
+    color: Theme.darkBackground,
   },
   cardTitleCompact: {
-    fontSize: 17,
-    letterSpacing: -0.25,
+    fontSize: 9,
+    letterSpacing: 0.45,
   },
-  gridRow: { gap: 14 },
+  gridRow: { gap: 10 },
   /** Extra gap when driver + vehicle stack vertically so sections don’t feel glued. */
   gridRowFleet: {
-    gap: 18,
+    gap: 12,
   },
-  gridRowWide: { flexDirection: "row", alignItems: "stretch", gap: 20 },
+  gridRowWide: { flexDirection: "row", alignItems: "stretch", gap: 16 },
   gridCol: { flex: 1, minWidth: 0 },
   gridColFleetStack: {
     flexBasis: "auto",
@@ -2431,18 +2651,27 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   gridColFleetVehicle: {
-    marginTop: 4,
-    paddingTop: 18,
+    marginTop: 3,
+    paddingTop: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
   },
+  /** Driver / vehicle lists fill each grid column on desktop (avoid skinny centered rails). */
+  fleetPickColumnWrap: {
+    width: "100%",
+    minWidth: 0,
+  },
+  fleetPickColumnInner: {
+    width: "100%",
+    minWidth: 0,
+  },
   aggregateSplit: {
-    gap: 14,
+    gap: 10,
   },
   aggregateSplitWide: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 20,
+    alignItems: "stretch",
+    gap: 16,
   },
   aggregateLeftPane: {
     minWidth: 0,
@@ -2454,17 +2683,65 @@ const styles = StyleSheet.create({
   aggregatePaneWide: {
     flex: 1,
   },
-  aggregateTrackingFieldBlock: {
+  aggregateTrackingFieldsGrid: {
+    marginTop: 10,
     width: "100%",
-    marginTop: 14,
+    minWidth: 0,
+    alignSelf: "stretch",
+  },
+  aggregateSplitSurface: {
+    padding: 11,
+    marginBottom: 0,
+    borderRadius: 14,
+    flexGrow: 1,
+    alignSelf: "stretch",
+    minWidth: 0,
+    minHeight: 0,
+  },
+  /** Wide aggregate: same flush columns as card 02 (no nested assignment shell card). */
+  aggregatePaneWideInner: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 0,
+    alignSelf: "stretch",
+    padding: 0,
+    marginBottom: 0,
+    backgroundColor: "transparent",
+  },
+  /** Rate row sits directly under label band (wide layout). */
+  aggregateRateInputFlush: {
+    marginTop: 0,
+  },
+  /** Wide aggregate: surfaces stretch with the taller pane so partner card can fill vertically. */
+  aggregateAssignSurfaceWide: {
+    flex: 1,
+    minHeight: 0,
+    alignSelf: "stretch",
+  },
+  aggregatePartnerName: {
+    fontSize: 11,
+    fontWeight: "600",
+    fontStyle: "normal",
+    color: Theme.textPrimaryDark,
+  },
+  aggregatePartnerNameOn: {
+    color: Theme.darkGreen,
+  },
+  aggregatePartnerMeta: {
+    fontSize: 10,
+    fontWeight: "500",
+    fontStyle: "normal",
+    color: Theme.textMuted,
+    marginTop: 2,
+    lineHeight: 14,
   },
   sectionLabelRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     flexWrap: "wrap",
-    gap: 12,
-    marginBottom: 8,
+    gap: 8,
+    marginBottom: 6,
   },
   sectionLabelRowStack: {
     alignItems: "flex-start",
@@ -2475,8 +2752,8 @@ const styles = StyleSheet.create({
     flexDirection: "column",
     alignItems: "stretch",
     justifyContent: "flex-start",
-    gap: 10,
-    marginBottom: 12,
+    gap: 8,
+    marginBottom: 10,
     width: "100%",
   },
   sectionLabelActions: {
@@ -2487,6 +2764,16 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   sectionLabelTight: {
+    marginBottom: 0,
+  },
+  /** Wide desktop: same vertical band for Select client actions vs price label. */
+  clientCommercialsHeaderBand: {
+    justifyContent: "center",
+    minHeight: 40,
+    marginBottom: 8,
+  },
+  /** Inside header band; spacing comes from clientCommercialsHeaderBand. */
+  sectionLabelRowFlush: {
     marginBottom: 0,
   },
   changeSelectionBtn: {
@@ -2541,39 +2828,61 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.surfaceLight,
+    borderColor: Theme.tripSelectionInsetBorder,
+    backgroundColor: Theme.tripSelectionInsetBg,
   },
   changeSelectionPillText: {
     fontSize: 10,
     fontWeight: "700",
-    color: Theme.iconPrimary,
+    color: Theme.textOnDark,
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
   label: {
-    fontSize: 9,
-    fontWeight: "700",
-    marginBottom: 8,
-    letterSpacing: 1.1,
-    textTransform: "uppercase",
+    ...FinanceTxnTypography.fieldLabel,
+    marginBottom: 3,
+    color: Theme.textMutedDemo,
   },
   input: {
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 14,
-    fontWeight: "500",
-    minHeight: 52,
-    marginBottom: 10,
+    borderRadius: 11,
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+    fontSize: 10,
+    fontWeight: "400",
+    fontStyle: "italic",
+    minHeight: 36,
+    marginBottom: 6,
     ...Platform.select({ web: { outlineStyle: "none" } as any }),
+  },
+  /** Align with `clientCard` in aggregate partner pane (card 03). */
+  inputMatchSelectionCard: {
+    minHeight: 70,
+    borderRadius: 15,
+    borderWidth: 1.5,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    color: Theme.textPrimary,
+    ...Platform.select({
+      web: {
+        width: "100%" as const,
+        maxWidth: "100%" as const,
+        boxSizing: "border-box" as const,
+      } as any,
+      default: {},
+    }),
+  },
+  inputMatchSelectionCardSelected: {
+    borderColor: Theme.darkGreen,
+    backgroundColor: Theme.cardWhite,
   },
   mobileWebNoZoomInput: {
     fontSize: 16,
   },
   iconField: {
     position: "relative",
-    marginBottom: 12,
+    marginBottom: 8,
     alignSelf: "stretch",
     minWidth: 0,
     ...Platform.select<ViewStyle>({
@@ -2583,18 +2892,19 @@ const styles = StyleSheet.create({
   },
   iconInField: {
     position: "absolute",
-    left: 14,
-    top: 16,
+    left: 9,
+    top: 9,
     zIndex: 1,
   },
   iconInput: {
-    borderRadius: 12,
-    paddingLeft: 44,
-    paddingRight: 14,
-    paddingVertical: 12,
-    fontSize: 14,
-    fontWeight: "500",
-    minHeight: 52,
+    borderRadius: 11,
+    paddingLeft: 34,
+    paddingRight: 9,
+    paddingVertical: 7,
+    fontSize: 10,
+    fontWeight: "400",
+    fontStyle: "italic",
+    minHeight: 36,
     borderWidth: 2,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.surfaceForm,
@@ -2611,18 +2921,30 @@ const styles = StyleSheet.create({
       default: {},
     }),
   },
+  iconInputVehicleMono: {
+    ...Platform.select<TextStyle>({
+      ios: { fontFamily: "Menlo" },
+      android: { fontFamily: "monospace" },
+      web: {
+        fontFamily:
+          "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+      },
+      default: {},
+    }),
+  },
   inPhoneOuter: {
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 2,
-    borderRadius: 12,
+    borderRadius: 11,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.surfaceForm,
-    minHeight: 52,
-    paddingLeft: 10,
-    paddingRight: 12,
-    gap: 6,
-    marginBottom: 12,
+    minHeight: 36,
+    paddingLeft: 9,
+    paddingRight: 9,
+    paddingVertical: 0,
+    gap: 5,
+    marginBottom: 8,
     alignSelf: "stretch",
     minWidth: 0,
     ...Platform.select<ViewStyle>({
@@ -2631,27 +2953,37 @@ const styles = StyleSheet.create({
     }),
   },
   inPhoneFlag: {
-    fontSize: 20,
-    lineHeight: 24,
+    fontSize: 14,
+    lineHeight: 18,
   },
   inPhoneCc: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: Theme.textSecondary,
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    letterSpacing: 0.2,
   },
   inPhoneInput: {
     flex: 1,
     minWidth: 0,
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-    fontSize: 14,
-    fontWeight: "500",
+    paddingVertical: 7,
+    paddingHorizontal: 2,
+    fontSize: 10,
+    fontWeight: "400",
+    fontStyle: "italic",
     color: Theme.textPrimary,
-    ...Platform.select({ web: { outlineStyle: "none" } as any }),
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+        width: "100%" as const,
+        maxWidth: "100%" as const,
+        boxSizing: "border-box" as const,
+      } as any,
+      default: {},
+    }),
   },
   phoneDigitHint: {
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "500",
     color: Theme.textMuted,
     marginTop: 4,
     marginBottom: 4,
@@ -2661,7 +2993,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     borderWidth: 2,
-    minHeight: 52,
+    minHeight: 46,
   },
   dateInputTrigger: {
     borderRadius: 14,
@@ -2671,12 +3003,12 @@ const styles = StyleSheet.create({
   quickDateRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 8,
+    gap: 6,
+    marginBottom: 6,
   },
   quickDateChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: Theme.borderLight,
@@ -2686,12 +3018,16 @@ const styles = StyleSheet.create({
     borderColor: Theme.iconPrimary,
     backgroundColor: Theme.surfaceLight,
   },
+  quickDateChipPressed: {
+    opacity: 0.82,
+  },
   quickDateChipText: {
-    fontSize: 10,
-    fontWeight: "700",
+    ...FinanceTxnTypography.chatFilterPill,
+    fontSize: 8,
+    letterSpacing: 0.45,
+    fontWeight: "600",
     color: Theme.textMuted,
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
+    fontStyle: "italic",
   },
   quickDateChipTextActive: {
     color: Theme.iconPrimary,
@@ -2700,13 +3036,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   dateTouchableText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: Theme.textPrimary,
+    ...FinanceTxnTypography.fieldValue,
+    fontSize: 10,
+    fontWeight: "500",
+    color: Theme.textPrimaryDark,
   },
   dateTouchablePlaceholder: {
-    fontSize: 12,
-    fontWeight: "500",
+    ...FinanceTxnTypography.routeWhy,
+    fontSize: 9,
     color: Theme.placeholder,
   },
   datePickerBackdrop: {
@@ -2742,34 +3079,10 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: Theme.iconPrimary,
   },
-  pickerInner: {
-    paddingLeft: 44,
-    paddingRight: 12,
-    flex: 1,
-  },
-  pickerText: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: "500",
-    color: Theme.textPrimary,
-  },
-  pickerPh: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: "500",
-    color: Theme.placeholder,
-  },
-  pickerRow: { flexDirection: "row", marginBottom: 12 },
-  pickerFlex: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
   routePreviewPanel: {
-    marginTop: 6,
-    marginBottom: 14,
-    borderRadius: 14,
+    marginTop: 4,
+    marginBottom: 10,
+    borderRadius: 12,
     overflow: "hidden",
     borderWidth: 1,
     borderColor: Theme.borderLight,
@@ -2790,9 +3103,9 @@ const styles = StyleSheet.create({
   routePreviewHero: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
     backgroundColor: Theme.surfaceGray,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
@@ -2800,11 +3113,10 @@ const styles = StyleSheet.create({
   routePreviewHeroText: {
     flex: 1,
     minWidth: 0,
-    fontSize: 12,
-    fontWeight: "500",
-    fontStyle: "italic",
-    letterSpacing: -0.25,
-    lineHeight: 20,
+    ...FinanceTxnTypography.partyTitle,
+    fontSize: 10,
+    lineHeight: 14,
+    letterSpacing: 0.2,
     color: Theme.textPrimaryDark,
   },
   routePreviewMetrics: {
@@ -2816,26 +3128,22 @@ const styles = StyleSheet.create({
   routePreviewMetricCol: {
     flex: 1,
     minWidth: 0,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
   },
   routePreviewMetricDivider: {
     width: StyleSheet.hairlineWidth,
     backgroundColor: Theme.borderLight,
   },
   routeMetricLab: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.65,
-    marginBottom: 4,
+    ...FinanceTxnTypography.fieldLabel,
+    color: Theme.textMutedDemo,
+    marginBottom: 3,
   },
   routeMetricVal: {
-    fontSize: 13,
-    fontWeight: "500",
-    letterSpacing: -0.35,
-    color: Theme.textPrimaryDark,
+    ...FinanceTxnTypography.fieldValue,
+    fontSize: 9,
+    lineHeight: 13,
   },
   clientList: { maxHeight: 280 },
   clientListCompact: { maxHeight: undefined },
@@ -2893,6 +3201,43 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
     overflow: "hidden",
   },
+  /** Picker list: highlight chosen row (light card). */
+  clientCardRowSelected: {
+    borderColor: Theme.darkGreen,
+    backgroundColor: Theme.cardWhite,
+  },
+  /** Minimized selected party — dark chip only after choice. */
+  selectionSummaryCard: {
+    backgroundColor: Theme.tripSelectionSurface,
+    borderColor: Theme.darkGreen,
+  },
+  selectionSummaryTitle: {
+    ...FinanceTxnTypography.partyTitle,
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textOnDark,
+  },
+  selectionSummarySub: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: Theme.textOnDarkMuted,
+    marginTop: 2,
+  },
+  selectionSummaryPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Theme.tripSelectionInsetBorder,
+    backgroundColor: Theme.tripSelectionInsetBg,
+  },
+  selectionSummaryPillText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textOnDark,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
   clientMain: {
     flex: 1,
     minWidth: 0,
@@ -2901,23 +3246,27 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingRight: 8,
   },
-  clientCardOn: {
-    borderColor: Theme.textPrimaryDark,
-    backgroundColor: Theme.cardWhite,
+  /** Wide row beside price: stretch with sales-price shell; revenue hint sits full-width below. */
+  clientCardWideBesidePrice: {
+    marginBottom: 0,
+    alignSelf: "stretch",
+    flexGrow: 1,
+    minHeight: 72,
   },
   clientName: {
-    fontSize: 12,
-    fontWeight: "600",
+    ...FinanceTxnTypography.partyTitle,
+    fontSize: 11,
+    fontWeight: "500",
     color: Theme.textPrimaryDark,
   },
-  clientNameOn: { color: Theme.iconPrimary },
+  clientNameOn: { color: Theme.darkGreen },
   clientAvatar: {
     borderWidth: 1.5,
     borderColor: Theme.borderLight,
   },
   clientAvatarOn: {
     borderWidth: 2,
-    borderColor: Theme.textPrimaryDark,
+    borderColor: Theme.darkGreen,
   },
   vehicleCardIcon: {
     width: 38,
@@ -2928,6 +3277,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: Theme.borderLight,
+  },
+  vehicleCardIconSummary: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: Theme.tripSelectionInsetBg,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: Theme.tripSelectionInsetBorder,
   },
   clientMetaRow: {
     flexDirection: "row",
@@ -2950,51 +3309,106 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
+    backgroundColor: Theme.surfaceForm,
   },
   radioOuterOn: {
-    borderColor: Theme.darkBackground,
-    backgroundColor: Theme.screenBackground,
+    borderColor: Theme.darkGreen,
+    backgroundColor: Theme.cardWhite,
   },
-  priceWrap: {
-    position: "relative",
-    marginBottom: 10,
+  /** Card 02: matches `clientCard` height & frame (selection row beside price). */
+  priceWrapShell: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 70,
+    paddingHorizontal: 14,
+    gap: 10,
+    borderRadius: 15,
+    borderWidth: 1.5,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+    marginBottom: 8,
+    alignSelf: "stretch",
+    minWidth: 0,
+    ...Platform.select({
+      web: {
+        width: "100%" as const,
+        maxWidth: "100%" as const,
+        boxSizing: "border-box" as const,
+      } as any,
+      default: {},
+    }),
   },
-  rupeeIcon: {
-    position: "absolute",
-    left: 14,
-    top: 18,
-    zIndex: 1,
+  /** Wide desktop: sales price grows with client column so bands align above full-width hint. */
+  priceWrapShellWideColumn: {
+    marginBottom: 0,
+    flexGrow: 1,
+    minHeight: 72,
+  },
+  priceWrapShellSelected: {
+    borderColor: Theme.darkGreen,
+    backgroundColor: Theme.cardWhite,
+  },
+  priceWrapShellError: {
+    borderColor: Theme.destructive,
+    borderWidth: 2,
+  },
+  priceRupeeIcon: {
+    flexShrink: 0,
   },
   priceInput: {
-    borderRadius: 18,
-    paddingLeft: 44,
-    paddingRight: 16,
-    paddingVertical: 16,
-    fontSize: 32,
+    flex: 1,
+    minWidth: 0,
+    borderWidth: 0,
+    paddingVertical: 12,
+    paddingHorizontal: 0,
+    fontSize: 13,
     fontWeight: "600",
-    borderWidth: 2,
-    borderColor: "transparent",
-    backgroundColor: Theme.surfaceForm,
+    fontStyle: "normal",
+    minHeight: 44,
+    backgroundColor: "transparent",
     color: Theme.textPrimaryDark,
-    ...Platform.select({ web: { outlineStyle: "none" } as any }),
+    letterSpacing: 0.2,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+        width: "100%" as const,
+        maxWidth: "100%" as const,
+        boxSizing: "border-box" as const,
+      } as any,
+      default: {},
+    }),
   },
   infoCallout: {
     flexDirection: "row",
-    gap: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 14,
+    gap: 8,
+    paddingVertical: 9,
+    paddingHorizontal: 11,
+    borderRadius: 12,
     backgroundColor: "rgba(0, 0, 0, 0.04)",
     borderWidth: 1,
     borderColor: Theme.borderLight,
     alignItems: "flex-start",
   },
+  infoCalloutWideSpan: {
+    flexDirection: "row",
+    gap: 8,
+    paddingVertical: 9,
+    paddingHorizontal: 11,
+    borderRadius: 12,
+    backgroundColor: "rgba(0, 0, 0, 0.04)",
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    alignItems: "flex-start",
+    marginTop: 12,
+    width: "100%",
+    alignSelf: "stretch",
+  },
   infoCalloutText: {
     flex: 1,
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "500",
     color: Theme.textPrimaryDark,
-    lineHeight: 17,
+    lineHeight: 14,
   },
   assignLaterPartnerHint: {
     flexDirection: "row",
@@ -3016,22 +3430,44 @@ const styles = StyleSheet.create({
   },
   segment: {
     flexDirection: "row",
-    alignSelf: "center",
     backgroundColor: "#07090C",
-    borderRadius: 20,
-    padding: 6,
+    borderRadius: 18,
+    padding: 5,
     borderWidth: 1,
     borderColor: "#0F1318",
+    gap: 5,
+  },
+  /** Asset | Aggregate pill + Assign later on one row (desktop). */
+  supplyModeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
     marginBottom: 16,
-    gap: 6,
+    width: "100%",
+    alignSelf: "stretch",
+    minWidth: 0,
+    flexWrap: "nowrap",
+  },
+  supplyModeRowStack: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: 12,
+    flexWrap: "nowrap",
+  },
+  segmentWrap: {
+    flexShrink: 0,
+  },
+  segmentWrapCentered: {
+    alignSelf: "center",
   },
   segmentBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingVertical: 11,
-    paddingHorizontal: 24,
-    borderRadius: 14,
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    borderRadius: 12,
     backgroundColor: "#131820",
     borderWidth: 1,
     borderColor: "#252C36",
@@ -3051,62 +3487,98 @@ const styles = StyleSheet.create({
     }),
   },
   segmentLab: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "700",
-    letterSpacing: 1,
+    letterSpacing: 0.85,
     textTransform: "uppercase",
     color: "rgba(255,255,255,0.72)",
   },
   segmentLabOn: { color: Theme.textOnPrimary },
   assignLaterCard: {
     flexDirection: "row",
+    flexWrap: "nowrap",
     alignItems: "center",
-    gap: 12,
-    paddingVertical: 11,
-    paddingHorizontal: 12,
-    borderRadius: 14,
+    flex: 1,
+    flexBasis: 0,
+    minWidth: 160,
+    gap: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 10,
+    borderRadius: 12,
     borderWidth: 2,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.surfaceForm,
+    ...Platform.select({
+      web: {
+        boxSizing: "border-box" as const,
+      },
+      default: {},
+    }),
   },
-  assignLaterCardLeft: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
+  assignLaterCardStacked: {
+    flex: 0,
+    flexBasis: "auto",
+    width: "100%",
     minWidth: 0,
+    alignSelf: "stretch",
+  },
+  assignLaterMergedWrap: {
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
+    justifyContent: "center",
+  },
+  assignLaterMergedText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.textPrimary,
+    lineHeight: 18,
+    ...Platform.select({
+      web: {
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+      } as TextStyle,
+      default: {},
+    }),
+  },
+  assignLaterTitleInline: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.textPrimary,
+  },
+  assignLaterSubInline: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: Theme.textMuted,
+    lineHeight: 18,
+  },
+  assignLaterSwitchWrap: {
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
   },
   assignLaterIconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    flexShrink: 0,
+    width: 32,
+    height: 32,
+    borderRadius: 9,
     backgroundColor: Theme.surface,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
     borderColor: Theme.borderLight,
   },
-  assignLaterTitle: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: Theme.textPrimary,
-    marginBottom: 4,
-  },
-  assignLaterSub: {
-    fontSize: 11,
+  assignLaterLockedHintBelow: {
+    marginTop: 8,
+    paddingHorizontal: 10,
+    fontSize: 10,
     fontWeight: "500",
     color: Theme.textMuted,
-    lineHeight: 17,
+    lineHeight: 15,
   },
   assignLaterCardDisabled: {
     opacity: 0.72,
-  },
-  assignLaterLockedHint: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: Theme.textMuted,
-    marginTop: 8,
-    lineHeight: 16,
   },
   warningText: {
     fontSize: 11,
@@ -3132,80 +3604,46 @@ const styles = StyleSheet.create({
     color: Theme.warning,
     lineHeight: 16,
   },
-  notesInput: {
-    minHeight: 84,
-    textAlignVertical: "top",
-    paddingTop: 14,
-    borderRadius: 16,
-    borderWidth: 2,
-    fontSize: 14,
-    fontWeight: "500",
-  },
   inputErrorOutline: {
     borderWidth: 2,
     borderColor: Theme.destructive,
   },
-  priceInputError: {
-    borderColor: Theme.destructive,
-    borderWidth: 2,
-  },
   fieldGroupRing: {
     borderWidth: 1.5,
     borderColor: Theme.destructive,
-    borderRadius: 14,
-    padding: 8,
+    borderRadius: 12,
+    padding: 6,
   },
   validationChecklist: {
     width: "100%",
-    maxWidth: 420,
-    alignSelf: "center",
-    marginBottom: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 14,
+    maxWidth: 960,
+    alignSelf: "stretch",
+    marginBottom: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 11,
     backgroundColor: "rgba(232, 33, 39, 0.06)",
     borderWidth: 1,
     borderColor: "rgba(232, 33, 39, 0.35)",
   },
-  /** Desktop: sits under Trip Preview card in the right column (360px). */
-  validationChecklistBelowPreview: {
-    maxWidth: "100%",
-    alignSelf: "stretch",
-    marginTop: 12,
-    marginBottom: 0,
-  },
-  /** Tablet: inside floating Trip Preview card, below preview body. */
-  validationChecklistBelowFloating: {
-    maxWidth: "100%",
-    alignSelf: "stretch",
-    marginTop: 10,
-    marginHorizontal: 0,
-    marginBottom: 0,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  previewFloatingScrollContent: {
-    flexGrow: 0,
-    paddingBottom: 8,
-  },
   validationChecklistHead: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginBottom: 8,
+    gap: 6,
+    marginBottom: 6,
   },
   validationChecklistTitle: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
   },
   validationChecklistItem: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: "600",
     color: Theme.destructive,
-    lineHeight: 18,
-    marginBottom: 4,
+    lineHeight: 14,
+    marginBottom: 3,
   },
   driverConfirmCardError: {
     borderColor: Theme.destructive,
@@ -3214,20 +3652,20 @@ const styles = StyleSheet.create({
   },
   ctaBlock: {
     alignItems: "center",
-    paddingVertical: 16,
-    marginBottom: 20,
+    paddingVertical: 10,
+    marginBottom: 14,
   },
   primaryCta: {
     width: "100%",
-    maxWidth: 420,
+    maxWidth: 400,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
+    gap: 8,
     backgroundColor: Theme.darkBackground,
-    paddingVertical: 14,
-    borderRadius: 14,
-    minHeight: 52,
+    paddingVertical: 11,
+    borderRadius: 12,
+    minHeight: 44,
     ...Platform.select<ViewStyle>({
       web: { boxShadow: "0 8px 24px rgba(0,0,0,0.35)" },
       default: {
@@ -3243,7 +3681,7 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   primaryCtaText: {
-    fontSize: 17,
+    fontSize: 13,
     fontWeight: "800",
     color: Theme.textOnPrimary,
   },
@@ -3254,162 +3692,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textTransform: "uppercase",
     color: Theme.textMuted,
-  },
-  previewCard: {
-    position: "absolute",
-    width: 336,
-    backgroundColor: Theme.cardWhite,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    overflow: "hidden",
-    zIndex: 50,
-    ...Platform.select<ViewStyle>({
-      web: {
-        boxShadow: "0 12px 40px rgba(15,23,42,0.15)",
-      },
-      default: {
-        shadowColor: Theme.shadow,
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.15,
-        shadowRadius: 16,
-        elevation: 10,
-      },
-    }),
-  },
-  previewCardDesktop: {
-    position: "relative",
-    width: "100%",
-    right: undefined,
-    bottom: undefined,
-    marginTop: 4,
-  },
-  previewHead: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: Theme.darkSurface,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-  },
-  previewHeadRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  previewHeadTitle: {
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 1,
-    textTransform: "uppercase",
-    color: Theme.textOnDark,
-  },
-  livePill: {
-    backgroundColor: Theme.darkBackground,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
-  },
-  livePillText: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: Theme.textOnPrimary,
-    textTransform: "uppercase",
-  },
-  previewCollapseBtn: {
-    width: 22,
-    height: 22,
-    borderRadius: 999,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.14)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.24)",
-  },
-  previewCollapsedChip: {
-    position: "absolute",
-    zIndex: 60,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: Theme.darkSurface,
-    borderRadius: 999,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    ...Platform.select<ViewStyle>({
-      web: { boxShadow: "0 10px 24px rgba(15,23,42,0.2)" },
-      default: {
-        shadowColor: Theme.shadow,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.16,
-        shadowRadius: 10,
-        elevation: 4,
-      },
-    }),
-  },
-  previewCollapsedChipText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: Theme.textOnPrimary,
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-  },
-  previewBody: { padding: 14, gap: 10 },
-  previewLine: { gap: 4 },
-  previewLab: {
-    fontSize: 8,
-    fontWeight: "700",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-  },
-  previewVal: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: Theme.textPrimaryDark,
-  },
-  previewDivider: {
-    height: 1,
-    backgroundColor: Theme.borderLight,
-    marginVertical: 6,
-  },
-  previewRow2: { flexDirection: "row", gap: 10 },
-  previewCell: {
-    flex: 1,
-    minWidth: 0,
-    gap: 2,
-  },
-  previewValStrong: {
-    fontSize: 14,
-    fontWeight: "600",
-    letterSpacing: -0.2,
-    color: Theme.textPrimaryDark,
-  },
-  previewFoot: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    backgroundColor: Theme.surfaceLight,
-    marginTop: 6,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-  },
-  previewFootLeft: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-  },
-  previewFootRight: {
-    fontSize: 9,
-    fontWeight: "600",
-    color: Theme.textPrimaryDark,
-    maxWidth: 150,
-    textAlign: "right",
   },
   blobA: {
     position: "absolute",
@@ -3432,9 +3714,9 @@ const styles = StyleSheet.create({
     zIndex: -1,
   },
   mutedSmall: {
-    fontSize: 12,
+    fontSize: 10,
     color: Theme.textMuted,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   driverConfirmCard: {
     marginTop: 8,
@@ -3450,18 +3732,29 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   driverConfirmCardConfirmed: {
-    borderColor: Theme.darkGreen,
-    backgroundColor: Theme.positiveMuted,
+    borderWidth: 0,
+    borderColor: Theme.driverEmeraldDark,
+    backgroundColor: Theme.driverEmeraldDark,
   },
   driverConfirmMain: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: Theme.textPrimaryDark,
-  },
-  driverConfirmSub: {
     fontSize: 11,
     fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0,
+  },
+  driverConfirmMainOnDark: {
+    color: Theme.textOnPrimary,
+    fontWeight: "600",
+  },
+  driverConfirmSub: {
+    fontSize: 10,
+    fontWeight: "500",
     color: Theme.textMuted,
     marginTop: 3,
+    lineHeight: 14,
+  },
+  driverConfirmSubOnDark: {
+    color: "rgba(255,255,255,0.88)",
+    fontWeight: "500",
   },
 });

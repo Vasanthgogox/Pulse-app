@@ -3,120 +3,103 @@
  * Thin container; logic lives in useAddTripForm and useClientsForTrip.
  * Waits for onComplete (e.g. createTrip) to finish before closing so lists refetch with new data.
  */
-import { normalizeIndianPhoneForMetadata } from "@/lib/phoneValidation";
-import { useFocusEffect } from "expo-router";
-import { useCallback, useState } from "react";
-import { Alert, Platform, View, Text, TouchableOpacity, StyleSheet } from "react-native";
-import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Alert,
+  Animated,
+  Easing,
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Platform,
+  useWindowDimensions,
+} from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import {
+  ArrowDown,
+  CheckCircle2,
+  Clock,
+  MapPinned,
+  RotateCw,
+  Truck,
+  User,
+} from "lucide-react-native";
+import { MotiView } from "moti";
 import { AddTripFormFields } from "./AddTripFormFields";
 import { AddTripModalLayout } from "./AddTripModalLayout";
-import type { AddTripCompleteOptions, AddTripCompleteResult, AddTripModalProps } from "./types";
+import type {
+  AddTripCompleteOptions,
+  AddTripCompleteResult,
+  AddTripFormState,
+  AddTripModalProps,
+  AddTripOtpScreenContext,
+} from "./types";
 import { useAddTripForm } from "./useAddTripForm";
 import { useClientsForTrip } from "./useClientsForTrip";
 import Theme from "@/constants/Theme";
 import Layout from "@/constants/Layout";
+import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import { regenerateTripOtp } from "@/features/trips/services/tripOtp.service";
-import { getDriverAvailabilityByPhoneGlobal } from "@/features/trips/services/trips.service";
-import { ThemedAlertModal } from "@/components/ThemedAlertModal";
-import { useWindowDimensions } from "react-native";
+
+function buildOtpScreenContext(state: AddTripFormState): AddTripOtpScreenContext {
+  const phoneResolved =
+    state.driverPhoneConfirmed && state.driverPhoneName?.trim()
+      ? state.driverPhoneName.trim()
+      : "";
+  const entered = state.aggregateDriverName.trim();
+  const driverName = entered || phoneResolved || undefined;
+  const routeLineParts: string[] = [];
+  if (state.routeDistanceKm != null && Number.isFinite(state.routeDistanceKm)) {
+    routeLineParts.push(`${state.routeDistanceKm} km`);
+  }
+  if (state.routeEtaLabel?.trim()) routeLineParts.push(state.routeEtaLabel.trim());
+  return {
+    driverName,
+    pickupArea: state.pickupArea.trim(),
+    dropLocation: state.dropLocation.trim(),
+    clientName: state.clientName.trim() || undefined,
+    tons: state.tons.trim() || undefined,
+    supplierDisplayName: state.supplierDisplayName.trim() || undefined,
+    routeLine: routeLineParts.length ? routeLineParts.join(" · ") : undefined,
+  };
+}
 
 export function AddTripModal({
   organizationId,
   onClose,
   onComplete,
 }: AddTripModalProps) {
-  const { width: windowWidth } = useWindowDimensions();
-  const showStickyFooter = windowWidth < 480;
   const form = useAddTripForm();
   const [submitting, setSubmitting] = useState(false);
   const [createdResult, setCreatedResult] = useState<AddTripCompleteResult | null>(null);
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [successDetails, setSuccessDetails] = useState<{
-    tripNumber: string;
-    routeLabel: string;
-  } | null>(null);
   const [regenerating, setRegenerating] = useState(false);
-  const [submitAttempted, setSubmitAttempted] = useState(false);
   const {
     clients,
     loading: clientsLoading,
     refetch: refetchClients,
   } = useClientsForTrip(organizationId);
-  const validationMessage = form.getValidationError();
-  const canCreateTrip = form.canSubmit;
-
-  useFocusEffect(
-    useCallback(() => {
-      setSubmitAttempted(false);
-    }, []),
-  );
 
   const handleSubmit = async () => {
-    if (submitting) return;
-    const isAggregateImmediateAssignment =
-      form.state.supplySource === "aggregate" && !form.state.assignLater;
-    const rawDriverPhone = form.state.driverPhone.trim();
-    const normalized =
-      rawDriverPhone.length > 0
-        ? normalizeIndianPhoneForMetadata(rawDriverPhone)
-        : null;
-    const normalizedDriver = (normalized ?? rawDriverPhone) || undefined;
-
-    // Hard guard at submit-time to avoid debounce/race gaps from field-level lookup.
-    if (isAggregateImmediateAssignment && normalizedDriver) {
-      const { error: availabilityError, result } =
-        await getDriverAvailabilityByPhoneGlobal(normalizedDriver, {
-          anyOpenTripBlocks: true,
-          requireAuthoritativeRpc: true,
-        });
-      if (availabilityError) {
-        Alert.alert("Unable to validate driver", availabilityError.message);
-        return;
-      }
-      if (result.isBusy) {
-        form.setters.setDriverPhoneTripConflict(
-          true,
-          result.ongoingTripLabel ?? null,
-        );
-        form.setters.setDriverPhoneConfirmed(false);
-        const who = form.state.driverPhoneName?.trim() || "Driver";
-        Alert.alert(
-          "Driver busy",
-          `${who} is already assigned to ${result.ongoingTripLabel ?? "another active trip"}. Complete or unassign that trip first.`,
-        );
-        return;
-      }
-      form.setters.setDriverPhoneTripConflict(false, null);
-    }
-
-    if (!form.canSubmit) {
-      setSubmitAttempted(true);
-      const errNow = form.getValidationError();
-      if (Platform.OS !== "web" && errNow) {
-        Alert.alert("Missing required details", errNow);
-      }
+    if (!form.canSubmit || submitting) return;
+    const validationErr = form.getValidationError();
+    if (validationErr) {
+      Alert.alert("Invalid input", validationErr);
       return;
     }
     setSubmitting(true);
     try {
       const options: AddTripCompleteOptions = {
         supplySource: form.state.supplySource,
-        driverPhone: normalizedDriver,
+        driverPhone: form.state.driverPhone.trim() || undefined,
       };
       const result = await Promise.resolve(onComplete(form.buildPayload(), options));
       const typed = result as AddTripCompleteResult | undefined;
-      if (typed?.trip) {
-        if (typed.otp) {
-          setCreatedResult(typed);
-          return;
-        }
-        setSuccessDetails(
-          typed.successDetails ?? {
-            tripNumber: typed.trip.id,
-            routeLabel: `${form.state.pickupArea} -> ${form.state.dropLocation}`,
-          },
-        );
-        setShowSuccessModal(true);
+      if (typed?.trip && typed?.otp) {
+        setCreatedResult({
+          ...typed,
+          otpScreenContext: buildOtpScreenContext(form.state),
+        });
         return;
       }
       onClose();
@@ -135,7 +118,8 @@ export function AddTripModal({
     setRegenerating(true);
     try {
       const { code, expires_at } = await regenerateTripOtp(createdResult.trip.id);
-      if (code != null && expires_at != null) setCreatedResult({ ...createdResult, otp: { code, expires_at } });
+      if (code != null && expires_at != null)
+        setCreatedResult({ ...createdResult, otp: { code, expires_at } });
     } finally {
       setRegenerating(false);
     }
@@ -146,133 +130,640 @@ export function AddTripModal({
     onClose();
   };
 
-  const handleSuccessOk = () => {
-    setShowSuccessModal(false);
-    setSuccessDetails(null);
-    onClose();
-  };
-
   if (createdResult?.trip && createdResult?.otp) {
-    const expiresAt = new Date(createdResult.otp.expires_at);
-    const expiresStr = expiresAt.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-    const vehicleDisplay = "vehicle_display_number" in createdResult.trip && typeof createdResult.trip.vehicle_display_number === "string"
-      ? createdResult.trip.vehicle_display_number.trim()
-      : "";
     return (
       <AddTripModalLayout
         title="Trip created"
+        subtitle="Share the code below — trip details stay on this screen for reference."
         submitLabel="Done"
         canSubmit={true}
         submitting={false}
-        primaryActionMode="footer"
         onClose={handleDone}
         onSubmit={handleDone}
       >
-        <View style={otpStyles.card}>
-          <Text style={otpStyles.label}>Share this OTP with the driver</Text>
-          <Text style={otpStyles.code}>{createdResult.otp.code}</Text>
-          {vehicleDisplay ? (
-            <Text style={otpStyles.vehicle}>Vehicle: {vehicleDisplay}</Text>
-          ) : null}
-          <Text style={otpStyles.expiry}>Valid until {expiresStr}</Text>
-          <TouchableOpacity
-            style={otpStyles.regenerateBtn}
-            onPress={handleRegenerateOtp}
-            disabled={regenerating}
-          >
-            <FontAwesome name="refresh" size={14} color={Theme.primary} />
-            <Text style={otpStyles.regenerateText}>
-              {regenerating ? "Regenerating…" : "Regenerate OTP"}
-            </Text>
-          </TouchableOpacity>
-        </View>
+        <AddTripOtpSuccessBody
+          createdResult={createdResult}
+          regenerating={regenerating}
+          onRegenerateOtp={handleRegenerateOtp}
+        />
       </AddTripModalLayout>
     );
   }
 
   return (
-    <>
-      <AddTripModalLayout
-        title="Create Trip"
-        submitLabel="Create Trip"
-        canSubmit={canCreateTrip}
-        lockPrimaryUntilValid={false}
-        validationMessage={submitAttempted ? validationMessage : null}
-        submitting={submitting}
-        primaryActionMode={showStickyFooter ? "footer" : "content"}
-        onClose={onClose}
-        onSubmit={handleSubmit}
-      >
-        <AddTripFormFields
-          state={form.state}
-          setters={form.setters}
-          clients={clients}
-          clientsLoading={clientsLoading}
-          organizationId={organizationId}
-          refetchClients={refetchClients}
-          onSubmit={handleSubmit}
-          canSubmit={canCreateTrip}
-          validationMessage={validationMessage}
-          validationIssues={submitAttempted ? form.validationIssues : []}
-          submitting={submitting}
-          showInlineCta={!showStickyFooter}
-          enablePrimaryWhenInvalid
-        />
-      </AddTripModalLayout>
-
-      <ThemedAlertModal
-        visible={showSuccessModal}
-        title="Trip Created Successfully"
-        message={`Trip Number: ${successDetails?.tripNumber ?? "Trip"}\nRoute: ${successDetails?.routeLabel ?? "Route details unavailable"}`}
-        okText="OK"
-        onOk={handleSuccessOk}
-        onRequestClose={handleSuccessOk}
-        variant="neutral"
-        okVariant="primary"
+    <AddTripModalLayout
+      title="Create Trip"
+      submitLabel="Create Trip"
+      canSubmit={form.canSubmit}
+      submitting={submitting}
+      onClose={onClose}
+      onSubmit={handleSubmit}
+    >
+      <AddTripFormFields
+        state={form.state}
+        setters={form.setters}
+        clients={clients}
+        clientsLoading={clientsLoading}
+        organizationId={organizationId}
+        refetchClients={refetchClients}
+        showInlineCta={false}
       />
-    </>
+    </AddTripModalLayout>
+  );
+}
+
+function AddTripOtpSuccessBody({
+  createdResult,
+  regenerating,
+  onRegenerateOtp,
+}: {
+  createdResult: AddTripCompleteResult;
+  regenerating: boolean;
+  onRegenerateOtp: () => void;
+}) {
+  const { width: winW } = useWindowDimensions();
+  const metaInline = winW >= 540;
+  const spin = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!regenerating) {
+      spin.setValue(0);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.timing(spin, {
+        toValue: 1,
+        duration: 900,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+    loop.start();
+    return () => {
+      loop.stop();
+      spin.setValue(0);
+    };
+  }, [regenerating, spin]);
+
+  const spinRotate = spin.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "360deg"],
+  });
+
+  const otp = createdResult.otp!;
+  const ctx = createdResult.otpScreenContext;
+  const expiresAt = new Date(otp.expires_at);
+  const expiresStr = expiresAt.toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const vehicleDisplay =
+    "vehicle_display_number" in createdResult.trip &&
+    typeof createdResult.trip.vehicle_display_number === "string"
+      ? createdResult.trip.vehicle_display_number.trim()
+      : "";
+
+  const digits = useMemo(
+    () => String(otp.code).replace(/\D/g, "").split(""),
+    [otp.code],
+  );
+
+  const hasSummary =
+    !!ctx &&
+    (ctx.pickupArea.length > 0 ||
+      ctx.dropLocation.length > 0 ||
+      !!ctx.clientName ||
+      !!ctx.tons ||
+      !!ctx.supplierDisplayName ||
+      !!ctx.routeLine);
+
+  return (
+    <View style={otpStyles.screen}>
+      <LinearGradient
+        colors={["#ecfdf5", "#e0f2fe", "#f5f3ff", "#fafafa"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFillObject}
+      />
+      <LinearGradient
+        colors={["transparent", "rgba(255,255,255,0.5)", "transparent"]}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={[StyleSheet.absoluteFillObject, { opacity: 0.85 }]}
+      />
+
+      <MotiView
+        from={{ opacity: 0, translateY: 22, scale: 0.96 }}
+        animate={{ opacity: 1, translateY: 0, scale: 1 }}
+        transition={{ type: "timing", duration: 520 }}
+        style={otpStyles.cardWrap}
+      >
+        <View style={otpStyles.card}>
+          <LinearGradient
+            colors={[
+              Theme.driverEmeraldDark,
+              Theme.driverEmerald,
+              "rgba(16, 185, 129, 0.85)",
+            ]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={otpStyles.cardGlowTop}
+          />
+          <View style={otpStyles.cardInner}>
+            <MotiView
+              from={{ scale: 0.85, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: "spring", damping: 14, stiffness: 220 }}
+            >
+              <MotiView
+                animate={{
+                  scale: [1, 1.06, 1],
+                  opacity: [1, 0.92, 1],
+                }}
+                transition={{
+                  type: "timing",
+                  duration: 2600,
+                  loop: true,
+                }}
+                style={otpStyles.badgeCircleWrap}
+              >
+                <LinearGradient
+                  colors={[Theme.driverEmeraldDark, Theme.driverEmerald]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={otpStyles.badgeCircle}
+                >
+                  <CheckCircle2 size={26} color={Theme.textOnPrimary} strokeWidth={2.5} />
+                </LinearGradient>
+              </MotiView>
+            </MotiView>
+
+            <Text style={otpStyles.kicker}>Driver OTP</Text>
+            <Text style={otpStyles.instruction}>Share this code with the driver</Text>
+
+            {hasSummary && ctx ? (
+              <View style={otpStyles.summaryShell}>
+                <Text style={otpStyles.summaryKicker}>Trip summary</Text>
+                <View style={otpStyles.summaryRouteRow}>
+                  <MapPinned size={14} color={Theme.iconPrimary} strokeWidth={2} />
+                  <View style={otpStyles.summaryRouteTextCol}>
+                    <Text style={otpStyles.summaryRouteMain} numberOfLines={2}>
+                      {ctx.pickupArea || "—"}
+                    </Text>
+                    <View style={otpStyles.summaryArrowDivider}>
+                      <ArrowDown size={11} color={Theme.textMuted} strokeWidth={2} />
+                    </View>
+                    <Text style={otpStyles.summaryRouteMain} numberOfLines={2}>
+                      {ctx.dropLocation || "—"}
+                    </Text>
+                  </View>
+                </View>
+                {ctx.routeLine ? (
+                  <Text style={otpStyles.summaryMetaLine} numberOfLines={1}>
+                    {ctx.routeLine}
+                  </Text>
+                ) : null}
+                <View style={otpStyles.summaryChips}>
+                  {ctx.clientName ? (
+                    <View style={otpStyles.chip}>
+                      <Text style={otpStyles.chipLab}>Client</Text>
+                      <Text style={otpStyles.chipVal} numberOfLines={1}>
+                        {ctx.clientName}
+                      </Text>
+                    </View>
+                  ) : null}
+                  {ctx.supplierDisplayName ? (
+                    <View style={otpStyles.chip}>
+                      <Text style={otpStyles.chipLab}>Partner</Text>
+                      <Text style={otpStyles.chipVal} numberOfLines={1}>
+                        {ctx.supplierDisplayName}
+                      </Text>
+                    </View>
+                  ) : null}
+                  {ctx.tons ? (
+                    <View style={otpStyles.chip}>
+                      <Text style={otpStyles.chipLab}>Load</Text>
+                      <Text style={otpStyles.chipVal} numberOfLines={1}>
+                        {ctx.tons} t
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+              </View>
+            ) : null}
+
+            {ctx?.driverName ? (
+              <MotiView
+                from={{ opacity: 0, translateX: -8 }}
+                animate={{ opacity: 1, translateX: 0 }}
+                transition={{ type: "timing", duration: 400, delay: 120 }}
+                style={otpStyles.driverBanner}
+              >
+                <View style={otpStyles.driverIconTile}>
+                  <User size={17} color={Theme.driverEmeraldDark} strokeWidth={2} />
+                </View>
+                <View style={otpStyles.driverTextCol}>
+                  <Text style={otpStyles.metaLabel}>Driver</Text>
+                  <Text style={otpStyles.driverNameText} numberOfLines={1}>
+                    {ctx.driverName}
+                  </Text>
+                </View>
+              </MotiView>
+            ) : null}
+
+            <View style={otpStyles.codeBand} key={otp.code}>
+              <View style={otpStyles.digitsRow}>
+                {digits.length === 0 ? (
+                  <Text style={otpStyles.digitFallback} selectable>
+                    {otp.code}
+                  </Text>
+                ) : (
+                  digits.map((d, i) => (
+                    <MotiView
+                      key={`${otp.code}-${i}`}
+                      from={{ opacity: 0, translateY: 14, scale: 0.82 }}
+                      animate={{ opacity: 1, translateY: 0, scale: 1 }}
+                      transition={{
+                        type: "spring",
+                        damping: 15,
+                        stiffness: 220,
+                        delay: 80 + i * 55,
+                      }}
+                      style={otpStyles.digitCell}
+                    >
+                      <Text style={otpStyles.digitChar}>{d}</Text>
+                    </MotiView>
+                  ))
+                )}
+              </View>
+            </View>
+
+            <View
+              style={[otpStyles.metaRowsWrap, metaInline && otpStyles.metaRowsWrapInline]}
+            >
+              {vehicleDisplay ? (
+                <View style={[otpStyles.metaRow, metaInline && otpStyles.metaRowFlex]}>
+                  <View style={otpStyles.metaIconTile}>
+                    <Truck size={16} color={Theme.driverEmeraldDark} strokeWidth={2} />
+                  </View>
+                  <View style={otpStyles.metaTextCol}>
+                    <Text style={otpStyles.metaLabel}>Vehicle</Text>
+                    <Text style={otpStyles.vehicle}>{vehicleDisplay}</Text>
+                  </View>
+                </View>
+              ) : null}
+              <View style={[otpStyles.metaRow, metaInline && otpStyles.metaRowFlex]}>
+                <View style={otpStyles.metaIconTileMuted}>
+                  <Clock size={15} color={Theme.textMuted} strokeWidth={2} />
+                </View>
+                <View style={otpStyles.metaTextCol}>
+                  <Text style={otpStyles.metaLabel}>Expires</Text>
+                  <Text style={otpStyles.expiry}>{expiresStr}</Text>
+                </View>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={[otpStyles.regenerateBtn, regenerating && otpStyles.regenerateBtnDisabled]}
+              onPress={onRegenerateOtp}
+              disabled={regenerating}
+              activeOpacity={0.85}
+            >
+              <Animated.View style={{ transform: [{ rotate: spinRotate }] }}>
+                <RotateCw size={15} color={Theme.primary} strokeWidth={2} />
+              </Animated.View>
+              <Text style={otpStyles.regenerateText}>
+                {regenerating ? "Regenerating…" : "Regenerate OTP"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </MotiView>
+    </View>
   );
 }
 
 const otpStyles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    minHeight: 320,
+    position: "relative",
+    overflow: "hidden",
+  },
+  cardWrap: {
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingVertical: 20,
+    zIndex: 1,
+  },
   card: {
+    borderRadius: 24,
+    overflow: "hidden",
+    alignSelf: "center",
+    width: "100%",
+    maxWidth: 440,
+    ...Platform.select({
+      web: {
+        boxShadow:
+          "0 4px 6px rgba(15, 23, 42, 0.04), 0 24px 48px rgba(15, 23, 42, 0.12)",
+      },
+      default: {
+        shadowColor: "#0f172a",
+        shadowOffset: { width: 0, height: 14 },
+        shadowOpacity: 0.12,
+        shadowRadius: 32,
+        elevation: 10,
+      },
+    }),
+  },
+  cardGlowTop: {
+    height: 4,
+    width: "100%",
+    opacity: 0.95,
+  },
+  cardInner: {
+    backgroundColor: Theme.cardWhite,
+    paddingHorizontal: 20,
+    paddingTop: 22,
+    paddingBottom: 20,
+    borderWidth: 1,
+    borderTopWidth: 0,
+    borderColor: Theme.borderLight,
+  },
+  badgeCircleWrap: {
+    alignSelf: "center",
+    marginBottom: 12,
+  },
+  badgeCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    ...Platform.select({
+      web: {
+        boxShadow: "0 12px 32px rgba(4, 120, 87, 0.32)",
+      },
+      default: {
+        shadowColor: Theme.driverEmeraldDark,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.35,
+        shadowRadius: 14,
+        elevation: 8,
+      },
+    }),
+  },
+  kicker: {
+    alignSelf: "center",
+    ...FinanceTxnTypography.fieldLabel,
+    marginBottom: 4,
+    textAlign: "center",
+  },
+  instruction: {
+    alignSelf: "center",
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    textAlign: "center",
+    marginBottom: 14,
+    letterSpacing: -0.15,
+    lineHeight: 16,
+    paddingHorizontal: 8,
+  },
+  summaryShell: {
+    alignSelf: "stretch",
+    marginBottom: 14,
+    padding: 12,
+    borderRadius: 14,
     backgroundColor: Theme.surface,
-    borderRadius: 12,
     borderWidth: 1,
     borderColor: Theme.surfaceBorder,
-    padding: Layout.sectionSpacing,
+    gap: 8,
   },
-  label: {
-    fontSize: 13,
+  summaryKicker: {
+    ...FinanceTxnTypography.chipLabel,
+    marginBottom: 2,
+  },
+  summaryRouteRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  summaryRouteTextCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  summaryArrowDivider: {
+    alignSelf: "flex-start",
+    paddingVertical: 3,
+    paddingHorizontal: 2,
+    marginLeft: 2,
+    opacity: 0.85,
+  },
+  summaryRouteMain: {
+    ...FinanceTxnTypography.fieldValue,
+    fontSize: 10,
+    lineHeight: 14,
+    flex: 1,
+    minWidth: 0,
+  },
+  summaryMetaLine: {
+    ...FinanceTxnTypography.routeWhy,
+    fontSize: 9,
+    marginTop: 2,
+  },
+  summaryChips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 4,
+  },
+  chip: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: Theme.surfaceForm,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    maxWidth: "100%",
+  },
+  chipLab: {
+    ...FinanceTxnTypography.chipLabel,
+    marginBottom: 2,
+  },
+  chipVal: {
+    ...FinanceTxnTypography.fieldValue,
+    fontStyle: "normal",
     fontWeight: "600",
-    color: Theme.textSecondary,
-    marginBottom: 8,
+    fontSize: 9,
   },
-  code: {
-    fontSize: 28,
+  driverBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    alignSelf: "stretch",
+    marginBottom: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    backgroundColor: "rgba(4, 120, 87, 0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(4, 120, 87, 0.18)",
+  },
+  driverIconTile: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "rgba(4, 120, 87, 0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(4, 120, 87, 0.2)",
+  },
+  driverTextCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  driverNameText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.2,
+  },
+  codeBand: {
+    alignSelf: "stretch",
+    marginBottom: 14,
+  },
+  digitsRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  digitCell: {
+    minWidth: 42,
+    height: 48,
+    paddingHorizontal: 4,
+    borderRadius: 14,
+    backgroundColor: "rgba(4, 120, 87, 0.08)",
+    borderWidth: 1.5,
+    borderColor: "rgba(4, 120, 87, 0.22)",
+    alignItems: "center",
+    justifyContent: "center",
+    ...Platform.select({
+      web: {
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.65)",
+      },
+      default: {},
+    }),
+  },
+  digitChar: {
+    fontSize: 22,
     fontWeight: "800",
-    letterSpacing: 6,
-    color: Theme.primary,
+    color: Theme.driverEmeraldDark,
+    fontVariant: ["tabular-nums"],
+    letterSpacing: 0.5,
+  },
+  digitFallback: {
+    fontSize: 26,
+    fontWeight: "800",
+    letterSpacing: 10,
+    color: Theme.driverEmeraldDark,
+    fontVariant: ["tabular-nums"],
+    textAlign: "center",
+  },
+  metaRowsWrap: {
+    gap: 10,
     marginBottom: 4,
+    alignSelf: "stretch",
+  },
+  metaRowsWrapInline: {
+    flexDirection: "row",
+    alignItems: "stretch",
+  },
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    backgroundColor: Theme.surface,
+    borderWidth: 1,
+    borderColor: Theme.surfaceBorder,
+    minWidth: 0,
+  },
+  metaRowFlex: {
+    flex: 1,
+  },
+  metaIconTile: {
+    width: 38,
+    height: 38,
+    borderRadius: 11,
+    backgroundColor: "rgba(4, 120, 87, 0.1)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(4, 120, 87, 0.18)",
+  },
+  metaIconTileMuted: {
+    width: 38,
+    height: 38,
+    borderRadius: 11,
+    backgroundColor: Theme.surfaceGray,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  metaTextCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  metaLabel: {
+    ...FinanceTxnTypography.fieldLabel,
+    marginBottom: 2,
+    fontSize: 8,
   },
   vehicle: {
-    fontSize: 13,
-    color: Theme.textSecondary,
-    marginBottom: 4,
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.4,
+    fontVariant: ["tabular-nums"],
   },
   expiry: {
-    fontSize: 12,
-    color: Theme.textMuted,
-    marginBottom: 16,
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textPrimary,
+    letterSpacing: -0.1,
+    fontVariant: ["tabular-nums"],
   },
   regenerateBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    justifyContent: "center",
+    gap: 10,
+    alignSelf: "center",
+    marginTop: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 20,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: Theme.primary,
+    backgroundColor: "rgba(26, 35, 126, 0.05)",
+  },
+  regenerateBtnDisabled: {
+    opacity: 0.55,
   },
   regenerateText: {
-    fontSize: 13,
-    fontWeight: "600",
+    ...FinanceTxnTypography.buttonLabel,
+    fontWeight: "700",
+    letterSpacing: 0.5,
     color: Theme.primary,
+    textTransform: "uppercase",
   },
 });

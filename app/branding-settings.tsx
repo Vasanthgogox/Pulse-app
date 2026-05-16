@@ -1,4 +1,5 @@
 import Layout from '@/constants/Layout';
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from '@/constants/Theme';
 import {
   getInvoiceBrandingSettings,
@@ -8,7 +9,6 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Pressable,
   ScrollView,
@@ -96,7 +96,7 @@ export default function BrandingSettingsScreen() {
 
       {isLoading ? (
         <View style={styles.loadingWrap}>
-          <ActivityIndicator size="small" color={Theme.primary} />
+          <LoadingIndicator size="small" color={Theme.primary} />
           <Text style={styles.loadingText}>Loading branding settings...</Text>
         </View>
       ) : (
@@ -156,7 +156,7 @@ export default function BrandingSettingsScreen() {
             disabled={isSaving || !isCompanyNameValid}
           >
             {isSaving ? (
-              <ActivityIndicator size="small" color={Theme.buttonPrimaryText} />
+              <LoadingIndicator size="small" color={Theme.buttonPrimaryText} />
             ) : (
               <>
                 <FontAwesome

@@ -2,25 +2,25 @@
  * Shared Ledger modal — pick a client or supplier, then full-screen Compare & verify
  * (`SharedLedgerContent`) for that party.
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
+import Theme from "@/constants/Theme";
 import type { ClientRow } from "@/features/clients/services/clients.service";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
 import type { TripRow } from "@/features/trips";
-import Theme from "@/constants/Theme";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { LedgerRow } from "../services/finance.service";
-import { SharedLedgerContent } from "./SharedLedgerContent";
 import type { SharedLedgerContentProps } from "./SharedLedgerContent";
+import { SharedLedgerContent } from "./SharedLedgerContent";
 
 export type { SharedLedgerContentProps } from "./SharedLedgerContent";
 
@@ -230,7 +230,7 @@ export function SharedLedgerModal({
           <SharedLedgerContent {...contentProps} />
         ) : (
           <View style={styles.loadingWrap}>
-            <ActivityIndicator size="large" color={Theme.primary} />
+            <LoadingIndicator size="large" color={Theme.primary} />
           </View>
         )}
       </View>
