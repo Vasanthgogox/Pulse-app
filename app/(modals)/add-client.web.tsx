@@ -1,23 +1,14 @@
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import {
-  AddClientModal,
-  type AddClientFormData,
-  type ConnectionInviteeMatch,
-} from "@/features/clients/components/AddClientModal";
-import { createClient } from "@/features/clients/services/clients.service";
-import { queryKeys } from "@/lib/queryKeys";
-import { useInvalidateClients } from "@/lib/queries/useClientsQuery";
+import type { ConnectionInviteeMatch } from "@/features/clients/components/AddClientModal";
+import { PartyRegistrationPortal } from "@/features/finance/components/PartyRegistrationPortal";
+import { usePartyPortalRouteHandlers } from "@/features/finance/hooks/usePartyPortalRouteHandlers";
 import { ROUTES } from "@/lib/routes";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useQueryClient } from "@tanstack/react-query";
 import {
   getConnectionInviteeByPhone,
   createConnectionRequest,
 } from "@/services/connectionRequestsService";
-
-const NO_ORG_MESSAGE =
-  "No organization loaded. Sign out and sign in again to refresh, or ensure you are added as a member of an organization in the dashboard.";
 
 function closeModal(
   router: ReturnType<typeof useRouter>,
@@ -37,30 +28,12 @@ function closeModal(
 export default function AddClientScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ returnTo?: string | string[] }>();
-  const queryClient = useQueryClient();
-  const invalidateClients = useInvalidateClients();
-  const { currentOrganization, isLoading, refreshOrganization } =
-    useOrganization();
+  const partyPortal = usePartyPortalRouteHandlers();
+  const { currentOrganization, isLoading } = useOrganization();
   const returnToParam = Array.isArray(params.returnTo)
     ? params.returnTo[0]
     : params.returnTo;
   const returnTo = returnToParam?.startsWith("/") ? returnToParam : undefined;
-
-  const handleComplete = async (data: AddClientFormData) => {
-    if (!currentOrganization?.id) {
-      throw new Error(NO_ORG_MESSAGE);
-    }
-    const orgId = currentOrganization.id;
-    const { error } = await createClient(orgId, {
-      contact_person: data.contactPerson,
-      phone: data.phone,
-      organization_name: data.organizationName || undefined,
-    });
-    if (error) throw error;
-    invalidateClients(orgId);
-    await queryClient.refetchQueries({ queryKey: queryKeys.clients.all(orgId) });
-    closeModal(router, returnTo);
-  };
 
   const searchInviteeByPhone = async (
     phone: string,
@@ -79,7 +52,7 @@ export default function AddClientScreen() {
 
   const handleSendInvitation = async (toOrgId: string) => {
     if (!currentOrganization?.id) {
-      throw new Error(NO_ORG_MESSAGE);
+      throw new Error(partyPortal.NO_ORG_MESSAGE);
     }
     const { error } = await createConnectionRequest(
       currentOrganization.id,
@@ -94,13 +67,19 @@ export default function AddClientScreen() {
   }
 
   return (
-    <AddClientModal
+    <PartyRegistrationPortal
+      visible
+      initialKind="client"
       onClose={() => closeModal(router, returnTo)}
-      onComplete={handleComplete}
-      successEntity="customer"
-      organizationId={currentOrganization?.id ?? null}
-      noOrganizationMessage={currentOrganization ? null : NO_ORG_MESSAGE}
-      onRefreshOrganization={refreshOrganization}
+      organizationId={partyPortal.organizationId}
+      noOrganizationMessage={
+        currentOrganization ? null : partyPortal.NO_ORG_MESSAGE
+      }
+      onRefreshOrganization={partyPortal.refreshOrganization}
+      onAddClient={partyPortal.handleAddClientComplete}
+      onAddSupplier={partyPortal.handleAddSupplierComplete}
+      onAddDriver={partyPortal.handleAddDriverDirect}
+      onAddVehicle={partyPortal.handleAddVehicleComplete}
       searchInviteeByPhone={searchInviteeByPhone}
       onSendInvitation={handleSendInvitation}
     />

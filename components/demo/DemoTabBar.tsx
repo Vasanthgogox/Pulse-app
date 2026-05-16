@@ -44,7 +44,7 @@ import {
 import type { SalaryRequestWithDriverRow } from "@/services/salaryRequestsService";
 import type { SharedLedgerNotificationRow } from "@/services/sharedLedgerNotificationsService";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
-import { Package, Route, Share2, Wallet } from "lucide-react-native";
+import { Home, Package, Route, Wallet } from "lucide-react-native";
 import { usePathname, useRouter } from "expo-router";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -111,7 +111,7 @@ function AnimatedPress({
   );
 }
 
-/** Edge tabs (profile / chat). */
+/** Edge tabs (home / chat). */
 const MOBILE_EDGE_ICON_SIZE = 22;
 const MOBILE_EDGE_ICON_SIZE_COMPACT = 19;
 /** Clustered ops tabs — light stroke, Slack thumb. */
@@ -142,14 +142,13 @@ function MobileFooterTab({
   customIcon?: React.ReactNode;
   avatarUri?: string | null;
   avatarInitials?: string;
-  /** Profile / chat wings — fixed width, no stretch. */
+  /** Home / chat wings — fixed width, no stretch. */
   edge?: boolean;
 }) {
   const showBadge = (badgeCount ?? 0) > 0;
   const iconSize = compact ? MOBILE_EDGE_ICON_SIZE_COMPACT : MOBILE_EDGE_ICON_SIZE;
   const iconColor = active ? Theme.pulseIndigo : Theme.textMutedDemo;
   const isProfile = avatarInitials != null;
-
   return (
     <TouchableOpacity
       style={[styles.mobileFooterTab, edge && styles.mobileFooterTabEdge]}
@@ -162,10 +161,11 @@ function MobileFooterTab({
       <View
         style={[
           styles.mobileFooterIconSlot,
-          active && styles.mobileFooterIconSlotActive,
+          edge && styles.mobileFooterIconSlotEdge,
+          active && (edge ? styles.mobileFooterIconSlotEdgeActive : styles.mobileFooterIconSlotActive),
         ]}
       >
-        {active ? <View style={styles.mobileFooterActiveBar} /> : null}
+        {active && !edge ? <View style={styles.mobileFooterActiveBar} /> : null}
         {isProfile ? (
           avatarUri ? (
             <Image
@@ -213,6 +213,7 @@ function MobileFooterTab({
           styles.mobileFooterLabel,
           compact && styles.mobileFooterLabelCompact,
           active && styles.mobileFooterLabelActive,
+          active && edge && styles.mobileFooterEdgeLabelActive,
         ]}
         numberOfLines={1}
       >
@@ -223,6 +224,8 @@ function MobileFooterTab({
 }
 
 const CLUSTER_PILL_INSET = 4;
+/** Stable style token (keeps HMR safe if an older bundle still references this name). */
+const FOOTER_CLUSTER_WASH = Theme.pulseIndigoWash;
 
 type SlackClusterTab = {
   id: string;
@@ -233,7 +236,7 @@ type SlackClusterTab = {
   badgeCount?: number;
 };
 
-/** Slack-style sliding thumb across four ops tabs. */
+/** Slack-style sliding thumb across ops tabs (cash / trips / loads). */
 function MobileFooterSlackCluster({
   tabs,
   activeIndex,
@@ -250,7 +253,7 @@ function MobileFooterSlackCluster({
     : MOBILE_CLUSTER_ICON_SIZE;
 
   useEffect(() => {
-    slideIndex.value = withSpring(activeIndex, {
+    slideIndex.value = withSpring(Math.max(0, activeIndex), {
       damping: 22,
       stiffness: 260,
       mass: 0.85,
@@ -263,7 +266,7 @@ function MobileFooterSlackCluster({
       : 0;
 
   const thumbStyle = useAnimatedStyle(() => {
-    if (segmentWidth <= 0) return { opacity: 0 };
+    if (segmentWidth <= 0 || activeIndex < 0) return { opacity: 0 };
     return {
       width: segmentWidth,
       opacity: 1,
@@ -273,7 +276,7 @@ function MobileFooterSlackCluster({
         },
       ],
     };
-  }, [segmentWidth]);
+  }, [segmentWidth, activeIndex]);
 
   return (
     <View
@@ -675,7 +678,6 @@ export function DemoTabBar({
   const isTrips = activeTab === "trips";
   const isNetwork = activeTab === "network";
   const isLoadCenter = activeTab === "loadCenter";
-  const isProfileRoute = pathname.includes("/profile");
   const isChatRoute = pathname.includes("/chat");
   const networkDockOpen = !isDesktopWeb && isNetworkExpanded;
   const displayName = (
@@ -961,20 +963,8 @@ export function DemoTabBar({
     );
   }
 
-  const openProfile = () => {
-    collapseNetworkDock();
-    onProfilePress?.();
-  };
-
-  const clusterActiveIndex = isFiscal
-    ? 0
-    : isTrips
-      ? 1
-      : isNetwork
-        ? 2
-        : isLoadCenter
-          ? 3
-          : 0;
+  /** No cluster tab selected on Home (network) or Chat — avoid defaulting thumb to Cash. */
+  const clusterActiveIndex = isFiscal ? 0 : isTrips ? 1 : isLoadCenter ? 2 : -1;
 
   const slackClusterTabs: SlackClusterTab[] = [
     {
@@ -995,17 +985,6 @@ export function DemoTabBar({
       onPress: () => {
         collapseNetworkDock();
         onTabChange("trips");
-      },
-    },
-    {
-      id: "network",
-      label: "Network",
-      LucideIcon: Share2,
-      active: isNetwork,
-      badgeCount: pendingInvites,
-      onPress: () => {
-        collapseNetworkDock();
-        onTabChange("network");
       },
     },
     {
@@ -1038,12 +1017,26 @@ export function DemoTabBar({
       >
         <View style={styles.mobileFooterEdgeStart}>
           <MobileFooterTab
-            label="Profile"
+            label="Home"
             edge
-            avatarUri={profileAvatarUri}
-            avatarInitials={initials}
-            active={isProfileRoute}
-            onPress={openProfile}
+            active={isNetwork}
+            badgeCount={pendingInvites}
+            customIcon={
+              <Home
+                size={
+                  isCompactMobile
+                    ? MOBILE_EDGE_ICON_SIZE_COMPACT + 1
+                    : MOBILE_EDGE_ICON_SIZE + 1
+                }
+                color={isNetwork ? Theme.pulseIndigo : Theme.textMutedDemo}
+                fill={isNetwork ? Theme.pulseIndigo : "transparent"}
+                strokeWidth={CLUSTER_STROKE}
+              />
+            }
+            onPress={() => {
+              collapseNetworkDock();
+              onTabChange("network");
+            }}
             compact={isCompactMobile}
           />
         </View>
@@ -1138,7 +1131,7 @@ const styles = StyleSheet.create({
     minWidth: 224,
     padding: CLUSTER_PILL_INSET,
     borderRadius: 26,
-    backgroundColor: Theme.pulseIndigoWash,
+    backgroundColor: FOOTER_CLUSTER_WASH,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.pulseTabActiveBorder,
     position: "relative",
@@ -1219,6 +1212,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 11,
+  },
+  mobileFooterIconSlotEdge: {
+    width: 40,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: "transparent",
+  },
+  mobileFooterIconSlotEdgeActive: {
+    backgroundColor: Theme.pulseTabActiveBg,
+    borderRadius: 12,
   },
   mobileFooterIconSlotActive: {
     backgroundColor: Theme.pulseTabActiveBg,
@@ -1305,6 +1308,9 @@ const styles = StyleSheet.create({
   mobileFooterLabelActive: {
     fontWeight: "600",
     color: Theme.iconPrimary,
+  },
+  mobileFooterEdgeLabelActive: {
+    color: Theme.pulseIndigo,
   },
   mobileFooterRow: {
     width: "100%",

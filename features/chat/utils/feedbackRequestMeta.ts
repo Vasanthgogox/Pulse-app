@@ -113,6 +113,11 @@ export function tripFeedbackRequestMatchesConversation(
     TripConversationRow,
     "id" | "party_type" | "client_id" | "supplier_id" | "driver_id"
   >,
+  resolvedPartyIds?: {
+    client_id?: string | null;
+    supplier_id?: string | null;
+    driver_id?: string | null;
+  },
 ): boolean {
   if (message.message_type !== "feedback_request" && message.message_type !== "feedback")
     return false;
@@ -122,10 +127,12 @@ export function tripFeedbackRequestMatchesConversation(
   if (meta.rated_party_type !== conv.party_type) return false;
   const partyId =
     conv.party_type === "client"
-      ? conv.client_id
+      ? conv.client_id ?? resolvedPartyIds?.client_id
       : conv.party_type === "supplier"
-        ? conv.supplier_id
-        : conv.driver_id;
-  if (partyId == null || String(partyId).trim() === "") return false;
+        ? conv.supplier_id ?? resolvedPartyIds?.supplier_id
+        : conv.driver_id ?? resolvedPartyIds?.driver_id;
+  if (partyId == null || String(partyId).trim() === "") {
+    return true;
+  }
   return String(meta.rated_id).trim() === String(partyId).trim();
 }

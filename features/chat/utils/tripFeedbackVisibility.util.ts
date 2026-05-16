@@ -20,7 +20,9 @@ export function tripMessageHistoryHasCompletedStatus(messages: TripMessageRow[] 
  */
 export function indentAllowsInChatFeedbackDebrief(
   conv: Pick<TripConversation, "indent_id" | "indent_status">,
+  tripTerminal = false,
 ): boolean {
+  if (tripTerminal) return true;
   const hasIndent = Boolean(conv.indent_id && String(conv.indent_id).trim());
   if (!hasIndent) return true;
   const st = String(conv.indent_status ?? "").trim().toLowerCase();

@@ -3,6 +3,7 @@
  * `hubMode`: Network screen layout (nested cards, shared header search/filters in parent).
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
+import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import {
     HUB_CAROUSEL_MIN_HEIGHT,
@@ -1155,28 +1156,28 @@ const styles = StyleSheet.create({
   },
   listContentEmbedded: { paddingHorizontal: 22, paddingBottom: 16, gap: 8 },
   hubGridEmbedded: {
-    paddingHorizontal: 14,
-    paddingTop: 8,
-    paddingBottom: 18,
-    gap: 12,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 6,
+    paddingBottom: 12,
+    gap: 10,
   },
   hubScrollViewport: {
-    height: HUB_CAROUSEL_MIN_HEIGHT + 30,
-    minHeight: HUB_CAROUSEL_MIN_HEIGHT + 30,
-    maxHeight: HUB_CAROUSEL_MIN_HEIGHT + 30,
-    paddingTop: 8,
-    paddingBottom: 14,
+    height: HUB_CAROUSEL_MIN_HEIGHT + 24,
+    minHeight: HUB_CAROUSEL_MIN_HEIGHT + 24,
+    maxHeight: HUB_CAROUSEL_MIN_HEIGHT + 24,
+    paddingTop: 6,
+    paddingBottom: 10,
   },
   hubScrollContent: {
     flexDirection: "row",
     alignItems: "flex-start",
-    paddingHorizontal: 14,
-    gap: 12,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    gap: 10,
     height: HUB_CAROUSEL_MIN_HEIGHT,
     minHeight: HUB_CAROUSEL_MIN_HEIGHT,
   },
   hubScrollCardWrap: {
-    width: 176,
+    width: 152,
     height: HUB_CAROUSEL_MIN_HEIGHT,
     minHeight: HUB_CAROUSEL_MIN_HEIGHT,
     flexGrow: 0,

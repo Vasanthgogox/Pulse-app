@@ -76,7 +76,7 @@ function subtleAvatarBg(id: string): string {
 }
 
 /** Min height for horizontal hub connection row (carousel / side-scroll). Kept exported for callers & stable bundles. */
-export const HUB_CAROUSEL_MIN_HEIGHT = 252;
+export const HUB_CAROUSEL_MIN_HEIGHT = 214;
 
 export function HubConnectionListCard({
   item,
@@ -334,11 +334,11 @@ const styles = StyleSheet.create({
     minHeight: 282,
   },
   cardPressCarousel: {
-    width: 176,
+    width: 152,
     height: HUB_CAROUSEL_MIN_HEIGHT,
     minHeight: HUB_CAROUSEL_MIN_HEIGHT,
     flex: 0,
-    flexBasis: 176,
+    flexBasis: 152,
     flexGrow: 0,
     flexShrink: 0,
     marginRight: 0,
@@ -346,7 +346,7 @@ const styles = StyleSheet.create({
   cardOuter: {
     flex: 1,
     backgroundColor: Theme.screenBackground,
-    borderRadius: 32,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: Theme.surfaceBorder,
     shadowColor: Theme.shadow,
@@ -364,7 +364,7 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   coverBg: {
-    height: 58,
+    height: 48,
     overflow: "hidden",
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
@@ -446,7 +446,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     width: "100%",
-    marginTop: -31,
+    marginTop: -26,
     paddingHorizontal: 2,
     zIndex: 5,
     gap: 4,
@@ -584,19 +584,19 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   entityName: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: "#475569",
-    letterSpacing: -0.2,
-    lineHeight: 15,
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.15,
+    lineHeight: 13,
     textAlign: "center",
-    marginTop: 8,
+    marginTop: 6,
   },
   entitySubtitle: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "500",
     color: Theme.textMutedDemo,
-    lineHeight: 12,
+    lineHeight: 11,
     textAlign: "center",
     marginTop: 3,
     minHeight: 22,
@@ -617,9 +617,9 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   heroAvatarCarousel: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
   },
   heroAvatarImage: {
     borderWidth: 2,
@@ -721,7 +721,7 @@ const styles = StyleSheet.create({
     color: Theme.textOnPrimary,
   },
   cardFooter: {
-    minHeight: 50,
+    minHeight: 42,
     paddingHorizontal: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
@@ -730,15 +730,15 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.screenBackground,
   },
   connectedStateTag: {
-    minHeight: 34,
+    minHeight: 28,
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 5,
     borderWidth: 1,
     borderColor: Theme.borderMedium,
-    borderRadius: 17,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     backgroundColor: Theme.screenBackground,
     shadowColor: Theme.shadow,
     shadowOpacity: 0.03,
@@ -747,7 +747,7 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   connectedStateTagText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "700",
     fontStyle: "italic",
     color: Theme.textPrimaryDark,

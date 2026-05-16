@@ -345,11 +345,13 @@ function RootLayoutNav() {
                   name="chat"
                   options={{ presentation: 'fullScreenModal', animation: 'slide_from_right', headerShown: false }}
                 />
+                <Stack.Screen name="trip" options={{ animation: 'slide_from_right', headerShown: false }} />
                 <Stack.Screen name="create-indent" options={{ presentation: 'fullScreenModal' }} />
                 <Stack.Screen name="log-incoming-pods" options={{ presentation: 'card', animation: 'slide_from_right' }} />
                 <Stack.Screen name="invoicing-execute" options={{ presentation: 'card', animation: 'slide_from_right' }} />
                 <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
                 <Stack.Screen name="(modals)" options={{ presentation: 'modal' }} />
+                <Stack.Screen name="+not-found" options={{ headerShown: false }} />
               </Stack>
               <RootOverlayTabBar />
               {isDesktopWeb ? <FloatingChatButton /> : null}

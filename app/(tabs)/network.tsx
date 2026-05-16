@@ -29,6 +29,12 @@ import {
   type ConnectionRequestRow,
 } from "@/services/connectionRequestsService";
 import { getOrCreateNetworkConversation } from "@/features/chat/services/chat.service";
+import {
+  DEFAULT_USER_2D_AVATAR_SEED,
+  getUser2DAvatarUriForSeed,
+} from "@/constants/UserAvatars";
+import { useAuth } from "@/contexts/AuthContext";
+import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { ROUTES } from "@/lib/routes";
 import { useClientsQuery } from "@/lib/queries/useClientsQuery";
 import {
@@ -41,27 +47,31 @@ import { useDriversQuery } from "@/lib/queries/useDriversQuery";
 import { useNetworkFeedQuery } from "@/lib/queries/usePostsQuery";
 import { useRealtimeNetworkInvalidation } from "@/lib/queries/useRealtimeInvalidation";
 import { useSuppliersQuery } from "@/lib/queries/useSuppliersQuery";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import {
   Activity,
   ArrowLeft,
+  ArrowRight,
   ArrowUpRight,
+  Building2,
   Check,
   Clock,
   Compass,
-  Cpu,
-  Globe,
   History,
   Inbox,
   Mail,
   MapPin,
+  Package,
   Search,
   Slash,
   Signal,
   Truck,
+  User,
   UserPlus,
   Users,
   Verified,
+  Warehouse,
   X,
 } from "lucide-react-native";
 import { useOrganization } from "@/contexts/OrganizationContext";
@@ -69,6 +79,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocalSearchParams } from "expo-router";
 import {
   Alert,
+  Image,
   Modal,
   Platform,
   Pressable,
@@ -238,6 +249,23 @@ function NetworkScreenInner() {
   const isCompactPhone = width < 420;
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
+  const { profile } = useAuth();
+  const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
+  const profileInitials = useMemo(() => {
+    const displayName = (
+      profile?.full_name ??
+      profile?.displayName ??
+      "User"
+    ).trim();
+    return (
+      displayName
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part[0]?.toUpperCase())
+        .join("") || "US"
+    );
+  }, [profile?.full_name, profile?.displayName]);
   const {
     currentOrganization: organization,
     isLoading: orgLoading,
@@ -259,6 +287,36 @@ function NetworkScreenInner() {
   });
   const [profileStatsLoading, setProfileStatsLoading] = useState(false);
   const [requestActionId, setRequestActionId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isActive = true;
+    const resolveAvatar = async () => {
+      if (!profile) {
+        if (isActive) setProfileAvatarUri(null);
+        return;
+      }
+      if (profile.avatar_url?.startsWith("http")) {
+        if (isActive) setProfileAvatarUri(profile.avatar_url);
+        return;
+      }
+      if (profile.avatar_url?.trim()) {
+        const signed = await getSignedAvatarUrl(profile.avatar_url.trim());
+        if (isActive) setProfileAvatarUri(signed);
+        return;
+      }
+      if (profile.avatar_seed?.trim()) {
+        if (isActive)
+          setProfileAvatarUri(getUser2DAvatarUriForSeed(profile.avatar_seed.trim()));
+        return;
+      }
+      if (isActive)
+        setProfileAvatarUri(getUser2DAvatarUriForSeed(DEFAULT_USER_2D_AVATAR_SEED));
+    };
+    void resolveAvatar();
+    return () => {
+      isActive = false;
+    };
+  }, [profile?.avatar_url, profile?.avatar_seed]);
   const [withdrawnProtocolIds, setWithdrawnProtocolIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -1058,13 +1116,38 @@ function NetworkScreenInner() {
       }
     >
       <>
-        <View style={styles.topTicker}>
-          <View style={styles.topTickerTrack}>
+        <View style={styles.topTickerRow}>
+          <View style={styles.topTicker}>
             <Text style={styles.topTickerText}>
               BUILD YOUR NETWORK BY ADDING CONTACTS AND CONNECTING WITH VERIFIED APP USERS TO GROW YOUR BUSINESS.
-              </Text>
+            </Text>
           </View>
-          </View>
+          <Pressable
+            onPress={() =>
+              router.push(ROUTES.TABS.PROFILE as Parameters<typeof router.push>[0])
+            }
+            style={({ pressed }) => [
+              styles.topTickerProfileAvatar,
+              pressed && styles.topTickerProfileAvatarPressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Open profile"
+            hitSlop={8}
+          >
+            {profileAvatarUri ? (
+              <Image
+                source={{ uri: profileAvatarUri }}
+                style={styles.topTickerProfileAvatarImage}
+              />
+            ) : (
+              <View style={styles.topTickerProfileAvatarFallback}>
+                <Text style={styles.topTickerProfileAvatarInitials}>
+                  {profileInitials}
+                </Text>
+              </View>
+            )}
+          </Pressable>
+        </View>
         <View style={[styles.topCluster, isDesktopMatrix && styles.topClusterDesktop, isCompactPhone && styles.topClusterCompact]}>
           <View style={[styles.topClusterMain, isDesktopMatrix && styles.topClusterMainDesktop]}>
         <View style={styles.commandStatsWrap}>
@@ -1073,13 +1156,13 @@ function NetworkScreenInner() {
                 <View style={[styles.commandMainContent, isMobileLayout && styles.commandMainContentCompact]}>
                   <View style={[styles.commandMainHead, isMobileLayout && styles.commandMainHeadMobile]}>
                     <View style={[styles.commandMainKickerRow, isMobileLayout && styles.commandMainKickerRowMobile]}>
-                  <Cpu size={12} color={Theme.primary} />
+                  <Activity size={isMobileLayout ? 10 : 12} color={Theme.primary} />
                       <Text style={styles.commandMainKicker} numberOfLines={1}>
-                        CORE NODE INTEL
+                        NETWORK GROWTH
                       </Text>
                 </View>
                 <View style={styles.commandGrowthPill}>
-                  <ArrowUpRight size={11} color={Theme.primary} />
+                  <ArrowUpRight size={isMobileLayout ? 9 : 11} color={Theme.primary} />
                   <Text style={styles.commandGrowthText}>+{trendPct || 12}%</Text>
                 </View>
               </View>
@@ -1093,13 +1176,14 @@ function NetworkScreenInner() {
                       >
                         {totalConnectionsDisplay}
                   </Text>
-                      <Text style={[styles.commandTotalSub, isMobileLayout && styles.commandTotalSubCompact]} numberOfLines={2}>
-                        Network Growth
-                      </Text>
                 </View>
                     <View style={[styles.commandMetricGrid, isMobileLayout && styles.commandMetricGridCompact]}>
                       <View style={[styles.commandMetricCell, isMobileLayout && styles.commandMetricCellCompact]}>
-                    <Users size={13} color={Theme.primary} />
+                    <Building2
+                      size={isMobileLayout ? 9 : 11}
+                      color={Theme.primary}
+                      strokeWidth={2}
+                    />
                         <Text style={[styles.commandMetricN, isMobileLayout && styles.commandMetricNCompact]}>
                           {String(animatedClientCount).padStart(2, "0")}
                         </Text>
@@ -1108,7 +1192,11 @@ function NetworkScreenInner() {
                         </Text>
                   </View>
                       <View style={[styles.commandMetricCell, isMobileLayout && styles.commandMetricCellCompact]}>
-                    <Globe size={13} color={Theme.primary} />
+                    <Warehouse
+                      size={isMobileLayout ? 9 : 11}
+                      color={Theme.primary}
+                      strokeWidth={2}
+                    />
                         <Text style={[styles.commandMetricN, isMobileLayout && styles.commandMetricNCompact]}>
                           {String(animatedSupplierCount).padStart(2, "0")}
                         </Text>
@@ -1117,7 +1205,11 @@ function NetworkScreenInner() {
                         </Text>
                   </View>
                       <View style={[styles.commandMetricCell, isMobileLayout && styles.commandMetricCellCompact]}>
-                    <Truck size={13} color={Theme.primary} />
+                    <User
+                      size={isMobileLayout ? 9 : 11}
+                      color={Theme.primary}
+                      strokeWidth={2}
+                    />
                         <Text style={[styles.commandMetricN, isMobileLayout && styles.commandMetricNCompact]}>
                           {String(animatedDriverCount).padStart(2, "0")}
                         </Text>
@@ -1317,7 +1409,7 @@ function NetworkScreenInner() {
               style={({ pressed }) => [styles.registryInviteBtn, pressed && { opacity: 0.75 }]}
               hitSlop={8}
             >
-              <Inbox size={14} color={Theme.textPrimaryDark} />
+              <Inbox size={12} color={Theme.textPrimaryDark} strokeWidth={2.2} />
               {pendingCount > 0 ? (
                 <View style={styles.registryInviteBadge}>
                   <Text style={styles.registryInviteBadgeText}>
@@ -1344,7 +1436,7 @@ function NetworkScreenInner() {
                     isMobileLayout && styles.sectionHeadingRowCompactMobile,
                   ]}
                 >
-                  <Activity size={14} color={Theme.textPrimaryDark} />
+                  <Activity size={11} color={Theme.textPrimaryDark} strokeWidth={2.2} />
                   <View style={styles.sectionTitleBlock}>
                     <Text style={styles.sectionKicker}>Operations pulse</Text>
                     <Text style={styles.sectionHeading}>Your connections</Text>
@@ -1444,7 +1536,7 @@ function NetworkScreenInner() {
                 <View style={[styles.sectionHeadingRowSpread, styles.discoverHeaderStackMobile]}>
                   <View style={styles.discoverHeaderTitleRowMobile}>
                     <View style={[styles.sectionHeadingRowCompact, styles.discoverHeaderTitleFlexMobile]}>
-                      <Compass size={14} color={Theme.textSecondary} />
+                      <Compass size={11} color={Theme.textSecondary} strokeWidth={2.2} />
                       <View style={styles.sectionTitleBlock}>
                         <Text style={styles.sectionKicker}>Discover potential allies</Text>
                         <Text style={styles.sectionHeading}>Grow your network</Text>
@@ -1506,7 +1598,7 @@ function NetworkScreenInner() {
                       isMobileLayout && styles.sectionHeadingRowCompactDiscoverMobile,
                     ]}
                   >
-                    <Compass size={14} color={Theme.textSecondary} />
+                    <Compass size={11} color={Theme.textSecondary} strokeWidth={2.2} />
                     <View style={styles.sectionTitleBlock}>
                       <Text style={styles.sectionKicker}>Discover potential allies</Text>
                       <Text style={styles.sectionHeading}>Grow your network</Text>
@@ -1574,6 +1666,57 @@ function NetworkScreenInner() {
                   </View>
                 </View>
               )}
+              <Pressable
+                onPress={() => router.push(ROUTES.PULSE_LOADS)}
+                style={({ pressed }) => [
+                  styles.loadsPromoBanner,
+                  pressed && styles.loadsPromoBannerPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Open Load Center — post loads, bid on freight"
+              >
+                <LinearGradient
+                  colors={["#0f172a", "#1e1b4b", "#312e81"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={StyleSheet.absoluteFill}
+                />
+                <View style={styles.loadsPromoOrbPrimary} pointerEvents="none" />
+                <View style={styles.loadsPromoOrbSecondary} pointerEvents="none" />
+                <View style={styles.loadsPromoContent}>
+                  <View style={styles.loadsPromoTopRow}>
+                    <View style={styles.loadsPromoIconRing}>
+                      <Package size={18} color={Theme.textOnPrimary} strokeWidth={2.2} />
+                    </View>
+                    <View style={styles.loadsPromoTextCol}>
+                      <View style={styles.loadsPromoKickerRow}>
+                        <View style={styles.loadsPromoLiveDot} />
+                        <Text style={styles.loadsPromoKicker}>Load center</Text>
+                      </View>
+                      <Text style={styles.loadsPromoTitle}>
+                        Give loads & get loads — with live bidding
+                      </Text>
+                    </View>
+                    <View style={styles.loadsPromoGoBtn}>
+                      <ArrowUpRight
+                        size={15}
+                        color={Theme.textPrimaryDark}
+                        strokeWidth={2.4}
+                      />
+                    </View>
+                  </View>
+                  <Text style={styles.loadsPromoSub}>
+                    Post open freight, quote on indents, compare bids, and award in one place.
+                  </Text>
+                  <View style={styles.loadsPromoChipRow}>
+                    {(["Post freight", "Live bids", "Award loads"] as const).map((label) => (
+                      <View key={label} style={styles.loadsPromoChip}>
+                        <Text style={styles.loadsPromoChipText}>{label}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              </Pressable>
               <DiscoverView
                 orgId={orgId}
                 embedded
@@ -1827,31 +1970,58 @@ const styles = StyleSheet.create({
     paddingBottom: 18,
     backgroundColor: Theme.screenBackground,
   },
-  topTicker: {
+  topTickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
     marginHorizontal: Layout.screenPaddingHorizontal,
     marginTop: 10,
+  },
+  topTicker: {
+    flex: 1,
+    minWidth: 0,
     borderRadius: 14,
     backgroundColor: Theme.textPrimaryDark,
     paddingVertical: 8,
     paddingHorizontal: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  topTickerTrack: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    flexWrap: "wrap",
-    flex: 1,
-    minWidth: 0,
   },
   topTickerText: {
     fontSize: 8,
     fontWeight: "900",
     color: Theme.textOnPrimary,
     letterSpacing: 0.8,
+  },
+  topTickerProfileAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Theme.borderInput,
+    overflow: "hidden",
+    backgroundColor: Theme.surfaceGray,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  topTickerProfileAvatarImage: {
+    width: "100%",
+    height: "100%",
+  },
+  topTickerProfileAvatarFallback: {
+    width: "100%",
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.surfaceGray,
+  },
+  topTickerProfileAvatarInitials: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.2,
+  },
+  topTickerProfileAvatarPressed: {
+    opacity: 0.88,
   },
   commandStatsWrap: {
     flexDirection: "row",
@@ -1860,8 +2030,8 @@ const styles = StyleSheet.create({
   },
   topCluster: {
     marginHorizontal: Layout.screenPaddingHorizontal,
-    marginTop: 10,
-    gap: 12,
+    marginTop: 8,
+    gap: 10,
   },
   topClusterCompact: {
     marginHorizontal: 10,
@@ -1875,14 +2045,14 @@ const styles = StyleSheet.create({
   topClusterMain: {
     flex: 1,
     minWidth: 0,
-    gap: 12,
+    gap: 10,
   },
   topClusterMainDesktop: {
     flex: 8,
     flexBasis: 0,
   },
   storyRowShell: {
-    borderRadius: 28,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: "rgba(148,163,184,0.18)",
     backgroundColor: Theme.surface,
@@ -1894,7 +2064,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   storyRowShellCompact: {
-    borderRadius: 20,
+    borderRadius: 16,
   },
   topClusterLogCol: {
     width: "100%",
@@ -1910,7 +2080,7 @@ const styles = StyleSheet.create({
   commandMainCard: {
     flex: 1,
     minWidth: 0,
-    borderRadius: 32,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: Theme.borderMedium,
     backgroundColor: Theme.screenBackground,
@@ -1926,18 +2096,18 @@ const styles = StyleSheet.create({
     top: -80,
   },
   commandMainContent: {
-    paddingHorizontal: 22,
-    paddingVertical: 20,
-    gap: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 10,
   },
   commandMainContentCompact: {
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    gap: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 10,
   },
   commandMainHead: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
   },
@@ -1955,15 +2125,15 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   commandMainKicker: {
-    fontSize: 11,
+    fontSize: 9,
     fontWeight: "900",
     color: Theme.primary,
-    letterSpacing: 2.8,
+    letterSpacing: 1.6,
     textTransform: "uppercase",
   },
   commandGrowthPill: {
-    minHeight: 26,
-    borderRadius: 13,
+    minHeight: 22,
+    borderRadius: 11,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.surface,
@@ -1971,10 +2141,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 5,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
   },
   commandGrowthText: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: "900",
     color: Theme.primary,
   },
@@ -1982,126 +2152,117 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 16,
+    gap: 12,
   },
   commandMainStatsRowCompact: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "flex-start",
     gap: 10,
   },
   commandTotalWrap: {
     flex: 1,
-    minWidth: 0,
+    flexShrink: 0,
+    minWidth: 88,
+    alignItems: "flex-start",
+    justifyContent: "center",
   },
   commandTotalWrapCompact: {
-    flex: 0,
-    width: 112,
-    minWidth: 112,
-    flexDirection: "column",
+    flex: 1,
+    flexShrink: 0,
+    minWidth: 72,
     alignItems: "flex-start",
-    justifyContent: "flex-start",
-    gap: 2,
+    justifyContent: "center",
     paddingTop: 0,
   },
   commandTotalWrapMobile: {
     alignItems: "flex-start",
   },
   commandTotalText: {
-    fontSize: 72,
+    fontSize: 64,
     fontWeight: "900",
     fontStyle: "italic",
     color: Theme.textPrimaryDark,
     letterSpacing: -1,
-    lineHeight: 72,
+    lineHeight: 64,
   },
   commandTotalTextCompact: {
     flexShrink: 0,
-    fontSize: 70,
-    lineHeight: 70,
-    minWidth: 104,
+    fontSize: 52,
+    lineHeight: 52,
     textAlign: "left",
     includeFontPadding: false,
-  },
-  commandTotalSub: {
-    marginTop: 6,
-    fontSize: 11,
-    fontWeight: "800",
-    color: Theme.textSecondary,
-    letterSpacing: 1,
-    textTransform: "uppercase",
-  },
-  commandTotalSubCompact: {
-    maxWidth: 104,
-    textAlign: "left",
-    fontSize: 9,
-    lineHeight: 11,
-    letterSpacing: 1,
   },
   commandMetricGrid: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
     marginTop: 0,
+    flexShrink: 1,
+    maxWidth: "58%",
   },
   commandMetricGridCompact: {
-    flex: 1,
+    flex: 0,
+    flexShrink: 1,
     width: undefined,
-    gap: 5,
-    justifyContent: "space-between",
+    maxWidth: "52%",
+    gap: 4,
+    justifyContent: "flex-end",
     minWidth: 0,
   },
   commandMetricCell: {
-    width: 84,
-    borderRadius: 24,
+    width: 52,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.surface,
-    paddingHorizontal: 9,
-    paddingVertical: 10,
+    paddingHorizontal: 4,
+    paddingVertical: 5,
     alignItems: "center",
-    gap: 5,
+    gap: 2,
   },
   commandMetricCellCompact: {
     flex: 1,
     width: undefined,
     minWidth: 0,
-    minHeight: 72,
-    borderRadius: 16,
-    paddingHorizontal: 4,
-    paddingVertical: 7,
+    maxWidth: 56,
+    minHeight: 44,
+    borderRadius: 10,
+    paddingHorizontal: 2,
+    paddingVertical: 4,
   },
   commandMetricN: {
-    fontSize: 24,
+    fontSize: 14,
     fontWeight: "900",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.4,
+    letterSpacing: -0.2,
+    lineHeight: 16,
   },
   commandMetricNCompact: {
-    fontSize: 20,
-    lineHeight: 22,
+    fontSize: 12,
+    lineHeight: 14,
   },
   commandMetricL: {
-    fontSize: 7,
-    fontWeight: "900",
+    fontSize: 6,
+    fontWeight: "800",
     color: Theme.textSecondary,
-    letterSpacing: 0.85,
+    letterSpacing: 0.5,
   },
   commandMetricLCompact: {
-    fontSize: 6,
-    letterSpacing: 0.6,
+    fontSize: 5,
+    letterSpacing: 0.35,
   },
   commandSideCard: {
     width: "100%",
     minWidth: 0,
-    minHeight: 196,
-    borderRadius: 24,
+    minHeight: 140,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
     shadowColor: Theme.shadow,
     shadowOpacity: 0.1,
     shadowRadius: 12,
@@ -2117,10 +2278,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   commandSideCardCompact: {
-    borderRadius: 20,
-    minHeight: 168,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    borderRadius: 16,
+    minHeight: 120,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
   },
   commandSideHead: {
     flexDirection: "row",
@@ -2137,9 +2298,9 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   commandSideHeadIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 9,
     backgroundColor: Theme.surface,
     borderWidth: 1,
     borderColor: Theme.borderLight,
@@ -2152,10 +2313,10 @@ const styles = StyleSheet.create({
     borderRadius: 9,
   },
   commandSideKicker: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "800",
     color: Theme.textPrimaryDark,
-    letterSpacing: 1.15,
+    letterSpacing: 0.9,
     textTransform: "uppercase",
   },
   commandSideKickerDesktop: {
@@ -2163,11 +2324,11 @@ const styles = StyleSheet.create({
     letterSpacing: 0.95,
   },
   commandSideSub: {
-    marginTop: 3,
-    fontSize: 10,
+    marginTop: 2,
+    fontSize: 8,
     fontWeight: "500",
     color: Theme.textSecondary,
-    letterSpacing: 0.15,
+    letterSpacing: 0.12,
   },
   commandSideSubLabelDesktop: {
     marginTop: 2,
@@ -2216,7 +2377,7 @@ const styles = StyleSheet.create({
   },
   commandLogAccent: {
     width: 3,
-    minHeight: 52,
+    minHeight: 44,
   },
   commandLogAccentDesktop: {
     width: 2,
@@ -2225,10 +2386,10 @@ const styles = StyleSheet.create({
   commandLogEntryMain: {
     flex: 1,
     minWidth: 0,
-    paddingVertical: 10,
-    paddingRight: 12,
-    paddingLeft: 10,
-    gap: 7,
+    paddingVertical: 8,
+    paddingRight: 10,
+    paddingLeft: 8,
+    gap: 5,
     justifyContent: "center",
   },
   commandLogEntryMainDesktop: {
@@ -2249,7 +2410,7 @@ const styles = StyleSheet.create({
   commandLogName: {
     flex: 1,
     minWidth: 0,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
     letterSpacing: 0.45,
@@ -3022,15 +3183,15 @@ const styles = StyleSheet.create({
   },
   networkMergedRow: {
     marginHorizontal: 0,
-    marginTop: 12,
+    marginTop: 8,
     flexDirection: "column",
     alignItems: "stretch",
-    gap: 18,
+    gap: 12,
   },
   networkMergedRowStack: {
     marginHorizontal: 0,
     flexDirection: "column",
-    gap: 18,
+    gap: 12,
   },
   networkMergedPanePrimary: {
     marginTop: 0,
@@ -3049,7 +3210,7 @@ const styles = StyleSheet.create({
   connectionsCard: {
     marginHorizontal: Layout.screenPaddingHorizontal,
     backgroundColor: Theme.screenBackground,
-    borderRadius: 44,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: Theme.cinematicCardBorder,
     overflow: "hidden",
@@ -3063,7 +3224,7 @@ const styles = StyleSheet.create({
     marginHorizontal: Layout.screenPaddingHorizontal,
     marginBottom: 14,
     backgroundColor: Theme.screenBackground,
-    borderRadius: 44,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: Theme.cinematicCardBorder,
     overflow: "hidden",
@@ -3207,7 +3368,7 @@ const styles = StyleSheet.create({
   sectionHeadingRowCompact: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 8,
     minWidth: 0,
     flex: 1,
   },
@@ -3218,10 +3379,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 12,
-    paddingHorizontal: 28,
-    paddingTop: 22,
-    paddingBottom: 10,
+    gap: 10,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 14,
+    paddingBottom: 8,
   },
   sectionHeadingRowSpreadMobile: {
     alignItems: "flex-start",
@@ -3260,30 +3421,31 @@ const styles = StyleSheet.create({
   },
   sectionTitleBlock: {
     minWidth: 0,
-    gap: 4,
+    gap: 2,
   },
   sectionKicker: {
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 2.6,
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 1.2,
     color: Theme.textSection,
     textTransform: "uppercase",
   },
   sectionHeading: {
-    ...Typography.subTabLabel,
-    fontSize: 20,
+    fontSize: 15,
+    fontWeight: "900",
     color: Theme.textPrimaryDark,
-    letterSpacing: 0.8,
+    letterSpacing: -0.15,
+    lineHeight: 18,
   },
   registryHead: {
     marginHorizontal: Layout.screenPaddingHorizontal,
-    marginTop: 18,
-    marginBottom: 6,
-    gap: 8,
+    marginTop: 12,
+    marginBottom: 4,
+    gap: 6,
   },
   registryHeadCompact: {
-    marginHorizontal: 10,
-    marginTop: 14,
+    marginHorizontal: Layout.screenPaddingHorizontal,
+    marginTop: 10,
   },
   registryHeadLeft: {
     flexDirection: "row",
@@ -3297,34 +3459,36 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   registryLine: {
-    width: 28,
-    height: 3,
-    borderRadius: 2,
+    width: 20,
+    height: 2,
+    borderRadius: 1,
     backgroundColor: Theme.primary,
   },
   registryKicker: {
-    fontSize: 11,
-    fontWeight: "900",
+    fontSize: 8,
+    fontWeight: "800",
     color: Theme.primary,
-    letterSpacing: 2.8,
+    letterSpacing: 1.2,
     textTransform: "uppercase",
   },
   registryHeading: {
-    fontSize: 38,
+    fontSize: 24,
     fontWeight: "900",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.4,
+    letterSpacing: -0.3,
     textTransform: "uppercase",
     fontStyle: "italic",
+    lineHeight: 26,
   },
   registryHeadingCompact: {
-    fontSize: 28,
+    fontSize: 20,
+    lineHeight: 22,
     letterSpacing: -0.2,
   },
   registryInviteBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 14,
+    width: 28,
+    height: 28,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
@@ -3366,6 +3530,137 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: Theme.primary,
     letterSpacing: 1,
+  },
+  loadsPromoBanner: {
+    marginHorizontal: Layout.screenPaddingHorizontal,
+    marginBottom: 12,
+    borderRadius: 16,
+    overflow: "hidden",
+    minHeight: 108,
+    borderWidth: 1,
+    borderColor: Theme.pulseIndigoRing,
+    shadowColor: Theme.pulseIndigo,
+    shadowOpacity: 0.22,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  },
+  loadsPromoBannerPressed: {
+    opacity: 0.94,
+    transform: [{ scale: 0.992 }],
+  },
+  loadsPromoOrbPrimary: {
+    position: "absolute",
+    width: 132,
+    height: 132,
+    borderRadius: 66,
+    top: -48,
+    right: -28,
+    backgroundColor: Theme.pulseIndigo,
+    opacity: 0.34,
+  },
+  loadsPromoOrbSecondary: {
+    position: "absolute",
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    bottom: -36,
+    left: -18,
+    backgroundColor: "#818cf8",
+    opacity: 0.2,
+  },
+  loadsPromoContent: {
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    gap: 8,
+  },
+  loadsPromoTopRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  loadsPromoIconRing: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.22)",
+    flexShrink: 0,
+  },
+  loadsPromoTextCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
+    paddingTop: 1,
+  },
+  loadsPromoKickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  loadsPromoLiveDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: "#34d399",
+  },
+  loadsPromoKicker: {
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+    color: "rgba(255,255,255,0.7)",
+  },
+  loadsPromoTitle: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: Theme.textOnPrimary,
+    letterSpacing: -0.2,
+    lineHeight: 17,
+  },
+  loadsPromoSub: {
+    fontSize: 9,
+    fontWeight: "600",
+    color: "rgba(255,255,255,0.78)",
+    lineHeight: 13,
+  },
+  loadsPromoGoBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.textOnPrimary,
+    flexShrink: 0,
+    alignSelf: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
+  loadsPromoChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 2,
+  },
+  loadsPromoChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.16)",
+  },
+  loadsPromoChipText: {
+    fontSize: 8,
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.92)",
+    letterSpacing: 0.2,
   },
   discoverHeaderActions: {
     flexDirection: "row",

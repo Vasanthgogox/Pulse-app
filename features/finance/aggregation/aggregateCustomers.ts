@@ -164,10 +164,8 @@ export function aggregateCustomers(
       adjustmentsByTripId !== undefined
         ? adjustedRevenue(baseBilled, adj)
         : baseBilled;
-    if (!billedAmount) continue;
 
     tripCount[clientId] = (tripCount[clientId] ?? 0) + 1;
-    billedByClientId[clientId] = (billedByClientId[clientId] ?? 0) + billedAmount;
 
     const tripId = normId((t as { id?: string }).id);
     if (tripId) {
@@ -176,6 +174,10 @@ export function aggregateCustomers(
         sales: billedAmount,
         amountPaid: Number((t as { amount_paid?: number }).amount_paid ?? 0),
       });
+    }
+
+    if (billedAmount > 0) {
+      billedByClientId[clientId] = (billedByClientId[clientId] ?? 0) + billedAmount;
     }
   }
 

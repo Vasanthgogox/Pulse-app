@@ -21,7 +21,7 @@ import type { LedgerRow } from "@/features/finance/services/finance.service";
 import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
 import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import type { TripRow } from "@/features/trips/services/trips.service";
-import { formatLedgerDate } from "@/lib/format";
+import { formatLedgerAmount, formatLedgerDate } from "@/lib/format";
 import { useClientsQuery, useTripsQuery } from "@/lib/queries";
 import { usePaginatedScroll } from "@/lib/usePaginatedScroll";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -43,6 +43,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { ClientRow } from "../services/clients.service";
 
 export type EntityType = "CLIENT" | "SUPPLIER" | "VEHICLE" | "DRIVER";
+
+/** Compact ₹ for secondary lines when space is tight. */
+function formatCustomerAmountCompact(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 100000) return `${(value / 100000).toFixed(1)}L`;
+  if (abs >= 1000) return `${(value / 1000).toFixed(1)}k`;
+  return formatLedgerAmount(value);
+}
 
 /** Format date as "11 MAR" for receivables-by-trip row. */
 function formatTripDateShort(iso: string | null | undefined): string {
@@ -2025,35 +2033,26 @@ export function CustomersTab({
         <View style={styles.customerTableHeader}>
           <View style={styles.customerTableHeaderEntityCol}>
             <Text
-              style={[
-                styles.customerTableHeaderCell,
-                styles.ctHeaderLeft,
-              ]}
+              style={[styles.customerTableHeaderCell, styles.ctHeaderLeft]}
               numberOfLines={1}
             >
-              Client Entity
+              Customer Entity
             </Text>
           </View>
           <View style={styles.customerTableHeaderTripsCol}>
             <Text
-              style={[
-                styles.customerTableHeaderCell,
-                styles.ctHeaderCenter,
-              ]}
+              style={[styles.customerTableHeaderCell, styles.ctHeaderCenter]}
               numberOfLines={1}
             >
               Trips
             </Text>
           </View>
-          <View style={styles.customerTableHeaderOutstandingCol}>
+          <View style={styles.customerTableHeaderDueCol}>
             <Text
-              style={[
-                styles.customerTableHeaderCell,
-                styles.ctHeaderRight,
-              ]}
+              style={[styles.customerTableHeaderCell, styles.ctHeaderRight]}
               numberOfLines={1}
             >
-              Outstanding
+              Due
             </Text>
           </View>
         </View>
@@ -2063,10 +2062,9 @@ export function CustomersTab({
             const sales = data.billed ?? 0;
             // For this list, "Received" maps to the cash collected from the customer.
             const received = data.received ?? Math.max(0, sales - due);
-            const receivedDisplay =
-              received >= 1000 ? `${(received / 1000).toFixed(1)}k` : received.toLocaleString("en-IN");
             const tripCount = data.trips ?? 0;
             const avatarData = clientAvatarById.get(data.id);
+            const receivedDisplay = formatCustomerAmountCompact(received);
             return (
               <TouchableOpacity
                 key={data.id}
@@ -2082,15 +2080,13 @@ export function CustomersTab({
                   isIntegrated={!!data.is_integrated}
                 />
                 <View style={[styles.customerTableCell, styles.ctEntity]}>
-                  <View style={styles.customerTableEntityHeader}>
-                    <Text
-                      style={styles.customerTableEntityName}
-                      numberOfLines={1}
-                      ellipsizeMode="tail"
-                    >
-                      {data.name ?? "—"}
-                    </Text>
-                  </View>
+                  <Text
+                    style={styles.customerTableEntityName}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
+                    {data.name ?? "—"}
+                  </Text>
                   <Text
                     style={styles.customerTableEntitySub}
                     numberOfLines={1}
@@ -2109,23 +2105,20 @@ export function CustomersTab({
                     </Text>
                   </View>
                 </View>
-                <View style={[styles.customerTableCell, styles.ctOutstanding]}>
+                <View style={[styles.customerTableCell, styles.ctDue]}>
                   <Text
                     style={[
-                      styles.customerTableOutstandingValue,
+                      styles.customerTableDueValue,
                       due > 0
-                        ? styles.customerTableOutstandingDue
-                        : styles.customerTableOutstandingPaid,
+                        ? styles.customerTableDueUnpaid
+                        : styles.customerTableDueSettled,
                     ]}
                     numberOfLines={1}
                   >
                     ₹{due.toLocaleString("en-IN")}
                   </Text>
-                  <Text style={styles.customerTableReceivedLine} numberOfLines={1}>
-                    Received:{" "}
-                    <Text style={styles.customerTableOutstandingPaid}>
-                      ₹{receivedDisplay}
-                    </Text>
+                  <Text style={styles.customerTableReceivedLabel} numberOfLines={1}>
+                    Received: ₹{receivedDisplay}
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -2264,38 +2257,23 @@ const styles = StyleSheet.create({
   ctHeaderRight: { textAlign: "right" },
   customerTableHeaderEntityCol: { flex: 2.2, minWidth: 0, justifyContent: "center" },
   customerTableHeaderTripsCol: { flex: 0.5, minWidth: 44, justifyContent: "center" },
-  customerTableHeaderOutstandingCol: {
-    flex: 1.5,
-    minWidth: 0,
-    justifyContent: "center",
-  },
+  customerTableHeaderDueCol: { flex: 1.5, minWidth: 0, justifyContent: "center" },
   ctEntity: { flex: 2.2, minWidth: 0 },
   ctTrips: { flex: 0.5, minWidth: 44, justifyContent: "center" },
-  ctOutstanding: {
-    flex: 1.5,
-    minWidth: 0,
-    alignItems: "flex-end",
-    justifyContent: "center",
-  },
+  ctDue: { flex: 1.5, minWidth: 0, alignItems: "flex-end", justifyContent: "center" },
   customerTableRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    minHeight: 62,
+    minHeight: 58,
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
   },
   customerTableCell: { paddingHorizontal: 5, minWidth: 0 },
-  customerTableEntityHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    minWidth: 0,
-  },
   customerTableEntityName: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "600",
     fontStyle: "italic",
     color: Theme.textPrimaryDark,
@@ -2304,14 +2282,14 @@ const styles = StyleSheet.create({
   },
   customerTableEntitySub: {
     marginTop: 4,
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "500",
     color: Theme.textMuted,
   },
   customerTableTripsPill: {
     alignSelf: "center",
     minWidth: 28,
-    height: 28,
+    height: 26,
     paddingHorizontal: 8,
     borderRadius: 8,
     backgroundColor: Theme.surfaceGray,
@@ -2321,25 +2299,25 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   customerTableTripsPillText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "600",
     color: Theme.textMuted,
   },
-  customerTableOutstandingValue: {
-    fontSize: 11,
+  customerTableDueValue: {
+    fontSize: 10,
     fontWeight: "600",
     fontStyle: "italic",
     textAlign: "right",
   },
-  customerTableOutstandingDue: { color: Theme.teslaRed },
-  customerTableOutstandingPaid: { color: Theme.darkGreen },
-  customerTableReceivedLine: {
-    marginTop: 2,
-    fontSize: 8,
+  customerTableDueUnpaid: { color: Theme.teslaRed },
+  customerTableDueSettled: { color: Theme.darkGreen },
+  customerTableReceivedLabel: {
+    fontSize: 7,
     fontWeight: "500",
     color: Theme.textMuted,
     letterSpacing: 0.6,
     textTransform: "uppercase",
+    marginTop: 2,
     textAlign: "right",
   },
   customerTableFooter: {

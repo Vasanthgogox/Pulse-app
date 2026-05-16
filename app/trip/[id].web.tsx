@@ -1,12 +1,21 @@
 import { CenteredLoadingView } from '@/components/CenteredLoadingView';
 import { useAuth } from '@/contexts/AuthContext';
-import TripDetailScreen from '@/features/trips/components/trip-detail/TripDetailScreen.web';
+import type { TripDetailScreenProps } from '@/features/trips/components/trip-detail/TripDetailScreen.types';
 import { ROUTES } from '@/lib/routes';
 import { useSafeBack } from '@/lib/useSafeBack';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Suspense, lazy, useEffect } from 'react';
+import {
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+
+const TripDetailScreen = lazy(
+  () => import('@/features/trips/components/trip-detail/TripDetailScreen'),
+);
 
 export default function TripDetailRoute() {
   const raw = useLocalSearchParams<{
@@ -19,8 +28,6 @@ export default function TripDetailRoute() {
   const router = useRouter();
   const { user, loading } = useAuth();
 
-  // Auth guard — redirect to sign-in instead of falling through to index
-  // (which would redirect drivers to /(driver) based on profile.role)
   useEffect(() => {
     if (!loading && !user) {
       router.replace(ROUTES.SIGN_IN_DIRECT);
@@ -32,7 +39,6 @@ export default function TripDetailRoute() {
   }
 
   if (!user) {
-    // Render nothing while the useEffect fires the redirect
     return <AuthRedirectScreen onSignIn={() => router.replace(ROUTES.SIGN_IN_DIRECT)} />;
   }
 
@@ -42,21 +48,25 @@ export default function TripDetailRoute() {
     (raw.entryContext === 'supplier' ||
       raw.entryContext === 'vehicle' ||
       raw.entryContext === 'client')
-      ? (raw.entryContext as 'supplier' | 'vehicle' | 'client')
+      ? (raw.entryContext as TripDetailScreenProps['entryContext'])
       : undefined;
   const clientIdFromContext =
     typeof raw.clientIdFromContext === 'string' ? raw.clientIdFromContext : undefined;
   const clientNameFromContext =
     typeof raw.clientNameFromContext === 'string' ? raw.clientNameFromContext : undefined;
 
+  const screenProps: TripDetailScreenProps = {
+    tripId,
+    entryContext,
+    clientIdFromContext,
+    clientNameFromContext,
+    onBack: safeBack,
+  };
+
   return (
-    <TripDetailScreen
-      tripId={tripId}
-      entryContext={entryContext}
-      clientIdFromContext={clientIdFromContext}
-      clientNameFromContext={clientNameFromContext}
-      onBack={safeBack}
-    />
+    <Suspense fallback={<CenteredLoadingView message="Loading trip…" />}>
+      <TripDetailScreen {...screenProps} />
+    </Suspense>
   );
 }
 

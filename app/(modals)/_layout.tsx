@@ -30,7 +30,7 @@ export default function ModalsLayout() {
       />
       <Stack.Screen
         name="ledger-sync"
-        options={{ presentation: 'fullScreenModal', title: 'Ledger Sync' }}
+        options={{ presentation: 'fullScreenModal', title: 'Ledger' }}
       />
       <Stack.Screen name="language-settings" />
       <Stack.Screen name="sms-otp-parsing" />

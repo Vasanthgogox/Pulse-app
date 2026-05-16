@@ -4,11 +4,15 @@ const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
 
-config.cacheStores = [
-  new FileStore({
-    root: path.join(__dirname, '.metro-cache'),
-  }),
-];
+// Persistent disk cache speeds CI/production; in dev it can serve stale 1-module
+// stubs after large file moves (HMR "Got unexpected undefined" → "Could not load bundle").
+if (process.env.EXPO_USE_METRO_CACHE === '1') {
+  config.cacheStores = [
+    new FileStore({
+      root: path.join(__dirname, '.metro-cache'),
+    }),
+  ];
+}
 
 // Disable package exports resolution so Metro can resolve subpaths inside
 // @supabase/realtime-js (e.g. ./RealtimeClient) correctly.

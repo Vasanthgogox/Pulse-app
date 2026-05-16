@@ -510,7 +510,7 @@ const styles = StyleSheet.create({
   },
   legCity: {
     fontSize: 11,
-    fontWeight: "600",
+    fontWeight: "900",
     color: REF.ink,
     letterSpacing: -0.15,
     lineHeight: 14,

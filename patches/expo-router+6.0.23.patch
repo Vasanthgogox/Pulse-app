@@ -1,0 +1,24 @@
+diff --git a/node_modules/expo-router/build/views/Unmatched.js b/node_modules/expo-router/build/views/Unmatched.js
+index 1111111..2222222 100644
+--- a/node_modules/expo-router/build/views/Unmatched.js
++++ b/node_modules/expo-router/build/views/Unmatched.js
+@@ -10,6 +10,10 @@
+ const expo_linking_1 = require("expo-linking");
+ const react_1 = __importDefault(require("react"));
+ const react_native_1 = require("react-native");
++/** Metro async-route chunks can resolve RN without StyleSheet on first load — resolve safely. */
++const StyleSheet =
++    react_native_1.StyleSheet ??
++        (react_native_1.default && react_native_1.default.StyleSheet);
+ const hooks_1 = require("../hooks");
+ const NoSSR_1 = require("./NoSSR");
+ const Link_1 = require("../link/Link");
+@@ -137,7 +141,7 @@
+ function NotFoundAsset() {
+     return <react_native_1.Image source={require('expo-router/assets/unmatched.png')} style={styles.image}/>;
+ }
+-const styles = react_native_1.StyleSheet.create({
++const styles = StyleSheet.create({
+     container: {
+         flex: 1,
+         backgroundColor: 'black',

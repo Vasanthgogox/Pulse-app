@@ -94,6 +94,10 @@ module.exports = {
       supabaseAnonKey,
       geminiApiKey: safeGeminiApiKey,
       opsAgentProxyUrl: process.env.EXPO_PUBLIC_OPS_AGENT_PROXY_URL || undefined,
+      // Use app/+not-found.tsx — built-in Unmatched.js crashes when async-loaded (StyleSheet undefined).
+      router: {
+        notFound: false,
+      },
     },
     scheme: config.expo?.scheme ?? 'qmobile',
     android: {

@@ -5,7 +5,8 @@
   "scripts": {
     "postinstall": "patch-package",
     "dev": "cross-env NODE_OPTIONS=--max-old-space-size=4096 CI=false npm run web",
-    "start": "cross-env DOTENV_CONFIG_QUIET=true node -r dotenv/config node_modules/expo/bin/cli start --go",
+    "start": "cross-env NODE_OPTIONS=--max-old-space-size=8192 DOTENV_CONFIG_QUIET=true node -r dotenv/config node_modules/expo/bin/cli start --go",
+    "start:clean": "rm -rf .metro-cache node_modules/.cache/metro && cross-env NODE_OPTIONS=--max-old-space-size=8192 DOTENV_CONFIG_QUIET=true node -r dotenv/config node_modules/expo/bin/cli start --go -c",
     "start:dev-client": "cross-env DOTENV_CONFIG_QUIET=true node -r dotenv/config node_modules/expo/bin/cli start",
     "start:simulator": "cross-env DOTENV_CONFIG_QUIET=true REACT_NATIVE_PACKAGER_HOSTNAME=127.0.0.1 node -r dotenv/config node_modules/expo/bin/cli start --localhost",
     "start:go": "cross-env DOTENV_CONFIG_QUIET=true node -r dotenv/config node_modules/expo/bin/cli start --go",

@@ -4,6 +4,16 @@ export type LedgerLockedEntityType = "CLIENT" | "SUPPLIER" | "DRIVER";
 
 export type TransactionFlowType = "in" | "out";
 
+export type LedgerFlowGuardAlertContent = {
+  title: string;
+  entityLabel: LedgerLockedEntityType;
+  attemptedFlow: TransactionFlowType;
+  correctFlow: TransactionFlowType;
+  headline: string;
+  bullets: string[];
+  tip?: string;
+};
+
 export type TripPartyIds = {
   localClientId: string | null;
   localSupplierId: string | null;
@@ -268,31 +278,48 @@ export function ledgerLockedPartyFlowGuard(
   flowType: TransactionFlowType,
   lockedEntityType: LedgerLockedEntityType | null,
   lockedPartyId: string | null | undefined,
-): { title: string; message: string } | null {
+): LedgerFlowGuardAlertContent | null {
   if (!lockedEntityType || !lockedPartyId) return null;
 
   if (lockedEntityType === "CLIENT" && flowType === "out") {
     return {
-      title: "Client · Cash OUT",
-      message:
-        "Money from a client is always Cash IN (Inbound) — receivables you collect from them.\n\n" +
-        "Cash OUT does not apply to a client party. If you need to fix billed revenue, show a refund, or add costs after they have already paid you, open the trip → Finance tab → Adjust payment (revenue / cost). That is where revenue and cost adjustments belong — not a Cash OUT ledger line.\n\n" +
-        "Tip: pick the trip in Select Voyage Registry, then open that trip’s detail page to use Adjust payment.",
+      title: "Use Cash IN for clients",
+      entityLabel: "CLIENT",
+      attemptedFlow: "out",
+      correctFlow: "in",
+      headline:
+        "Money from a client is always Cash IN — receivables you collect from them.",
+      bullets: [
+        "Cash OUT does not apply to a client party.",
+        "To fix billed revenue, show a refund, or add costs after they paid you, use Adjust payment on the trip Finance tab (revenue / cost).",
+        "Do not record those changes as a Cash OUT ledger line.",
+      ],
+      tip:
+        "Pick the trip in Voyage Registry, open trip detail → Finance → Adjust payment.",
     };
   }
   if (lockedEntityType === "SUPPLIER" && flowType === "in") {
     return {
-      title: "Supplier · Cash IN",
-      message:
-        "Suppliers are recorded as payables — use Cash OUT (Outbound) to log payments to this supplier.\n\n" +
-        "For cost or billing changes, use Adjust payment on the trip Finance tab instead of Cash IN.",
+      title: "Use Cash OUT for suppliers",
+      entityLabel: "SUPPLIER",
+      attemptedFlow: "in",
+      correctFlow: "out",
+      headline:
+        "Suppliers are payables — log payments to them as Cash OUT.",
+      bullets: [
+        "Cash IN does not apply when paying a supplier.",
+        "For billing or cost corrections, use Adjust payment on the trip Finance tab.",
+      ],
     };
   }
   if (lockedEntityType === "DRIVER" && flowType === "in") {
     return {
-      title: "Driver · Cash IN",
-      message:
-        "Driver payouts use Cash OUT (Outbound). Switch to Outbound to record a payment to this driver.",
+      title: "Use Cash OUT for drivers",
+      entityLabel: "DRIVER",
+      attemptedFlow: "in",
+      correctFlow: "out",
+      headline: "Driver payouts are recorded as Cash OUT.",
+      bullets: ["Switch to Cash OUT to record a payment to this driver."],
     };
   }
   return null;

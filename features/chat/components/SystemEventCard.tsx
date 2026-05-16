@@ -162,8 +162,18 @@ function ImageMessageCard({ message, isOwn }: { message: TripMessageRow; isOwn: 
 // ── TrackingCard ──────────────────────────────────────────────────────────────
 
 function TrackingCard({ message }: { message: TripMessageRow }) {
-  const meta = message.metadata as TrackingMetadata | null;
-  if (!meta?.lat || !meta?.lng) return null;
+  let rawMeta: unknown = message.metadata;
+  if (typeof rawMeta === "string") {
+    try {
+      rawMeta = JSON.parse(rawMeta) as unknown;
+    } catch {
+      return null;
+    }
+  }
+  const meta = rawMeta as TrackingMetadata | null;
+  const lat = Number(meta?.lat);
+  const lng = Number(meta?.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
 
   let displayTime = "";
   try {
@@ -176,12 +186,13 @@ function TrackingCard({ message }: { message: TripMessageRow }) {
     /* keep empty */
   }
 
-  const eta = meta.eta_label ?? (meta.eta_minutes != null ? `${meta.eta_minutes} min` : null);
-  const coords = `${meta.lat.toFixed(5)}, ${meta.lng.toFixed(5)}`;
+  const eta =
+    meta?.eta_label ?? (meta?.eta_minutes != null ? `${meta.eta_minutes} min` : null);
+  const coords = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
   const dateUpper = formatTripEventSheetDate(message.created_at);
-  const title = (meta.address_hint ?? coords).trim();
+  const title = (meta?.address_hint ?? coords).trim();
   const metaLine = `Live location · ${dateUpper} · GPS`;
-  const subLine = meta.address_hint ? coords : null;
+  const subLine = meta?.address_hint ? coords : null;
 
   return (
     <TripProgressEventCard

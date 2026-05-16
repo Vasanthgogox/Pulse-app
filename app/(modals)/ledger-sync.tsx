@@ -1029,7 +1029,7 @@ export default function LedgerSyncScreen() {
           <TouchableOpacity onPress={handleClose} style={styles.backBtn} hitSlop={8}>
             <FontAwesome name="chevron-left" size={18} color={Theme.textPrimaryDark} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{t("ledgerSync")}</Text>
+          <Text style={styles.headerTitle}>Ledger</Text>
         </View>
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={Theme.primary} />
@@ -1045,25 +1045,8 @@ export default function LedgerSyncScreen() {
   /** Vehicle sync uses the same full-page AddTransactionModal as drivers/clients/suppliers, with vehicle locked. */
   const isVehicleEntity = params.entityType === "VEHICLE" && Boolean(params.entityId);
 
-  const ledgerWorkspaceSubtitle = currentOrganization?.name
-    ? `OPERATIONAL COMMAND · ${currentOrganization.name.toUpperCase()}`
-    : "OPERATIONAL COMMAND";
-
   return (
-    <View style={[styles.container, { paddingTop: Platform.OS === "web" ? 0 : insets.top }]}>
-      {Platform.OS !== "web" ? (
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleClose} style={styles.backBtn} hitSlop={8} accessibilityLabel={t("back")}>
-            <FontAwesome name="chevron-left" size={18} color={Theme.textPrimaryDark} />
-          </TouchableOpacity>
-          <View style={styles.headerTitleWrap}>
-            <Text style={styles.headerTitle}>{entryContextLabel ? t("addEntry") : t("ledgerSync")}</Text>
-            {entryContextLabel ? (
-              <Text style={styles.headerSubtitle} numberOfLines={1}>{entryContextLabel}</Text>
-            ) : null}
-          </View>
-        </View>
-      ) : null}
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <AddTransactionModal
         visible
         fullPage
@@ -1138,7 +1121,6 @@ export default function LedgerSyncScreen() {
         dueAmountOut={effectiveDueAmountOut}
         ledgerTransactions={transactions}
         driverOffersByDriverId={driverOffers}
-        ledgerWorkspaceSubtitle={ledgerWorkspaceSubtitle}
       />
     </View>
   );

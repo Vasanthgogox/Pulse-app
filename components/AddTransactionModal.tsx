@@ -1,7 +1,8 @@
 /**
  * Add Transaction modal — demo-style ledger sync (IN/OUT, amount, party, link MSN).
- * Ledger entry form: LEDGER SYNC title, IN (green) / OUT (red) toggle, amount, party + trip dropdowns, SAVE ENTRY.
+ * Ledger entry form: Ledger title, IN / OUT toggle, amount, party + trip dropdowns, SAVE ENTRY.
  */
+import { LedgerFlowGuardAlert } from "@/components/LedgerFlowGuardAlert";
 import { LedgerReconSummaryModal } from "@/components/ledger/LedgerReconSummaryModal";
 import { LedgerWebDateField } from "@/components/ledger/LedgerWebDateField";
 import Layout from "@/constants/Layout";
@@ -28,6 +29,7 @@ import {
   ledgerDisplaySupplierDue,
   ledgerLockedPartyFlowGuard,
   ledgerLockedPartyPreferredFlow,
+  type LedgerFlowGuardAlertContent,
   ledgerTripDueWeightForContext,
   ledgerTripNoDueHeroMessage,
   ledgerTripNoDueTagLabel,
@@ -904,6 +906,8 @@ export function AddTransactionModal({
   /** Full-page ledger: show reconciliation summary in a confirm overlay before save. */
   const [ledgerSubmitConfirmVisible, setLedgerSubmitConfirmVisible] =
     useState(false);
+  const [ledgerFlowGuardAlert, setLedgerFlowGuardAlert] =
+    useState<LedgerFlowGuardAlertContent | null>(null);
   const [ledgerSyncDatePickerVisible, setLedgerSyncDatePickerVisible] = useState(false);
   const [entryDate, setEntryDate] = useState<string>(
     () =>
@@ -931,6 +935,13 @@ export function AddTransactionModal({
       ),
     [lockedEntityTypeProp, partyContext, isPartyLocked],
   );
+  const showLedgerFlowGuardAlert = useCallback(
+    (guard: LedgerFlowGuardAlertContent) => {
+      setLedgerFlowGuardAlert(guard);
+    },
+    [],
+  );
+
   const requestLedgerFlowType = useCallback(
     (next: "in" | "out") => {
       if (next === type) return;
@@ -940,12 +951,12 @@ export function AddTransactionModal({
         lockedPartyId,
       );
       if (guard) {
-        Alert.alert(guard.title, guard.message);
+        showLedgerFlowGuardAlert(guard);
         return;
       }
       setType(next);
     },
-    [type, ledgerLockedEntityType, lockedPartyId],
+    [type, ledgerLockedEntityType, lockedPartyId, showLedgerFlowGuardAlert],
   );
   const effectivePartyId = isPartyLocked ? lockedPartyId : partyId;
 
@@ -2627,7 +2638,7 @@ export function AddTransactionModal({
       lockedPartyId,
     );
     if (flowGuard) {
-      Alert.alert(flowGuard.title, flowGuard.message);
+      showLedgerFlowGuardAlert(flowGuard);
       return;
     }
     // When tripLocked, derive party from trip (no party field shown).
@@ -4613,16 +4624,13 @@ export function AddTransactionModal({
             <View style={[styles.ledgerV2HeaderDivider, mob && styles.ledgerMobHeaderDivider]} />
           <View style={styles.ledgerV2HeaderTitleBlock}>
               <Text style={[styles.ledgerV2Title, mob && styles.ledgerMobTitle]}>
-                {isEditMode ? "Edit Ledger Entry" : "Ledger Sync Protocol"}
+                {isEditMode ? "Edit ledger" : "Ledger"}
               </Text>
-              <Text style={[styles.ledgerV2Sub, mob && styles.ledgerMobSub]} numberOfLines={1}>
-                {ledgerWorkspaceSubtitle ??
-                  (headerPartyName
-                    ? `PARTY · ${headerPartyName.toUpperCase()}`
-                : entryContextLabel
-                      ? `CONTEXT · ${entryContextLabel.toUpperCase()}`
-                      : "OPERATIONAL COMMAND")}
-            </Text>
+              {headerPartyName?.trim() || entryContextLabel?.trim() ? (
+                <Text style={[styles.ledgerV2Sub, mob && styles.ledgerMobSub]} numberOfLines={1}>
+                  {headerPartyName?.trim() || entryContextLabel?.trim()}
+                </Text>
+              ) : null}
           </View>
           </View>
           <View style={[styles.toggleWrap, styles.toggleWrapLedgerPulse]}>
@@ -4642,7 +4650,7 @@ export function AddTransactionModal({
                   type === "in" && styles.toggleBtnPulseTextActive,
                 ]}
               >
-                INBOUND
+                IN
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -4661,7 +4669,7 @@ export function AddTransactionModal({
                   type === "out" && styles.toggleBtnPulseTextActive,
                 ]}
               >
-                OUTBOUND
+                OUT
               </Text>
             </TouchableOpacity>
           </View>
@@ -6037,6 +6045,11 @@ export function AddTransactionModal({
                       commitLedgerSubmit();
                     }}
         />
+        <LedgerFlowGuardAlert
+          visible={ledgerFlowGuardAlert != null}
+          content={ledgerFlowGuardAlert}
+          onDismiss={() => setLedgerFlowGuardAlert(null)}
+        />
       </>
     );
   }
@@ -6071,6 +6084,11 @@ export function AddTransactionModal({
         />
         {formContent}
       </View>
+      <LedgerFlowGuardAlert
+        visible={ledgerFlowGuardAlert != null}
+        content={ledgerFlowGuardAlert}
+        onDismiss={() => setLedgerFlowGuardAlert(null)}
+      />
     </Modal>
   );
 }
@@ -6104,10 +6122,17 @@ const styles = StyleSheet.create({
   panelFullPage: {
     flex: 1,
     minHeight: 0,
+    width: "100%",
+    alignSelf: "stretch",
     borderTopWidth: 0,
-    paddingHorizontal: 20,
-    paddingTop: 12,
+    paddingHorizontal: 16,
+    paddingTop: 8,
     backgroundColor: LedgerSyncPalette.page,
+    ...Platform.select({
+      web: {
+        minHeight: "100%",
+      } as object,
+    }),
   },
   panelFullPageColumn: {
     flexDirection: "column",
@@ -6146,11 +6171,12 @@ const styles = StyleSheet.create({
   ledgerMobShell: { gap: 8, paddingBottom: 2 },
   ledgerMobHeader: { paddingVertical: 8, marginBottom: 4 },
   ledgerMobTitle: {
-    ...FinanceTxnTypography.partyTitle,
-    fontSize: 13,
-    lineHeight: 16,
+    fontSize: 18,
+    fontWeight: "800",
+    lineHeight: 22,
+    letterSpacing: -0.3,
   },
-  ledgerMobSub: { fontSize: 7, letterSpacing: 1.6, marginTop: 1 },
+  ledgerMobSub: { fontSize: 11, fontWeight: "600", letterSpacing: 0, marginTop: 2 },
   ledgerMobBackBtn: { width: 36, height: 36, borderRadius: 12 },
   ledgerMobHeaderDivider: { height: 32 },
   ledgerMobToggle: { paddingVertical: 6, paddingHorizontal: 10, minWidth: 68, borderRadius: 14 },
@@ -7051,10 +7077,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-    marginBottom: 6,
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 4,
     borderBottomWidth: 1,
     borderBottomColor: LedgerSyncPalette.border,
     backgroundColor: LedgerSyncPalette.surface,
@@ -7063,7 +7089,7 @@ const styles = StyleSheet.create({
   ledgerV2HeaderLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 10,
     flex: 1,
     minWidth: 0,
   },
@@ -7083,15 +7109,20 @@ const styles = StyleSheet.create({
   ledgerV2HeaderTitleBlock: {
     flex: 1,
     minWidth: 0,
+    justifyContent: "center",
   },
   ledgerV2Title: {
-    ...FinanceTxnTypography.partyTitle,
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: 20,
+    fontWeight: "800",
+    letterSpacing: -0.35,
+    lineHeight: 24,
+    color: LedgerSyncPalette.ink,
   },
   ledgerV2Sub: {
-    ...FinanceTxnTypography.dateLine,
     marginTop: 2,
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 16,
     color: LedgerSyncPalette.muted,
   },
   toggleWrapLedgerPulse: {

@@ -78,9 +78,11 @@ describe("ledgerPartySmartTagPolicy", () => {
   it("guides CLIENT away from Cash OUT", () => {
     const guard = ledgerLockedPartyFlowGuard("out", "CLIENT", "client-a");
     expect(guard).not.toBeNull();
-    expect(guard?.title).toContain("Client");
-    expect(guard?.message).toMatch(/Cash IN/i);
-    expect(guard?.message).toMatch(/Adjust payment/i);
+    expect(guard?.title).toContain("Cash IN");
+    expect(guard?.entityLabel).toBe("CLIENT");
+    expect(guard?.correctFlow).toBe("in");
+    expect(guard?.headline).toMatch(/Cash IN/i);
+    expect(guard?.bullets.join(" ")).toMatch(/Adjust payment/i);
     expect(ledgerLockedPartyPreferredFlow("CLIENT")).toBe("in");
   });
 
