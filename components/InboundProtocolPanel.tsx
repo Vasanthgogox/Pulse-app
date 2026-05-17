@@ -17,6 +17,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  type ViewStyle,
 } from "react-native";
 import Animated, {
   Easing,
@@ -28,6 +29,8 @@ import Animated, {
 } from "react-native-reanimated";
 
 export type { InboundProtocolInviteItem };
+
+export type InboundProtocolPanelLayout = "popover" | "fullscreen";
 
 export type InboundProtocolPanelProps = {
   tab: "received" | "sent";
@@ -41,6 +44,10 @@ export type InboundProtocolPanelProps = {
   onReject: (item: InboundProtocolInviteItem) => void;
   onCancel: (item: InboundProtocolInviteItem) => void;
   onManageAll: () => void;
+  layout?: InboundProtocolPanelLayout;
+  topInset?: number;
+  bottomInset?: number;
+  showFooter?: boolean;
 };
 
 function inviteInitials(name: string): string {
@@ -200,14 +207,31 @@ export function InboundProtocolPanel({
   onReject,
   onCancel,
   onManageAll,
+  layout = "popover",
+  topInset = 0,
+  bottomInset = 0,
+  showFooter = true,
 }: InboundProtocolPanelProps) {
+  const isFullscreen = layout === "fullscreen";
   const list = tab === "received" ? receivedItems : sentItems;
   const displayPending =
     tab === "received" ? pendingCount : sentItems.length;
 
+  const fullscreenShell: ViewStyle | undefined = isFullscreen
+    ? {
+        flex: 1,
+        width: "100%",
+        maxWidth: "100%",
+        borderRadius: 0,
+        borderWidth: 0,
+        elevation: 0,
+        shadowOpacity: 0,
+      }
+    : undefined;
+
   return (
-    <View style={styles.shell}>
-      <View style={styles.header}>
+    <View style={[styles.shell, fullscreenShell]}>
+      <View style={[styles.header, isFullscreen && { paddingTop: 14 + topInset }]}>
         <LinearGradient
           colors={["#0F172A", "#1e293b"]}
           start={{ x: 0, y: 0 }}
@@ -231,7 +255,7 @@ export function InboundProtocolPanel({
         </Pressable>
       </View>
 
-      <View style={styles.body}>
+      <View style={[styles.body, isFullscreen && styles.bodyFullscreen]}>
         <View style={styles.tabTrack}>
           {(["received", "sent"] as const).map((t) => {
             const selected = tab === t;
@@ -254,8 +278,11 @@ export function InboundProtocolPanel({
         </View>
 
         <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
+          style={[styles.scroll, isFullscreen && { flex: 1, maxHeight: undefined, minHeight: undefined }]}
+          contentContainerStyle={[
+            styles.scrollContent,
+            isFullscreen && { paddingBottom: bottomInset + 8 },
+          ]}
           showsVerticalScrollIndicator
           nestedScrollEnabled
         >
@@ -277,17 +304,24 @@ export function InboundProtocolPanel({
         </ScrollView>
       </View>
 
-      <View style={styles.footer}>
-        <Pressable
-          onPress={onManageAll}
-          style={styles.manageBtn}
-          accessibilityRole="button"
-          accessibilityLabel="Manage all requests"
+      {showFooter ? (
+        <View
+          style={[
+            styles.footer,
+            isFullscreen && { paddingBottom: 12 + bottomInset },
+          ]}
         >
-          <UserCheck size={14} color="#4f46e5" />
-          <Text style={styles.manageBtnText}>Manage all requests</Text>
-        </Pressable>
-      </View>
+          <Pressable
+            onPress={onManageAll}
+            style={styles.manageBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Manage all requests"
+          >
+            <UserCheck size={14} color="#4f46e5" />
+            <Text style={styles.manageBtnText}>Manage all requests</Text>
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -295,7 +329,7 @@ export function InboundProtocolPanel({
 const styles = StyleSheet.create({
   shell: {
     width: 440,
-    maxWidth: "96vw" as const,
+    maxWidth: Platform.OS === "web" ? ("96vw" as unknown as number) : "100%",
     borderRadius: 32,
     borderWidth: 1,
     borderColor: Theme.borderLight,

@@ -26,6 +26,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  type ViewStyle,
 } from "react-native";
 
 function formatRelativeTime(iso: string | null | undefined): string {
@@ -73,6 +74,8 @@ export type AlertRegistryFinanceHandlers = {
   busySalaryId: string | null;
 };
 
+export type AlertRegistryPanelLayout = "popover" | "fullscreen";
+
 export type AlertRegistryPanelProps = {
   tab: "active" | "history";
   onTabChange: (tab: "active" | "history") => void;
@@ -80,6 +83,10 @@ export type AlertRegistryPanelProps = {
   onSync?: () => void | Promise<void>;
   syncing?: boolean;
   finance: AlertRegistryFinanceHandlers;
+  /** Popover (desktop bell) vs full-screen mobile route. */
+  layout?: AlertRegistryPanelLayout;
+  topInset?: number;
+  bottomInset?: number;
 };
 
 function RegistryFeedList({
@@ -239,7 +246,11 @@ export function AlertRegistryPanel({
   onSync,
   syncing = false,
   finance,
+  layout = "popover",
+  topInset = 0,
+  bottomInset = 0,
 }: AlertRegistryPanelProps) {
+  const isFullscreen = layout === "fullscreen";
   const org = useOptionalOrganization();
   const orgId = org?.currentOrganization?.id ?? null;
   const [syncSpin, setSyncSpin] = useState(false);
@@ -302,9 +313,21 @@ export function AlertRegistryPanel({
     [],
   );
 
+  const fullscreenShell: ViewStyle | undefined = isFullscreen
+    ? {
+        flex: 1,
+        width: "100%",
+        maxWidth: "100%",
+        borderRadius: 0,
+        borderWidth: 0,
+        elevation: 0,
+        shadowOpacity: 0,
+      }
+    : undefined;
+
   return (
-    <View style={styles.shell}>
-      <View style={styles.header}>
+    <View style={[styles.shell, fullscreenShell]}>
+      <View style={[styles.header, isFullscreen && { paddingTop: 14 + topInset }]}>
         <LinearGradient
           colors={["#171A20", "#1e293b"]}
           start={{ x: 0, y: 0 }}
@@ -331,7 +354,7 @@ export function AlertRegistryPanel({
         </Pressable>
       </View>
 
-      <View style={styles.body}>
+      <View style={[styles.body, isFullscreen && { flex: 1 }]}>
         <View style={styles.tabTrack}>
           {(["active", "history"] as const).map((t) => {
             const selected = tab === t;
@@ -362,8 +385,11 @@ export function AlertRegistryPanel({
         </View>
 
         <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
+          style={[styles.scroll, isFullscreen && { flex: 1, maxHeight: undefined }]}
+          contentContainerStyle={[
+            styles.scrollContent,
+            isFullscreen && { paddingBottom: bottomInset + 8 },
+          ]}
           showsVerticalScrollIndicator
           nestedScrollEnabled
         >
@@ -396,7 +422,12 @@ export function AlertRegistryPanel({
         </ScrollView>
       </View>
 
-      <View style={styles.footer}>
+      <View
+        style={[
+          styles.footer,
+          isFullscreen && { paddingBottom: 10 + bottomInset },
+        ]}
+      >
         <Pressable
           onPress={() => void handleSync()}
           style={styles.syncBtn}
@@ -419,7 +450,7 @@ export function AlertRegistryPanel({
 const styles = StyleSheet.create({
   shell: {
     width: 440,
-    maxWidth: "96vw" as const,
+    maxWidth: Platform.OS === "web" ? ("96vw" as unknown as number) : "100%",
     borderRadius: 32,
     borderWidth: 1,
     borderColor: Theme.borderLight,
