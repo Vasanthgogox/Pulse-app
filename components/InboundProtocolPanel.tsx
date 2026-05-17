@@ -329,7 +329,7 @@ export function InboundProtocolPanel({
 const styles = StyleSheet.create({
   shell: {
     width: 440,
-    maxWidth: "96vw" as const,
+    maxWidth: Platform.OS === "web" ? ("96vw" as unknown as number) : "100%",
     borderRadius: 32,
     borderWidth: 1,
     borderColor: Theme.borderLight,
