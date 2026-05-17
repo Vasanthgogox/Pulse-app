@@ -3,6 +3,7 @@ import { CounterpartyProfileSystemCard } from "@/components/CounterpartyProfileS
 import { DatePresetPillBar } from "@/components/DatePresetPillBar";
 import { DateRangePickerModal } from "@/components/DateRangePickerModal";
 import { entityCompanionCardStyles as ecc } from "@/components/entityCompanionCard.styles";
+import { entityDetailPageChromeStyles as edc } from "@/components/entityDetailPageChrome.styles";
 import { entityHeroScorecardStyles as ehs } from "@/components/entityHeroScorecard.styles";
 import { FinanceFAB } from "@/components/FinanceFAB";
 import { EntityIdentityAvatar } from "@/components/EntityIdentityAvatar";
@@ -1260,7 +1261,7 @@ export default function SupplierDetailScreen({
         >
           <FontAwesome
             name="chevron-left"
-            size={20}
+            size={18}
             color={Theme.textPrimaryDark}
           />
         </TouchableOpacity>
@@ -1281,7 +1282,7 @@ export default function SupplierDetailScreen({
             >
               <FontAwesome
                 name="user-circle-o"
-                size={18}
+                size={16}
                 color={Theme.textPrimaryDark}
               />
             </TouchableOpacity>
@@ -1302,11 +1303,11 @@ export default function SupplierDetailScreen({
                 : "Download report"
             }
           >
-            <FontAwesome
-              name="cloud-download"
-              size={18}
-              color={Theme.textOnPrimary}
-            />
+              <FontAwesome
+                name="cloud-download"
+                size={16}
+                color={Theme.textOnPrimary}
+              />
           </TouchableOpacity>
         </View>
       </View>
@@ -2289,67 +2290,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Theme.screenBackground,
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(0,0,0,0.05)",
-    backgroundColor: "rgba(255,255,255,0.6)",
-  },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: Theme.surfaceGray,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerCenter: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 8,
-  },
-  headerTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-    fontStyle: "italic",
-    color: Theme.textPrimaryDark,
-    textTransform: "uppercase",
-    letterSpacing: -0.5,
-  },
-  headerSubtitle: {
-    fontSize: 8,
-    fontWeight: "700",
-    color: Theme.textMuted,
-    letterSpacing: 1.2,
-    marginTop: 2,
-  },
-  headerRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  downloadBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: Theme.darkBackground,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  profileBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: Theme.surfaceGray,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  header: edc.header,
+  backBtn: edc.backBtn,
+  headerCenter: edc.headerCenter,
+  headerTitle: edc.headerTitle,
+  headerSubtitle: edc.headerSubtitle,
+  headerRight: edc.headerRight,
+  downloadBtn: edc.downloadBtn,
+  profileBtn: edc.profileBtn,
   fabWrap: {
     position: "absolute",
     right: Layout.fabRightOffset,
@@ -2621,7 +2569,7 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 10,
+    ...edc.scrollContent,
   },
   scorecard: ehs.scorecard,
   scorecardWebDesktop: ehs.scorecardWebDesktop,
@@ -2737,51 +2685,13 @@ const styles = StyleSheet.create({
   profilePreviewToggleSub: ecc.toggleSub,
   profilePreviewActionBtn: ecc.actionBtn,
   profilePreviewActionText: ecc.actionText,
-  tabRow: {
-    flexDirection: "row",
-    backgroundColor: Theme.surfaceGray,
-    padding: 4,
-    borderRadius: 16,
-    marginBottom: 8,
-    gap: 4,
-  },
-  tripDatePillWrap: {
-    paddingHorizontal: 4,
-    marginBottom: 6,
-    marginTop: -4,
-  },
-  tabItem: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 40,
-  },
-  tabItemActive: {
-    backgroundColor: Theme.screenBackground,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  tabItemText: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: Theme.textMuted,
-    letterSpacing: 0.4,
-  },
-  tabItemTextActive: {
-    color: Theme.textPrimaryDark,
-  },
-  tableCard: {
-    backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 32,
-    overflow: "hidden",
-  },
+  tabRow: edc.tabRow,
+  tripDatePillWrap: edc.tripDatePillWrap,
+  tabItem: edc.tabItem,
+  tabItemActive: edc.tabItemActive,
+  tabItemText: edc.tabItemText,
+  tabItemTextActive: edc.tabItemTextActive,
+  tableCard: edc.tableCard,
   tableCardWebDesktop: {
     borderRadius: 12,
     borderColor: Theme.borderMedium,
@@ -2789,29 +2699,14 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surface,
     marginHorizontal: 0,
   },
-  tableHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    backgroundColor: Theme.surfaceLight,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
-  },
+  tableHeader: edc.tableHeader,
   tableHeaderWebDesktop: {
     paddingVertical: 8,
     paddingHorizontal: 8,
     backgroundColor: Theme.surface,
     borderBottomColor: Theme.borderMedium,
   },
-  th: {
-    fontSize: 9,
-    fontWeight: "700",
-    fontStyle: "italic",
-    color: Theme.textMuted,
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
-  },
+  th: edc.th,
   thWebDesktop: {
     fontSize: 11,
     letterSpacing: 0.1,
@@ -2846,19 +2741,8 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  headerAmountCol: {
-    width: 80,
-    minWidth: 72,
-    flexShrink: 0,
-    alignItems: "flex-end",
-  },
-  amountCol: {
-    width: 80,
-    minWidth: 72,
-    flexShrink: 0,
-    alignItems: "flex-end",
-    justifyContent: "center",
-  },
+  headerAmountCol: edc.headerAmountCol,
+  amountCol: edc.amountCol,
   amountColWebDesktop: {
     flexGrow: 0,
     flexShrink: 0,
@@ -2870,17 +2754,10 @@ const styles = StyleSheet.create({
     borderLeftColor: Theme.borderLight,
     paddingLeft: 5,
   },
-  thMission: { flex: 1, minWidth: 0 },
-  thSales: { width: 80, textAlign: "right" as const },
-  thRight: { width: 72, textAlign: "right" as const },
-  tableRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
-  },
+  thMission: edc.thMission,
+  thSales: { textAlign: "right" as const },
+  thRight: { textAlign: "right" as const },
+  tableRow: edc.tableRow,
   tableRowWebDesktop: {
     paddingVertical: 7,
     paddingHorizontal: 8,
@@ -2888,27 +2765,10 @@ const styles = StyleSheet.create({
     minHeight: 46,
     backgroundColor: Theme.surface,
   },
-  td: {
-    fontSize: 10,
-    fontWeight: "600",
-    fontStyle: "italic",
-    color: Theme.textPrimaryDark,
-  },
-  tdMission: { flex: 1, minWidth: 0 },
-  tdMissionId: {
-    fontSize: 11,
-    fontWeight: "600",
-    fontStyle: "italic",
-    color: Theme.textPrimaryDark,
-    textTransform: "uppercase",
-  },
-  tdRoute: {
-    fontSize: 10,
-    fontWeight: "400",
-    fontStyle: "italic",
-    color: Theme.textMuted,
-    marginTop: 4,
-  },
+  td: edc.td,
+  tdMission: edc.thMission,
+  tdMissionId: edc.tdMissionId,
+  tdRoute: edc.tdRoute,
   tdMissionWebDesktop: {
     flexGrow: 1,
     flexShrink: 1,
@@ -2937,17 +2797,12 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     fontStyle: "italic",
   },
-  tdSales: { width: 80, textAlign: "right" as const },
-  tdRight: { width: 72, textAlign: "right" as const },
+  tdSales: { textAlign: "right" as const },
+  tdRight: { textAlign: "right" as const },
   tdGreen: { color: Theme.darkGreen },
   tdRed: { color: Theme.teslaRed },
-  emptyRow: { paddingVertical: 24, alignItems: "center" },
-  emptyRowText: {
-    fontSize: 11,
-    fontWeight: "600",
-    fontStyle: "italic",
-    color: Theme.textMuted,
-  },
+  emptyRow: edc.emptyRow,
+  emptyRowText: edc.emptyRowText,
   cashSection: { marginBottom: 24 },
   sharedSection: { marginBottom: 24 },
   sharedSectionWeb: { width: "100%", alignSelf: "stretch" },

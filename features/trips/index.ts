@@ -16,7 +16,12 @@ export {
     type TripFinanceBlockProps
 } from "./components/TripFinanceBlock";
 export {
-    DEFAULT_TRIPS_HUB_TABLE_COLUMNS, TripsHubTableView, TripsHubTripCard, linkedOrgAvatarFields, summarizeTripLedgerForHub,
+    DEFAULT_TRIPS_HUB_TABLE_COLUMNS,
+    TripsHubMobileTripListCanvas,
+    TripsHubTableView,
+    TripsHubTripCard,
+    linkedOrgAvatarFields,
+    summarizeTripLedgerForHub,
     tripFinanceAdjForHubLookup,
     tripHubCost,
     tripHubDue,

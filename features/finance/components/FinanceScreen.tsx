@@ -230,6 +230,7 @@ export function FinanceScreen() {
     setCashDirectionFilter,
     searchQuery,
     setSearchQuery,
+    filteredLedger,
     filteredLedgerForDisplay,
     ledgerTotalsData,
     ledgerCategoryCounts,
@@ -1537,6 +1538,7 @@ export function FinanceScreen() {
               organizationId={orgId}
               ledgerLoading={ledgerLoading}
               ledgerTransactions={ledgerTransactions}
+              ledgerForEntityAggregation={filteredLedger}
               filteredLedgerForDisplay={filteredLedgerForDisplay}
               ledgerRefreshKey={ledgerRefreshKey}
               onAddTransactionPress={() =>

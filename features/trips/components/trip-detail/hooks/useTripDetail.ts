@@ -2031,11 +2031,15 @@ export function useTripDetail({
       setTripRatings([]);
       return;
     }
+    let isActive = true;
     getRatingsForTrip(trip.id).then(({ error, ratings }) => {
-      if (error) return;
+      if (!isActive || error) return;
       const driverRatings = (ratings ?? []).filter((r) => r.rated_type === "driver");
       setTripRatings(driverRatings);
     });
+    return () => {
+      isActive = false;
+    };
   }, [trip?.id, tripCompleted]);
 
   // Driver location reverse geocoding
@@ -2044,22 +2048,29 @@ export function useTripDetail({
       setDriverLocationAddress(null);
       return;
     }
+    let isActive = true;
     safeReverseGeocode(driverLocation.latitude, driverLocation.longitude).then(
       (results) => {
+        if (!isActive) return;
         const addr = results[0];
         if (!addr) return;
         const parts = [addr.street, addr.city, addr.region].filter(Boolean);
         setDriverLocationAddress(parts.join(", "));
       },
     );
+    return () => {
+      isActive = false;
+    };
   }, [driverLocation?.latitude, driverLocation?.longitude]);
 
   // Past location geocoding
   useEffect(() => {
     const past = tripLocationPoints.slice(-2).reverse();
     setPastLocationAddresses([null, null]);
+    let isActive = true;
     past.forEach((pt, i) => {
       safeReverseGeocode(pt.latitude, pt.longitude).then((results) => {
+        if (!isActive) return;
         const addr = results[0];
         if (!addr) return;
         const parts = [addr.street, addr.city].filter(Boolean);
@@ -2070,6 +2081,9 @@ export function useTripDetail({
         });
       });
     });
+    return () => {
+      isActive = false;
+    };
   }, [tripLocationPoints]);
 
   return {

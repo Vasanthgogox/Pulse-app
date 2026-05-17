@@ -170,7 +170,7 @@ export default function TabLayout() {
         <Tabs.Screen name="ops-agent" options={{ href: null }} />
         <Tabs.Screen name="finance" options={{ title: 'Fiscal' }} />
         <Tabs.Screen name="trips" options={{ title: 'Trips' }} />
-        <Tabs.Screen name="network" options={{ title: 'Network' }} />
+        <Tabs.Screen name="network" options={{ title: 'Home' }} />
         <Tabs.Screen name="indents" options={{ href: null }} />
         <Tabs.Screen name="resources" options={{ href: null }} />
       </Tabs>

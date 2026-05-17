@@ -1,0 +1,40 @@
+/**
+ * Native trip map placeholder — desktop web uses TripMap.web (Leaflet).
+ */
+import { Theme } from "@/constants/Theme";
+import { StyleSheet, View } from "react-native";
+
+export interface TripMapProps {
+  source?: string | null;
+  destination?: string | null;
+  sourceCoords?: { latitude: number; longitude: number } | null;
+  destCoords?: { latitude: number; longitude: number } | null;
+  truckLocation?: { latitude: number; longitude: number } | null;
+  truckStatus?: {
+    truckNo?: string;
+    speed?: number;
+    ignitionStatus?: boolean;
+    location?: string;
+    lastUpdated?: string;
+  } | null;
+  dbLocationTrail?: {
+    latitude: number;
+    longitude: number;
+    recorded_at?: string;
+  }[];
+  intermediateStops?: string[];
+  height?: number | string;
+  onDistanceCalculated?: (distanceKm: string) => void;
+}
+
+export function TripMap({ height }: TripMapProps) {
+  const minHeight = typeof height === "number" ? height : 200;
+  return <View style={[styles.map, { minHeight }]} />;
+}
+
+const styles = StyleSheet.create({
+  map: {
+    flex: 1,
+    backgroundColor: Theme.screenBackground,
+  },
+});

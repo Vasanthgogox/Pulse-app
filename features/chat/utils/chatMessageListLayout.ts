@@ -24,11 +24,14 @@ export function estimateTripMessageRowHeight(
     case "system":
     case "update":
     case "system_log":
-      return 96;
+      return 88;
+    case "location_log":
+      return 200;
     case "status_change":
     case "image":
+      return 104;
     case "tracking":
-      return 112;
+      return 200;
     default:
       return Math.min(240, 76 + Math.ceil((m.content?.length ?? 0) / 34) * 18);
   }

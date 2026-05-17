@@ -98,8 +98,9 @@ export function ChatFeedbackCard({
     });
   }, [message]);
 
-  const canSubmit =
-    currentOrgId.trim() === (ratingOrganizationId ?? "").trim();
+  const ownerOrg = (ratingOrganizationId ?? "").trim();
+  const viewerOrg = currentOrgId.trim();
+  const canSubmit = !ownerOrg || viewerOrg === ownerOrg;
 
   const targetName = formatChatPartyName(
     meta?.rated_display_name ?? message.content,
@@ -308,14 +309,14 @@ export const ChatTripFeedbackCard = ChatFeedbackCard;
 const s = StyleSheet.create({
   wrap: {
     alignSelf: "center",
-    maxWidth: 440,
+    maxWidth: 360,
     width: "100%",
     backgroundColor: Theme.cardWhite,
-    borderRadius: 28,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: "rgba(67, 56, 202, 0.14)",
-    paddingVertical: 18,
-    paddingHorizontal: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
     marginVertical: 8,
     shadowColor: "#4338ca",
     shadowOpacity: 0.06,
@@ -342,11 +343,12 @@ const s = StyleSheet.create({
     letterSpacing: 1.4,
   },
   title: {
-    marginTop: 6,
-    fontSize: 22,
-    fontWeight: "900",
+    marginTop: 4,
+    fontSize: 16,
+    fontWeight: "800",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.6,
+    letterSpacing: -0.35,
+    lineHeight: 20,
   },
   targetRow: {
     marginTop: 8,
@@ -407,8 +409,8 @@ const s = StyleSheet.create({
     justifyContent: "center",
   },
   smileyEmoji: {
-    fontSize: 26,
-    lineHeight: 32,
+    fontSize: 22,
+    lineHeight: 28,
   },
   confirmBanner: {
     marginTop: 14,
@@ -556,10 +558,10 @@ const s = StyleSheet.create({
     marginBottom: 12,
   },
   successTitle: {
-    fontSize: 20,
-    fontWeight: "900",
+    fontSize: 16,
+    fontWeight: "800",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.4,
+    letterSpacing: -0.3,
     marginBottom: 6,
   },
   successBody: {

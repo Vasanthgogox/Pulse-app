@@ -25,6 +25,7 @@ import {
     REVENUE_REASON_OPTIONS,
 } from "@/features/trips/services/tripAdjustments";
 import type { TripRow } from "@/features/trips/services/trips.service";
+import { splitTripLocationDisplay } from "@/features/trips/utils/tripLocationDisplay.util";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -1623,12 +1624,8 @@ export function TripDetailFinanceView({
                 <View style={[styles.manifestDot, styles.manifestDotEnd]} />
               </View>
               <View style={styles.manifestTextCol}>
-                <Text style={styles.manifestPlace}>
-                  {toTitleCase(trip.pickup_area)}
-                </Text>
-                <Text style={styles.manifestPlace}>
-                  {toTitleCase(trip.drop_location)}
-                </Text>
+                <ManifestRouteStop location={trip.pickup_area} />
+                <ManifestRouteStop location={trip.drop_location} />
               </View>
             </View>
             <View style={styles.manifestMetaRow}>
@@ -3204,24 +3201,44 @@ export function TripDetailFinanceView({
   );
 }
 
-const CARD_PADDING = 16;
-const SECTION_GAP = 16;
+/** Match {@link TripsHubMobileTripCard} density (radius 16, compact type). */
+const HUB_CARD_RADIUS = 16;
+const CARD_PADDING = 14;
+const SECTION_GAP = 12;
+
+function ManifestRouteStop({ location }: { location: string | null | undefined }) {
+  const { city, detail } = splitTripLocationDisplay(location);
+  const cityLabel = toTitleCase(city || String(location ?? "").trim() || "—");
+  const detailLabel = detail ? toTitleCase(detail) : "";
+  return (
+    <View style={styles.manifestStopCol}>
+      <Text style={styles.manifestPlace} numberOfLines={2}>
+        {cityLabel}
+      </Text>
+      {detailLabel ? (
+        <Text style={styles.manifestPlaceDetail} numberOfLines={2}>
+          {detailLabel}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
   content: { paddingBottom: 80 },
   detailTabBar: {
     flexDirection: "row",
-    gap: 8,
+    gap: 6,
     marginBottom: SECTION_GAP,
-    padding: 4,
-    borderRadius: 14,
+    padding: 3,
+    borderRadius: 12,
     backgroundColor: Theme.surfaceGray,
     borderWidth: 1,
     borderColor: Theme.borderLight,
   },
   detailTabBtn: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 8,
     borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
@@ -3235,7 +3252,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   detailTabBtnTxt: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
     color: Theme.textMuted,
     letterSpacing: 0.2,
@@ -3245,7 +3262,7 @@ const styles = StyleSheet.create({
   },
   manifestCard: {
     backgroundColor: Theme.screenBackground,
-    borderRadius: 20,
+    borderRadius: HUB_CARD_RADIUS,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     padding: CARD_PADDING,
@@ -3254,26 +3271,26 @@ const styles = StyleSheet.create({
   sectionKickerRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginBottom: 14,
+    gap: 6,
+    marginBottom: 10,
   },
   sectionKickerBar: {
-    width: 4,
-    height: 18,
+    width: 3,
+    height: 14,
     borderRadius: 3,
     backgroundColor: Theme.primary,
   },
   sectionKicker: {
-    fontSize: 11,
+    fontSize: 9,
     fontWeight: "700",
-    letterSpacing: 1.8,
+    letterSpacing: 1.2,
     color: Theme.textSection,
     textTransform: "uppercase",
   },
   manifestRouteRow: {
     flexDirection: "row",
-    gap: 12,
-    marginBottom: 14,
+    gap: 10,
+    marginBottom: 10,
   },
   manifestDotsCol: {
     alignItems: "center",
@@ -3300,41 +3317,56 @@ const styles = StyleSheet.create({
   },
   manifestTextCol: {
     flex: 1,
-    gap: 8,
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  manifestStopCol: {
+    minWidth: 0,
+    gap: 1,
   },
   manifestPlace: {
-    fontSize: 16,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.2,
+    letterSpacing: -0.15,
+    lineHeight: 14,
+    textTransform: "uppercase",
+  },
+  manifestPlaceDetail: {
+    fontSize: 8,
+    fontWeight: "400",
+    color: Theme.textRouteCard,
+    lineHeight: 11,
+    letterSpacing: 0.2,
   },
   manifestMetaRow: {
     flexDirection: "row",
-    gap: 10,
+    gap: 8,
     borderTopWidth: 1,
     borderTopColor: Theme.borderLight,
-    paddingTop: 10,
+    paddingTop: 8,
   },
   manifestMetaCell: {
     flex: 1,
     minWidth: 0,
   },
   manifestMetaLabel: {
-    fontSize: 10,
+    fontSize: 8,
     fontWeight: "700",
     color: Theme.textRouteCard,
     textTransform: "uppercase",
-    letterSpacing: 0.9,
-    marginBottom: 2,
+    letterSpacing: 0.6,
+    marginBottom: 1,
   },
   manifestMetaValue: {
-    fontSize: 14,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
+    letterSpacing: -0.1,
   },
   operatorCardModern: {
     backgroundColor: Theme.screenBackground,
-    borderRadius: 20,
+    borderRadius: HUB_CARD_RADIUS,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     padding: CARD_PADDING,
@@ -3343,63 +3375,64 @@ const styles = StyleSheet.create({
   operatorBadgeModern: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
     backgroundColor: Theme.surfaceGray,
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
   operatorTextBlock: {
     flex: 1,
     minWidth: 0,
   },
   operatorLabelModern: {
-    fontSize: 10,
+    fontSize: 8,
     fontWeight: "700",
-    letterSpacing: 1.1,
+    letterSpacing: 0.8,
     color: Theme.textRouteCard,
     textTransform: "uppercase",
   },
   operatorValueModern: {
-    fontSize: 15,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.2,
+    letterSpacing: -0.15,
   },
   operatorSubModern: {
-    marginTop: 10,
-    fontSize: 14,
+    marginTop: 8,
+    fontSize: 11,
     fontWeight: "500",
     color: Theme.textSecondary,
+    lineHeight: 15,
   },
   assignmentCardModern: {
     backgroundColor: Theme.screenBackground,
-    borderRadius: 20,
+    borderRadius: HUB_CARD_RADIUS,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     padding: CARD_PADDING,
     marginBottom: SECTION_GAP,
   },
   assignmentTitleModern: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
-    marginBottom: 2,
+    marginBottom: 0,
   },
   assignmentRowModern: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingVertical: 10,
+    gap: 8,
+    paddingVertical: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
   },
   assignmentIconBox: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.surfaceGray,
@@ -3411,17 +3444,17 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   assignmentMetaLabel: {
-    fontSize: 10,
+    fontSize: 8,
     fontWeight: "700",
     textTransform: "uppercase",
     color: Theme.textRouteCard,
-    letterSpacing: 0.8,
+    letterSpacing: 0.6,
   },
   assignmentMetaValue: {
-    fontSize: 15,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.2,
+    letterSpacing: -0.1,
   },
   assignmentFootRow: {
     marginTop: 10,
@@ -3436,17 +3469,18 @@ const styles = StyleSheet.create({
   assignmentFootText: {
     flex: 1,
     minWidth: 0,
-    fontSize: 12,
+    fontSize: 10,
     color: Theme.textSecondary,
+    lineHeight: 14,
   },
   assignmentActionBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
     backgroundColor: Theme.darkBackground,
   },
   assignmentActionBtnText: {
-    fontSize: 11,
+    fontSize: 9,
     fontWeight: "700",
     color: Theme.textOnDark,
     letterSpacing: 0.3,
@@ -3457,7 +3491,7 @@ const styles = StyleSheet.create({
   },
   trackingCard: {
     backgroundColor: Theme.screenBackground,
-    borderRadius: 20,
+    borderRadius: HUB_CARD_RADIUS,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     padding: CARD_PADDING,

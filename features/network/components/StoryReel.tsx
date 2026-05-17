@@ -113,7 +113,7 @@ function BroadcastCard({
               avatarUrl={postAvatarUrl}
               avatarSeed={post.org_avatar_seed}
               entityType="supplier"
-              size={64}
+              size={48}
               borderStyle={styles.storyAvatarImage}
             />
             <View style={[styles.storyAvatarIconWrap, { borderColor: withAlpha(color, "44") }]}>
@@ -252,7 +252,7 @@ export function StoryReel({ posts, orgId, onCreatePost, headerActions }: StoryRe
                   avatarUrl={profile?.avatar_url ?? null}
                   avatarSeed={profile?.avatar_seed ?? null}
                   entityType="supplier"
-                  size={64}
+                  size={36}
                   borderStyle={styles.storyAvatarImage}
                 />
               </View>
@@ -268,9 +268,6 @@ export function StoryReel({ posts, orgId, onCreatePost, headerActions }: StoryRe
               </Pressable>
             </LinearGradient>
             <Text style={styles.storyName}>Mine</Text>
-            <Text style={styles.storyMeta} numberOfLines={1}>
-              {hasOwnStories ? `${ownStoryQueue.length} ${ownStoryQueue.length > 1 ? "stories" : "story"}` : "Add story"}
-            </Text>
           </View>
         </Pressable>
         {stories.map((post) => (
@@ -300,25 +297,25 @@ export function StoryReel({ posts, orgId, onCreatePost, headerActions }: StoryRe
 const styles = StyleSheet.create({
   wrap: {
     backgroundColor: "transparent",
-    paddingTop: 12,
-    paddingBottom: 16,
+    paddingTop: 8,
+    paddingBottom: 10,
   },
   scroll: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    gap: 20,
+    gap: 14,
     alignItems: "center",
     paddingRight: 28,
   },
   storyItem: {
-    width: 108,
+    width: 84,
     alignItems: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 2,
   },
   storyRing: {
-    width: 96,
-    height: 96,
-    borderRadius: 34,
+    width: 72,
+    height: 72,
+    borderRadius: 26,
     alignItems: "center",
     justifyContent: "center",
     padding: 3,
@@ -329,9 +326,9 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   storyAvatar: {
-    width: 90,
-    height: 90,
-    borderRadius: 30,
+    width: 66,
+    height: 66,
+    borderRadius: 22,
     backgroundColor: Theme.screenBackground,
     alignItems: "center",
     justifyContent: "center",
@@ -367,9 +364,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   launchRing: {
-    width: 96,
-    height: 96,
-    borderRadius: 34,
+    width: 72,
+    height: 72,
+    borderRadius: 26,
     borderWidth: 1,
     borderColor: "rgba(26,35,126,0.12)",
     borderStyle: "dashed",
@@ -379,9 +376,9 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.5)",
   },
   launchAvatarWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 14,
     backgroundColor: Theme.textPrimaryDark,
     alignItems: "center",
     justifyContent: "center",
@@ -391,11 +388,11 @@ const styles = StyleSheet.create({
   },
   mineAddIconWrap: {
     position: "absolute",
-    right: 10,
+    right: 8,
     bottom: 2,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: Theme.primary,
     borderWidth: 2,
     borderColor: Theme.screenBackground,
@@ -414,8 +411,8 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   storyName: {
-    marginTop: 10,
-    fontSize: 12,
+    marginTop: 6,
+    fontSize: 10,
     fontWeight: "800",
     color: Theme.textPrimaryDark,
     letterSpacing: 0.2,
@@ -423,8 +420,8 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   storyMeta: {
-    marginTop: 3,
-    fontSize: 8,
+    marginTop: 2,
+    fontSize: 7,
     fontWeight: "800",
     color: Theme.textSecondary,
     letterSpacing: 0.5,

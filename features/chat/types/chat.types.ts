@@ -165,8 +165,6 @@ export const MESSAGE_VISIBILITY: Partial<Record<MessageType, ConversationPartyTy
   feedback:         ['client', 'supplier'],
   document_upload:  ['client', 'supplier', 'driver'],
   assignment_update: ['client', 'supplier', 'driver'],
-  /** Operational pings — driver thread / live ops island. */
-  location_log: ['driver'],
 };
 
 /**

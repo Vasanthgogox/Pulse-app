@@ -177,7 +177,7 @@ export function FloatingChatButton() {
                 onPress={() => {
                   setShowPreview(false);
                   router.push({
-                    pathname: "/(modals)/chat",
+                    pathname: ROUTES.CHAT,
                     params: {
                       tab: row.type,
                       conversationId: row.id,
@@ -219,7 +219,7 @@ export function FloatingChatButton() {
             style={styles.launchBtn}
             onPress={() => {
               setShowPreview(false);
-              router.push("/(modals)/chat");
+              router.push(ROUTES.CHAT);
             }}
           >
             <Plus size={14} color="#fff" />

@@ -9,7 +9,20 @@ import Theme from "@/constants/Theme";
 import { PartyAvatar } from '@/components/PartyAvatar';
 import { discoverOrganizations, type DiscoverOrg } from '@/features/network/services/discover.service';
 import { getOrganizationLocationsByIds } from '@/features/organization/services/organization.service';
+import {
+  averageRatingForRatedParty,
+  averageScoreDeduped,
+  getRatingsForClients,
+  getRatingsForSuppliers,
+  type RatingRow,
+} from '@/features/ratings';
 import { showAppAlert } from "@/lib/appAlert";
+import {
+  useClientsQuery,
+  useSuppliersQuery,
+  useTripsQuery,
+} from '@/lib/queries';
+import { supabase } from '@/lib/supabase';
 import { todayPendingInviteCountFromSent } from "@/lib/todayPendingInviteCount";
 import {
   cancelPendingConnectionRequestByOrgPair,
@@ -186,9 +199,21 @@ function scoreOrgs(
 
 // --- Org card ---
 
-function OrgCard({ org, locationFallback, onConnect, onCancel, loading, onOpenProfile, stretchCellHeight }: {
+function OrgCard({
+  org,
+  locationFallback,
+  totalTrips,
+  ratingValue,
+  onConnect,
+  onCancel,
+  loading,
+  onOpenProfile,
+  stretchCellHeight,
+}: {
   org: ScoredOrg;
   locationFallback?: { city?: string | null; state?: string | null; address_line?: string | null } | null;
+  totalTrips?: number | null;
+  ratingValue?: number | null;
   onConnect: () => void;
   onCancel: () => void;
   loading: boolean;
@@ -204,11 +229,15 @@ function OrgCard({ org, locationFallback, onConnect, onCancel, loading, onOpenPr
   const isRecommended = org.score > 0;
   const mutuals = org.mutual_count ?? org.mutual_connections_count ?? 0;
   const hasMutuals = mutuals > 0;
-  const ratingValue = org.rating ?? org.average_rating ?? null;
-  const rating = typeof ratingValue === "number" && Number.isFinite(ratingValue)
-    ? ratingValue.toFixed(1)
-    : null;
+  const resolvedRating =
+    ratingValue ?? org.rating ?? org.average_rating ?? null;
+  const rating =
+    typeof resolvedRating === 'number' && Number.isFinite(resolvedRating)
+      ? resolvedRating.toFixed(1)
+      : null;
   const businessLocation = getBusinessLocation(org, locationFallback);
+  const showTrips =
+    typeof totalTrips === 'number' && totalTrips >= 0;
 
   const onIn = () => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start();
   const onOut = () => Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start();
@@ -231,75 +260,103 @@ function OrgCard({ org, locationFallback, onConnect, onCancel, loading, onOpenPr
             {isConnected ? "CONNECTED" : isPending ? "REQUEST SENT" : "LIVE"}
           </Text>
         </View>
-        <View style={[styles.coverRatingNode, !rating && styles.coverRatingNodeEmpty]}>
-          {rating ? (
-            <Star size={10} color={Theme.driverGold} fill={Theme.driverGold} strokeWidth={2.2} />
-          ) : null}
-          <Text style={[styles.coverRatingText, !rating && styles.coverRatingTextEmpty]}>
-            {rating ?? "No rating"}
-          </Text>
-        </View>
       </View>
 
-      <View style={[styles.discoveryHero, stretchCellHeight && styles.discoveryHeroFlex]}>
-        <Pressable onPress={onOpenProfile} style={styles.discoveryHeroPress}>
-        <View style={styles.avatar}>
-          <PartyAvatar
-            name={org.name}
-            initialsColorSeed={org.id}
-            avatarSeed={org.avatar_seed}
-            entityType="client"
-            size={62}
-            borderStyle={styles.avatarImage}
-          />
-        </View>
-        <Text style={styles.orgName} numberOfLines={1} ellipsizeMode="tail">
-          {org.name.toUpperCase()}
-        </Text>
-        <View style={styles.locationRow}>
-          <MapPin
-            size={10}
-            color={businessLocation ? Theme.textMutedDemo : Theme.textSecondary}
-            strokeWidth={2.4}
-          />
-          {businessLocation ? (
-            <Text style={styles.locationText} numberOfLines={1}>
-              {businessLocation}
-            </Text>
-          ) : (
-            <Text style={styles.locationTextEmpty} numberOfLines={1}>
-              {t('networkDiscoverLocationNotSet')}
-            </Text>
-          )}
-        </View>
+      <View style={[styles.profileBlock, stretchCellHeight && styles.profileBlockFlex]}>
+        <Pressable onPress={onOpenProfile} style={styles.profileBlockPress}>
+          <View style={styles.profileHeroRow}>
+            <View style={[styles.profileHeroCol, styles.profileHeroColLeft]}>
+              {showTrips ? (
+                <View style={styles.hubMetricPill}>
+                  <Text style={styles.hubTripsText} numberOfLines={1}>
+                    {totalTrips} trip{totalTrips === 1 ? '' : 's'}
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.profileHeroColGap} />
+              )}
+            </View>
+            <View style={styles.heroAvatar}>
+              <PartyAvatar
+                name={org.name}
+                initialsColorSeed={org.id}
+                avatarSeed={org.avatar_seed}
+                entityType="client"
+                size={48}
+                borderStyle={styles.heroAvatarImage}
+              />
+            </View>
+            <View style={[styles.profileHeroCol, styles.profileHeroColRight]}>
+              <View
+                style={[
+                  styles.hubMetricPill,
+                  styles.hubMetricPillRating,
+                  !rating && styles.hubMetricPillRatingEmpty,
+                ]}
+              >
+                {rating ? (
+                  <Star
+                    size={10}
+                    color={Theme.driverGold}
+                    fill={Theme.driverGold}
+                    strokeWidth={2.2}
+                  />
+                ) : null}
+                <Text
+                  style={[
+                    styles.hubRatingText,
+                    !rating && styles.hubRatingTextEmpty,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {rating ?? 'No rating'}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <Text style={styles.orgName} numberOfLines={1} ellipsizeMode="tail">
+            {org.name.toUpperCase()}
+          </Text>
+          <View style={styles.locationRow}>
+            <MapPin
+              size={10}
+              color={businessLocation ? Theme.textMutedDemo : Theme.textSecondary}
+              strokeWidth={2.4}
+            />
+            {businessLocation ? (
+              <Text style={styles.locationText} numberOfLines={1}>
+                {businessLocation}
+              </Text>
+            ) : (
+              <Text style={styles.locationTextEmpty} numberOfLines={1}>
+                {t('networkDiscoverLocationNotSet')}
+              </Text>
+            )}
+          </View>
         </Pressable>
       </View>
 
-      <View style={styles.discoveryMetaStack}>
+      <View style={styles.cardMetaStack}>
         <View style={[styles.discoveryMetaChip, hasMutuals && styles.discoveryMetaChipStrong]}>
           <Users size={10} color={hasMutuals ? Theme.textOnPrimary : Theme.textSecondary} strokeWidth={2.5} />
           <Text style={[styles.discoveryMetaText, hasMutuals && styles.discoveryMetaTextStrong]} numberOfLines={1}>
-            {hasMutuals ? `${mutuals} mutual${mutuals === 1 ? "" : "s"}` : "No mutuals"}
-          </Text>
-        </View>
-        <View style={[styles.discoveryMetaChip, !isRecommended && styles.discoveryMetaChipGhost]}>
-          <Text style={styles.discoveryMetaText} numberOfLines={1}>
-            Active lane overlap
+            {hasMutuals ? `${mutuals} mutual${mutuals === 1 ? '' : 's'}` : 'No mutuals'}
           </Text>
         </View>
       </View>
 
       <View style={styles.cardFooter}>
         {isConnected ? (
-          <View style={styles.stateTag}>
+          <View style={styles.footerAction}>
             <Check size={13} color={Theme.textPrimaryDark} strokeWidth={2.5} />
-              <Text style={styles.stateTagText} numberOfLines={1}>Connected</Text>
+            <Text style={styles.footerActionText} numberOfLines={1}>Connected</Text>
           </View>
         ) : isPending ? (
-          <View style={styles.pendingActionRow}>
-            <View style={styles.stateTag}>
-              <Clock3 size={13} color={Theme.warning} strokeWidth={2.5} />
-              <Text style={styles.stateTagText} numberOfLines={1}>Request sent</Text>
+          <View style={styles.pendingFooter}>
+            <View style={[styles.footerAction, styles.footerActionPending, styles.footerActionFlex]}>
+              <Clock3 size={12} color={Theme.warning} strokeWidth={2.4} />
+              <Text style={styles.footerActionText} numberOfLines={1}>Request sent</Text>
             </View>
             <Pressable
               style={({ pressed }) => [
@@ -313,15 +370,15 @@ function OrgCard({ org, locationFallback, onConnect, onCancel, loading, onOpenPr
               accessibilityLabel={`Cancel request to ${org.name}`}
             >
               {loading ? (
-                <LoadingIndicator size={11} color={Theme.textPrimaryDark} />
+                <LoadingIndicator size={12} color={Theme.textPrimaryDark} />
               ) : (
-                <X size={13} color={Theme.textPrimaryDark} strokeWidth={2.7} />
+                <X size={12} color={Theme.textPrimaryDark} strokeWidth={2.5} />
               )}
             </Pressable>
           </View>
         ) : (
           <Pressable
-            style={[styles.connectBtn, loading && styles.connectBtnLoading]}
+            style={[styles.footerAction, styles.footerActionPrimary, loading && styles.footerActionLoading]}
             onPress={onConnect}
             onPressIn={onIn}
             onPressOut={onOut}
@@ -332,7 +389,7 @@ function OrgCard({ org, locationFallback, onConnect, onCancel, loading, onOpenPr
             ) : (
               <>
                 <UserPlus size={13} color={Theme.textPrimaryDark} strokeWidth={2.5} />
-                <Text style={styles.connectBtnText} numberOfLines={1}>Send request</Text>
+                <Text style={styles.footerActionText} numberOfLines={1}>Send request</Text>
               </>
             )}
           </Pressable>
@@ -367,8 +424,8 @@ const DISCOVER_ROWS_MOBILE = 3;
 /** Matches discoverOrganizations fetch limit — show full result set inside embedded scroll. */
 const EMBEDDED_SCROLL_ITEM_CAP = 40;
 const LIST_STATIC_HORIZONTAL_PAD = 14 * 2;
-const DISCOVER_GRID_GAP_PX = 12;
-const DISCOVER_EMBEDDED_CARD_HEIGHT = 286;
+const DISCOVER_GRID_GAP_PX = 8;
+const DISCOVER_EMBEDDED_CARD_HEIGHT = 224;
 /** Before `onLayout` reports width, cap provisional outer width so 7-up math stays modest vs narrow columns. */
 const DISCOVER_EMBEDDED_PROVISIONAL_OUTER_CAP = 520;
 
@@ -418,7 +475,16 @@ export function DiscoverView({
 
   const feedQ = useNetworkFeedQuery(orgId);
   const indentsQ = useIndentsQuery(orgId);
+  const clientsQ = useClientsQuery(orgId);
+  const suppliersQ = useSuppliersQuery(orgId);
+  const tripsQ = useTripsQuery(orgId);
   const invalidateNetwork = useInvalidateNetwork(orgId);
+  const [discoverRatingsByOrgId, setDiscoverRatingsByOrgId] = useState<
+    Record<string, number | null>
+  >({});
+  const [discoverOrgTripCounts, setDiscoverOrgTripCounts] = useState<
+    Record<string, number | null>
+  >({});
   const search = searchProp ?? internalSearch;
   const setSearch = onSearchChange ?? setInternalSearch;
 
@@ -537,6 +603,185 @@ export function DiscoverView({
     }
     return map;
   }, [organizationLocationsQ.data]);
+
+  const linkedPartnerByOrgId = useMemo(() => {
+    const map: Record<string, { clientId?: string; supplierId?: string }> = {};
+    for (const client of (clientsQ.data ?? []) as Array<{
+      id: string;
+      linked_organization_id?: string | null;
+    }>) {
+      const linkedOrgId = client.linked_organization_id?.trim();
+      if (!linkedOrgId) continue;
+      map[linkedOrgId] = { ...map[linkedOrgId], clientId: client.id };
+    }
+    for (const supplier of (suppliersQ.data ?? []) as Array<{
+      id: string;
+      linked_organization_id?: string | null;
+    }>) {
+      const linkedOrgId = supplier.linked_organization_id?.trim();
+      if (!linkedOrgId) continue;
+      map[linkedOrgId] = { ...map[linkedOrgId], supplierId: supplier.id };
+    }
+    return map;
+  }, [clientsQ.data, suppliersQ.data]);
+
+  const tripCountByClientId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const trip of tripsQ.data ?? []) {
+      if (trip.client_id) {
+        map.set(trip.client_id, (map.get(trip.client_id) ?? 0) + 1);
+      }
+    }
+    return map;
+  }, [tripsQ.data]);
+
+  const tripCountBySupplierId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const trip of tripsQ.data ?? []) {
+      if (trip.supplier_id) {
+        map.set(trip.supplier_id, (map.get(trip.supplier_id) ?? 0) + 1);
+      }
+    }
+    return map;
+  }, [tripsQ.data]);
+
+  const discoverPartnerClientIds = useMemo(
+    () =>
+      discoverOrgIds
+        .map((id) => linkedPartnerByOrgId[id]?.clientId)
+        .filter((id): id is string => Boolean(id)),
+    [discoverOrgIds, linkedPartnerByOrgId],
+  );
+
+  const discoverPartnerSupplierIds = useMemo(
+    () =>
+      discoverOrgIds
+        .map((id) => linkedPartnerByOrgId[id]?.supplierId)
+        .filter((id): id is string => Boolean(id)),
+    [discoverOrgIds, linkedPartnerByOrgId],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const clientIds = discoverPartnerClientIds;
+    const supplierIds = discoverPartnerSupplierIds;
+    if (clientIds.length === 0 && supplierIds.length === 0) {
+      setDiscoverRatingsByOrgId({});
+      return;
+    }
+
+    void (async () => {
+      const [clientRes, supplierRes] = await Promise.all([
+        clientIds.length > 0
+          ? getRatingsForClients(clientIds)
+          : Promise.resolve({ byClientId: {} as Record<string, RatingRow[]> }),
+        supplierIds.length > 0
+          ? getRatingsForSuppliers(supplierIds)
+          : Promise.resolve({ bySupplierId: {} as Record<string, RatingRow[]> }),
+      ]);
+      if (cancelled) return;
+
+      const next: Record<string, number | null> = {};
+      for (const discoverOrgId of discoverOrgIds) {
+        const partner = linkedPartnerByOrgId[discoverOrgId];
+        if (!partner) continue;
+        if (partner.clientId) {
+          next[discoverOrgId] = averageRatingForRatedParty(
+            clientRes.byClientId,
+            partner.clientId,
+            discoverOrgId,
+          );
+        } else if (partner.supplierId) {
+          next[discoverOrgId] = averageRatingForRatedParty(
+            supplierRes.bySupplierId,
+            partner.supplierId,
+            discoverOrgId,
+          );
+        }
+        if (next[discoverOrgId] === undefined && partner.clientId) {
+          next[discoverOrgId] = averageScoreDeduped(
+            clientRes.byClientId[partner.clientId] ?? [],
+          );
+        }
+        if (next[discoverOrgId] === undefined && partner.supplierId) {
+          next[discoverOrgId] = averageScoreDeduped(
+            supplierRes.bySupplierId[partner.supplierId] ?? [],
+          );
+        }
+      }
+      setDiscoverRatingsByOrgId(next);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    discoverOrgIds,
+    discoverPartnerClientIds,
+    discoverPartnerSupplierIds,
+    linkedPartnerByOrgId,
+  ]);
+
+  const discoverOrgIdsForTripFetch = useMemo(
+    () => discoverOrgIds.filter((id) => !linkedPartnerByOrgId[id]),
+    [discoverOrgIds, linkedPartnerByOrgId],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    if (discoverOrgIdsForTripFetch.length === 0) {
+      setDiscoverOrgTripCounts({});
+      return;
+    }
+
+    void (async () => {
+      const entries = await Promise.all(
+        discoverOrgIdsForTripFetch.map(async (targetOrgId) => {
+          const { count, error } = await supabase()
+            .from('trips')
+            .select('id', { count: 'exact', head: true })
+            .eq('organization_id', targetOrgId);
+          if (error) return [targetOrgId, null] as const;
+          return [targetOrgId, count ?? 0] as const;
+        }),
+      );
+      if (cancelled) return;
+      setDiscoverOrgTripCounts(Object.fromEntries(entries));
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [discoverOrgIdsForTripFetch]);
+
+  const getDiscoverOrgCardMetrics = useCallback(
+    (targetOrg: DiscoverOrg) => {
+      const partner = linkedPartnerByOrgId[targetOrg.id];
+      let totalTrips: number | null = null;
+      if (partner?.clientId) {
+        totalTrips = tripCountByClientId.get(partner.clientId) ?? null;
+      } else if (partner?.supplierId) {
+        totalTrips = tripCountBySupplierId.get(partner.supplierId) ?? null;
+      } else {
+        totalTrips = discoverOrgTripCounts[targetOrg.id] ?? null;
+      }
+
+      const rating =
+        discoverRatingsByOrgId[targetOrg.id] ??
+        targetOrg.rating ??
+        targetOrg.average_rating ??
+        null;
+
+      return { totalTrips, ratingValue: rating };
+    },
+    [
+      linkedPartnerByOrgId,
+      tripCountByClientId,
+      tripCountBySupplierId,
+      discoverOrgTripCounts,
+      discoverRatingsByOrgId,
+    ],
+  );
 
   const fetchOrgs = useCallback(async (q: string) => {
     setLoading(true);
@@ -711,18 +956,19 @@ export function DiscoverView({
                 <OrgCard
                   org={item.org}
                   locationFallback={organizationLocationById[item.org.id]}
+                  {...getDiscoverOrgCardMetrics(item.org)}
                   onConnect={() => tryBeginConnectionRequest(item.org)}
                   onCancel={() => void handleCancelRequest(item.org)}
                   loading={connecting === item.org.id}
                   stretchCellHeight={embedded}
-                  onOpenProfile={() =>
+                  onOpenProfile={() => {
+                    const metrics = getDiscoverOrgCardMetrics(item.org);
                     onOpenProfile?.({
                       ...item.org,
-                      rating_value:
-                        item.org.rating ?? item.org.average_rating ?? null,
+                      rating_value: metrics.ratingValue,
                       location_value: getBusinessLocation(item.org),
-                    })
-                  }
+                    });
+                  }}
                 />
               </View>
             </View>
@@ -819,16 +1065,18 @@ export function DiscoverView({
               <OrgCard
                 org={item.org}
                 locationFallback={organizationLocationById[item.org.id]}
+                {...getDiscoverOrgCardMetrics(item.org)}
                 onConnect={() => tryBeginConnectionRequest(item.org)}
                 onCancel={() => void handleCancelRequest(item.org)}
                 loading={connecting === item.org.id}
-                onOpenProfile={() =>
+                onOpenProfile={() => {
+                  const metrics = getDiscoverOrgCardMetrics(item.org);
                   onOpenProfile?.({
                     ...item.org,
-                    rating_value: item.org.rating ?? item.org.average_rating ?? null,
+                    rating_value: metrics.ratingValue,
                     location_value: getBusinessLocation(item.org),
-                  })
-                }
+                  });
+                }}
               />
             );
           }}
@@ -985,11 +1233,11 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
   },
   listStatic: {
-    paddingHorizontal: 14,
-    paddingBottom: 24,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingBottom: 16,
     width: "100%",
     flexDirection: "column",
-    gap: 12,
+    gap: DISCOVER_GRID_GAP_PX,
     alignItems: "stretch",
   },
   gridHeaderCell: { width: "100%" },
@@ -1028,9 +1276,9 @@ const styles = StyleSheet.create({
   },
   card: {
     width: "100%",
-    minHeight: 186,
+    minHeight: 0,
     backgroundColor: Theme.screenBackground,
-    borderRadius: 32,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: Theme.surfaceBorder,
     shadowColor: Theme.shadow,
@@ -1038,9 +1286,11 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 7 },
     overflow: 'hidden',
+    flexDirection: "column",
   },
   cardStretchEmbedded: {
     flex: 1,
+    height: "100%",
   },
   cardFixedHeightEmbedded: {
     height: DISCOVER_EMBEDDED_CARD_HEIGHT,
@@ -1062,7 +1312,7 @@ const styles = StyleSheet.create({
   recommendedText: { fontSize: 9, fontWeight: '800', color: '#6366f1', letterSpacing: 0.4 },
   cardRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
   discoverCover: {
-    height: 82,
+    height: 52,
     overflow: "hidden",
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
@@ -1101,12 +1351,12 @@ const styles = StyleSheet.create({
   },
   coverSignalChip: {
     position: "absolute",
-    top: 8,
-    right: 8,
-    minHeight: 20,
+    top: 6,
+    right: 6,
+    minHeight: 16,
     justifyContent: "center",
-    paddingHorizontal: 7,
-    borderRadius: 10,
+    paddingHorizontal: 5,
+    borderRadius: 8,
     backgroundColor: Theme.screenBackground,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
@@ -1119,94 +1369,123 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     includeFontPadding: false,
   },
-  coverRatingNode: {
-    position: "absolute",
-    right: 8,
-    bottom: 8,
-    minHeight: 23,
-    flexDirection: "row",
+  profileBlock: {
+    position: "relative",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
     paddingHorizontal: 8,
-    borderRadius: 11,
-    backgroundColor: "rgba(255,255,255,0.86)",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
+    paddingBottom: 4,
   },
-  coverRatingNodeEmpty: {
-    minHeight: 18,
-    paddingHorizontal: 5,
-    borderRadius: 9,
-    backgroundColor: "rgba(255,255,255,0.72)",
-  },
-  coverRatingText: {
-    fontSize: 10,
-    fontWeight: "700",
-    fontStyle: "italic",
-    color: Theme.textPrimaryDark,
-    includeFontPadding: false,
-  },
-  coverRatingTextEmpty: {
-    fontSize: 7,
-    fontWeight: "700",
-    color: Theme.textMutedDemo,
-    letterSpacing: -0.1,
-  },
-  discoveryHero: {
-    alignItems: "center",
-    paddingHorizontal: 10,
-    paddingBottom: 8,
-  },
-  discoveryHeroFlex: {
-    height: 88,
-    maxHeight: 88,
+  profileBlockFlex: {
+    flex: 1,
+    minHeight: 0,
     justifyContent: "flex-start",
   },
-  discoveryHeroPress: {
+  profileBlockPress: {
     alignItems: "center",
     width: "100%",
   },
-  avatar: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
-    overflow: "hidden",
+  profileHeroRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    width: "100%",
+    marginTop: -24,
+    paddingHorizontal: 2,
+    zIndex: 5,
+    gap: 4,
+  },
+  profileHeroCol: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "center",
+  },
+  profileHeroColLeft: {
+    alignItems: "flex-start",
+  },
+  profileHeroColRight: {
+    alignItems: "flex-end",
+  },
+  profileHeroColGap: {
+    minHeight: 22,
+  },
+  hubMetricPill: {
+    minHeight: 22,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 11,
     backgroundColor: Theme.screenBackground,
-    marginTop: -31,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+    maxWidth: "100%",
+  },
+  hubMetricPillRating: {
+    gap: 4,
+  },
+  hubMetricPillRatingEmpty: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    minHeight: 20,
+  },
+  hubTripsText: {
+    fontSize: 8,
+    fontWeight: "600",
+    fontStyle: "italic",
+    color: Theme.textSecondary,
+  },
+  hubRatingText: {
+    fontSize: 9,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+  },
+  hubRatingTextEmpty: {
+    fontSize: 7,
+    fontWeight: "500",
+    color: Theme.textMutedDemo,
+    letterSpacing: -0.1,
+  },
+  heroAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    overflow: "hidden",
+    backgroundColor: Theme.screenBackground,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
     shadowColor: Theme.shadow,
     shadowOpacity: 0.12,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 8 },
     elevation: 2,
   },
-  avatarImage: {
+  heroAvatarImage: {
     borderWidth: 2,
     borderColor: Theme.screenBackground,
   },
   info: { flex: 1, gap: 5 },
   orgName: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: "#475569",
-    letterSpacing: -0.2,
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.1,
     textAlign: "center",
-    marginTop: 8,
-    lineHeight: 15,
-    height: 15,
-    maxHeight: 15,
+    marginTop: 5,
+    lineHeight: 12,
+    height: 12,
+    maxHeight: 12,
     width: "100%",
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
     includeFontPadding: false,
     flexShrink: 1,
   },
   locationRow: {
-    height: 14,
-    maxHeight: 14,
+    height: 12,
+    maxHeight: 12,
     width: "100%",
-    marginTop: 3,
+    marginTop: 2,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -1215,56 +1494,51 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   locationText: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "500",
     fontStyle: "italic",
     color: Theme.textMutedDemo,
-    lineHeight: 12,
+    lineHeight: 11,
     textAlign: "center",
     includeFontPadding: false,
   },
   locationTextEmpty: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "600",
     fontStyle: "italic",
     color: Theme.textSecondary,
-    lineHeight: 12,
+    lineHeight: 11,
     textAlign: "center",
     opacity: 0.85,
     includeFontPadding: false,
   },
-  discoveryMetaStack: {
+  cardMetaStack: {
     width: "100%",
-    height: 50,
     paddingHorizontal: 8,
-    gap: 6,
     marginTop: 2,
-    marginBottom: 8,
+    marginBottom: 6,
     alignItems: "center",
     justifyContent: "center",
   },
   discoveryMetaChip: {
-    minHeight: 22,
+    minHeight: 18,
     maxWidth: "100%",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    borderRadius: 11,
+    gap: 3,
+    paddingHorizontal: 6,
+    borderRadius: 9,
     backgroundColor: Theme.surface,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
-  },
-  discoveryMetaChipGhost: {
-    opacity: 0,
   },
   discoveryMetaChipStrong: {
     backgroundColor: Theme.textPrimaryDark,
     borderColor: Theme.textPrimaryDark,
   },
   discoveryMetaText: {
-    fontSize: 8,
+    fontSize: 7,
     fontWeight: "700",
     fontStyle: "italic",
     color: Theme.textSecondary,
@@ -1353,75 +1627,72 @@ const styles = StyleSheet.create({
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   connectedLabel: { fontSize: 10, fontWeight: '700', color: '#10b981' },
   pendingLabel: { fontSize: 10, fontWeight: '700', color: '#f59e0b' },
-  connectBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  cardFooter: {
+    minHeight: 40,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
+    alignItems: "stretch",
+    justifyContent: "center",
+    marginTop: "auto",
+  },
+  footerAction: {
+    minHeight: 30,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 6,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     backgroundColor: Theme.screenBackground,
     borderWidth: 1,
     borderColor: Theme.borderMedium,
-    borderRadius: 18,
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-    minHeight: 34,
-    minWidth: 118,
-    justifyContent: 'center',
     shadowColor: Theme.shadow,
     shadowOpacity: 0.04,
     shadowRadius: 7,
     shadowOffset: { width: 0, height: 3 },
     elevation: 1,
   },
-  connectBtnLoading: { opacity: 0.7 },
-  connectBtnText: { fontSize: 10, fontWeight: '700', fontStyle: "italic", color: Theme.textPrimaryDark, letterSpacing: 0.2, includeFontPadding: false },
-  cardFooter: {
-    height: 50,
-    maxHeight: 50,
-    paddingHorizontal: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.borderLight,
-    alignItems: "center",
-    justifyContent: "center",
+  footerActionPrimary: {
+    borderColor: Theme.textPrimaryDark,
+    width: "100%",
   },
-  stateTag: {
-    minHeight: 34,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    borderWidth: 1,
+  footerActionPending: {
     borderColor: Theme.borderMedium,
-    borderRadius: 17,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    backgroundColor: Theme.screenBackground,
-    shadowColor: Theme.shadow,
-    shadowOpacity: 0.03,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 1,
   },
-  stateTagText: {
+  footerActionFlex: {
+    flex: 1,
+    minWidth: 0,
+  },
+  footerActionLoading: {
+    opacity: 0.72,
+  },
+  footerActionText: {
     fontSize: 10,
     fontWeight: "700",
     fontStyle: "italic",
     color: Theme.textPrimaryDark,
+    letterSpacing: 0.2,
     includeFontPadding: false,
   },
-  pendingActionRow: {
+  pendingFooter: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 7,
+    gap: 6,
+    width: "100%",
   },
   cancelRequestBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.screenBackground,
     borderWidth: 1,
     borderColor: Theme.borderMedium,
+    flexShrink: 0,
     shadowColor: Theme.shadow,
     shadowOpacity: 0.025,
     shadowRadius: 6,

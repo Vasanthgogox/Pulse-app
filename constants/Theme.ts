@@ -178,6 +178,14 @@ export const Theme = {
   /** Treasury/Fiscal bottom nav active pill background (light indigo) */
   fiscalTabActiveBg: "#e8eaf6",
 
+  /** Pulse loader + mobile tab bar accent (indigo) */
+  pulseIndigo: "#4F46E5",
+  pulseIndigoRing: "rgba(79, 70, 229, 0.22)",
+  pulseIndigoWash: "rgba(99, 102, 241, 0.12)",
+  /** Mobile footer active pill + icon ring */
+  pulseTabActiveBg: "rgba(79, 70, 229, 0.10)",
+  pulseTabActiveBorder: "rgba(79, 70, 229, 0.28)",
+
   /** Demo tab bar: bar background, top border, pill and FAB (use Layout for radii/shadows) */
   tabBarBg: "#ffffff",
   tabBarBorderTop: "#f1f5f9",

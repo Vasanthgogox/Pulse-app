@@ -1,7 +1,4 @@
-/**
- * Shared props for platform trip-detail screens — keep in this file only (no RN tree),
- * so Metro never pulls `TripDetailScreen.tsx` when bundling `TripDetailScreen.web.tsx`.
- */
+/** Shared props for trip detail (TripDetailScreen). */
 export interface TripDetailScreenProps {
   tripId: string;
   /**

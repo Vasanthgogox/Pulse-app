@@ -2,6 +2,10 @@
  * Single card: summary (Total In / Out) + toolbar (search, report icon, filter).
  * Animated icons, report icon-only, used on Treasury and Entity detail.
  */
+import {
+  CHAT_FILTER_MUTED,
+  chatFilterChromeStyles as chatChrome,
+} from "@/constants/ChatFilterChrome";
 import Theme from '@/constants/Theme';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import {
@@ -999,157 +1003,140 @@ export function TreasurySummaryCard({
           ]}
         >
           <View style={[styles.toolbarLeft, styles.toolbarLeftNetwork]}>
-            <View style={styles.networkSearchRow}>
-              {showInlineSourceChips && (
-                <View style={styles.inlineSourceChipRail}>
-                  {(['all', 'asset', 'aggregate'] as const).map((s) => (
+            <View style={chatChrome.toolbarStack}>
+              {showInlineSourceChips ? (
+                <View style={chatChrome.tabRow}>
+                  {(["all", "asset", "aggregate"] as const).map((s) => {
+                    const active = sourceFilter === s;
+                    return (
+                      <TouchableOpacity
+                        key={s}
+                        style={[
+                          chatChrome.tabPill,
+                          active && chatChrome.tabPillActive,
+                        ]}
+                        onPress={() => onSourceFilterChange?.(s)}
+                        activeOpacity={0.75}
+                        accessibilityRole="tab"
+                        accessibilityState={{ selected: active }}
+                      >
+                        <FontAwesome
+                          name={
+                            s === "all"
+                              ? "list"
+                              : s === "asset"
+                                ? "truck"
+                                : "sitemap"
+                          }
+                          size={12}
+                          color={active ? "#ffffff" : CHAT_FILTER_MUTED}
+                        />
+                        <Text
+                          style={[
+                            chatChrome.tabPillLabel,
+                            active && chatChrome.tabPillLabelActive,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {SOURCE_FILTER_LABELS[s]}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ) : null}
+
+              <View style={chatChrome.searchScopeStrip}>
+                <View style={chatChrome.searchWrap}>
+                  <AnimatedIcon
+                    name="search"
+                    size={12}
+                    color="#94a3b8"
+                    style={styles.searchIcon}
+                  />
+                  <TextInput
+                    style={[
+                      chatChrome.searchInput,
+                      Platform.OS === "web" &&
+                        ({ outlineStyle: "none" } as unknown as TextStyle),
+                    ]}
+                    value={searchQuery}
+                    onChangeText={onSearchChange}
+                    placeholder={searchPlaceholder}
+                    placeholderTextColor="#94a3b8"
+                    returnKeyType="search"
+                    autoCorrect={false}
+                    spellCheck={false}
+                    autoComplete="off"
+                  />
+                  {searchQuery !== "" ? (
                     <TouchableOpacity
-                      key={s}
-                      style={[
-                        styles.inlineSourceChip,
-                        isLightToolbar && styles.inlineSourceChipLight,
-                        sourceFilter === s && styles.inlineSourceChipActive,
-                        sourceFilter === s &&
-                          isLightToolbar &&
-                          styles.inlineSourceChipActiveLight,
-                      ]}
-                      onPress={() => onSourceFilterChange?.(s)}
-                      activeOpacity={0.8}
+                      onPress={() => onSearchChange("")}
+                      style={styles.searchClearIcon}
+                      hitSlop={8}
                     >
                       <FontAwesome
-                        name={s === 'all' ? 'list' : s === 'asset' ? 'truck' : 'sitemap'}
-                        size={11}
-                        color={
-                          sourceFilter === s
-                            ? isLightToolbar
-                              ? Theme.textPrimary
-                              : Theme.textOnDark
-                            : isLightToolbar
-                              ? Theme.textSecondary
-                              : Theme.textOnDarkMuted
-                        }
+                        name="times-circle"
+                        size={12}
+                        color="#94a3b8"
                       />
-                      <Text
-                        style={[
-                          styles.inlineSourceChipText,
-                          isLightToolbar && styles.inlineSourceChipTextLight,
-                          sourceFilter === s && styles.inlineSourceChipTextActive,
-                          sourceFilter === s &&
-                            isLightToolbar &&
-                            styles.inlineSourceChipTextActiveLight,
-                        ]}
-                      >
-                        {SOURCE_FILTER_LABELS[s]}
-                      </Text>
                     </TouchableOpacity>
-                  ))}
+                  ) : null}
                 </View>
-              )}
-              <View
-                style={[
-                  styles.searchWrap,
-                  styles.searchWrapNetwork,
-                  isLightToolbar && styles.searchWrapNetworkLight,
-                ]}
-              >
-                <AnimatedIcon
-                  name="search"
-                  size={14}
-                  color={isLightToolbar ? Theme.textSecondary : Theme.textOnDarkMuted}
-                  style={styles.searchIcon}
-                />
-                <TextInput
-                  style={[
-                    styles.searchInput,
-                    styles.searchInputNetwork,
-                    isLightToolbar && styles.searchInputNetworkLight,
-                    Platform.OS === "web" &&
-                      ({ outlineStyle: "none" } as unknown as TextStyle),
-                  ]}
-                  value={searchQuery}
-                  onChangeText={onSearchChange}
-                  placeholder={searchPlaceholder}
-                  placeholderTextColor={
-                    isLightToolbar ? Theme.textSecondary : Theme.textOnDarkMuted
-                  }
-                  returnKeyType="search"
-                  autoCorrect={false}
-                  spellCheck={false}
-                  autoComplete="off"
-                />
-                {searchQuery !== '' && (
+
+                {onEntityFilterChange != null ? (
+                  <View style={chatChrome.scopeSegment}>
+                    {(["all", "has_due", "no_due"] as const).map((f) => {
+                      const active = entityFilter === f;
+                      return (
+                        <TouchableOpacity
+                          key={f}
+                          style={[
+                            chatChrome.scopePill,
+                            active && chatChrome.scopePillActive,
+                          ]}
+                          onPress={() => onEntityFilterChange(f)}
+                          activeOpacity={0.82}
+                          accessibilityRole="tab"
+                          accessibilityState={{ selected: active }}
+                        >
+                          <Text
+                            style={[
+                              chatChrome.scopePillText,
+                              active && chatChrome.scopePillTextActive,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {effectiveEntityFilterLabels[f]}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                ) : null}
+
+                {onEntityFilterChange == null ? periodAndSourceFilters : null}
+
+                {isAnyFilterActive ? (
                   <TouchableOpacity
-                    onPress={() => onSearchChange('')}
-                    style={styles.searchClearIcon}
-                  >
-                    <FontAwesome
-                      name="times-circle"
-                      size={14}
-                      color={isLightToolbar ? Theme.textSecondary : Theme.textOnDarkMuted}
-                    />
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {onEntityFilterChange != null && (
-                <View style={styles.networkEntityChipsWrap}>
-                  {(['all', 'has_due', 'no_due'] as const).map((f) => (
-                    <TouchableOpacity
-                      key={f}
-                      style={[
-                        styles.networkTypeChip,
-                        entityFilter === f && styles.networkTypeChipActive,
-                      ]}
-                      onPress={() => onEntityFilterChange(f)}
-                      activeOpacity={0.8}
-                    >
-                      <Text
-                        style={[
-                          styles.networkTypeChipText,
-                          entityFilter === f && styles.networkTypeChipTextActive,
-                        ]}
-                      >
-                        {effectiveEntityFilterLabels[f]}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-
-              {/* When no entity filter (Cash tab), show period/source filters in-line like Network chips */}
-              {onEntityFilterChange == null && periodAndSourceFilters}
-
-              {isAnyFilterActive && (
-                <TouchableOpacity
-                  onPress={onClearFilters}
-                  activeOpacity={0.7}
-                  style={[
-                    styles.clearFiltersBtn,
-                    isLightToolbar && styles.clearFiltersBtnLight,
-                  ]}
-                >
-                  <FontAwesome
-                    name="times"
-                    size={10}
-                    color={isLightToolbar ? Theme.textPrimary : Theme.textOnDark}
-                  />
-                  <Text
+                    onPress={onClearFilters}
+                    activeOpacity={0.7}
                     style={[
-                      styles.clearFiltersText,
-                      isLightToolbar && styles.clearFiltersTextLight,
+                      chatChrome.scopePill,
+                      styles.clearFiltersBtnChat,
                     ]}
                   >
-                    Clear
-                  </Text>
-                </TouchableOpacity>
-              )}
+                    <FontAwesome name="times" size={10} color={CHAT_FILTER_MUTED} />
+                  </TouchableOpacity>
+                ) : null}
 
-              {filterRowRight != null && (
-                <View style={styles.filterRowRight}>{filterRowRight}</View>
-              )}
+                {filterRowRight != null ? (
+                  <View style={styles.filterRowRight}>{filterRowRight}</View>
+                ) : null}
+              </View>
             </View>
 
-            {onEntityFilterChange != null && periodAndSourceFilters}
+            {onEntityFilterChange != null ? periodAndSourceFilters : null}
           </View>
 
           {!hideReportInToolbar && (
@@ -1694,6 +1681,11 @@ const styles = StyleSheet.create({
   },
   inlineSourceChipTextActiveLight: {
     color: Theme.textPrimary,
+  },
+  clearFiltersBtnChat: {
+    minWidth: 34,
+    maxWidth: 34,
+    paddingHorizontal: 0,
   },
   filterModalOverlay: {
     flex: 1,

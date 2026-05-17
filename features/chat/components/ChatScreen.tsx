@@ -1,6 +1,8 @@
 import { PartyAvatar } from "@/components/PartyAvatar";
 import { LoadingIndicator } from "@/components/LoadingIndicator";
+import { chatFilterChromeStyles } from "@/constants/ChatFilterChrome";
 import Theme from "@/constants/Theme";
+import { ROUTES } from "@/lib/routes";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { CHAT_ACCENT, CHAT_ACCENT_BORDER, CHAT_ACCENT_SOFT, CHAT_ICON_MUTED } from "@/features/chat/chatTheme";
@@ -92,6 +94,8 @@ import {
   Animated,
   Easing,
   FlatList,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   ScrollView,
@@ -113,7 +117,7 @@ import { isMessageVisibleInTab } from "../types/chat.types";
 import { commandPriorityScore } from "../utils/commandPriority.util";
 import { tripFeedbackRequestMatchesConversation } from "../utils/feedbackRequestMeta";
 import { ledgerEventInvolvesOrg } from "../utils/ledgerVisibility.util";
-import { parseSystemLogLocationData } from "../utils/locationLogPayload.util";
+import { parseMessageLocationData } from "../utils/locationLogPayload.util";
 import {
   indentAllowsInChatFeedbackDebrief,
   tripMessageHistoryHasCompletedStatus,
@@ -708,8 +712,8 @@ export function ChatScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
-  /** Trip hub cards (alerts + party row): desktop always; all web viewports so mobile browser matches. */
-  const useGroupedTripHub = isDesktop || Platform.OS === "web";
+  /** Trip hub cards (alerts + party row) on every viewport — one list UX for native + web. */
+  const useGroupedTripHub = true;
   const allowNewTripConversation = false;
   /** Web: anchored compose/search UX from tablet width up (avoids sheet on iPad / large phones in browser). */
   const isWebAnchoredPanels = Platform.OS === "web" && (isDesktop || width >= 900);
@@ -754,6 +758,7 @@ export function ChatScreen() {
   const activeTripsForCommandPriority = useGlobalSyncStore((s) => s.activeTrips);
   const [visibleTripCount, setVisibleTripCount] = useState(10);
   const [tripSidebarSearch, setTripSidebarSearch] = useState("");
+  const [hubSearchOpen, setHubSearchOpen] = useState(false);
   const [showTripFilterModal, setShowTripFilterModal] = useState(false);
   const detailEnterProgress = useRef(new Animated.Value(1)).current;
   const [tripPartyFilters, setTripPartyFilters] = useState<ConversationPartyType[]>([
@@ -1076,6 +1081,10 @@ export function ChatScreen() {
   useEffect(() => {
     setVisibleTripCount(10);
   }, [tripChatScope, activeTab]);
+
+  useEffect(() => {
+    if (tripSidebarSearch.trim().length > 0) setHubSearchOpen(true);
+  }, [tripSidebarSearch]);
 
   useEffect(() => {
     if (tripChatScope !== "history" || !organizationId || !bootstrapDone) return;
@@ -1600,20 +1609,48 @@ export function ChatScreen() {
     return (
       <View style={s.listPanel}>
         <View style={s.listHeader}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
             <TouchableOpacity
-              onPress={() => router.canGoBack() ? router.back() : router.replace("/(tabs)")}
+              onPress={() =>
+                router.canGoBack() ? router.back() : router.replace(ROUTES.TABS.TRIPS)
+              }
               hitSlop={10}
               style={s.backBtn}
             >
               <ArrowLeft size={18} color="#fff" />
             </TouchableOpacity>
-            <Text style={s.brandTitle}>
+            <Text style={s.brandTitle} numberOfLines={1}>
               pulse chat
               <Text style={s.brandDot}>.</Text>
             </Text>
           </View>
-          <View />
+          {!isDesktop && isTripStreamTab(activeTab) ? (
+            <TouchableOpacity
+              onPress={() => {
+                if (hubSearchOpen) {
+                  setHubSearchOpen(false);
+                  setTripSidebarSearch("");
+                } else {
+                  setHubSearchOpen(true);
+                }
+              }}
+              hitSlop={10}
+              style={[
+                s.headerSearchBtn,
+                (hubSearchOpen || tripSidebarSearch.length > 0) && s.headerSearchBtnActive,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={hubSearchOpen ? "Close search" : "Search trips"}
+            >
+              {hubSearchOpen ? (
+                <X size={16} color="#fff" />
+              ) : (
+                <Search size={16} color="#94a3b8" />
+              )}
+            </TouchableOpacity>
+          ) : (
+            <View />
+          )}
         </View>
 
         <View style={s.tabRow}>
@@ -1648,85 +1685,148 @@ export function ChatScreen() {
           })}
         </View>
 
-        {isTripStreamTab(activeTab) && (
-          <View style={s.tripSearchScopeStrip}>
-            <View style={s.tripSearchScopeSearchWrap}>
-              <Search size={12} color="#94a3b8" style={{ marginRight: 5 }} />
-              <TextInput
-                style={s.sidebarSearchInput}
-                value={tripSidebarSearch}
-                onChangeText={setTripSidebarSearch}
-                placeholder="Search trip, route…"
-                placeholderTextColor="#94a3b8"
-                autoCapitalize="none"
-              />
-              {tripSidebarSearch.length > 0 && (
-                <TouchableOpacity onPress={() => setTripSidebarSearch("")} hitSlop={8}>
-                  <X size={12} color="#94a3b8" />
-                </TouchableOpacity>
-              )}
-            </View>
-            <View style={s.tripSearchScopeSegment}>
-              <TouchableOpacity
-                style={[
-                  s.tripChatScopePillStrip,
-                  tripChatScope === "active" && s.tripChatScopePillOn,
-                ]}
-                onPress={() => setTripChatScope("active")}
-                activeOpacity={0.82}
-              >
-                <Text
-                  style={[
-                    s.tripChatScopePillTextStrip,
-                    tripChatScope === "active" && s.tripChatScopePillTextOn,
-                  ]}
-                  numberOfLines={1}
-                >
-                  Active
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  s.tripChatScopePillStrip,
-                  tripChatScope === "history" && s.tripChatScopePillOn,
-                ]}
-                onPress={() => setTripChatScope("history")}
-                activeOpacity={0.82}
-              >
-                <Text
-                  style={[
-                    s.tripChatScopePillTextStrip,
-                    tripChatScope === "history" && s.tripChatScopePillTextOn,
-                  ]}
-                  numberOfLines={1}
-                >
-                  History
-                </Text>
-              </TouchableOpacity>
-              {Platform.OS === "web" && isDesktop ? (
+        {isTripStreamTab(activeTab) &&
+          (isDesktop ? (
+            <View style={s.tripSearchScopeStrip}>
+              <View style={s.tripSearchScopeSearchWrap}>
+                <Search size={12} color="#94a3b8" style={{ marginRight: 5 }} />
+                <TextInput
+                  style={s.sidebarSearchInput}
+                  value={tripSidebarSearch}
+                  onChangeText={setTripSidebarSearch}
+                  placeholder="Search trip, route…"
+                  placeholderTextColor="#94a3b8"
+                  autoCapitalize="none"
+                />
+                {tripSidebarSearch.length > 0 && (
+                  <TouchableOpacity onPress={() => setTripSidebarSearch("")} hitSlop={8}>
+                    <X size={12} color="#94a3b8" />
+                  </TouchableOpacity>
+                )}
+              </View>
+              <View style={s.tripSearchScopeSegment}>
                 <TouchableOpacity
                   style={[
                     s.tripChatScopePillStrip,
-                    webCommandPriorityFilter && s.tripChatScopePillOn,
-                    { marginLeft: 8 },
+                    tripChatScope === "active" && s.tripChatScopePillOn,
                   ]}
-                  onPress={() => setWebCommandPriorityFilter((v) => !v)}
+                  onPress={() => setTripChatScope("active")}
                   activeOpacity={0.82}
                 >
                   <Text
                     style={[
                       s.tripChatScopePillTextStrip,
-                      webCommandPriorityFilter && s.tripChatScopePillTextOn,
+                      tripChatScope === "active" && s.tripChatScopePillTextOn,
                     ]}
                     numberOfLines={1}
                   >
-                    Priority
+                    Active
                   </Text>
                 </TouchableOpacity>
-              ) : null}
+                <TouchableOpacity
+                  style={[
+                    s.tripChatScopePillStrip,
+                    tripChatScope === "history" && s.tripChatScopePillOn,
+                  ]}
+                  onPress={() => setTripChatScope("history")}
+                  activeOpacity={0.82}
+                >
+                  <Text
+                    style={[
+                      s.tripChatScopePillTextStrip,
+                      tripChatScope === "history" && s.tripChatScopePillTextOn,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    History
+                  </Text>
+                </TouchableOpacity>
+                {Platform.OS === "web" ? (
+                  <TouchableOpacity
+                    style={[
+                      s.tripChatScopePillStrip,
+                      webCommandPriorityFilter && s.tripChatScopePillOn,
+                      { marginLeft: 8 },
+                    ]}
+                    onPress={() => setWebCommandPriorityFilter((v) => !v)}
+                    activeOpacity={0.82}
+                  >
+                    <Text
+                      style={[
+                        s.tripChatScopePillTextStrip,
+                        webCommandPriorityFilter && s.tripChatScopePillTextOn,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      Priority
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
             </View>
-          </View>
-        )}
+          ) : (
+            <View style={s.tripSearchScopeBlock}>
+              {hubSearchOpen ? (
+                <View style={[chatFilterChromeStyles.searchWrap, s.tripSearchScopeSearchMobile]}>
+                  <Search size={12} color="#94a3b8" style={{ marginRight: 5 }} />
+                  <TextInput
+                    style={chatFilterChromeStyles.searchInput}
+                    value={tripSidebarSearch}
+                    onChangeText={setTripSidebarSearch}
+                    placeholder="Search trip, route…"
+                    placeholderTextColor="#94a3b8"
+                    autoCapitalize="none"
+                    autoFocus
+                  />
+                  {tripSidebarSearch.length > 0 && (
+                    <TouchableOpacity onPress={() => setTripSidebarSearch("")} hitSlop={8}>
+                      <X size={12} color="#94a3b8" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ) : null}
+              <View style={s.tripSearchScopeStripMobile}>
+                <TouchableOpacity
+                  style={[
+                    s.tripChatScopePillStrip,
+                    s.tripChatScopePillStripMobile,
+                    tripChatScope === "active" && s.tripChatScopePillOn,
+                  ]}
+                  onPress={() => setTripChatScope("active")}
+                  activeOpacity={0.82}
+                >
+                  <Text
+                    style={[
+                      s.tripChatScopePillTextStrip,
+                      tripChatScope === "active" && s.tripChatScopePillTextOn,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    Active
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    s.tripChatScopePillStrip,
+                    s.tripChatScopePillStripMobile,
+                    tripChatScope === "history" && s.tripChatScopePillOn,
+                  ]}
+                  onPress={() => setTripChatScope("history")}
+                  activeOpacity={0.82}
+                >
+                  <Text
+                    style={[
+                      s.tripChatScopePillTextStrip,
+                      tripChatScope === "history" && s.tripChatScopePillTextOn,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    History
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))}
 
         {isTripStreamTab(activeTab) && isWebAnchoredPanels && showCompose && (
           <View style={s.composePopoverLayer} pointerEvents="box-none">
@@ -1799,7 +1899,7 @@ export function ChatScreen() {
               contentContainerStyle={s.tripHubScrollContent}
               showsVerticalScrollIndicator={false}
               scrollEventThrottle={16}
-              onScroll={Platform.OS === "web" && !isDesktop ? onTripStreamListScroll : undefined}
+              onScroll={!isDesktop ? onTripStreamListScroll : undefined}
             >
               {groupedTripRows.length === 0 ? (
                 <EmptyList
@@ -2555,13 +2655,22 @@ export function ChatScreen() {
       locations={[0, 0.45, 1]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
-      style={[s.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}
+      style={[
+        s.root,
+        {
+          paddingTop: insets.top,
+          paddingBottom: isMobileDetail ? 0 : insets.bottom,
+        },
+      ]}
     >
       <View style={s.mobileRootFill}>
         {!isMobileDetail ? (
           ChatList()
         ) : (
-          <Animated.View style={[s.detailTransitionShell, detailEnterStyle]}>
+          <Animated.View
+            style={[s.detailTransitionShell, detailEnterStyle]}
+            collapsable={false}
+          >
             {detailPanel}
           </Animated.View>
         )}
@@ -3017,6 +3126,35 @@ const s = StyleSheet.create({
     letterSpacing: -0.4,
     fontStyle: "italic",
   },
+  headerSearchBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  headerSearchBtnActive: {
+    backgroundColor: "rgba(255,255,255,0.2)",
+  },
+  tripSearchScopeBlock: {
+    marginHorizontal: 18,
+    marginBottom: 12,
+    gap: 8,
+  },
+  tripSearchScopeSearchMobile: {
+    width: "100%",
+  },
+  tripSearchScopeStripMobile: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 8,
+    width: "100%",
+  },
+  tripChatScopePillStripMobile: {
+    flex: 1,
+    minWidth: 0,
+  },
   /** Single row: search (flex) + Active / History — inset matches tabRow padding so edges line up. */
   tripSearchScopeStrip: {
     flexDirection: "row",
@@ -3396,11 +3534,16 @@ const s = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: "#eef2f7",
     backgroundColor: "#ffffff",
+    flexShrink: 0,
+  },
+  detailHeaderMobile: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   detailIconWrap: {
     flexDirection: "row",
@@ -3413,7 +3556,14 @@ const s = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: "#0f172a",
   },
-  detailTitle: { fontSize: 15, fontWeight: "900", color: "#0f172a", letterSpacing: -0.2, fontStyle: "italic" },
+  detailTitle: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#0f172a",
+    letterSpacing: -0.2,
+    fontStyle: "italic",
+  },
+  detailTitleMobile: { fontSize: 14 },
   /** Party / org subtitle under trip title — matches ledger `tableCellParty` (light italic, not bold). */
   detailPartySubtitle: {
     marginTop: 2,
@@ -3431,8 +3581,16 @@ const s = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     backgroundColor: "#fdfefe",
-    borderBottomWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: "#eef2f7",
+    flexShrink: 0,
+  },
+  detailMissionBarMobile: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   detailMissionRoute: {
     flexDirection: "row",
@@ -3477,6 +3635,11 @@ const s = StyleSheet.create({
     flexGrow: 0,
     maxWidth: "58%",
     minHeight: 44,
+  },
+  detailMissionTabsScrollerMobile: {
+    maxWidth: "100%",
+    width: "100%",
+    minHeight: 40,
   },
   detailMissionUnread: {
     paddingHorizontal: 8,
@@ -3604,9 +3767,16 @@ const s = StyleSheet.create({
   },
 
   detailPanel: { flex: 1, minHeight: 0, backgroundColor: "transparent" },
-  detailTransitionShell: { flex: 1, minHeight: 0 },
+  detailTransitionShell: { flex: 1, minHeight: 0, width: "100%" },
+  chatMessagesFlex: { flex: 1, minHeight: 0 },
+  chatInputDock: {
+    flexShrink: 0,
+    backgroundColor: "#fff",
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#e2e8f0",
+  },
   msgs: { flex: 1, backgroundColor: "transparent" },
-  msgsContent: { padding: 18, gap: 14, paddingBottom: 24 },
+  msgsContent: { paddingHorizontal: 14, paddingTop: 12, gap: 10, paddingBottom: 12 },
 
   sysMsg: {
     alignSelf: "center",
@@ -3658,20 +3828,15 @@ const s = StyleSheet.create({
   inputWrap: {
     position: "relative",
     backgroundColor: "#fff",
-    borderTopWidth: 0,
-    shadowColor: "#0f172a",
-    shadowOpacity: 0.06,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: -4 },
-    elevation: 8,
   },
   inputRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     gap: 6,
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 4,
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: 6,
+    minHeight: 48,
   },
   plusBtn: {
     width: 36,
@@ -3685,16 +3850,21 @@ const s = StyleSheet.create({
   },
   input: {
     flex: 1,
-    backgroundColor: "#f8fafc",
-    borderRadius: 999,
+    minWidth: 0,
+    backgroundColor: "#f1f5f9",
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: "#eef2f7",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: "#1e293b",
-    maxHeight: 96,
+    borderColor: "#e2e8f0",
+    paddingHorizontal: 14,
+    paddingTop: Platform.OS === "ios" ? 10 : 8,
+    paddingBottom: Platform.OS === "ios" ? 10 : 8,
+    fontSize: 15,
+    lineHeight: 20,
+    color: "#0f172a",
+    maxHeight: 120,
+    minHeight: 40,
   },
+  inputWeb: Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : {},
   iconBtn: {
     width: 34,
     height: 34,
@@ -3728,7 +3898,7 @@ const s = StyleSheet.create({
     elevation: 3,
   },
 
-  chipRow: { paddingHorizontal: 14, paddingBottom: 12, paddingTop: 4, gap: 8 },
+  chipRow: { paddingHorizontal: 10, paddingBottom: 8, paddingTop: 2, gap: 6 },
   chip: {
     paddingHorizontal: 13,
     paddingVertical: 7,
@@ -4090,6 +4260,48 @@ const cm = StyleSheet.create({
 
 // ── Conversation detail (module scope: stable component identity so TextInput keeps focus) ─
 
+function ChatConversationLayout({
+  isDesktop,
+  header,
+  messages,
+  inputBar,
+}: {
+  isDesktop: boolean;
+  header: React.ReactNode;
+  messages: React.ReactNode;
+  inputBar: React.ReactNode;
+}) {
+  const insets = useSafeAreaInsets();
+  const body = (
+    <>
+      {header}
+      <View style={s.chatMessagesFlex}>{messages}</View>
+      <View
+        style={[
+          s.chatInputDock,
+          { paddingBottom: isDesktop ? 10 : Math.max(insets.bottom, 6) },
+        ]}
+      >
+        {inputBar}
+      </View>
+    </>
+  );
+
+  if (isDesktop) {
+    return <View style={s.detailPanel}>{body}</View>;
+  }
+
+  return (
+    <KeyboardAvoidingView
+      style={s.detailPanel}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 2 : 0}
+    >
+      {body}
+    </KeyboardAvoidingView>
+  );
+}
+
 function ChatDetailHeader({
   title,
   subtitle,
@@ -4108,9 +4320,9 @@ function ChatDetailHeader({
 }) {
   const dualLane = Boolean(partyType && counterpartyType);
   return (
-    <View style={s.detailHeader}>
+    <View style={[s.detailHeader, !isDesktop && s.detailHeaderMobile]}>
       {!isDesktop && (
-        <TouchableOpacity onPress={onCloseDetail} hitSlop={10} style={{ marginRight: 8 }}>
+        <TouchableOpacity onPress={onCloseDetail} hitSlop={10} style={{ marginRight: 6 }}>
           <ArrowLeft size={20} color="#0f172a" />
         </TouchableOpacity>
       )}
@@ -4127,7 +4339,10 @@ function ChatDetailHeader({
         )}
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={s.detailTitle} numberOfLines={1}>
+        <Text
+          style={[s.detailTitle, !isDesktop && s.detailTitleMobile]}
+          numberOfLines={1}
+        >
           {title}
         </Text>
         {subtitle ? (
@@ -4277,6 +4492,8 @@ function ChatInputBar({
   onSend,
   onOpenDocShare,
   inputOverlayMaxWidth,
+  compact,
+  minimalChrome,
 }: {
   quickMsgs: string[];
   messageInput: string;
@@ -4289,6 +4506,10 @@ function ChatInputBar({
   onOpenDocShare?: () => void;
   /** Caps emoji / quick-message popovers on narrow viewports (mobile web). */
   inputOverlayMaxWidth?: number;
+  /** Hide quick chips when the keyboard is open (mobile). */
+  compact?: boolean;
+  /** Mobile: hide emoji/scripts row buttons (WhatsApp-style composer). */
+  minimalChrome?: boolean;
 }) {
   const overlayW = inputOverlayMaxWidth ?? 300;
   const canSend = messageInput.trim().length > 0;
@@ -4302,6 +4523,11 @@ function ChatInputBar({
       bounciness: 6,
     }).start();
   }, [canSend, sendScale]);
+
+  const submitMessage = useCallback(() => {
+    if (!messageInput.trim()) return;
+    onSend();
+  }, [messageInput, onSend]);
 
   return (
     <View style={s.inputWrap}>
@@ -4359,33 +4585,46 @@ function ChatInputBar({
           <Plus size={16} color={onOpenDocShare ? CHAT_ACCENT : "#94a3b8"} />
         </TouchableOpacity>
         <TextInput
-          style={s.input}
+          style={[s.input, s.inputWeb]}
           value={messageInput}
           onChangeText={onChangeMessage}
-          placeholder="Type a message…"
-          placeholderTextColor="#b0b8c8"
+          placeholder="Message"
+          placeholderTextColor="#94a3b8"
           multiline
+          editable
+          scrollEnabled
+          blurOnSubmit={false}
+          returnKeyType="send"
+          enablesReturnKeyAutomatically
+          onSubmitEditing={submitMessage}
+          textAlignVertical="center"
+          autoCorrect
+          autoCapitalize="sentences"
         />
-        <TouchableOpacity
-          style={s.iconBtn}
-          onPress={() => {
-            setShowEmoji((v) => !v);
-            setShowScripts(false);
-          }}
-          hitSlop={6}
-        >
-          <Smile size={19} color={showEmoji ? CHAT_ACCENT : "#94a3b8"} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={s.iconBtn}
-          onPress={() => {
-            setShowScripts((v) => !v);
-            setShowEmoji(false);
-          }}
-          hitSlop={6}
-        >
-          <FileType size={19} color={showScripts ? CHAT_ACCENT : "#94a3b8"} />
-        </TouchableOpacity>
+        {!minimalChrome ? (
+          <TouchableOpacity
+            style={s.iconBtn}
+            onPress={() => {
+              setShowEmoji((v) => !v);
+              setShowScripts(false);
+            }}
+            hitSlop={6}
+          >
+            <Smile size={19} color={showEmoji ? CHAT_ACCENT : "#94a3b8"} />
+          </TouchableOpacity>
+        ) : null}
+        {!minimalChrome ? (
+          <TouchableOpacity
+            style={s.iconBtn}
+            onPress={() => {
+              setShowScripts((v) => !v);
+              setShowEmoji(false);
+            }}
+            hitSlop={6}
+          >
+            <FileType size={19} color={showScripts ? CHAT_ACCENT : "#94a3b8"} />
+          </TouchableOpacity>
+        ) : null}
         <Animated.View style={{ transform: [{ scale: sendScale }] }}>
           <TouchableOpacity
             style={[s.sendBtn, !canSend && s.sendBtnOff]}
@@ -4415,25 +4654,28 @@ function ChatInputBar({
           </TouchableOpacity>
         </Animated.View>
       </View>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={{ flexShrink: 0 }}
-        contentContainerStyle={s.chipRow}
-      >
-        {quickMsgs.map((m, i) => (
-          <TouchableOpacity
-            key={i}
-            style={s.chip}
-            onPress={() => onChangeMessage(m)}
-            activeOpacity={0.7}
-          >
-            <Text style={s.chipText} numberOfLines={1}>
-              {m}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      {!compact ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          style={{ flexShrink: 0 }}
+          contentContainerStyle={s.chipRow}
+        >
+          {quickMsgs.map((m, i) => (
+            <TouchableOpacity
+              key={i}
+              style={s.chip}
+              onPress={() => onChangeMessage(m)}
+              activeOpacity={0.7}
+            >
+              <Text style={s.chipText} numberOfLines={1}>
+                {m}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      ) : null}
     </View>
   );
 }
@@ -4763,22 +5005,9 @@ function TripConversationDetailLoaded({
       liveConv.conversation_type,
     ],
   );
-  /** Manual / private employer–driver trips: debrief on client or supplier lane only (not driver). */
-  const manualPrivateEmployerLane = useMemo(
-    () =>
-      (liveTripEntry?.chatFlow === "private_trip" ||
-        (!hasTripIndent && liveConv.conversation_type !== "integrated_group")) &&
-      (liveConv.party_type === "client" || liveConv.party_type === "supplier"),
-    [
-      liveTripEntry?.chatFlow,
-      hasTripIndent,
-      liveConv.conversation_type,
-      liveConv.party_type,
-    ],
-  );
   const allowLedgerActions = allowFinancialCards && integratedIndentCommercialLane;
   const showFeedbackCardOnEligibleLane =
-    integratedIndentCommercialLane || manualPrivateEmployerLane;
+    liveConv.party_type === "client" || liveConv.party_type === "supplier";
 
   // Snapshot messages in a ref — avoids adding to ratings effect deps.
   const liveMessagesRef = useRef(liveConv.messages);
@@ -5134,11 +5363,13 @@ function TripConversationDetailLoaded({
     // Ledger events only appear in Client/Supplier tabs; tracking in Driver tab.
     if (!isMessageVisibleInTab(m.message_type, liveConv.party_type)) return null;
 
-    if (
-      m.message_type === "status_change" ||
-      m.message_type === "image" ||
-      m.message_type === "tracking"
-    ) {
+    if (m.message_type === "tracking") {
+      const trackLoc = parseMessageLocationData(m);
+      if (trackLoc) {
+        return <LocationEventCard message={m} location={trackLoc} />;
+      }
+    }
+    if (m.message_type === "status_change" || m.message_type === "image") {
       return (
         <SystemEventCard
           message={m}
@@ -5168,7 +5399,7 @@ function TripConversationDetailLoaded({
           />
         );
       }
-      const locData = parseSystemLogLocationData(m);
+      const locData = parseMessageLocationData(m);
       if (locData) {
         return <LocationEventCard message={m} location={locData} />;
       }
@@ -5198,11 +5429,22 @@ function TripConversationDetailLoaded({
     }
     if (m.message_type === "feedback_request" || m.message_type === "feedback") {
       if (viewerIsDriver) return null;
-      if (!tripFeedbackRequestMatchesConversation(m, liveConv)) return null;
-      const completionKnownInLane = tripMessageHistoryHasCompletedStatus(liveConv.messages);
-      if (!completionKnownInLane && !tripEligibleForFeedback) return null;
       if (!showFeedbackCardOnEligibleLane) return null;
-      if (!indentAllowsInChatFeedbackDebrief(liveConv)) return null;
+      if (
+        !tripFeedbackRequestMatchesConversation(m, liveConv, {
+          client_id: clientId,
+          supplier_id: supplierId,
+          driver_id: driverId,
+        })
+      ) {
+        return null;
+      }
+      const completionKnownInLane =
+        tripEligibleForFeedback ||
+        tripMessageHistoryHasCompletedStatus(liveConv.messages) ||
+        tripMessageHistoryHasCompletedStatus(displayMessages);
+      if (!completionKnownInLane) return null;
+      if (!indentAllowsInChatFeedbackDebrief(liveConv, tripEligibleForFeedback)) return null;
       return (
         <ChatFeedbackCard
           message={m}
@@ -5254,6 +5496,10 @@ function TripConversationDetailLoaded({
     longHaulLiveEta,
     longHaulLiveHealth,
     primaryLateMessageId,
+    displayMessages,
+    clientId,
+    supplierId,
+    driverId,
   ]);
 
   const indentShipperDisplayName = useMemo(() => {
@@ -5300,17 +5546,30 @@ function TripConversationDetailLoaded({
     currentOrgId,
     liveConv.party_type,
   );
-  return (
-    <View style={s.detailPanel}>
-      <ChatDetailHeader
-        title={`${liveConv.trip_number} · ${viewerRelativeConvPartyLabel}`}
-        subtitle={chatDetailSubtitle}
-        partyType={liveConv.party_type}
-        counterpartyType={headerCounterparty}
-        isDesktop={isDesktop}
-        onCloseDetail={onCloseDetail}
-      />
-      <View style={s.detailMissionBar}>
+
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  useEffect(() => {
+    if (isDesktop) return;
+    const showEvt =
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvt =
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSub = Keyboard.addListener(showEvt, () => {
+      setKeyboardOpen(true);
+      setTimeout(
+        () => messagesRef.current?.scrollToEnd({ animated: true }),
+        Platform.OS === "ios" ? 80 : 120,
+      );
+    });
+    const hideSub = Keyboard.addListener(hideEvt, () => setKeyboardOpen(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [isDesktop, messagesRef]);
+
+  const missionBar = (
+      <View style={[s.detailMissionBar, !isDesktop && s.detailMissionBarMobile]}>
         <View style={s.detailMissionRoute}>
           <MapPin size={13} color={CHAT_ACCENT} />
           <View style={s.detailMissionRouteTextBlock}>
@@ -5341,7 +5600,10 @@ function TripConversationDetailLoaded({
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            style={s.detailMissionTabsScroller}
+            style={[
+              s.detailMissionTabsScroller,
+              !isDesktop && s.detailMissionTabsScrollerMobile,
+            ]}
             contentContainerStyle={s.detailPartyTabs}
           >
             {missionBarPartyTypes.map((tab) => {
@@ -5396,6 +5658,25 @@ function TripConversationDetailLoaded({
           </ScrollView>
         ) : null}
       </View>
+  );
+
+  return (
+    <ChatConversationLayout
+      isDesktop={isDesktop}
+      header={
+        <>
+          <ChatDetailHeader
+            title={`${liveConv.trip_number} · ${viewerRelativeConvPartyLabel}`}
+            subtitle={chatDetailSubtitle}
+            partyType={liveConv.party_type}
+            counterpartyType={headerCounterparty}
+            isDesktop={isDesktop}
+            onCloseDetail={onCloseDetail}
+          />
+          {missionBar}
+        </>
+      }
+      messages={
       <FlatList
         ref={messagesRef}
         style={s.msgs}
@@ -5408,6 +5689,8 @@ function TripConversationDetailLoaded({
         removeClippedSubviews={Platform.OS === "android"}
         windowSize={9}
         maxToRenderPerBatch={12}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
         onViewableItemsChanged={stableOnViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
         onContentSizeChange={onMessagesContentSizeChange}
@@ -5479,19 +5762,24 @@ function TripConversationDetailLoaded({
           </>
         }
       />
-      <ChatInputBar
-        quickMsgs={quickMsgs}
-        messageInput={messageInput}
-        onChangeMessage={setMessageInput}
-        showEmoji={showEmoji}
-        setShowEmoji={setShowEmoji}
-        showScripts={showScripts}
-        setShowScripts={setShowScripts}
-        onSend={onSend}
-        onOpenDocShare={onOpenDocShare}
-        inputOverlayMaxWidth={inputOverlayMaxWidth}
-      />
-    </View>
+      }
+      inputBar={
+        <ChatInputBar
+          quickMsgs={quickMsgs}
+          messageInput={messageInput}
+          onChangeMessage={setMessageInput}
+          showEmoji={showEmoji}
+          setShowEmoji={setShowEmoji}
+          showScripts={showScripts}
+          setShowScripts={setShowScripts}
+          onSend={onSend}
+          onOpenDocShare={onOpenDocShare}
+          inputOverlayMaxWidth={inputOverlayMaxWidth}
+          compact={keyboardOpen}
+          minimalChrome={!isDesktop}
+        />
+      }
+    />
   );
 }
 
@@ -5522,43 +5810,69 @@ function NetworkDetailPanel({
   inputOverlayMaxWidth: number;
   onCloseDetail: () => void;
 }) {
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  useEffect(() => {
+    if (isDesktop) return;
+    const showEvt =
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvt =
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSub = Keyboard.addListener(showEvt, () => setKeyboardOpen(true));
+    const hideSub = Keyboard.addListener(hideEvt, () => setKeyboardOpen(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [isDesktop]);
+
   if (!selectedNet) return <EmptyDetail />;
   return (
-    <View style={s.detailPanel}>
-      <ChatDetailHeader
-        title={selectedNet.partnerName}
-        subtitle={formatChatPartyName(selectedNet.organization) ?? undefined}
-        isDesktop={isDesktop}
-        onCloseDetail={onCloseDetail}
-      />
-      <FlatList
-        ref={messagesRef}
-        style={s.msgs}
-        contentContainerStyle={s.msgsContent}
-        data={selectedNet.messages}
-        keyExtractor={(m) => m.id}
-        renderItem={({ item: m }) => (
-          <ChatBubble
-            isOwn={m.senderId === "dispatcher-1"}
-            content={m.content}
-            timestamp={m.timestamp}
-            senderName={m.senderId !== "dispatcher-1" ? selectedNet.partnerName : undefined}
-          />
-        )}
-        ListHeaderComponent={<ChatSystemMsg label="SECURE CHANNEL · TODAY" />}
-        onContentSizeChange={() => messagesRef.current?.scrollToEnd({ animated: false })}
-      />
-      <ChatInputBar
-        quickMsgs={INTEGRATED_QUICK_MESSAGES}
-        messageInput={messageInput}
-        onChangeMessage={setMessageInput}
-        showEmoji={showEmoji}
-        setShowEmoji={setShowEmoji}
-        showScripts={showScripts}
-        setShowScripts={setShowScripts}
-        onSend={onSend}
-        inputOverlayMaxWidth={inputOverlayMaxWidth}
-      />
-    </View>
+    <ChatConversationLayout
+      isDesktop={isDesktop}
+      header={
+        <ChatDetailHeader
+          title={selectedNet.partnerName}
+          subtitle={formatChatPartyName(selectedNet.organization) ?? undefined}
+          isDesktop={isDesktop}
+          onCloseDetail={onCloseDetail}
+        />
+      }
+      messages={
+        <FlatList
+          ref={messagesRef}
+          style={s.msgs}
+          contentContainerStyle={s.msgsContent}
+          data={selectedNet.messages}
+          keyExtractor={(m) => m.id}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+          renderItem={({ item: m }) => (
+            <ChatBubble
+              isOwn={m.senderId === "dispatcher-1"}
+              content={m.content}
+              timestamp={m.timestamp}
+              senderName={m.senderId !== "dispatcher-1" ? selectedNet.partnerName : undefined}
+            />
+          )}
+          ListHeaderComponent={<ChatSystemMsg label="SECURE CHANNEL · TODAY" />}
+          onContentSizeChange={() => messagesRef.current?.scrollToEnd({ animated: false })}
+        />
+      }
+      inputBar={
+        <ChatInputBar
+          quickMsgs={INTEGRATED_QUICK_MESSAGES}
+          messageInput={messageInput}
+          onChangeMessage={setMessageInput}
+          showEmoji={showEmoji}
+          setShowEmoji={setShowEmoji}
+          showScripts={showScripts}
+          setShowScripts={setShowScripts}
+          onSend={onSend}
+          inputOverlayMaxWidth={inputOverlayMaxWidth}
+          compact={keyboardOpen}
+          minimalChrome={!isDesktop}
+        />
+      }
+    />
   );
 }
