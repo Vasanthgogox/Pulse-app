@@ -2,6 +2,8 @@
  * Network tab — Allies hub (stories, connections, discover) and embedded Load center.
  * Full-width layout; top bar switches Network ↔ Load (no left sidebar on web).
  */
+import { HomePageHeader } from "@/components/HomePageHeader";
+import { InboundProtocolPanel } from "@/components/InboundProtocolPanel";
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -13,28 +15,17 @@ import {
   type ConnectionFilterTab,
 } from "@/features/network/components/ConnectionsView";
 import { DiscoverView } from "@/features/network/components/DiscoverView";
+import { NetworkLoadsQuickCards } from "@/features/network/components/NetworkLoadsQuickCards";
 import { NetworkTabErrorBoundary } from "@/components/network/NetworkTabErrorBoundary";
 import { StoryReel } from "@/features/network/components/StoryReel";
 import { isPostVisibleForOrg, type PostRow } from "@/features/network/services/posts.service";
 import {
-  cancelDriverInvite,
-  type DriverInviteSentRow,
-} from "@/features/drivers/services/drivers.service";
-import {
-  approveConnectionRequest,
-  cancelConnectionRequest,
   createConnectionRequest,
   looksLikeConnectionRateLimitError,
-  rejectConnectionRequest,
-  type ConnectionRequestRow,
 } from "@/services/connectionRequestsService";
+import { useInboundProtocolInvites } from "@/lib/globalSync/useInboundProtocolInvites";
+import { useInboundProtocolInviteActions } from "@/lib/hooks/useInboundProtocolInviteActions";
 import { getOrCreateNetworkConversation } from "@/features/chat/services/chat.service";
-import {
-  DEFAULT_USER_2D_AVATAR_SEED,
-  getUser2DAvatarUriForSeed,
-} from "@/constants/UserAvatars";
-import { useAuth } from "@/contexts/AuthContext";
-import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { ROUTES } from "@/lib/routes";
 import { useClientsQuery } from "@/lib/queries/useClientsQuery";
 import {
@@ -47,7 +38,6 @@ import { useDriversQuery } from "@/lib/queries/useDriversQuery";
 import { useNetworkFeedQuery } from "@/lib/queries/usePostsQuery";
 import { useRealtimeNetworkInvalidation } from "@/lib/queries/useRealtimeInvalidation";
 import { useSuppliersQuery } from "@/lib/queries/useSuppliersQuery";
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import {
   Activity,
@@ -55,16 +45,10 @@ import {
   ArrowRight,
   ArrowUpRight,
   Building2,
-  Check,
-  Clock,
   Compass,
-  History,
-  Inbox,
   Mail,
   MapPin,
-  Package,
   Search,
-  Slash,
   Signal,
   Truck,
   User,
@@ -98,50 +82,6 @@ import { supabase } from "@/lib/supabase";
 
 function isStoryPost(p: PostRow): boolean {
   return p.type === "LOAD" || p.type === "VEHICLE_AVAILABILITY";
-}
-
-/** Pills sit on a dark navy card — use light text + brighter accents for contrast. */
-function activityRoleVisuals(role: ConnectedOrg["role"]) {
-  switch (role) {
-    case "CLIENT":
-      return {
-        accent: "#38bdf8",
-        pillBg: "rgba(56,189,248,0.22)",
-        pillText: "#f0f9ff",
-        pillBorder: "rgba(125,211,252,0.5)",
-      };
-    case "DRIVER":
-      return {
-        accent: "#fb923c",
-        pillBg: "rgba(251,146,60,0.22)",
-        pillText: "#fff7ed",
-        pillBorder: "rgba(253,186,116,0.5)",
-      };
-    default:
-      return {
-        accent: "#4ade80",
-        pillBg: "rgba(74,222,128,0.2)",
-        pillText: "#f0fdf4",
-        pillBorder: "rgba(134,239,172,0.45)",
-      };
-  }
-}
-
-function roleShortLabel(role: ConnectedOrg["role"]) {
-  if (role === "CLIENT") return "Client";
-  if (role === "SUPPLIER") return "Supplier";
-  return "Driver";
-}
-
-/** Relative time for the 24h activity window — tuned for scan speed. */
-function formatRelativeActivityTime(createdMs: number): string {
-  const diff = Math.max(0, Date.now() - createdMs);
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return "Today";
 }
 
 function NetworkStoryStrip({
@@ -192,11 +132,6 @@ type NetworkProfileNode = {
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-/** Org connection request vs driver app invite — both surface under mission protocol. */
-type MissionProtocolListItem =
-  | { kind: "connection"; row: ConnectionRequestRow }
-  | { kind: "driver_invite"; row: DriverInviteSentRow };
 
 function getNetworkNodeLocation(item: ConnectedOrg): string {
   const cityState = [item.city, item.state]
@@ -249,23 +184,6 @@ function NetworkScreenInner() {
   const isCompactPhone = width < 420;
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
-  const { profile } = useAuth();
-  const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
-  const profileInitials = useMemo(() => {
-    const displayName = (
-      profile?.full_name ??
-      profile?.displayName ??
-      "User"
-    ).trim();
-    return (
-      displayName
-        .split(/\s+/)
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((part) => part[0]?.toUpperCase())
-        .join("") || "US"
-    );
-  }, [profile?.full_name, profile?.displayName]);
   const {
     currentOrganization: organization,
     isLoading: orgLoading,
@@ -280,46 +198,12 @@ function NetworkScreenInner() {
   const [discoverSearchOpen, setDiscoverSearchOpen] = useState(false);
   const [discoverSearch, setDiscoverSearch] = useState("");
   const [viewMode, setViewMode] = useState<"dashboard" | "requests">("dashboard");
-  const [requestTab, setRequestTab] = useState<"received" | "sent" | "cancelled">("received");
+  const [inviteTab, setInviteTab] = useState<"received" | "sent">("received");
   const [selectedProfileNode, setSelectedProfileNode] = useState<NetworkProfileNode | null>(null);
   const [selectedProfileStats, setSelectedProfileStats] = useState<{ totalTrips: number | null }>({
     totalTrips: null,
   });
   const [profileStatsLoading, setProfileStatsLoading] = useState(false);
-  const [requestActionId, setRequestActionId] = useState<string | null>(null);
-
-  useEffect(() => {
-    let isActive = true;
-    const resolveAvatar = async () => {
-      if (!profile) {
-        if (isActive) setProfileAvatarUri(null);
-        return;
-      }
-      if (profile.avatar_url?.startsWith("http")) {
-        if (isActive) setProfileAvatarUri(profile.avatar_url);
-        return;
-      }
-      if (profile.avatar_url?.trim()) {
-        const signed = await getSignedAvatarUrl(profile.avatar_url.trim());
-        if (isActive) setProfileAvatarUri(signed);
-        return;
-      }
-      if (profile.avatar_seed?.trim()) {
-        if (isActive)
-          setProfileAvatarUri(getUser2DAvatarUriForSeed(profile.avatar_seed.trim()));
-        return;
-      }
-      if (isActive)
-        setProfileAvatarUri(getUser2DAvatarUriForSeed(DEFAULT_USER_2D_AVATAR_SEED));
-    };
-    void resolveAvatar();
-    return () => {
-      isActive = false;
-    };
-  }, [profile?.avatar_url, profile?.avatar_seed]);
-  const [withdrawnProtocolIds, setWithdrawnProtocolIds] = useState<Set<string>>(
-    () => new Set(),
-  );
   const [discoverInviteCount, setDiscoverInviteCount] = useState(0);
   const [discoverInviteLimit, setDiscoverInviteLimit] = useState(5);
   const [showProtocolRolePicker, setShowProtocolRolePicker] = useState(false);
@@ -333,70 +217,19 @@ function NetworkScreenInner() {
   const driversQ = useDriversQuery(orgId);
   const feedQ = useNetworkFeedQuery(orgId);
   const invalidateNetwork = useInvalidateNetwork(orgId);
+  const {
+    receivedItems: receivedInviteItems,
+    sentItems: sentInviteItems,
+    pendingCount,
+  } = useInboundProtocolInvites(orgId);
+  const { inviteActionId, handleInviteAction } =
+    useInboundProtocolInviteActions(orgId);
 
   const filterTabs = useMemo(
     () => ["ALL", "CLIENT", "SUPPLIER", "DRIVER"] as ConnectionFilterTab[],
     [],
   );
 
-  const pendingCount = useMemo(
-    () => (receivedQ.data ?? []).filter((r) => r.status === "pending").length,
-    [receivedQ.data],
-  );
-  const receivedRequests = useMemo(
-    () => ((receivedQ.data ?? []) as ConnectionRequestRow[]).filter((r) => r.status === "pending"),
-    [receivedQ.data],
-  );
-  const sentRequests = useMemo(
-    () =>
-      ((sentQ.data ?? []) as ConnectionRequestRow[]).filter(
-        (r) =>
-          r.status === "pending" && !withdrawnProtocolIds.has(String(r.id ?? "")),
-      ),
-    [sentQ.data, withdrawnProtocolIds],
-  );
-  const cancelledRequests = useMemo(() => {
-    const fromReceived = ((receivedQ.data ?? []) as ConnectionRequestRow[]).filter(
-      (r) => r.status !== "pending" && r.status !== "approved",
-    );
-    const fromSent = ((sentQ.data ?? []) as ConnectionRequestRow[]).filter(
-      (r) => r.status !== "pending" && r.status !== "approved",
-    );
-    const merged = [...fromReceived, ...fromSent];
-    const seen = new Set<string>();
-    return merged.filter((r) => {
-      if (seen.has(r.id)) return false;
-      seen.add(r.id);
-      return true;
-    });
-  }, [receivedQ.data, sentQ.data]);
-
-  const pendingDriverInvitesSent = useMemo(() => {
-    const rows = (driverInvitesSentQ.data ?? []) as DriverInviteSentRow[];
-    return rows.filter(
-      (r) =>
-        String(r.status ?? "").toLowerCase() === "pending" &&
-        !withdrawnProtocolIds.has(String(r.id ?? "")),
-    );
-  }, [driverInvitesSentQ.data, withdrawnProtocolIds]);
-
-  const sentProtocolItems = useMemo((): MissionProtocolListItem[] => {
-    const connectionItems: MissionProtocolListItem[] = sentRequests.map((row) => ({
-      kind: "connection",
-      row,
-    }));
-    const driverItems: MissionProtocolListItem[] = pendingDriverInvitesSent.map((row) => ({
-      kind: "driver_invite",
-      row,
-    }));
-    return [...connectionItems, ...driverItems].sort(
-      (a, b) =>
-        new Date(
-          a.kind === "connection" ? a.row.created_at : a.row.created_at,
-        ).getTime() -
-        new Date(b.kind === "connection" ? b.row.created_at : b.row.created_at).getTime(),
-    );
-  }, [sentRequests, pendingDriverInvitesSent]);
   const clientCount = useMemo(
     () => ((clientsQ.data ?? []) as unknown[]).length,
     [clientsQ.data],
@@ -418,114 +251,6 @@ function NetworkScreenInner() {
   const animatedSupplierCount = useAnimatedCount(supplierCount);
   const animatedDriverCount = useAnimatedCount(driverCount);
   const totalConnectionsDisplay = String(animatedTotalConnections).padStart(2, "0");
-  const recentAddedConnections = useMemo((): Array<ConnectedOrg & { createdAt: number }> => {
-    const now = Date.now();
-    const windowMs = 24 * 60 * 60 * 1000;
-    type R = ConnectedOrg & { createdAt: number };
-    const acc: R[] = [];
-
-    for (const c of (clientsQ.data ?? []) as Array<{
-      id: string;
-      name: string;
-      phone?: string | null;
-      linked_organization_id?: string | null;
-      is_integrated?: boolean;
-      created_at?: string | null;
-      avatar_url?: string | null;
-      avatar_seed?: string | null;
-      mutual_count?: number | null;
-      mutual_connections_count?: number | null;
-      rating?: number | null;
-      average_rating?: number | null;
-    }>) {
-      const created = c.created_at ? new Date(c.created_at).getTime() : 0;
-      if (created === 0 || now - created > windowMs || !c.name?.trim()) continue;
-      acc.push({
-        id: c.id,
-        name: c.name,
-        role: "CLIENT",
-        is_integrated: c.is_integrated ?? Boolean(c.linked_organization_id),
-        avatar_url: c.avatar_url ?? null,
-        avatar_seed: c.avatar_seed ?? null,
-        mutual_count: c.mutual_count ?? c.mutual_connections_count ?? null,
-        rating: c.rating ?? c.average_rating ?? null,
-        phone: c.phone ?? null,
-        linked_organization_id: c.linked_organization_id ?? null,
-        createdAt: created,
-      });
-    }
-
-    for (const s of (suppliersQ.data ?? []) as Array<{
-      id: string;
-      name: string | null;
-      phone?: string | null;
-      linked_organization_id?: string | null;
-      supplier_type?: string | null;
-      is_integrated?: boolean;
-      created_at?: string | null;
-      avatar_url?: string | null;
-      avatar_seed?: string | null;
-      mutual_count?: number | null;
-      mutual_connections_count?: number | null;
-      rating?: number | null;
-      average_rating?: number | null;
-    }>) {
-      const created = s.created_at ? new Date(s.created_at).getTime() : 0;
-      if (created === 0 || now - created > windowMs) continue;
-      const name = s.name?.trim() ? s.name.trim() : "Supplier";
-      acc.push({
-        id: s.id,
-        name,
-        role: "SUPPLIER",
-        is_integrated: s.is_integrated ?? (s.supplier_type === "integrated" || Boolean(s.linked_organization_id)),
-        avatar_url: s.avatar_url ?? null,
-        avatar_seed: s.avatar_seed ?? null,
-        mutual_count: s.mutual_count ?? s.mutual_connections_count ?? null,
-        rating: s.rating ?? s.average_rating ?? null,
-        phone: s.phone ?? null,
-        linked_organization_id: s.linked_organization_id ?? null,
-        createdAt: created,
-      });
-    }
-
-    for (const d of driversQ.data ?? []) {
-      if (d.left_at) continue;
-      const dr = d as {
-        id: string;
-        name: string;
-        user_id?: string | null;
-        left_at?: string | null;
-        created_at?: string | null;
-        phone?: string | null;
-        avatar_url?: string | null;
-        avatar_seed?: string | null;
-        mutual_count?: number | null;
-        mutual_connections_count?: number | null;
-        rating?: number | null;
-        average_rating?: number | null;
-      };
-      const created = dr.created_at ? new Date(dr.created_at).getTime() : 0;
-      if (created === 0 || now - created > windowMs || !dr.name?.trim()) continue;
-      acc.push({
-        id: `driver-${dr.id}`,
-        name: dr.name,
-        role: "DRIVER",
-        is_integrated: Boolean(dr.user_id),
-        avatar_url: dr.avatar_url ?? null,
-        avatar_seed: dr.avatar_seed ?? null,
-        mutual_count: dr.mutual_count ?? dr.mutual_connections_count ?? null,
-        rating: dr.rating ?? dr.average_rating ?? null,
-        phone: dr.phone ?? null,
-        createdAt: created,
-      });
-    }
-
-    return acc
-      .sort((a, b) => b.createdAt - a.createdAt)
-      .slice(0, 5)
-      .map(({ createdAt, ...rest }) => ({ ...rest, createdAt }));
-  }, [clientsQ.data, suppliersQ.data, driversQ.data]);
-
   const onCreatePost = () => router.push("/(modals)/create-post");
   useEffect(() => {
     if (searchParams.view === "requests") {
@@ -676,277 +401,26 @@ function NetworkScreenInner() {
     );
   }
 
-  const openProfileFromProtocolItem = (
-    item: MissionProtocolListItem,
-    mode: "received" | "sent" | "cancelled",
-  ) => {
-    if (item.kind === "driver_invite") {
-      const inv = item.row;
-      setSelectedProfileNode({
-        id: inv.to_user_id?.trim() || `pending-driver-invite-${inv.id}`,
-        name: inv.driver_name?.trim() || "Driver",
-        type: "DRIVER",
-        location: "Not available",
-        status: "REQUEST SENT",
-        rating: null,
-        mutuals: 0,
-      });
-      return;
-    }
-    const row = item.row;
-    const fromReceived = mode === "received";
-    const name = fromReceived ? row.from_org_name : row.to_org_name;
-    const normalized = String(row.status ?? "").toLowerCase();
-    const status: NetworkProfileNode["status"] =
-      normalized === "approved"
-        ? "CONNECTED"
-        : normalized === "pending"
-          ? "REQUEST SENT"
-          : "LIVE";
-    setSelectedProfileNode({
-      id: fromReceived ? row.from_organization_id : row.to_organization_id,
-      name: name?.trim() || "Organization",
-      type: row.request_shipper_client ? "CLIENT" : "SUPPLIER",
-      location: "Not available",
-      status,
-      rating: null,
-      mutuals: 0,
-    });
-  };
-
-  const handleAcceptRequest = async (requestId: string) => {
-    setRequestActionId(requestId);
-    try {
-      const res = await approveConnectionRequest(requestId, orgId);
-      if (res.error) return;
-      await Promise.all([receivedQ.refetch(), sentQ.refetch(), clientsQ.refetch(), suppliersQ.refetch()]);
-      invalidateNetwork();
-    } finally {
-      setRequestActionId(null);
-    }
-  };
-
-  const handleRejectRequest = async (requestId: string) => {
-    setRequestActionId(requestId);
-    try {
-      const res = await rejectConnectionRequest(requestId, orgId);
-      if (res.error) return;
-      await Promise.all([receivedQ.refetch(), sentQ.refetch()]);
-      invalidateNetwork();
-    } finally {
-      setRequestActionId(null);
-    }
-  };
-
-  const handleRecallProtocolItem = async (item: MissionProtocolListItem) => {
-    setRequestActionId(item.row.id);
-    try {
-      if (item.kind === "driver_invite") {
-        const res = await cancelDriverInvite(item.row.id);
-        if (res.error) {
-          Alert.alert("Could not recall invite", res.error.message);
-          return;
-        }
-        if (!res.deleted) {
-          Alert.alert(
-            "Request already changed",
-            "This invite is no longer pending. Refreshing the latest network state.",
-          );
-        }
-        setWithdrawnProtocolIds((prev) => {
-          const next = new Set(prev);
-          next.add(String(item.row.id));
-          return next;
-        });
-        await Promise.all([driverInvitesSentQ.refetch(), driversQ.refetch()]);
-        invalidateNetwork();
-        return;
-      }
-      const res = await cancelConnectionRequest(item.row.id);
-      if (res.error) {
-        Alert.alert("Could not recall request", res.error.message);
-        return;
-      }
-      if (!res.deleted) {
-        Alert.alert(
-          "Request already changed",
-          "This request is no longer pending. Refreshing the latest network state.",
-        );
-      }
-      setWithdrawnProtocolIds((prev) => {
-        const next = new Set(prev);
-        next.add(String(item.row.id));
-        return next;
-      });
-      await Promise.all([receivedQ.refetch(), sentQ.refetch()]);
-      invalidateNetwork();
-    } finally {
-      setRequestActionId(null);
-    }
-  };
-
   if (viewMode === "requests") {
-    const missionProtocolList: MissionProtocolListItem[] =
-      requestTab === "received"
-        ? receivedRequests.map((row) => ({ kind: "connection", row }))
-        : requestTab === "sent"
-          ? sentProtocolItems
-          : cancelledRequests.map((row) => ({ kind: "connection", row }));
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <View style={styles.requestsHero}>
-          <Pressable
-            onPress={() => setViewMode("dashboard")}
-            style={({ pressed }) => [styles.requestsBackBtn, pressed && { opacity: 0.8 }]}
-          >
-            <ArrowLeft size={14} color={Theme.textOnPrimary} />
-            <Text style={styles.requestsBackBtnText}>Dashboard</Text>
-          </Pressable>
-          <Text style={styles.requestsHeroTitle}>Inbound mission protocol</Text>
-          <Text style={styles.requestsHeroSub}>Manage network access requests</Text>
-          <View style={styles.requestsTabRow}>
-            {([
-              { key: "received", label: "RECEIVED", count: receivedRequests.length },
-              { key: "sent", label: "SENT", count: sentProtocolItems.length },
-              { key: "cancelled", label: "CANCELLED", count: cancelledRequests.length },
-            ] as const).map((tab) => {
-              const on = requestTab === tab.key;
-              return (
-                <Pressable
-                  key={tab.key}
-                  onPress={() => setRequestTab(tab.key)}
-                  style={[styles.requestsTabBtn, on && styles.requestsTabBtnOn]}
-                >
-                  <Text style={[styles.requestsTabText, on && styles.requestsTabTextOn]}>{tab.label}</Text>
-                  <View style={[styles.requestsTabBadge, on && styles.requestsTabBadgeOn]}>
-                    <Text style={[styles.requestsTabBadgeText, on && styles.requestsTabBadgeTextOn]}>
-                      {tab.count}
-                    </Text>
-        </View>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={styles.requestsListContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {missionProtocolList.length === 0 ? (
-            <View style={styles.requestsEmptyCard}>
-              <Slash size={32} color={Theme.textSecondary} />
-              <Text style={styles.requestsEmptyTitle}>No {requestTab} protocol</Text>
-              <Text style={styles.requestsEmptySub}>Your queue is currently clear.</Text>
-                </View>
-          ) : (
-            missionProtocolList.map((item) => {
-              const rowId = item.kind === "connection" ? item.row.id : item.row.id;
-              const isBusy = requestActionId === rowId;
-              const req = item.kind === "connection" ? item.row : null;
-              const inv = item.kind === "driver_invite" ? item.row : null;
-              // For cancelled tab: show the other party (they sent → show from, we sent → show to)
-              const isSender = req ? req.from_organization_id === orgId : false;
-              const title = inv
-                ? inv.driver_name
-                : req && requestTab === "cancelled"
-                  ? isSender
-                    ? req.to_org_name
-                    : req.from_org_name
-                  : req && requestTab === "received"
-                    ? req.from_org_name
-                    : req
-                      ? req.to_org_name
-                      : "";
-              const roleLabel = inv ? "DRIVER" : req?.request_shipper_client ? "CLIENT" : "SUPPLIER";
-              const createdAt = inv ? inv.created_at : req!.created_at;
-
-              // Determine cancelled category label + colour
-              const cancelledCategory = (() => {
-                if (requestTab !== "cancelled" || !req) return null;
-                if (isSender && req.status === "cancelled") return { label: "Withdrawn by us", color: "#d97706" };
-                if (isSender && req.status === "rejected")  return { label: "Declined by them", color: Theme.textSecondary };
-                if (!isSender && req.status === "rejected") return { label: "Declined by us",   color: Theme.textSecondary };
-                return { label: (req.status ?? "cancelled").toUpperCase(), color: Theme.textSecondary };
-              })();
-
-              return (
-                <Pressable
-                  key={rowId}
-                  onPress={() => openProfileFromProtocolItem(item, requestTab)}
-                  style={({ pressed }) => [styles.requestsCard, pressed && { opacity: 0.93 }]}
-                >
-                  <View style={styles.requestsCardMain}>
-                    <View style={styles.requestsCardAvatar}>
-                      <Text style={styles.requestsCardAvatarText}>{(title ?? "OR").slice(0, 2).toUpperCase()}</Text>
-                    </View>
-                    <View style={styles.requestsCardInfo}>
-                      <Text style={styles.requestsCardName} numberOfLines={1}>
-                        {(title ?? "Organization").toUpperCase()}
-                      </Text>
-                      <View style={styles.requestsCardMeta}>
-                        <Text style={styles.requestsCardRole}>{roleLabel}</Text>
-                        <Text style={styles.requestsCardTime}>
-                          {new Date(createdAt).toLocaleDateString("en-GB")}
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-                  <View style={styles.requestsActions}>
-                    {requestTab === "received" && req ? (
-                      <>
-                        <Pressable
-                          onPress={() => void handleRejectRequest(req.id)}
-                          disabled={isBusy}
-                          style={styles.requestsIgnoreBtn}
-                        >
-                          <X size={12} color={Theme.textSecondary} />
-                          <Text style={styles.requestsIgnoreText}>Ignore</Text>
-                        </Pressable>
-                        <Pressable
-                          onPress={() => void handleAcceptRequest(req.id)}
-                          disabled={isBusy}
-                          style={styles.requestsAcceptBtn}
-                        >
-                          {isBusy ? (
-                            <LoadingIndicator size={12} color={Theme.textOnPrimary} />
-                          ) : (
-                            <Check size={12} color={Theme.textOnPrimary} />
-                          )}
-                          <Text style={styles.requestsAcceptText}>Accept</Text>
-                        </Pressable>
-                      </>
-                    ) : requestTab === "sent" ? (
-                      <Pressable
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          void handleRecallProtocolItem(item);
-                        }}
-                        disabled={isBusy}
-                        style={styles.requestsRecallBtn}
-                      >
-                        {isBusy ? (
-                          <LoadingIndicator size={12} color={Theme.textOnPrimary} />
-                        ) : (
-                          <Clock size={12} color={Theme.textOnPrimary} />
-                        )}
-                        <Text style={styles.requestsRecallText}>Recall</Text>
-                      </Pressable>
-                    ) : cancelledCategory ? (
-                      <View style={styles.requestsCancelledPill}>
-                        <Slash size={12} color={cancelledCategory.color} />
-                        <Text style={[styles.requestsCancelledText, { color: cancelledCategory.color }]}>
-                          {cancelledCategory.label}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
-                </Pressable>
-              );
-            })
-          )}
-        </ScrollView>
+      <View style={styles.container}>
+        <InboundProtocolPanel
+          layout="fullscreen"
+          topInset={insets.top}
+          bottomInset={insets.bottom}
+          tab={inviteTab}
+          onTabChange={setInviteTab}
+          onClose={() => setViewMode("dashboard")}
+          pendingCount={pendingCount}
+          receivedItems={receivedInviteItems}
+          sentItems={sentInviteItems}
+          busyId={inviteActionId}
+          onApprove={(item) => void handleInviteAction(item, "approve")}
+          onReject={(item) => void handleInviteAction(item, "reject")}
+          onCancel={(item) => void handleInviteAction(item, "cancel")}
+          onManageAll={() => setViewMode("dashboard")}
+          showFooter={false}
+        />
       </View>
     );
   }
@@ -1116,40 +590,13 @@ function NetworkScreenInner() {
       }
     >
       <>
-        <View style={styles.topTickerRow}>
-          <View style={styles.topTicker}>
-            <Text style={styles.topTickerText}>
-              BUILD YOUR NETWORK BY ADDING CONTACTS AND CONNECTING WITH VERIFIED APP USERS TO GROW YOUR BUSINESS.
-            </Text>
-          </View>
-          <Pressable
-            onPress={() =>
-              router.push(ROUTES.TABS.PROFILE as Parameters<typeof router.push>[0])
-            }
-            style={({ pressed }) => [
-              styles.topTickerProfileAvatar,
-              pressed && styles.topTickerProfileAvatarPressed,
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Open profile"
-            hitSlop={8}
-          >
-            {profileAvatarUri ? (
-              <Image
-                source={{ uri: profileAvatarUri }}
-                style={styles.topTickerProfileAvatarImage}
-              />
-            ) : (
-              <View style={styles.topTickerProfileAvatarFallback}>
-                <Text style={styles.topTickerProfileAvatarInitials}>
-                  {profileInitials}
-                </Text>
-              </View>
-            )}
-          </Pressable>
+        <View style={styles.topTicker}>
+          <Text style={styles.topTickerText}>
+            BUILD YOUR NETWORK BY ADDING CONTACTS AND CONNECTING WITH VERIFIED APP USERS TO GROW YOUR BUSINESS.
+          </Text>
         </View>
-        <View style={[styles.topCluster, isDesktopMatrix && styles.topClusterDesktop, isCompactPhone && styles.topClusterCompact]}>
-          <View style={[styles.topClusterMain, isDesktopMatrix && styles.topClusterMainDesktop]}>
+        <View style={[styles.topCluster, isCompactPhone && styles.topClusterCompact]}>
+          <View style={styles.topClusterMain}>
         <View style={styles.commandStatsWrap}>
           <View style={styles.commandMainCard}>
             <View style={styles.commandMainBgOrb} />
@@ -1168,15 +615,10 @@ function NetworkScreenInner() {
               </View>
                   <View style={[styles.commandMainStatsRow, isMobileLayout && styles.commandMainStatsRowCompact]}>
                     <View style={[styles.commandTotalWrap, isMobileLayout && styles.commandTotalWrapCompact]}>
-                      <Text
-                        style={[styles.commandTotalText, isMobileLayout && styles.commandTotalTextCompact]}
-                        numberOfLines={1}
-                        adjustsFontSizeToFit={isMobileLayout}
-                        minimumFontScale={0.8}
-                      >
+                      <Text style={styles.commandTotalText} numberOfLines={1}>
                         {totalConnectionsDisplay}
-                  </Text>
-                </View>
+                      </Text>
+                    </View>
                     <View style={[styles.commandMetricGrid, isMobileLayout && styles.commandMetricGridCompact]}>
                       <View style={[styles.commandMetricCell, isMobileLayout && styles.commandMetricCellCompact]}>
                     <Building2
@@ -1222,208 +664,27 @@ function NetworkScreenInner() {
             </View>
           </View>
             </View>
-            <View style={[styles.storyRowShell, isCompactPhone && styles.storyRowShellCompact]}>
-              <NetworkStoryStrip
-                orgId={orgId}
-                orgName={organization?.name ?? ""}
-                feedPosts={feedPosts}
-                feedLoading={feedQ.isLoading}
-                onCreatePost={onCreatePost}
-              />
-                </View>
-              </View>
-
-          <View style={[styles.topClusterLogCol, isDesktopMatrix && styles.topClusterLogColDesktop]}>
-        <View
-          style={[
-                styles.commandSideCard,
-                isDesktopMatrix && styles.commandSideCardDesktop,
-                isCompactPhone && styles.commandSideCardCompact,
-              ]}
-            >
-              <View
-                style={[
-                  styles.commandSideHead,
-                  isDesktopMatrix && styles.commandSideHeadDesktop,
-                ]}
-              >
-                <View style={styles.commandSideHeadText}>
-                  <Text
-                    style={[
-                      styles.commandSideKicker,
-                      isDesktopMatrix && styles.commandSideKickerDesktop,
-                    ]}
-                  >
-                    Activity log
-                  </Text>
-                  <Text
-                    style={[
-                      styles.commandSideSub,
-                      isDesktopMatrix && styles.commandSideSubLabelDesktop,
-                    ]}
-                  >
-                    Last 24 hours · newest first
-                  </Text>
-                </View>
-                <View
-                  style={[
-                    styles.commandSideHeadIcon,
-                    isDesktopMatrix && styles.commandSideHeadIconDesktop,
-                  ]}
-                >
-                  <History
-                    size={isDesktopMatrix ? 12 : 13}
-                    color={Theme.textSecondary}
-                    strokeWidth={2}
-                  />
-                </View>
-              </View>
-              <ScrollView
-                style={[
-                  styles.commandLogScroll,
-                  isDesktopMatrix && styles.commandLogScrollDesktop,
-                ]}
-                contentContainerStyle={[
-                  styles.commandLogScrollContent,
-                  isDesktopMatrix && styles.commandLogScrollContentDesktop,
-                ]}
-                showsVerticalScrollIndicator={false}
-                nestedScrollEnabled
-              >
-                {recentAddedConnections.length === 0 ? (
-                  <View style={styles.commandLogEmpty}>
-                    <Text style={styles.commandLogEmptyText}>
-                      No contacts added in the last 24 hours
-                    </Text>
-                    <Text style={styles.commandLogEmptyHint}>
-                      New clients, suppliers, and drivers appear here.
-                    </Text>
-                </View>
-                ) : (
-                  recentAddedConnections.map((item) => {
-                    const v = activityRoleVisuals(item.role);
-                    return (
-                      <View
-                        key={`recent-log-${item.id}`}
-                        style={[
-                          styles.commandLogEntry,
-                          isDesktopMatrix && styles.commandLogEntryDesktop,
-                        ]}
-                      >
-                        <View
-                          style={[
-                            styles.commandLogAccent,
-                            isDesktopMatrix && styles.commandLogAccentDesktop,
-                            { backgroundColor: v.accent },
-                          ]}
-                        />
-                        <View
-                          style={[
-                            styles.commandLogEntryMain,
-                            isDesktopMatrix && styles.commandLogEntryMainDesktop,
-                          ]}
-                        >
-                          <View
-                            style={[
-                              styles.commandLogEntryTop,
-                              isDesktopMatrix && styles.commandLogEntryTopDesktop,
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                styles.commandLogName,
-                                isDesktopMatrix && styles.commandLogNameDesktop,
-                              ]}
-                              numberOfLines={1}
-                            >
-                              {item.name.trim().toUpperCase()}
-                            </Text>
-                            <Text
-                              style={[
-                                styles.commandLogWhen,
-                                isDesktopMatrix && styles.commandLogWhenDesktop,
-                              ]}
-                            >
-                              {formatRelativeActivityTime(item.createdAt)}
-                            </Text>
-                          </View>
-                          <View
-                            style={[
-                              styles.commandLogEntryBottom,
-                              isDesktopMatrix && styles.commandLogEntryBottomDesktop,
-                            ]}
-                          >
-                            <View
-                              style={[
-                                styles.commandLogRolePill,
-                                isDesktopMatrix && styles.commandLogRolePillDesktop,
-                                {
-                                  backgroundColor: v.pillBg,
-                                  borderColor: v.pillBorder,
-                                },
-                              ]}
-                            >
-                              <Text
-                                style={[
-                                  styles.commandLogRolePillText,
-                                  isDesktopMatrix && styles.commandLogRolePillTextDesktop,
-                                  { color: v.pillText },
-                                ]}
-                              >
-                                {roleShortLabel(item.role)}
-                              </Text>
-                            </View>
-                            <Text
-                              style={[
-                                styles.commandLogStatus,
-                                item.is_integrated
-                                  ? styles.commandLogStatusLive
-                                  : styles.commandLogStatusPending,
-                                isDesktopMatrix && styles.commandLogStatusDesktop,
-                                isDesktopMatrix && styles.commandLogStatusFontDesktop,
-                              ]}
-                              numberOfLines={isDesktopMatrix ? 2 : 1}
-                            >
-                              {item.is_integrated
-                                ? "Connected on Pulse"
-                                : "Awaiting app signup"}
-                            </Text>
-                          </View>
-                        </View>
-                      </View>
-                    );
-                  })
-                )}
-              </ScrollView>
-                </View>
-              </View>
+            <NetworkStoryStrip
+              orgId={orgId}
+              orgName={organization?.name ?? ""}
+              feedPosts={feedPosts}
+              feedLoading={feedQ.isLoading}
+              onCreatePost={onCreatePost}
+            />
+            <View style={[styles.loadsRowShell, isCompactPhone && styles.loadsRowShellCompact]}>
+              <NetworkLoadsQuickCards compact={isCompactPhone} />
             </View>
-        <View style={[styles.registryHead, isCompactPhone && styles.registryHeadCompact]}>
-          <View style={styles.registryHeadTopRow}>
-            <View style={styles.registryHeadLeft}>
-              <View style={styles.registryLine} />
-              <Text style={styles.registryKicker}>Registry core</Text>
-          </View>
-            <Pressable
-              onPress={() => setViewMode("requests")}
-              style={({ pressed }) => [styles.registryInviteBtn, pressed && { opacity: 0.75 }]}
-              hitSlop={8}
-            >
-              <Inbox size={12} color={Theme.textPrimaryDark} strokeWidth={2.2} />
-              {pendingCount > 0 ? (
-                <View style={styles.registryInviteBadge}>
-                  <Text style={styles.registryInviteBadgeText}>
-                    {pendingCount > 9 ? "9+" : String(pendingCount)}
-                  </Text>
-            </View>
-          ) : null}
-            </Pressable>
-          </View>
-          <Text style={[styles.registryHeading, isCompactPhone && styles.registryHeadingCompact]}>Grow network</Text>
+              </View>
         </View>
         <View style={[styles.networkMergedRow, !isWideNetwork && styles.networkMergedRowStack]}>
-          <View style={[styles.sectionBlock, isWideNetwork && styles.networkMergedPanePrimary]}>
-            <View style={[styles.connectionsCard, isWideNetwork && styles.networkMergedCard]}>
+          <View
+            style={[
+              styles.sectionBlock,
+              styles.sectionBlockMerged,
+              isWideNetwork && styles.networkMergedPanePrimary,
+            ]}
+          >
+            <View style={[styles.sectionBody, styles.sectionBodyConnections]}>
               <View
                 style={[
                   styles.sectionHeadingRowSpread,
@@ -1530,8 +791,14 @@ function NetworkScreenInner() {
             </View>
           </View>
 
-          <View style={[styles.sectionBlock, isWideNetwork && styles.networkMergedPaneTertiary]}>
-            <View style={[styles.discoverCard, isWideNetwork && styles.networkMergedCard]}>
+          <View
+            style={[
+              styles.sectionBlock,
+              styles.sectionBlockMerged,
+              isWideNetwork && styles.networkMergedPaneTertiary,
+            ]}
+          >
+            <View style={[styles.sectionBody, styles.sectionBodyDiscover]}>
               {isMobileLayout && discoverSearchOpen ? (
                 <View style={[styles.sectionHeadingRowSpread, styles.discoverHeaderStackMobile]}>
                   <View style={styles.discoverHeaderTitleRowMobile}>
@@ -1589,6 +856,7 @@ function NetworkScreenInner() {
                 <View
                   style={[
                     styles.sectionHeadingRowSpread,
+                    styles.sectionHeadingRowDiscoverLead,
                     isMobileLayout && styles.sectionHeadingRowSpreadDiscoverMobile,
                   ]}
                 >
@@ -1666,61 +934,9 @@ function NetworkScreenInner() {
                   </View>
                 </View>
               )}
-              <Pressable
-                onPress={() => router.push(ROUTES.PULSE_LOADS)}
-                style={({ pressed }) => [
-                  styles.loadsPromoBanner,
-                  pressed && styles.loadsPromoBannerPressed,
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel="Open Load Center — post loads, bid on freight"
-              >
-                <LinearGradient
-                  colors={["#0f172a", "#1e1b4b", "#312e81"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={StyleSheet.absoluteFill}
-                />
-                <View style={styles.loadsPromoOrbPrimary} pointerEvents="none" />
-                <View style={styles.loadsPromoOrbSecondary} pointerEvents="none" />
-                <View style={styles.loadsPromoContent}>
-                  <View style={styles.loadsPromoTopRow}>
-                    <View style={styles.loadsPromoIconRing}>
-                      <Package size={18} color={Theme.textOnPrimary} strokeWidth={2.2} />
-                    </View>
-                    <View style={styles.loadsPromoTextCol}>
-                      <View style={styles.loadsPromoKickerRow}>
-                        <View style={styles.loadsPromoLiveDot} />
-                        <Text style={styles.loadsPromoKicker}>Load center</Text>
-                      </View>
-                      <Text style={styles.loadsPromoTitle}>
-                        Give loads & get loads — with live bidding
-                      </Text>
-                    </View>
-                    <View style={styles.loadsPromoGoBtn}>
-                      <ArrowUpRight
-                        size={15}
-                        color={Theme.textPrimaryDark}
-                        strokeWidth={2.4}
-                      />
-                    </View>
-                  </View>
-                  <Text style={styles.loadsPromoSub}>
-                    Post open freight, quote on indents, compare bids, and award in one place.
-                  </Text>
-                  <View style={styles.loadsPromoChipRow}>
-                    {(["Post freight", "Live bids", "Award loads"] as const).map((label) => (
-                      <View key={label} style={styles.loadsPromoChip}>
-                        <Text style={styles.loadsPromoChipText}>{label}</Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              </Pressable>
               <DiscoverView
                 orgId={orgId}
                 embedded
-                embeddedScrollable
                 search={discoverSearch}
                 onSearchChange={setDiscoverSearch}
                 showSearchChrome={false}
@@ -1738,8 +954,15 @@ function NetworkScreenInner() {
     </ScrollView>
   );
 
+  const orgDisplayName = organization?.name?.trim() || "Network";
+
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={styles.container}>
+      <HomePageHeader
+        title={orgDisplayName}
+        invitationBadgeCount={pendingCount}
+        onInvitationsPress={() => setViewMode("requests")}
+      />
       {scrollContent}
       <Modal
         visible={Boolean(selectedProfileNode)}
@@ -1970,16 +1193,9 @@ const styles = StyleSheet.create({
     paddingBottom: 18,
     backgroundColor: Theme.screenBackground,
   },
-  topTickerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
+  topTicker: {
     marginHorizontal: Layout.screenPaddingHorizontal,
     marginTop: 10,
-  },
-  topTicker: {
-    flex: 1,
-    minWidth: 0,
     borderRadius: 14,
     backgroundColor: Theme.textPrimaryDark,
     paddingVertical: 8,
@@ -1990,38 +1206,6 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: Theme.textOnPrimary,
     letterSpacing: 0.8,
-  },
-  topTickerProfileAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
-    overflow: "hidden",
-    backgroundColor: Theme.surfaceGray,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-  topTickerProfileAvatarImage: {
-    width: "100%",
-    height: "100%",
-  },
-  topTickerProfileAvatarFallback: {
-    width: "100%",
-    height: "100%",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Theme.surfaceGray,
-  },
-  topTickerProfileAvatarInitials: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: Theme.textPrimaryDark,
-    letterSpacing: -0.2,
-  },
-  topTickerProfileAvatarPressed: {
-    opacity: 0.88,
   },
   commandStatsWrap: {
     flexDirection: "row",
@@ -2037,45 +1221,18 @@ const styles = StyleSheet.create({
     marginHorizontal: 10,
     gap: 10,
   },
-  topClusterDesktop: {
-    flexDirection: "row",
-    alignItems: "stretch",
-    gap: 14,
-  },
   topClusterMain: {
     flex: 1,
     minWidth: 0,
     gap: 10,
   },
-  topClusterMainDesktop: {
-    flex: 8,
-    flexBasis: 0,
-  },
-  storyRowShell: {
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "rgba(148,163,184,0.18)",
-    backgroundColor: Theme.surface,
-    overflow: "hidden",
-    shadowColor: "#0f172a",
-    shadowOpacity: 0.05,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 2,
-  },
-  storyRowShellCompact: {
-    borderRadius: 16,
-  },
-  topClusterLogCol: {
+  loadsRowShell: {
     width: "100%",
+    minWidth: 0,
+    marginTop: 2,
   },
-  topClusterLogColDesktop: {
-    width: 0,
-    minWidth: 220,
-    flex: 2,
-    flexBasis: 0,
-    minHeight: 0,
-    alignSelf: "stretch",
+  loadsRowShellCompact: {
+    marginTop: 0,
   },
   commandMainCard: {
     flex: 1,
@@ -2161,18 +1318,15 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   commandTotalWrap: {
-    flex: 1,
+    flexGrow: 0,
     flexShrink: 0,
-    minWidth: 88,
+    flexBasis: "auto",
+    minWidth: 96,
     alignItems: "flex-start",
     justifyContent: "center",
   },
   commandTotalWrapCompact: {
-    flex: 1,
-    flexShrink: 0,
-    minWidth: 72,
-    alignItems: "flex-start",
-    justifyContent: "center",
+    minWidth: 88,
     paddingTop: 0,
   },
   commandTotalWrapMobile: {
@@ -2186,29 +1340,19 @@ const styles = StyleSheet.create({
     letterSpacing: -1,
     lineHeight: 64,
   },
-  commandTotalTextCompact: {
-    flexShrink: 0,
-    fontSize: 52,
-    lineHeight: 52,
-    textAlign: "left",
-    includeFontPadding: false,
-  },
   commandMetricGrid: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     marginTop: 0,
+    flex: 1,
     flexShrink: 1,
-    maxWidth: "58%",
+    minWidth: 0,
+    justifyContent: "flex-end",
   },
   commandMetricGridCompact: {
-    flex: 0,
-    flexShrink: 1,
-    width: undefined,
-    maxWidth: "52%",
     gap: 4,
     justifyContent: "flex-end",
-    minWidth: 0,
   },
   commandMetricCell: {
     width: 52,
@@ -2251,277 +1395,6 @@ const styles = StyleSheet.create({
   commandMetricLCompact: {
     fontSize: 5,
     letterSpacing: 0.35,
-  },
-  commandSideCard: {
-    width: "100%",
-    minWidth: 0,
-    minHeight: 140,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.screenBackground,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 8,
-    shadowColor: Theme.shadow,
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 2,
-  },
-  commandSideCardDesktop: {
-    flex: 1,
-    minHeight: 0,
-    flexDirection: "column",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 8,
-  },
-  commandSideCardCompact: {
-    borderRadius: 16,
-    minHeight: 120,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-  },
-  commandSideHead: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  commandSideHeadDesktop: {
-    alignItems: "center",
-    paddingBottom: 0,
-  },
-  commandSideHeadText: {
-    flex: 1,
-    minWidth: 0,
-  },
-  commandSideHeadIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 9,
-    backgroundColor: Theme.surface,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  commandSideHeadIconDesktop: {
-    width: 28,
-    height: 28,
-    borderRadius: 9,
-  },
-  commandSideKicker: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: Theme.textPrimaryDark,
-    letterSpacing: 0.9,
-    textTransform: "uppercase",
-  },
-  commandSideKickerDesktop: {
-    fontSize: 8,
-    letterSpacing: 0.95,
-  },
-  commandSideSub: {
-    marginTop: 2,
-    fontSize: 8,
-    fontWeight: "500",
-    color: Theme.textSecondary,
-    letterSpacing: 0.12,
-  },
-  commandSideSubLabelDesktop: {
-    marginTop: 2,
-    fontSize: 8,
-    fontWeight: "500",
-    color: Theme.textSecondary,
-    letterSpacing: 0.12,
-  },
-  /** No maxHeight on mobile: fixed 220px clipped the last log row while the gray shell still had room below. */
-  commandLogScroll: {
-    width: "100%",
-    alignSelf: "stretch",
-  },
-  /** Fills remaining card height so sidebar matches left column (no fixed tall max). */
-  commandLogScrollDesktop: {
-    flex: 1,
-    minHeight: 0,
-  },
-  commandLogScrollContent: {
-    gap: 8,
-    paddingBottom: 14,
-  },
-  commandLogScrollContentDesktop: {
-    gap: 6,
-    paddingBottom: 12,
-    flexGrow: 1,
-  },
-  commandLogEntry: {
-    flexDirection: "row",
-    alignItems: "stretch",
-    gap: 0,
-    borderRadius: 14,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.surface,
-    shadowColor: Theme.shadow,
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  commandLogEntryDesktop: {
-    borderRadius: 12,
-    backgroundColor: Theme.surface,
-  },
-  commandLogAccent: {
-    width: 3,
-    minHeight: 44,
-  },
-  commandLogAccentDesktop: {
-    width: 2,
-    minHeight: 40,
-  },
-  commandLogEntryMain: {
-    flex: 1,
-    minWidth: 0,
-    paddingVertical: 8,
-    paddingRight: 10,
-    paddingLeft: 8,
-    gap: 5,
-    justifyContent: "center",
-  },
-  commandLogEntryMainDesktop: {
-    paddingVertical: 5,
-    paddingLeft: 8,
-    paddingRight: 9,
-    gap: 4,
-  },
-  commandLogEntryTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  commandLogEntryTopDesktop: {
-    gap: 8,
-  },
-  commandLogName: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 10,
-    fontWeight: "700",
-    color: Theme.textPrimaryDark,
-    letterSpacing: 0.45,
-    textTransform: "uppercase",
-  },
-  commandLogNameDesktop: {
-    fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 0.35,
-    textTransform: "uppercase",
-  },
-  commandLogWhen: {
-    fontSize: 9,
-    fontWeight: "600",
-    color: Theme.textSecondary,
-    flexShrink: 0,
-    paddingTop: 0,
-  },
-  commandLogWhenDesktop: {
-    fontSize: 8,
-    fontWeight: "600",
-    color: Theme.textSecondary,
-    paddingTop: 0,
-  },
-  commandLogEntryBottom: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-start",
-    flexWrap: "wrap",
-    gap: 8,
-    width: "100%",
-  },
-  commandLogEntryBottomDesktop: {
-    flexWrap: "nowrap",
-    justifyContent: "space-between",
-    gap: 6,
-    alignItems: "center",
-  },
-  commandLogRolePill: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-    flexShrink: 0,
-    alignSelf: "center",
-  },
-  commandLogRolePillDesktop: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  commandLogRolePillText: {
-    fontSize: 8,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
-  },
-  commandLogRolePillTextDesktop: {
-    fontSize: 7,
-    letterSpacing: 0.4,
-  },
-  commandLogStatus: {
-    fontSize: 9,
-    fontWeight: "600",
-    flex: 1,
-    minWidth: 0,
-    textAlign: "left",
-    lineHeight: 13,
-  },
-  commandLogStatusDesktop: {
-    flexBasis: 0,
-    flexGrow: 1,
-    textAlign: "right",
-    lineHeight: 12,
-    paddingLeft: 4,
-  },
-  commandLogStatusFontDesktop: {
-    fontSize: 8,
-  },
-  commandLogStatusLive: {
-    color: Theme.darkGreen,
-  },
-  commandLogStatusPending: {
-    color: Theme.teslaRed,
-  },
-  commandLogEmpty: {
-    minHeight: 84,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderStyle: "dashed",
-    backgroundColor: Theme.surface,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    gap: 5,
-  },
-  commandLogEmptyText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: Theme.textPrimaryDark,
-    textAlign: "center",
-    letterSpacing: 0.15,
-  },
-  commandLogEmptyHint: {
-    fontSize: 10,
-    fontWeight: "500",
-    color: Theme.textSecondary,
-    textAlign: "center",
-    lineHeight: 15,
   },
   profileModalBackdrop: {
     flex: 1,
@@ -3181,17 +2054,20 @@ const styles = StyleSheet.create({
   sectionBlock: {
     marginTop: 10,
   },
+  sectionBlockMerged: {
+    marginTop: 0,
+  },
   networkMergedRow: {
     marginHorizontal: 0,
-    marginTop: 8,
+    marginTop: 6,
     flexDirection: "column",
     alignItems: "stretch",
-    gap: 12,
+    gap: 4,
   },
   networkMergedRowStack: {
     marginHorizontal: 0,
     flexDirection: "column",
-    gap: 12,
+    gap: 4,
   },
   networkMergedPanePrimary: {
     marginTop: 0,
@@ -3202,37 +2078,15 @@ const styles = StyleSheet.create({
   networkMergedPaneTertiary: {
     marginTop: 0,
   },
-  networkMergedCard: {
-    marginHorizontal: Layout.screenPaddingHorizontal,
-    marginTop: 0,
-    marginBottom: 0,
+  sectionBody: {
+    width: "100%",
+    paddingBottom: 8,
   },
-  connectionsCard: {
-    marginHorizontal: Layout.screenPaddingHorizontal,
-    backgroundColor: Theme.screenBackground,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: Theme.cinematicCardBorder,
-    overflow: "hidden",
-    shadowColor: Theme.shadow,
-    shadowOpacity: 0.05,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 2,
+  sectionBodyConnections: {
+    paddingBottom: 0,
   },
-  discoverCard: {
-    marginHorizontal: Layout.screenPaddingHorizontal,
-    marginBottom: 14,
-    backgroundColor: Theme.screenBackground,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: Theme.cinematicCardBorder,
-    overflow: "hidden",
-    shadowColor: Theme.shadow,
-    shadowOpacity: 0.04,
-    shadowRadius: 22,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 2,
+  sectionBodyDiscover: {
+    paddingBottom: 8,
   },
   sectionHeadingRow: {
     flexDirection: "row",
@@ -3259,6 +2113,7 @@ const styles = StyleSheet.create({
   },
   inlineTabsWrapHeaderMobile: {
     flex: 1,
+    minWidth: 0,
     maxWidth: "100%" as const,
   },
   connectionsHeaderControls: {
@@ -3271,24 +2126,27 @@ const styles = StyleSheet.create({
   },
   connectionsHeaderControlsMobile: {
     width: "100%" as const,
-    flexDirection: "column",
-    alignItems: "stretch",
+    flexDirection: "row",
+    alignItems: "center",
     alignSelf: "stretch",
-    gap: 8,
+    gap: 6,
+    minWidth: 0,
   },
   connectionsSearchSlot: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-end",
-    minWidth: 0,
+    flexShrink: 0,
   },
   connectionsSearchSlotMobile: {
-    width: "100%",
+    flexShrink: 0,
     justifyContent: "flex-end",
   },
   connectionsSearchSlotMobileOpen: {
-    alignSelf: "stretch",
-    justifyContent: "flex-start",
+    flex: 1,
+    minWidth: 0,
+    maxWidth: 168,
+    justifyContent: "flex-end",
   },
   inlineFilterScroll: {
     flexDirection: "row",
@@ -3340,11 +2198,10 @@ const styles = StyleSheet.create({
     borderWidth: 0,
   },
   inlineSearchBoxMobile: {
-    maxWidth: "100%",
-    width: "100%",
     flex: 1,
-    minWidth: 0,
-    minHeight: 32,
+    minWidth: 72,
+    maxWidth: 168,
+    minHeight: 28,
   },
   inlineSearchInput: {
     flex: 1,
@@ -3381,13 +2238,17 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 10,
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 14,
-    paddingBottom: 8,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  sectionHeadingRowDiscoverLead: {
+    paddingTop: 4,
+    paddingBottom: 4,
   },
   sectionHeadingRowSpreadMobile: {
     alignItems: "flex-start",
     flexDirection: "column",
-    gap: 10,
+    gap: 6,
   },
   /** Discover: keep title + search on one row (default SpreadMobile stacks them). */
   sectionHeadingRowSpreadDiscoverMobile: {
@@ -3436,85 +2297,6 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     letterSpacing: -0.15,
     lineHeight: 18,
-  },
-  registryHead: {
-    marginHorizontal: Layout.screenPaddingHorizontal,
-    marginTop: 12,
-    marginBottom: 4,
-    gap: 6,
-  },
-  registryHeadCompact: {
-    marginHorizontal: Layout.screenPaddingHorizontal,
-    marginTop: 10,
-  },
-  registryHeadLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  registryHeadTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  registryLine: {
-    width: 20,
-    height: 2,
-    borderRadius: 1,
-    backgroundColor: Theme.primary,
-  },
-  registryKicker: {
-    fontSize: 8,
-    fontWeight: "800",
-    color: Theme.primary,
-    letterSpacing: 1.2,
-    textTransform: "uppercase",
-  },
-  registryHeading: {
-    fontSize: 24,
-    fontWeight: "900",
-    color: Theme.textPrimaryDark,
-    letterSpacing: -0.3,
-    textTransform: "uppercase",
-    fontStyle: "italic",
-    lineHeight: 26,
-  },
-  registryHeadingCompact: {
-    fontSize: 20,
-    lineHeight: 22,
-    letterSpacing: -0.2,
-  },
-  registryInviteBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.screenBackground,
-    alignItems: "center",
-    justifyContent: "center",
-    position: "relative",
-  },
-  registryInviteBadge: {
-    position: "absolute",
-    top: -3,
-    right: -3,
-    minWidth: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: Theme.primary,
-    borderWidth: 1.5,
-    borderColor: Theme.screenBackground,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 3,
-  },
-  registryInviteBadgeText: {
-    fontSize: 7,
-    fontWeight: "900",
-    color: Theme.textOnPrimary,
-    letterSpacing: 0.1,
   },
   expandSignal: {
     flexDirection: "row",
@@ -4078,254 +2860,5 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: Theme.textOnDark,
     letterSpacing: 0.2,
-  },
-  requestsHero: {
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 12,
-    paddingBottom: 14,
-    backgroundColor: Theme.textPrimaryDark,
-  },
-  requestsBackBtn: {
-    alignSelf: "flex-start",
-    minHeight: 30,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderOnDark,
-    backgroundColor: Theme.driverWhiteMutedStrong,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 10,
-  },
-  requestsBackBtnText: {
-    fontSize: 9,
-    fontWeight: "900",
-    color: Theme.textOnPrimary,
-    textTransform: "uppercase",
-    letterSpacing: 0.7,
-  },
-  requestsHeroTitle: {
-    marginTop: 10,
-    fontSize: 20,
-    fontWeight: "900",
-    color: Theme.textOnPrimary,
-    textTransform: "uppercase",
-    letterSpacing: 0.2,
-    fontStyle: "italic",
-  },
-  requestsHeroSub: {
-    marginTop: 3,
-    fontSize: 10,
-    fontWeight: "700",
-    color: Theme.onPrimaryMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-  },
-  requestsTabRow: {
-    marginTop: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    flexWrap: "wrap",
-  },
-  requestsTabBtn: {
-    minHeight: 30,
-    borderRadius: 15,
-    borderWidth: 1,
-    borderColor: Theme.borderOnDark,
-    backgroundColor: Theme.driverWhiteMutedStrong,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 10,
-  },
-  requestsTabBtnOn: {
-    backgroundColor: Theme.screenBackground,
-    borderColor: Theme.screenBackground,
-  },
-  requestsTabText: {
-    fontSize: 9,
-    fontWeight: "900",
-    color: Theme.onPrimaryMuted,
-    letterSpacing: 0.6,
-  },
-  requestsTabTextOn: {
-    color: Theme.textPrimaryDark,
-  },
-  requestsTabBadge: {
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 4,
-    backgroundColor: Theme.textPrimaryDark,
-  },
-  requestsTabBadgeOn: {
-    backgroundColor: Theme.surfaceGray,
-  },
-  requestsTabBadgeText: {
-    fontSize: 8,
-    fontWeight: "900",
-    color: Theme.textOnPrimary,
-  },
-  requestsTabBadgeTextOn: {
-    color: Theme.textPrimaryDark,
-  },
-  requestsListContent: {
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingVertical: 14,
-    gap: 10,
-    paddingBottom:
-      24 + Layout.demoTabBarScrollBottomInset + Layout.tabBarBottomPaddingMin,
-  },
-  requestsEmptyCard: {
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.screenBackground,
-    minHeight: 190,
-    gap: 8,
-  },
-  requestsEmptyTitle: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: Theme.textPrimaryDark,
-    textTransform: "uppercase",
-  },
-  requestsEmptySub: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: Theme.textSecondary,
-  },
-  requestsCard: {
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.screenBackground,
-    padding: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  requestsCardMain: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  requestsCardAvatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Theme.surfaceGray,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-  },
-  requestsCardAvatarText: {
-    fontSize: 11,
-    fontWeight: "900",
-    color: Theme.textPrimaryDark,
-  },
-  requestsCardInfo: {
-    flex: 1,
-    minWidth: 0,
-    gap: 3,
-  },
-  requestsCardName: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: Theme.textPrimaryDark,
-    letterSpacing: 0.1,
-  },
-  requestsCardMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  requestsCardRole: {
-    fontSize: 8,
-    fontWeight: "800",
-    color: Theme.primary,
-    textTransform: "uppercase",
-  },
-  requestsCardTime: {
-    fontSize: 8,
-    fontWeight: "700",
-    color: Theme.textSecondary,
-  },
-  requestsActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-  },
-  requestsIgnoreBtn: {
-    minHeight: 28,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.screenBackground,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 9,
-  },
-  requestsIgnoreText: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: Theme.textSecondary,
-  },
-  requestsAcceptBtn: {
-    minHeight: 28,
-    borderRadius: 14,
-    backgroundColor: Theme.primary,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 9,
-  },
-  requestsAcceptText: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: Theme.textOnPrimary,
-    textTransform: "uppercase",
-  },
-  requestsRecallBtn: {
-    minHeight: 28,
-    borderRadius: 14,
-    backgroundColor: Theme.textPrimaryDark,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 9,
-  },
-  requestsRecallText: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: Theme.textOnPrimary,
-    textTransform: "uppercase",
-  },
-  requestsCancelledPill: {
-    minHeight: 26,
-    borderRadius: 13,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.surfaceGray,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 9,
-  },
-  requestsCancelledText: {
-    fontSize: 8,
-    fontWeight: "800",
-    color: Theme.textSecondary,
-    textTransform: "uppercase",
   },
 });

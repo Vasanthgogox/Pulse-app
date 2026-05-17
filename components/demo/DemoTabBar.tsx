@@ -247,10 +247,18 @@ function MobileFooterSlackCluster({
   compact?: boolean;
 }) {
   const [pillWidth, setPillWidth] = useState(0);
+  const pillMountedRef = useRef(false);
   const slideIndex = useSharedValue(activeIndex);
   const iconSize = compact
     ? MOBILE_CLUSTER_ICON_SIZE_COMPACT
     : MOBILE_CLUSTER_ICON_SIZE;
+
+  useEffect(() => {
+    pillMountedRef.current = true;
+    return () => {
+      pillMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     slideIndex.value = withSpring(Math.max(0, activeIndex), {
@@ -259,6 +267,11 @@ function MobileFooterSlackCluster({
       mass: 0.85,
     });
   }, [activeIndex, slideIndex]);
+
+  const handlePillLayout = useCallback((width: number) => {
+    if (!pillMountedRef.current || width <= 0) return;
+    setPillWidth((prev) => (prev === width ? prev : width));
+  }, []);
 
   const segmentWidth =
     pillWidth > 0
@@ -284,7 +297,7 @@ function MobileFooterSlackCluster({
         styles.mobileFooterSlackPill,
         compact && styles.mobileFooterSlackPillCompact,
       ]}
-      onLayout={(e) => setPillWidth(e.nativeEvent.layout.width)}
+      onLayout={(e) => handlePillLayout(e.nativeEvent.layout.width)}
     >
       {segmentWidth > 0 ? (
         <Animated.View

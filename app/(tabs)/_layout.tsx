@@ -18,10 +18,14 @@ import { ROUTES } from '@/lib/routes';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
+import { ProfileMenuDrawerProvider, useProfileMenuDrawer } from '@/contexts/ProfileMenuDrawerContext';
 
-function DemoCustomTabBar(props: BottomTabBarProps) {
+function DemoCustomTabBar(
+  props: BottomTabBarProps & { onOpenProfileDrawer: () => void },
+) {
   const router = useRouter();
   const { resetBarVisible } = useDemoTabBarScroll();
+  const { onOpenProfileDrawer } = props;
   const { state, navigation } = props;
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -43,7 +47,7 @@ function DemoCustomTabBar(props: BottomTabBarProps) {
   };
 
   const onProfilePress = () => {
-    router.push('/(tabs)/profile');
+    onOpenProfileDrawer();
   };
 
   useEffect(() => {
@@ -151,30 +155,42 @@ export default function TabLayout() {
   }
 
   return (
-    <DemoTabBarScrollProvider>
-      <Tabs
-        backBehavior="history"
-        tabBar={(props) => <DemoCustomTabBar {...props} />}
-        screenOptions={{
-          headerShown: false,
-          tabBarShowLabel: false,
-          tabBarStyle: { display: 'none' },
-          sceneStyle: isDesktopWeb
-            ? {
-                paddingTop: Layout.desktopTopNavOffset,
-              }
-            : undefined,
-        }}
-      >
-        <Tabs.Screen name="index" options={{ title: 'Home' }} />
-        <Tabs.Screen name="ops-agent" options={{ href: null }} />
-        <Tabs.Screen name="finance" options={{ title: 'Fiscal' }} />
-        <Tabs.Screen name="trips" options={{ title: 'Trips' }} />
-        <Tabs.Screen name="network" options={{ title: 'Home' }} />
-        <Tabs.Screen name="indents" options={{ href: null }} />
-        <Tabs.Screen name="resources" options={{ href: null }} />
-      </Tabs>
-    </DemoTabBarScrollProvider>
+    <ProfileMenuDrawerProvider>
+      <DemoTabBarScrollProvider>
+        <TabsWithProfileDrawer isDesktopWeb={isDesktopWeb} />
+      </DemoTabBarScrollProvider>
+    </ProfileMenuDrawerProvider>
+  );
+}
+
+function TabsWithProfileDrawer({ isDesktopWeb }: { isDesktopWeb: boolean }) {
+  const { open: openProfileDrawer } = useProfileMenuDrawer();
+
+  return (
+    <Tabs
+      backBehavior="history"
+      tabBar={(props) => (
+        <DemoCustomTabBar {...props} onOpenProfileDrawer={openProfileDrawer} />
+      )}
+      screenOptions={{
+        headerShown: false,
+        tabBarShowLabel: false,
+        tabBarStyle: { display: 'none' },
+        sceneStyle: isDesktopWeb
+          ? {
+              paddingTop: Layout.desktopTopNavOffset,
+            }
+          : undefined,
+      }}
+    >
+      <Tabs.Screen name="index" options={{ title: 'Home' }} />
+      <Tabs.Screen name="ops-agent" options={{ href: null }} />
+      <Tabs.Screen name="finance" options={{ title: 'Fiscal' }} />
+      <Tabs.Screen name="trips" options={{ title: 'Trips' }} />
+      <Tabs.Screen name="network" options={{ title: 'Home' }} />
+      <Tabs.Screen name="indents" options={{ href: null }} />
+      <Tabs.Screen name="resources" options={{ href: null }} />
+    </Tabs>
   );
 }
 

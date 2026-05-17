@@ -4,18 +4,31 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 type Props = { children: ReactNode };
 
-type State = { hasError: boolean };
+type State = { hasError: boolean; errorMessage: string | null };
 
 /**
  * Catches render errors on the Network tab so a flaky child doesn’t replace the whole app
  * with the root ErrorBoundary (“Connection error”).
  */
 export class NetworkTabErrorBoundary extends Component<Props, State> {
-  state: State = { hasError: false };
+  state: State = { hasError: false, errorMessage: null };
 
-  static getDerivedStateFromError(): State {
-    return { hasError: true };
+  private retryKey = 0;
+
+  static getDerivedStateFromError(error: Error): State {
+    return { hasError: true, errorMessage: error?.message ?? null };
   }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    if (__DEV__) {
+      console.error("[NetworkTabErrorBoundary]", error, info.componentStack);
+    }
+  }
+
+  private handleRetry = () => {
+    this.retryKey += 1;
+    this.setState({ hasError: false, errorMessage: null });
+  };
 
   render() {
     if (this.state.hasError) {
@@ -26,9 +39,14 @@ export class NetworkTabErrorBoundary extends Component<Props, State> {
             A panel on this screen hit an unexpected error. Try again — if it keeps happening, pull to
             refresh after checking your connection.
           </Text>
+          {__DEV__ && this.state.errorMessage ? (
+            <Text style={styles.devError} selectable>
+              {this.state.errorMessage}
+            </Text>
+          ) : null}
           <TouchableOpacity
             style={styles.btn}
-            onPress={() => this.setState({ hasError: false })}
+            onPress={this.handleRetry}
             accessibilityRole="button"
             accessibilityLabel="Try again"
           >
@@ -37,7 +55,7 @@ export class NetworkTabErrorBoundary extends Component<Props, State> {
         </View>
       );
     }
-    return this.props.children;
+    return <React.Fragment key={this.retryKey}>{this.props.children}</React.Fragment>;
   }
 }
 
@@ -63,6 +81,14 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 20,
     lineHeight: 22,
+  },
+  devError: {
+    fontSize: 11,
+    color: Theme.teslaRed,
+    textAlign: "center",
+    marginBottom: 16,
+    lineHeight: 16,
+    maxWidth: 320,
   },
   btn: {
     backgroundColor: Theme.buttonPrimary,

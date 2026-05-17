@@ -4,6 +4,13 @@
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from "@/constants/Theme";
+import {
+  NETWORK_PROFILE_AVATAR_SIZE_HUB,
+  NETWORK_PROFILE_AVATAR_SIZE_HUB_CAROUSEL,
+  NETWORK_PROFILE_CARD_HEIGHT,
+  NETWORK_PROFILE_CARD_RADIUS,
+  NETWORK_PROFILE_COVER_HEIGHT,
+} from "@/features/network/constants/networkProfileCardLayout";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
 import { getInitials } from "@/lib/stringUtils";
 import {
@@ -76,7 +83,8 @@ function subtleAvatarBg(id: string): string {
 }
 
 /** Min height for horizontal hub connection row (carousel / side-scroll). Kept exported for callers & stable bundles. */
-export const HUB_CAROUSEL_MIN_HEIGHT = 214;
+export const HUB_CAROUSEL_MIN_HEIGHT = NETWORK_PROFILE_CARD_HEIGHT;
+export const HUB_CAROUSEL_CARD_WIDTH = 152;
 
 export function HubConnectionListCard({
   item,
@@ -160,7 +168,7 @@ export function HubConnectionListCard({
             <View style={[styles.profileHeroCol, styles.profileHeroColLeft]}>
               {typeof item.totalTrips === "number" && item.totalTrips >= 0 ? (
                 <View style={styles.hubMetricPill}>
-                  <Text style={styles.hubTripsText} numberOfLines={1}>
+                  <Text style={styles.hubTripsText} numberOfLines={2}>
                     {item.totalTrips} trip{item.totalTrips === 1 ? "" : "s"}
                   </Text>
                 </View>
@@ -186,7 +194,11 @@ export function HubConnectionListCard({
                       ? "supplier"
                       : "client")
                 }
-                size={isCarousel ? 48 : 62}
+                size={
+                  isCarousel
+                    ? NETWORK_PROFILE_AVATAR_SIZE_HUB_CAROUSEL
+                    : NETWORK_PROFILE_AVATAR_SIZE_HUB
+                }
                 borderStyle={styles.heroAvatarImage}
               />
             </View>
@@ -221,7 +233,7 @@ export function HubConnectionListCard({
           <Text style={styles.entityName} numberOfLines={1}>
             {item.name.toUpperCase()}
           </Text>
-          <Text style={styles.entitySubtitle} numberOfLines={2}>
+          <Text style={styles.entitySubtitle} numberOfLines={1}>
             {item.role === "CLIENT"
               ? "Shipping demand partner"
               : item.role === "SUPPLIER"
@@ -331,14 +343,14 @@ const styles = StyleSheet.create({
   cardPress: {
     flex: 1,
     minWidth: 0,
-    minHeight: 282,
+    minHeight: NETWORK_PROFILE_CARD_HEIGHT,
   },
   cardPressCarousel: {
-    width: 152,
+    width: HUB_CAROUSEL_CARD_WIDTH,
     height: HUB_CAROUSEL_MIN_HEIGHT,
     minHeight: HUB_CAROUSEL_MIN_HEIGHT,
     flex: 0,
-    flexBasis: 152,
+    flexBasis: HUB_CAROUSEL_CARD_WIDTH,
     flexGrow: 0,
     flexShrink: 0,
     marginRight: 0,
@@ -346,7 +358,7 @@ const styles = StyleSheet.create({
   cardOuter: {
     flex: 1,
     backgroundColor: Theme.screenBackground,
-    borderRadius: 18,
+    borderRadius: NETWORK_PROFILE_CARD_RADIUS,
     borderWidth: 1,
     borderColor: Theme.surfaceBorder,
     shadowColor: Theme.shadow,
@@ -364,7 +376,7 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   coverBg: {
-    height: 48,
+    height: NETWORK_PROFILE_COVER_HEIGHT,
     overflow: "hidden",
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
@@ -446,13 +458,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     width: "100%",
-    marginTop: -26,
-    paddingHorizontal: 2,
+    marginTop: -22,
+    paddingHorizontal: 0,
     zIndex: 5,
-    gap: 4,
+    gap: 2,
   },
   profileHeroRowCarousel: {
-    marginTop: -24,
+    marginTop: -20,
   },
   profileHeroCol: {
     flex: 1,
@@ -466,16 +478,16 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
   },
   profileHeroColGap: {
-    minHeight: 22,
+    minHeight: 18,
   },
   hubMetricPill: {
-    minHeight: 22,
+    minHeight: 18,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 7,
-    paddingVertical: 4,
-    borderRadius: 11,
+    paddingHorizontal: 5,
+    paddingVertical: 3,
+    borderRadius: 9,
     backgroundColor: Theme.screenBackground,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
@@ -490,10 +502,12 @@ const styles = StyleSheet.create({
     minHeight: 20,
   },
   hubTripsText: {
-    fontSize: 8,
+    fontSize: 7,
     fontWeight: "600",
     fontStyle: "italic",
     color: Theme.textSecondary,
+    textAlign: "center",
+    lineHeight: 9,
   },
   hubRatingText: {
     fontSize: 9,
@@ -580,31 +594,31 @@ const styles = StyleSheet.create({
   profileBlock: {
     position: "relative",
     alignItems: "center",
-    paddingHorizontal: 10,
-    paddingBottom: 8,
+    paddingHorizontal: 6,
+    paddingBottom: 2,
   },
   entityName: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "800",
     color: Theme.textPrimaryDark,
     letterSpacing: -0.15,
-    lineHeight: 13,
+    lineHeight: 12,
     textAlign: "center",
-    marginTop: 6,
+    marginTop: 4,
   },
   entitySubtitle: {
-    fontSize: 8,
+    fontSize: 7,
     fontWeight: "500",
     color: Theme.textMutedDemo,
-    lineHeight: 11,
+    lineHeight: 10,
     textAlign: "center",
-    marginTop: 3,
-    minHeight: 22,
+    marginTop: 1,
+    minHeight: 0,
   },
   heroAvatar: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
+    width: NETWORK_PROFILE_AVATAR_SIZE_HUB + 4,
+    height: NETWORK_PROFILE_AVATAR_SIZE_HUB + 4,
+    borderRadius: (NETWORK_PROFILE_AVATAR_SIZE_HUB + 4) / 2,
     overflow: "hidden",
     backgroundColor: Theme.screenBackground,
     alignItems: "center",
@@ -617,9 +631,9 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   heroAvatarCarousel: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: NETWORK_PROFILE_AVATAR_SIZE_HUB_CAROUSEL + 4,
+    height: NETWORK_PROFILE_AVATAR_SIZE_HUB_CAROUSEL + 4,
+    borderRadius: (NETWORK_PROFILE_AVATAR_SIZE_HUB_CAROUSEL + 4) / 2,
   },
   heroAvatarImage: {
     borderWidth: 2,
@@ -627,14 +641,14 @@ const styles = StyleSheet.create({
   },
   cardMetaStack: {
     width: "100%",
-    gap: 6,
-    paddingHorizontal: 8,
+    gap: 2,
+    paddingHorizontal: 6,
     marginTop: 2,
-    marginBottom: 8,
+    marginBottom: 2,
     alignItems: "center",
   },
   metaChip: {
-    minHeight: 18,
+    minHeight: 16,
     maxWidth: "100%",
     flexDirection: "row",
     alignItems: "center",
@@ -721,8 +735,9 @@ const styles = StyleSheet.create({
     color: Theme.textOnPrimary,
   },
   cardFooter: {
-    minHeight: 42,
-    paddingHorizontal: 10,
+    minHeight: 28,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
     alignItems: "center",
@@ -730,15 +745,15 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.screenBackground,
   },
   connectedStateTag: {
-    minHeight: 28,
+    minHeight: 24,
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 4,
     borderWidth: 1,
     borderColor: Theme.borderMedium,
-    borderRadius: 14,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     backgroundColor: Theme.screenBackground,
     shadowColor: Theme.shadow,
     shadowOpacity: 0.03,
@@ -747,20 +762,20 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   connectedStateTagText: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "700",
     fontStyle: "italic",
     color: Theme.textPrimaryDark,
   },
   inviteBtn: {
-    minHeight: 30,
+    minHeight: 26,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    gap: 5,
+    borderRadius: 13,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     backgroundColor: Theme.screenBackground,
     borderWidth: 1,
     borderColor: Theme.textPrimaryDark,
@@ -775,7 +790,7 @@ const styles = StyleSheet.create({
     opacity: 0.72,
   },
   inviteBtnText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "600",
     color: Theme.textPrimaryDark,
     letterSpacing: 0.2,

@@ -6,10 +6,16 @@ import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import {
+    HUB_CAROUSEL_CARD_WIDTH,
     HUB_CAROUSEL_MIN_HEIGHT,
     HubConnectionListCard,
     type HubConnectionItem,
 } from "@/features/network/components/NetworkConnectionHubCards";
+import {
+    NetworkLoadMoreButton,
+    networkCompactListStyle,
+    useNetworkListPagination,
+} from "@/features/network/components/NetworkCompactRows";
 import { runConnectionInvite } from "@/features/network/utils/connectionInvite.util";
 import {
     getOrganizationLocationsByIds,
@@ -831,6 +837,15 @@ export function ConnectionsView({
     tripCountByDriverId,
   ]);
 
+  const connectionsPaginationKey = `${effectiveFilter}:${effectiveSearch}`;
+
+  const {
+    visibleItems: visibleConnections,
+    hasMore: hasMoreConnections,
+    remaining: remainingConnections,
+    loadMore: loadMoreConnections,
+  } = useNetworkListPagination(connections, connectionsPaginationKey);
+
   const toHubItem = (c: ConnectedOrg): HubConnectionItem => ({
     id: c.id,
     name: c.name,
@@ -891,6 +906,41 @@ export function ConnectionsView({
     onConnectionsComputed?.(connections);
   }, [connections, onConnectionsComputed]);
 
+  const renderHubConnectionCarousel = () => (
+    <View style={styles.hubCarouselWrap}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        nestedScrollEnabled
+        directionalLockEnabled
+        style={styles.hubCarouselScroll}
+        contentContainerStyle={styles.hubCarouselContent}
+      >
+        {visibleConnections.map((item) => (
+          <View
+            key={`hub-card-${item.role}-${item.id}`}
+            style={styles.hubCarouselItem}
+          >
+            <HubConnectionListCard
+              item={toHubItem(item)}
+              layout="carousel"
+              onActionPress={() => void inviteOffAppParty(item)}
+              onCardPress={() => onOpenProfile?.(item)}
+            />
+          </View>
+        ))}
+      </ScrollView>
+      {hasMoreConnections ? (
+        <View style={styles.hubCarouselLoadMore}>
+          <NetworkLoadMoreButton
+            remaining={remainingConnections}
+            onPress={loadMoreConnections}
+          />
+        </View>
+      ) : null}
+    </View>
+  );
+
   const embeddedBody = useHubLayout ? (
     isLoading ? (
       <View style={styles.embeddedLoading}>
@@ -902,27 +952,7 @@ export function ConnectionsView({
         <EmptyState />
       </View>
     ) : (
-      <ScrollView
-        horizontal
-        nestedScrollEnabled
-        showsHorizontalScrollIndicator={false}
-        style={styles.hubScrollViewport}
-        contentContainerStyle={styles.hubScrollContent}
-      >
-        {connections.map((item) => (
-          <View
-            key={`hub-scroll-${item.role}-${item.id}`}
-            style={styles.hubScrollCardWrap}
-          >
-            <HubConnectionListCard
-              item={toHubItem(item)}
-              layout="carousel"
-              onActionPress={() => void inviteOffAppParty(item)}
-              onCardPress={() => onOpenProfile?.(item)}
-            />
-          </View>
-        ))}
-      </ScrollView>
+      renderHubConnectionCarousel()
     )
   ) : isLoading ? (
     <View style={styles.embeddedLoading}>
@@ -1049,29 +1079,13 @@ export function ConnectionsView({
       ) : isLoading ? (
         <LoadingIndicator color={Theme.primary} style={{ marginTop: 48 }} />
       ) : useHubLayout ? (
-        <FlatList
-          key="hub-list"
-          data={connections}
-          keyExtractor={(item) => `hub-${item.role}-${item.id}`}
-          renderItem={({ item }) => (
-            <HubConnectionListCard
-              item={toHubItem(item)}
-              onActionPress={() => void inviteOffAppParty(item)}
-            />
-          )}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          scrollEnabled
-          nestedScrollEnabled
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor={Theme.primary}
-            />
-          }
-          ListEmptyComponent={<EmptyState />}
-        />
+        connections.length === 0 ? (
+          <EmptyState />
+        ) : (
+          <View style={[styles.listContent, networkCompactListStyle]}>
+            {renderHubConnectionCarousel()}
+          </View>
+        )
       ) : isGrid ? (
         <FlatList
           key="grid"
@@ -1147,6 +1161,31 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Theme.textSecondary,
   },
+  compactList: {},
+  hubCarouselWrap: {
+    width: "100%",
+    paddingTop: 2,
+  },
+  hubCarouselScroll: {
+    width: "100%",
+    flexGrow: 0,
+    maxHeight: HUB_CAROUSEL_MIN_HEIGHT + 8,
+  },
+  hubCarouselContent: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    gap: 10,
+  },
+  hubCarouselItem: {
+    width: HUB_CAROUSEL_CARD_WIDTH,
+    flexShrink: 0,
+  },
+  hubCarouselLoadMore: {
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 2,
+    paddingBottom: 0,
+  },
   embeddedEmptyWrap: { minHeight: 200, paddingBottom: 16 },
   embeddedGridRoot: { paddingBottom: 8 },
   gridRowEmbedded: {
@@ -1155,43 +1194,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
   },
   listContentEmbedded: { paddingHorizontal: 22, paddingBottom: 16, gap: 8 },
-  hubGridEmbedded: {
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 6,
-    paddingBottom: 12,
-    gap: 10,
-  },
-  hubScrollViewport: {
-    height: HUB_CAROUSEL_MIN_HEIGHT + 24,
-    minHeight: HUB_CAROUSEL_MIN_HEIGHT + 24,
-    maxHeight: HUB_CAROUSEL_MIN_HEIGHT + 24,
-    paddingTop: 6,
-    paddingBottom: 10,
-  },
-  hubScrollContent: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    gap: 10,
-    height: HUB_CAROUSEL_MIN_HEIGHT,
-    minHeight: HUB_CAROUSEL_MIN_HEIGHT,
-  },
-  hubScrollCardWrap: {
-    width: 152,
-    height: HUB_CAROUSEL_MIN_HEIGHT,
-    minHeight: HUB_CAROUSEL_MIN_HEIGHT,
-    flexGrow: 0,
-    flexShrink: 0,
-  },
-  hubGridRow: {
-    flexDirection: "row",
-    alignItems: "stretch",
-    gap: 12,
-  },
-  hubGridSpacer: {
-    flex: 1,
-    minWidth: 0,
-  },
 
   statsBar: {
     flexDirection: "row",

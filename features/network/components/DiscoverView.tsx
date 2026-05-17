@@ -7,6 +7,17 @@ import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { PartyAvatar } from '@/components/PartyAvatar';
+import {
+  NetworkLoadMoreButton,
+  networkCompactListStyle,
+  useNetworkListPagination,
+} from '@/features/network/components/NetworkCompactRows';
+import {
+  NETWORK_PROFILE_AVATAR_SIZE_DISCOVER,
+  NETWORK_PROFILE_CARD_HEIGHT,
+  NETWORK_PROFILE_CARD_RADIUS,
+  NETWORK_PROFILE_COVER_HEIGHT,
+} from "@/features/network/constants/networkProfileCardLayout";
 import { discoverOrganizations, type DiscoverOrg } from '@/features/network/services/discover.service';
 import { getOrganizationLocationsByIds } from '@/features/organization/services/organization.service';
 import {
@@ -245,7 +256,6 @@ function OrgCard({
   return (
     <Animated.View style={[
       styles.card,
-      stretchCellHeight && styles.cardStretchEmbedded,
       stretchCellHeight && styles.cardFixedHeightEmbedded,
       isConnected && styles.cardConnected,
       isRecommended && !isConnected && !isPending && styles.cardRecommended,
@@ -262,31 +272,27 @@ function OrgCard({
         </View>
       </View>
 
-      <View style={[styles.profileBlock, stretchCellHeight && styles.profileBlockFlex]}>
+      <View style={styles.profileBlock}>
         <Pressable onPress={onOpenProfile} style={styles.profileBlockPress}>
-          <View style={styles.profileHeroRow}>
-            <View style={[styles.profileHeroCol, styles.profileHeroColLeft]}>
-              {showTrips ? (
-                <View style={styles.hubMetricPill}>
-                  <Text style={styles.hubTripsText} numberOfLines={1}>
-                    {totalTrips} trip{totalTrips === 1 ? '' : 's'}
-                  </Text>
-                </View>
-              ) : (
-                <View style={styles.profileHeroColGap} />
-              )}
-            </View>
+          <View style={styles.profileHeroStack}>
             <View style={styles.heroAvatar}>
               <PartyAvatar
                 name={org.name}
                 initialsColorSeed={org.id}
                 avatarSeed={org.avatar_seed}
                 entityType="client"
-                size={48}
+                size={NETWORK_PROFILE_AVATAR_SIZE_DISCOVER}
                 borderStyle={styles.heroAvatarImage}
               />
             </View>
-            <View style={[styles.profileHeroCol, styles.profileHeroColRight]}>
+            <View style={styles.profileMetricsRow}>
+              {showTrips ? (
+                <View style={styles.hubMetricPill}>
+                  <Text style={styles.hubTripsText} numberOfLines={1}>
+                    {totalTrips} trip{totalTrips === 1 ? '' : 's'}
+                  </Text>
+                </View>
+              ) : null}
               <View
                 style={[
                   styles.hubMetricPill,
@@ -335,14 +341,13 @@ function OrgCard({
             )}
           </View>
         </Pressable>
-      </View>
-
-      <View style={styles.cardMetaStack}>
-        <View style={[styles.discoveryMetaChip, hasMutuals && styles.discoveryMetaChipStrong]}>
-          <Users size={10} color={hasMutuals ? Theme.textOnPrimary : Theme.textSecondary} strokeWidth={2.5} />
-          <Text style={[styles.discoveryMetaText, hasMutuals && styles.discoveryMetaTextStrong]} numberOfLines={1}>
-            {hasMutuals ? `${mutuals} mutual${mutuals === 1 ? '' : 's'}` : 'No mutuals'}
-          </Text>
+        <View style={styles.cardMetaStack}>
+          <View style={[styles.discoveryMetaChip, hasMutuals && styles.discoveryMetaChipStrong]}>
+            <Users size={9} color={hasMutuals ? Theme.textOnPrimary : Theme.textSecondary} strokeWidth={2.5} />
+            <Text style={[styles.discoveryMetaText, hasMutuals && styles.discoveryMetaTextStrong]} numberOfLines={1}>
+              {hasMutuals ? `${mutuals} mutual${mutuals === 1 ? '' : 's'}` : 'No mutuals'}
+            </Text>
+          </View>
         </View>
       </View>
 
@@ -425,7 +430,7 @@ const DISCOVER_ROWS_MOBILE = 3;
 const EMBEDDED_SCROLL_ITEM_CAP = 40;
 const LIST_STATIC_HORIZONTAL_PAD = 14 * 2;
 const DISCOVER_GRID_GAP_PX = 8;
-const DISCOVER_EMBEDDED_CARD_HEIGHT = 224;
+const DISCOVER_EMBEDDED_CARD_HEIGHT = NETWORK_PROFILE_CARD_HEIGHT;
 /** Before `onLayout` reports width, cap provisional outer width so 7-up math stays modest vs narrow columns. */
 const DISCOVER_EMBEDDED_PROVISIONAL_OUTER_CAP = 520;
 
@@ -894,79 +899,61 @@ export function DiscoverView({
     | { _type: 'header'; label: string; count: number }
     | { _type: 'org'; org: ScoredOrg };
 
+  const discoverListOrgs = useMemo(
+    () => (search ? connectableOrgs : [...recommended, ...rest]),
+    [connectableOrgs, recommended, rest, search],
+  );
+
+  const discoverPaginationKey = `${search}:${discoverListOrgs.length}`;
+
+  const {
+    visibleItems: visibleDiscoverOrgs,
+    hasMore: hasMoreDiscover,
+    remaining: remainingDiscover,
+    loadMore: loadMoreDiscover,
+  } = useNetworkListPagination(discoverListOrgs, discoverPaginationKey);
+
   const listData = useMemo<ListItem[]>(() => {
     const items: ListItem[] = [];
-    const display = (search ? connectableOrgs : [...recommended, ...rest]).slice(
-      0,
-      discoverDisplayCap,
-    );
-    if (search && display.length > 0) {
+    const display = embedded
+      ? discoverListOrgs
+      : discoverListOrgs.slice(0, discoverDisplayCap);
+    if (search && display.length > 0 && !embedded) {
       items.push({ _type: 'header', label: 'Fresh profiles', count: connectableOrgs.length });
     }
     for (const org of display) items.push({ _type: 'org', org });
     return items;
-  }, [connectableOrgs, recommended, rest, search, discoverDisplayCap]);
+  }, [connectableOrgs, discoverListOrgs, discoverDisplayCap, embedded, search]);
 
-  const embeddedDiscoverSections = useMemo(() => {
-    const orgItems = listData.filter(
-      (item): item is Extract<ListItem, { _type: "org" }> =>
-        item._type === "org",
-    );
-    const header =
-      listData.find(
-        (item): item is Extract<ListItem, { _type: "header" }> =>
-          item._type === "header",
-      ) ?? null;
-    return {
-      header,
-      rows: chunkBySize(orgItems, discoverColumnCount),
-    };
-  }, [listData, discoverColumnCount]);
+  const embeddedDiscoverRows = useMemo(
+    () => chunkBySize(visibleDiscoverOrgs, discoverColumnCount),
+    [visibleDiscoverOrgs, discoverColumnCount],
+  );
 
-  const embeddedGridBody = (
-    <>
-      {embeddedDiscoverSections.header ? (
-        <View style={styles.gridHeaderCell}>
-          <SectionLabel
-            label={embeddedDiscoverSections.header.label}
-            count={embeddedDiscoverSections.header.count}
-          />
-        </View>
-      ) : null}
-      {embeddedDiscoverSections.rows.map((row, ri) => (
-        <View key={`discover-grid-${ri}`} style={styles.discoverGridRow}>
-          {row.map((item) => (
-            <View
-              key={item.org.id}
-              style={[
-                styles.discoverGridCell,
-                embedded &&
-                  embeddedDiscoverCellWidth != null && {
-                    width: embeddedDiscoverCellWidth,
-                    minWidth: embeddedDiscoverCellWidth,
-                    maxWidth: embeddedDiscoverCellWidth,
-                    flexGrow: 0,
-                    flexShrink: 0,
-                    alignSelf: "flex-start",
-                  },
-                embedded && styles.discoverGridCellEmbeddedFixedHeight,
-              ]}
-            >
-              <View style={[styles.discoverGridCardWrap, embedded && styles.discoverGridCardWrapStretch]}>
+  const embeddedProfileCardBody = (
+    <View style={[styles.discoverCardList, networkCompactListStyle]}>
+      {embeddedDiscoverRows.map((row, rowIndex) => (
+        <View key={`discover-row-${rowIndex}`} style={styles.discoverGridRow}>
+          {row.map((org) => (
+            <View key={org.id} style={styles.discoverGridCellEmbeddedFlex}>
+              <View style={styles.discoverGridCardWrapStretch}>
                 <OrgCard
-                  org={item.org}
-                  locationFallback={organizationLocationById[item.org.id]}
-                  {...getDiscoverOrgCardMetrics(item.org)}
-                  onConnect={() => tryBeginConnectionRequest(item.org)}
-                  onCancel={() => void handleCancelRequest(item.org)}
-                  loading={connecting === item.org.id}
-                  stretchCellHeight={embedded}
+                  org={org}
+                  locationFallback={organizationLocationById[org.id]}
+                  {...getDiscoverOrgCardMetrics(org)}
+                  onConnect={() => tryBeginConnectionRequest(org)}
+                  onCancel={() => void handleCancelRequest(org)}
+                  loading={connecting === org.id}
+                  stretchCellHeight
                   onOpenProfile={() => {
-                    const metrics = getDiscoverOrgCardMetrics(item.org);
+                    const metrics = getDiscoverOrgCardMetrics(org);
                     onOpenProfile?.({
-                      ...item.org,
+                      ...org,
                       rating_value: metrics.ratingValue,
-                      location_value: getBusinessLocation(item.org),
+                      location_value: getBusinessLocation(
+                        org,
+                        organizationLocationById[org.id],
+                      ),
                     });
                   }}
                 />
@@ -975,7 +962,13 @@ export function DiscoverView({
           ))}
         </View>
       ))}
-    </>
+      {hasMoreDiscover ? (
+        <NetworkLoadMoreButton
+          remaining={remainingDiscover}
+          onPress={loadMoreDiscover}
+        />
+      ) : null}
+    </View>
   );
 
   return (
@@ -1015,7 +1008,7 @@ export function DiscoverView({
 
       {embedded ? (
         <View>
-          {listData.length === 0 && !loading ? (
+          {discoverListOrgs.length === 0 && !loading ? (
             <View style={styles.empty}>
               <View style={styles.emptyIconWrap}>
                 <Compass size={36} color={Theme.textSecondary} strokeWidth={1.5} />
@@ -1029,28 +1022,12 @@ export function DiscoverView({
                   : "Search for companies, clients, and suppliers across the country"}
               </Text>
             </View>
-          ) : listData.length === 0 && loading ? (
+          ) : discoverListOrgs.length === 0 && loading ? (
             <View style={styles.embeddedGridLoading}>
               <LoadingIndicator size="small" color={Theme.primary} />
             </View>
-          ) : embeddedScrollable ? (
-            <ScrollView
-              style={[styles.embeddedDiscoverScroll, { maxHeight: embeddedScrollMaxHeight }]}
-              contentContainerStyle={styles.listStatic}
-              onLayout={(e) => recordEmbeddedListWidth(e.nativeEvent.layout.width)}
-              nestedScrollEnabled
-              showsVerticalScrollIndicator
-              keyboardShouldPersistTaps="handled"
-            >
-              {embeddedGridBody}
-            </ScrollView>
           ) : (
-            <View
-              style={styles.listStatic}
-              onLayout={(e) => recordEmbeddedListWidth(e.nativeEvent.layout.width)}
-            >
-              {embeddedGridBody}
-            </View>
+            embeddedProfileCardBody
           )}
         </View>
       ) : (
@@ -1185,6 +1162,7 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     width: "100%",
   },
+  compactList: {},
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1232,6 +1210,10 @@ const styles = StyleSheet.create({
     width: "100%",
     alignSelf: "stretch",
   },
+  discoverCardList: {
+    width: "100%",
+    gap: 8,
+  },
   listStatic: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingBottom: 16,
@@ -1278,7 +1260,7 @@ const styles = StyleSheet.create({
     width: "100%",
     minHeight: 0,
     backgroundColor: Theme.screenBackground,
-    borderRadius: 18,
+    borderRadius: NETWORK_PROFILE_CARD_RADIUS,
     borderWidth: 1,
     borderColor: Theme.surfaceBorder,
     shadowColor: Theme.shadow,
@@ -1312,7 +1294,7 @@ const styles = StyleSheet.create({
   recommendedText: { fontSize: 9, fontWeight: '800', color: '#6366f1', letterSpacing: 0.4 },
   cardRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
   discoverCover: {
-    height: 52,
+    height: NETWORK_PROFILE_COVER_HEIGHT,
     overflow: "hidden",
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
@@ -1384,42 +1366,35 @@ const styles = StyleSheet.create({
     alignItems: "center",
     width: "100%",
   },
-  profileHeroRow: {
-    flexDirection: "row",
+  profileHeroStack: {
     alignItems: "center",
-    justifyContent: "space-between",
     width: "100%",
-    marginTop: -24,
-    paddingHorizontal: 2,
+    marginTop: -22,
+    paddingHorizontal: 4,
     zIndex: 5,
-    gap: 4,
+    gap: 6,
   },
-  profileHeroCol: {
-    flex: 1,
-    minWidth: 0,
+  profileMetricsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
     justifyContent: "center",
-  },
-  profileHeroColLeft: {
-    alignItems: "flex-start",
-  },
-  profileHeroColRight: {
-    alignItems: "flex-end",
-  },
-  profileHeroColGap: {
-    minHeight: 22,
+    gap: 4,
+    width: "100%",
   },
   hubMetricPill: {
-    minHeight: 22,
+    minHeight: 18,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 7,
-    paddingVertical: 4,
-    borderRadius: 11,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 9,
     backgroundColor: Theme.screenBackground,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
-    maxWidth: "100%",
+    flexShrink: 1,
+    maxWidth: "48%",
   },
   hubMetricPillRating: {
     gap: 4,
@@ -1430,10 +1405,12 @@ const styles = StyleSheet.create({
     minHeight: 20,
   },
   hubTripsText: {
-    fontSize: 8,
+    fontSize: 7,
     fontWeight: "600",
     fontStyle: "italic",
     color: Theme.textSecondary,
+    textAlign: "center",
+    lineHeight: 9,
   },
   hubRatingText: {
     fontSize: 9,
@@ -1447,9 +1424,9 @@ const styles = StyleSheet.create({
     letterSpacing: -0.1,
   },
   heroAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: NETWORK_PROFILE_AVATAR_SIZE_DISCOVER + 4,
+    height: NETWORK_PROFILE_AVATAR_SIZE_DISCOVER + 4,
+    borderRadius: (NETWORK_PROFILE_AVATAR_SIZE_DISCOVER + 4) / 2,
     overflow: "hidden",
     backgroundColor: Theme.screenBackground,
     alignItems: "center",
@@ -1472,7 +1449,7 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     letterSpacing: -0.1,
     textAlign: "center",
-    marginTop: 5,
+    marginTop: 4,
     lineHeight: 12,
     height: 12,
     maxHeight: 12,
@@ -1514,9 +1491,9 @@ const styles = StyleSheet.create({
   },
   cardMetaStack: {
     width: "100%",
-    paddingHorizontal: 8,
-    marginTop: 2,
-    marginBottom: 6,
+    paddingHorizontal: 6,
+    marginTop: 0,
+    marginBottom: 4,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1628,24 +1605,23 @@ const styles = StyleSheet.create({
   connectedLabel: { fontSize: 10, fontWeight: '700', color: '#10b981' },
   pendingLabel: { fontSize: 10, fontWeight: '700', color: '#f59e0b' },
   cardFooter: {
-    minHeight: 40,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
+    minHeight: 28,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
     alignItems: "stretch",
     justifyContent: "center",
-    marginTop: "auto",
   },
   footerAction: {
-    minHeight: 30,
+    minHeight: 26,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    gap: 5,
+    borderRadius: 13,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     backgroundColor: Theme.screenBackground,
     borderWidth: 1,
     borderColor: Theme.borderMedium,

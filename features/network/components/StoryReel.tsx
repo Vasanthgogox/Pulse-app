@@ -1,17 +1,15 @@
 /**
- * Network broadcasts row — compact market signal cards.
+ * Network stories row — circular avatars with gradient rings (unseen / seen).
  */
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import Typography from "@/constants/Typography";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { type PostRow } from "@/features/network/services/posts.service";
-import { getInitials } from "@/lib/stringUtils";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
-import { Package, Plus, Radio, Truck } from "lucide-react-native";
+import { Plus } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
@@ -23,122 +21,157 @@ interface StoryReelProps {
   headerActions?: React.ReactNode;
 }
 
-const ACCENT_TOKENS = [Theme.teslaRed, Theme.darkGreen, Theme.primary, Theme.textPrimaryDark] as const;
+const STORY_AVATAR = 42;
+const STORY_RING = STORY_AVATAR + 6;
+
+const RING_UNSEEN = ["#f43f5e", "#f59e0b", "#a855f7", "#6366f1"] as const;
+const RING_SEEN = ["#cbd5e1", "#94a3b8"] as const;
+const RING_MINE_ACTIVE = ["#6366f1", "#22d3ee", "#10b981"] as const;
+const RING_MINE_IDLE = ["#e2e8f0", "#cbd5e1"] as const;
+
+const ACCENT_TOKENS = [Theme.teslaRed, Theme.darkGreen, Theme.primary, "#8b5cf6"] as const;
+
 function seedColor(id: string): string {
   let h = 0;
   for (let i = 0; i < id.length; i++) h = (h + id.charCodeAt(i)) % ACCENT_TOKENS.length;
   return ACCENT_TOKENS[h];
 }
 
-function withAlpha(hex: string, a: string): string {
-  if (hex.length === 7) return `${hex}${a}`;
-  return hex;
-}
-
-function shortPlace(value: string | null | undefined): string {
-  const clean = (value ?? "").split(",")[0]?.trim();
-  return clean || "Open lane";
-}
-
-function previewText(post: PostRow): string {
-  if (post.type === "VEHICLE_AVAILABILITY") {
-    return (post.vehicle_type?.trim() || "VEHICLE AVAILABLE").toUpperCase();
-  }
-  if (post.type === "LOAD") {
-    const route = `${shortPlace(post.origin)} → ${shortPlace(post.destination)}`;
-    const requiredVehicle = post.vehicle_type?.trim() || "VEHICLE REQUIRED";
-    return `${requiredVehicle.toUpperCase()} · ${route}`;
-  }
-  const fromContent = (post.content ?? "").trim();
-  if (fromContent.length > 0) return fromContent;
-  return "Network update";
-}
-
-function timeAgoShort(iso: string | null | undefined): string {
-  if (!iso) return "now";
-  const ms = Date.now() - new Date(iso).getTime();
-  const mins = Math.max(1, Math.floor(ms / 60000));
-  if (mins < 60) return `${mins}m`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h`;
-  const days = Math.floor(hrs / 24);
-  return `${days}d`;
-}
-
 function storySeenKey(post: PostRow): string {
   return `${post.organization_id}:${post.type}`;
 }
 
-function BroadcastCard({
-  post,
+function StoryGradientRing({
+  colors,
+  children,
+}: {
+  colors: readonly string[];
+  children: React.ReactNode;
+}) {
+  return (
+    <LinearGradient
+      colors={[...colors]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.ringGradient}
+    >
+      <View style={styles.ringGap}>{children}</View>
+    </LinearGradient>
+  );
+}
+
+function StoryAvatar({
+  name,
+  avatarUrl,
+  avatarSeed,
+  entityType = "supplier" as const,
+}: {
+  name: string;
+  avatarUrl?: string | null;
+  avatarSeed?: string | null;
+  entityType?: "client" | "supplier" | "driver";
+}) {
+  return (
+    <PartyAvatar
+      name={name}
+      avatarUrl={avatarUrl}
+      avatarSeed={avatarSeed}
+      entityType={entityType}
+      size={STORY_AVATAR}
+      style={styles.avatarPlain}
+      borderStyle={styles.avatarPlain}
+    />
+  );
+}
+
+function StoryBubble({
+  label,
+  ringColors,
   onPress,
+  onPressIn,
+  onPressOut,
+  scale,
+  children,
+  badge,
+}: {
+  label: string;
+  ringColors: readonly string[];
+  onPress: () => void;
+  onPressIn?: () => void;
+  onPressOut?: () => void;
+  scale?: Animated.Value;
+  children: React.ReactNode;
+  badge?: React.ReactNode;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      style={({ pressed }) => [styles.storyItem, pressed && styles.storyItemPressed]}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      <Animated.View style={scale ? { transform: [{ scale }] } : undefined}>
+        <View style={styles.ringStack}>
+          <StoryGradientRing colors={ringColors}>{children}</StoryGradientRing>
+          {badge}
+        </View>
+      </Animated.View>
+      <Text style={styles.storyName} numberOfLines={1}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function BroadcastStory({
+  post,
   seen,
+  onPress,
 }: {
   post: PostRow;
-  onPress: () => void;
   seen: boolean;
+  onPress: () => void;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
-  const color = seedColor(post.organization_id);
-  const isLoad = post.type === "LOAD";
-  const isVehicle = post.type === "VEHICLE_AVAILABILITY";
-  const storyPreview = previewText(post);
-  const meta = `${isLoad ? "LOAD" : "CAPACITY"} · ${timeAgoShort(post.created_at)}`;
+  const accent = seedColor(post.organization_id);
   const rawPost = post as PostRow & {
     org_avatar_url?: string | null;
     avatar_url?: string | null;
   };
   const postAvatarUrl = rawPost.org_avatar_url ?? rawPost.avatar_url ?? null;
+  const ringColors = seen
+    ? RING_SEEN
+    : ([accent, RING_UNSEEN[1], RING_UNSEEN[2]] as const);
+
   const handlePressIn = () =>
-    Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start();
+    Animated.spring(scale, { toValue: 0.94, useNativeDriver: true }).start();
   const handlePressOut = () =>
     Animated.spring(scale, { toValue: 1, tension: 80, friction: 6, useNativeDriver: true }).start();
 
+  const shortName = post.org_name.trim().split(/\s+/)[0] ?? post.org_name;
+
   return (
-    <Pressable onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut}>
-      <Animated.View style={[styles.storyItem, { transform: [{ scale }] }]}>
-        <LinearGradient
-          colors={
-            seen
-              ? [withAlpha(Theme.textSection, "66"), withAlpha(Theme.textSection, "2A")]
-              : [withAlpha(color, "66"), withAlpha(color, "28")]
-          }
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.storyRing}
-        >
-          <View style={styles.storyAvatar}>
-            <PartyAvatar
-              name={post.org_name}
-              avatarUrl={postAvatarUrl}
-              avatarSeed={post.org_avatar_seed}
-              entityType="supplier"
-              size={48}
-              borderStyle={styles.storyAvatarImage}
-            />
-            <View style={[styles.storyAvatarIconWrap, { borderColor: withAlpha(color, "44") }]}>
-              {isLoad ? (
-                <Package size={12} color={color} strokeWidth={2.2} />
-              ) : isVehicle ? (
-                <Truck size={12} color={color} strokeWidth={2.2} />
-              ) : (
-                <Text style={[styles.initials, { color }]}>{getInitials(post.org_name)}</Text>
-              )}
-            </View>
-          </View>
-        </LinearGradient>
-        <Text style={styles.storyName} numberOfLines={1}>
-          {post.org_name.toUpperCase()}
-        </Text>
-        <Text style={styles.storyMeta} numberOfLines={1}>
-          {meta}
-        </Text>
-      </Animated.View>
-    </Pressable>
+    <StoryBubble
+      label={shortName}
+      ringColors={ringColors}
+      onPress={onPress}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      scale={scale}
+    >
+      <StoryAvatar
+        name={post.org_name}
+        avatarUrl={postAvatarUrl}
+        avatarSeed={post.org_avatar_seed}
+        entityType="supplier"
+      />
+    </StoryBubble>
   );
 }
 
-export function StoryReel({ posts, orgId, onCreatePost, headerActions }: StoryReelProps) {
+export function StoryReel({ posts, orgId, onCreatePost }: StoryReelProps) {
   const router = useRouter();
   const { profile } = useAuth();
   const [seenKeys, setSeenKeys] = useState<Record<string, true>>({});
@@ -209,6 +242,8 @@ export function StoryReel({ posts, orgId, onCreatePost, headerActions }: StoryRe
   const ownStoryQueueIds = ownStoryQueue.map((s) => s.id).join(",");
   const hasOwnStories = ownStoryQueue.length > 0;
 
+  const mineRing = hasOwnStories ? RING_MINE_ACTIVE : RING_MINE_IDLE;
+
   return (
     <View style={styles.wrap}>
       <ScrollView
@@ -216,7 +251,9 @@ export function StoryReel({ posts, orgId, onCreatePost, headerActions }: StoryRe
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scroll}
       >
-        <Pressable
+        <StoryBubble
+          label="Mine"
+          ringColors={mineRing}
           onPress={() => {
             if (!latestOwnStory) {
               onCreatePost();
@@ -233,45 +270,31 @@ export function StoryReel({ posts, orgId, onCreatePost, headerActions }: StoryRe
               },
             });
           }}
-          style={({ pressed }) => [pressed && { opacity: 0.92 }]}
-        >
-          <View style={styles.storyItem}>
-            <LinearGradient
-              colors={
-                hasOwnStories
-                  ? [withAlpha(Theme.primary, "A8"), withAlpha(Theme.darkGreen, "A8")]
-                  : [withAlpha(Theme.textSection, "66"), withAlpha(Theme.textSection, "2A")]
-              }
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.launchRing}
+          badge={
+            <Pressable
+              style={styles.addBadge}
+              onPress={(event) => {
+                event.stopPropagation();
+                router.push("/(modals)/create-post");
+              }}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Add story"
             >
-              <View style={styles.launchAvatarWrap}>
-                <PartyAvatar
-                  name={profile?.displayName ?? profile?.full_name ?? "Mine"}
-                  avatarUrl={profile?.avatar_url ?? null}
-                  avatarSeed={profile?.avatar_seed ?? null}
-                  entityType="supplier"
-                  size={36}
-                  borderStyle={styles.storyAvatarImage}
-                />
-              </View>
-              <Pressable
-                style={styles.mineAddIconWrap}
-                onPress={(event) => {
-                  event.stopPropagation();
-                  router.push("/(modals)/create-post");
-                }}
-                hitSlop={8}
-              >
-                <Plus size={12} color={Theme.textOnPrimary} strokeWidth={2.8} />
-              </Pressable>
-            </LinearGradient>
-            <Text style={styles.storyName}>Mine</Text>
-          </View>
-        </Pressable>
+              <Plus size={11} color={Theme.textOnPrimary} strokeWidth={2.6} />
+            </Pressable>
+          }
+        >
+          <StoryAvatar
+            name={profile?.displayName ?? profile?.full_name ?? "Mine"}
+            avatarUrl={profile?.avatar_url ?? null}
+            avatarSeed={profile?.avatar_seed ?? null}
+            entityType="supplier"
+          />
+        </StoryBubble>
+
         {stories.map((post) => (
-          <BroadcastCard
+          <BroadcastStory
             key={post.id}
             post={post}
             seen={!!seenKeys[storySeenKey(post)]}
@@ -296,103 +319,58 @@ export function StoryReel({ posts, orgId, onCreatePost, headerActions }: StoryRe
 
 const styles = StyleSheet.create({
   wrap: {
-    backgroundColor: "transparent",
-    paddingTop: 8,
-    paddingBottom: 10,
+    paddingTop: 2,
+    paddingBottom: 4,
   },
   scroll: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    gap: 14,
-    alignItems: "center",
-    paddingRight: 28,
+    gap: 8,
+    alignItems: "flex-start",
+    paddingRight: 20,
   },
   storyItem: {
-    width: 84,
+    width: 56,
     alignItems: "center",
-    paddingVertical: 6,
-    paddingHorizontal: 2,
   },
-  storyRing: {
-    width: 72,
-    height: 72,
-    borderRadius: 26,
+  storyItemPressed: {
+    opacity: 0.92,
+  },
+  ringStack: {
+    position: "relative",
+    width: STORY_RING,
+    height: STORY_RING,
     alignItems: "center",
     justifyContent: "center",
-    padding: 3,
-    shadowColor: "#0f172a",
-    shadowOpacity: 0.12,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
   },
-  storyAvatar: {
-    width: 66,
-    height: 66,
-    borderRadius: 22,
+  ringGradient: {
+    width: STORY_RING,
+    height: STORY_RING,
+    borderRadius: STORY_RING / 2,
+    padding: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ringGap: {
+    width: STORY_AVATAR + 3,
+    height: STORY_AVATAR + 3,
+    borderRadius: (STORY_AVATAR + 3) / 2,
     backgroundColor: Theme.screenBackground,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    overflow: "visible",
+    padding: 1.5,
   },
-  storyAvatarImage: {
-    borderWidth: 1.5,
-    borderColor: Theme.networkCardBackground,
-  },
-  storyAvatarPreview: {
-    width: "76%",
-    fontSize: 8,
-    fontWeight: "700",
-    fontStyle: "italic",
-    lineHeight: 10.5,
-    color: Theme.textMutedDemo,
-    textAlign: "center",
-    opacity: 0.86,
-    letterSpacing: 0.08,
-  },
-  storyAvatarIconWrap: {
-    position: "absolute",
-    top: -5,
-    right: -4,
-    width: 26,
-    height: 26,
-    borderRadius: 10,
-    borderWidth: 1,
-    backgroundColor: Theme.screenBackground,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  launchRing: {
-    width: 72,
-    height: 72,
-    borderRadius: 26,
-    borderWidth: 1,
-    borderColor: "rgba(26,35,126,0.12)",
-    borderStyle: "dashed",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 2.5,
-    backgroundColor: "rgba(255,255,255,0.5)",
-  },
-  launchAvatarWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    backgroundColor: Theme.textPrimaryDark,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
+  avatarPlain: {
     overflow: "hidden",
+    borderWidth: 0,
+    borderColor: "transparent",
   },
-  mineAddIconWrap: {
+  addBadge: {
     position: "absolute",
-    right: 8,
-    bottom: 2,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    right: -1,
+    bottom: -1,
+    width: 17,
+    height: 17,
+    borderRadius: 9,
     backgroundColor: Theme.primary,
     borderWidth: 2,
     borderColor: Theme.screenBackground,
@@ -400,32 +378,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     shadowColor: Theme.primary,
     shadowOpacity: 0.35,
-    shadowRadius: 6,
+    shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
     elevation: 3,
   },
-  initials: {
-    fontSize: 12,
-    fontWeight: "800",
-    fontStyle: "italic",
-    letterSpacing: -0.5,
-  },
   storyName: {
-    marginTop: 6,
-    fontSize: 10,
-    fontWeight: "800",
+    marginTop: 4,
+    fontSize: 9,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
-    letterSpacing: 0.2,
-    textAlign: "center",
-    width: "100%",
-  },
-  storyMeta: {
-    marginTop: 2,
-    fontSize: 7,
-    fontWeight: "800",
-    color: Theme.textSecondary,
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
+    letterSpacing: 0.1,
     textAlign: "center",
     width: "100%",
   },
