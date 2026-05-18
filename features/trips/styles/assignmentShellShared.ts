@@ -26,7 +26,7 @@ export const assignmentShellStyles = StyleSheet.create({
       web: {
         justifyContent: "center",
         alignItems: "center",
-      } as const,
+      } as any,
     }),
   },
 
@@ -45,7 +45,7 @@ export const assignmentShellStyles = StyleSheet.create({
         minHeight: 420,
         borderWidth: 1,
         borderColor: assignmentShellColors.borderSlate,
-      } as const,
+      } as any,
     }),
   },
 
@@ -61,9 +61,9 @@ export const assignmentShellStyles = StyleSheet.create({
     ...Platform.select({
       web: {
         boxShadow: "0 25px 50px -12px rgba(15, 23, 42, 0.2)",
-        height: "85vh" as const,
+        height: "85vh",
         minHeight: 420,
-      } as const,
+      } as any,
       default: {
         flex: 1,
         minHeight: 0,
@@ -157,7 +157,7 @@ export const assignmentShellStyles = StyleSheet.create({
     ...Platform.select({
       web: {
         boxShadow: "0 1px 3px rgba(15, 23, 42, 0.08)",
-      } as const,
+      } as any,
       default: {
         shadowColor: "#0f172a",
         shadowOffset: { width: 0, height: 1 },
@@ -237,7 +237,7 @@ export const assignmentShellStyles = StyleSheet.create({
     ...Platform.select({
       web: {
         boxShadow: "0 1px 3px rgba(15, 23, 42, 0.06)",
-      } as const,
+      } as any,
       default: {
         shadowColor: Theme.shadow,
         shadowOffset: { width: 0, height: 2 },

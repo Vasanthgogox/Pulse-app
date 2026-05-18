@@ -716,16 +716,26 @@ export function LoadCenterView({
     );
   }, [findWorkDoneUnionLoads, searchQuery, loadMatchesSearch]);
 
-  const filteredFindWorkList =
-    statusFilterTab === "DONE"
-      ? filteredFindWorkDoneLoads
-      : filteredFindWorkLoads;
+  const filteredFindWorkList = useMemo(
+    () =>
+      statusFilterTab === "DONE"
+        ? filteredFindWorkDoneLoads
+        : filteredFindWorkLoads,
+    [statusFilterTab, filteredFindWorkDoneLoads, filteredFindWorkLoads],
+  );
+
+  const filteredFindWorkAvatarKey = useMemo(
+    () => filteredFindWorkList.map((load) => load.id).join("|"),
+    [filteredFindWorkList],
+  );
 
   useEffect(() => {
     let cancelled = false;
     const loadCardAvatars = async () => {
       if (filteredFindWorkList.length === 0) {
-        setLoadAvatarByIndentId({});
+        setLoadAvatarByIndentId((prev) =>
+          Object.keys(prev).length === 0 ? prev : {},
+        );
         return;
       }
       const pairs = await Promise.all(
@@ -764,13 +774,23 @@ export function LoadCenterView({
       pairs.forEach(([indentId, uri]) => {
         if (uri) next[indentId] = uri;
       });
-      setLoadAvatarByIndentId(next);
+      setLoadAvatarByIndentId((prev) => {
+        const prevKeys = Object.keys(prev);
+        const nextKeys = Object.keys(next);
+        if (
+          prevKeys.length === nextKeys.length &&
+          nextKeys.every((k) => prev[k] === next[k])
+        ) {
+          return prev;
+        }
+        return next;
+      });
     };
     loadCardAvatars();
     return () => {
       cancelled = true;
     };
-  }, [filteredFindWorkList]);
+  }, [filteredFindWorkAvatarKey, filteredFindWorkList]);
 
   const filteredClaimedLoads = useMemo(() => {
     return awardedLoads.filter((load) => loadMatchesSearch(load, searchQuery));
@@ -2456,13 +2476,8 @@ export function LoadCenterView({
               <ContentErrorState
                 variant="loads"
                 layout="embedded"
-                message={
-                  marketError instanceof Error
-                    ? marketError.message
-                    : 'Check your connection or try again.'
-                }
                 onRetry={() => void refetchMarketIndents()}
-                retrying={marketLoading}
+                retrying={marketRefetching}
               />
             ) : filteredFindWorkList.length === 0 ? (
               <View style={styles.emptyWrap}>
@@ -4946,7 +4961,7 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
   },
   reviewHubHeroStatValueEnd: {
-    textAlign: "right" as const,
+    textAlign: "right",
     alignSelf: "stretch",
   },
   reviewHubHeroStatLabel: {
@@ -5092,7 +5107,7 @@ const styles = StyleSheet.create({
   loadingWrap: { paddingVertical: 32, alignItems: "center", gap: 12 },
   loadingText: { fontSize: 10, fontWeight: "700", color: Theme.textMuted },
   loadCard: {
-    position: "relative" as const,
+    position: "relative",
     backgroundColor: Theme.cardWhite,
     borderWidth: 1,
     borderColor: Theme.borderLight,
@@ -5892,7 +5907,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-      } as const,
+      } as any,
       default: {
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 4 },
@@ -5915,7 +5930,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.05)",
-      } as const,
+      } as any,
     }),
   },
   handshakeSegBtnText: {
@@ -5942,7 +5957,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         boxShadow: "0 1px 2px rgba(15,23,42,0.06)",
-      } as const,
+      } as any,
       default: {
         shadowColor: "#0f172a",
         shadowOffset: { width: 0, height: 1 },
@@ -5998,7 +6013,7 @@ const styles = StyleSheet.create({
       web: {
         boxShadow: "0 12px 24px rgba(15,23,42,0.2)",
         cursor: "pointer",
-      } as const,
+      } as any,
       default: {
         shadowColor: "#0f172a",
         shadowOffset: { width: 0, height: 8 },
@@ -6020,8 +6035,10 @@ const styles = StyleSheet.create({
     width: "98%",
     maxWidth: 760,
     borderRadius: 14,
-    height: "92vh",
-    maxHeight: "92vh",
+    ...Platform.select({
+      web: { height: "92vh", maxHeight: "92vh" } as any,
+      default: { maxHeight: "92%" },
+    }),
   },
   handshakeNativeInner: {
     flex: 1,
@@ -6578,7 +6595,7 @@ const styles = StyleSheet.create({
       web: {
         maxWidth: 760,
         boxShadow: "0 10px 24px rgba(15,23,42,0.16)",
-      } as const,
+      } as any,
     }),
   },
   subcontractPickerTitle: {
