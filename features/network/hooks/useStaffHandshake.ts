@@ -1,6 +1,7 @@
 /**
  * useStaffHandshake — manages all state and handlers for the
  * Staff Handshake / Deploy modal (Asset roster + Aggregate ad-hoc flows).
+ * FSM-style: open(load) → fill form → deployRoster/deployAdHoc → close.
  */
 
 import { upsertTripSubcontract } from "@/features/finance/services/tripSubcontracts.service";
@@ -24,89 +25,86 @@ import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, TextInput } from "react-native";
 import { Platform } from "react-native";
-
-type LoadAction =
-  | { type: "AWARD"; load: IndentRow }
-  | { type: "BID"; load: IndentRow }
-  | { type: "ASSIGN"; load: IndentRow }
-  | null;
+import React from "react";
 
 interface UseStaffHandshakeParams {
   orgId: string | null;
   myQuotes: DirectQuoteRow[];
-  loadAction: LoadAction;
-  setLoadAction: (action: LoadAction) => void;
-  setAssigningTripId: (id: string | null) => void;
-  assigningTripId: string | null;
-  triggerSuccess: (msg: string) => void;
+  onSuccess: (msg: string) => void;
 }
 
 export interface StaffHandshakeResult {
-  // State
-  useAdHocDriver: boolean;
-  setUseAdHocDriver: (v: boolean) => void;
-  assignDriverId: string | null;
-  setAssignDriverId: (id: string | null) => void;
-  assignVehicleId: string | null | undefined;
-  setAssignVehicleId: (id: string | null | undefined) => void;
-  assignVehicleRegistration: string;
-  setAssignVehicleRegistration: (v: string) => void;
-  aggregateDriverTrackingName: string;
-  setAggregateDriverTrackingName: (v: string) => void;
-  aggregateDriverPhone: string;
-  setAggregateDriverPhone: (v: string) => void;
-  aggregatePhoneName: string | null;
-  setAggregatePhoneName: (v: string | null) => void;
-  aggregatePhoneNotFound: boolean;
-  setAggregatePhoneNotFound: (v: boolean) => void;
-  aggregatePhoneInTrip: boolean;
-  setAggregatePhoneInTrip: (v: boolean) => void;
-  subcontractSupplierId: string | null;
-  setSubcontractSupplierId: (id: string | null) => void;
-  subcontractRate: string;
-  setSubcontractRate: (v: string) => void;
-  aggregateAdvancePaid: string;
-  setAggregateAdvancePaid: (v: string) => void;
-  deployOtpCode: string | null;
-  setDeployOtpCode: (v: string | null) => void;
-  deployOtpExpiresAt: string | null;
-  setDeployOtpExpiresAt: (v: string | null) => void;
-  deployTripIdForOtp: string | null;
-  setDeployTripIdForOtp: (v: string | null) => void;
-  staffHandshakeAssignLater: boolean;
-  setStaffHandshakeAssignLater: (v: boolean) => void;
-  // Refs
-  staffHandshakeDeployLockRef: React.MutableRefObject<boolean>;
-  aggregateDriverNameManualRef: React.MutableRefObject<boolean>;
-  aggregatePhoneLookupTimeoutRef: React.MutableRefObject<number | null>;
-  // Computed values
-  rosterReady: boolean;
-  adHocReady: boolean;
-  aggregateTrackingFlowReady: boolean;
-  aggregatePartnerHandshakeComplete: boolean;
-  aggregateHasDriverName: boolean;
-  aggregateHasDriverPhone: boolean;
-  aggregateHasVehicleText: boolean;
-  // Handlers
-  handleDeployRoster: (load: IndentRow) => Promise<void>;
-  handleDeployAdHoc: (load: IndentRow) => Promise<void>;
-  handleStaffHandshakeBack: () => void;
+  state: {
+    isOpen: boolean;
+    currentLoad: IndentRow | null;
+    isDeploying: boolean;
+    showOtp: boolean;
+    // form fields (read-only for modal display):
+    useAdHocDriver: boolean;
+    assignDriverId: string | null;
+    assignVehicleId: string | null | undefined;
+    assignVehicleRegistration: string;
+    aggregateDriverTrackingName: string;
+    aggregateDriverPhone: string;
+    aggregatePhoneName: string | null;
+    aggregatePhoneNotFound: boolean;
+    aggregatePhoneInTrip: boolean;
+    subcontractSupplierId: string | null;
+    subcontractRate: string;
+    aggregateAdvancePaid: string;
+    deployOtpCode: string | null;
+    deployOtpExpiresAt: string | null;
+    deployTripIdForOtp: string | null;
+    staffHandshakeAssignLater: boolean;
+    // computed readiness flags:
+    rosterReady: boolean;
+    adHocReady: boolean;
+    aggregateTrackingFlowReady: boolean;
+    aggregatePartnerHandshakeComplete: boolean;
+    aggregateHasDriverName: boolean;
+    aggregateHasVehicleText: boolean;
+  };
+  set: {
+    useAdHocDriver: (v: boolean) => void;
+    assignDriverId: (id: string | null) => void;
+    assignVehicleId: (id: string | null | undefined) => void;
+    assignVehicleRegistration: (v: string) => void;
+    aggregateDriverTrackingName: (v: string) => void;
+    aggregateDriverPhone: (v: string) => void;
+    aggregatePhoneName: (v: string | null) => void;
+    aggregatePhoneNotFound: (v: boolean) => void;
+    aggregatePhoneInTrip: (v: boolean) => void;
+    subcontractSupplierId: (id: string | null) => void;
+    subcontractRate: (v: string) => void;
+    aggregateAdvancePaid: (v: string) => void;
+    deployOtpCode: (v: string | null) => void;
+    deployOtpExpiresAt: (v: string | null) => void;
+    deployTripIdForOtp: (v: string | null) => void;
+    staffHandshakeAssignLater: (v: boolean) => void;
+    aggregateDriverNameManualRef: React.MutableRefObject<boolean>;
+  };
+  open: (load: IndentRow) => void;
+  close: () => void;
+  deployRoster: () => Promise<void>;
+  deployAdHoc: () => Promise<void>;
+  backFromOtp: () => void;
 }
 
 export function useStaffHandshake({
   orgId,
   myQuotes,
-  loadAction,
-  setLoadAction,
-  setAssigningTripId,
-  assigningTripId,
-  triggerSuccess,
+  onSuccess,
 }: UseStaffHandshakeParams): StaffHandshakeResult {
   const router = useRouter();
   const invalidateTrips = useInvalidateTrips();
   const invalidateIndents = useInvalidateIndents();
   const queryClient = useQueryClient();
 
+  // FSM-style open/close state
+  const [currentLoad, setCurrentLoad] = useState<IndentRow | null>(null);
+  const [isDeploying, setIsDeploying] = useState(false);
+
+  // Form fields
   const [useAdHocDriver, setUseAdHocDriver] = useState(false);
   const [assignDriverId, setAssignDriverId] = useState<string | null>(null);
   const [assignVehicleId, setAssignVehicleId] = useState<
@@ -141,6 +139,7 @@ export function useStaffHandshake({
   const [staffHandshakeAssignLater, setStaffHandshakeAssignLater] =
     useState(false);
 
+  // Phone lookup side-effect — stays inside the hook
   useEffect(() => {
     const trimmed = aggregateDriverPhone.trim();
     if (aggregatePhoneLookupTimeoutRef.current)
@@ -161,7 +160,6 @@ export function useStaffHandshake({
         let foundName = direct;
 
         if (!foundName) {
-          // Some deployments store phone as +91XXXXXXXXXX; try that too.
           const { matches: matchesWithCode } =
             await searchExistingDriversByPhone(`+91${last10}`);
           foundName = matchesWithCode[0]?.full_name ?? null;
@@ -169,7 +167,6 @@ export function useStaffHandshake({
 
         setAggregatePhoneName(foundName);
         if (foundName && !aggregateDriverNameManualRef.current) {
-          // Autofill from phone lookup unless user manually edited the field.
           setAggregateDriverTrackingName(foundName);
         }
         setAggregatePhoneNotFound(!foundName);
@@ -183,13 +180,14 @@ export function useStaffHandshake({
         });
         setAggregatePhoneInTrip(result.isBusy);
       });
-    }, 400);
+    }, 400) as unknown as number;
     return () => {
       if (aggregatePhoneLookupTimeoutRef.current)
         clearTimeout(aggregatePhoneLookupTimeoutRef.current);
     };
   }, [aggregateDriverPhone, orgId]);
 
+  // Computed readiness flags
   const rosterReady =
     !useAdHocDriver && !!assignDriverId && typeof assignVehicleId === "string";
   const adHocReady = useAdHocDriver;
@@ -200,7 +198,6 @@ export function useStaffHandshake({
   const aggregateTrackingFlowReady =
     aggregateHasDriverName && aggregateHasDriverPhone && aggregateHasVehicleText;
 
-  /** Aggregate Staff Handshake: partner + rate are always required before deploy. */
   const aggregatePartnerHandshakeComplete = useMemo(() => {
     const sid = (subcontractSupplierId ?? "").trim();
     const rateRaw = subcontractRate.trim();
@@ -213,8 +210,54 @@ export function useStaffHandshake({
     );
   }, [subcontractSupplierId, subcontractRate]);
 
-  const handleDeployRoster = async (load: IndentRow) => {
-    if (assigningTripId === load.id) return;
+  /** Reset all form state to defaults */
+  const resetForm = useCallback(() => {
+    setUseAdHocDriver(false);
+    setAssignDriverId(null);
+    setAssignVehicleId(undefined);
+    setAssignVehicleRegistration("");
+    setAggregateDriverTrackingName("");
+    setAggregateDriverPhone("");
+    setAggregatePhoneName(null);
+    setAggregatePhoneNotFound(false);
+    setAggregatePhoneInTrip(false);
+    setSubcontractSupplierId(null);
+    setSubcontractRate("");
+    setAggregateAdvancePaid("");
+    setDeployOtpCode(null);
+    setDeployOtpExpiresAt(null);
+    setDeployTripIdForOtp(null);
+    setStaffHandshakeAssignLater(false);
+    aggregateDriverNameManualRef.current = false;
+  }, []);
+
+  const open = useCallback(
+    (load: IndentRow) => {
+      resetForm();
+      setCurrentLoad(load);
+    },
+    [resetForm],
+  );
+
+  const close = useCallback(() => {
+    setCurrentLoad(null);
+    resetForm();
+  }, [resetForm]);
+
+  const backFromOtp = useCallback(() => {
+    if (deployOtpCode) {
+      setDeployOtpCode(null);
+      setDeployOtpExpiresAt(null);
+      setDeployTripIdForOtp(null);
+      return;
+    }
+    close();
+  }, [deployOtpCode, close]);
+
+  const deployRoster = useCallback(async () => {
+    const load = currentLoad;
+    if (!load) return;
+    if (isDeploying) return;
     if (!orgId) {
       Alert.alert(
         "Cannot deploy",
@@ -228,7 +271,7 @@ export function useStaffHandshake({
         "Load unavailable",
         "This load has been cancelled or closed.",
       );
-      setLoadAction(null);
+      setCurrentLoad(null);
       return;
     }
     const acceptedQuote = myQuotes.find(
@@ -252,7 +295,7 @@ export function useStaffHandshake({
     }
     staffHandshakeDeployLockRef.current = true;
     try {
-      setAssigningTripId(load.id);
+      setIsDeploying(true);
       const { error: assignErr } = await updateDirectQuoteAssignment(
         acceptedQuote.id,
         assignDriverId,
@@ -273,12 +316,12 @@ export function useStaffHandshake({
         return;
       }
       await updateIndent(load.id, { status: "completed" });
-      setLoadAction(null);
+      setCurrentLoad(null);
       setAssignDriverId(null);
       setAssignVehicleId(undefined);
       setAssignVehicleRegistration("");
       setUseAdHocDriver(false);
-      triggerSuccess("Voyage authorized — trip created.");
+      onSuccess("Voyage authorized — trip created.");
       invalidateTrips(orgId);
       invalidateIndents(orgId);
       const isShipper = load.organization_id === orgId;
@@ -295,12 +338,25 @@ export function useStaffHandshake({
       Alert.alert("Could not deploy", msg);
     } finally {
       staffHandshakeDeployLockRef.current = false;
-      setAssigningTripId(null);
+      setIsDeploying(false);
     }
-  };
+  }, [
+    currentLoad,
+    isDeploying,
+    orgId,
+    myQuotes,
+    assignDriverId,
+    assignVehicleId,
+    invalidateTrips,
+    invalidateIndents,
+    onSuccess,
+    router,
+  ]);
 
-  const handleDeployAdHoc = async (load: IndentRow) => {
-    if (assigningTripId === load.id) return;
+  const deployAdHoc = useCallback(async () => {
+    const load = currentLoad;
+    if (!load) return;
+    if (isDeploying) return;
     if (!orgId) {
       Alert.alert(
         "Cannot deploy",
@@ -314,7 +370,7 @@ export function useStaffHandshake({
         "Load unavailable",
         "This load has been cancelled or closed.",
       );
-      setLoadAction(null);
+      setCurrentLoad(null);
       return;
     }
     const acceptedQuote = myQuotes.find(
@@ -347,7 +403,6 @@ export function useStaffHandshake({
       );
       return;
     }
-    /** Trip detail will hold driver / vehicle / OTP; never persist ad-hoc fields when deferring. */
     const deferHandshakeAssignment = staffHandshakeAssignLater;
     const nameTrimmed = deferHandshakeAssignment
       ? ""
@@ -389,7 +444,7 @@ export function useStaffHandshake({
     }
     staffHandshakeDeployLockRef.current = true;
     try {
-      setAssigningTripId(load.id);
+      setIsDeploying(true);
       const vehicleIdForQuote = deferHandshakeAssignment
         ? null
         : typeof assignVehicleId === "string"
@@ -462,21 +517,18 @@ export function useStaffHandshake({
         });
       };
 
-      // Driver + OTP are optional: require phone only for OTP generation (not for trip creation).
       if (deferHandshakeAssignment || !phoneTrimmed || phoneErr) {
         await saveSubcontract();
         await updateIndent(load.id, { status: "completed" });
         invalidateTrips(orgId);
         invalidateIndents(orgId);
-        setLoadAction(null);
-        setAssigningTripId(null);
-        triggerSuccess(
+        setCurrentLoad(null);
+        setIsDeploying(false);
+        onSuccess(
           deferHandshakeAssignment
             ? "Trip created — add driver and vehicle on trip detail when ready."
             : "Trip created (OTP not generated)",
         );
-        // Do not treat this as an error. OTP can be generated later from Trip Detail
-        // after providing a driver phone number.
         return;
       }
       const { error: availabilityError, result: availability } =
@@ -493,8 +545,8 @@ export function useStaffHandshake({
         await updateIndent(load.id, { status: "completed" });
         invalidateTrips(orgId);
         invalidateIndents(orgId);
-        setLoadAction(null);
-        setAssigningTripId(null);
+        setCurrentLoad(null);
+        setIsDeploying(false);
         Alert.alert(
           "Trip created",
           `Driver is already assigned to ${availability.ongoingTripLabel ?? "another ongoing trip"}.\n\nComplete or unassign that trip before assigning this one.`,
@@ -517,8 +569,8 @@ export function useStaffHandshake({
         await updateIndent(load.id, { status: "completed" });
         invalidateTrips(orgId);
         invalidateIndents(orgId);
-        setLoadAction(null);
-        setAssigningTripId(null);
+        setCurrentLoad(null);
+        setIsDeploying(false);
         Alert.alert(
           "Trip created",
           `Driver could not be assigned. ${humanizeTripIdInRpcError(assignAggErr.message, trip)}\n\nAssign driver from trip detail to generate OTP.`,
@@ -540,8 +592,8 @@ export function useStaffHandshake({
         await updateIndent(load.id, { status: "completed" });
         invalidateTrips(orgId);
         invalidateIndents(orgId);
-        setLoadAction(null);
-        setAssigningTripId(null);
+        setCurrentLoad(null);
+        setIsDeploying(false);
         Alert.alert(
           "Trip created",
           "OTP could not be generated. Get OTP from the trip detail screen.",
@@ -562,76 +614,85 @@ export function useStaffHandshake({
       await updateIndent(load.id, { status: "completed" });
       invalidateTrips(orgId);
       invalidateIndents(orgId);
-      triggerSuccess("OTP generated");
+      onSuccess("OTP generated");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error.";
       Alert.alert("Could not deploy", msg);
     } finally {
       staffHandshakeDeployLockRef.current = false;
-      setAssigningTripId(null);
+      setIsDeploying(false);
     }
-  };
-
-  /** Staff Handshake: dismiss OTP preview, or close modal. */
-  const handleStaffHandshakeBack = useCallback(() => {
-    if (deployOtpCode) {
-      setDeployOtpCode(null);
-      setDeployOtpExpiresAt(null);
-      setDeployTripIdForOtp(null);
-      return;
-    }
-    setLoadAction(null);
-    setDeployOtpCode(null);
-    setDeployOtpExpiresAt(null);
-    setDeployTripIdForOtp(null);
-    setStaffHandshakeAssignLater(false);
-  }, [deployOtpCode, setLoadAction]);
+  }, [
+    currentLoad,
+    isDeploying,
+    orgId,
+    myQuotes,
+    subcontractSupplierId,
+    subcontractRate,
+    staffHandshakeAssignLater,
+    aggregateDriverTrackingName,
+    aggregateDriverPhone,
+    assignVehicleRegistration,
+    assignVehicleId,
+    queryClient,
+    invalidateTrips,
+    invalidateIndents,
+    onSuccess,
+    router,
+  ]);
 
   return {
-    useAdHocDriver,
-    setUseAdHocDriver,
-    assignDriverId,
-    setAssignDriverId,
-    assignVehicleId,
-    setAssignVehicleId,
-    assignVehicleRegistration,
-    setAssignVehicleRegistration,
-    aggregateDriverTrackingName,
-    setAggregateDriverTrackingName,
-    aggregateDriverPhone,
-    setAggregateDriverPhone,
-    aggregatePhoneName,
-    setAggregatePhoneName,
-    aggregatePhoneNotFound,
-    setAggregatePhoneNotFound,
-    aggregatePhoneInTrip,
-    setAggregatePhoneInTrip,
-    subcontractSupplierId,
-    setSubcontractSupplierId,
-    subcontractRate,
-    setSubcontractRate,
-    aggregateAdvancePaid,
-    setAggregateAdvancePaid,
-    deployOtpCode,
-    setDeployOtpCode,
-    deployOtpExpiresAt,
-    setDeployOtpExpiresAt,
-    deployTripIdForOtp,
-    setDeployTripIdForOtp,
-    staffHandshakeAssignLater,
-    setStaffHandshakeAssignLater,
-    staffHandshakeDeployLockRef,
-    aggregateDriverNameManualRef,
-    aggregatePhoneLookupTimeoutRef,
-    rosterReady,
-    adHocReady,
-    aggregateTrackingFlowReady,
-    aggregatePartnerHandshakeComplete,
-    aggregateHasDriverName,
-    aggregateHasDriverPhone,
-    aggregateHasVehicleText,
-    handleDeployRoster,
-    handleDeployAdHoc,
-    handleStaffHandshakeBack,
+    state: {
+      isOpen: currentLoad !== null,
+      currentLoad,
+      isDeploying,
+      showOtp: deployOtpCode !== null,
+      useAdHocDriver,
+      assignDriverId,
+      assignVehicleId,
+      assignVehicleRegistration,
+      aggregateDriverTrackingName,
+      aggregateDriverPhone,
+      aggregatePhoneName,
+      aggregatePhoneNotFound,
+      aggregatePhoneInTrip,
+      subcontractSupplierId,
+      subcontractRate,
+      aggregateAdvancePaid,
+      deployOtpCode,
+      deployOtpExpiresAt,
+      deployTripIdForOtp,
+      staffHandshakeAssignLater,
+      rosterReady,
+      adHocReady,
+      aggregateTrackingFlowReady,
+      aggregatePartnerHandshakeComplete,
+      aggregateHasDriverName,
+      aggregateHasVehicleText,
+    },
+    set: {
+      useAdHocDriver: setUseAdHocDriver,
+      assignDriverId: setAssignDriverId,
+      assignVehicleId: setAssignVehicleId,
+      assignVehicleRegistration: setAssignVehicleRegistration,
+      aggregateDriverTrackingName: setAggregateDriverTrackingName,
+      aggregateDriverPhone: setAggregateDriverPhone,
+      aggregatePhoneName: setAggregatePhoneName,
+      aggregatePhoneNotFound: setAggregatePhoneNotFound,
+      aggregatePhoneInTrip: setAggregatePhoneInTrip,
+      subcontractSupplierId: setSubcontractSupplierId,
+      subcontractRate: setSubcontractRate,
+      aggregateAdvancePaid: setAggregateAdvancePaid,
+      deployOtpCode: setDeployOtpCode,
+      deployOtpExpiresAt: setDeployOtpExpiresAt,
+      deployTripIdForOtp: setDeployTripIdForOtp,
+      staffHandshakeAssignLater: setStaffHandshakeAssignLater,
+      aggregateDriverNameManualRef,
+    },
+    open,
+    close,
+    deployRoster,
+    deployAdHoc,
+    backFromOtp,
   };
 }

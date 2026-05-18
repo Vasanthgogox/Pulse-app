@@ -5,7 +5,6 @@
 import { ContentErrorState } from '@/components/ContentErrorState';
 import { LoadCardRouteRow } from "@/components/LoadCardRouteRow";
 import { LoadCardSpecsRow } from "@/components/LoadCardSpecsRow";
-import { FinanceFAB } from "@/components/FinanceFAB";
 import {
   LoadCenterHubMobileIndentCard,
   LoadCenterHubMobileListCanvas,
@@ -22,7 +21,6 @@ import Typography from "@/constants/Typography";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
     BidReceivedHammer,
-    createDirectQuote,
     getIndentDisplayNumber,
     type DirectQuoteRow,
     type IndentRow,
@@ -41,44 +39,37 @@ import {
 import { useAwardQuote } from "@/features/network/hooks/useAwardQuote";
 import { useLoadCenterFilters } from "@/features/network/hooks/useLoadCenterFilters";
 import { useStaffHandshake } from "@/features/network/hooks/useStaffHandshake";
-import { setInitialTripForDetail } from "@/features/trips";
-import { regenerateTripOtp } from "@/features/trips/services/tripOtp.service";
-import { acceptAwardedQuote } from "@/features/indents/services/accept-awarded-quote.service";
-import { updateIndent } from "@/features/indents";
+import { useSuccessToast } from "@/features/network/hooks/useSuccessToast";
+import { useTripDeployment } from "@/features/network/hooks/useTripDeployment";
+import { AwardModal } from "@/features/network/components/AwardModal";
+import { BidModal } from "@/features/network/components/BidModal";
+import { StaffHandshakeModal } from "@/features/network/components/StaffHandshakeModal";
 import {
     assignmentShellColors,
     assignmentShellStyles,
 } from "@/features/trips/styles/assignmentShellShared";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
-import { formatINR, formatMobileNumber } from "@/lib/format";
+import { formatINR } from "@/lib/format";
 import {
     useIndentOfferCountsQuery,
     useDriversQuery,
-    useIndentDirectQuotesQuery,
     useIndentsQuery,
     useInvalidateIndents,
-    useInvalidateTrips,
     useMarketIndentsQuery,
     useMyDirectQuotesQuery,
     useSuppliersQuery,
     useTripsQuery,
     useVehiclesQuery,
 } from "@/lib/queries";
-import { queryKeys } from "@/lib/queryKeys";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { FlashList } from "@shopify/flash-list";
 import { useQueryClient } from "@tanstack/react-query";
-import * as Clipboard from "expo-clipboard";
 import * as Linking from "expo-linking";
-import { useRouter } from "expo-router";
 import {
     Building2,
-    ListChecks,
     Package,
     Share2,
-    Truck,
     Users,
-    X,
     Zap,
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -88,15 +79,12 @@ import {
     Animated,
     Easing,
     Image,
-    KeyboardAvoidingView,
     Modal,
     Platform,
-    Pressable,
     RefreshControl,
     ScrollView,
     Share,
     StyleSheet,
-    Switch,
     Text,
     TextInput,
     TouchableOpacity,
@@ -129,7 +117,6 @@ export function LoadCenterView({
 }: LoadCenterViewProps) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const router = useRouter();
   const { currentOrganization } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
 
@@ -145,36 +132,11 @@ export function LoadCenterView({
     Record<string, string>
   >({});
   const [showPostModal, setShowPostModal] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
-  const [successMsg, setSuccessMsg] = useState("");
-  const [quoteAmount, setQuoteAmount] = useState<string>("");
-  const [submittingQuote, setSubmittingQuote] = useState(false);
-  const [loadAction, setLoadAction] = useState<
-    | {
-        type: "AWARD";
-        load: IndentRow;
-      }
-    | {
-        type: "BID";
-        load: IndentRow;
-      }
-    | {
-        type: "ASSIGN";
-        load: IndentRow;
-      }
-    | null
-  >(null);
-  const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
-  const [assigningTripId, setAssigningTripId] = useState<string | null>(null);
+  const { showSuccess, successMsg, trigger: triggerSuccess } = useSuccessToast();
+  const [bidLoad, setBidLoad] = useState<IndentRow | null>(null);
   const [localBidHistoryByIndentId, setLocalBidHistoryByIndentId] = useState<
     Record<string, { amount: number; updatedAt: string }[]>
   >({});
-  // TextInput refs kept in component (used directly in modal JSX)
-  const aggregatePartnerRateInputRef = useRef<TextInput | null>(null);
-  const aggregateAdvancePaidInputRef = useRef<TextInput | null>(null);
-  const aggregateDriverNameInputRef = useRef<TextInput | null>(null);
-  const aggregateDriverPhoneInputRef = useRef<TextInput | null>(null);
-  const aggregateVehicleInputRef = useRef<TextInput | null>(null);
   const isSingleRowHeader = Platform.OS === "web" && width >= 1200;
   const isCompactModalLayout = Platform.OS === "web" && width < 920;
 
@@ -192,7 +154,6 @@ export function LoadCenterView({
   const { data: drivers = [] } = useDriversQuery(orgId);
   const { data: vehicles = [] } = useVehiclesQuery(orgId);
   const { data: suppliers = [] } = useSuppliersQuery(orgId);
-  const invalidateTrips = useInvalidateTrips();
   const invalidateIndents = useInvalidateIndents();
   const queryClient = useQueryClient();
 
@@ -262,150 +223,22 @@ export function LoadCenterView({
     indentIdsWithTrip,
     hirePartnerLoads,
     awardedLoads,
-    awardedLoadsDone,
     findWorkLoads,
-    findWorkDoneUnionLoads,
     filteredHirePartnerLoads,
     filteredFindWorkList,
     filteredClaimedLoads,
-    filteredClaimedDoneLoads,
     statusTabCounts,
-    loadMatchesSearch,
   } = filters;
 
-  const activeBidQuote = useMemo(() => {
-    if (loadAction?.type !== "BID") return null;
-    return myQuoteByIndentId.get(loadAction.load.id) ?? null;
-  }, [loadAction, myQuoteByIndentId]);
-  const activeBidQuoteUpdatedAt = useMemo(() => {
-    if (!activeBidQuote?.updated_at) return null;
-    const parsed = new Date(activeBidQuote.updated_at);
-    if (Number.isNaN(parsed.getTime())) return null;
-    return parsed.toLocaleString("en-IN", {
-      day: "numeric",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  }, [activeBidQuote?.updated_at]);
-  const activeBidHistory = useMemo(() => {
-    if (loadAction?.type !== "BID") return [];
-    const indentId = loadAction.load.id;
-    const localHistory = localBidHistoryByIndentId[indentId] ?? [];
-    return localHistory
-      .filter((entry) => Number.isFinite(Number(entry.amount)))
-      .sort(
-        (a, b) =>
-          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-      );
-  }, [loadAction, localBidHistoryByIndentId]);
-
-  // ── Award Quote ──────────────────────────────────────────────────────────────
-  const awardModalIndentId =
-    loadAction?.type === "AWARD" ? loadAction.load.id : null;
-  const {
-    data: awardModalQuotes = [],
-    isLoading: awardModalQuotesLoading,
-    refetch: refetchAwardModalQuotes,
-  } = useIndentDirectQuotesQuery(awardModalIndentId);
-
-  useEffect(() => {
-    if (loadAction?.type === "AWARD" && awardModalIndentId) {
-      refetchAwardModalQuotes();
-    }
-  }, [loadAction?.type, awardModalIndentId, refetchAwardModalQuotes]);
-
-  /** Sorted for Offer Hub: pending by amount (lowest first), then rejected, then accepted. */
-  const sortedOfferHubQuotes = useMemo(() => {
-    const list = [...awardModalQuotes];
-    return list.sort((a, b) => {
-      const sa = (a.status || "").toLowerCase();
-      const sb = (b.status || "").toLowerCase();
-      if (sa === "pending" && sb === "pending") {
-        return Number(a.amount ?? 0) - Number(b.amount ?? 0);
-      }
-      if (sa === "pending") return -1;
-      if (sb === "pending") return 1;
-      if (sa === "rejected" && sb === "accepted") return -1;
-      if (sa === "accepted" && sb === "rejected") return 1;
-      return 0;
-    });
-  }, [awardModalQuotes]);
-
-  const pendingOfferCount = useMemo(
-    () =>
-      awardModalQuotes.filter(
-        (q) => (q.status || "").toLowerCase() === "pending",
-      ).length,
-    [awardModalQuotes],
-  );
-  const lowestPendingAmount = useMemo(() => {
-    const pending = awardModalQuotes.filter(
-      (q) => (q.status || "").toLowerCase() === "pending",
-    );
-    if (pending.length === 0) return null;
-    return Math.min(...pending.map((q) => Number(q.amount ?? 0)));
-  }, [awardModalQuotes]);
+  // ── Award Quote hook ────────────────────────────────────────────────────────
+  const awardModal = useAwardQuote({ orgId, queryClient, invalidateIndents, onSuccess: triggerSuccess });
 
   // ── Staff Handshake hook ────────────────────────────────────────────────────
-  const staffHandshake = useStaffHandshake({
-    orgId,
-    myQuotes,
-    loadAction,
-    setLoadAction,
-    setAssigningTripId,
-    assigningTripId,
-    triggerSuccess: (msg: string) => {
-      setSuccessMsg(msg);
-      setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 1500);
-    },
-  });
-
-  const {
-    useAdHocDriver,
-    setUseAdHocDriver,
-    assignDriverId,
-    setAssignDriverId,
-    assignVehicleId,
-    setAssignVehicleId,
-    assignVehicleRegistration,
-    setAssignVehicleRegistration,
-    aggregateDriverTrackingName,
-    setAggregateDriverTrackingName,
-    aggregateDriverPhone,
-    setAggregateDriverPhone,
-    aggregatePhoneName,
-    setAggregatePhoneName,
-    aggregatePhoneNotFound,
-    setAggregatePhoneNotFound,
-    aggregatePhoneInTrip,
-    setAggregatePhoneInTrip,
-    subcontractSupplierId,
-    setSubcontractSupplierId,
-    subcontractRate,
-    setSubcontractRate,
-    aggregateAdvancePaid,
-    setAggregateAdvancePaid,
-    deployOtpCode,
-    setDeployOtpCode,
-    deployOtpExpiresAt,
-    setDeployOtpExpiresAt,
-    deployTripIdForOtp,
-    setDeployTripIdForOtp,
-    staffHandshakeAssignLater,
-    setStaffHandshakeAssignLater,
-    aggregateDriverNameManualRef,
-    rosterReady,
-    aggregateTrackingFlowReady,
-    aggregatePartnerHandshakeComplete,
-    handleDeployRoster,
-    handleDeployAdHoc,
-    handleStaffHandshakeBack,
-  } = staffHandshake;
+  const handshake = useStaffHandshake({ orgId, myQuotes, onSuccess: triggerSuccess });
 
   const visiblePartnersForHandshake = useMemo(() => {
     const base = suppliers;
+    const subcontractSupplierId = handshake.state.subcontractSupplierId;
     // Never hide the currently selected partner (keeps existing selection stable).
     if (
       subcontractSupplierId &&
@@ -415,7 +248,14 @@ export function LoadCenterView({
       if (selected) return [selected, ...base];
     }
     return base;
-  }, [suppliers, subcontractSupplierId]);
+  }, [suppliers, handshake.state.subcontractSupplierId]);
+
+  // ── Trip Deployment hook ────────────────────────────────────────────────────
+  const tripDeployment = useTripDeployment({
+    orgId,
+    myQuoteByIndentId: filters.myQuoteByIndentId,
+    onSuccess: triggerSuccess,
+  });
 
   const filteredFindWorkAvatarKey = useMemo(
     () => filteredFindWorkList.map((load) => load.id).join("|"),
@@ -507,24 +347,6 @@ export function LoadCenterView({
     }
   }, [loadSubTab, statusFilterTab, refetchQuoteCounts]);
 
-  const triggerSuccess = (msg: string) => {
-    setSuccessMsg(msg);
-    setShowSuccess(true);
-    setTimeout(() => setShowSuccess(false), 1500);
-  };
-
-  // ── useAwardQuote hook ───────────────────────────────────────────────────────
-  const { handleAwardQuote, awarding } = useAwardQuote({
-    orgId,
-    loadAction,
-    setLoadAction,
-    selectedQuoteId,
-    setSelectedQuoteId,
-    awardModalQuotes,
-    queryClient,
-    invalidateIndents,
-    triggerSuccess,
-  });
 
   const handleBroadcastDraft = async (load: IndentRow) => {
     if (!orgId) return;
@@ -572,66 +394,6 @@ export function LoadCenterView({
     }
   };
 
-  const handleFinalAssignment = async (load: IndentRow) => {
-    if (assigningTripId === load.id) return;
-    if (!orgId) {
-      Alert.alert(
-        "Cannot start trip",
-        "Your organization context is missing. Please try again.",
-      );
-      return;
-    }
-
-    const acceptedQuote = myQuotes.find(
-      (q) =>
-        (q.status || "").toLowerCase() === "accepted" &&
-        q.indent_id === load.id,
-    );
-
-    if (!acceptedQuote) {
-      Alert.alert(
-        "Cannot start trip",
-        "No accepted quote found for this load. Please ensure the load is awarded to you.",
-      );
-      return;
-    }
-
-    try {
-      setAssigningTripId(load.id);
-      const { error, trip } = await acceptAwardedQuote(acceptedQuote.id);
-      if (error || !trip) {
-        Alert.alert(
-          "Could not create trip",
-          error?.message ??
-            "Unknown error while creating trip from awarded quote.",
-        );
-        return;
-      }
-
-      // Mark indent completed so it leaves Claimed list (O(1)). Ignore status-update failure; trip is source of truth.
-      const { error: completedErr } = await updateIndent(load.id, {
-        status: "completed",
-      });
-      if (completedErr) {
-        // Constraint or RLS may block; still invalidate so list refetches.
-      }
-
-      setLoadAction(null);
-      triggerSuccess("Trip Initialized");
-      if (orgId) {
-        invalidateTrips(orgId);
-        invalidateIndents(orgId);
-      }
-      const isShipper = load.organization_id === orgId;
-      if (isShipper) router.push("/(tabs)/trips" as import("expo-router").Href);
-    } catch (e) {
-      const msg =
-        e instanceof Error ? e.message : "Unknown error while creating trip.";
-      Alert.alert("Could not create trip", msg);
-    } finally {
-      setAssigningTripId(null);
-    }
-  };
 
   const activeDrivers = useMemo(
     () => drivers.filter((d) => !d.left_at),
@@ -907,22 +669,12 @@ export function LoadCenterView({
               ) : (
                 <TouchableOpacity
                   style={styles.reviewBidsBtn}
-                  onPress={() => {
-                    setAssignDriverId(null);
-                    setAssignVehicleId(undefined);
-                    setAssignVehicleRegistration("");
-                    setUseAdHocDriver(false);
-                    setDeployOtpCode(null);
-                    setDeployOtpExpiresAt(null);
-                    setDeployTripIdForOtp(null);
-                    setStaffHandshakeAssignLater(false);
-                    setLoadAction({ type: "ASSIGN", load });
-                  }}
+                  onPress={() => handshake.open(load)}
                   activeOpacity={0.9}
-                  disabled={assigningTripId === load.id}
+                  disabled={tripDeployment.assigningTripId === load.id}
                 >
                   <Text style={styles.reviewBidsBtnText}>
-                    {assigningTripId === load.id
+                    {tripDeployment.assigningTripId === load.id
                       ? "Authorizing…"
                       : "Assign & deploy"}
                   </Text>
@@ -1585,8 +1337,7 @@ export function LoadCenterView({
                                         handleBroadcastDraft(load);
                                         return;
                                       }
-                                      setSelectedQuoteId(null);
-                                      setLoadAction({ type: "AWARD", load });
+                                      awardModal.open(load);
                                     }}
                                     activeOpacity={0.9}
                                   >
@@ -1670,10 +1421,7 @@ export function LoadCenterView({
                       : "—";
                   const loadTypeDetail = load.load_type || "—";
                   const openBidModal = () => {
-                    setQuoteAmount(
-                      existingQuote ? String(existingQuote.amount) : "",
-                    );
-                    setLoadAction({ type: "BID", load });
+                    setBidLoad(load);
                   };
                   const clientLabel = (
                     load.creator_organization_name ||
@@ -2109,1557 +1857,58 @@ export function LoadCenterView({
       </Modal>
 
       {/* Offer Hub modal — list quotes, select one, Award */}
-      <Modal
-        visible={loadAction?.type === "AWARD"}
-        transparent
-        animationType="slide"
-        onRequestClose={() => {
-          setLoadAction(null);
-          setSelectedQuoteId(null);
-        }}
-      >
-        <TouchableOpacity
-          style={styles.modalBackdrop}
-          activeOpacity={1}
-          onPress={() => {
-            setLoadAction(null);
-            setSelectedQuoteId(null);
-          }}
-        >
-          <View
-            style={[styles.modalSheet, { paddingBottom: 24 + insets.bottom }]}
-          >
-            <View style={styles.modalHandle} />
-            <View style={styles.reviewHubModalHeader}>
-              <TouchableOpacity
-                onPress={() => {
-                  setLoadAction(null);
-                  setSelectedQuoteId(null);
-                }}
-                hitSlop={12}
-                style={styles.reviewHubModalBack}
-              >
-                <X size={22} color={Theme.textPrimaryDark} strokeWidth={2.5} />
-              </TouchableOpacity>
-              <View style={styles.modalHeaderTitleWrap}>
-                <Text style={[styles.modalTitle, styles.modalTitleCenter]}>
-                  Review Hub
-                </Text>
-                {loadAction?.type === "AWARD" ? (
-                  <Text style={styles.modalSubtitle}>
-                    Audit indent {getIndentDisplayNumber(loadAction.load)}
-                  </Text>
-                ) : null}
-              </View>
-              <View style={styles.reviewHubModalHeaderSpacer} />
-            </View>
-            {loadAction?.type === "AWARD" ? (
-              <View style={styles.reviewHubHero}>
-                <View
-                  style={[styles.reviewHubHeroGlow, { pointerEvents: "none" }]}
-                />
-                <Text style={styles.reviewHubHeroKicker}>Target route</Text>
-                <Text style={styles.reviewHubHeroRoute} numberOfLines={3}>
-                  {(loadAction.load.pickup_area || "—").toUpperCase()} →{" "}
-                  {(loadAction.load.drop_location || "—").toUpperCase()}
-                </Text>
-                <View style={styles.reviewHubHeroMeta}>
-                  <View style={styles.reviewHubHeroMetaCol}>
-                    <Text style={styles.reviewHubHeroStatLabel}>Offers</Text>
-                    <Text style={styles.reviewHubHeroStatValue} numberOfLines={1}>
-                      {awardModalQuotesLoading
-                        ? "—"
-                        : String(awardModalQuotes.length)}
-                    </Text>
-                  </View>
-                  {lowestPendingAmount != null && pendingOfferCount > 0 ? (
-                    <View style={styles.reviewHubHeroMetaColEnd}>
-                      <Text style={styles.reviewHubHeroStatLabel}>
-                        Lowest bid
-                      </Text>
-                      <Text
-                        style={[
-                          styles.reviewHubHeroStatValue,
-                          styles.reviewHubHeroStatValueEnd,
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {formatINR(lowestPendingAmount)}
-                      </Text>
-                    </View>
-                  ) : (
-                    <View style={styles.reviewHubHeroMetaColEnd}>
-                      <Text style={styles.reviewHubHeroStatLabel}>Pending</Text>
-                      <Text
-                        style={[
-                          styles.reviewHubHeroStatValue,
-                          styles.reviewHubHeroStatValueEnd,
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {String(pendingOfferCount)}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-            ) : null}
-            {awardModalQuotesLoading ? (
-              <View style={styles.bidEmptyWrap}>
-                <ActivityIndicator size="small" color={Theme.primary} />
-                <Text style={styles.bidEmptyText}>Loading offers…</Text>
-              </View>
-            ) : awardModalQuotes.length === 0 ? (
-              <View style={styles.bidEmptyWrap}>
-                <FontAwesome
-                  name="inbox"
-                  size={32}
-                  color={Theme.textMuted}
-                  style={{ marginBottom: 12 }}
-                />
-                <Text style={styles.bidEmptyText}>No offers yet</Text>
-                <Text style={styles.bidEmptySubtext}>
-                  Share this load to get offers from your network.
-                </Text>
-              </View>
-            ) : (
-              <>
-                <View style={styles.quoteHeaderRowDark}>
-                  <Text style={styles.quoteHeaderNameDark}>Bidder</Text>
-                  <Text style={styles.quoteHeaderAmountDark}>Amount</Text>
-                  <Text style={styles.quoteHeaderStatusDark}>Status</Text>
-                </View>
-                <ScrollView
-                  style={{ maxHeight: 280 }}
-                  showsVerticalScrollIndicator
-                >
-                  {sortedOfferHubQuotes.map((q: DirectQuoteRow) => {
-                    const isPending =
-                      (q.status || "").toLowerCase() === "pending";
-                    const isSelected = selectedQuoteId === q.id;
-                    return (
-                      <TouchableOpacity
-                        key={q.id}
-                        style={[
-                          styles.quoteRow,
-                          isSelected && styles.quoteRowSelected,
-                          !isPending && styles.quoteRowDisabled,
-                        ]}
-                        onPress={() =>
-                          isPending &&
-                          setSelectedQuoteId(isSelected ? null : q.id)
-                        }
-                        activeOpacity={0.8}
-                        disabled={!isPending}
-                      >
-                        <Text style={styles.quoteRowName} numberOfLines={1}>
-                          {q.bidder_organization_name ?? "—"}
-                        </Text>
-                        <Text style={styles.quoteRowAmount}>
-                          {formatINR(Number(q.amount ?? 0))}
-                        </Text>
-                        <Text style={styles.quoteRowStatus}>
-                          {(q.status || "").toUpperCase()}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-                {pendingOfferCount === 0 && (
-                  <Text style={styles.bidEmptySubtext}>
-                    No pending offers to award.
-                  </Text>
-                )}
-                {pendingOfferCount > 0 && (
-                  <Text style={styles.bidEmptySubtext}>
-                    Tap an offer to select, then Award selected.
-                  </Text>
-                )}
-              </>
-            )}
-            {loadAction?.type === "AWARD" && (
-              <>
-                <TouchableOpacity
-                  style={[styles.modalSubmit, { marginTop: 16 }]}
-                  onPress={handleAwardQuote}
-                  activeOpacity={0.9}
-                  disabled={
-                    awarding ||
-                    !selectedQuoteId ||
-                    !awardModalQuotes.some(
-                      (q) =>
-                        q.id === selectedQuoteId &&
-                        (q.status || "").toLowerCase() === "pending",
-                    )
-                  }
-                >
-                  <Text style={styles.modalSubmitText}>
-                    {awarding ? "Awarding…" : "Award selected"}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.viewIndentBtn}
-                  onPress={() => {
-                    setLoadAction(null);
-                    setSelectedQuoteId(null);
-                    onIndentPress(loadAction.load);
-                  }}
-                  activeOpacity={0.9}
-                >
-                  <Text style={styles.viewIndentBtnText}>View Indent</Text>
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
-        </TouchableOpacity>
-      </Modal>
+      <AwardModal
+        visible={awardModal.isOpen}
+        award={awardModal}
+        onViewIndent={onIndentPress}
+        insets={insets}
+      />
 
       {/* Submit Registry Bid modal (reference) */}
-      <Modal
-        visible={loadAction?.type === "BID"}
-        animationType="slide"
-        presentationStyle="fullScreen"
-        onRequestClose={() => {
-          setLoadAction(null);
-          setQuoteAmount("");
+      <BidModal
+        visible={bidLoad !== null}
+        load={bidLoad}
+        orgId={orgId}
+        myQuoteByIndentId={myQuoteByIndentId}
+        onClose={() => setBidLoad(null)}
+        onSuccess={triggerSuccess}
+        localBidHistoryByIndentId={localBidHistoryByIndentId}
+        onUpdateLocalBidHistory={(indentId, entry) => {
+          setLocalBidHistoryByIndentId((prev) => {
+            const prior = prev[indentId] ?? [];
+            const alreadyExists = prior.some(
+              (row) =>
+                Number(row.amount) === Number(entry.amount) &&
+                row.updatedAt === entry.updatedAt,
+            );
+            if (alreadyExists) return prev;
+            return {
+              ...prev,
+              [indentId]: [entry, ...prior].slice(0, 10),
+            };
+          });
         }}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          style={styles.bidModalPage}
-        >
-          <View
-            style={[
-              styles.modalSheet,
-              styles.bidModalSheetFull,
-              {
-                paddingTop: insets.top + 12,
-                paddingBottom: 24 + insets.bottom,
-              },
-            ]}
-          >
-            <View style={styles.modalHandle} />
-            <View style={styles.reviewHubModalHeader}>
-              <TouchableOpacity
-                onPress={() => {
-                  setLoadAction(null);
-                  setQuoteAmount("");
-                }}
-                hitSlop={12}
-                style={styles.reviewHubModalBack}
-              >
-                <X size={22} color={Theme.textPrimaryDark} strokeWidth={2.5} />
-              </TouchableOpacity>
-              <View style={styles.modalHeaderTitleWrap}>
-                <Text style={[styles.modalTitle, styles.modalTitleCenter]}>
-                  Bid hub
-                </Text>
-                <Text style={styles.modalSubtitle}>Submit quotation</Text>
-              </View>
-              <View style={styles.reviewHubModalHeaderSpacer} />
-            </View>
-            <ScrollView
-              style={styles.bidModalScroll}
-              contentContainerStyle={styles.bidModalScrollContent}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
-              {loadAction?.type === "BID" ? (
-                <View style={styles.bidIndentDetailSection}>
-                  <View style={styles.bidHubHero}>
-                    <View
-                      style={[styles.bidHubHeroGlow, { pointerEvents: "none" }]}
-                    />
-                    <Text style={styles.bidHubHeroKicker}>
-                      You are bidding on
-                    </Text>
-                    <Text style={styles.bidHubHeroRoute} numberOfLines={4}>
-                      {(loadAction.load.pickup_area || "—").trim()} →{" "}
-                      {(loadAction.load.drop_location || "—").trim()}
-                    </Text>
-                    <View style={styles.bidHubHeroChips}>
-                      {loadAction.load.load_type ? (
-                        <View style={styles.bidHubChip}>
-                          <Text style={styles.bidHubChipText} numberOfLines={1}>
-                            {String(loadAction.load.load_type).toUpperCase()}
-                          </Text>
-                        </View>
-                      ) : null}
-                      {loadAction.load.vehicle_type ? (
-                        <View style={styles.bidHubChip}>
-                          <Text style={styles.bidHubChipText} numberOfLines={1}>
-                            {loadAction.load.vehicle_type}
-                          </Text>
-                        </View>
-                      ) : null}
-                    </View>
-                    <View style={[styles.reviewHubHeroMeta, { marginTop: 14 }]}>
-                      <View style={styles.reviewHubHeroMetaCol}>
-                        <Text style={styles.reviewHubHeroStatLabel}>
-                          Indent
-                        </Text>
-                        <Text
-                          style={styles.reviewHubHeroStatValue}
-                          numberOfLines={1}
-                        >
-                          {getIndentDisplayNumber(loadAction.load)}
-                        </Text>
-                      </View>
-                      <View style={styles.reviewHubHeroMetaColEnd}>
-                        <Text style={styles.reviewHubHeroStatLabel}>
-                          Target
-                        </Text>
-                        <Text
-                          style={[
-                            styles.reviewHubHeroStatValue,
-                            styles.reviewHubHeroStatValueEnd,
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {formatINR(
-                            Number(
-                              loadAction.load.supplier_target ??
-                                loadAction.load.client_price ??
-                                0,
-                            ),
-                          )}
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-                </View>
-              ) : null}
-              <View style={styles.bidInputBlock}>
-                <Text style={styles.bidSectionTitle}>Financial proposal</Text>
-                <Text style={styles.quoteLabel}>Your price (₹)</Text>
-                <TextInput
-                  style={styles.quoteInput}
-                  keyboardType="numeric"
-                  placeholder={
-                    loadAction?.type === "BID" && loadAction.load
-                      ? (() => {
-                          const target =
-                            loadAction.load.supplier_target ??
-                            loadAction.load.client_price;
-                          return target != null && Number(target) > 0
-                            ? `Target rate: ${formatINR(Number(target))}`
-                            : "Target price (₹)";
-                        })()
-                      : "Target price (₹)"
-                  }
-                  placeholderTextColor={Theme.textMuted}
-                  value={quoteAmount}
-                  onChangeText={(raw) =>
-                    setQuoteAmount(raw.replace(/[^\d]/g, ""))
-                  }
-                />
-                {activeBidQuote ? (
-                  <View style={styles.previousBidWrap}>
-                    <Text style={styles.previousBidLabel}>Previous bid</Text>
-                    <Text style={styles.previousBidValue}>
-                      {formatINR(Number(activeBidQuote.amount ?? 0))}
-                    </Text>
-                    {activeBidQuoteUpdatedAt ? (
-                      <Text style={styles.previousBidMeta}>
-                        Last updated: {activeBidQuoteUpdatedAt}
-                      </Text>
-                    ) : null}
-                    {activeBidHistory.length > 0 ? (
-                      <View style={styles.previousBidHistoryWrap}>
-                        <Text style={styles.previousBidHistoryTitle}>
-                          Earlier updates
-                        </Text>
-                        {activeBidHistory.map((entry, idx) => {
-                          const dt = new Date(entry.updatedAt);
-                          const readable = Number.isNaN(dt.getTime())
-                            ? "Unknown time"
-                            : dt.toLocaleString("en-IN", {
-                                day: "numeric",
-                                month: "short",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              });
-                          return (
-                            <View
-                              key={`${entry.updatedAt}-${entry.amount}-${idx}`}
-                              style={styles.previousBidHistoryRow}
-                            >
-                              <Text style={styles.previousBidHistoryAmount}>
-                                {formatINR(Number(entry.amount ?? 0))}
-                              </Text>
-                              <Text style={styles.previousBidHistoryDate}>
-                                {readable}
-                              </Text>
-                            </View>
-                          );
-                        })}
-                      </View>
-                    ) : null}
-                  </View>
-                ) : null}
-              </View>
-              <TouchableOpacity
-                style={styles.modalSubmit}
-                onPress={async () => {
-                  if (!orgId || loadAction?.type !== "BID") {
-                    return;
-                  }
-                  const value = Number(
-                    String(quoteAmount).replace(/,/g, "").trim(),
-                  );
-                  if (!Number.isFinite(value) || value <= 0) {
-                    Alert.alert(
-                      "Invalid amount",
-                      "Please enter a valid quote amount.",
-                    );
-                    return;
-                  }
-                  const load = loadAction.load;
-                  const hadExistingQuote = !!myQuoteByIndentId.get(load.id);
-                  const existingQuoteBeforeSave = myQuoteByIndentId.get(
-                    load.id,
-                  );
-                  try {
-                    setSubmittingQuote(true);
-                    const { error } = await createDirectQuote(
-                      load.id,
-                      orgId,
-                      value,
-                      null,
-                      null,
-                      null,
-                    );
-                    setSubmittingQuote(false);
-                    if (error) {
-                      Alert.alert("Could not publish offer", error.message);
-                      refetchMarketIndents();
-                      return;
-                    }
-                    invalidateIndents(orgId);
-                    await Promise.allSettled([
-                      queryClient.invalidateQueries({
-                        queryKey: [
-                          ...queryKeys.indents.all(orgId),
-                          "my-direct-quotes",
-                        ],
-                      }),
-                      queryClient.invalidateQueries({
-                        queryKey: ["indents", load.id, "direct-quotes"],
-                      }),
-                      queryClient.invalidateQueries({
-                        queryKey: ["indents", "quote-counts"],
-                      }),
-                      refetchMyQuotes(),
-                      refetchMarketIndents(),
-                    ]);
-                    triggerSuccess(
-                      hadExistingQuote ? "Quote updated" : "Offer Published",
-                    );
-                    if (existingQuoteBeforeSave) {
-                      setLocalBidHistoryByIndentId((prev) => {
-                        const indentId = load.id;
-                        const prior = prev[indentId] ?? [];
-                        const nextEntry = {
-                          amount: Number(existingQuoteBeforeSave.amount ?? 0),
-                          updatedAt:
-                            existingQuoteBeforeSave.updated_at ??
-                            new Date().toISOString(),
-                        };
-                        const alreadyExists = prior.some(
-                          (row) =>
-                            Number(row.amount) === Number(nextEntry.amount) &&
-                            row.updatedAt === nextEntry.updatedAt,
-                        );
-                        if (alreadyExists) return prev;
-                        return {
-                          ...prev,
-                          [indentId]: [nextEntry, ...prior].slice(0, 10),
-                        };
-                      });
-                    }
-                    setLoadAction(null);
-                  } catch (e) {
-                    setSubmittingQuote(false);
-                    const msg =
-                      e instanceof Error
-                        ? e.message
-                        : "Unknown error while publishing offer.";
-                    Alert.alert("Could not publish offer", msg);
-                    refetchMarketIndents();
-                  }
-                }}
-                activeOpacity={0.9}
-                disabled={submittingQuote}
-              >
-                <Text style={styles.modalSubmitText}>
-                  {submittingQuote ? "Submitting…" : "Submit bid"}
-                </Text>
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+        queryClient={queryClient}
+        invalidateIndents={invalidateIndents}
+        refetchMyQuotes={refetchMyQuotes}
+        refetchMarketIndents={refetchMarketIndents}
+        insets={insets}
+      />
 
-      {/* Staff Handshake modal: Roster (driver + vehicle from org) or Ad hoc driver (OTP claim). Triggered from Claimed tab (ASSIGN STAFF & DEPLOY). O(n): drivers/vehicles loaded once per org. Web shell matches TripAssignmentBlock centered modal. */}
-      <Modal
-        visible={loadAction?.type === "ASSIGN"}
-        animationType={Platform.OS === "web" ? "fade" : "slide"}
-        presentationStyle={
-          Platform.OS === "web" ? "overFullScreen" : "fullScreen"
-        }
-        transparent={Platform.OS === "web"}
-        onRequestClose={handleStaffHandshakeBack}
-      >
-        <View
-          style={
-            Platform.OS === "web"
-              ? assignmentShellStyles.webModalBackdrop
-              : [styles.assignModalPage, { paddingTop: insets.top }]
-          }
-        >
-          <View
-            style={
-              Platform.OS === "web"
-                ? [
-                    assignmentShellStyles.webModalCardWhite,
-                    { paddingTop: insets.top },
-                    isCompactModalLayout && styles.assignWebModalCardCompact,
-                    !useAdHocDriver && {
-                      height: "auto",
-                      maxHeight: 620,
-                      minHeight: 420,
-                    },
-                  ]
-                : styles.handshakeNativeInner
-            }
-          >
-            <View style={assignmentShellStyles.modalHero}>
-              <View style={assignmentShellStyles.modalHeroText}>
-                <Text
-                  style={[
-                    assignmentShellStyles.modalTitle,
-                    { fontStyle: "italic", fontWeight: "900" },
-                  ]}
-                >
-                  Supply & Allocation
-                </Text>
-                <Text style={assignmentShellStyles.modalSubtitle}>
-                  Network node selection — roster deploy or OTP for the driver.
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => {
-                  setLoadAction(null);
-                  setDeployOtpCode(null);
-                  setDeployOtpExpiresAt(null);
-                  setDeployTripIdForOtp(null);
-                  setStaffHandshakeAssignLater(false);
-                }}
-                hitSlop={12}
-                style={assignmentShellStyles.modalCloseBtn}
-                accessibilityLabel="Close"
-              >
-                <FontAwesome
-                  name="times"
-                  size={18}
-                  color={assignmentShellColors.subtitle}
-                />
-              </TouchableOpacity>
-            </View>
-            {loadAction?.type === "ASSIGN" && (
-            <View
-              style={[styles.assignModalBody, assignmentShellStyles.modalBodyFlex]}
-            >
-              <ScrollView
-                style={styles.assignModalScroll}
-                contentContainerStyle={[
-                  assignmentShellStyles.bodyScrollContent,
-                  {
-                    paddingHorizontal: isCompactModalLayout ? 12 : 20,
-                    paddingTop: isCompactModalLayout ? 12 : 20,
-                    paddingBottom: !deployOtpCode
-                      ? 110 + insets.bottom
-                      : 24 + insets.bottom,
-                  },
-                ]}
-                keyboardShouldPersistTaps="handled"
-              >
-                {/* OTP result (ad hoc flow completed) */}
-                {deployOtpCode ? (
-                  <>
-                    <Text style={styles.modalHint}>
-                      Share this code with the driver to claim the trip.
-                    </Text>
-                    <View style={styles.otpCard}>
-                      <Text style={styles.otpCode}>{deployOtpCode}</Text>
-                      {deployOtpExpiresAt ? (
-                        <Text style={styles.otpExpiry}>
-                          Expires{" "}
-                          {new Date(deployOtpExpiresAt).toLocaleString()}
-                        </Text>
-                      ) : null}
-                      <View style={styles.otpActions}>
-                        <TouchableOpacity
-                          style={styles.otpBtn}
-                          onPress={() => {
-                            Clipboard.setStringAsync(deployOtpCode).then(() =>
-                              triggerSuccess("Copied"),
-                            );
-                          }}
-                        >
-                          <Text style={styles.otpBtnText}>Copy</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.otpBtn}
-                          onPress={() => {
-                            Share.share({
-                              message: `Claim this trip with code: ${deployOtpCode}`,
-                              title: "Trip claim code",
-                            }).catch(() => {});
-                          }}
-                        >
-                          <Text style={styles.otpBtnText}>Share</Text>
-                        </TouchableOpacity>
-                        {deployTripIdForOtp ? (
-                          <TouchableOpacity
-                            style={styles.otpBtn}
-                            onPress={async () => {
-                              const { code, expires_at } =
-                                await regenerateTripOtp(deployTripIdForOtp);
-                              if (code) {
-                                setDeployOtpCode(code);
-                                setDeployOtpExpiresAt(expires_at ?? null);
-                                triggerSuccess("OTP regenerated");
-                              }
-                            }}
-                          >
-                            <Text style={styles.otpBtnText}>Regenerate</Text>
-                          </TouchableOpacity>
-                        ) : null}
-                      </View>
-                    </View>
-                    <TouchableOpacity
-                      style={[styles.modalSubmit, styles.handshakeBtnModal]}
-                      onPress={() => {
-                        setLoadAction(null);
-                        setDeployOtpCode(null);
-                        setDeployOtpExpiresAt(null);
-                        setDeployTripIdForOtp(null);
-                        setStaffHandshakeAssignLater(false);
-                        const isShipper =
-                          loadAction?.type === "ASSIGN" &&
-                          loadAction.load.organization_id === orgId;
-                        if (isShipper)
-                          router.push(
-                            "/(tabs)/trips" as import("expo-router").Href,
-                          );
-                      }}
-                      activeOpacity={0.9}
-                    >
-                      <Text style={styles.modalSubmitText}>
-                        {loadAction?.type === "ASSIGN" &&
-                        loadAction.load.organization_id === orgId
-                          ? "Go to Trips"
-                          : "Done"}
-                      </Text>
-                    </TouchableOpacity>
-                  </>
-                ) : (
-                  <>
-                    <View style={styles.handshakeSegmentSection}>
-                      <View style={styles.handshakeSegmentPill}>
-                        <TouchableOpacity
-                          style={[
-                            styles.handshakeSegBtn,
-                            !useAdHocDriver && styles.handshakeSegBtnActive,
-                          ]}
-                          onPress={() => {
-                            setUseAdHocDriver(false);
-                            setAssignVehicleRegistration("");
-                            setAggregateDriverPhone("");
-                            setAggregateDriverTrackingName("");
-                            setSubcontractSupplierId(null);
-                            setSubcontractRate("");
-                            setAggregateAdvancePaid("");
-                            aggregateDriverNameManualRef.current = false;
-                            setAggregateDriverTrackingName("");
-                            setAggregatePhoneName(null);
-                            setAggregatePhoneNotFound(false);
-                            setAggregatePhoneInTrip(false);
-                          }}
-                          activeOpacity={0.88}
-                        >
-                          <Truck
-                            size={14}
-                            color={!useAdHocDriver ? "#ffffff" : "#94a3b8"}
-                          />
-                          <Text
-                            style={[
-                              styles.handshakeSegBtnText,
-                              !useAdHocDriver && styles.handshakeSegBtnTextActive,
-                            ]}
-                          >
-                            Asset
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[
-                            styles.handshakeSegBtn,
-                            useAdHocDriver && styles.handshakeSegBtnActive,
-                          ]}
-                          onPress={() => {
-                            setUseAdHocDriver(true);
-                            setAssignDriverId(null);
-                            setAssignVehicleId(undefined);
-                            setAssignVehicleRegistration("");
-                            setAggregateDriverPhone("");
-                            setAggregateDriverTrackingName("");
-                            setSubcontractSupplierId(null);
-                            setSubcontractRate("");
-                            setAggregateAdvancePaid("");
-                            aggregateDriverNameManualRef.current = false;
-                            setAggregateDriverTrackingName("");
-                            setAggregatePhoneName(null);
-                            setAggregatePhoneNotFound(false);
-                            setAggregatePhoneInTrip(false);
-                          }}
-                          activeOpacity={0.88}
-                        >
-                          <Building2
-                            size={14}
-                            color={useAdHocDriver ? "#ffffff" : "#94a3b8"}
-                          />
-                          <Text
-                            style={[
-                              styles.handshakeSegBtnText,
-                              useAdHocDriver && styles.handshakeSegBtnTextActive,
-                            ]}
-                          >
-                            Aggregate
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-
-                    <View
-                      style={[
-                        styles.handshakeAssignLaterOuter,
-                        isCompactModalLayout && styles.handshakeAssignLaterOuterCompact,
-                      ]}
-                    >
-                      <View style={styles.handshakeAssignLaterLeft}>
-                        <View style={styles.handshakeAssignLaterIconWrap}>
-                          <ListChecks size={18} color="#64748b" />
-                        </View>
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <Text style={styles.handshakeAssignLaterTitle}>
-                            Assign later
-                          </Text>
-                          <Text style={styles.handshakeAssignLaterSub}>
-                            {useAdHocDriver
-                              ? "(vehicle & driver phone from trip detail)"
-                              : "(vehicle & driver from trip detail)"}
-                          </Text>
-                        </View>
-                      </View>
-                      <Switch
-                        value={staffHandshakeAssignLater}
-                        onValueChange={(v) => {
-                          setStaffHandshakeAssignLater(v);
-                          if (v) {
-                            setAssignDriverId(null);
-                            setAssignVehicleId(undefined);
-                            setAggregateDriverPhone("");
-                            aggregateDriverNameManualRef.current = false;
-                            setAggregateDriverTrackingName("");
-                            setAssignVehicleRegistration("");
-                          }
-                        }}
-                        trackColor={{
-                          false: "#e2e8f0",
-                          true: "#0f172a",
-                        }}
-                        thumbColor="#ffffff"
-                      />
-                    </View>
-
-                    {!useAdHocDriver ? (
-                      (staffHandshakeAssignLater ? (
-                        <Text style={styles.modalHint}>
-                          Assign vehicle and driver on the trip screen before the
-                          trip starts.
-                        </Text>
-                      ) : (
-                        <>
-                    {(() => {
-                      const selectedDriver = activeDrivers.find(
-                        (d) => String(d.id) === assignDriverId,
-                      );
-                      const selectedVehicle =
-                        typeof assignVehicleId === "string"
-                          ? vehicles.find(
-                              (v) => String(v.id) === assignVehicleId,
-                            )
-                          : null;
-                      return (
-                        <>
-                          <View
-                            style={[
-                              styles.assignSelectionGrid,
-                              width >= 980 && styles.assignSelectionGridDesktop,
-                            ]}
-                          >
-                            <View style={styles.assignPickerCard}>
-                              <View style={styles.assignPickerHeader}>
-                                <Text style={styles.assignPickerTitle}>
-                                  Select Driver
-                                </Text>
-                                <View style={styles.assignPickerBadge}>
-                                  <Text style={styles.assignPickerBadgeText}>
-                                    {activeDrivers.length} Total
-                                  </Text>
-                                </View>
-                              </View>
-                              {activeDrivers.map((d) => (
-                                <TouchableOpacity
-                                  key={d.id}
-                                  style={[
-                                    styles.assignEntityRow,
-                                    assignDriverId === String(d.id) &&
-                                      styles.assignEntityRowActive,
-                                  ]}
-                                  onPress={() =>
-                                    setAssignDriverId(String(d.id))
-                                  }
-                                  activeOpacity={0.85}
-                                >
-                                  <View style={styles.assignEntityIconWrap}>
-                                    <FontAwesome
-                                      name="user"
-                                      size={16}
-                                      color={
-                                        assignDriverId === String(d.id)
-                                          ? Theme.textOnPrimary
-                                          : Theme.textMuted
-                                      }
-                                    />
-                                  </View>
-                                  <View style={styles.assignEntityTextCol}>
-                                    <Text style={styles.assignEntityTitle}>
-                                      {d.name ?? d.phone ?? "—"}
-                                    </Text>
-                                    <Text style={styles.assignEntitySubtitle}>
-                                      {d.phone
-                                        ? `Phone: ${d.phone}`
-                                        : "Available"}
-                                    </Text>
-                                  </View>
-                                  <FontAwesome
-                                    name={
-                                      assignDriverId === String(d.id)
-                                        ? "check-circle"
-                                        : "chevron-right"
-                                    }
-                                    size={15}
-                                    color={
-                                      assignDriverId === String(d.id)
-                                        ? Theme.primary
-                                        : Theme.textMuted
-                                    }
-                                  />
-                                </TouchableOpacity>
-                              ))}
-                              {activeDrivers.length === 0 ? (
-                                <View style={styles.assignEmptyState}>
-                                  <Text style={styles.assignEmptyText}>
-                                    No asset drivers were found in your
-                                    organization. Add a salaried driver to
-                                    continue with Asset-based assignment, or use
-                                    the Aggregate flow from the previous step.
-                                  </Text>
-                                  <TouchableOpacity
-                                    style={styles.assignEmptyActionBtn}
-                                    onPress={() => {
-                                      setLoadAction(null);
-                                      setDeployOtpCode(null);
-                                      setDeployOtpExpiresAt(null);
-                                      setDeployTripIdForOtp(null);
-                                      setStaffHandshakeAssignLater(false);
-                                      setTimeout(
-                                        () => {
-                                          router.push(
-                                            "/(modals)/add-driver" as import("expo-router").Href,
-                                          );
-                                        },
-                                        Platform.OS === "ios" ? 100 : 0,
-                                      );
-                                    }}
-                                    activeOpacity={0.9}
-                                  >
-                                    <FontAwesome
-                                      name="plus"
-                                      size={12}
-                                      color={Theme.textOnPrimary}
-                                    />
-                                    <Text
-                                      style={styles.assignEmptyActionBtnText}
-                                    >
-                                      Add Driver
-                                    </Text>
-                                  </TouchableOpacity>
-                                </View>
-                              ) : null}
-                            </View>
-
-                            <View style={styles.assignPickerCard}>
-                              <View style={styles.assignPickerHeader}>
-                                <Text style={styles.assignPickerTitle}>
-                                  Select Vehicle
-                                </Text>
-                                <View style={styles.assignPickerBadge}>
-                                  <Text style={styles.assignPickerBadgeText}>
-                                    {vehicles.length} Total
-                                  </Text>
-                                </View>
-                              </View>
-                              {vehicles.map((v) => (
-                                <TouchableOpacity
-                                  key={v.id}
-                                  style={[
-                                    styles.assignEntityRow,
-                                    assignVehicleId === String(v.id) &&
-                                      styles.assignEntityRowActive,
-                                  ]}
-                                  onPress={() =>
-                                    setAssignVehicleId(String(v.id))
-                                  }
-                                  activeOpacity={0.85}
-                                >
-                                  <View style={styles.assignEntityIconWrap}>
-                                    <FontAwesome
-                                      name="truck"
-                                      size={16}
-                                      color={
-                                        assignVehicleId === String(v.id)
-                                          ? Theme.textOnPrimary
-                                          : Theme.textMuted
-                                      }
-                                    />
-                                  </View>
-                                  <View style={styles.assignEntityTextCol}>
-                                    <Text style={styles.assignEntityTitle}>
-                                      {v.vehicle_number}
-                                    </Text>
-                                    <Text style={styles.assignEntitySubtitle}>
-                                      {v.vehicle_type
-                                        ? `${v.vehicle_type}${
-                                            v.vehicle_body_type
-                                              ? ` · ${v.vehicle_body_type}`
-                                              : ""
-                                          }`
-                                        : "Fleet vehicle"}
-                                    </Text>
-                                  </View>
-                                  <FontAwesome
-                                    name={
-                                      assignVehicleId === String(v.id)
-                                        ? "check-circle"
-                                        : "chevron-right"
-                                    }
-                                    size={15}
-                                    color={
-                                      assignVehicleId === String(v.id)
-                                        ? Theme.primary
-                                        : Theme.textMuted
-                                    }
-                                  />
-                                </TouchableOpacity>
-                              ))}
-                              {vehicles.length === 0 ? (
-                                <View style={styles.assignEmptyState}>
-                                  <Text style={styles.assignEmptyText}>
-                                    No vehicles were found in your fleet. Add an
-                                    own vehicle to continue with Asset-based
-                                    assignment.
-                                  </Text>
-                                  <TouchableOpacity
-                                    style={styles.assignEmptyActionBtn}
-                                    onPress={() => {
-                                      setLoadAction(null);
-                                      setDeployOtpCode(null);
-                                      setDeployOtpExpiresAt(null);
-                                      setDeployTripIdForOtp(null);
-                                      setStaffHandshakeAssignLater(false);
-                                      setTimeout(
-                                        () => {
-                                          router.push(
-                                            "/(modals)/add-vehicle" as import("expo-router").Href,
-                                          );
-                                        },
-                                        Platform.OS === "ios" ? 100 : 0,
-                                      );
-                                    }}
-                                    activeOpacity={0.9}
-                                  >
-                                    <FontAwesome
-                                      name="plus"
-                                      size={12}
-                                      color={Theme.textOnPrimary}
-                                    />
-                                    <Text
-                                      style={styles.assignEmptyActionBtnText}
-                                    >
-                                      Add Vehicle
-                                    </Text>
-                                  </TouchableOpacity>
-                                </View>
-                              ) : null}
-                            </View>
-                          </View>
-
-                          <View style={styles.assignSummaryBar}>
-                            <View style={styles.assignSummaryRow}>
-                              <View style={styles.assignSummaryBlock}>
-                                <Text style={styles.assignSummaryLabel}>
-                                  Selected Driver
-                                </Text>
-                                <Text style={styles.assignSummaryValue}>
-                                  {selectedDriver?.name ??
-                                    selectedDriver?.phone ??
-                                    "Not selected"}
-                                </Text>
-                              </View>
-                              <View style={styles.assignSummaryDivider} />
-                              <View style={styles.assignSummaryBlock}>
-                                <Text style={styles.assignSummaryLabel}>
-                                  Selected Vehicle
-                                </Text>
-                                <Text style={styles.assignSummaryValue}>
-                                  {selectedVehicle?.vehicle_number ??
-                                    "Not selected"}
-                                </Text>
-                              </View>
-                            </View>
-                          </View>
-                        </>
-                      );
-                    })()}
-                        </>
-                      ))
-                    ) : (
-                      (() => {
-                        const inlinePartners = visiblePartnersForHandshake;
-                        const canWideAlign =
-                          Platform.OS === "web" ? width >= 1200 : width >= 900;
-
-                        const partnerPane = (
-                          <View
-                            style={[
-                              styles.aggregatePaneCard,
-                              canWideAlign && styles.aggregatePaneWide,
-                            ]}
-                          >
-                            <View style={styles.aggregatePaneHeaderRow}>
-                              <Text style={styles.aggregatePaneTitle}>
-                                Transport partner *
-                              </Text>
-                              <TouchableOpacity
-                                style={styles.partnerAddBtn}
-                                onPress={() => {
-                                  setLoadAction(null);
-                                  setDeployOtpCode(null);
-                                  setDeployOtpExpiresAt(null);
-                                  setDeployTripIdForOtp(null);
-                                  setStaffHandshakeAssignLater(false);
-                                  setTimeout(
-                                    () => {
-                                      router.push(
-                                        "/(modals)/add-supplier" as import("expo-router").Href,
-                                      );
-                                    },
-                                    Platform.OS === "ios" ? 100 : 0,
-                                  );
-                                }}
-                                activeOpacity={0.9}
-                              >
-                                <FontAwesome
-                                  name="plus-circle"
-                                  size={12}
-                                  color={Theme.textPrimaryDark}
-                                />
-                                <Text style={styles.partnerAddBtnText}>
-                                  Add Partner
-                                </Text>
-                              </TouchableOpacity>
-                            </View>
-                            {inlinePartners.length > 0 ? (
-                              <View style={styles.aggregatePartnerList}>
-                                {inlinePartners.map((p) => {
-                                  const partnerName =
-                                    p.company_name ||
-                                    p.name ||
-                                    p.contact_person ||
-                                    "—";
-                                  const partnerSub = [p.phone, p.email]
-                                    .filter(Boolean)
-                                    .join(" · ");
-                                  const isSelected = subcontractSupplierId === p.id;
-                                  return (
-                                    <TouchableOpacity
-                                      key={p.id}
-                                      style={[
-                                        styles.aggregatePartnerCard,
-                                        isSelected && styles.aggregatePartnerCardSelected,
-                                      ]}
-                                      onPress={() =>
-                                        setSubcontractSupplierId(
-                                          isSelected ? null : p.id,
-                                        )
-                                      }
-                                      activeOpacity={0.85}
-                                    >
-                                      <View style={styles.aggregatePartnerAvatar}>
-                                        <Text
-                                          style={styles.aggregatePartnerAvatarText}
-                                        >
-                                          {partnerName.slice(0, 2).toUpperCase()}
-                                        </Text>
-                                      </View>
-                                      <View style={{ flex: 1, minWidth: 0 }}>
-                                        <Text
-                                          style={styles.aggregatePartnerName}
-                                          numberOfLines={1}
-                                        >
-                                          {partnerName}
-                                        </Text>
-                                        {partnerSub ? (
-                                          <Text
-                                            style={styles.aggregatePartnerSub}
-                                            numberOfLines={1}
-                                          >
-                                            {partnerSub}
-                                          </Text>
-                                        ) : null}
-                                      </View>
-                                      <FontAwesome
-                                        name={
-                                          isSelected ? "check-circle" : "circle-thin"
-                                        }
-                                        size={22}
-                                        color={
-                                          isSelected ? Theme.primary : Theme.borderInput
-                                        }
-                                      />
-                                    </TouchableOpacity>
-                                  );
-                                })}
-                              </View>
-                            ) : (
-                              <View style={styles.aggregateViewMoreBtn}>
-                                <Text style={styles.aggregateViewMoreText}>
-                                  No partners yet. Add or select partner
-                                </Text>
-                              </View>
-                            )}
-                          </View>
-                        );
-
-                        const rateAndTrackingPane = (
-                          <View
-                            style={[
-                              styles.aggregatePaneCard,
-                              canWideAlign && styles.aggregatePaneWide,
-                            ]}
-                          >
-                            <View
-                              style={[
-                                styles.aggregateGridRow,
-                                canWideAlign && styles.aggregateGridRowWide,
-                              ]}
-                            >
-                              <View style={styles.aggregateGridCol}>
-                                <Text style={styles.tripAssignRowLabel}>
-                                  Partner rate (₹) *
-                                </Text>
-                                <TextInput
-                                  style={[
-                                    styles.assignVehicleInput,
-                                    assignmentShellStyles.inputWell,
-                                  ]}
-                                  placeholder="0"
-                                  placeholderTextColor={Theme.textMuted}
-                                  value={subcontractRate}
-                                  onChangeText={setSubcontractRate}
-                                  ref={aggregatePartnerRateInputRef}
-                                  keyboardType="decimal-pad"
-                                  returnKeyType="next"
-                                  onSubmitEditing={() =>
-                                    aggregateAdvancePaidInputRef.current?.focus()
-                                  }
-                                />
-                              </View>
-                              <View style={styles.aggregateGridCol}>
-                                <Text style={styles.tripAssignRowLabel}>
-                                  Advance paid (₹)
-                                </Text>
-                                <TextInput
-                                  style={[
-                                    styles.assignVehicleInput,
-                                    assignmentShellStyles.inputWell,
-                                  ]}
-                                  placeholder="Optional"
-                                  placeholderTextColor={Theme.textMuted}
-                                  value={aggregateAdvancePaid}
-                                  onChangeText={setAggregateAdvancePaid}
-                                  ref={aggregateAdvancePaidInputRef}
-                                  keyboardType="decimal-pad"
-                                  returnKeyType={
-                                    staffHandshakeAssignLater ? "done" : "next"
-                                  }
-                                  onSubmitEditing={() => {
-                                    if (!staffHandshakeAssignLater) {
-                                      aggregateDriverNameInputRef.current?.focus();
-                                    }
-                                  }}
-                                />
-                              </View>
-                            </View>
-
-                            {!staffHandshakeAssignLater ? (
-                              <>
-                                <Text style={styles.tripAssignRowLabel}>
-                                  Driver Name (Tracking) *
-                                </Text>
-                                <TextInput
-                                  style={[
-                                    styles.assignVehicleInput,
-                                    assignmentShellStyles.inputWell,
-                                  ]}
-                                  placeholder="e.g. Suresh Kumar"
-                                  placeholderTextColor={Theme.textMuted}
-                                  value={aggregateDriverTrackingName}
-                                  onChangeText={(value) => {
-                                    aggregateDriverNameManualRef.current = true;
-                                    setAggregateDriverTrackingName(value);
-                                  }}
-                                  ref={aggregateDriverNameInputRef}
-                                  autoCorrect={false}
-                                  autoCapitalize="words"
-                                  returnKeyType="next"
-                                  onSubmitEditing={() =>
-                                    aggregateDriverPhoneInputRef.current?.focus()
-                                  }
-                                />
-                                <View
-                                  style={[
-                                    styles.aggregateGridRow,
-                                    canWideAlign && styles.aggregateGridRowWide,
-                                  ]}
-                                >
-                                  <View style={styles.aggregateGridCol}>
-                                    <Text
-                                      style={[
-                                        styles.tripAssignRowLabel,
-                                        styles.aggregateInlineFieldLabel,
-                                      ]}
-                                    >
-                                      Driver Phone (Tracking) *
-                                    </Text>
-                                    <View
-                                      style={[
-                                        styles.aggregatePhoneInputWrap,
-                                        assignmentShellStyles.inputWell,
-                                      ]}
-                                    >
-                                      <Text style={styles.aggregatePhonePrefix}>
-                                        🇮🇳 +91
-                                      </Text>
-                                      <TextInput
-                                        style={styles.aggregatePhoneInput}
-                                        placeholder="98765 43210"
-                                        placeholderTextColor={Theme.textMuted}
-                                        value={aggregateDriverPhone}
-                                        onChangeText={(t) =>
-                                          setAggregateDriverPhone(
-                                            formatMobileNumber(t),
-                                          )
-                                        }
-                                        ref={aggregateDriverPhoneInputRef}
-                                        keyboardType="phone-pad"
-                                        autoComplete="tel"
-                                        returnKeyType="next"
-                                        onSubmitEditing={() =>
-                                          aggregateVehicleInputRef.current?.focus()
-                                        }
-                                      />
-                                    </View>
-                                  </View>
-                                  <View style={styles.aggregateGridCol}>
-                                    <Text
-                                      style={[
-                                        styles.tripAssignRowLabel,
-                                        styles.aggregateInlineFieldLabel,
-                                      ]}
-                                    >
-                                      Vehicle Number *
-                                    </Text>
-                                    <TextInput
-                                      style={[
-                                        styles.assignVehicleInput,
-                                        assignmentShellStyles.inputWell,
-                                      ]}
-                                      placeholder="e.g. TN 67 GH 7652"
-                                      placeholderTextColor={Theme.textMuted}
-                                      value={assignVehicleRegistration}
-                                      onChangeText={setAssignVehicleRegistration}
-                                      ref={aggregateVehicleInputRef}
-                                      editable
-                                      returnKeyType="done"
-                                    />
-                                  </View>
-                                </View>
-                                {aggregatePhoneName ? (
-                                  <Text style={styles.phoneModalFound}>
-                                    Found: {aggregatePhoneName}
-                                  </Text>
-                                ) : aggregatePhoneNotFound ? (
-                                  <Text style={styles.phoneModalNotFound}>
-                                    No driver found for this number
-                                  </Text>
-                                ) : null}
-                                {aggregatePhoneName && aggregatePhoneInTrip ? (
-                                  <Text style={styles.phoneModalInTrip}>
-                                    Driver is in trip
-                                  </Text>
-                                ) : null}
-                              </>
-                            ) : null}
-                          </View>
-                        );
-
-                        return (
-                          <>
-                            {staffHandshakeAssignLater ? (
-                              <Text style={styles.modalHint}>
-                                Add vehicle number and driver phone on the trip
-                                screen before the trip starts.
-                              </Text>
-                            ) : null}
-                            <View
-                              style={assignmentShellStyles.tripAssignSurfaceCard}
-                            >
-                              <View style={styles.tripAssignCardHeader}>
-                                <Text style={styles.tripAssignCardHeaderTitle}>
-                                  Current Node
-                                </Text>
-                                <View
-                                  style={[
-                                    styles.tripAssignSourceBadge,
-                                    styles.tripAssignBadgeUnassigned,
-                                  ]}
-                                >
-                                  <Text
-                                    style={[
-                                      styles.tripAssignSourceBadgeText,
-                                      styles.tripAssignSourceBadgeTextUnassigned,
-                                    ]}
-                                  >
-                                    Unassigned
-                                  </Text>
-                                </View>
-                              </View>
-                              <Text style={styles.tripAssignPartnerHint}>
-                                Associated partner (required). Select your
-                                sub-supplier for this trip and enter the rate you
-                                will pay.
-                              </Text>
-                              <ScrollView
-                                style={[
-                                  styles.currentNodeInnerScroll,
-                                  !canWideAlign && styles.currentNodeInnerScrollMobile,
-                                  isCompactModalLayout && styles.currentNodeInnerScrollCompact,
-                                ]}
-                                contentContainerStyle={[
-                                  styles.currentNodeInnerScrollContent,
-                                  styles.aggregateSplit,
-                                  canWideAlign && styles.aggregateSplitWide,
-                                ]}
-                                nestedScrollEnabled
-                                keyboardShouldPersistTaps="handled"
-                                showsVerticalScrollIndicator={!canWideAlign}
-                              >
-                                {canWideAlign ? (
-                                  <>
-                                    {partnerPane}
-                                    {rateAndTrackingPane}
-                                  </>
-                                ) : (
-                                  <View style={styles.aggregateMobileStack}>
-                                    {partnerPane}
-                                    {rateAndTrackingPane}
-                                  </View>
-                                )}
-                              </ScrollView>
-                            </View>
-                          </>
-                        );
-                      })()
-                  )}
-                  </>
-                )}
-              </ScrollView>
-              {!deployOtpCode ? (
-                <View
-                  style={[
-                    assignmentShellStyles.modalFooterBar,
-                    { paddingBottom: Math.max(16, insets.bottom + 8) },
-                  ]}
-                >
-                  {loadAction?.type === "ASSIGN" &&
-                  assigningTripId === loadAction.load.id ? (
-                    <View style={styles.loadingWrap}>
-                      <ActivityIndicator size="small" color={Theme.primary} />
-                      <Text style={styles.loadingText}>Creating trip…</Text>
-                    </View>
-                  ) : loadAction?.type === "ASSIGN" &&
-                    !useAdHocDriver &&
-                    staffHandshakeAssignLater ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      disabled={assigningTripId === loadAction.load.id}
-                      style={({ pressed }) => [
-                        styles.handshakePrimaryCta,
-                        pressed && { opacity: 0.9 },
-                        Platform.OS === "web" &&
-                          ({ cursor: "pointer" } as const),
-                      ]}
-                      onPress={() => {
-                        if (loadAction?.type === "ASSIGN") {
-                          void handleFinalAssignment(loadAction.load);
-                        }
-                      }}
-                    >
-                      <FontAwesome
-                        name="bolt"
-                        size={18}
-                        color={Theme.textOnPrimary}
-                        style={{ marginRight: 8 }}
-                      />
-                      <Text style={styles.handshakePrimaryCtaText}>
-                        Authorize & deploy voyage
-                      </Text>
-                    </Pressable>
-                  ) : loadAction?.type === "ASSIGN" &&
-                    !useAdHocDriver &&
-                    !staffHandshakeAssignLater &&
-                    rosterReady ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      disabled={assigningTripId === loadAction.load.id}
-                      style={({ pressed }) => [
-                        styles.handshakePrimaryCta,
-                        pressed && { opacity: 0.9 },
-                        Platform.OS === "web" &&
-                          ({ cursor: "pointer" } as const),
-                      ]}
-                      onPress={() => {
-                        if (loadAction?.type === "ASSIGN") {
-                          void handleDeployRoster(loadAction.load);
-                        }
-                      }}
-                    >
-                      <FontAwesome
-                        name="bolt"
-                        size={18}
-                        color={Theme.textOnPrimary}
-                        style={{ marginRight: 8 }}
-                      />
-                      <Text style={styles.handshakePrimaryCtaText}>
-                        Authorize & deploy voyage
-                      </Text>
-                    </Pressable>
-                  ) : loadAction?.type === "ASSIGN" &&
-                    useAdHocDriver &&
-                    !staffHandshakeAssignLater ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      disabled={
-                        assigningTripId === loadAction.load.id ||
-                        !aggregatePartnerHandshakeComplete ||
-                        !aggregateTrackingFlowReady ||
-                        (aggregateDriverPhone.trim().length > 0 &&
-                          aggregatePhoneInTrip)
-                      }
-                      style={({ pressed }) => [
-                        styles.handshakePrimaryCta,
-                        pressed && { opacity: 0.9 },
-                        Platform.OS === "web" &&
-                          ({ cursor: "pointer" } as const),
-                      ]}
-                      onPress={() => {
-                        if (loadAction?.type === "ASSIGN") {
-                          void handleDeployAdHoc(loadAction.load);
-                        }
-                      }}
-                    >
-                      <FontAwesome
-                        name="share-alt"
-                        size={18}
-                        color={Theme.textOnPrimary}
-                        style={{ marginRight: 8 }}
-                      />
-                      <Text style={styles.handshakePrimaryCtaText}>
-                        {aggregateDriverPhone.trim().length > 0 &&
-                        aggregatePhoneInTrip
-                          ? "Driver on trip"
-                          : "Deploy & get OTP"}
-                      </Text>
-                    </Pressable>
-                  ) : loadAction?.type === "ASSIGN" &&
-                    useAdHocDriver &&
-                    staffHandshakeAssignLater ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      disabled={
-                        assigningTripId === loadAction.load.id ||
-                        !aggregatePartnerHandshakeComplete
-                      }
-                      style={({ pressed }) => [
-                        styles.handshakePrimaryCta,
-                        pressed && { opacity: 0.9 },
-                        Platform.OS === "web" &&
-                          ({ cursor: "pointer" } as const),
-                      ]}
-                      onPress={() => {
-                        if (loadAction?.type === "ASSIGN") {
-                          void handleDeployAdHoc(loadAction.load);
-                        }
-                      }}
-                    >
-                      <FontAwesome
-                        name="share-alt"
-                        size={18}
-                        color={Theme.textOnPrimary}
-                        style={{ marginRight: 8 }}
-                      />
-                      <Text style={styles.handshakePrimaryCtaText}>
-                        Create trip & assign later
-                      </Text>
-                    </Pressable>
-                  ) : (
-                    <Text style={[styles.modalHint, { marginBottom: 0 }]}>
-                      {!useAdHocDriver
-                        ? "Select a driver and a vehicle from your org to continue."
-                        : "Enter driver name, driver phone, and vehicle number, or use Assign later."}
-                    </Text>
-                  )}
-                </View>
-              ) : null}
-            </View>
-          )}
-          </View>
-        </View>
-      </Modal>
+      {/* Staff Handshake modal */}
+      <StaffHandshakeModal
+        visible={handshake.state.isOpen}
+        handshake={handshake}
+        activeDrivers={activeDrivers}
+        vehicles={vehicles}
+        suppliers={suppliers}
+        visiblePartnersForHandshake={visiblePartnersForHandshake}
+        orgId={orgId}
+        width={width}
+        isCompactModalLayout={isCompactModalLayout}
+        insets={insets}
+        onSuccess={triggerSuccess}
+      />
 
     </View>
   );
