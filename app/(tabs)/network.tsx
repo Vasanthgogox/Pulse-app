@@ -16,6 +16,7 @@ import {
 } from "@/features/network/components/ConnectionsView";
 import { DiscoverView } from "@/features/network/components/DiscoverView";
 import { NetworkLoadsQuickCards } from "@/features/network/components/NetworkLoadsQuickCards";
+import { ContentErrorState } from "@/components/ContentErrorState";
 import { NetworkTabErrorBoundary } from "@/components/network/NetworkTabErrorBoundary";
 import { StoryReel } from "@/features/network/components/StoryReel";
 import { isPostVisibleForOrg, type PostRow } from "@/features/network/services/posts.service";
@@ -367,36 +368,21 @@ function NetworkScreenInner() {
     }
     if (organizationError) {
       return (
-        <View style={[styles.container, styles.orgGateWrap, { paddingTop: insets.top + 24 }]}>
-          <Text style={styles.orgGateTitle}>Connection issue</Text>
-          <Text style={styles.orgGateMessage}>
-            Couldn&apos;t load your workspace. Check your connection and try again.
-          </Text>
-          <TouchableOpacity
-            style={styles.orgGateBtn}
-            onPress={() => void refreshOrganization()}
-            accessibilityRole="button"
-            accessibilityLabel="Try again"
-          >
-            <Text style={styles.orgGateBtnText}>Try again</Text>
-          </TouchableOpacity>
+        <View style={[styles.container, { paddingTop: insets.top }]}>
+          <ContentErrorState
+            variant="workspace"
+            onRetry={() => void refreshOrganization()}
+          />
         </View>
       );
     }
     return (
-      <View style={[styles.container, styles.orgGateWrap, { paddingTop: insets.top + 24 }]}>
-        <Text style={styles.orgGateTitle}>No organization linked</Text>
-        <Text style={styles.orgGateMessage}>
-          You&apos;re signed in, but we couldn&apos;t find an organization for this account yet.
-        </Text>
-        <TouchableOpacity
-          style={styles.orgGateBtn}
-          onPress={() => void refreshOrganization()}
-          accessibilityRole="button"
-          accessibilityLabel="Refresh"
-        >
-          <Text style={styles.orgGateBtnText}>Refresh</Text>
-        </TouchableOpacity>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <ContentErrorState
+          variant="workspaceMissing"
+          onRetry={() => void refreshOrganization()}
+          retryLabel="Refresh"
+        />
       </View>
     );
   }

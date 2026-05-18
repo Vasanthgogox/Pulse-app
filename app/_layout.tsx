@@ -1,4 +1,5 @@
 import { AppAlertHost } from '@/components/AppAlertHost';
+import { ContentErrorState } from '@/components/ContentErrorState';
 import { GlobalOperationsToast } from '@/components/GlobalOperationsToast';
 import { FloatingChatButton } from '@/components/FloatingChatButton';
 import { DemoTabBar, type DemoTabId } from '@/components/demo';
@@ -91,91 +92,61 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   const staleDeploy = isStaleWebChunkError(error);
   const configMissing = isConfigMissingError(error);
   const network = isNetworkError(error);
+  const variant = configMissing
+    ? 'config'
+    : staleDeploy
+      ? 'update'
+      : network
+        ? 'connection'
+        : 'generic';
+
   return (
     <View
-      style={[
-        errorStyles.container,
-        { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 },
-      ]}
+      style={{
+        flex: 1,
+        paddingTop: insets.top,
+        paddingBottom: insets.bottom,
+      }}
     >
-      <Text style={errorStyles.title}>
-        {configMissing
-          ? tGlobal('appNotConfigured')
-          : staleDeploy
-            ? 'Update available'
-            : network
-              ? tGlobal('connectionErrorShort')
-              : tGlobal('somethingWentWrong')}
-      </Text>
-      <Text style={errorStyles.message}>
-        {configMissing
-          ? 'Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY to .env in the project root, then restart: npx expo start'
-          : staleDeploy
-            ? 'A new version was deployed. Reloading…'
-            : network
-              ? "Cannot reach server. If you're on home or office WiFi, try mobile data or a different network—some routers block or slow cloud services."
-              : error.message}
-      </Text>
-      {!configMissing && !staleDeploy && (
-        <TouchableOpacity
-          style={errorStyles.button}
-          onPress={() => {
-            if (Platform.OS === 'web' && isStaleWebChunkError(error)) {
-              recoverStaleWebDeploy();
-              return;
-            }
-            retry();
-          }}
-        >
-          <Text style={errorStyles.buttonText}>{tGlobal('tryAgain')}</Text>
-        </TouchableOpacity>
-      )}
+      <ContentErrorState
+        variant={variant}
+        tone="dark"
+        layout="full"
+        title={
+          configMissing
+            ? tGlobal('appNotConfigured')
+            : staleDeploy
+              ? undefined
+              : network
+                ? tGlobal('connectionErrorShort')
+                : tGlobal('somethingWentWrong')
+        }
+        message={
+          configMissing
+            ? undefined
+            : staleDeploy
+              ? undefined
+              : network
+                ? undefined
+                : error.message
+        }
+        technicalDetails={error.stack ?? error.message}
+        onRetry={
+          configMissing || staleDeploy
+            ? undefined
+            : () => {
+                if (Platform.OS === 'web' && isStaleWebChunkError(error)) {
+                  recoverStaleWebDeploy();
+                  return;
+                }
+                retry();
+              }
+        }
+        retryLabel={tGlobal('tryAgain')}
+      />
     </View>
   );
 }
-
-const errorStyles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    backgroundColor: Theme.darkBackground,
-  },
-  iconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: Theme.darkSurface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: Theme.textOnDark,
-    marginBottom: 8,
-  },
-  message: {
-    fontSize: 16,
-    color: Theme.textMuted,
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  button: {
-    backgroundColor: Theme.buttonPrimary,
-    padding: 16,
-    borderRadius: 12,
-    minWidth: 160,
-    alignItems: 'center',
-  },
-  buttonText: {
-    color: Theme.buttonPrimaryText,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-});
 
 const styles = StyleSheet.create({
   /** Required so RNGH components (e.g. hold-to-accept Pressable) work on Android; stabilizes iOS. */

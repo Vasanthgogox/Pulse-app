@@ -2,6 +2,7 @@
  * Load Center — reference UI: Hire Partners | Find Work | Awarded.
  * Header "Load Center" / "Find or Hire Work", three sub-tabs, cards, modals.
  */
+import { ContentErrorState } from '@/components/ContentErrorState';
 import { LoadCardRouteRow } from "@/components/LoadCardRouteRow";
 import { LoadCardSpecsRow } from "@/components/LoadCardSpecsRow";
 import { FinanceFAB } from "@/components/FinanceFAB";
@@ -2452,33 +2453,17 @@ export function LoadCenterView({
                 <Text style={styles.loadingText}>Loading…</Text>
               </View>
             ) : marketError ? (
-              <View style={styles.emptyWrap}>
-                <FontAwesome
-                  name="exclamation-circle"
-                  size={40}
-                  color={Theme.textMuted}
-                />
-                <Text style={styles.emptyTitle}>Get Load</Text>
-                <Text style={styles.emptySub}>
-                  Unable to load loads. Check your connection or try again.
-                </Text>
-                <TouchableOpacity
-                  style={[
-                    styles.quoteBtn,
-                    { marginTop: 16, alignSelf: "center" },
-                  ]}
-                  onPress={() => refetchMarketIndents()}
-                  activeOpacity={0.9}
-                >
-                  <FontAwesome
-                    name="refresh"
-                    size={14}
-                    color={Theme.teslaRed}
-                    style={{ marginRight: 8 }}
-                  />
-                  <Text style={styles.quoteBtnText}>Retry</Text>
-                </TouchableOpacity>
-              </View>
+              <ContentErrorState
+                variant="loads"
+                layout="embedded"
+                message={
+                  marketError instanceof Error
+                    ? marketError.message
+                    : 'Check your connection or try again.'
+                }
+                onRetry={() => void refetchMarketIndents()}
+                retrying={marketLoading}
+              />
             ) : filteredFindWorkList.length === 0 ? (
               <View style={styles.emptyWrap}>
                 <View style={styles.emptyIconWrapMuted}>

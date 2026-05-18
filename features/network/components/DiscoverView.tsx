@@ -3,6 +3,7 @@
  * Smart recommendations: scored by mutual connections, location match, lane overlap.
  * Shows "WHY" reason chips per card. Sort: recommended first, then alphabetical.
  */
+import { ContentErrorState } from '@/components/ContentErrorState';
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -753,11 +754,15 @@ export function DiscoverView({
         </View>
       ) : null}
 
-      {error && (
-        <View style={styles.errorBanner}>
-          <Text style={styles.errorText}>{error}</Text>
-        </View>
-      )}
+      {error ? (
+        <ContentErrorState
+          variant="discover"
+          layout="inline"
+          message={error}
+          onRetry={() => refetchDiscover(search)}
+          retrying={loading}
+        />
+      ) : null}
 
       {embedded ? (
         <View>
@@ -933,16 +938,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingTop: 8,
   },
-  errorBanner: {
-    marginHorizontal: 14,
-    marginBottom: 10,
-    backgroundColor: '#fef2f2',
-    borderRadius: 10,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: '#fecaca',
-  },
-  errorText: { fontSize: 12, color: '#dc2626', fontWeight: '600' },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
