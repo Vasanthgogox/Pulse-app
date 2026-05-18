@@ -20,36 +20,37 @@ import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { searchExistingDriversByPhone } from "@/features/drivers/services/drivers.service";
-import { upsertTripSubcontract } from "@/features/finance/services/tripSubcontracts.service";
 import {
     BidReceivedHammer,
     createDirectQuote,
     getIndentDisplayNumber,
-    updateDirectQuoteAssignment,
-    updateDirectQuoteStatus,
-    updateIndent,
     type DirectQuoteRow,
     type IndentRow,
 } from "@/features/indents";
-import { acceptAwardedQuote } from "@/features/indents/services/accept-awarded-quote.service";
 import { shareDraftIndent } from "@/features/indents/services/indents.service";
 import { indentCanBroadcastToPulseNetwork } from "@/features/network/utils/indentBroadcastEligibility.util";
-import { setInitialTripForDetail } from "@/features/trips";
 import {
-    assignAggregateTripDriverByPhone,
-    getDriverAvailabilityByPhoneGlobal,
-    humanizeTripIdInRpcError,
-    updateTripSupplier,
-} from "@/features/trips/services/trips.service";
-import { generateTripOtp, regenerateTripOtp } from "@/features/trips/services/tripOtp.service";
+    formatIndentCardDate,
+    giveLoadStatusPillStyles,
+    shouldHideGetLoadStatePill,
+    STATUS_TABS,
+    statusMatchesFilter,
+    type LoadSubTab,
+    type StatusFilterTab,
+} from "@/features/network/utils/loadCenter.model";
+import { useAwardQuote } from "@/features/network/hooks/useAwardQuote";
+import { useLoadCenterFilters } from "@/features/network/hooks/useLoadCenterFilters";
+import { useStaffHandshake } from "@/features/network/hooks/useStaffHandshake";
+import { setInitialTripForDetail } from "@/features/trips";
+import { regenerateTripOtp } from "@/features/trips/services/tripOtp.service";
+import { acceptAwardedQuote } from "@/features/indents/services/accept-awarded-quote.service";
+import { updateIndent } from "@/features/indents";
 import {
     assignmentShellColors,
     assignmentShellStyles,
 } from "@/features/trips/styles/assignmentShellShared";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { formatINR, formatMobileNumber } from "@/lib/format";
-import { validatePhone } from "@/lib/phoneValidation";
 import {
     useIndentOfferCountsQuery,
     useDriversQuery,
@@ -104,107 +105,6 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-type LoadSubTab = "GIVE_LOAD" | "GET_LOAD" | "AWARDED";
-
-/** Status filter tabs: Open | Quoted | Awarded | Done. Maps to indent status values. */
-type StatusFilterTab = "OPEN" | "QUOTED" | "AWARDED" | "DONE";
-
-const STATUS_TABS: {
-  id: StatusFilterTab;
-  label: string;
-  statuses: string[];
-}[] = [
-  {
-    id: "OPEN",
-    label: "Open",
-    statuses: ["open", "pending", "broadcast", "draft"],
-  },
-  { id: "QUOTED", label: "Quoted", statuses: ["quoted"] },
-  { id: "AWARDED", label: "Awarded", statuses: ["awarded"] },
-  {
-    id: "DONE",
-    label: "Done",
-    statuses: ["completed", "cancelled", "closed", "expired"],
-  },
-];
-
-function statusMatchesFilter(status: string, filter: StatusFilterTab): boolean {
-  const s = status.toLowerCase();
-  const tab = STATUS_TABS.find((t) => t.id === filter);
-  return tab?.statuses.includes(s) ?? false;
-}
-
-/** Hide GET LOAD row state pill when the active status chip already matches (see GET LOAD cards). */
-function shouldHideGetLoadStatePill(
-  filter: StatusFilterTab,
-  stateLabel: string,
-  quoteAccepted: boolean,
-): boolean {
-  if (filter === "OPEN" && stateLabel === "OPEN") return true;
-  if (filter === "QUOTED" && stateLabel === "QUOTED") return true;
-  if (filter === "AWARDED" && quoteAccepted) return true;
-  return false;
-}
-
-/** Status pill colors for Hire Partner cards (Tesla palette, no indigo). */
-function giveLoadStatusPillStyles(status: string): {
-  pill: object;
-  text: object;
-} {
-  const s = (status || "").toLowerCase();
-  if (s === "awarded") {
-    return {
-      pill: {
-        backgroundColor: Theme.positive,
-        borderWidth: 1,
-        borderColor: Theme.darkGreen,
-      },
-      text: { color: Theme.textOnPrimary },
-    };
-  }
-  if (["completed", "closed", "cancelled", "expired"].includes(s)) {
-    return {
-      pill: {
-        backgroundColor: Theme.surfaceGray,
-        borderWidth: 1,
-        borderColor: Theme.borderMedium,
-      },
-      text: { color: Theme.textSecondary },
-    };
-  }
-  if (s === "quoted") {
-    return {
-      pill: {
-        backgroundColor: Theme.screenBackground,
-        borderWidth: 1,
-        borderColor: Theme.textPrimaryDark,
-      },
-      text: { color: Theme.textPrimaryDark },
-    };
-  }
-  return {
-    pill: {
-      backgroundColor: Theme.tripHubUnassignedPillBg,
-      borderWidth: 1,
-      borderColor: Theme.textPrimaryDark,
-    },
-    text: { color: Theme.textPrimaryDark },
-  };
-}
-
-function formatIndentCardDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  try {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return "—";
-    return d
-      .toLocaleDateString("en-IN", { day: "numeric", month: "short" })
-      .toUpperCase();
-  } catch {
-    return "—";
-  }
-}
-
 interface LoadCenterViewProps {
   /** Top padding (e.g. from parent sub-tab row + safe area). */
   contentTopPadding?: number;
@@ -249,7 +149,6 @@ export function LoadCenterView({
   const [successMsg, setSuccessMsg] = useState("");
   const [quoteAmount, setQuoteAmount] = useState<string>("");
   const [submittingQuote, setSubmittingQuote] = useState(false);
-  const [assigningTripId, setAssigningTripId] = useState<string | null>(null);
   const [loadAction, setLoadAction] = useState<
     | {
         type: "AWARD";
@@ -266,49 +165,16 @@ export function LoadCenterView({
     | null
   >(null);
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
-  const [awarding, setAwarding] = useState(false);
-  const [assignDriverId, setAssignDriverId] = useState<string | null>(null);
-  const [assignVehicleId, setAssignVehicleId] = useState<
-    string | null | undefined
-  >(undefined);
-  const [assignVehicleRegistration, setAssignVehicleRegistration] =
-    useState("");
-  const [useAdHocDriver, setUseAdHocDriver] = useState(false);
-  const [aggregateDriverTrackingName, setAggregateDriverTrackingName] =
-    useState("");
-  const aggregateDriverNameManualRef = useRef(false);
-  const [aggregateDriverPhone, setAggregateDriverPhone] = useState("");
-  const [aggregatePhoneName, setAggregatePhoneName] = useState<string | null>(
-    null,
-  );
-  const [aggregatePhoneNotFound, setAggregatePhoneNotFound] = useState(false);
-  const [aggregatePhoneInTrip, setAggregatePhoneInTrip] = useState(false);
+  const [assigningTripId, setAssigningTripId] = useState<string | null>(null);
+  const [localBidHistoryByIndentId, setLocalBidHistoryByIndentId] = useState<
+    Record<string, { amount: number; updatedAt: string }[]>
+  >({});
+  // TextInput refs kept in component (used directly in modal JSX)
   const aggregatePartnerRateInputRef = useRef<TextInput | null>(null);
   const aggregateAdvancePaidInputRef = useRef<TextInput | null>(null);
   const aggregateDriverNameInputRef = useRef<TextInput | null>(null);
   const aggregateDriverPhoneInputRef = useRef<TextInput | null>(null);
   const aggregateVehicleInputRef = useRef<TextInput | null>(null);
-  const aggregatePhoneLookupTimeoutRef = useRef<number | null>(null);
-  /** Prevents double-submit on Staff Handshake (parallel creates → unique trip_number 409). */
-  const staffHandshakeDeployLockRef = useRef(false);
-  const [subcontractSupplierId, setSubcontractSupplierId] = useState<
-    string | null
-  >(null);
-  const [subcontractRate, setSubcontractRate] = useState<string>("");
-  const [aggregateAdvancePaid, setAggregateAdvancePaid] = useState<string>("");
-  const [deployOtpCode, setDeployOtpCode] = useState<string | null>(null);
-  const [deployOtpExpiresAt, setDeployOtpExpiresAt] = useState<string | null>(
-    null,
-  );
-  const [deployTripIdForOtp, setDeployTripIdForOtp] = useState<string | null>(
-    null,
-  );
-  /** Staff Handshake: mirror Add Trip — assign driver/vehicle on trip detail when on. */
-  const [staffHandshakeAssignLater, setStaffHandshakeAssignLater] =
-    useState(false);
-  const [localBidHistoryByIndentId, setLocalBidHistoryByIndentId] = useState<
-    Record<string, { amount: number; updatedAt: string }[]>
-  >({});
   const isSingleRowHeader = Platform.OS === "web" && width >= 1200;
   const isCompactModalLayout = Platform.OS === "web" && width < 920;
 
@@ -360,12 +226,53 @@ export function LoadCenterView({
     return () => clearTimeout(t);
   }, [highlightedIndentId, useGridLayout]);
 
-  /** O(myQuotes.length): map indent_id -> quote for Find Work "Quote Sent" / "Update quote" and modal prefill. */
-  const myQuoteByIndentId = useMemo(() => {
-    const m = new Map<string, DirectQuoteRow>();
-    for (const q of myQuotes) m.set(q.indent_id, q);
-    return m;
-  }, [myQuotes]);
+  // ── Filter pipeline ─────────────────────────────────────────────────────────
+  // hirePartnerLoads is needed before giveLoadIds so we compute it first.
+  const hirePartnerLoadsForIds = useMemo(
+    () => indents.filter((i) => i.organization_id === orgId),
+    [indents, orgId],
+  );
+  const giveLoadIds = useMemo(
+    () =>
+      hirePartnerLoadsForIds
+        .filter((i) => {
+          const s = (i.status || "").toLowerCase();
+          return s !== "awarded" && s !== "completed" && s !== "cancelled";
+        })
+        .map((l) => l.id),
+    [hirePartnerLoadsForIds],
+  );
+  const { data: quoteCounts = {}, refetch: refetchQuoteCounts } =
+    useIndentOfferCountsQuery(orgId, giveLoadIds);
+
+  const filters = useLoadCenterFilters({
+    orgId,
+    indents,
+    marketIndents,
+    myQuotes,
+    trips,
+    quoteCounts,
+    loadSubTab,
+    statusFilterTab,
+    searchQuery,
+  });
+
+  const {
+    myQuoteByIndentId,
+    indentIdsWithTrip,
+    hirePartnerLoads,
+    awardedLoads,
+    awardedLoadsDone,
+    findWorkLoads,
+    findWorkDoneUnionLoads,
+    filteredHirePartnerLoads,
+    filteredFindWorkList,
+    filteredClaimedLoads,
+    filteredClaimedDoneLoads,
+    statusTabCounts,
+    loadMatchesSearch,
+  } = filters;
+
   const activeBidQuote = useMemo(() => {
     if (loadAction?.type !== "BID") return null;
     return myQuoteByIndentId.get(loadAction.load.id) ?? null;
@@ -393,22 +300,7 @@ export function LoadCenterView({
       );
   }, [loadAction, localBidHistoryByIndentId]);
 
-  const visiblePartnersForHandshake = useMemo(() => {
-    const base = suppliers;
-    // Never hide the currently selected partner (keeps existing selection stable).
-    if (
-      subcontractSupplierId &&
-      !base.some((s) => s.id === subcontractSupplierId)
-    ) {
-      const selected = suppliers.find((s) => s.id === subcontractSupplierId);
-      if (selected) return [selected, ...base];
-    }
-    return base;
-  }, [
-    suppliers,
-    subcontractSupplierId,
-  ]);
-
+  // ── Award Quote ──────────────────────────────────────────────────────────────
   const awardModalIndentId =
     loadAction?.type === "AWARD" ? loadAction.load.id : null;
   const {
@@ -455,274 +347,75 @@ export function LoadCenterView({
     return Math.min(...pending.map((q) => Number(q.amount ?? 0)));
   }, [awardModalQuotes]);
 
-  useEffect(() => {
-    const trimmed = aggregateDriverPhone.trim();
-    if (aggregatePhoneLookupTimeoutRef.current)
-      clearTimeout(aggregatePhoneLookupTimeoutRef.current);
-    aggregatePhoneLookupTimeoutRef.current = setTimeout(() => {
-      aggregatePhoneLookupTimeoutRef.current = null;
-      const digits = trimmed.replace(/\D/g, "");
-      const last10 = digits.slice(-10);
-      if (last10.length < 10) {
-        setAggregatePhoneName(null);
-        setAggregatePhoneNotFound(false);
-        setAggregatePhoneInTrip(false);
-        return;
-      }
-
-      searchExistingDriversByPhone(last10).then(async ({ matches }) => {
-        const direct = matches[0]?.full_name ?? null;
-        let foundName = direct;
-
-        if (!foundName) {
-          // Some deployments store phone as +91XXXXXXXXXX; try that too.
-          const { matches: matchesWithCode } =
-            await searchExistingDriversByPhone(`+91${last10}`);
-          foundName = matchesWithCode[0]?.full_name ?? null;
-        }
-
-        setAggregatePhoneName(foundName);
-        if (foundName && !aggregateDriverNameManualRef.current) {
-          // Autofill from phone lookup unless user manually edited the field.
-          setAggregateDriverTrackingName(foundName);
-        }
-        setAggregatePhoneNotFound(!foundName);
-        if (!orgId) {
-          setAggregatePhoneInTrip(false);
-          return;
-        }
-        const { result } = await getDriverAvailabilityByPhoneGlobal(last10, {
-          anyOpenTripBlocks: true,
-          requireAuthoritativeRpc: true,
-        });
-        setAggregatePhoneInTrip(result.isBusy);
-      });
-    }, 400);
-    return () => {
-      if (aggregatePhoneLookupTimeoutRef.current)
-        clearTimeout(aggregatePhoneLookupTimeoutRef.current);
-    };
-  }, [aggregateDriverPhone, orgId]);
-
-  /** Indent ids that already have a trip (owner or supplier). Exclude these from Claimed so we don't show "ASSIGN STAFF & DEPLOY" again after deploy. */
-  const indentIdsWithTrip = useMemo(() => {
-    const list = trips ?? [];
-    const ids: string[] = [];
-    for (const t of list) {
-      const id = (t as { indent_id?: string | null }).indent_id;
-      if (id) ids.push(id);
-    }
-    return new Set(ids);
-  }, [trips]);
-
-  /** All indents from my org (for Hire Partner — filter by status tab). */
-  const hirePartnerLoads = useMemo(
-    () => indents.filter((i) => i.organization_id === orgId),
-    [indents, orgId],
-  );
-  const giveLoadIds = useMemo(
-    () =>
-      hirePartnerLoads
-        .filter((i) => {
-          const s = (i.status || "").toLowerCase();
-          return s !== "awarded" && s !== "completed" && s !== "cancelled";
-        })
-        .map((l) => l.id),
-    [hirePartnerLoads],
-  );
-  const { data: quoteCounts = {}, refetch: refetchQuoteCounts } =
-    useIndentOfferCountsQuery(orgId, giveLoadIds);
-
-  /** Indents awarded to my org: accepted direct quote OR shipper set assigned_supplier_id (Give Load / assign without quote row). */
-  const awardedToMeIndentIds = useMemo(() => {
-    const s = new Set(
-      myQuotes
-        .filter((q) => (q.status || "").toLowerCase() === "accepted")
-        .map((q) => q.indent_id),
-    );
-    const stAwarded = new Set(["awarded", "completed"]);
-    for (const i of marketIndents) {
-      const aid = i.assigned_supplier_id;
-      if (!orgId || String(aid ?? "") !== orgId) continue;
-      const st = (i.status || "").toLowerCase();
-      if (stAwarded.has(st)) s.add(i.id);
-    }
-    return s;
-  }, [myQuotes, marketIndents, orgId]);
-
-  const awardedLoads = useMemo(
-    () =>
-      marketIndents.filter(
-        (i) =>
-          awardedToMeIndentIds.has(i.id) &&
-          (i.status || "").toLowerCase() !== "completed" &&
-          !indentIdsWithTrip.has(i.id),
-      ),
-    [marketIndents, awardedToMeIndentIds, indentIdsWithTrip],
-  );
-
-  /**
-   * Find Work "Done": terminal loads that I interacted with (quoted), excluding any
-   * load awarded to me (those belong in Claimed → Done). We later union this with
-   * Claimed → Done when rendering Find Work → Done, so users can view all done
-   * outcomes from one place without changing award/deploy flow.
-   */
-  const findWorkDoneLoads = useMemo(() => {
-    return marketIndents.filter((i) => {
-      const status = (i.status || "").toLowerCase();
-      if (!statusMatchesFilter(status, "DONE")) return false;
-      const target = (i.circulation_target || "").toLowerCase();
-      const isTargeted = target === "integrated_supplier" || target === "both";
-      if (!isTargeted) return false;
-      if (awardedToMeIndentIds.has(i.id)) return false;
-      return myQuoteByIndentId.has(i.id);
-    });
-  }, [marketIndents, awardedToMeIndentIds, myQuoteByIndentId]);
-
-  /** Claimed "Done": loads awarded to me that are completed or have a trip. */
-  const awardedLoadsDone = useMemo(
-    () =>
-      marketIndents.filter(
-        (i) =>
-          awardedToMeIndentIds.has(i.id) &&
-          (statusMatchesFilter(i.status || "", "DONE") ||
-            indentIdsWithTrip.has(i.id)),
-      ),
-    [marketIndents, awardedToMeIndentIds, indentIdsWithTrip],
-  );
-
-  /**
-   * Find Work → Done should also include Claimed → Done (awarded-to-me + done/trip),
-   * so users can see final outcomes in the Find Work DONE tab too.
-   */
-  const findWorkDoneUnionLoads = useMemo(() => {
-    const byId = new Map<string, IndentRow>();
-    for (const l of findWorkDoneLoads) byId.set(l.id, l);
-    for (const l of awardedLoadsDone ?? []) byId.set(l.id, l);
-    return Array.from(byId.values());
-  }, [findWorkDoneLoads, awardedLoadsDone]);
-
-  const getLoads = useMemo(
-    () =>
-      marketIndents.filter((i) => {
-        const status = (i.status || "").toLowerCase();
-        if (
-          status === "awarded" ||
-          status === "completed" ||
-          status === "cancelled"
-        )
-          return false;
-        const target = (i.circulation_target || "").toLowerCase();
-        return target === "integrated_supplier" || target === "both";
-      }),
-    [marketIndents],
-  );
-
-  /** Find Work list: open loads targeted to me, excluding any load already awarded to me (so we never show "Update quote" for awarded loads). */
-  const findWorkLoads = useMemo(
-    () => getLoads.filter((load) => !awardedToMeIndentIds.has(load.id)),
-    [getLoads, awardedToMeIndentIds],
-  );
-
-  /** Check if a load matches the search query (route, ID, client, creator org). */
-  const loadMatchesSearch = useCallback(
-    (load: IndentRow, q: string): boolean => {
-      const trimmed = q.trim().toLowerCase();
-      if (!trimmed) return true;
-      const route =
-        `${(load.pickup_area || "").toLowerCase()} ${(load.drop_location || "").toLowerCase()}`.trim();
-      const indentId = (getIndentDisplayNumber(load) || "").toLowerCase();
-      const tripId = (load.trip_number || "").toLowerCase();
-      const client = (load.client_name || "").toLowerCase();
-      const creator = (
-        (load as { creator_organization_name?: string })
-          .creator_organization_name || ""
-      ).toLowerCase();
-      return (
-        route.includes(trimmed) ||
-        indentId.includes(trimmed) ||
-        tripId.includes(trimmed) ||
-        client.includes(trimmed) ||
-        creator.includes(trimmed)
-      );
+  // ── Staff Handshake hook ────────────────────────────────────────────────────
+  const staffHandshake = useStaffHandshake({
+    orgId,
+    myQuotes,
+    loadAction,
+    setLoadAction,
+    setAssigningTripId,
+    assigningTripId,
+    triggerSuccess: (msg: string) => {
+      setSuccessMsg(msg);
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 1500);
     },
-    [],
-  );
+  });
 
-  /** Status-filtered lists for each role tab, then search-filtered. */
-  const filteredHirePartnerLoads = useMemo(() => {
-    const statusFiltered = hirePartnerLoads.filter((load) => {
-      const status = (load.status || "").toLowerCase();
-      if (statusFilterTab === "QUOTED") {
-        const hasBids = (quoteCounts[load.id] ?? 0) > 0;
-        const isQuotedStatus = statusMatchesFilter(status, "QUOTED");
-        const isNotTerminal =
-          !statusMatchesFilter(status, "AWARDED") &&
-          !statusMatchesFilter(status, "DONE");
-        return (isQuotedStatus || hasBids) && isNotTerminal;
-      }
-      if (statusFilterTab === "OPEN") {
-        // Hire Partner: once a load has any bids (or becomes "quoted"), it should
-        // move out of Created and into Quoted.
-        const hasBids = (quoteCounts[load.id] ?? 0) > 0;
-        const isQuotedStatus = statusMatchesFilter(status, "QUOTED");
-        if (hasBids || isQuotedStatus) return false;
-        return statusMatchesFilter(status, "OPEN");
-      }
-      return statusMatchesFilter(status, statusFilterTab);
-    });
-    return statusFiltered.filter((load) =>
-      loadMatchesSearch(load, searchQuery),
-    );
-  }, [
-    hirePartnerLoads,
-    statusFilterTab,
-    quoteCounts,
-    searchQuery,
-    loadMatchesSearch,
-  ]);
-  const filteredFindWorkLoads = useMemo(() => {
-    const statusFiltered = (() => {
-      if (statusFilterTab === "OPEN") {
-        // Find Work: Open should only show loads I haven't quoted yet.
-        return findWorkLoads.filter((load) => !myQuoteByIndentId.has(load.id));
-      }
-      if (statusFilterTab === "QUOTED") {
-        // Find Work: Quoted means I have sent a quote (pending/rejected/etc).
-        return findWorkLoads.filter((load) => myQuoteByIndentId.has(load.id));
-      }
-      if (statusFilterTab === "AWARDED") {
-        // Find Work: Awarded mirrors Claimed (awarded to me, ready to deploy).
-        return awardedLoads;
-      }
-      return [];
-    })();
+  const {
+    useAdHocDriver,
+    setUseAdHocDriver,
+    assignDriverId,
+    setAssignDriverId,
+    assignVehicleId,
+    setAssignVehicleId,
+    assignVehicleRegistration,
+    setAssignVehicleRegistration,
+    aggregateDriverTrackingName,
+    setAggregateDriverTrackingName,
+    aggregateDriverPhone,
+    setAggregateDriverPhone,
+    aggregatePhoneName,
+    setAggregatePhoneName,
+    aggregatePhoneNotFound,
+    setAggregatePhoneNotFound,
+    aggregatePhoneInTrip,
+    setAggregatePhoneInTrip,
+    subcontractSupplierId,
+    setSubcontractSupplierId,
+    subcontractRate,
+    setSubcontractRate,
+    aggregateAdvancePaid,
+    setAggregateAdvancePaid,
+    deployOtpCode,
+    setDeployOtpCode,
+    deployOtpExpiresAt,
+    setDeployOtpExpiresAt,
+    deployTripIdForOtp,
+    setDeployTripIdForOtp,
+    staffHandshakeAssignLater,
+    setStaffHandshakeAssignLater,
+    aggregateDriverNameManualRef,
+    rosterReady,
+    aggregateTrackingFlowReady,
+    aggregatePartnerHandshakeComplete,
+    handleDeployRoster,
+    handleDeployAdHoc,
+    handleStaffHandshakeBack,
+  } = staffHandshake;
 
-    return statusFiltered.filter((load) =>
-      loadMatchesSearch(load, searchQuery),
-    );
-  }, [
-    findWorkLoads,
-    statusFilterTab,
-    searchQuery,
-    loadMatchesSearch,
-    myQuoteByIndentId,
-    awardedLoads,
-  ]);
-
-  const filteredFindWorkDoneLoads = useMemo(() => {
-    return findWorkDoneUnionLoads.filter((load) =>
-      loadMatchesSearch(load, searchQuery),
-    );
-  }, [findWorkDoneUnionLoads, searchQuery, loadMatchesSearch]);
-
-  const filteredFindWorkList = useMemo(
-    () =>
-      statusFilterTab === "DONE"
-        ? filteredFindWorkDoneLoads
-        : filteredFindWorkLoads,
-    [statusFilterTab, filteredFindWorkDoneLoads, filteredFindWorkLoads],
-  );
+  const visiblePartnersForHandshake = useMemo(() => {
+    const base = suppliers;
+    // Never hide the currently selected partner (keeps existing selection stable).
+    if (
+      subcontractSupplierId &&
+      !base.some((s) => s.id === subcontractSupplierId)
+    ) {
+      const selected = suppliers.find((s) => s.id === subcontractSupplierId);
+      if (selected) return [selected, ...base];
+    }
+    return base;
+  }, [suppliers, subcontractSupplierId]);
 
   const filteredFindWorkAvatarKey = useMemo(
     () => filteredFindWorkList.map((load) => load.id).join("|"),
@@ -792,75 +485,6 @@ export function LoadCenterView({
     };
   }, [filteredFindWorkAvatarKey, filteredFindWorkList]);
 
-  const filteredClaimedLoads = useMemo(() => {
-    return awardedLoads.filter((load) => loadMatchesSearch(load, searchQuery));
-  }, [awardedLoads, searchQuery, loadMatchesSearch]);
-  const filteredClaimedDoneLoads = useMemo(() => {
-    return awardedLoadsDone.filter((load) =>
-      loadMatchesSearch(load, searchQuery),
-    );
-  }, [awardedLoadsDone, searchQuery, loadMatchesSearch]);
-
-  /** Counts per status tab for the current role tab (Hire Partner / Find Work / Claimed). */
-  const statusTabCounts = useMemo(() => {
-    const getCount = (filter: StatusFilterTab) => {
-      if (loadSubTab === "GIVE_LOAD") {
-        return hirePartnerLoads.filter((load) => {
-          const status = (load.status || "").toLowerCase();
-          if (filter === "QUOTED") {
-            const hasBids = (quoteCounts[load.id] ?? 0) > 0;
-            const isQuotedStatus = statusMatchesFilter(status, "QUOTED");
-            const isNotTerminal =
-              !statusMatchesFilter(status, "AWARDED") &&
-              !statusMatchesFilter(status, "DONE");
-            return (isQuotedStatus || hasBids) && isNotTerminal;
-          }
-          if (filter === "OPEN") {
-            const hasBids = (quoteCounts[load.id] ?? 0) > 0;
-            const isQuotedStatus = statusMatchesFilter(status, "QUOTED");
-            if (hasBids || isQuotedStatus) return false;
-            return statusMatchesFilter(status, "OPEN");
-          }
-          return statusMatchesFilter(status, filter);
-        }).length;
-      }
-      if (loadSubTab === "GET_LOAD") {
-        if (filter === "DONE") return findWorkDoneUnionLoads.length;
-        if (filter === "AWARDED") return awardedLoads.length;
-        if (filter === "QUOTED") {
-          return findWorkLoads.filter((load) => myQuoteByIndentId.has(load.id))
-            .length;
-        }
-        if (filter === "OPEN") {
-          return findWorkLoads.filter((load) => !myQuoteByIndentId.has(load.id))
-            .length;
-        }
-        return 0;
-      }
-      if (loadSubTab === "AWARDED") {
-        if (filter === "AWARDED") return awardedLoads.length;
-        if (filter === "DONE") return awardedLoadsDone.length;
-        return 0;
-      }
-      return 0;
-    };
-    return {
-      OPEN: getCount("OPEN"),
-      QUOTED: getCount("QUOTED"),
-      AWARDED: getCount("AWARDED"),
-      DONE: getCount("DONE"),
-    };
-  }, [
-    loadSubTab,
-    hirePartnerLoads,
-    findWorkLoads,
-    findWorkDoneUnionLoads,
-    awardedLoads,
-    awardedLoadsDone,
-    quoteCounts,
-    myQuoteByIndentId,
-  ]);
-
   useEffect(() => {
     // Keep status filter valid per role tab to avoid confusing empty views.
     if (loadSubTab === "AWARDED") {
@@ -888,6 +512,19 @@ export function LoadCenterView({
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 1500);
   };
+
+  // ── useAwardQuote hook ───────────────────────────────────────────────────────
+  const { handleAwardQuote, awarding } = useAwardQuote({
+    orgId,
+    loadAction,
+    setLoadAction,
+    selectedQuoteId,
+    setSelectedQuoteId,
+    awardModalQuotes,
+    queryClient,
+    invalidateIndents,
+    triggerSuccess,
+  });
 
   const handleBroadcastDraft = async (load: IndentRow) => {
     if (!orgId) return;
@@ -932,108 +569,6 @@ export function LoadCenterView({
       }
     } catch {
       await Share.share({ message });
-    }
-  };
-
-  const handleAwardQuote = async () => {
-    if (!orgId || loadAction?.type !== "AWARD" || !selectedQuoteId) return;
-    const load = loadAction.load;
-    const currentStatus = (load.status || "").toLowerCase();
-    if (currentStatus === "awarded" || currentStatus === "completed") {
-      Alert.alert(
-        "Already awarded",
-        "This load has already been awarded. Closing.",
-      );
-      setLoadAction(null);
-      setSelectedQuoteId(null);
-      invalidateIndents(orgId);
-      return;
-    }
-    if (currentStatus === "cancelled" || currentStatus === "closed") {
-      Alert.alert(
-        "Load unavailable",
-        "This load has been cancelled or closed.",
-      );
-      setLoadAction(null);
-      setSelectedQuoteId(null);
-      invalidateIndents(orgId);
-      return;
-    }
-    const pendingQuotes = awardModalQuotes.filter(
-      (q) => (q.status || "").toLowerCase() === "pending",
-    );
-    const winner = pendingQuotes.find((q) => q.id === selectedQuoteId);
-    if (!winner) {
-      Alert.alert(
-        "Invalid selection",
-        "Please select a pending offer to award.",
-      );
-      return;
-    }
-    try {
-      setAwarding(true);
-      const { error: acceptErr } = await updateDirectQuoteStatus(
-        winner.id,
-        "accepted",
-      );
-      if (acceptErr) {
-        Alert.alert("Could not award", acceptErr.message);
-        return;
-      }
-      for (const q of pendingQuotes) {
-        if (q.id !== winner.id) {
-          const { error: rejectErr } = await updateDirectQuoteStatus(
-            q.id,
-            "rejected",
-          );
-          if (rejectErr) {
-            Alert.alert(
-              "Award partially failed",
-              "One or more quotes could not be updated. Winner was set.",
-            );
-            queryClient.invalidateQueries({
-              queryKey: ["indents", load.id, "direct-quotes"],
-            });
-            invalidateIndents(orgId);
-            break;
-          }
-        }
-      }
-      const { error: indentErr } = await updateIndent(load.id, {
-        status: "awarded",
-      });
-      if (indentErr) {
-        const friendlyMessage =
-          indentErr.message &&
-          (indentErr.message.includes("check constraint") ||
-            indentErr.message.includes("indents_status_check"))
-            ? "Indent status could not be updated. Please refresh the app and try again."
-            : indentErr.message;
-        Alert.alert(
-          "Award saved but indent status could not be updated",
-          friendlyMessage,
-        );
-        queryClient.invalidateQueries({
-          queryKey: ["indents", load.id, "direct-quotes"],
-        });
-      }
-      setSelectedQuoteId(null);
-      setLoadAction(null);
-      invalidateIndents(orgId);
-      triggerSuccess(
-        "Load awarded — supplier can assign and deploy from Claimed.",
-      );
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Unknown error.";
-      Alert.alert("Could not award", msg);
-      if (loadAction?.type === "AWARD" && loadAction.load?.id) {
-        queryClient.invalidateQueries({
-          queryKey: ["indents", loadAction.load.id, "direct-quotes"],
-        });
-      }
-      invalidateIndents(orgId);
-    } finally {
-      setAwarding(false);
     }
   };
 
@@ -1098,404 +633,10 @@ export function LoadCenterView({
     }
   };
 
-  const handleDeployRoster = async (load: IndentRow) => {
-    if (assigningTripId === load.id) return;
-    if (!orgId) {
-      Alert.alert(
-        "Cannot deploy",
-        "Your organization context is missing. Please try again.",
-      );
-      return;
-    }
-    const status = (load.status || "").toLowerCase();
-    if (status === "cancelled" || status === "closed") {
-      Alert.alert(
-        "Load unavailable",
-        "This load has been cancelled or closed.",
-      );
-      setLoadAction(null);
-      return;
-    }
-    const acceptedQuote = myQuotes.find(
-      (q) =>
-        (q.status || "").toLowerCase() === "accepted" &&
-        q.indent_id === load.id,
-    );
-    if (!acceptedQuote) {
-      Alert.alert("Cannot deploy", "No accepted quote found for this load.");
-      return;
-    }
-    if (!assignDriverId || typeof assignVehicleId !== "string") {
-      Alert.alert(
-        "Select driver and vehicle",
-        "Please select a driver and a vehicle from your org to assign trip.",
-      );
-      return;
-    }
-    if (staffHandshakeDeployLockRef.current) {
-      return;
-    }
-    staffHandshakeDeployLockRef.current = true;
-    try {
-      setAssigningTripId(load.id);
-      const { error: assignErr } = await updateDirectQuoteAssignment(
-        acceptedQuote.id,
-        assignDriverId,
-        assignVehicleId,
-      );
-      if (assignErr) {
-        Alert.alert("Could not assign", assignErr.message);
-        return;
-      }
-      const { error: tripErr, trip } = await acceptAwardedQuote(
-        acceptedQuote.id,
-      );
-      if (tripErr || !trip) {
-        Alert.alert(
-          "Could not create trip",
-          tripErr?.message ?? "Unknown error.",
-        );
-        return;
-      }
-      await updateIndent(load.id, { status: "completed" });
-      setLoadAction(null);
-      setAssignDriverId(null);
-      setAssignVehicleId(undefined);
-      setAssignVehicleRegistration("");
-      setUseAdHocDriver(false);
-      triggerSuccess("Voyage authorized — trip created.");
-      invalidateTrips(orgId);
-      invalidateIndents(orgId);
-      const isShipper = load.organization_id === orgId;
-      if (isShipper) {
-        router.push("/(tabs)/trips" as import("expo-router").Href);
-      } else if (trip?.id) {
-        setInitialTripForDetail(trip);
-        router.push(
-          `/trip/${trip.id}?entryContext=supplier` as import("expo-router").Href,
-        );
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Unknown error.";
-      Alert.alert("Could not deploy", msg);
-    } finally {
-      staffHandshakeDeployLockRef.current = false;
-      setAssigningTripId(null);
-    }
-  };
-
-  const handleDeployAdHoc = async (load: IndentRow) => {
-    if (assigningTripId === load.id) return;
-    if (!orgId) {
-      Alert.alert(
-        "Cannot deploy",
-        "Your organization context is missing. Please try again.",
-      );
-      return;
-    }
-    const status = (load.status || "").toLowerCase();
-    if (status === "cancelled" || status === "closed") {
-      Alert.alert(
-        "Load unavailable",
-        "This load has been cancelled or closed.",
-      );
-      setLoadAction(null);
-      return;
-    }
-    const acceptedQuote = myQuotes.find(
-      (q) =>
-        (q.status || "").toLowerCase() === "accepted" &&
-        q.indent_id === load.id,
-    );
-    if (!acceptedQuote) {
-      Alert.alert("Cannot deploy", "No accepted quote found for this load.");
-      return;
-    }
-    const handshakeSubSupplierId = (subcontractSupplierId ?? "").trim();
-    const handshakeSubRateRaw = subcontractRate.trim();
-    const handshakeSubRateNum = Number(handshakeSubRateRaw);
-    if (!handshakeSubSupplierId) {
-      Alert.alert(
-        "Partner required",
-        "Select the associated partner (sub-supplier) for this trip.",
-      );
-      return;
-    }
-    if (
-      handshakeSubRateRaw === "" ||
-      !Number.isFinite(handshakeSubRateNum) ||
-      handshakeSubRateNum < 0
-    ) {
-      Alert.alert(
-        "Partner rate required",
-        "Enter the rate you will pay this partner (₹).",
-      );
-      return;
-    }
-    /** Trip detail will hold driver / vehicle / OTP; never persist ad-hoc fields when deferring. */
-    const deferHandshakeAssignment = staffHandshakeAssignLater;
-    const nameTrimmed = deferHandshakeAssignment
-      ? ""
-      : aggregateDriverTrackingName.trim();
-    const phoneTrimmed = deferHandshakeAssignment
-      ? ""
-      : aggregateDriverPhone.trim();
-    const regTrimmed = deferHandshakeAssignment
-      ? ""
-      : assignVehicleRegistration.trim();
-    if (!deferHandshakeAssignment && nameTrimmed.length === 0) {
-      Alert.alert(
-        "Driver name required",
-        "Enter driver name (tracking) to continue.",
-      );
-      return;
-    }
-    if (!deferHandshakeAssignment && phoneTrimmed.length === 0) {
-      Alert.alert(
-        "Driver phone required",
-        "Enter driver phone (tracking) to continue.",
-      );
-      return;
-    }
-    if (!deferHandshakeAssignment && regTrimmed.length === 0) {
-      Alert.alert(
-        "Vehicle number required",
-        "Enter vehicle number to continue.",
-      );
-      return;
-    }
-    const phoneErr = phoneTrimmed ? validatePhone(phoneTrimmed) : null;
-    if (!deferHandshakeAssignment && phoneErr) {
-      Alert.alert("Invalid driver phone", phoneErr);
-      return;
-    }
-    if (staffHandshakeDeployLockRef.current) {
-      return;
-    }
-    staffHandshakeDeployLockRef.current = true;
-    try {
-      setAssigningTripId(load.id);
-      const vehicleIdForQuote = deferHandshakeAssignment
-        ? null
-        : typeof assignVehicleId === "string"
-          ? assignVehicleId
-          : null;
-      const { error: assignErr } = await updateDirectQuoteAssignment(
-        acceptedQuote.id,
-        null,
-        vehicleIdForQuote,
-      );
-      if (assignErr) {
-        Alert.alert("Could not assign", assignErr.message);
-        return;
-      }
-      const regNum = deferHandshakeAssignment ? "" : regTrimmed;
-      const { error: tripErr, trip } = await acceptAwardedQuote(
-        acceptedQuote.id,
-        {
-          vehicle_display_number: regNum || undefined,
-        },
-      );
-      if (tripErr || !trip) {
-        Alert.alert(
-          "Could not create trip",
-          tripErr?.message ?? "Unknown error.",
-        );
-        return;
-      }
-      const subSupplierId = handshakeSubSupplierId;
-      const subRateNum = handshakeSubRateNum;
-      const shouldSaveSubcontract =
-        subSupplierId !== "" &&
-        handshakeSubRateRaw !== "" &&
-        Number.isFinite(subRateNum) &&
-        subRateNum >= 0;
-
-      const saveSubcontract = async () => {
-        if (!shouldSaveSubcontract) return;
-        const isTripOwner = trip.organization_id === orgId;
-
-        if (isTripOwner) {
-          const { error: supplierUpdateErr } = await updateTripSupplier(
-            trip.id,
-            {
-              supplier_id: subSupplierId,
-              supplier_rate: subRateNum,
-            },
-          );
-          if (supplierUpdateErr) {
-            Alert.alert(
-              "Trip created",
-              `Partner was saved, but trip supplier link could not be updated. ${supplierUpdateErr.message}`,
-            );
-          }
-        }
-
-        const { error: subErr } = await upsertTripSubcontract({
-          viewerOrgId: orgId,
-          tripId: trip.id,
-          supplierId: subSupplierId,
-          rate: subRateNum,
-        });
-        if (subErr)
-          Alert.alert(
-            "Trip created",
-            `Partner could not be saved. ${subErr.message}`,
-          );
-        queryClient.invalidateQueries({
-          queryKey: ["q", "trips", "subcontracts", orgId],
-        });
-      };
-
-      // Driver + OTP are optional: require phone only for OTP generation (not for trip creation).
-      if (deferHandshakeAssignment || !phoneTrimmed || phoneErr) {
-        await saveSubcontract();
-        await updateIndent(load.id, { status: "completed" });
-        invalidateTrips(orgId);
-        invalidateIndents(orgId);
-        setLoadAction(null);
-        setAssigningTripId(null);
-        triggerSuccess(
-          deferHandshakeAssignment
-            ? "Trip created — add driver and vehicle on trip detail when ready."
-            : "Trip created (OTP not generated)",
-        );
-        // Do not treat this as an error. OTP can be generated later from Trip Detail
-        // after providing a driver phone number.
-        return;
-      }
-      const { error: availabilityError, result: availability } =
-        await getDriverAvailabilityByPhoneGlobal(phoneTrimmed, {
-          excludeTripId: trip.id,
-          anyOpenTripBlocks: true,
-          requireAuthoritativeRpc: true,
-        });
-      if (availabilityError) {
-        throw availabilityError;
-      }
-      if (availability.isBusy) {
-        await saveSubcontract();
-        await updateIndent(load.id, { status: "completed" });
-        invalidateTrips(orgId);
-        invalidateIndents(orgId);
-        setLoadAction(null);
-        setAssigningTripId(null);
-        Alert.alert(
-          "Trip created",
-          `Driver is already assigned to ${availability.ongoingTripLabel ?? "another ongoing trip"}.\n\nComplete or unassign that trip before assigning this one.`,
-        );
-        setInitialTripForDetail(trip);
-        router.push(
-          `/trip/${trip.id}?entryContext=supplier` as import("expo-router").Href,
-        );
-        return;
-      }
-
-      const { error: assignAggErr } = await assignAggregateTripDriverByPhone(
-        trip.id,
-        orgId,
-        phoneTrimmed,
-        regNum || null,
-      );
-      if (assignAggErr) {
-        await saveSubcontract();
-        await updateIndent(load.id, { status: "completed" });
-        invalidateTrips(orgId);
-        invalidateIndents(orgId);
-        setLoadAction(null);
-        setAssigningTripId(null);
-        Alert.alert(
-          "Trip created",
-          `Driver could not be assigned. ${humanizeTripIdInRpcError(assignAggErr.message, trip)}\n\nAssign driver from trip detail to generate OTP.`,
-        );
-        setInitialTripForDetail(trip);
-        router.push(
-          `/trip/${trip.id}?entryContext=supplier` as import("expo-router").Href,
-        );
-        return;
-      }
-
-      const {
-        error: otpErr,
-        code,
-        expires_at,
-      } = await generateTripOtp(trip.id);
-      if (otpErr || !code) {
-        await saveSubcontract();
-        await updateIndent(load.id, { status: "completed" });
-        invalidateTrips(orgId);
-        invalidateIndents(orgId);
-        setLoadAction(null);
-        setAssigningTripId(null);
-        Alert.alert(
-          "Trip created",
-          "OTP could not be generated. Get OTP from the trip detail screen.",
-        );
-        setInitialTripForDetail(trip);
-        router.push(
-          `/trip/${trip.id}?entryContext=supplier` as import("expo-router").Href,
-        );
-        return;
-      }
-
-      setDeployOtpCode(code);
-      setDeployOtpExpiresAt(expires_at ?? null);
-      setDeployTripIdForOtp(trip.id);
-
-      await saveSubcontract();
-
-      await updateIndent(load.id, { status: "completed" });
-      invalidateTrips(orgId);
-      invalidateIndents(orgId);
-      triggerSuccess("OTP generated");
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Unknown error.";
-      Alert.alert("Could not deploy", msg);
-    } finally {
-      staffHandshakeDeployLockRef.current = false;
-      setAssigningTripId(null);
-    }
-  };
-
-  const rosterReady =
-    !useAdHocDriver && !!assignDriverId && typeof assignVehicleId === "string";
-  const adHocReady = useAdHocDriver;
   const activeDrivers = useMemo(
     () => drivers.filter((d) => !d.left_at),
     [drivers],
   );
-  const aggregateHasDriverName = aggregateDriverTrackingName.trim().length > 0;
-  const aggregateHasDriverPhone = aggregateDriverPhone.trim().length > 0;
-  const aggregateHasVehicleText = assignVehicleRegistration.trim().length > 0;
-  const aggregateTrackingFlowReady =
-    aggregateHasDriverName && aggregateHasDriverPhone && aggregateHasVehicleText;
-  /** Aggregate Staff Handshake: partner + rate are always required before deploy. */
-  const aggregatePartnerHandshakeComplete = useMemo(() => {
-    const sid = (subcontractSupplierId ?? "").trim();
-    const rateRaw = subcontractRate.trim();
-    const rateNum = Number(rateRaw);
-    return (
-      sid.length > 0 &&
-      rateRaw.length > 0 &&
-      Number.isFinite(rateNum) &&
-      rateNum >= 0
-    );
-  }, [subcontractSupplierId, subcontractRate]);
-
-  /** Staff Handshake: dismiss OTP preview, or close modal. */
-  const handleStaffHandshakeBack = useCallback(() => {
-    if (deployOtpCode) {
-      setDeployOtpCode(null);
-      setDeployOtpExpiresAt(null);
-      setDeployTripIdForOtp(null);
-      return;
-    }
-    setLoadAction(null);
-    setDeployOtpCode(null);
-    setDeployOtpExpiresAt(null);
-    setDeployTripIdForOtp(null);
-    setStaffHandshakeAssignLater(false);
-  }, [deployOtpCode]);
 
   /** Keep add-load FAB above the global chat FAB, tab bar, and safe area. */
   const hirePartnerFabBottom =
@@ -4007,9 +3148,6 @@ export function LoadCenterView({
                       ))
                     ) : (
                       (() => {
-                        const selectedPartner = subcontractSupplierId
-                          ? suppliers.find((s) => s.id === subcontractSupplierId)
-                          : null;
                         const inlinePartners = visiblePartnersForHandshake;
                         const canWideAlign =
                           Platform.OS === "web" ? width >= 1200 : width >= 900;
@@ -4527,14 +3665,8 @@ export function LoadCenterView({
   );
 }
 
-/** Reference: route text red #F44336 */
-const LOAD_ROUTE_RED = "#F44336";
 /** Reference: content bg #f4f5f7 */
 const LOAD_CONTENT_BG = "#f4f5f7";
-/** Reference: broadcast area #eef1f6 */
-const LOAD_BROADCAST_BG = "#eef1f6";
-/** Reference: broadcast icon/label #829ab1 */
-const LOAD_BROADCAST_MUTED = "#829ab1";
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Theme.darkBackground },
