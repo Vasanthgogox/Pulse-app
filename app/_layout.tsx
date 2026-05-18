@@ -21,6 +21,11 @@ import {
   stopRealtimeDiagnosticsLogger,
 } from '@/lib/realtimeRegistry';
 import { hasSupabaseConfig, SUPABASE_CONFIG_MISSING_MESSAGE } from '@/lib/supabase';
+import {
+  installWebDeployRecoveryListener,
+  isStaleWebChunkError,
+  recoverStaleWebDeploy,
+} from '@/lib/webDeployRecovery';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
@@ -73,10 +78,17 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
     }
   }, [sessionExpired, router]);
 
+  useEffect(() => {
+    if (isStaleWebChunkError(error)) {
+      recoverStaleWebDeploy();
+    }
+  }, [error]);
+
   if (sessionExpired) {
     return null;
   }
 
+  const staleDeploy = isStaleWebChunkError(error);
   const configMissing = isConfigMissingError(error);
   const network = isNetworkError(error);
   return (
@@ -87,17 +99,34 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
       ]}
     >
       <Text style={errorStyles.title}>
-        {configMissing ? tGlobal('appNotConfigured') : network ? tGlobal('connectionErrorShort') : tGlobal('somethingWentWrong')}
+        {configMissing
+          ? tGlobal('appNotConfigured')
+          : staleDeploy
+            ? 'Update available'
+            : network
+              ? tGlobal('connectionErrorShort')
+              : tGlobal('somethingWentWrong')}
       </Text>
       <Text style={errorStyles.message}>
         {configMissing
           ? 'Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY to .env in the project root, then restart: npx expo start'
-          : network
-            ? "Cannot reach server. If you're on home or office WiFi, try mobile data or a different network—some routers block or slow cloud services."
-            : error.message}
+          : staleDeploy
+            ? 'A new version was deployed. Reloading…'
+            : network
+              ? "Cannot reach server. If you're on home or office WiFi, try mobile data or a different network—some routers block or slow cloud services."
+              : error.message}
       </Text>
-      {!configMissing && (
-        <TouchableOpacity style={errorStyles.button} onPress={retry}>
+      {!configMissing && !staleDeploy && (
+        <TouchableOpacity
+          style={errorStyles.button}
+          onPress={() => {
+            if (Platform.OS === 'web' && isStaleWebChunkError(error)) {
+              recoverStaleWebDeploy();
+              return;
+            }
+            retry();
+          }}
+        >
           <Text style={errorStyles.buttonText}>{tGlobal('tryAgain')}</Text>
         </TouchableOpacity>
       )}
@@ -175,6 +204,10 @@ LogBox.ignoreLogs([
 ]);
 
 export default function RootLayout() {
+  useEffect(() => {
+    installWebDeployRecoveryListener();
+  }, []);
+
   const splashHidden = useRef(false);
   const [loaded, error] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
