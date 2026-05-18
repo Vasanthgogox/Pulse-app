@@ -26,6 +26,13 @@ const user23 = require('../assets/avatars/female_screenshot_5.png');
 const user24 = require('../assets/avatars/female_screenshot_6.png');
 const user25 = require('../assets/avatars/female_screenshot_7.png');
 const user26 = require('../assets/avatars/female_screenshot_9.png');
+const user27 = require('../assets/avatars/male_wa1.jpeg');
+const user28 = require('../assets/avatars/male_wa2.jpeg');
+const user29 = require('../assets/avatars/male_wa3.jpeg');
+const user30 = require('../assets/avatars/male_wa4.jpeg');
+const user31 = require('../assets/avatars/male_wa5.jpeg');
+const user32 = require('../assets/avatars/male_wa6.jpeg');
+const user33 = require('../assets/avatars/male_wa7.png');
 
 export type { PresetAvatar as UserAvatarPreset };
 
@@ -56,6 +63,13 @@ export const USER_2D_AVATARS: PresetAvatar[] = [
   { name: 'Fleet Analyst',     seed: 'user-24', image: user24 },
   { name: 'Logistics Pro',     seed: 'user-25', image: user25 },
   { name: 'Express Manager',   seed: 'user-26', image: user26 },
+  { name: 'Operations Lead',   seed: 'user-27', image: user27 },
+  { name: 'Fleet Director',    seed: 'user-28', image: user28 },
+  { name: 'Senior Executive',  seed: 'user-29', image: user29 },
+  { name: 'Logistics Head',    seed: 'user-30', image: user30 },
+  { name: 'Transport Manager', seed: 'user-31', image: user31 },
+  { name: 'Dispatch Chief',    seed: 'user-32', image: user32 },
+  { name: 'Port Manager',      seed: 'user-33', image: user33 },
 ];
 
 export const DEFAULT_USER_2D_AVATAR_SEED = USER_2D_AVATARS[0]?.seed ?? 'user-1';
