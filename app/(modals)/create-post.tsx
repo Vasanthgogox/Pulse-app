@@ -289,7 +289,8 @@ export default function CreatePostScreen() {
       </View>
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" ? "padding" : "padding"}
+        enabled={Platform.OS !== "web"}
         style={{ flex: 1 }}
         keyboardVerticalOffset={insets.top + 60}
       >

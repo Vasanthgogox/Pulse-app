@@ -1,11 +1,11 @@
 /**
  * Grow your network / People you may know — list row (transaction typography).
  */
-import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { ConnectionInviteRole } from "@/features/network/components/ConnectionRoleModal";
+import { NetworkHubGlassButton } from "@/features/network/components/NetworkHubGlassButton";
 import { MutualConnectionsFacepile } from "@/features/network/components/MutualConnectionsFacepile";
 import {
   MutedStarMetric,
@@ -161,54 +161,23 @@ export function NetworkPartyDiscoverListCard({
   const statusAction = showStatusAction ? (
     <View style={styles.nativeActionWrap}>
       {isConnected ? (
-        <View style={[styles.statusBtn, styles.statusBtnNative]}>
-          <Check size={11} color={Theme.primary} strokeWidth={2.4} />
-          <Text style={[styles.statusBtnText, styles.statusBtnTextNative]} numberOfLines={1}>
-            {t("networkDiscoverConnected")}
-          </Text>
-        </View>
+        <NetworkHubGlassButton variant="connected" label={t("networkDiscoverConnected")} />
       ) : isPending ? (
-        <Pressable
+        <NetworkHubGlassButton
+          variant="neutral"
+          label={pendingLabel}
           onPress={onCancel}
-          disabled={loading}
-          style={({ pressed }) => [
-            styles.statusBtn,
-            styles.statusBtnNative,
-            pressed && { opacity: 0.88 },
-          ]}
-        >
-          {loading ? (
-            <LoadingIndicator size={14} color={Theme.primary} />
-          ) : (
-            <>
-              <Check size={11} color={Theme.primary} strokeWidth={2.4} />
-              <Text style={[styles.statusBtnText, styles.statusBtnTextNative]} numberOfLines={1}>
-                {pendingLabel}
-              </Text>
-            </>
-          )}
-        </Pressable>
+          loading={loading}
+          leadingIcon={<Check size={11} color={Theme.primary} strokeWidth={2.2} />}
+        />
       ) : (
-        <Pressable
+        <NetworkHubGlassButton
+          variant="primary"
+          label={t("networkDiscoverConnect")}
           onPress={onConnect}
-          disabled={loading}
-          style={({ pressed }) => [
-            styles.connectBtn,
-            styles.connectBtnNative,
-            (pressed || loading) && { opacity: 0.9 },
-          ]}
-        >
-          {loading ? (
-            <LoadingIndicator size={14} color={Theme.primary} />
-          ) : (
-            <>
-              <UserPlus size={11} color={Theme.primary} strokeWidth={2.4} />
-              <Text style={[styles.connectBtnText, styles.connectBtnTextNative]} numberOfLines={1}>
-                {t("networkDiscoverConnect")}
-              </Text>
-            </>
-          )}
-        </Pressable>
+          loading={loading}
+          leadingIcon={<UserPlus size={11} color={Theme.primary} strokeWidth={2.2} />}
+        />
       )}
     </View>
   ) : null;
@@ -369,70 +338,41 @@ export function NetworkPartyDiscoverListCard({
             <View style={[styles.actionCol, mobileGrid && styles.actionColMobileGrid]}>
               <View style={styles.actionRow}>
                 {isConnected ? (
-                  <View style={[styles.statusBtn, mobileGrid && styles.statusBtnMobileGrid]}>
-                    <Check size={mobileGrid ? 10 : 12} color={Theme.primary} strokeWidth={2.4} />
-                    <Text
-                      style={[styles.statusBtnText, mobileGrid && styles.statusBtnTextMobileGrid]}
-                      numberOfLines={1}
-                    >
-                      {t("networkDiscoverConnected")}
-                    </Text>
-                  </View>
+                  <NetworkHubGlassButton
+                    variant="connected"
+                    label={t("networkDiscoverConnected")}
+                    size={mobileGrid ? "compact" : "default"}
+                  />
                 ) : isPending ? (
-                  <Pressable
+                  <NetworkHubGlassButton
+                    variant="neutral"
+                    label={pendingLabel}
+                    size={mobileGrid ? "compact" : "default"}
                     onPress={onCancel}
-                    disabled={loading}
-                    style={({ pressed }) => [
-                      styles.statusBtn,
-                      mobileGrid && styles.statusBtnMobileGrid,
-                      pressed && { opacity: 0.88 },
-                    ]}
-                  >
-                    {loading ? (
-                      <LoadingIndicator size={14} color={Theme.primary} />
-                    ) : (
-                      <>
-                        <Check size={mobileGrid ? 10 : 12} color={Theme.primary} strokeWidth={2.4} />
-                        <Text
-                          style={[styles.statusBtnText, mobileGrid && styles.statusBtnTextMobileGrid]}
-                          numberOfLines={mobileGrid ? 1 : 2}
-                        >
-                          {pendingLabel}
-                        </Text>
-                      </>
-                    )}
-                  </Pressable>
+                    loading={loading}
+                    leadingIcon={
+                      <Check
+                        size={mobileGrid ? 10 : 12}
+                        color={Theme.primary}
+                        strokeWidth={2.2}
+                      />
+                    }
+                  />
                 ) : (
-                  <Pressable
+                  <NetworkHubGlassButton
+                    variant="primary"
+                    label={t("networkDiscoverConnect")}
+                    size={mobileGrid ? "compact" : "default"}
                     onPress={onConnect}
-                    disabled={loading}
-                    style={({ pressed }) => [
-                      styles.connectBtn,
-                      mobileGrid && styles.connectBtnMobileGrid,
-                      (pressed || loading) && { opacity: 0.9 },
-                    ]}
-                  >
-                    {loading ? (
-                      <LoadingIndicator size={14} color={Theme.primary} />
-                    ) : (
-                      <>
-                        <UserPlus
-                          size={mobileGrid ? 10 : 12}
-                          color={Theme.primary}
-                          strokeWidth={2.4}
-                        />
-                        <Text
-                          style={[
-                            styles.connectBtnText,
-                            mobileGrid && styles.connectBtnTextMobileGrid,
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {t("networkDiscoverConnect")}
-                        </Text>
-                      </>
-                    )}
-                  </Pressable>
+                    loading={loading}
+                    leadingIcon={
+                      <UserPlus
+                        size={mobileGrid ? 10 : 12}
+                        color={Theme.primary}
+                        strokeWidth={2.2}
+                      />
+                    }
+                  />
                 )}
 
                 {onDismiss && !mobileGrid ? (

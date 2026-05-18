@@ -19,6 +19,7 @@ import {
   Package,
 } from "lucide-react-native";
 import { CHAT_ACCENT, CHAT_ACCENT_SOFT } from "@/features/chat/chatTheme";
+import { CHAT_MOBILE } from "@/features/chat/chatMobileLayout";
 import { formatChatPartyName } from "@/features/chat/utils/partyDisplay";
 import Theme from "@/constants/Theme";
 import {
@@ -267,7 +268,8 @@ export function ChatLedgerEventCard({
   onDispute,
   readOnly = false,
   hideLedgerActions = false,
-}: LedgerCardProps) {
+  isMobile = false,
+}: LedgerCardProps & { isMobile?: boolean }) {
   const addingToBook = useSyncExternalStore(
     subscribeLedgerBookPending,
     () => getLedgerBookPendingSnapshot().has(message.id),
@@ -332,54 +334,94 @@ export function ChatLedgerEventCard({
   const isCredit = flow === "in";
   const amountColor = isCredit ? "#047857" : "#be123c";
 
+  const avatarEl = (
+    <View style={[s.ledgerAvatarWrap, s.ledgerAvatarWrapAlign, isMobile && s.ledgerAvatarWrapMobile]}>
+      <View
+        style={[
+          s.ledgerAvatar,
+          isMobile && s.ledgerAvatarMobile,
+          { backgroundColor: avatarBg },
+        ]}
+      >
+        <Text style={[s.ledgerAvatarInitials, { color: avatarFg }]}>
+          {partyInitialsFromName(avatarSeedName)}
+        </Text>
+      </View>
+      <View
+        style={[
+          s.ledgerAvatarDot,
+          { backgroundColor: isDisputed ? "#f59e0b" : "#22c55e" },
+        ]}
+      />
+    </View>
+  );
+
+  const bodyEl = (
+    <View style={s.ledgerBody}>
+      {titleDisplay ? (
+        <Text
+          style={[s.ledgerTitle, isMobile && s.ledgerTitleMobile]}
+          numberOfLines={isMobile ? 3 : 1}
+        >
+          {titleDisplay}
+        </Text>
+      ) : null}
+      <Text
+        style={[s.ledgerMeta, isMobile && s.ledgerMetaMobile]}
+        numberOfLines={isMobile ? 3 : 1}
+      >
+        {directionLabel}
+        {" · "}
+        {dateUpper}
+        {" · "}
+        {metaMid}
+      </Text>
+      <Text
+        style={[s.ledgerRoute, isMobile && s.ledgerRouteMobile]}
+        numberOfLines={isMobile ? 2 : 1}
+      >
+        {routeLine}
+      </Text>
+    </View>
+  );
+
   return (
-    <View style={s.ledgerWrap}>
-      <View style={s.ledgerCard}>
-        <View style={[s.ledgerAvatarWrap, s.ledgerAvatarWrapAlign]}>
-          <View style={[s.ledgerAvatar, { backgroundColor: avatarBg }]}>
-            <Text style={[s.ledgerAvatarInitials, { color: avatarFg }]}>
-              {partyInitialsFromName(avatarSeedName)}
-            </Text>
-          </View>
-          <View
-            style={[
-              s.ledgerAvatarDot,
-              { backgroundColor: isDisputed ? "#f59e0b" : "#22c55e" },
-            ]}
-          />
-        </View>
-
-        <View style={s.ledgerBody}>
-          {titleDisplay ? (
-            <Text style={s.ledgerTitle} numberOfLines={1}>
-              {titleDisplay}
-            </Text>
-          ) : null}
-          <Text style={s.ledgerMeta} numberOfLines={1}>
-            {directionLabel}
-            {" · "}
-            {dateUpper}
-            {" · "}
-            {metaMid}
-          </Text>
-          <Text style={s.ledgerRoute} numberOfLines={1}>
-            {routeLine}
-          </Text>
-        </View>
-
-        <View style={s.ledgerRight}>
-          <Text style={[s.ledgerAmount, { color: amountColor }]} numberOfLines={1}>
-            {flowPrefix}
-            {amountLabel}
-          </Text>
-          <Text style={s.ledgerTimeRight} numberOfLines={1}>
-            {displayTime}
-          </Text>
-        </View>
-
-        <View style={s.ledgerChevronWrap}>
-          <ChevronRight size={14} color="#cbd5e1" />
-        </View>
+    <View style={[s.ledgerWrap, isMobile && s.ledgerWrapMobile]}>
+      <View style={[s.ledgerCard, isMobile && s.ledgerCardMobile]}>
+        {isMobile ? (
+          <>
+            <View style={s.ledgerTopRowMobile}>
+              {avatarEl}
+              {bodyEl}
+            </View>
+            <View style={s.ledgerFooterMobile}>
+              <Text style={[s.ledgerAmountMobile, { color: amountColor }]} numberOfLines={1}>
+                {flowPrefix}
+                {amountLabel}
+              </Text>
+              <Text style={s.ledgerTimeMobile} numberOfLines={1}>
+                {displayTime}
+              </Text>
+            </View>
+          </>
+        ) : (
+          <>
+            {avatarEl}
+            {bodyEl}
+            <View style={s.ledgerRight}>
+              <Text style={[s.ledgerAmount, { color: amountColor }]} numberOfLines={1}>
+                {flowPrefix}
+                {amountLabel}
+              </Text>
+              <Text style={s.ledgerTimeRight} numberOfLines={1}>
+                {displayTime}
+              </Text>
+            </View>
+            <View style={s.ledgerChevronWrap}>
+              <ChevronRight size={14} color="#cbd5e1" />
+            </View>
+          </>
+        )}
       </View>
 
       {meta.notes ? (
@@ -606,6 +648,99 @@ const s = StyleSheet.create({
     fontWeight: "700",
     color: "#b45309",
   },
+  ledgerWrapMobile: {
+    alignSelf: "stretch",
+    width: "100%",
+    maxWidth: "100%",
+    marginVertical: CHAT_MOBILE.eventCardGap / 2,
+  },
+  ledgerCardMobile: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    paddingHorizontal: CHAT_MOBILE.eventCardPadH,
+    paddingVertical: CHAT_MOBILE.eventCardPadV,
+    borderRadius: CHAT_MOBILE.eventCardRadius,
+    borderColor: "#E9EDEF",
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+    gap: 0,
+  },
+  ledgerTopRowMobile: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  ledgerAvatarWrapMobile: {
+    width: CHAT_MOBILE.eventAvatar,
+    height: CHAT_MOBILE.eventAvatar,
+  },
+  ledgerAvatarMobile: {
+    width: CHAT_MOBILE.eventAvatar,
+    height: CHAT_MOBILE.eventAvatar,
+    borderRadius: CHAT_MOBILE.eventAvatar / 2,
+  },
+  ledgerTitleMobile: {
+    fontSize: CHAT_MOBILE.eventTitleSize,
+    lineHeight: CHAT_MOBILE.eventTitleLine,
+    fontWeight: "600",
+    color: "#111B21",
+  },
+  ledgerMetaMobile: {
+    fontSize: CHAT_MOBILE.eventMetaSize,
+    lineHeight: CHAT_MOBILE.eventMetaLine,
+    color: "#667781",
+    fontWeight: "500",
+    letterSpacing: 0,
+    textTransform: "none",
+  },
+  ledgerRouteMobile: {
+    fontSize: CHAT_MOBILE.eventSubSize,
+    lineHeight: 14,
+    color: "#8696A0",
+    letterSpacing: 0,
+    textTransform: "none",
+  },
+  ledgerFooterMobile: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#E9EDEF",
+    gap: 8,
+  },
+  ledgerAmountMobile: {
+    fontSize: CHAT_MOBILE.eventAmountSize,
+    fontWeight: "800",
+    fontVariant: ["tabular-nums"],
+    flexShrink: 1,
+  },
+  ledgerTimeMobile: {
+    fontSize: CHAT_MOBILE.eventTimeSize,
+    fontWeight: "600",
+    color: "#8696A0",
+    flexShrink: 0,
+    textTransform: "none",
+    letterSpacing: 0,
+  },
+  eventBadgeMobile: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    maxWidth: "72%",
+  },
+  eventBadgeTextMobile: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+  },
+  pulseProtoCardMobile: {
+    borderLeftWidth: 3,
+    borderLeftColor: "#10b981",
+  },
   // Pulse-style system protocol ribbon (completed / milestone)
   pulseProtoWrap: {
     alignSelf: "center",
@@ -722,6 +857,7 @@ export interface TripProgressEventCardProps {
   rightPrimary: string;
   rightPrimaryColor: string;
   time: string;
+  isMobile?: boolean;
 }
 
 /**
@@ -737,44 +873,88 @@ export function TripProgressEventCard({
   rightPrimary,
   rightPrimaryColor,
   time,
+  isMobile = false,
 }: TripProgressEventCardProps) {
   const avatarBg = partyAvatarBackgroundColor(avatarSeed);
   const avatarFg = partyAvatarInitialsTextColor(avatarBg);
+  const avatarEl = (
+    <View style={[s.ledgerAvatarWrap, s.ledgerAvatarWrapAlign, isMobile && s.ledgerAvatarWrapMobile]}>
+      <View
+        style={[
+          s.ledgerAvatar,
+          isMobile && s.ledgerAvatarMobile,
+          { backgroundColor: avatarBg },
+        ]}
+      >
+        <Text style={[s.ledgerAvatarInitials, { color: avatarFg }]}>
+          {partyInitialsFromName(avatarSeed)}
+        </Text>
+      </View>
+      <View style={[s.ledgerAvatarDot, { backgroundColor: avatarDotColor }]} />
+    </View>
+  );
+  const bodyEl = (
+    <View style={s.ledgerBody}>
+      <Text
+        style={[s.ledgerTitle, isMobile && s.ledgerTitleMobile]}
+        numberOfLines={isMobile ? 4 : 2}
+      >
+        {title}
+      </Text>
+      <Text
+        style={[s.ledgerMeta, isMobile && s.ledgerMetaMobile]}
+        numberOfLines={isMobile ? 3 : 2}
+      >
+        {metaLine}
+      </Text>
+      {subLine ? (
+        <Text
+          style={[s.ledgerRoute, isMobile && s.ledgerRouteMobile]}
+          numberOfLines={isMobile ? 2 : 2}
+        >
+          {subLine}
+        </Text>
+      ) : null}
+    </View>
+  );
+
   return (
-    <View style={s.ledgerWrap}>
-      <View style={s.ledgerCard}>
-        <View style={[s.ledgerAvatarWrap, s.ledgerAvatarWrapAlign]}>
-          <View style={[s.ledgerAvatar, { backgroundColor: avatarBg }]}>
-            <Text style={[s.ledgerAvatarInitials, { color: avatarFg }]}>
-              {partyInitialsFromName(avatarSeed)}
-            </Text>
-          </View>
-          <View style={[s.ledgerAvatarDot, { backgroundColor: avatarDotColor }]} />
-        </View>
-        <View style={s.ledgerBody}>
-          <Text style={s.ledgerTitle} numberOfLines={2}>
-            {title}
-          </Text>
-          <Text style={s.ledgerMeta} numberOfLines={2}>
-            {metaLine}
-          </Text>
-          {subLine ? (
-            <Text style={s.ledgerRoute} numberOfLines={2}>
-              {subLine}
-            </Text>
-          ) : null}
-        </View>
-        <View style={s.ledgerRight}>
-          <Text style={[s.ledgerAmount, { color: rightPrimaryColor }]} numberOfLines={1}>
-            {rightPrimary}
-          </Text>
-          <Text style={s.ledgerTimeRight} numberOfLines={1}>
-            {time}
-          </Text>
-        </View>
-        <View style={s.ledgerChevronWrap}>
-          <ChevronRight size={14} color="#cbd5e1" />
-        </View>
+    <View style={[s.ledgerWrap, isMobile && s.ledgerWrapMobile]}>
+      <View style={[s.ledgerCard, isMobile && s.ledgerCardMobile]}>
+        {isMobile ? (
+          <>
+            <View style={s.ledgerTopRowMobile}>
+              {avatarEl}
+              {bodyEl}
+            </View>
+            <View style={s.ledgerFooterMobile}>
+              <View style={[s.eventBadgeMobile, { backgroundColor: `${rightPrimaryColor}18` }]}>
+                <Text style={[s.eventBadgeTextMobile, { color: rightPrimaryColor }]} numberOfLines={1}>
+                  {rightPrimary}
+                </Text>
+              </View>
+              <Text style={s.ledgerTimeMobile} numberOfLines={1}>
+                {time}
+              </Text>
+            </View>
+          </>
+        ) : (
+          <>
+            {avatarEl}
+            {bodyEl}
+            <View style={s.ledgerRight}>
+              <Text style={[s.ledgerAmount, { color: rightPrimaryColor }]} numberOfLines={1}>
+                {rightPrimary}
+              </Text>
+              <Text style={s.ledgerTimeRight} numberOfLines={1}>
+                {time}
+              </Text>
+            </View>
+            <View style={s.ledgerChevronWrap}>
+              <ChevronRight size={14} color="#cbd5e1" />
+            </View>
+          </>
+        )}
       </View>
     </View>
   );
@@ -792,11 +972,46 @@ function PulseSystemProtocolCard({
   title,
   subtitle,
   displayTime,
+  isMobile = false,
 }: {
   title: string;
   subtitle: string;
   displayTime: string;
+  isMobile?: boolean;
 }) {
+  if (isMobile) {
+    return (
+      <View style={[s.ledgerWrap, s.ledgerWrapMobile]}>
+        <View style={[s.ledgerCard, s.ledgerCardMobile, s.pulseProtoCardMobile]}>
+          <View style={s.ledgerTopRowMobile}>
+            <View style={s.pulseProtoIconCol}>
+              <View style={s.pulseProtoIconCircle}>
+                <Activity size={18} color="#059669" strokeWidth={2.4} />
+              </View>
+              <View style={s.pulseProtoLiveDot} />
+            </View>
+            <View style={s.ledgerBody}>
+              <Text style={[s.ledgerTitle, s.ledgerTitleMobile]} numberOfLines={4}>
+                {title}
+              </Text>
+              <Text style={[s.ledgerMeta, s.ledgerMetaMobile]} numberOfLines={4}>
+                {subtitle}
+              </Text>
+            </View>
+          </View>
+          <View style={s.ledgerFooterMobile}>
+            <View style={s.pulseProtoBadge}>
+              <Text style={s.pulseProtoBadgeText}>SYSTEM DONE</Text>
+            </View>
+            <Text style={s.ledgerTimeMobile} numberOfLines={1}>
+              {displayTime}
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={s.pulseProtoWrap}>
       <View style={s.pulseProtoCard}>
@@ -828,7 +1043,13 @@ function PulseSystemProtocolCard({
   );
 }
 
-export function ChatSystemEventCard({ message }: { message: TripMessageRow }) {
+export function ChatSystemEventCard({
+  message,
+  isMobile = false,
+}: {
+  message: TripMessageRow;
+  isMobile?: boolean;
+}) {
   const statusKey = inferStatusFromContent(message.content);
   const cfg = STATUS_ICON_MAP[statusKey] ?? STATUS_ICON_MAP.default;
   const dateUpper = formatTripEventSheetDate(message.created_at);
@@ -860,6 +1081,7 @@ export function ChatSystemEventCard({ message }: { message: TripMessageRow }) {
         title={message.content.trim() || "Trip protocol update"}
         subtitle={subtitle}
         displayTime={displayTime}
+        isMobile={isMobile}
       />
     );
   }
@@ -874,6 +1096,7 @@ export function ChatSystemEventCard({ message }: { message: TripMessageRow }) {
       rightPrimary={cfg.rightWord}
       rightPrimaryColor={cfg.rightColor}
       time={displayTime}
+      isMobile={isMobile}
     />
   );
 }

@@ -175,8 +175,8 @@ export const hubListCardStyles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     alignItems: "center",
-    gap: 4,
-    marginTop: 1,
+    gap: 6,
+    marginTop: 2,
   },
   badge: {
     paddingHorizontal: 6,

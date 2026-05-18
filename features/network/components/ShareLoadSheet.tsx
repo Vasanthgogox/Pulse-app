@@ -297,7 +297,8 @@ export function ShareLoadSheet({
           <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
 
           <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+            enabled={Platform.OS !== 'web'}
             style={styles.kvContainer}
           >
             <Animated.View

@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     minWidth: 0,
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
     color: Theme.textPrimary,
     paddingVertical: 0,

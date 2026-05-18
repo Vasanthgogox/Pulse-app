@@ -113,10 +113,25 @@ function subtleAvatarTone(seed: string): {
 
 function roleTone(role: ConnectedOrg["role"]) {
   if (role === "CLIENT")
-    return { bg: Theme.networkClientTintBg, text: Theme.primary };
+    return {
+      bg: Theme.networkBadgeClientBg,
+      gradientTop: Theme.networkBadgeClientGradientTop,
+      text: Theme.networkBadgeClientText,
+      border: Theme.networkBadgeClientBorder,
+    };
   if (role === "DRIVER")
-    return { bg: Theme.networkDriverTintBg, text: Theme.warning };
-  return { bg: Theme.networkSupplierTintBg, text: Theme.positive };
+    return {
+      bg: Theme.networkBadgeDriverBg,
+      gradientTop: Theme.networkBadgeDriverGradientTop,
+      text: Theme.networkBadgeDriverText,
+      border: Theme.networkBadgeDriverBorder,
+    };
+  return {
+    bg: Theme.networkBadgeSupplierBg,
+    gradientTop: Theme.networkBadgeSupplierGradientTop,
+    text: Theme.networkBadgeSupplierText,
+    border: Theme.networkBadgeSupplierBorder,
+  };
 }
 
 export interface ConnectedOrg {
@@ -169,14 +184,19 @@ function rolePillsForConnection(item: ConnectedOrg): NetworkPartyRolePill[] {
     {
       label: item.role,
       backgroundColor: tone.bg,
+      gradientTop: tone.gradientTop,
       color: tone.text,
+      borderColor: tone.border,
     },
   ];
   if (item.is_integrated) {
     pills.push({
       label: "INTEGRATED",
-      backgroundColor: Theme.textPrimaryDark,
-      color: Theme.textOnPrimary,
+      backgroundColor: Theme.networkBadgeIntegratedBg,
+      gradientTop: Theme.networkBadgeIntegratedGradientTop,
+      color: Theme.networkBadgeIntegratedText,
+      borderColor: Theme.networkBadgeIntegratedBorder,
+      highlightColor: Theme.networkBadgeIntegratedHighlight,
     });
   }
   return pills;

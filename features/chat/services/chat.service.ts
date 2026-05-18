@@ -43,6 +43,8 @@ export interface TripForCompose {
   driver_display_name: string | null;
   client_linked_organization_id: string | null;
   supplier_linked_organization_id: string | null;
+  /** From `trips.indent_id` — set only for marketplace/indent-backed trips. */
+  indent_id?: string | null;
 }
 
 export async function getTripsForCompose(
@@ -77,6 +79,7 @@ export async function getTripsForCompose(
       (row.driver_display_name as string | null | undefined) ?? null,
     client_linked_organization_id: null,
     supplier_linked_organization_id: null,
+    indent_id: (row.indent_id as string | null | undefined) ?? null,
   }));
 
   const clientIds = Array.from(

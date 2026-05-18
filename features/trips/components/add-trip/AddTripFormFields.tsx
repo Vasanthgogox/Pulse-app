@@ -52,6 +52,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import type { TextStyle, ViewStyle } from "react-native";
 import {
     ActivityIndicator,
+    Keyboard,
     Modal,
     Platform,
     Pressable,
@@ -67,6 +68,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { ROUTES } from "@/lib/routes";
+import { ADD_TRIP_FORM } from "./addTripFormTokens";
+import { useKeyboardAccessory } from "@/contexts/KeyboardAccessoryContext";
 import { LocationSearchField } from "./LocationSearchField";
 import type { AddTripFormState } from "./types";
 import type { AddTripIssueField, AddTripValidationIssue } from "./useAddTripForm";
@@ -177,6 +180,18 @@ export function AddTripFormFields({
   const insets = useSafeAreaInsets();
   const { width: winW } = useWindowDimensions();
   const isCompactMobile = winW < 480;
+  /** Native app + narrow web: tighter fields and section padding. */
+  const isDenseForm = Platform.OS !== "web" || winW < 600;
+  const fieldLabelStyle = [styles.label, labelStyle, isDenseForm && styles.labelDense];
+  const fieldInputStyle = [styles.input, inputStyle, isDenseForm && styles.inputDense];
+  const iconFieldInputStyle = [
+    styles.iconInput,
+    inputStyle,
+    isDenseForm && styles.iconInputDense,
+  ];
+  const moneyInputStyle = isDenseForm
+    ? fieldInputStyle
+    : [styles.input, inputStyle, styles.inputMatchSelectionCard];
   const renderValidationChecklist = () => {
     if (validationIssues.length === 0) return null;
     return (
@@ -262,12 +277,42 @@ export function AddTripFormFields({
   const driverPhoneInputRef = useRef<TextInput>(null);
   const aggregateVehicleInputRef = useRef<TextInput>(null);
   const notesModalInputRef = useRef<TextInput>(null);
+  const {
+    accessoryId: kbAccessoryId,
+    registerKeyboardNext,
+    releaseAccessoryBar,
+    dismissKeyboard,
+  } = useKeyboardAccessory();
+
+  const focusPadField = useCallback(
+    (onNext: () => void, preview: string, label = "Next") => {
+      registerKeyboardNext(onNext, label, preview);
+    },
+    [registerKeyboardNext],
+  );
+
+  const onPadValueChange = useCallback((setter: (text: string) => void, text: string) => {
+    setter(text);
+  }, []);
+
+  /** End numeric entry without opening notes — notes are opened only via the notes button. */
+  const finishPadFieldEntry = useCallback(() => {
+    dismissKeyboard();
+  }, [dismissKeyboard]);
 
   const focusField = useCallback((ref: { current: TextInput | null }) => {
     requestAnimationFrame(() => {
       ref.current?.focus();
     });
   }, []);
+
+  /** Keyboard Next only — never call from onFocus (avoids iOS accessory blur races). */
+  const focusNextField = useCallback(
+    (ref: { current: TextInput | null }) => {
+      focusField(ref);
+    },
+    [focusField],
+  );
 
   const focusFieldAfterModalClose = useCallback(
     (ref: { current: TextInput | null }) => {
@@ -462,6 +507,8 @@ export function AddTripFormFields({
 
   const handleSelectClient = (c: ClientRow) => {
     if (state.clientId === c.id) return;
+    releaseAccessoryBar();
+    Keyboard.dismiss();
     setters.setClientSelection(c.id, c.name);
     setClientListExpanded(false);
   };
@@ -544,11 +591,12 @@ export function AddTripFormFields({
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
+          isDenseForm && styles.scrollContentDense,
           {
             paddingBottom:
               Layout.sectionSpacing +
               insets.bottom +
-              (desktopFormGrid ? 52 : isWide ? 68 : 108),
+              (desktopFormGrid ? 52 : isDenseForm ? 88 : isWide ? 68 : 108),
           },
         ]}
         showsVerticalScrollIndicator
@@ -588,20 +636,20 @@ export function AddTripFormFields({
           <View
             style={[
               styles.card,
-              isCompactMobile && styles.cardCompact,
+              isDenseForm && styles.cardDense,
               desktopFormGrid && styles.cardGridRouteWeb,
             ]}
           >
-            <View style={styles.cardHead}>
-              <View style={styles.stepBadge}>
+            <View style={[styles.cardHead, isDenseForm && styles.cardHeadDense]}>
+              <View style={[styles.stepBadge, isDenseForm && styles.stepBadgeDense]}>
                 <Text style={styles.stepBadgeText}>01</Text>
               </View>
-              <Text style={[styles.cardTitle, isCompactMobile && styles.cardTitleCompact]}>
+              <Text style={[styles.cardTitle, isDenseForm && styles.cardTitleDense]}>
                 Route Details
               </Text>
             </View>
 
-            <View style={[styles.gridRow, isWide && styles.gridRowWide]}>
+            <View style={[styles.gridRow, isDenseForm && styles.gridRowDense, isWide && styles.gridRowWide]}>
               <View style={styles.gridCol}>
                 <LocationSearchField
                   label="Pickup *"
@@ -611,9 +659,10 @@ export function AddTripFormFields({
                   onSelectPlace={(_name, coords) =>
                     setters.setPickupCoords(coords.lat, coords.lon)
                   }
-                  leadingIcon={<MapPin size={14} color={Theme.iconMuted} />}
-                  inputStyle={[styles.input, inputStyle, outlineErr("pickup")]}
-                  labelStyle={[styles.label, labelStyle]}
+                  leadingIcon={<MapPin size={isDenseForm ? 13 : 14} color={Theme.iconMuted} />}
+                  inputStyle={[...fieldInputStyle, outlineErr("pickup")]}
+                  labelStyle={fieldLabelStyle}
+                  compact={isDenseForm}
                   onDropdownOpenChange={setPickupDropdownOpen}
                 />
               </View>
@@ -626,18 +675,19 @@ export function AddTripFormFields({
                   onSelectPlace={(_name, coords) =>
                     setters.setDropCoords(coords.lat, coords.lon)
                   }
-                  leadingIcon={<Navigation size={14} color={Theme.iconMuted} />}
-                  inputStyle={[styles.input, inputStyle, outlineErr("drop")]}
-                  labelStyle={[styles.label, labelStyle]}
+                  leadingIcon={<Navigation size={isDenseForm ? 13 : 14} color={Theme.iconMuted} />}
+                  inputStyle={[...fieldInputStyle, outlineErr("drop")]}
+                  labelStyle={fieldLabelStyle}
+                  compact={isDenseForm}
                   onDropdownOpenChange={setDropDropdownOpen}
                 />
               </View>
             </View>
 
-            <View style={[styles.gridRow, isWide && styles.gridRowWide]}>
+            <View style={[styles.gridRow, isDenseForm && styles.gridRowDense, isWide && styles.gridRowWide]}>
               <View style={styles.gridCol}>
-                <Text style={[styles.label, labelStyle]}>Trip start date</Text>
-                <View style={styles.quickDateRow}>
+                <Text style={fieldLabelStyle}>Trip start date</Text>
+                <View style={[styles.quickDateRow, isDenseForm && styles.quickDateRowDense]}>
                   {(
                     [
                       { label: "Today", get: getToday },
@@ -652,6 +702,7 @@ export function AddTripFormFields({
                         key={label}
                         style={({ pressed }) => [
                           styles.quickDateChip,
+                          isDenseForm && styles.quickDateChipDense,
                           isActive && styles.quickDateChipActive,
                           pressed && styles.quickDateChipPressed,
                           Platform.OS === "web" &&
@@ -664,6 +715,7 @@ export function AddTripFormFields({
                         <Text
                           style={[
                             styles.quickDateChipText,
+                            isDenseForm && styles.quickDateChipTextDense,
                             isActive && styles.quickDateChipTextActive,
                           ]}
                         >
@@ -675,7 +727,7 @@ export function AddTripFormFields({
                 </View>
                 {Platform.OS === "web" ? (
                   <TextInput
-                    style={[styles.input, inputStyle, outlineErr("tripDate")]}
+                    style={[...fieldInputStyle, outlineErr("tripDate")]}
                     placeholder="YYYY-MM-DD"
                     placeholderTextColor={Theme.placeholder}
                     value={state.tripStartDate}
@@ -686,8 +738,7 @@ export function AddTripFormFields({
                   <>
                     <TouchableOpacity
                       style={[
-                        styles.input,
-                        inputStyle,
+                        ...fieldInputStyle,
                         styles.dateTouchable,
                         outlineErr("tripDate"),
                       ]}
@@ -697,8 +748,14 @@ export function AddTripFormFields({
                       <Text
                         style={
                           state.tripStartDate
-                            ? styles.dateTouchableText
-                            : styles.dateTouchablePlaceholder
+                            ? [
+                                styles.dateTouchableText,
+                                isDenseForm && styles.dateTouchableTextDense,
+                              ]
+                            : [
+                                styles.dateTouchablePlaceholder,
+                                isDenseForm && styles.dateTouchablePlaceholderDense,
+                              ]
                         }
                       >
                         {state.tripStartDate
@@ -774,11 +831,10 @@ export function AddTripFormFields({
                 )}
               </View>
               <View style={styles.gridCol}>
-                <Text style={[styles.label, labelStyle]}>Tons</Text>
+                <Text style={fieldLabelStyle}>Tons</Text>
                 <TextInput
                   style={[
-                    styles.input,
-                    inputStyle,
+                    ...fieldInputStyle,
                     outlineErr("tons"),
                     isCompactMobile &&
                     Platform.OS === "web" &&
@@ -787,9 +843,18 @@ export function AddTripFormFields({
                   placeholder="Enter load weight in tons"
                   placeholderTextColor={Theme.placeholder}
                   value={state.tons}
-                  onChangeText={setters.setTons}
+                  onChangeText={(t) => onPadValueChange(setters.setTons, t)}
                   keyboardType="decimal-pad"
                   autoCorrect={false}
+                  inputAccessoryViewID={kbAccessoryId}
+                  onFocus={() => {
+                    focusPadField(
+                      () => focusNextField(clientPriceInputRef),
+                      state.tons,
+                      "Next",
+                    );
+                  }}
+                  blurOnSubmit={false}
                 />
               </View>
             </View>
@@ -842,18 +907,18 @@ export function AddTripFormFields({
           <View
             style={[
               styles.card,
-              isCompactMobile && styles.cardCompact,
+              isDenseForm && styles.cardDense,
               desktopFormGrid && styles.cardGridClientWeb,
             ]}
           >
-            <View style={styles.cardHead}>
-              <View style={styles.stepBadge}>
+            <View style={[styles.cardHead, isDenseForm && styles.cardHeadDense]}>
+              <View style={[styles.stepBadge, isDenseForm && styles.stepBadgeDense]}>
                 <Text style={styles.stepBadgeText}>02</Text>
               </View>
-              <Text style={[styles.cardTitle, isCompactMobile && styles.cardTitleCompact]}>Client & Commercials</Text>
+              <Text style={[styles.cardTitle, isDenseForm && styles.cardTitleDense]}>Client & Commercials</Text>
             </View>
 
-            <View style={[styles.gridRow, isWide && styles.gridRowWide]}>
+            <View style={[styles.gridRow, isDenseForm && styles.gridRowDense, isWide && styles.gridRowWide]}>
               <View
                 style={[
                   styles.gridCol,
@@ -866,10 +931,11 @@ export function AddTripFormFields({
                   <View
                     style={[
                       styles.sectionLabelRow,
+                      isDenseForm && styles.sectionLabelRowDense,
                       isWide && styles.sectionLabelRowFlush,
                     ]}
                   >
-                    <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
+                    <Text style={[...fieldLabelStyle, styles.sectionLabelTight]}>
                       Select client
                     </Text>
                     <View style={styles.sectionLabelActions}>
@@ -913,8 +979,9 @@ export function AddTripFormFields({
                   <TouchableOpacity
                     style={[
                       styles.clientCard,
+                      isDenseForm && styles.clientCardDense,
                       styles.selectionSummaryCard,
-                      isWide && styles.clientCardWideBesidePrice,
+                      isWide && !isDenseForm && styles.clientCardWideBesidePrice,
                     ]}
                     onPress={() => setClientListExpanded(true)}
                     activeOpacity={0.85}
@@ -929,7 +996,7 @@ export function AddTripFormFields({
                           (selectedClientRow as { avatar_seed?: string | null }).avatar_seed ?? null
                         }
                         entityType="client"
-                        size={38}
+                        size={isDenseForm ? 32 : 38}
                         borderStyle={styles.clientAvatarOn}
                       />
                       <View style={{ flex: 1, minWidth: 0 }}>
@@ -960,6 +1027,7 @@ export function AddTripFormFields({
                           key={c.id}
                           style={[
                             styles.clientCard,
+                            isDenseForm && styles.clientCardDense,
                             selected && styles.clientCardRowSelected,
                             Platform.OS === "web"
                               ? ({ cursor: "pointer" } as ViewStyle)
@@ -985,6 +1053,7 @@ export function AddTripFormFields({
                             <Text
                               style={[
                                 styles.clientName,
+                                isDenseForm && styles.clientNameDense,
                                 selected && styles.clientNameOn,
                               ]}
                               numberOfLines={1}
@@ -1028,14 +1097,15 @@ export function AddTripFormFields({
                 <View
                   style={isWide ? styles.clientCommercialsHeaderBand : undefined}
                 >
-                  <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
+                  <Text style={[...fieldLabelStyle, styles.sectionLabelTight]}>
                     Client sales price (₹) *
                   </Text>
                 </View>
                 <View
                   style={[
                     styles.priceWrapShell,
-                    isWide && styles.priceWrapShellWideColumn,
+                    isDenseForm && styles.priceWrapShellDense,
+                    isWide && !isDenseForm && styles.priceWrapShellWideColumn,
                     state.clientId &&
                       !invalid("clientPrice") &&
                       styles.priceWrapShellSelected,
@@ -1043,7 +1113,7 @@ export function AddTripFormFields({
                   ]}
                 >
                   <IndianRupee
-                    size={16}
+                    size={isDenseForm ? ADD_TRIP_FORM.moneyIconSize : 16}
                     color={
                       state.clientId && !invalid("clientPrice")
                         ? Theme.iconPrimary
@@ -1054,6 +1124,7 @@ export function AddTripFormFields({
                   <TextInput
                     style={[
                       styles.priceInput,
+                      isDenseForm && styles.priceInputDense,
                       isCompactMobile &&
                         Platform.OS === "web" &&
                         styles.mobileWebNoZoomInput,
@@ -1061,28 +1132,33 @@ export function AddTripFormFields({
                     placeholder="0"
                     placeholderTextColor={Theme.placeholder}
                     value={state.clientPrice}
-                    onChangeText={setters.setClientPrice}
+                    onChangeText={(t) => onPadValueChange(setters.setClientPrice, t)}
                     ref={clientPriceInputRef}
                     keyboardType="decimal-pad"
                     autoCorrect={false}
-                    returnKeyType="next"
-                    onSubmitEditing={() => {
-                      if (supplyIsAsset) {
-                        if (state.assignLater) {
-                          openNotesModal();
-                        } else {
-                          openPickerNext("driver");
+                    inputAccessoryViewID={kbAccessoryId}
+                    onFocus={() => {
+                      focusPadField(() => {
+                        if (supplyIsAsset) {
+                          if (state.assignLater) {
+                            finishPadFieldEntry();
+                          } else {
+                            openPickerNext("driver");
+                          }
+                          return;
                         }
-                        return;
-                      }
-                      openSupplierPickerNext();
+                        focusNextField(supplierRateInputRef);
+                      }, state.clientPrice);
                     }}
+                    blurOnSubmit={false}
                   />
                 </View>
                 {!isWide ? (
-                  <View style={styles.infoCallout}>
-                    <Info size={16} color={Theme.iconPrimary} />
-                    <Text style={styles.infoCalloutText}>
+                  <View style={[styles.infoCallout, isDenseForm && styles.infoCalloutDense]}>
+                    <Info size={isDenseForm ? 14 : 16} color={Theme.iconPrimary} />
+                    <Text
+                      style={[styles.infoCalloutText, isDenseForm && styles.infoCalloutTextDense]}
+                    >
                       Revenue should match what you bill this client for this
                       lane. Adjust if this trip differs.
                     </Text>
@@ -1105,17 +1181,17 @@ export function AddTripFormFields({
           <View
             style={[
               styles.card,
-              isCompactMobile && styles.cardCompact,
+              isDenseForm && styles.cardDense,
               desktopFormGrid && styles.cardGridSupplyWeb,
             ]}
           >
-            <View style={[styles.cardHead, styles.cardHeadWithTrailingAction]}>
+            <View style={[styles.cardHead, styles.cardHeadWithTrailingAction, isDenseForm && styles.cardHeadDense]}>
               <View style={styles.cardHeadTitleCluster}>
-                <View style={styles.stepBadge}>
+                <View style={[styles.stepBadge, isDenseForm && styles.stepBadgeDense]}>
                   <Text style={styles.stepBadgeText}>03</Text>
                 </View>
                 <Text
-                  style={[styles.cardTitle, isCompactMobile && styles.cardTitleCompact]}
+                  style={[styles.cardTitle, isDenseForm && styles.cardTitleDense]}
                   numberOfLines={1}
                 >
                   Supply & Allocation
@@ -1357,7 +1433,7 @@ export function AddTripFormFields({
                             </View>
                           ) : state.driverId && !driverListExpanded && selectedDriverRow ? (
                             <TouchableOpacity
-                              style={[styles.clientCard, styles.selectionSummaryCard]}
+                              style={[styles.clientCard, isDenseForm && styles.clientCardDense, styles.selectionSummaryCard]}
                               onPress={() => setDriverListExpanded(true)}
                               activeOpacity={0.85}
                             >
@@ -1392,6 +1468,7 @@ export function AddTripFormFields({
                                   key={d.id}
                                   style={[
                                     styles.clientCard,
+                                    isDenseForm && styles.clientCardDense,
                                     styles.clientCardMobile,
                                     d.isBusy && styles.clientCardDisabled,
                                     selected && styles.clientCardRowSelected,
@@ -1437,7 +1514,7 @@ export function AddTripFormFields({
                         </View>
                       ) : state.driverId && !driverListExpanded && selectedDriverRow ? (
                         <TouchableOpacity
-                          style={[styles.clientCard, styles.selectionSummaryCard]}
+                          style={[styles.clientCard, isDenseForm && styles.clientCardDense, styles.selectionSummaryCard]}
                           onPress={() => setDriverListExpanded(true)}
                           activeOpacity={0.85}
                         >
@@ -1482,6 +1559,7 @@ export function AddTripFormFields({
                                 key={d.id}
                                 style={[
                                   styles.clientCard,
+                                  isDenseForm && styles.clientCardDense,
                                   d.isBusy && styles.clientCardDisabled,
                                   selected && styles.clientCardRowSelected,
                                   Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null,
@@ -1591,7 +1669,7 @@ export function AddTripFormFields({
                             </View>
                           ) : state.vehicleId && !vehicleListExpanded && selectedVehicleRow ? (
                             <TouchableOpacity
-                              style={[styles.clientCard, styles.selectionSummaryCard]}
+                              style={[styles.clientCard, isDenseForm && styles.clientCardDense, styles.selectionSummaryCard]}
                               onPress={() => setVehicleListExpanded(true)}
                               activeOpacity={0.85}
                             >
@@ -1628,6 +1706,7 @@ export function AddTripFormFields({
                                   key={v.id}
                                   style={[
                                     styles.clientCard,
+                                    isDenseForm && styles.clientCardDense,
                                     styles.clientCardMobile,
                                     v.isBusy && styles.clientCardDisabled,
                                     selected && styles.clientCardRowSelected,
@@ -1668,7 +1747,7 @@ export function AddTripFormFields({
                         </View>
                       ) : state.vehicleId && !vehicleListExpanded && selectedVehicleRow ? (
                         <TouchableOpacity
-                          style={[styles.clientCard, styles.selectionSummaryCard]}
+                          style={[styles.clientCard, isDenseForm && styles.clientCardDense, styles.selectionSummaryCard]}
                           onPress={() => setVehicleListExpanded(true)}
                           activeOpacity={0.85}
                         >
@@ -1715,6 +1794,7 @@ export function AddTripFormFields({
                                 key={v.id}
                                 style={[
                                   styles.clientCard,
+                                  isDenseForm && styles.clientCardDense,
                                   v.isBusy && styles.clientCardDisabled,
                                   selected && styles.clientCardRowSelected,
                                   Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null,
@@ -1839,7 +1919,7 @@ export function AddTripFormFields({
                   </Text>
                 ) : state.supplierId && !partnerListExpanded && selectedSupplierRow ? (
                   <TouchableOpacity
-                    style={[styles.clientCard, styles.selectionSummaryCard]}
+                    style={[styles.clientCard, isDenseForm && styles.clientCardDense, styles.selectionSummaryCard]}
                     onPress={() => setPartnerListExpanded(true)}
                     activeOpacity={0.85}
                   >
@@ -1878,16 +1958,19 @@ export function AddTripFormFields({
                           key={s.id}
                           style={[
                             styles.clientCard,
+                            isDenseForm && styles.clientCardDense,
                             selected && styles.clientCardRowSelected,
                             Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null,
                           ]}
                           onPress={() => {
                             if (selected) {
+                              releaseAccessoryBar();
+                              Keyboard.dismiss();
                               setters.setSupplierSelection(null);
-                            } else {
-                              setters.setSupplierSelection(s.id, primary);
-                              setPartnerListExpanded(false);
+                              return;
                             }
+                            setters.setSupplierSelection(s.id, primary);
+                            setPartnerListExpanded(false);
                           }}
                           activeOpacity={0.85}
                         >
@@ -1964,9 +2047,7 @@ export function AddTripFormFields({
                       <View style={styles.gridCol}>
                         <TextInput
                           style={[
-                            styles.input,
-                            inputStyle,
-                            styles.inputMatchSelectionCard,
+                            ...moneyInputStyle,
                             styles.aggregateRateInputFlush,
                             outlineErr("partnerRate"),
                             state.supplierId &&
@@ -1976,19 +2057,25 @@ export function AddTripFormFields({
                           placeholder="0"
                           placeholderTextColor={Theme.placeholder}
                           value={state.supplierRate}
-                          onChangeText={setters.setSupplierRate}
+                          onChangeText={(t) =>
+                            onPadValueChange(setters.setSupplierRate, t)
+                          }
                           ref={supplierRateInputRef}
                           keyboardType="decimal-pad"
-                          returnKeyType="next"
-                          onSubmitEditing={() => focusField(advancePaidInputRef)}
+                          inputAccessoryViewID={kbAccessoryId}
+                          onFocus={() => {
+                            focusPadField(
+                              () => focusNextField(advancePaidInputRef),
+                              state.supplierRate,
+                            );
+                          }}
+                          blurOnSubmit={false}
                         />
                       </View>
                       <View style={styles.gridCol}>
                         <TextInput
                           style={[
-                            styles.input,
-                            inputStyle,
-                            styles.inputMatchSelectionCard,
+                            ...moneyInputStyle,
                             styles.aggregateRateInputFlush,
                             outlineErr("advancePaid"),
                             state.supplierId &&
@@ -1998,17 +2085,22 @@ export function AddTripFormFields({
                           placeholder="Optional"
                           placeholderTextColor={Theme.placeholder}
                           value={state.advancePaid}
-                          onChangeText={setters.setAdvancePaid}
+                          onChangeText={(t) =>
+                            onPadValueChange(setters.setAdvancePaid, t)
+                          }
                           ref={advancePaidInputRef}
                           keyboardType="decimal-pad"
-                          returnKeyType="next"
-                          onSubmitEditing={() => {
-                            if (state.assignLater) {
-                              openNotesModal();
-                            } else {
-                              focusField(aggregateDriverNameInputRef);
-                            }
+                          inputAccessoryViewID={kbAccessoryId}
+                          onFocus={() => {
+                            focusPadField(() => {
+                              if (state.assignLater) {
+                                finishPadFieldEntry();
+                              } else {
+                                focusNextField(aggregateDriverNameInputRef);
+                              }
+                            }, state.advancePaid);
                           }}
+                          blurOnSubmit={false}
                         />
                       </View>
                     </View>
@@ -2026,9 +2118,7 @@ export function AddTripFormFields({
                     </Text>
                     <TextInput
                       style={[
-                        styles.input,
-                        inputStyle,
-                        styles.inputMatchSelectionCard,
+                        ...moneyInputStyle,
                         outlineErr("partnerRate"),
                         state.supplierId &&
                           !invalid("partnerRate") &&
@@ -2037,11 +2127,19 @@ export function AddTripFormFields({
                       placeholder="0"
                       placeholderTextColor={Theme.placeholder}
                       value={state.supplierRate}
-                      onChangeText={setters.setSupplierRate}
+                      onChangeText={(t) =>
+                        onPadValueChange(setters.setSupplierRate, t)
+                      }
                       ref={supplierRateInputRef}
                       keyboardType="decimal-pad"
-                      returnKeyType="next"
-                      onSubmitEditing={() => focusField(advancePaidInputRef)}
+                      inputAccessoryViewID={kbAccessoryId}
+                      onFocus={() => {
+                        focusPadField(
+                          () => focusNextField(advancePaidInputRef),
+                          state.supplierRate,
+                        );
+                      }}
+                      blurOnSubmit={false}
                     />
                   </View>
                   <View style={styles.gridCol}>
@@ -2050,9 +2148,7 @@ export function AddTripFormFields({
                     </Text>
                     <TextInput
                       style={[
-                        styles.input,
-                        inputStyle,
-                        styles.inputMatchSelectionCard,
+                        ...moneyInputStyle,
                         outlineErr("advancePaid"),
                         state.supplierId &&
                           !invalid("advancePaid") &&
@@ -2061,17 +2157,22 @@ export function AddTripFormFields({
                       placeholder="Optional"
                       placeholderTextColor={Theme.placeholder}
                       value={state.advancePaid}
-                      onChangeText={setters.setAdvancePaid}
+                      onChangeText={(t) =>
+                        onPadValueChange(setters.setAdvancePaid, t)
+                      }
                       ref={advancePaidInputRef}
                       keyboardType="decimal-pad"
-                      returnKeyType="next"
-                      onSubmitEditing={() => {
-                        if (state.assignLater) {
-                          openNotesModal();
-                        } else {
-                          focusField(aggregateDriverNameInputRef);
-                        }
+                      inputAccessoryViewID={kbAccessoryId}
+                      onFocus={() => {
+                        focusPadField(() => {
+                          if (state.assignLater) {
+                            finishPadFieldEntry();
+                          } else {
+                            focusNextField(aggregateDriverNameInputRef);
+                          }
+                        }, state.advancePaid);
                       }}
+                      blurOnSubmit={false}
                     />
                   </View>
                 </View>
@@ -2088,19 +2189,18 @@ export function AddTripFormFields({
                       ]}
                     >
                       <View style={styles.gridCol}>
-                        <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
+                        <Text style={[...fieldLabelStyle, styles.sectionLabelTight]}>
                           Driver name (tracking) *
                         </Text>
                         <View style={styles.iconField}>
                           <User
-                            size={16}
+                            size={isDenseForm ? ADD_TRIP_FORM.moneyIconSize : 16}
                             color={Theme.iconMuted}
-                            style={styles.iconInField}
+                            style={[styles.iconInField, isDenseForm && styles.iconInFieldDense]}
                           />
                           <TextInput
                             style={[
-                              styles.iconInput,
-                              inputStyle,
+                              ...iconFieldInputStyle,
                               outlineErr("driverName"),
                               isCompactMobile &&
                                 Platform.OS === "web" &&
@@ -2109,13 +2209,19 @@ export function AddTripFormFields({
                             placeholder="e.g. Suresh Kumar"
                             placeholderTextColor={Theme.placeholder}
                             value={state.aggregateDriverName}
-                            onChangeText={setters.setAggregateDriverName}
+                            onChangeText={(t) =>
+                              onPadValueChange(setters.setAggregateDriverName, t)
+                            }
                             ref={aggregateDriverNameInputRef}
                             autoCapitalize="words"
-                            returnKeyType="next"
-                            onSubmitEditing={() =>
-                              focusField(driverPhoneInputRef)
-                            }
+                            inputAccessoryViewID={kbAccessoryId}
+                            onFocus={() => {
+                              focusPadField(
+                                () => focusNextField(driverPhoneInputRef),
+                                state.aggregateDriverName,
+                              );
+                            }}
+                            blurOnSubmit={false}
                           />
                         </View>
                       </View>
@@ -2126,6 +2232,7 @@ export function AddTripFormFields({
                         <View
                           style={[
                             styles.inPhoneOuter,
+                            isDenseForm && styles.inPhoneOuterDense,
                             invalid("driverPhone") && styles.inputErrorOutline,
                           ]}
                         >
@@ -2139,6 +2246,7 @@ export function AddTripFormFields({
                           <TextInput
                             style={[
                               styles.inPhoneInput,
+                              isDenseForm && styles.inPhoneInputDense,
                               isCompactMobile &&
                                 Platform.OS === "web" &&
                                 styles.mobileWebNoZoomInput,
@@ -2146,16 +2254,20 @@ export function AddTripFormFields({
                             placeholder="98765 43210"
                             placeholderTextColor={Theme.placeholder}
                             value={state.driverPhone}
-                            onChangeText={(v) =>
-                              setters.setDriverPhone(formatMobileNumber(v))
-                            }
+                            onChangeText={(v) => {
+                              setters.setDriverPhone(formatMobileNumber(v));
+                            }}
                             keyboardType="number-pad"
                             maxLength={10}
                             ref={driverPhoneInputRef}
-                            returnKeyType="next"
-                            onSubmitEditing={() =>
-                              focusField(aggregateVehicleInputRef)
-                            }
+                            inputAccessoryViewID={kbAccessoryId}
+                            onFocus={() => {
+                              focusPadField(
+                                () => focusNextField(aggregateVehicleInputRef),
+                                state.driverPhone,
+                              );
+                            }}
+                            blurOnSubmit={false}
                           />
                         </View>
                         {state.driverPhone.length > 0 &&
@@ -2177,19 +2289,18 @@ export function AddTripFormFields({
                           !driverVehicleSideBySide && styles.gridColFleetVehicle,
                         ]}
                       >
-                        <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
+                        <Text style={[...fieldLabelStyle, styles.sectionLabelTight]}>
                           Vehicle number *
                         </Text>
                         <View style={styles.iconField}>
                           <Truck
-                            size={16}
+                            size={isDenseForm ? ADD_TRIP_FORM.moneyIconSize : 16}
                             color={Theme.iconMuted}
-                            style={styles.iconInField}
+                            style={[styles.iconInField, isDenseForm && styles.iconInFieldDense]}
                           />
                           <TextInput
                             style={[
-                              styles.iconInput,
-                              inputStyle,
+                              ...iconFieldInputStyle,
                               outlineErr("vehicleNumber"),
                               styles.iconInputVehicleMono,
                               isCompactMobile &&
@@ -2199,15 +2310,22 @@ export function AddTripFormFields({
                             placeholder="e.g. TN 67 GH 7654"
                             placeholderTextColor={Theme.placeholder}
                             value={state.aggregateVehicleText}
-                            onChangeText={(v) =>
+                            onChangeText={(v) => {
                               setters.setAggregateVehicleText(
                                 formatIndianVehicleNumberInput(v),
-                              )
-                            }
+                              );
+                            }}
                             autoCapitalize="characters"
                             ref={aggregateVehicleInputRef}
-                            returnKeyType="next"
-                            onSubmitEditing={() => openNotesModal()}
+                            inputAccessoryViewID={kbAccessoryId}
+                            onFocus={() => {
+                              focusPadField(
+                                finishPadFieldEntry,
+                                state.aggregateVehicleText,
+                                "Next",
+                              );
+                            }}
+                            blurOnSubmit={false}
                           />
                         </View>
                       </View>
@@ -2422,6 +2540,9 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingTop: 12,
   },
+  scrollContentDense: {
+    paddingTop: 6,
+  },
   contentMax: {
     width: "100%",
     maxWidth: 960,
@@ -2596,10 +2717,16 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  cardCompact: {
-    padding: 14,
-    borderRadius: 14,
-    marginBottom: 12,
+  cardDense: {
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  cardHeadDense: {
+    paddingBottom: 4,
+    marginBottom: 6,
+    gap: 5,
   },
   cardHead: {
     flexDirection: "row",
@@ -2609,6 +2736,11 @@ const styles = StyleSheet.create({
     borderBottomColor: Theme.borderLight,
     paddingBottom: 6,
     marginBottom: 8,
+  },
+  stepBadgeDense: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
   },
   stepBadge: {
     width: 22,
@@ -2633,10 +2765,11 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: Theme.darkBackground,
   },
-  cardTitleCompact: {
-    fontSize: 9,
-    letterSpacing: 0.45,
+  cardTitleDense: {
+    fontSize: 8,
+    letterSpacing: 0.4,
   },
+  gridRowDense: { gap: 6 },
   gridRow: { gap: 10 },
   /** Extra gap when driver + vehicle stack vertically so sections don’t feel glued. */
   gridRowFleet: {
@@ -2756,6 +2889,10 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     width: "100%",
   },
+  sectionLabelRowDense: {
+    marginBottom: 4,
+    gap: 6,
+  },
   sectionLabelActions: {
     flexDirection: "row",
     alignItems: "center",
@@ -2843,6 +2980,13 @@ const styles = StyleSheet.create({
     marginBottom: 3,
     color: Theme.textMutedDemo,
   },
+  labelDense: {
+    fontSize: ADD_TRIP_FORM.labelSize,
+    marginBottom: ADD_TRIP_FORM.labelSpacing,
+    letterSpacing: 0.45,
+    lineHeight: ADD_TRIP_FORM.labelLine,
+    textTransform: "uppercase",
+  },
   input: {
     borderRadius: 11,
     paddingHorizontal: 9,
@@ -2854,7 +2998,28 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     ...Platform.select({ web: { outlineStyle: "none" } as any }),
   },
+  inputDense: {
+    borderRadius: ADD_TRIP_FORM.fieldRadius,
+    paddingHorizontal: ADD_TRIP_FORM.fieldPadH,
+    paddingVertical: ADD_TRIP_FORM.fieldPadV,
+    fontSize: ADD_TRIP_FORM.fieldFontSize,
+    lineHeight: ADD_TRIP_FORM.fieldLineHeight,
+    fontStyle: "normal",
+    fontWeight: "400",
+    minHeight: ADD_TRIP_FORM.fieldHeight,
+    marginBottom: ADD_TRIP_FORM.fieldGap,
+  },
   /** Align with `clientCard` in aggregate partner pane (card 03). */
+  inputMatchSelectionCardDense: {
+    minHeight: ADD_TRIP_FORM.fieldHeight,
+    borderRadius: ADD_TRIP_FORM.fieldRadius,
+    borderWidth: 1,
+    paddingHorizontal: ADD_TRIP_FORM.fieldPadH,
+    paddingVertical: ADD_TRIP_FORM.fieldPadV,
+    fontSize: ADD_TRIP_FORM.fieldFontSize,
+    fontStyle: "normal",
+    fontWeight: "500",
+  },
   inputMatchSelectionCard: {
     minHeight: 70,
     borderRadius: 15,
@@ -2896,6 +3061,18 @@ const styles = StyleSheet.create({
     top: 9,
     zIndex: 1,
   },
+  iconInFieldDense: {
+    left: 10,
+    top: 11,
+  },
+  iconInputDense: {
+    minHeight: ADD_TRIP_FORM.fieldHeight,
+    paddingVertical: ADD_TRIP_FORM.fieldPadV,
+    paddingLeft: 32,
+    fontSize: ADD_TRIP_FORM.fieldFontSize,
+    lineHeight: ADD_TRIP_FORM.fieldLineHeight,
+    fontStyle: "normal",
+  },
   iconInput: {
     borderRadius: 11,
     paddingLeft: 34,
@@ -2931,6 +3108,18 @@ const styles = StyleSheet.create({
       },
       default: {},
     }),
+  },
+  inPhoneOuterDense: {
+    minHeight: ADD_TRIP_FORM.fieldHeight,
+    borderWidth: 1,
+    borderRadius: ADD_TRIP_FORM.fieldRadius,
+    marginBottom: ADD_TRIP_FORM.fieldGap,
+  },
+  inPhoneInputDense: {
+    fontSize: ADD_TRIP_FORM.fieldFontSize,
+    lineHeight: ADD_TRIP_FORM.fieldLineHeight,
+    paddingVertical: ADD_TRIP_FORM.fieldPadV,
+    fontStyle: "normal",
   },
   inPhoneOuter: {
     flexDirection: "row",
@@ -3000,11 +3189,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
+  quickDateRowDense: {
+    gap: 4,
+    marginBottom: 4,
+  },
   quickDateRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 6,
     marginBottom: 6,
+  },
+  quickDateChipDense: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
   },
   quickDateChip: {
     paddingHorizontal: 7,
@@ -3020,6 +3217,11 @@ const styles = StyleSheet.create({
   },
   quickDateChipPressed: {
     opacity: 0.82,
+  },
+  quickDateChipTextDense: {
+    fontSize: 10,
+    fontStyle: "normal",
+    letterSpacing: 0.2,
   },
   quickDateChipText: {
     ...FinanceTxnTypography.chatFilterPill,
@@ -3041,10 +3243,18 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: Theme.textPrimaryDark,
   },
+  dateTouchableTextDense: {
+    fontSize: 14,
+    fontStyle: "normal",
+  },
   dateTouchablePlaceholder: {
     ...FinanceTxnTypography.routeWhy,
     fontSize: 9,
     color: Theme.placeholder,
+  },
+  dateTouchablePlaceholderDense: {
+    fontSize: 14,
+    fontStyle: "normal",
   },
   datePickerBackdrop: {
     flex: 1,
@@ -3166,6 +3376,14 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Theme.textMuted,
   },
+  clientCardDense: {
+    minHeight: 52,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    marginBottom: 6,
+    borderWidth: 1,
+  },
   clientCardMobile: {
     marginBottom: 0,
   },
@@ -3259,6 +3477,12 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: Theme.textPrimaryDark,
   },
+  clientNameDense: {
+    fontSize: ADD_TRIP_FORM.fieldFontSize,
+    fontWeight: "600",
+    fontStyle: "normal",
+    letterSpacing: 0,
+  },
   clientNameOn: { color: Theme.darkGreen },
   clientAvatar: {
     borderWidth: 1.5,
@@ -3316,6 +3540,21 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
   },
   /** Card 02: matches `clientCard` height & frame (selection row beside price). */
+  priceWrapShellDense: {
+    minHeight: ADD_TRIP_FORM.fieldHeight,
+    paddingHorizontal: ADD_TRIP_FORM.fieldPadH,
+    gap: 8,
+    borderRadius: ADD_TRIP_FORM.fieldRadius,
+    borderWidth: 1,
+    marginBottom: ADD_TRIP_FORM.fieldGap,
+  },
+  priceInputDense: {
+    paddingVertical: ADD_TRIP_FORM.fieldPadV,
+    fontSize: ADD_TRIP_FORM.fieldFontSize,
+    lineHeight: ADD_TRIP_FORM.fieldLineHeight,
+    fontWeight: "600",
+    minHeight: 0,
+  },
   priceWrapShell: {
     flexDirection: "row",
     alignItems: "center",
@@ -3361,7 +3600,7 @@ const styles = StyleSheet.create({
     borderWidth: 0,
     paddingVertical: 12,
     paddingHorizontal: 0,
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: "600",
     fontStyle: "normal",
     minHeight: 44,
@@ -3377,6 +3616,17 @@ const styles = StyleSheet.create({
       } as any,
       default: {},
     }),
+  },
+  infoCalloutDense: {
+    paddingVertical: 7,
+    paddingHorizontal: 9,
+    borderRadius: ADD_TRIP_FORM.fieldRadius,
+    marginTop: 2,
+    gap: 6,
+  },
+  infoCalloutTextDense: {
+    fontSize: 11,
+    lineHeight: 15,
   },
   infoCallout: {
     flexDirection: "row",

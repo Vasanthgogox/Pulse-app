@@ -5,6 +5,7 @@ import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { NetworkHubGlassBadge } from "@/features/network/components/NetworkHubGlassBadge";
 import { MutualConnectionsFacepile } from "@/features/network/components/MutualConnectionsFacepile";
 import {
   networkPartyProfileCardStyles as s,
@@ -55,6 +56,12 @@ export type NetworkPartyRolePill = {
   label: string;
   backgroundColor: string;
   color: string;
+  /** Lighter stop for top of glass gradient */
+  gradientTop?: string;
+  /** Glass rim — defaults to Theme.networkGlassBorder */
+  borderColor?: string;
+  /** Top specular line on the pill */
+  highlightColor?: string;
 };
 
 export type NetworkPartyProfileCardProps = {
@@ -786,12 +793,7 @@ export function NetworkPartyProfileCard({
               {showRolePills ? (
                 <View style={s.listRolePillsRow}>
                   {rolePills!.map((pill) => (
-                    <View
-                      key={pill.label}
-                      style={[s.rolePill, { backgroundColor: pill.backgroundColor }]}
-                    >
-                      <Text style={[s.rolePillText, { color: pill.color }]}>{pill.label}</Text>
-                    </View>
+                    <NetworkHubGlassBadge key={pill.label} pill={pill} />
                   ))}
                 </View>
               ) : null}
@@ -968,24 +970,11 @@ export function NetworkPartyProfileCard({
             {rolePills && rolePills.length > 0 ? (
               <View style={[s.gridRolePillsRow, gridDesktop && s.gridRolePillsRowDesktop]}>
                 {rolePills.map((pill) => (
-                  <View
+                  <NetworkHubGlassBadge
                     key={pill.label}
-                    style={[
-                      s.rolePill,
-                      gridDesktop && s.rolePillGridDesktop,
-                      { backgroundColor: pill.backgroundColor },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        s.rolePillText,
-                        gridDesktop && s.rolePillTextGridDesktop,
-                        { color: pill.color },
-                      ]}
-                    >
-                      {pill.label}
-                    </Text>
-                  </View>
+                    pill={pill}
+                    size={gridDesktop ? "default" : "compact"}
+                  />
                 ))}
               </View>
             ) : null}

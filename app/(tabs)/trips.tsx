@@ -1210,11 +1210,44 @@ export default function TripsScreen() {
     hubSubcontractRateByTripId,
   ]);
 
+  const tripMainTabCounts = useMemo(() => {
+    const matchesSupply = (t: TripRow) =>
+      tripMatchesSupplyFilter(
+        t,
+        supplyFilter,
+        tripKindPillMetaByTripId.get(t.id),
+        currentOrganization?.id,
+      );
+
+    let active = 0;
+    let history = 0;
+    for (const t of trips) {
+      if (!matchesSupply(t)) continue;
+      if (isCompletedStatus(t.status)) {
+        history += 1;
+      } else if (!isTripCancelledForHub(t.status)) {
+        active += 1;
+      }
+    }
+    return { active, history };
+  }, [
+    trips,
+    supplyFilter,
+    tripKindPillMetaByTripId,
+    currentOrganization?.id,
+  ]);
+
+  const formatMainTabLabel = useCallback(
+    (label: string, count: number) => `${label} (${count})`,
+    [],
+  );
+
   const mainTabs = useMemo(
     () => [
       {
         id: "active" as const,
         label: tr("active"),
+        count: tripMainTabCounts.active,
         isActive: tripFilter === "Active",
         onPress: () => {
           setTripFilter("Active");
@@ -1224,11 +1257,12 @@ export default function TripsScreen() {
       {
         id: "history" as const,
         label: tr("history"),
+        count: tripMainTabCounts.history,
         isActive: tripFilter === "History",
         onPress: () => setTripFilter("History"),
       },
     ],
-    [tr, tripFilter],
+    [tr, tripFilter, tripMainTabCounts],
   );
 
   const subTabs = useMemo(
@@ -1747,9 +1781,10 @@ export default function TripsScreen() {
                       {mainTabs.map((tab) => (
                         <TripsMmtUnderlineTab
                           key={tab.id}
-                          label={tab.label}
+                          label={formatMainTabLabel(tab.label, tab.count)}
                           isActive={tab.isActive}
                           onPress={tab.onPress}
+                          accessibilityLabel={`${tab.label}, ${tab.count} trips`}
                         />
                       ))}
                     </ScrollView>
@@ -1828,6 +1863,7 @@ export default function TripsScreen() {
                               activeOpacity={0.75}
                               accessibilityRole="tab"
                               accessibilityState={{ selected: tab.isActive }}
+                              accessibilityLabel={`${tab.label}, ${tab.count} trips`}
                             >
                               <Text
                                 style={[
@@ -1836,7 +1872,7 @@ export default function TripsScreen() {
                                     styles.tripsMainPillTextActiveWeb,
                                 ]}
                               >
-                                {tab.label}
+                                {formatMainTabLabel(tab.label, tab.count)}
                               </Text>
                             </TouchableOpacity>
                           ))}

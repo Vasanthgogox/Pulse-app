@@ -963,7 +963,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
-  searchInput: { flex: 1, fontSize: 15, color: Theme.textPrimary, fontWeight: '600' },
+  searchInput: { flex: 1, fontSize: 16, color: Theme.textPrimary, fontWeight: '600' },
   inlineLoading: {
     alignItems: "flex-end",
     paddingHorizontal: 14,

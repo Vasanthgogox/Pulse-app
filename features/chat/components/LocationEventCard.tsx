@@ -3,6 +3,7 @@ import { Linking, Platform, Pressable, StyleSheet, Text, View } from "react-nati
 import { Image } from "expo-image";
 import { MapPin } from "lucide-react-native";
 import { CHAT_ACCENT, CHAT_ACCENT_SOFT } from "@/features/chat/chatTheme";
+import { CHAT_MOBILE } from "@/features/chat/chatMobileLayout";
 import Theme from "@/constants/Theme";
 import type { TripMessageRow } from "../types/chat.types";
 import type { SystemLogLocationData } from "../utils/locationLogPayload.util";
@@ -15,15 +16,22 @@ const MAP_H = 120;
 export interface LocationEventCardProps {
   message: TripMessageRow;
   location: SystemLogLocationData;
+  isMobile?: boolean;
 }
 
 /**
  * Static map thumbnail for location-bearing trip messages; tap opens maps app.
  */
-export function LocationEventCard({ message, location }: LocationEventCardProps) {
+export function LocationEventCard({
+  message,
+  location,
+  isMobile = false,
+}: LocationEventCardProps) {
+  const mapPixelW = isMobile ? 340 : MAP_W;
+  const mapPixelH = isMobile ? 132 : MAP_H;
   const mapUrl = useMemo(
-    () => buildStaticMapImageUrl(location.lat, location.lng, MAP_W, MAP_H),
-    [location.lat, location.lng],
+    () => buildStaticMapImageUrl(location.lat, location.lng, mapPixelW, mapPixelH),
+    [location.lat, location.lng, mapPixelW, mapPixelH],
   );
 
   let displayTime = message.created_at;
@@ -50,17 +58,26 @@ export function LocationEventCard({ message, location }: LocationEventCardProps)
     });
   };
 
+  const mapW = isMobile ? "100%" : MAP_W;
+
   return (
-    <View style={s.card} accessibilityRole="text" accessibilityLabel={label || "Driver location update"}>
+    <View
+      style={[s.card, isMobile && s.cardMobile]}
+      accessibilityRole="text"
+      accessibilityLabel={label || "Driver location update"}
+    >
       <View style={s.headerRow}>
-        <View style={s.iconWrap}>
-          <MapPin size={14} color={CHAT_ACCENT} />
+        <View style={[s.iconWrap, isMobile && s.iconWrapMobile]}>
+          <MapPin size={isMobile ? 16 : 14} color={CHAT_ACCENT} />
         </View>
         <View style={s.headerText}>
-          <Text style={s.title} numberOfLines={2}>
-            {message.content?.trim() ? message.content : "Location update"}
+          <Text style={[s.title, isMobile && s.titleMobile]} numberOfLines={3}>
+            {message.content?.trim() ? message.content : "Location ping"}
           </Text>
-          <Text style={s.time}>{displayTime}</Text>
+          <Text style={[s.metaLine, isMobile && s.metaLineMobile]} numberOfLines={2}>
+            Live location · GPS
+          </Text>
+          <Text style={[s.time, isMobile && s.timeMobile]}>{displayTime}</Text>
         </View>
       </View>
 
@@ -71,7 +88,10 @@ export function LocationEventCard({ message, location }: LocationEventCardProps)
         style={({ pressed }) => [s.mapPressable, pressed && s.mapPressablePressed]}
       >
         {mapUrl ? (
-          <View style={s.mapFrame} importantForAccessibility="no-hide-descendants">
+          <View
+            style={[s.mapFrame, isMobile && s.mapFrameMobile, { width: mapW }]}
+            importantForAccessibility="no-hide-descendants"
+          >
             <Image
               source={{ uri: mapUrl }}
               style={s.mapImage}
@@ -81,7 +101,10 @@ export function LocationEventCard({ message, location }: LocationEventCardProps)
             />
           </View>
         ) : (
-          <View style={[s.mapFrame, s.mapPlaceholder]} importantForAccessibility="no-hide-descendants">
+          <View
+            style={[s.mapFrame, s.mapPlaceholder, isMobile && s.mapFrameMobile, { width: mapW }]}
+            importantForAccessibility="no-hide-descendants"
+          >
             <MapPin size={24} color={Theme.textSecondary} />
             <Text style={s.placeholderHint}>Tap to open in Maps</Text>
           </View>
@@ -89,11 +112,11 @@ export function LocationEventCard({ message, location }: LocationEventCardProps)
         <Text style={s.mapTapHint}>View on map</Text>
       </Pressable>
 
-      <Text style={s.coords} numberOfLines={1}>
+      <Text style={[s.coords, isMobile && s.coordsMobile]} numberOfLines={1}>
         {coordsLabel}
       </Text>
       {label ? (
-        <Text style={s.address} numberOfLines={3}>
+        <Text style={[s.address, isMobile && s.addressMobile]} numberOfLines={3}>
           {label}
         </Text>
       ) : null}
@@ -108,11 +131,25 @@ const s = StyleSheet.create({
     marginVertical: 6,
     padding: 10,
     borderRadius: 12,
-    backgroundColor: Theme.cardWhite,
+    backgroundColor: "#FFFFFF",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: CHAT_ACCENT_SOFT,
+    borderColor: "#E9EDEF",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
-  headerRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, marginBottom: 8 },
+  cardMobile: {
+    alignSelf: "stretch",
+    width: "100%",
+    maxWidth: "100%",
+    marginVertical: CHAT_MOBILE.eventCardGap / 2,
+    paddingHorizontal: CHAT_MOBILE.eventCardPadH,
+    paddingVertical: CHAT_MOBILE.eventCardPadV,
+    borderRadius: CHAT_MOBILE.eventCardRadius,
+  },
+  headerRow: { flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 10 },
   iconWrap: {
     width: 28,
     height: 28,
@@ -120,10 +157,40 @@ const s = StyleSheet.create({
     backgroundColor: CHAT_ACCENT_SOFT,
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
+  },
+  iconWrapMobile: {
+    width: CHAT_MOBILE.eventAvatar,
+    height: CHAT_MOBILE.eventAvatar,
+    borderRadius: CHAT_MOBILE.eventAvatar / 2,
   },
   headerText: { flex: 1, minWidth: 0 },
   title: { fontSize: 12, color: Theme.textPrimary, fontWeight: "600", lineHeight: 16 },
+  titleMobile: {
+    fontSize: CHAT_MOBILE.eventTitleSize,
+    lineHeight: CHAT_MOBILE.eventTitleLine,
+    color: "#111B21",
+    fontWeight: "600",
+  },
+  metaLine: {
+    fontSize: 10,
+    color: Theme.textSecondary,
+    marginTop: 2,
+    lineHeight: 14,
+  },
+  metaLineMobile: {
+    fontSize: CHAT_MOBILE.eventMetaSize,
+    lineHeight: CHAT_MOBILE.eventMetaLine,
+    color: "#667781",
+    marginTop: 3,
+  },
   time: { fontSize: 10, color: Theme.textSecondary, marginTop: 2 },
+  timeMobile: {
+    fontSize: CHAT_MOBILE.eventTimeSize,
+    color: "#8696A0",
+    marginTop: 4,
+    fontWeight: "600",
+  },
   mapPressable: { borderRadius: 8, overflow: "hidden" },
   mapPressablePressed: { opacity: 0.88 },
   mapFrame: {
@@ -132,6 +199,11 @@ const s = StyleSheet.create({
     borderRadius: 8,
     overflow: "hidden",
     backgroundColor: CHAT_ACCENT_SOFT,
+  },
+  mapFrameMobile: {
+    height: 132,
+    borderRadius: 10,
+    alignSelf: "stretch",
   },
   mapImage: { width: "100%", height: "100%" },
   mapPlaceholder: {
@@ -159,10 +231,21 @@ const s = StyleSheet.create({
     color: Theme.textMuted,
     fontVariant: ["tabular-nums"],
   },
+  coordsMobile: {
+    fontSize: CHAT_MOBILE.eventSubSize,
+    color: "#8696A0",
+    marginTop: 8,
+  },
   address: {
     marginTop: 4,
     fontSize: 11,
     color: Theme.textSecondary,
     lineHeight: 15,
+  },
+  addressMobile: {
+    fontSize: CHAT_MOBILE.eventMetaSize,
+    lineHeight: CHAT_MOBILE.eventMetaLine,
+    color: "#667781",
+    marginTop: 4,
   },
 });

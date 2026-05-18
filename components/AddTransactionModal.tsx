@@ -4814,8 +4814,9 @@ export function AddTransactionModal({
   const formContent = (
     <KeyboardAvoidingView
       style={[styles.keyboardAvoid, fullPage && styles.keyboardAvoidFullPage]}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={fullPage ? 100 : 0}
+      behavior={Platform.OS === "ios" ? "padding" : Platform.OS === "web" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "web" ? 0 : fullPage ? 100 : 0}
+      enabled={Platform.OS !== "web"}
     >
       <View
         style={[
@@ -6205,7 +6206,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1.5,
   },
-  ledgerMobSearchInput: { fontSize: 12, paddingVertical: 8 },
+  ledgerMobSearchInput: { fontSize: 16, paddingVertical: 8 },
   ledgerMobFilterStrip: { marginBottom: 6 },
   ledgerMobFilterChip: {
     paddingVertical: 6,
@@ -6554,7 +6555,7 @@ const styles = StyleSheet.create({
   },
   fieldInputDateWrap: { flex: 1, minWidth: 0 },
   fieldInputDate: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "600",
     color: Theme.textPrimaryDark,
     paddingVertical: 6,
@@ -6567,7 +6568,7 @@ const styles = StyleSheet.create({
   },
   fieldInput: {
     flex: 1,
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: "600",
     color: Theme.textPrimaryDark,
     paddingVertical: 0,

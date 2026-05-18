@@ -2,7 +2,11 @@
  * Modal wrapper that keeps form content visible when the keyboard opens on Android.
  * Pattern: Modal → KeyboardAvoidingView (padding on both platforms) → [ScrollView] → children.
  *
- * Use for any RN Modal that contains TextInputs. Aligns with docs/ANDROID_KEYBOARD_ANALYSIS.md.
+ * Use for any RN Modal that contains TextInputs.
+ *
+ * On web, KeyboardAvoidingView is omitted — the viewport meta tag
+ * (interactive-widget=overlays-content) handles keyboard overlay behaviour,
+ * so no layout shifting is needed or desired.
  */
 import type { ReactNode } from 'react';
 import {
@@ -14,8 +18,6 @@ import {
   StyleSheet,
   type ViewStyle,
 } from 'react-native';
-
-const KEYBOARD_BEHAVIOR = Platform.OS === 'ios' ? 'padding' : 'padding';
 
 export interface KeyboardAwareModalProps {
   visible: boolean;
@@ -43,6 +45,20 @@ export function KeyboardAwareModal({
 }: KeyboardAwareModalProps) {
   if (!visible) return null;
 
+  const inner = scroll ? (
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={contentContainerStyle}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode={Platform.OS === 'web' ? 'none' : 'on-drag'}
+      showsVerticalScrollIndicator={false}
+    >
+      {children}
+    </ScrollView>
+  ) : (
+    <View style={[styles.inner, style]}>{children}</View>
+  );
+
   return (
     <Modal
       visible={visible}
@@ -50,25 +66,17 @@ export function KeyboardAwareModal({
       presentationStyle={presentationStyle}
       onRequestClose={onRequestClose}
     >
-      <KeyboardAvoidingView
-        style={[styles.wrapper, style]}
-        behavior={KEYBOARD_BEHAVIOR}
-        keyboardVerticalOffset={keyboardVerticalOffset}
-      >
-        {scroll ? (
-          <ScrollView
-            style={styles.scroll}
-            contentContainerStyle={contentContainerStyle}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="on-drag"
-            showsVerticalScrollIndicator={false}
-          >
-            {children}
-          </ScrollView>
-        ) : (
-          <View style={[styles.inner, style]}>{children}</View>
-        )}
-      </KeyboardAvoidingView>
+      {Platform.OS === 'web' ? (
+        <View style={[styles.wrapper, style]}>{inner}</View>
+      ) : (
+        <KeyboardAvoidingView
+          style={[styles.wrapper, style]}
+          behavior="padding"
+          keyboardVerticalOffset={keyboardVerticalOffset}
+        >
+          {inner}
+        </KeyboardAvoidingView>
+      )}
     </Modal>
   );
 }

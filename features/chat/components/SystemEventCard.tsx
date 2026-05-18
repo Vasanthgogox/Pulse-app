@@ -99,7 +99,13 @@ function statusChangeNarrative(message: TripMessageRow, statusKey: string): stri
   }
 }
 
-function StatusChangeCard({ message }: { message: TripMessageRow }) {
+function StatusChangeCard({
+  message,
+  isMobile = false,
+}: {
+  message: TripMessageRow;
+  isMobile?: boolean;
+}) {
   const meta = message.metadata as StatusChangeMetadata | null;
 
   const statusKey = meta?.new_status ?? "default";
@@ -139,6 +145,7 @@ function StatusChangeCard({ message }: { message: TripMessageRow }) {
       rightPrimary={sheet.rightWord}
       rightPrimaryColor={sheet.rightColor}
       time={displayTime}
+      isMobile={isMobile}
     />
   );
 }
@@ -161,7 +168,13 @@ function ImageMessageCard({ message, isOwn }: { message: TripMessageRow; isOwn: 
 
 // ── TrackingCard ──────────────────────────────────────────────────────────────
 
-function TrackingCard({ message }: { message: TripMessageRow }) {
+function TrackingCard({
+  message,
+  isMobile = false,
+}: {
+  message: TripMessageRow;
+  isMobile?: boolean;
+}) {
   let rawMeta: unknown = message.metadata;
   if (typeof rawMeta === "string") {
     try {
@@ -204,6 +217,7 @@ function TrackingCard({ message }: { message: TripMessageRow }) {
       rightPrimary={(eta ?? "LIVE").toUpperCase()}
       rightPrimaryColor="#047857"
       time={displayTime}
+      isMobile={isMobile}
     />
   );
 }
@@ -225,6 +239,8 @@ interface SystemEventCardProps {
   financialViewerBlocked?: boolean;
   /** When true, ledger card renders without Add to book / Dispute (indent-lane-only actions). */
   hideLedgerActions?: boolean;
+  /** Compact full-width layout for native / narrow chat threads. */
+  isMobile?: boolean;
   // Feedback card callback
   onFeedbackSubmit?: (score: number, tags: string[]) => Promise<void>;
 }
@@ -239,13 +255,14 @@ export function SystemEventCard({
   readOnly,
   financialViewerBlocked,
   hideLedgerActions,
+  isMobile = false,
 }: SystemEventCardProps) {
   switch (message.message_type) {
     case 'status_change':
-      return <StatusChangeCard message={message} />;
+      return <StatusChangeCard message={message} isMobile={isMobile} />;
 
     case 'tracking':
-      return <TrackingCard message={message} />;
+      return <TrackingCard message={message} isMobile={isMobile} />;
 
     case 'image':
       return <ImageMessageCard message={message} isOwn={isOwn} />;
@@ -273,13 +290,14 @@ export function SystemEventCard({
           onDispute={onDispute}
           readOnly={readOnly}
           hideLedgerActions={hideLedgerActions}
+          isMobile={isMobile}
         />
       );
     }
 
     case 'system':
     case 'update':
-      return <ChatSystemEventCard message={message} />;
+      return <ChatSystemEventCard message={message} isMobile={isMobile} />;
 
     default:
       // text, question, challenge, feedback_request — rendered as chat bubbles elsewhere

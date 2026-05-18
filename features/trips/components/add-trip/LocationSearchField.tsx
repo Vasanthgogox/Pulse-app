@@ -43,6 +43,8 @@ export interface LocationSearchFieldProps {
   inputStyle?: object;
   labelStyle?: object;
   onDropdownOpenChange?: (open: boolean) => void;
+  /** Tighter field height and typography for native / narrow create-trip forms. */
+  compact?: boolean;
 }
 
 const DEBOUNCE_MS = 300;
@@ -58,6 +60,7 @@ export function LocationSearchField({
   inputStyle,
   labelStyle,
   onDropdownOpenChange,
+  compact = false,
 }: LocationSearchFieldProps) {
   const { width: winW } = useWindowDimensions();
   const horizontalPad = Layout.screenPaddingHorizontal * 2;
@@ -228,11 +231,14 @@ export function LocationSearchField({
   );
 
   return (
-    <View style={styles.wrapper} collapsable={false}>
+    <View style={[styles.wrapper, compact && styles.wrapperCompact]} collapsable={false}>
       <Text style={labelStyle}>{label}</Text>
       <View style={styles.inputRow}>
         {leadingIcon ? (
-          <View style={styles.leadingIconWrap} pointerEvents="none">
+          <View
+            style={[styles.leadingIconWrap, compact && styles.leadingIconWrapCompact]}
+            pointerEvents="none"
+          >
             {leadingIcon}
           </View>
         ) : null}
@@ -241,14 +247,17 @@ export function LocationSearchField({
           onPress={openDropdown}
           style={[
             styles.input,
+            compact && styles.inputCompact,
             inputStyle,
             styles.inputPressable,
             leadingIcon ? styles.inputWithLeadingIcon : null,
+            leadingIcon && compact ? styles.inputWithLeadingIconCompact : null,
           ]}
         >
           <Text
             style={[
               styles.inputValueText,
+              compact && styles.inputValueTextCompact,
               { color: value.trim() ? Theme.textPrimary : Theme.placeholder },
             ]}
             numberOfLines={1}
@@ -356,6 +365,9 @@ const styles = StyleSheet.create({
     zIndex: 1,
     marginBottom: 12,
   },
+  wrapperCompact: {
+    marginBottom: 4,
+  },
   inputRow: {
     position: "relative",
     marginBottom: 4,
@@ -368,8 +380,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     zIndex: 1,
   },
+  leadingIconWrapCompact: {
+    left: 10,
+  },
   inputWithLeadingIcon: {
     paddingLeft: 44,
+  },
+  inputWithLeadingIconCompact: {
+    paddingLeft: 36,
   },
   input: {
     borderRadius: 12,
@@ -384,6 +402,13 @@ const styles = StyleSheet.create({
       web: { outlineStyle: "none" } as TextStyle,
     }),
   },
+  inputCompact: {
+    borderRadius: 10,
+    minHeight: 40,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    paddingRight: 40,
+  },
   inputPressable: {
     justifyContent: "center",
   },
@@ -391,6 +416,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "500",
     fontStyle: "italic",
+  },
+  inputValueTextCompact: {
+    fontSize: 14,
+    fontStyle: "normal",
+    fontWeight: "400",
   },
   clearBtn: {
     position: "absolute",

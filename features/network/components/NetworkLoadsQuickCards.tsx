@@ -1,11 +1,23 @@
 /**
- * Give / Get loads — side-by-side action cards on Network home.
+ * Give / Get loads — Network home quick actions (Apple-style frosted glass).
  */
 import Theme from "@/constants/Theme";
 import { ROUTES } from "@/lib/routes";
+import { LinearGradient } from "expo-linear-gradient";
+import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import { ArrowUpRight, Package, Search, Zap } from "lucide-react-native";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View, type ViewStyle } from "react-native";
+
+const GLASS_WEB: ViewStyle =
+  Platform.OS === "web"
+    ? ({
+        backdropFilter: "blur(24px) saturate(190%)",
+        WebkitBackdropFilter: "blur(24px) saturate(190%)",
+      } as ViewStyle)
+    : {};
+
+const GLASS_FADE = "rgba(255,255,255,0.02)";
 
 const ACTIONS = [
   {
@@ -14,11 +26,9 @@ const ACTIONS = [
     sub: "Post open freight",
     chip: "Supply",
     Icon: Package,
-    accent: Theme.primary,
-    cardBg: Theme.networkClientTintBg,
-    chipBg: "rgba(26, 35, 126, 0.1)",
-    iconBg: "rgba(26, 35, 126, 0.12)",
-    wash: "rgba(26, 35, 126, 0.04)",
+    accent: Theme.networkGlassSupplyAccent,
+    gradient: [Theme.networkGlassSupplyGradient, GLASS_FADE] as const,
+    iconBg: Theme.networkGlassSupplyIconBg,
   },
   {
     id: "get",
@@ -26,73 +36,125 @@ const ACTIONS = [
     sub: "Bid on freight",
     chip: "Demand",
     Icon: Search,
-    accent: Theme.positive,
-    cardBg: Theme.networkSupplierTintBg,
-    chipBg: "rgba(21, 128, 61, 0.1)",
-    iconBg: "rgba(21, 128, 61, 0.12)",
-    wash: "rgba(21, 128, 61, 0.04)",
+    accent: Theme.networkGlassDemandAccent,
+    gradient: [Theme.networkGlassDemandGradient, GLASS_FADE] as const,
+    iconBg: Theme.networkGlassDemandIconBg,
   },
 ] as const;
 
 export interface NetworkLoadsQuickCardsProps {
   compact?: boolean;
-  /** Desktop story row — narrow 20% column, stacked cards. */
   layout?: "default" | "sidebar";
 }
 
-function SidebarLoadCard({
-  label,
-  sub,
-  chip,
-  Icon,
-  accent,
-  cardBg,
-  chipBg,
-  iconBg,
-  wash,
-  onPress,
-}: {
+type GlassCardProps = {
   label: string;
   sub: string;
   chip: string;
   Icon: (typeof ACTIONS)[number]["Icon"];
   accent: string;
-  cardBg: string;
-  chipBg: string;
+  gradient: readonly [string, string];
   iconBg: string;
-  wash: string;
-  onPress: () => void;
-}) {
+  pressed: boolean;
+  compact?: boolean;
+  variant: "tile" | "sidebar";
+};
+
+function GlassMarketplaceCard({
+  label,
+  sub,
+  chip,
+  Icon,
+  accent,
+  gradient,
+  iconBg,
+  pressed,
+  compact,
+  variant,
+}: GlassCardProps) {
+  const sidebar = variant === "sidebar";
+
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [styles.sidebarCardPress, pressed && styles.cardPressed]}
-      accessibilityRole="button"
-      accessibilityLabel={`${label} — open Load Center`}
+    <View
+      style={[
+        styles.glassShell,
+        sidebar ? styles.shellSidebar : styles.shellTile,
+        compact && !sidebar && styles.shellTileCompact,
+        GLASS_WEB,
+        pressed && styles.shellPressed,
+      ]}
     >
-      <View style={[styles.sidebarCard, { backgroundColor: cardBg, borderColor: Theme.borderLight }]}>
-        <View style={[styles.cardWash, { backgroundColor: wash }]} />
-        <View style={styles.sidebarCardInner}>
-          <View style={[styles.sidebarIconBadge, { backgroundColor: iconBg }]}>
-            <Icon size={14} color={accent} strokeWidth={2.2} />
+      <LinearGradient
+        colors={[...gradient]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      <LinearGradient
+        colors={[Theme.networkGlassSpecular, "rgba(255,255,255,0)"]}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 0.55 }}
+        style={styles.specular}
+        pointerEvents="none"
+      />
+      <View style={styles.edgeHighlight} pointerEvents="none" />
+
+      {sidebar ? (
+        <View style={styles.sidebarInner}>
+          <View style={[styles.iconOrb, styles.iconOrbSidebar, { backgroundColor: iconBg }]}>
+            <Icon size={15} color={accent} strokeWidth={2} />
           </View>
           <View style={styles.sidebarTextCol}>
-            <Text style={[styles.sidebarChip, { color: accent, backgroundColor: chipBg }]}>
-              {chip}
-            </Text>
-            <Text style={styles.sidebarLabel} numberOfLines={1}>
+            <Text style={[styles.chip, { color: accent }]}>{chip}</Text>
+            <Text style={styles.sidebarTitle} numberOfLines={1}>
               {label}
             </Text>
             <Text style={styles.sidebarSub} numberOfLines={1}>
               {sub}
             </Text>
           </View>
-          <View style={styles.sidebarArrowBadge}>
-            <ArrowUpRight size={11} color={Theme.textSecondary} strokeWidth={2.5} />
+          <View style={styles.arrowOrb}>
+            <ArrowUpRight size={12} color={accent} strokeWidth={2.2} />
           </View>
         </View>
+      ) : (
+        <View style={[styles.tileInner, compact && styles.tileInnerCompact]}>
+          <View style={styles.tileTop}>
+            <View style={styles.tileMeta}>
+              <View style={[styles.iconOrb, { backgroundColor: iconBg }]}>
+                <Icon size={13} color={accent} strokeWidth={2} />
+              </View>
+              <Text style={[styles.chip, { color: accent }]}>{chip}</Text>
+            </View>
+            <View style={styles.arrowOrb}>
+              <ArrowUpRight size={13} color={accent} strokeWidth={2.2} />
+            </View>
+          </View>
+          <Text style={[styles.tileTitle, compact && styles.tileTitleCompact]} numberOfLines={2}>
+            {label}
+          </Text>
+          <Text style={[styles.tileSub, compact && styles.tileSubCompact]} numberOfLines={2}>
+            {sub}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+function SectionHeader({ sidebar }: { sidebar?: boolean }) {
+  return (
+    <View style={sidebar ? styles.headSidebar : styles.head}>
+      <View style={styles.headPill}>
+        <View style={styles.headIconOrb}>
+          <Zap size={sidebar ? 10 : 11} color={Theme.networkGlassSupplyAccent} strokeWidth={2} />
+        </View>
+        <Text style={sidebar ? styles.headTitleSidebar : styles.headTitle} numberOfLines={1}>
+          Load marketplace
+        </Text>
       </View>
-    </Pressable>
+      {!sidebar ? <Text style={styles.headHint}>Tap to open Load Center</Text> : null}
+    </View>
   );
 }
 
@@ -102,21 +164,42 @@ export function NetworkLoadsQuickCards({
 }: NetworkLoadsQuickCardsProps) {
   const router = useRouter();
   const sidebar = layout === "sidebar";
-  const openLoadCenter = () => router.push(ROUTES.PULSE_LOADS);
+
+  const openLoadCenter = () => {
+    if (Platform.OS !== "web") {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    router.push(ROUTES.PULSE_LOADS);
+  };
+
+  const renderCard = (action: (typeof ACTIONS)[number], variant: "tile" | "sidebar") => (
+    <Pressable
+      key={action.id}
+      onPress={openLoadCenter}
+      style={({ pressed }) => [
+        variant === "tile" ? styles.cardPress : styles.sidebarCardPress,
+        pressed && styles.pressableScale,
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={`${action.label} — open Load Center`}
+    >
+      {({ pressed }) => (
+        <GlassMarketplaceCard
+          {...action}
+          pressed={pressed}
+          compact={compact}
+          variant={variant}
+        />
+      )}
+    </Pressable>
+  );
 
   if (sidebar) {
     return (
       <View style={styles.wrapSidebar}>
-        <View style={styles.headSidebar}>
-          <Zap size={9} color={Theme.primary} strokeWidth={2.4} />
-          <Text style={styles.kickerSidebar} numberOfLines={1}>
-            Load marketplace
-          </Text>
-        </View>
+        <SectionHeader sidebar />
         <View style={styles.railSidebar}>
-          {ACTIONS.map(({ id, ...action }) => (
-            <SidebarLoadCard key={id} {...action} onPress={openLoadCenter} />
-          ))}
+          {ACTIONS.map((action) => renderCard(action, "sidebar"))}
         </View>
       </View>
     );
@@ -124,306 +207,260 @@ export function NetworkLoadsQuickCards({
 
   return (
     <View style={styles.wrap}>
-      <View style={styles.head}>
-        <View style={styles.headLeft}>
-          <Zap size={10} color={Theme.primary} strokeWidth={2.4} />
-          <Text style={styles.kicker} numberOfLines={1}>
-            Load marketplace
-          </Text>
-        </View>
-        <Text style={styles.headHint}>Tap to open Load Center</Text>
-      </View>
+      <SectionHeader />
       <View style={[styles.rail, compact && styles.railCompact]}>
-        {ACTIONS.map(({ id, label, sub, chip, Icon, accent, cardBg, chipBg, iconBg, wash }) => (
-          <Pressable
-            key={id}
-            onPress={openLoadCenter}
-            style={({ pressed }) => [styles.cardPress, pressed && styles.cardPressed]}
-            accessibilityRole="button"
-            accessibilityLabel={`${label} — open Load Center`}
-          >
-            <View
-              style={[
-                styles.card,
-                compact && styles.cardCompact,
-                { backgroundColor: cardBg, borderColor: Theme.borderLight },
-              ]}
-            >
-              <View style={[styles.cardWash, { backgroundColor: wash }]} />
-              <View style={[styles.cardInner, compact && styles.cardInnerCompact]}>
-                <View style={styles.topRow}>
-                  <View style={styles.chipRow}>
-                    <View style={[styles.iconBadge, { backgroundColor: iconBg }]}>
-                      <Icon size={12} color={accent} strokeWidth={2.2} />
-                    </View>
-                    <Text style={[styles.chip, { color: accent, backgroundColor: chipBg }]}>
-                      {chip}
-                    </Text>
-                  </View>
-                  <View style={styles.arrowBadge}>
-                    <ArrowUpRight size={12} color={Theme.textSecondary} strokeWidth={2.5} />
-                  </View>
-                </View>
-                <Text
-                  style={[styles.label, compact && styles.labelCompact, { color: Theme.textPrimaryDark }]}
-                  numberOfLines={2}
-                >
-                  {label}
-                </Text>
-                <Text style={[styles.sub, compact && styles.subCompact]} numberOfLines={2}>
-                  {sub}
-                </Text>
-              </View>
-            </View>
-          </Pressable>
-        ))}
+        {ACTIONS.map((action) => renderCard(action, "tile"))}
       </View>
     </View>
   );
 }
 
+const cardShadow = Platform.select({
+  ios: {
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.07,
+    shadowRadius: 18,
+  },
+  android: { elevation: 4 },
+  web: {
+    boxShadow:
+      "0 8px 28px rgba(15, 23, 42, 0.07), 0 1px 0 rgba(255, 255, 255, 0.9) inset",
+  },
+  default: {},
+});
+
 const styles = StyleSheet.create({
   wrap: {
     width: "100%",
-    gap: 6,
+    gap: 10,
   },
   wrapSidebar: {
     width: "100%",
     minWidth: 0,
-    gap: 10,
+    gap: 12,
     justifyContent: "center",
   },
   head: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 6,
+    gap: 10,
     paddingHorizontal: 2,
   },
-  headLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    flexShrink: 1,
-    minWidth: 0,
-  },
   headSidebar: {
+    paddingHorizontal: 0,
+  },
+  headPill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 0,
-    marginBottom: 0,
+    gap: 7,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 20,
+    backgroundColor: Theme.networkGlassHeadPill,
+    borderWidth: 1,
+    borderColor: Theme.networkGlassBorder,
+    maxWidth: "100%",
+    flexShrink: 1,
   },
-  kicker: {
+  headIconOrb: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.networkGlassInset,
+    borderWidth: 1,
+    borderColor: Theme.networkGlassBorder,
+  },
+  headTitle: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.35,
+  },
+  headTitleSidebar: {
     fontSize: 9,
-    fontWeight: "800",
-    color: Theme.primary,
-    letterSpacing: 1,
-    textTransform: "uppercase",
-  },
-  kickerSidebar: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 8,
-    fontWeight: "800",
-    color: Theme.primary,
-    letterSpacing: 0.9,
-    textTransform: "uppercase",
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.3,
+    flexShrink: 1,
   },
   headHint: {
     fontSize: 8,
-    fontWeight: "600",
+    fontWeight: "500",
     color: Theme.textMuted,
     flexShrink: 0,
   },
   rail: {
     flexDirection: "row",
     alignItems: "stretch",
-    gap: 8,
+    gap: 12,
     width: "100%",
   },
   railCompact: {
-    gap: 6,
+    gap: 10,
   },
   railSidebar: {
     flexDirection: "column",
     gap: 10,
     width: "100%",
   },
-  sidebarCardPress: {
-    width: "100%",
-    minWidth: 0,
-  },
-  sidebarCard: {
-    width: "100%",
-    borderRadius: 12,
+  glassShell: {
     overflow: "hidden",
     position: "relative",
-    borderWidth: StyleSheet.hairlineWidth,
-    shadowColor: Theme.shadow,
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 1,
+    backgroundColor: Theme.networkGlassSurface,
+    borderWidth: 1,
+    borderColor: Theme.networkGlassBorderOuter,
+    ...cardShadow,
   },
-  sidebarCardInner: {
+  shellPressed: {
+    backgroundColor: Theme.networkGlassSurfacePressed,
+    transform: [{ scale: 0.985 }],
+  },
+  shellTile: {
+    minHeight: 80,
+    borderRadius: 20,
+  },
+  shellTileCompact: {
+    minHeight: 72,
+    borderRadius: 18,
+  },
+  shellSidebar: {
+    width: "100%",
+    borderRadius: 18,
+  },
+  specular: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.85,
+  },
+  edgeHighlight: {
+    position: "absolute",
+    top: 0,
+    left: 16,
+    right: 16,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: Theme.networkGlassBorder,
+    zIndex: 1,
+  },
+  tileInner: {
+    flex: 1,
+    paddingHorizontal: 13,
+    paddingVertical: 12,
+    gap: 6,
+    justifyContent: "center",
+    minHeight: 80,
+    zIndex: 2,
+  },
+  tileInnerCompact: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    minHeight: 72,
+    gap: 5,
+  },
+  tileTop: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  tileMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    flexShrink: 1,
     minWidth: 0,
   },
-  sidebarIconBadge: {
-    width: 36,
-    height: 36,
+  iconOrb: {
+    width: 28,
+    height: 28,
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: Theme.networkGlassBorder,
+  },
+  iconOrbSidebar: {
+    width: 38,
+    height: 38,
+    borderRadius: 13,
     flexShrink: 0,
+  },
+  chip: {
+    fontSize: 7,
+    fontWeight: "600",
+    letterSpacing: 0.75,
+    textTransform: "uppercase",
+  },
+  arrowOrb: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.networkGlassInset,
+    borderWidth: 1,
+    borderColor: Theme.networkGlassBorder,
+    flexShrink: 0,
+  },
+  tileTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.35,
+    lineHeight: 17,
+  },
+  tileTitleCompact: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  tileSub: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: Theme.textMuted,
+    letterSpacing: 0.02,
+    lineHeight: 13,
+  },
+  tileSubCompact: {
+    fontSize: 9,
+    lineHeight: 12,
+  },
+  sidebarInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 13,
+    paddingVertical: 12,
+    zIndex: 2,
   },
   sidebarTextCol: {
     flex: 1,
     minWidth: 0,
-    gap: 2,
+    gap: 3,
   },
-  sidebarChip: {
-    alignSelf: "flex-start",
-    fontSize: 7,
-    fontWeight: "800",
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    borderRadius: 4,
-    overflow: "hidden",
-  },
-  sidebarLabel: {
-    fontSize: 13,
-    fontWeight: "800",
+  sidebarTitle: {
+    fontSize: 14,
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.15,
-    lineHeight: 16,
+    letterSpacing: -0.35,
+    lineHeight: 17,
   },
   sidebarSub: {
     fontSize: 10,
-    fontWeight: "600",
+    fontWeight: "500",
     color: Theme.textMuted,
     lineHeight: 13,
-  },
-  sidebarArrowBadge: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: Theme.screenBackground,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
   },
   cardPress: {
     flex: 1,
     minWidth: 0,
   },
-  card: {
-    minHeight: 72,
-    borderRadius: 14,
-    overflow: "hidden",
-    position: "relative",
-    borderWidth: StyleSheet.hairlineWidth,
-    backgroundColor: Theme.surface,
-    shadowColor: Theme.shadow,
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 1,
-  },
-  cardCompact: {
-    minHeight: 66,
-    borderRadius: 12,
-  },
-  cardWash: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  cardPressed: {
-    opacity: 0.92,
-    transform: [{ scale: 0.98 }],
-  },
-  cardInner: {
-    flex: 1,
-    paddingHorizontal: 9,
-    paddingVertical: 8,
-    gap: 3,
-    justifyContent: "center",
-    minHeight: 72,
-  },
-  cardInnerCompact: {
-    paddingHorizontal: 8,
-    paddingVertical: 7,
-    minHeight: 66,
-  },
-  topRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 6,
-  },
-  chipRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    flexShrink: 1,
+  sidebarCardPress: {
+    width: "100%",
     minWidth: 0,
   },
-  iconBadge: {
-    width: 22,
-    height: 22,
-    borderRadius: 7,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-  chip: {
-    fontSize: 7,
-    fontWeight: "800",
-    letterSpacing: 0.7,
-    textTransform: "uppercase",
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    borderRadius: 4,
-    overflow: "hidden",
-  },
-  label: {
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: -0.15,
-    lineHeight: 15,
-  },
-  labelCompact: {
-    fontSize: 11,
-    lineHeight: 14,
-  },
-  sub: {
-    fontSize: 9,
-    fontWeight: "600",
-    color: Theme.textMuted,
-    letterSpacing: 0.1,
-    lineHeight: 12,
-  },
-  subCompact: {
-    fontSize: 8,
-    lineHeight: 11,
-  },
-  arrowBadge: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: Theme.screenBackground,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
+  pressableScale: {
+    opacity: 0.97,
   },
 });

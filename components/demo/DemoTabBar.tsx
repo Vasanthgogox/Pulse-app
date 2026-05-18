@@ -46,6 +46,7 @@ import {
 import type { SalaryRequestWithDriverRow } from "@/services/salaryRequestsService";
 import type { SharedLedgerNotificationRow } from "@/services/sharedLedgerNotificationsService";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
+import { LinearGradient } from "expo-linear-gradient";
 import { Home, Package, Route, Wallet } from "lucide-react-native";
 import { usePathname, useRouter } from "expo-router";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -225,9 +226,26 @@ function MobileFooterTab({
   );
 }
 
-const CLUSTER_PILL_INSET = 4;
-/** Stable style token (keeps HMR safe if an older bundle still references this name). */
-const FOOTER_CLUSTER_WASH = Theme.pulseIndigoWash;
+const CLUSTER_PILL_INSET = 5;
+/** Horizontal float inset so the glass thumb sits inside each segment. */
+const CLUSTER_THUMB_FLOAT = 3;
+const CLUSTER_SPRING = { damping: 30, stiffness: 340, mass: 0.72 };
+
+const CLUSTER_THUMB_GLASS_WEB: ViewStyle =
+  Platform.OS === "web"
+    ? ({
+        backdropFilter: "blur(20px) saturate(180%)",
+        WebkitBackdropFilter: "blur(20px) saturate(180%)",
+      } as ViewStyle)
+    : {};
+
+const CLUSTER_TRACK_GLASS_WEB: ViewStyle =
+  Platform.OS === "web"
+    ? ({
+        backdropFilter: "blur(8px) saturate(120%)",
+        WebkitBackdropFilter: "blur(8px) saturate(120%)",
+      } as ViewStyle)
+    : {};
 
 type SlackClusterTab = {
   id: string;
@@ -263,11 +281,7 @@ function MobileFooterSlackCluster({
   }, []);
 
   useEffect(() => {
-    slideIndex.value = withSpring(Math.max(0, activeIndex), {
-      damping: 22,
-      stiffness: 260,
-      mass: 0.85,
-    });
+    slideIndex.value = withSpring(Math.max(0, activeIndex), CLUSTER_SPRING);
   }, [activeIndex, slideIndex]);
 
   const handlePillLayout = useCallback((width: number) => {
@@ -280,54 +294,115 @@ function MobileFooterSlackCluster({
       ? (pillWidth - CLUSTER_PILL_INSET * 2) / tabs.length
       : 0;
 
+  const thumbWidth =
+    segmentWidth > 0 ? Math.max(0, segmentWidth - CLUSTER_THUMB_FLOAT * 2) : 0;
+
   const thumbStyle = useAnimatedStyle(() => {
-    if (segmentWidth <= 0 || activeIndex < 0) return { opacity: 0 };
+    if (thumbWidth <= 0 || activeIndex < 0) return { opacity: 0 };
     return {
-      width: segmentWidth,
+      width: thumbWidth,
       opacity: 1,
       transform: [
         {
-          translateX: CLUSTER_PILL_INSET + slideIndex.value * segmentWidth,
+          translateX:
+            CLUSTER_PILL_INSET +
+            CLUSTER_THUMB_FLOAT +
+            slideIndex.value * segmentWidth,
         },
       ],
     };
-  }, [segmentWidth, activeIndex]);
+  }, [thumbWidth, segmentWidth, activeIndex]);
 
   return (
     <View
       style={[
         styles.mobileFooterSlackPill,
         compact && styles.mobileFooterSlackPillCompact,
+        CLUSTER_TRACK_GLASS_WEB,
       ]}
       onLayout={(e) => handlePillLayout(e.nativeEvent.layout.width)}
     >
-      {segmentWidth > 0 ? (
+      <LinearGradient
+        colors={[Theme.pulseTabClusterTrackTop, Theme.pulseTabClusterTrackBottom]}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+      <LinearGradient
+        colors={[Theme.pulseTabClusterTrackInnerGlow, "rgba(255,255,255,0)"]}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 0.35 }}
+        style={styles.mobileFooterSlackTrackSheen}
+        pointerEvents="none"
+      />
+      {thumbWidth > 0 ? (
         <Animated.View
           pointerEvents="none"
-          style={[styles.mobileFooterSlackThumb, thumbStyle]}
-        />
+          style={[
+            styles.mobileFooterSlackThumb,
+            compact && styles.mobileFooterSlackThumbCompact,
+            thumbStyle,
+            CLUSTER_THUMB_GLASS_WEB,
+          ]}
+        >
+          <LinearGradient
+            colors={[
+              Theme.pulseTabClusterThumbTop,
+              Theme.pulseTabClusterThumbMid,
+              Theme.pulseTabClusterThumbBottom,
+            ]}
+            locations={[0, 0.45, 1]}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+          <LinearGradient
+            colors={[Theme.pulseTabClusterThumbAccent, "rgba(99,102,241,0)"]}
+            start={{ x: 0.5, y: 1 }}
+            end={{ x: 0.5, y: 0.35 }}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
+          <LinearGradient
+            colors={[Theme.pulseTabClusterThumbSpecular, "rgba(255,255,255,0)"]}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 0.5 }}
+            style={styles.mobileFooterSlackThumbSpecular}
+            pointerEvents="none"
+          />
+          <View style={styles.mobileFooterSlackThumbEdge} pointerEvents="none" />
+        </Animated.View>
       ) : null}
       {tabs.map((tab) => {
         const showBadge = (tab.badgeCount ?? 0) > 0;
-        const iconColor = tab.active ? Theme.pulseIndigo : Theme.textMutedDemo;
+        const iconColor = tab.active
+          ? Theme.pulseTabClusterIconActive
+          : Theme.pulseTabClusterIconInactive;
         const Icon = tab.LucideIcon;
         return (
           <Pressable
             key={tab.id}
-            style={[
+            style={({ pressed }) => [
               styles.mobileFooterSlackSegment,
               segmentWidth > 0 ? { width: segmentWidth } : styles.mobileFooterSlackSegmentFlex,
+              pressed && styles.mobileFooterSlackSegmentPressed,
             ]}
             onPress={tab.onPress}
             accessibilityRole="tab"
             accessibilityState={{ selected: tab.active }}
             accessibilityLabel={tab.label}
           >
-            <View style={styles.mobileFooterSlackIconWrap}>
+            <View
+              style={[
+                styles.mobileFooterSlackIconWrap,
+                tab.active && styles.mobileFooterSlackIconWrapActive,
+              ]}
+            >
               <Icon
                 size={iconSize}
                 color={iconColor}
-                strokeWidth={CLUSTER_STROKE}
+                strokeWidth={tab.active ? 2.15 : 1.65}
               />
               {showBadge ? (
                 <View style={styles.mobileFooterBadgeClustered}>
@@ -1174,42 +1249,69 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     alignItems: "stretch",
-    maxWidth: 296,
-    minWidth: 224,
+    maxWidth: 300,
+    minWidth: 228,
     padding: CLUSTER_PILL_INSET,
-    borderRadius: 26,
-    backgroundColor: FOOTER_CLUSTER_WASH,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.pulseTabActiveBorder,
+    borderRadius: 28,
+    backgroundColor: Theme.pulseTabClusterTrackBg,
+    borderWidth: 1,
+    borderColor: Theme.pulseTabClusterTrackBorder,
     position: "relative",
     overflow: "hidden",
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.22,
+    shadowRadius: 16,
+    elevation: 8,
   },
   mobileFooterSlackPillCompact: {
-    maxWidth: 276,
-    minWidth: 208,
-    borderRadius: 24,
+    maxWidth: 280,
+    minWidth: 212,
+    borderRadius: 26,
+  },
+  mobileFooterSlackTrackSheen: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.85,
   },
   mobileFooterSlackThumb: {
     position: "absolute",
     top: CLUSTER_PILL_INSET,
     bottom: CLUSTER_PILL_INSET,
     left: 0,
+    borderRadius: 20,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: Theme.pulseTabClusterThumbBorder,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  mobileFooterSlackThumbCompact: {
     borderRadius: 18,
-    backgroundColor: Theme.screenBackground,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.pulseTabActiveBorder,
-    shadowColor: Theme.pulseIndigo,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    elevation: 2,
+  },
+  mobileFooterSlackThumbSpecular: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.88,
+  },
+  mobileFooterSlackThumbEdge: {
+    position: "absolute",
+    top: 0,
+    left: 14,
+    right: 14,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: Theme.pulseTabClusterThumbBorder,
   },
   mobileFooterSlackSegment: {
     alignItems: "center",
     justifyContent: "flex-end",
-    paddingTop: 3,
-    paddingBottom: 3,
+    paddingTop: 4,
+    paddingBottom: 4,
     zIndex: 1,
+  },
+  mobileFooterSlackSegmentPressed: {
+    opacity: 0.82,
   },
   mobileFooterSlackSegmentFlex: {
     flex: 1,
@@ -1217,25 +1319,33 @@ const styles = StyleSheet.create({
   },
   mobileFooterSlackIconWrap: {
     position: "relative",
-    width: 34,
-    height: 28,
+    width: 36,
+    height: 30,
     alignItems: "center",
     justifyContent: "center",
+    borderRadius: 12,
+  },
+  mobileFooterSlackIconWrapActive: {
+    transform: [{ scale: 1.05 }],
   },
   mobileFooterSlackLabel: {
-    marginTop: 3,
-    fontSize: 10,
-    fontWeight: "400",
-    color: Theme.textMutedDemo,
-    letterSpacing: -0.1,
+    marginTop: 4,
+    fontSize: 9,
+    fontWeight: "500",
+    color: Theme.pulseTabClusterLabelInactive,
+    letterSpacing: 0.35,
     textAlign: "center",
+    textTransform: "uppercase",
   },
   mobileFooterSlackLabelCompact: {
-    fontSize: 9,
+    fontSize: 8,
+    letterSpacing: 0.3,
+    marginTop: 3,
   },
   mobileFooterSlackLabelActive: {
-    fontWeight: "500",
-    color: Theme.pulseIndigo,
+    fontWeight: "600",
+    color: Theme.pulseTabClusterLabelActive,
+    letterSpacing: 0.45,
   },
   mobileFooterTab: {
     flex: 1,
@@ -1332,7 +1442,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
     backgroundColor: Theme.teslaRed,
     borderWidth: 1.5,
-    borderColor: Theme.screenBackground,
+    borderColor: Theme.pulseTabClusterTrackBg,
     alignItems: "center",
     justifyContent: "center",
   },

@@ -1,10 +1,11 @@
 /**
  * "Your connections" list row — full-width horizontal card (reference list layout).
  */
-import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { NetworkHubGlassBadge } from "@/features/network/components/NetworkHubGlassBadge";
+import { NetworkHubGlassButton } from "@/features/network/components/NetworkHubGlassButton";
 import { MutualConnectionsFacepile } from "@/features/network/components/MutualConnectionsFacepile";
 import {
   MutedStarMetric,
@@ -167,40 +168,16 @@ export function NetworkPartyHubListCard({
   const connectionAction = showConnectionAction ? (
     <View style={styles.nativeActionWrap}>
       {connectionIntegrated ? (
-        <Pressable
-          disabled
-          style={styles.connectedBtn}
-          accessibilityRole="button"
-          accessibilityLabel={actionLabel}
-        >
-          <View style={styles.connectedDotOuter}>
-            <View style={styles.connectedDotInner} />
-          </View>
-          <Text style={styles.connectedBtnText} numberOfLines={1}>
-            {actionLabel}
-          </Text>
-        </Pressable>
+        <NetworkHubGlassButton variant="connected" label={actionLabel} />
       ) : (
-        <Pressable
+        <NetworkHubGlassButton
+          variant="primary"
+          label={actionLabel}
           onPress={onConnectionAction}
-          disabled={connectionActionDisabled || loading}
-          style={({ pressed }) => [
-            styles.connectedBtn,
-            (pressed || loading) && { opacity: 0.88 },
-            connectionActionDisabled && { opacity: 0.5 },
-          ]}
-        >
-          {loading ? (
-            <LoadingIndicator size={14} color={Theme.primary} />
-          ) : (
-            <>
-              <Send size={12} color={Theme.primary} strokeWidth={2.4} />
-              <Text style={[styles.connectedBtnText, { color: Theme.primary }]} numberOfLines={1}>
-                {actionLabel}
-              </Text>
-            </>
-          )}
-        </Pressable>
+          disabled={connectionActionDisabled}
+          loading={loading}
+          leadingIcon={<Send size={12} color={Theme.primary} strokeWidth={2.2} />}
+        />
       )}
     </View>
   ) : null;
@@ -240,12 +217,7 @@ export function NetworkPartyHubListCard({
             {rolePills.length > 0 ? (
               <View style={styles.badgesRow}>
                 {rolePills.map((pill) => (
-                  <View
-                    key={pill.label}
-                    style={[styles.badge, { backgroundColor: pill.backgroundColor }]}
-                  >
-                    <Text style={[styles.badgeText, { color: pill.color }]}>{pill.label}</Text>
-                  </View>
+                  <NetworkHubGlassBadge key={pill.label} pill={pill} />
                 ))}
               </View>
             ) : null}
@@ -327,20 +299,11 @@ export function NetworkPartyHubListCard({
               {rolePills.length > 0 ? (
                 <View style={[styles.badgesRow, mobileGrid && styles.badgesRowMobileGrid]}>
                   {rolePills.map((pill) => (
-                    <View
+                    <NetworkHubGlassBadge
                       key={pill.label}
-                      style={[styles.badge, { backgroundColor: pill.backgroundColor }]}
-                    >
-                      <Text
-                        style={[
-                          styles.badgeText,
-                          mobileGrid && styles.badgeTextMobileGrid,
-                          { color: pill.color },
-                        ]}
-                      >
-                        {pill.label}
-                      </Text>
-                    </View>
+                      pill={pill}
+                      size={mobileGrid ? "compact" : "default"}
+                    />
                   ))}
                 </View>
               ) : null}
@@ -387,61 +350,27 @@ export function NetworkPartyHubListCard({
                 ) : null}
 
                 {connectionIntegrated ? (
-                  <Pressable
-                    disabled
-                    style={[
-                      styles.connectedBtn,
-                      mobileGrid && styles.connectedBtnMobileGrid,
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityLabel={actionLabel}
-                  >
-                    <View style={styles.connectedDotOuter}>
-                      <View style={styles.connectedDotInner} />
-                    </View>
-                    <Text
-                      style={[
-                        styles.connectedBtnText,
-                        mobileGrid && styles.connectedBtnTextMobileGrid,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {actionLabel}
-                    </Text>
-                  </Pressable>
+                  <NetworkHubGlassButton
+                    variant="connected"
+                    label={actionLabel}
+                    size={mobileGrid ? "compact" : "default"}
+                  />
                 ) : (
-                  <Pressable
+                  <NetworkHubGlassButton
+                    variant="primary"
+                    label={actionLabel}
+                    size={mobileGrid ? "compact" : "default"}
                     onPress={onConnectionAction}
-                    disabled={connectionActionDisabled || loading}
-                    style={({ pressed }) => [
-                      styles.connectedBtn,
-                      mobileGrid && styles.connectedBtnMobileGrid,
-                      (pressed || loading) && { opacity: 0.88 },
-                      connectionActionDisabled && { opacity: 0.5 },
-                    ]}
-                  >
-                    {loading ? (
-                      <LoadingIndicator size={14} color={Theme.primary} />
-                    ) : (
-                      <>
-                        <Send
-                          size={mobileGrid ? 10 : 12}
-                          color={Theme.primary}
-                          strokeWidth={2.4}
-                        />
-                        <Text
-                          style={[
-                            styles.connectedBtnText,
-                            mobileGrid && styles.connectedBtnTextMobileGrid,
-                            { color: Theme.primary },
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {actionLabel}
-                        </Text>
-                      </>
-                    )}
-                  </Pressable>
+                    disabled={connectionActionDisabled}
+                    loading={loading}
+                    leadingIcon={
+                      <Send
+                        size={mobileGrid ? 10 : 12}
+                        color={Theme.primary}
+                        strokeWidth={2.2}
+                      />
+                    }
+                  />
                 )}
               </View>
             ) : null}
