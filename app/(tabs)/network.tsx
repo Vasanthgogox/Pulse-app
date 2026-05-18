@@ -15,6 +15,12 @@ import {
   type ConnectionFilterTab,
 } from "@/features/network/components/ConnectionsView";
 import { DiscoverView } from "@/features/network/components/DiscoverView";
+import { MutualConnectionsModal } from "@/features/network/components/MutualConnectionsModal";
+import type { MutualConnectionRow } from "@/features/network/services/mutual-connections.service";
+import {
+  NETWORK_HUB_GRID_ROW_PADDING_H,
+  NETWORK_HUB_SPLIT_COLUMN_GAP_PX,
+} from "@/features/network/constants/networkHubGrid";
 import { NetworkLoadsQuickCards } from "@/features/network/components/NetworkLoadsQuickCards";
 import { ContentErrorState } from "@/components/ContentErrorState";
 import { NetworkTabErrorBoundary } from "@/components/network/NetworkTabErrorBoundary";
@@ -59,6 +65,7 @@ import {
   Warehouse,
   X,
 } from "lucide-react-native";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocalSearchParams } from "expo-router";
@@ -92,6 +99,7 @@ function NetworkStoryStrip({
   feedLoading,
   onCreatePost,
   headerActions,
+  embedded,
 }: {
   orgId: string;
   orgName: string;
@@ -99,6 +107,7 @@ function NetworkStoryStrip({
   feedLoading: boolean;
   onCreatePost: () => void;
   headerActions?: React.ReactNode;
+  embedded?: boolean;
 }) {
   const storyPosts = useMemo(() => feedPosts.filter(isStoryPost), [feedPosts]);
   if (feedLoading && storyPosts.length === 0) {
@@ -116,6 +125,7 @@ function NetworkStoryStrip({
       orgName={orgName}
       onCreatePost={onCreatePost}
       headerActions={headerActions}
+      embedded={embedded}
     />
   );
 }
@@ -182,6 +192,10 @@ function NetworkScreenInner() {
   const isWideNetwork = Platform.OS === "web" && width >= 1180;
   const isDesktopMatrix = width >= 1100;
   const isMobileLayout = width < 820;
+  /** Org welcome bar — mobile + tablet only; hidden on desktop web. */
+  const showHomePageHeader = Platform.OS !== "web" || width < 1180;
+  /** Desktop: stories 80% + load marketplace 20% in one row. */
+  const showStoryLoadsSplit = Platform.OS === "web" && width >= 1180;
   const isCompactPhone = width < 420;
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
@@ -201,12 +215,20 @@ function NetworkScreenInner() {
   const [viewMode, setViewMode] = useState<"dashboard" | "requests">("dashboard");
   const [inviteTab, setInviteTab] = useState<"received" | "sent">("received");
   const [selectedProfileNode, setSelectedProfileNode] = useState<NetworkProfileNode | null>(null);
+  const [mutualModalTarget, setMutualModalTarget] = useState<{
+    targetOrgId: string;
+    targetOrgName: string;
+  } | null>(null);
   const [selectedProfileStats, setSelectedProfileStats] = useState<{ totalTrips: number | null }>({
     totalTrips: null,
   });
   const [profileStatsLoading, setProfileStatsLoading] = useState(false);
   const [discoverInviteCount, setDiscoverInviteCount] = useState(0);
   const [discoverInviteLimit, setDiscoverInviteLimit] = useState(5);
+  const [discoverHasMayKnow, setDiscoverHasMayKnow] = useState(false);
+  const { t } = useLanguage();
+  const showDiscoverSplitHeader =
+    !isMobileLayout && !discoverSearch.trim() && !discoverSearchOpen;
   const [showProtocolRolePicker, setShowProtocolRolePicker] = useState(false);
 
   useRealtimeNetworkInvalidation(orgId);
@@ -426,6 +448,10 @@ function NetworkScreenInner() {
     });
   };
 
+  const handlePressMutuals = useCallback((target: { id: string; name: string }) => {
+    setMutualModalTarget({ targetOrgId: target.id, targetOrgName: target.name });
+  }, []);
+
   const handleOpenProfileFromDiscover = (
       org: {
         id: string;
@@ -454,6 +480,18 @@ function NetworkScreenInner() {
         mutuals: org.mutual_count ?? org.mutual_connections_count ?? 0,
       });
   };
+
+  const handleOpenMutualProfile = useCallback((row: MutualConnectionRow) => {
+    handleOpenProfileFromDiscover({
+      id: row.id,
+      name: row.name,
+      connection_status: "approved",
+      mutual_count: 0,
+      mutual_connections_count: 0,
+      rating_value: null,
+      location_value: undefined,
+    });
+  }, []);
 
   const handleSendProtocolFromProfile = async () => {
     if (!selectedProfileNode || !orgId) return;
@@ -556,6 +594,7 @@ function NetworkScreenInner() {
       style={styles.scroll}
       contentContainerStyle={[
         styles.scrollContent,
+        !showHomePageHeader && { paddingTop: insets.top + 8 },
         {
           paddingBottom:
             24 +
@@ -650,16 +689,38 @@ function NetworkScreenInner() {
             </View>
           </View>
             </View>
-            <NetworkStoryStrip
-              orgId={orgId}
-              orgName={organization?.name ?? ""}
-              feedPosts={feedPosts}
-              feedLoading={feedQ.isLoading}
-              onCreatePost={onCreatePost}
-            />
-            <View style={[styles.loadsRowShell, isCompactPhone && styles.loadsRowShellCompact]}>
-              <NetworkLoadsQuickCards compact={isCompactPhone} />
-            </View>
+            {showStoryLoadsSplit ? (
+              <View style={styles.storyLoadsRow}>
+                <View style={styles.storyLoadsRowStories}>
+                  <NetworkStoryStrip
+                    orgId={orgId}
+                    orgName={organization?.name ?? ""}
+                    feedPosts={feedPosts}
+                    feedLoading={feedQ.isLoading}
+                    onCreatePost={onCreatePost}
+                    embedded
+                  />
+                </View>
+                <View style={styles.storyLoadsRowMarketplace}>
+                  <NetworkLoadsQuickCards layout="sidebar" />
+                </View>
+              </View>
+            ) : (
+              <>
+                <NetworkStoryStrip
+                  orgId={orgId}
+                  orgName={organization?.name ?? ""}
+                  feedPosts={feedPosts}
+                  feedLoading={feedQ.isLoading}
+                  onCreatePost={onCreatePost}
+                />
+                <View
+                  style={[styles.loadsRowShell, isCompactPhone && styles.loadsRowShellCompact]}
+                >
+                  <NetworkLoadsQuickCards compact={isCompactPhone} />
+                </View>
+              </>
+            )}
               </View>
         </View>
         <View style={[styles.networkMergedRow, !isWideNetwork && styles.networkMergedRowStack]}>
@@ -773,6 +834,8 @@ function NetworkScreenInner() {
                 hubSearch={connSearch}
                 hubFilter={connFilter}
                 onOpenProfile={handleOpenProfileFromConnection}
+                onPressMutuals={handlePressMutuals}
+                onPressMutual={handleOpenMutualProfile}
               />
             </View>
           </View>
@@ -843,30 +906,135 @@ function NetworkScreenInner() {
                   style={[
                     styles.sectionHeadingRowSpread,
                     styles.sectionHeadingRowDiscoverLead,
+                    showDiscoverSplitHeader && styles.sectionHeadingRowDiscoverSplit,
                     isMobileLayout && styles.sectionHeadingRowSpreadDiscoverMobile,
                   ]}
                 >
-                  <View
-                    style={[
-                      styles.sectionHeadingRowCompact,
-                      isMobileLayout && styles.sectionHeadingRowCompactDiscoverMobile,
-                    ]}
-                  >
-                    <Compass size={11} color={Theme.textSecondary} strokeWidth={2.2} />
-                    <View style={styles.sectionTitleBlock}>
-                      <Text style={styles.sectionKicker}>Discover potential allies</Text>
-                      <Text style={styles.sectionHeading}>Grow your network</Text>
-                    </View>
-                  </View>
-                  <View
-                    style={[
-                      styles.discoverHeaderActions,
-                      isMobileLayout && styles.discoverHeaderActionsDiscoverMobile,
-                      isMobileLayout &&
-                        !discoverSearchOpen &&
-                        styles.discoverHeaderActionsStackMobile,
-                    ]}
-                  >
+                  {showDiscoverSplitHeader ? (
+                    <>
+                      <View style={styles.discoverSplitHeadRow}>
+                        <View style={styles.discoverSplitHeadCell}>
+                          <View style={styles.discoverSplitHeadTitle}>
+                            <Compass size={11} color={Theme.textSecondary} strokeWidth={2.2} />
+                            <View style={styles.sectionTitleBlock}>
+                              <Text style={styles.sectionKicker}>
+                                {t("networkDiscoverAlliesKicker")}
+                              </Text>
+                              <Text style={styles.sectionHeading}>
+                                {t("networkDiscoverGrowSlots")}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+                        {discoverHasMayKnow ? (
+                          <View
+                            style={[
+                              styles.discoverSplitHeadCell,
+                              styles.discoverSplitHeadCellRight,
+                            ]}
+                          >
+                            <View style={styles.sectionTitleBlock}>
+                              <Text style={styles.sectionKicker}>
+                                {t("networkDiscoverSuggestions")}
+                              </Text>
+                              <Text style={styles.sectionHeading}>
+                                {t("networkPeopleYouMayKnow")}
+                              </Text>
+                            </View>
+                          </View>
+                        ) : (
+                          <View style={styles.discoverSplitHeadCell} />
+                        )}
+                      </View>
+                      <View
+                        style={[
+                          styles.discoverHeaderActions,
+                          styles.discoverHeaderActionsSplit,
+                        ]}
+                      >
+                        {discoverInviteCount > 0 && (
+                          <View
+                            style={[
+                              styles.inviteCountPill,
+                              discoverInviteCount >= discoverInviteLimit &&
+                                styles.inviteCountPillOver,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.inviteCountPillText,
+                                discoverInviteCount >= discoverInviteLimit &&
+                                  styles.inviteCountPillTextOver,
+                              ]}
+                            >
+                              {discoverInviteCount}/{discoverInviteLimit} invites
+                            </Text>
+                          </View>
+                        )}
+                        {discoverSearchOpen ? (
+                          <View style={styles.discoverSearchInline}>
+                            <Search size={13} color={Theme.textSecondary} />
+                            <TextInput
+                              style={styles.discoverSearchInput}
+                              placeholder="Search network..."
+                              placeholderTextColor={Theme.textSecondary}
+                              value={discoverSearch}
+                              onChangeText={setDiscoverSearch}
+                              returnKeyType="search"
+                              autoCapitalize="words"
+                              autoFocus
+                            />
+                            <Pressable
+                              onPress={() => {
+                                setDiscoverSearch("");
+                                setDiscoverSearchOpen(false);
+                              }}
+                              hitSlop={8}
+                            >
+                              <Text style={styles.discoverSearchClose}>×</Text>
+                            </Pressable>
+                          </View>
+                        ) : (
+                          <Pressable
+                            onPress={() => setDiscoverSearchOpen(true)}
+                            style={({ pressed }) => [
+                              styles.discoverSearchIconBtn,
+                              pressed && { opacity: 0.72 },
+                            ]}
+                            hitSlop={8}
+                          >
+                            <Search size={14} color={Theme.textPrimaryDark} strokeWidth={2.4} />
+                          </Pressable>
+                        )}
+                      </View>
+                    </>
+                  ) : (
+                    <>
+                      <View
+                        style={[
+                          styles.sectionHeadingRowCompact,
+                          isMobileLayout && styles.sectionHeadingRowCompactDiscoverMobile,
+                        ]}
+                      >
+                        <Compass size={11} color={Theme.textSecondary} strokeWidth={2.2} />
+                        <View style={styles.sectionTitleBlock}>
+                          <Text style={styles.sectionKicker}>
+                            {t("networkDiscoverAlliesKicker")}
+                          </Text>
+                          <Text style={styles.sectionHeading}>
+                            {t("networkDiscoverGrowSlots")}
+                          </Text>
+                        </View>
+                      </View>
+                      <View
+                        style={[
+                          styles.discoverHeaderActions,
+                          isMobileLayout && styles.discoverHeaderActionsDiscoverMobile,
+                          isMobileLayout &&
+                            !discoverSearchOpen &&
+                            styles.discoverHeaderActionsStackMobile,
+                        ]}
+                      >
                     {discoverInviteCount > 0 && (
                       <View style={[
                         styles.inviteCountPill,
@@ -918,6 +1086,8 @@ function NetworkScreenInner() {
                       </Pressable>
                     )}
                   </View>
+                    </>
+                  )}
                 </View>
               )}
               <DiscoverView
@@ -927,11 +1097,14 @@ function NetworkScreenInner() {
                 onSearchChange={setDiscoverSearch}
                 showSearchChrome={false}
                 onOpenProfile={handleOpenProfileFromDiscover}
+                onPressMutuals={handlePressMutuals}
+                onPressMutual={handleOpenMutualProfile}
                 inviteDailyCapReached={discoverInviteCount >= discoverInviteLimit}
                 onInviteCountChange={(count, limit) => {
                   setDiscoverInviteCount(count);
                   setDiscoverInviteLimit(limit);
                 }}
+                onSplitMetaChange={setDiscoverHasMayKnow}
               />
             </View>
           </View>
@@ -944,12 +1117,22 @@ function NetworkScreenInner() {
 
   return (
     <View style={styles.container}>
-      <HomePageHeader
-        title={orgDisplayName}
-        invitationBadgeCount={pendingCount}
-        onInvitationsPress={() => setViewMode("requests")}
-      />
+      {showHomePageHeader ? (
+        <HomePageHeader
+          title={orgDisplayName}
+          invitationBadgeCount={pendingCount}
+          onInvitationsPress={() => setViewMode("requests")}
+        />
+      ) : null}
       {scrollContent}
+      <MutualConnectionsModal
+        visible={Boolean(mutualModalTarget)}
+        viewerOrgId={orgId}
+        targetOrgId={mutualModalTarget?.targetOrgId ?? null}
+        targetOrgName={mutualModalTarget?.targetOrgName}
+        onClose={() => setMutualModalTarget(null)}
+        onOpenProfile={handleOpenMutualProfile}
+      />
       <Modal
         visible={Boolean(selectedProfileNode)}
         transparent
@@ -1137,7 +1320,7 @@ export default function NetworkScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.networkPageBackground,
     minHeight: 0,
   },
   orgGateWrap: {
@@ -1173,11 +1356,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
-  scroll: { flex: 1 },
+  scroll: { flex: 1, backgroundColor: Theme.networkPageBackground },
   scrollContent: {
     paddingTop: 0,
     paddingBottom: 18,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.networkPageBackground,
   },
   topTicker: {
     marginHorizontal: Layout.screenPaddingHorizontal,
@@ -1210,12 +1393,45 @@ const styles = StyleSheet.create({
   topClusterMain: {
     flex: 1,
     minWidth: 0,
-    gap: 10,
+    gap: 12,
+  },
+  storyLoadsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    width: "100%",
+    gap: 0,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    minHeight: 88,
+  },
+  storyLoadsRowStories: {
+    flexGrow: 0,
+    flexShrink: 1,
+    flexBasis: "80%",
+    width: "80%",
+    maxWidth: "80%",
+    minWidth: 0,
+    overflow: "hidden",
+  },
+  storyLoadsRowMarketplace: {
+    flexGrow: 0,
+    flexShrink: 0,
+    flexBasis: "20%",
+    width: "20%",
+    maxWidth: "20%",
+    minWidth: 0,
+    paddingLeft: 16,
+    marginLeft: 12,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: Theme.borderLight,
+    justifyContent: "center",
+    alignSelf: "stretch",
+    paddingVertical: 8,
   },
   loadsRowShell: {
     width: "100%",
     minWidth: 0,
-    marginTop: 2,
+    marginTop: 4,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
   },
   loadsRowShellCompact: {
     marginTop: 0,
@@ -1399,8 +1615,8 @@ const styles = StyleSheet.create({
     maxHeight: "88%",
     borderRadius: 34,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.networkPageBackground,
+    borderColor: Theme.networkCardBorder,
+    backgroundColor: Theme.networkCardBackground,
     overflow: "hidden",
     shadowColor: Theme.shadow,
     shadowOpacity: 0.18,
@@ -1927,7 +2143,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    paddingVertical: 16,
+    paddingVertical: 20,
     paddingHorizontal: Layout.screenPaddingHorizontal,
     backgroundColor: Theme.screenBackground,
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -2072,13 +2288,13 @@ const styles = StyleSheet.create({
     paddingBottom: 0,
   },
   sectionBodyDiscover: {
-    paddingBottom: 8,
+    paddingBottom: 24,
   },
   sectionHeadingRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    paddingHorizontal: 22,
+    paddingHorizontal: NETWORK_HUB_GRID_ROW_PADDING_H,
     paddingTop: 16,
     paddingBottom: 6,
   },
@@ -2223,13 +2439,40 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
-    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingHorizontal: NETWORK_HUB_GRID_ROW_PADDING_H,
     paddingTop: 8,
-    paddingBottom: 4,
+    paddingBottom: 6,
   },
   sectionHeadingRowDiscoverLead: {
     paddingTop: 4,
     paddingBottom: 4,
+  },
+  sectionHeadingRowDiscoverSplit: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: 8,
+  },
+  discoverSplitHeadRow: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: NETWORK_HUB_SPLIT_COLUMN_GAP_PX,
+    minWidth: 0,
+  },
+  discoverSplitHeadCell: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "flex-end",
+    alignItems: "flex-start",
+  },
+  discoverSplitHeadCellRight: {
+    alignItems: "flex-start",
+  },
+  discoverSplitHeadTitle: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    minWidth: 0,
   },
   sectionHeadingRowSpreadMobile: {
     alignItems: "flex-start",
@@ -2437,6 +2680,11 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     minWidth: 44,
     gap: 8,
+  },
+  discoverHeaderActionsSplit: {
+    flexShrink: 0,
+    alignSelf: "flex-end",
+    width: "100%",
   },
   discoverHeaderActionsDiscoverMobile: {
     flexShrink: 0,

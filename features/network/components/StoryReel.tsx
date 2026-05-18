@@ -19,10 +19,13 @@ interface StoryReelProps {
   orgName?: string;
   onCreatePost: () => void;
   headerActions?: React.ReactNode;
+  /** Inside desktop 80% story column — trim outer horizontal padding. */
+  embedded?: boolean;
 }
 
-const STORY_AVATAR = 42;
-const STORY_RING = STORY_AVATAR + 6;
+/** Matches hub connection list avatar (NetworkPartyHubListCard). */
+const STORY_AVATAR = 56;
+const STORY_RING = STORY_AVATAR + 8;
 
 const RING_UNSEEN = ["#f43f5e", "#f59e0b", "#a855f7", "#6366f1"] as const;
 const RING_SEEN = ["#cbd5e1", "#94a3b8"] as const;
@@ -171,7 +174,12 @@ function BroadcastStory({
   );
 }
 
-export function StoryReel({ posts, orgId, onCreatePost }: StoryReelProps) {
+export function StoryReel({
+  posts,
+  orgId,
+  onCreatePost,
+  embedded = false,
+}: StoryReelProps) {
   const router = useRouter();
   const { profile } = useAuth();
   const [seenKeys, setSeenKeys] = useState<Record<string, true>>({});
@@ -245,16 +253,17 @@ export function StoryReel({ posts, orgId, onCreatePost }: StoryReelProps) {
   const mineRing = hasOwnStories ? RING_MINE_ACTIVE : RING_MINE_IDLE;
 
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, embedded && styles.wrapEmbedded]}>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[styles.scroll, embedded && styles.scrollEmbedded]}
       >
-        <StoryBubble
-          label="Mine"
-          ringColors={mineRing}
-          onPress={() => {
+        <View style={styles.mineCluster}>
+          <StoryBubble
+            label="Mine"
+            ringColors={mineRing}
+            onPress={() => {
             if (!latestOwnStory) {
               onCreatePost();
               return;
@@ -289,7 +298,7 @@ export function StoryReel({ posts, orgId, onCreatePost }: StoryReelProps) {
               {...(Platform.OS !== "web" && { accessibilityRole: "button" as const })}
               accessibilityLabel="Add story"
             >
-              <Plus size={11} color={Theme.textOnPrimary} strokeWidth={2.6} />
+              <Plus size={14} color={Theme.textOnPrimary} strokeWidth={2.6} />
             </View>
           }
         >
@@ -299,7 +308,12 @@ export function StoryReel({ posts, orgId, onCreatePost }: StoryReelProps) {
             avatarSeed={profile?.avatar_seed ?? null}
             entityType="supplier"
           />
-        </StoryBubble>
+          </StoryBubble>
+          <View style={styles.pulseStoryWatermark} pointerEvents="none">
+            <Text style={styles.watermarkPulse}>Pulse.</Text>
+            <Text style={styles.watermarkStory}>story</Text>
+          </View>
+        </View>
 
         {stories.map((post) => (
           <BroadcastStory
@@ -327,18 +341,63 @@ export function StoryReel({ posts, orgId, onCreatePost }: StoryReelProps) {
 
 const styles = StyleSheet.create({
   wrap: {
-    paddingTop: 2,
-    paddingBottom: 4,
+    paddingTop: 12,
+    paddingBottom: 12,
+  },
+  wrapEmbedded: {
+    paddingTop: 8,
+    paddingBottom: 8,
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "center",
   },
   scroll: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    gap: 8,
-    alignItems: "flex-start",
-    paddingRight: 20,
+    gap: 10,
+    alignItems: "center",
+    paddingRight: 12,
+    paddingVertical: 2,
+  },
+  scrollEmbedded: {
+    paddingHorizontal: 0,
+    paddingRight: 8,
+  },
+  mineCluster: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginRight: 4,
+    flexShrink: 0,
+    paddingVertical: 2,
+  },
+  pulseStoryWatermark: {
+    alignSelf: "center",
+    justifyContent: "center",
+    opacity: 0.11,
+    minWidth: 52,
+  },
+  watermarkPulse: {
+    fontSize: 22,
+    fontWeight: "800",
+    fontStyle: "italic",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.8,
+    lineHeight: 24,
+  },
+  watermarkStory: {
+    fontSize: 16,
+    fontWeight: "600",
+    fontStyle: "italic",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.4,
+    lineHeight: 19,
+    alignSelf: "flex-end",
+    marginTop: -2,
   },
   storyItem: {
-    width: 56,
+    width: 72,
     alignItems: "center",
+    justifyContent: "flex-start",
   },
   storyItemPressed: {
     opacity: 0.92,
@@ -374,11 +433,11 @@ const styles = StyleSheet.create({
   },
   addBadge: {
     position: "absolute",
-    right: -1,
-    bottom: -1,
-    width: 17,
-    height: 17,
-    borderRadius: 9,
+    right: -2,
+    bottom: -2,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: Theme.primary,
     borderWidth: 2,
     borderColor: Theme.screenBackground,
@@ -391,12 +450,13 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   storyName: {
-    marginTop: 4,
-    fontSize: 9,
+    marginTop: 6,
+    fontSize: 10,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
     letterSpacing: 0.1,
     textAlign: "center",
     width: "100%",
+    lineHeight: 13,
   },
 });

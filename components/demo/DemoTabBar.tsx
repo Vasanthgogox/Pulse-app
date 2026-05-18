@@ -1057,7 +1057,7 @@ export function DemoTabBar({
       pointerEvents="box-none"
     >
       <View
-        style={[
+              style={[
           styles.mmtFooterBar,
           isCompactMobile && styles.mmtFooterBarCompact,
         ]}
@@ -1080,13 +1080,13 @@ export function DemoTabBar({
                 strokeWidth={CLUSTER_STROKE}
               />
             }
-            onPress={() => {
-              collapseNetworkDock();
+              onPress={() => {
+                collapseNetworkDock();
               onTabChange("network");
             }}
             compact={isCompactMobile}
           />
-        </View>
+                </View>
         <MobileFooterSlackCluster
           tabs={slackClusterTabs}
           activeIndex={clusterActiveIndex}

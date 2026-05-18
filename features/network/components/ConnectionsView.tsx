@@ -5,18 +5,17 @@
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import type { NetworkPartyRolePill } from "@/features/network/components/NetworkPartyProfileCard";
+import { NetworkPartyHubListCard } from "@/features/network/components/NetworkPartyHubListCard";
+import { NetworkHubConnectionsPagedGrid } from "@/features/network/components/NetworkHubConnectionsPagedGrid";
 import {
-    HUB_CAROUSEL_CARD_WIDTH,
-    HUB_CAROUSEL_MIN_HEIGHT,
-    HubConnectionListCard,
-    type HubConnectionItem,
-} from "@/features/network/components/NetworkConnectionHubCards";
-import {
-    NetworkLoadMoreButton,
-    networkCompactListStyle,
-    useNetworkListPagination,
-} from "@/features/network/components/NetworkCompactRows";
+  getNetworkHubConnectionsLayout,
+  NETWORK_HUB_GRID_GAP_PX,
+  NETWORK_HUB_GRID_ROW_PADDING_H,
+} from "@/features/network/constants/networkHubGrid";
+import { networkCompactListStyle } from "@/features/network/components/NetworkCompactRows";
 import { runConnectionInvite } from "@/features/network/utils/connectionInvite.util";
+import { formatPartyContactPhone } from "@/features/network/utils/partyContactDisplay.util";
 import {
     getOrganizationLocationsByIds,
     getOrganizationLocationsByNames,
@@ -66,6 +65,8 @@ interface ConnectionsViewProps {
   orgId: string;
   onRefresh?: () => void;
   onOpenProfile?: (item: ConnectedOrg) => void;
+  onPressMutuals?: (org: { id: string; name: string }) => void;
+  onPressMutual?: (org: { id: string; name: string; avatar_seed?: string | null }) => void;
   onConnectionsComputed?: (items: ConnectedOrg[]) => void;
   /** Render list without internal scroll (nested in parent ScrollView). */
   embedded?: boolean;
@@ -159,6 +160,105 @@ function getConnectionLocation(item: ConnectedOrg): string | null {
 function normalizeName(value: string | null | undefined): string {
   return (value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 }
+
+function rolePillsForConnection(item: ConnectedOrg): NetworkPartyRolePill[] {
+  const tone = roleTone(item.role);
+  const pills: NetworkPartyRolePill[] = [
+    {
+      label: item.role,
+      backgroundColor: tone.bg,
+      color: tone.text,
+    },
+  ];
+  if (item.is_integrated) {
+    pills.push({
+      label: "INTEGRATED",
+      backgroundColor: Theme.textPrimaryDark,
+      color: Theme.textOnPrimary,
+    });
+  }
+  return pills;
+}
+
+function ConnectionProfileCard({
+  item,
+  compact,
+  onOpenProfile,
+  onPressMutuals,
+  onPressMutual,
+  viewerOrgId,
+  onConnectionAction,
+  actionLoading,
+}: {
+  item: ConnectedOrg;
+  compact?: boolean;
+  onOpenProfile?: (item: ConnectedOrg) => void;
+  onPressMutuals?: (org: { id: string; name: string }) => void;
+  onPressMutual?: (org: { id: string; name: string; avatar_seed?: string | null }) => void;
+  viewerOrgId?: string | null;
+  onConnectionAction: () => void;
+  actionLoading: boolean;
+}) {
+  const location = getConnectionLocation(item);
+  const roleLine =
+    item.role === "CLIENT"
+      ? "Client partner"
+      : item.role === "SUPPLIER"
+        ? "Supplier partner"
+        : "Fleet driver";
+
+  return (
+    <View style={hubCardStyles.listShell}>
+      <NetworkPartyHubListCard
+        partyId={item.id}
+        name={item.name}
+        partyType={roleLine}
+        phone={formatPartyContactPhone(item.phone)}
+        location={location ?? undefined}
+        avatarSeed={item.avatar_seed}
+        avatarUrl={item.avatar_url}
+        entityType={
+          item.role === "DRIVER"
+            ? "driver"
+            : item.role === "SUPPLIER"
+              ? "supplier"
+              : "client"
+        }
+        compact={compact}
+        rolePills={rolePillsForConnection(item)}
+        totalTrips={item.total_trips ?? null}
+        ratingValue={item.rating ?? null}
+        mutualCount={item.mutual_count ?? 0}
+        showVerified={item.is_integrated}
+        showOnline={item.is_integrated}
+        viewerOrgId={viewerOrgId}
+        onPressMutuals={
+          (item.mutual_count ?? 0) > 0 && onPressMutuals
+            ? () =>
+                onPressMutuals({
+                  id: item.linked_organization_id ?? item.id,
+                  name: item.name,
+                })
+            : undefined
+        }
+        onPressMutual={onPressMutual}
+        onPressCard={onOpenProfile ? () => onOpenProfile(item) : undefined}
+        connectionIntegrated={item.is_integrated}
+        onConnectionAction={onConnectionAction}
+        connectionActionDisabled={item.role === "DRIVER" && !item.phone}
+        loading={actionLoading}
+      />
+    </View>
+  );
+}
+
+const hubCardStyles = StyleSheet.create({
+  listShell: {
+    width: "100%",
+    flex: 1,
+    minWidth: 0,
+  },
+});
 
 // ─── Grid Card (LinkedIn-style: cover + overlapping avatar) ───────────────────
 
@@ -331,6 +431,8 @@ export function ConnectionsView({
   orgId,
   onRefresh,
   onOpenProfile,
+  onPressMutuals,
+  onPressMutual,
   onConnectionsComputed,
   embedded,
   hubMode = false,
@@ -358,7 +460,15 @@ export function ConnectionsView({
     supplier: number | null;
     driver: number | null;
   }>({ client: null, supplier: null, driver: null });
-  const gridNumColumns = windowWidth >= 1200 ? 4 : windowWidth >= 900 ? 3 : 2;
+  const gridNumColumns = hubMode
+    ? windowWidth >= 900
+      ? 2
+      : 1
+    : windowWidth >= 1200
+      ? 4
+      : windowWidth >= 900
+        ? 3
+        : 2;
 
   const clientsQ = useClientsQuery(orgId);
   const suppliersQ = useSuppliersQuery(orgId);
@@ -837,36 +947,11 @@ export function ConnectionsView({
     tripCountByDriverId,
   ]);
 
-  const connectionsPaginationKey = `${effectiveFilter}:${effectiveSearch}`;
-
-  const {
-    visibleItems: visibleConnections,
-    hasMore: hasMoreConnections,
-    remaining: remainingConnections,
-    loadMore: loadMoreConnections,
-  } = useNetworkListPagination(connections, connectionsPaginationKey);
-
-  const toHubItem = (c: ConnectedOrg): HubConnectionItem => ({
-    id: c.id,
-    name: c.name,
-    role: c.role,
-    is_integrated: c.is_integrated,
-    avatarUrl: c.avatar_url,
-    avatarSeed: c.avatar_seed,
-    entityType:
-      c.role === "DRIVER"
-        ? "driver"
-        : c.role === "SUPPLIER"
-          ? "supplier"
-          : "client",
-    mutualCount: c.mutual_count,
-    rating: c.rating,
-    locationLabel: getConnectionLocation(c),
-    actionLabel: c.is_integrated ? "Connected" : "Send invite",
-    actionLoading: invitingId === c.id,
-    actionDisabled: c.role === "DRIVER" && !c.phone,
-    totalTrips: c.total_trips ?? null,
-  });
+  const hubConnectionsLayout = useMemo(
+    () => getNetworkHubConnectionsLayout(windowWidth),
+    [windowWidth],
+  );
+  const connectionsPaginationKey = `${effectiveFilter}:${effectiveSearch}:${hubConnectionsLayout.columns}x${hubConnectionsLayout.rows}`;
 
   const inviteOffAppParty = async (item: ConnectedOrg) => {
     if (item.is_integrated) return;
@@ -906,39 +991,30 @@ export function ConnectionsView({
     onConnectionsComputed?.(connections);
   }, [connections, onConnectionsComputed]);
 
-  const renderHubConnectionCarousel = () => (
-    <View style={styles.hubCarouselWrap}>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        nestedScrollEnabled
-        directionalLockEnabled
-        style={styles.hubCarouselScroll}
-        contentContainerStyle={styles.hubCarouselContent}
-      >
-        {visibleConnections.map((item) => (
-          <View
-            key={`hub-card-${item.role}-${item.id}`}
-            style={styles.hubCarouselItem}
-          >
-            <HubConnectionListCard
-              item={toHubItem(item)}
-              layout="carousel"
-              onActionPress={() => void inviteOffAppParty(item)}
-              onCardPress={() => onOpenProfile?.(item)}
-            />
-          </View>
-        ))}
-      </ScrollView>
-      {hasMoreConnections ? (
-        <View style={styles.hubCarouselLoadMore}>
-          <NetworkLoadMoreButton
-            remaining={remainingConnections}
-            onPress={loadMoreConnections}
-          />
-        </View>
-      ) : null}
-    </View>
+  const hubListCompact =
+    hubConnectionsLayout.columns >= 3 ? windowWidth < 1280 : windowWidth < 1100;
+
+  const renderHubConnectionListCard = (item: ConnectedOrg) => (
+    <ConnectionProfileCard
+      item={item}
+      compact={hubListCompact}
+      onOpenProfile={onOpenProfile}
+      onPressMutuals={onPressMutuals}
+      onPressMutual={onPressMutual}
+      viewerOrgId={orgId}
+      onConnectionAction={() => void inviteOffAppParty(item)}
+      actionLoading={invitingId === item.id}
+    />
+  );
+
+  const renderHubConnectionsBody = () => (
+    <NetworkHubConnectionsPagedGrid
+      items={connections}
+      layout={hubConnectionsLayout}
+      resetKey={connectionsPaginationKey}
+      keyExtractor={(item) => `${item.role}-${item.id}`}
+      renderItem={renderHubConnectionListCard}
+    />
   );
 
   const embeddedBody = useHubLayout ? (
@@ -952,7 +1028,7 @@ export function ConnectionsView({
         <EmptyState />
       </View>
     ) : (
-      renderHubConnectionCarousel()
+      renderHubConnectionsBody()
     )
   ) : isLoading ? (
     <View style={styles.embeddedLoading}>
@@ -1083,7 +1159,7 @@ export function ConnectionsView({
           <EmptyState />
         ) : (
           <View style={[styles.listContent, networkCompactListStyle]}>
-            {renderHubConnectionCarousel()}
+            {renderHubConnectionsBody()}
           </View>
         )
       ) : isGrid ? (
@@ -1162,36 +1238,35 @@ const styles = StyleSheet.create({
     color: Theme.textSecondary,
   },
   compactList: {},
-  hubCarouselWrap: {
+  hubGridRoot: {
     width: "100%",
-    paddingTop: 2,
+    gap: 8,
+    paddingBottom: 4,
   },
-  hubCarouselScroll: {
+  hubScrollWrap: {
     width: "100%",
-    flexGrow: 0,
-    maxHeight: HUB_CAROUSEL_MIN_HEIGHT + 8,
   },
-  hubCarouselContent: {
-    flexDirection: "row",
-    alignItems: "stretch",
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    gap: 10,
+  hubScrollLoadMore: {
+    paddingHorizontal: NETWORK_HUB_GRID_ROW_PADDING_H,
+    paddingTop: 4,
   },
-  hubCarouselItem: {
-    width: HUB_CAROUSEL_CARD_WIDTH,
-    flexShrink: 0,
+  hubListVertical: {
+    width: "100%",
+    gap: 8,
+    paddingHorizontal: NETWORK_HUB_GRID_ROW_PADDING_H,
+    paddingBottom: 4,
   },
-  hubCarouselLoadMore: {
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 2,
-    paddingBottom: 0,
+  hubListLoadMore: {
+    width: "100%",
+    paddingTop: 4,
   },
   embeddedEmptyWrap: { minHeight: 200, paddingBottom: 16 },
   embeddedGridRoot: { paddingBottom: 8 },
   gridRowEmbedded: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    paddingHorizontal: 22,
+    alignItems: "stretch",
+    paddingHorizontal: NETWORK_HUB_GRID_ROW_PADDING_H,
+    gap: NETWORK_HUB_GRID_GAP_PX,
   },
   listContentEmbedded: { paddingHorizontal: 22, paddingBottom: 16, gap: 8 },
 

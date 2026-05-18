@@ -7,18 +7,26 @@ import { ContentErrorState } from '@/components/ContentErrorState';
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import { PartyAvatar } from '@/components/PartyAvatar';
+import {
+  ConnectionRoleModal,
+  type ConnectionInviteRole,
+} from "@/features/network/components/ConnectionRoleModal";
+import { NetworkPartyDiscoverListCard } from "@/features/network/components/NetworkPartyDiscoverListCard";
 import {
   NetworkLoadMoreButton,
-  networkCompactListStyle,
   useNetworkListPagination,
 } from '@/features/network/components/NetworkCompactRows';
 import {
-  NETWORK_PROFILE_AVATAR_SIZE_DISCOVER,
-  NETWORK_PROFILE_CARD_HEIGHT,
-  NETWORK_PROFILE_CARD_RADIUS,
-  NETWORK_PROFILE_COVER_HEIGHT,
-} from "@/features/network/constants/networkProfileCardLayout";
+  NetworkHubSplitLayout,
+  networkHubSplitStyles,
+} from "@/features/network/components/NetworkHubSplitLayout";
+import {
+  getNetworkHubSplitPaneLayout,
+  isNetworkHubSplitStacked,
+  NETWORK_HUB_SPLIT_GRID_COLUMNS,
+  NETWORK_HUB_GRID_GAP_PX,
+  NETWORK_HUB_GRID_ROW_PADDING_H,
+} from "@/features/network/constants/networkHubGrid";
 import { useNetworkDiscovery } from '@/features/network/hooks/useNetworkDiscovery';
 import type { DiscoverOrg } from '@/features/network/services/discover.service';
 import { showAppAlert } from "@/lib/appAlert";
@@ -37,23 +45,15 @@ import { queryKeys } from '@/lib/queryKeys';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  Check,
-  Clock3,
   Compass,
-  MapPin,
   Search,
   Sparkles,
-  Star,
-  UserPlus,
-  Users,
-  X,
 } from 'lucide-react-native';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Animated,
   FlatList,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -78,10 +78,14 @@ interface DiscoverViewProps {
   onSearchChange?: (value: string) => void;
   showSearchChrome?: boolean;
   onOpenProfile?: (org: DiscoverOrg & { rating_value?: number | null; location_value?: string | null }) => void;
+  onPressMutuals?: (org: { id: string; name: string }) => void;
+  onPressMutual?: (org: { id: string; name: string; avatar_seed?: string | null }) => void;
   /** Called whenever the daily invite count changes so the parent can display it inline. */
   onInviteCountChange?: (count: number, limit: number) => void;
   /** When true (e.g. header shows max invites), block Send request with daily-limit alert even if query count lags. */
   inviteDailyCapReached?: boolean;
+  /** Desktop split: whether the right “People you may know” column has cards. */
+  onSplitMetaChange?: (hasPeopleYouMayKnow: boolean) => void;
 }
 
 // --- Scoring ---
@@ -202,7 +206,13 @@ function OrgCard({
   onCancel,
   loading,
   onOpenProfile,
-  stretchCellHeight,
+  onPressMutuals,
+  onPressMutual,
+  viewerOrgId,
+  onDismiss,
+  pendingRole = null,
+  compact,
+  desktopPane,
 }: {
   org: ScoredOrg;
   locationFallback?: { city?: string | null; state?: string | null; address_line?: string | null } | null;
@@ -212,178 +222,44 @@ function OrgCard({
   onCancel: () => void;
   loading: boolean;
   onOpenProfile?: () => void;
-  /** When true (embedded hub grid), card fills the row cell height so tiles align. */
-  stretchCellHeight?: boolean;
+  onPressMutuals?: () => void;
+  onPressMutual?: (org: { id: string; name: string; avatar_seed?: string | null }) => void;
+  viewerOrgId?: string | null;
+  onDismiss?: () => void;
+  pendingRole?: ConnectionInviteRole | null;
+  compact?: boolean;
+  desktopPane?: boolean;
 }) {
   const { t } = useLanguage();
-  const scale = useRef(new Animated.Value(1)).current;
-  const status = org.connection_status;
-  const isConnected = status === 'approved';
-  const isPending = status === 'pending';
-  const isRecommended = org.score > 0;
   const mutuals = org.mutual_count ?? org.mutual_connections_count ?? 0;
-  const hasMutuals = mutuals > 0;
-  const resolvedRating =
-    ratingValue ?? org.rating ?? org.average_rating ?? null;
-  const rating =
-    typeof resolvedRating === 'number' && Number.isFinite(resolvedRating)
-      ? resolvedRating.toFixed(1)
-      : null;
   const businessLocation = getBusinessLocation(org, locationFallback);
-  const showTrips =
-    typeof totalTrips === 'number' && totalTrips >= 0;
-
-  const onIn = () => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start();
-  const onOut = () => Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start();
+  const locationUnset = !businessLocation;
 
   return (
-    <Animated.View style={[
-      styles.card,
-      stretchCellHeight && styles.cardFixedHeightEmbedded,
-      isConnected && styles.cardConnected,
-      isRecommended && !isConnected && !isPending && styles.cardRecommended,
-      { transform: [{ scale }] },
-    ]}>
-      <View style={styles.discoverCover}>
-        <View style={styles.discoverCoverOrb} />
-        <View style={styles.discoverCoverOrbSmall} />
-        <View style={styles.discoverCoverPlane} />
-        <View style={styles.coverSignalChip}>
-          <Text style={styles.coverSignalText}>
-            {isConnected ? "CONNECTED" : isPending ? "REQUEST SENT" : "LIVE"}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.profileBlock}>
-        <Pressable onPress={onOpenProfile} style={styles.profileBlockPress}>
-          <View style={styles.profileHeroStack}>
-            <View style={styles.heroAvatar}>
-              <PartyAvatar
-                name={org.name}
-                initialsColorSeed={org.id}
-                avatarSeed={org.avatar_seed}
-                entityType="client"
-                size={NETWORK_PROFILE_AVATAR_SIZE_DISCOVER}
-                borderStyle={styles.heroAvatarImage}
-              />
-            </View>
-            <View style={styles.profileMetricsRow}>
-              {showTrips ? (
-                <View style={styles.hubMetricPill}>
-                  <Text style={styles.hubTripsText} numberOfLines={1}>
-                    {totalTrips} trip{totalTrips === 1 ? '' : 's'}
-                  </Text>
-                </View>
-              ) : null}
-              <View
-                style={[
-                  styles.hubMetricPill,
-                  styles.hubMetricPillRating,
-                  !rating && styles.hubMetricPillRatingEmpty,
-                ]}
-              >
-                {rating ? (
-                  <Star
-                    size={10}
-                    color={Theme.driverGold}
-                    fill={Theme.driverGold}
-                    strokeWidth={2.2}
-                  />
-                ) : null}
-                <Text
-                  style={[
-                    styles.hubRatingText,
-                    !rating && styles.hubRatingTextEmpty,
-                  ]}
-                  numberOfLines={1}
-                >
-                  {rating ?? 'No rating'}
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          <Text style={styles.orgName} numberOfLines={1} ellipsizeMode="tail">
-            {org.name.toUpperCase()}
-          </Text>
-          <View style={styles.locationRow}>
-            <MapPin
-              size={10}
-              color={businessLocation ? Theme.textMutedDemo : Theme.textSecondary}
-              strokeWidth={2.4}
-            />
-            {businessLocation ? (
-              <Text style={styles.locationText} numberOfLines={1}>
-                {businessLocation}
-              </Text>
-            ) : (
-              <Text style={styles.locationTextEmpty} numberOfLines={1}>
-                {t('networkDiscoverLocationNotSet')}
-              </Text>
-            )}
-          </View>
-        </Pressable>
-        <View style={styles.cardMetaStack}>
-          <View style={[styles.discoveryMetaChip, hasMutuals && styles.discoveryMetaChipStrong]}>
-            <Users size={9} color={hasMutuals ? Theme.textOnPrimary : Theme.textSecondary} strokeWidth={2.5} />
-            <Text style={[styles.discoveryMetaText, hasMutuals && styles.discoveryMetaTextStrong]} numberOfLines={1}>
-              {hasMutuals ? `${mutuals} mutual${mutuals === 1 ? '' : 's'}` : 'No mutuals'}
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.cardFooter}>
-        {isConnected ? (
-          <View style={styles.footerAction}>
-            <Check size={13} color={Theme.textPrimaryDark} strokeWidth={2.5} />
-            <Text style={styles.footerActionText} numberOfLines={1}>Connected</Text>
-          </View>
-        ) : isPending ? (
-          <View style={styles.pendingFooter}>
-            <View style={[styles.footerAction, styles.footerActionPending, styles.footerActionFlex]}>
-              <Clock3 size={12} color={Theme.warning} strokeWidth={2.4} />
-              <Text style={styles.footerActionText} numberOfLines={1}>Request sent</Text>
-            </View>
-            <Pressable
-              style={({ pressed }) => [
-                styles.cancelRequestBtn,
-                pressed && { opacity: 0.72 },
-                loading && styles.cancelRequestBtnLoading,
-              ]}
-              onPress={onCancel}
-              disabled={loading}
-              hitSlop={8}
-              accessibilityLabel={`Cancel request to ${org.name}`}
-            >
-              {loading ? (
-                <LoadingIndicator size={12} color={Theme.textPrimaryDark} />
-              ) : (
-                <X size={12} color={Theme.textPrimaryDark} strokeWidth={2.5} />
-              )}
-            </Pressable>
-          </View>
-        ) : (
-          <Pressable
-            style={[styles.footerAction, styles.footerActionPrimary, loading && styles.footerActionLoading]}
-            onPress={onConnect}
-            onPressIn={onIn}
-            onPressOut={onOut}
-            disabled={loading}
-          >
-            {loading ? (
-              <LoadingIndicator size={12} color={Theme.textPrimaryDark} />
-            ) : (
-              <>
-                <UserPlus size={13} color={Theme.textPrimaryDark} strokeWidth={2.5} />
-                <Text style={styles.footerActionText} numberOfLines={1}>Send request</Text>
-              </>
-            )}
-          </Pressable>
-        )}
-      </View>
-    </Animated.View>
+    <View style={styles.discoverListItemShell}>
+      <NetworkPartyDiscoverListCard
+        orgId={org.id}
+        name={org.name}
+        avatarSeed={org.avatar_seed}
+        locationLabel={businessLocation || t("networkDiscoverLocationNotSet")}
+        locationUnset={locationUnset}
+        totalTrips={totalTrips}
+        ratingValue={ratingValue ?? org.rating ?? org.average_rating ?? null}
+        mutualCount={mutuals}
+        connectionStatus={org.connection_status}
+        pendingRole={pendingRole}
+        loading={loading}
+        compact={compact}
+        desktopPane={desktopPane}
+        onOpenProfile={onOpenProfile}
+        onPressMutuals={onPressMutuals}
+        onPressMutual={onPressMutual}
+        viewerOrgId={viewerOrgId}
+        onConnect={onConnect}
+        onCancel={onCancel}
+        onDismiss={onDismiss}
+      />
+    </View>
   );
 }
 
@@ -411,12 +287,7 @@ const DISCOVER_COLS_MOBILE = 2;
 const DISCOVER_ROWS_MOBILE = 3;
 /** Matches discoverOrganizations fetch limit — show full result set inside embedded scroll. */
 const EMBEDDED_SCROLL_ITEM_CAP = 40;
-const LIST_STATIC_HORIZONTAL_PAD = 14 * 2;
 const DISCOVER_GRID_GAP_PX = 8;
-const DISCOVER_EMBEDDED_CARD_HEIGHT = NETWORK_PROFILE_CARD_HEIGHT;
-/** Before `onLayout` reports width, cap provisional outer width so 7-up math stays modest vs narrow columns. */
-const DISCOVER_EMBEDDED_PROVISIONAL_OUTER_CAP = 520;
-
 export function DiscoverView({
   orgId,
   embedded,
@@ -426,15 +297,14 @@ export function DiscoverView({
   onSearchChange,
   showSearchChrome = true,
   onOpenProfile,
+  onPressMutuals,
+  onPressMutual,
   onInviteCountChange,
   inviteDailyCapReached = false,
+  onSplitMetaChange,
 }: DiscoverViewProps) {
+  const { t } = useLanguage();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  /** Measured width of the embedded discover grid (list or outer container), for fixed card columns. */
-  const [embeddedListWidth, setEmbeddedListWidth] = useState(0);
-  const recordEmbeddedListWidth = useCallback((w: number) => {
-    if (w > 0) setEmbeddedListWidth((prev) => Math.max(prev, w));
-  }, []);
   const [internalSearch, setInternalSearch] = useState("");
   const [connecting, setConnecting] = useState<string | null>(null);
   const [requestRoleModalOrg, setRequestRoleModalOrg] = useState<ScoredOrg | null>(null);
@@ -448,19 +318,21 @@ export function DiscoverView({
     refetch: refetchDiscover,
     invalidateCache: invalidateDiscoverCache,
   } = useNetworkDiscovery({ orgId, search });
-  /** Optimistic removals after connect (pending orgs are hidden until refetch). */
-  const [optimisticHiddenIds, setOptimisticHiddenIds] = useState<Set<string>>(
-    () => new Set(),
-  );
+  /** Role chosen for outbound requests — drives "Request sent as client/supplier" on list cards. */
+  const [sentRequestRoles, setSentRequestRoles] = useState<
+    Record<string, ConnectionInviteRole>
+  >({});
+  /** User-dismissed Grow your network recommendations (session); next scored org fills the slot. */
+  const [dismissedRecommendationIds, setDismissedRecommendationIds] = useState<
+    Set<string>
+  >(() => new Set());
 
   useEffect(() => {
-    setOptimisticHiddenIds(new Set());
+    setSentRequestRoles({});
+    setDismissedRecommendationIds(new Set());
   }, [orgId, search]);
 
-  const visibleOrgs = useMemo(
-    () => orgs.filter((o) => !optimisticHiddenIds.has(o.id)),
-    [orgs, optimisticHiddenIds],
-  );
+  const visibleOrgs = orgs;
 
   const sentQ = useConnectionRequestsSentQuery(orgId);
 
@@ -498,10 +370,48 @@ export function DiscoverView({
   );
   const recommended = connectableOrgs.filter((o) => o.score > 0);
   const rest = connectableOrgs.filter((o) => o.score <= 0);
-  /**
-   * Column count follows the viewport only — wide window = 7 columns, narrow = 2.
-   * Do not use embedded list width here: a narrow discover pane on a desktop would wrongly flip to 2-up.
-   */
+
+  const splitPaneLayout = useMemo(
+    () => getNetworkHubSplitPaneLayout(windowWidth),
+    [windowWidth],
+  );
+
+  const growNetworkRecommendations = useMemo(() => {
+    const slots: ScoredOrg[] = [];
+    for (const org of recommended) {
+      if (dismissedRecommendationIds.has(org.id)) continue;
+      slots.push(org);
+      if (slots.length >= splitPaneLayout.slotLimit) break;
+    }
+    return slots;
+  }, [recommended, dismissedRecommendationIds, splitPaneLayout.slotLimit]);
+
+  const peopleYouMayKnow = useMemo(() => {
+    const growIds = new Set(growNetworkRecommendations.map((o) => o.id));
+    const slots: ScoredOrg[] = [];
+    for (const org of recommended) {
+      if (dismissedRecommendationIds.has(org.id)) continue;
+      if (growIds.has(org.id)) continue;
+      slots.push(org);
+      if (slots.length >= splitPaneLayout.slotLimit) break;
+    }
+    return slots;
+  }, [
+    recommended,
+    dismissedRecommendationIds,
+    growNetworkRecommendations,
+    splitPaneLayout.slotLimit,
+  ]);
+
+  const handleDismissRecommendation = useCallback((targetOrgId: string) => {
+    setDismissedRecommendationIds((prev) => new Set(prev).add(targetOrgId));
+  }, []);
+
+  const embeddedHubRecommendations = useMemo(
+    () => [...growNetworkRecommendations, ...peopleYouMayKnow],
+    [growNetworkRecommendations, peopleYouMayKnow],
+  );
+
   const isDiscoverDesktopGrid = windowWidth >= DISCOVER_GRID_BREAKPOINT;
   const discoverColumnCount = isDiscoverDesktopGrid
     ? DISCOVER_COLS_DESKTOP
@@ -524,30 +434,19 @@ export function DiscoverView({
     [embedded, embeddedScrollable, discoverMaxVisible],
   );
 
-  /**
-   * Fixed pixel width per card column (same as a full 7- or 2-up row). Rows use `justifyContent:
-   * 'flex-start'` so short rows do not stretch cards. Uses measured list/container width when
-   * available; until then a capped provisional width avoids one card filling the row.
-   */
-  const embeddedDiscoverCellWidth = useMemo(() => {
-    if (!embedded) return null;
-    const cols = discoverColumnCount;
-    const gaps = Math.max(0, cols - 1) * DISCOVER_GRID_GAP_PX;
-    const windowOuter = Math.max(0, windowWidth - Layout.screenPaddingHorizontal * 2);
-    const listOuter =
-      embeddedListWidth > 0
-        ? embeddedListWidth
-        : Math.min(windowOuter, DISCOVER_EMBEDDED_PROVISIONAL_OUTER_CAP);
-    const inner = Math.max(0, listOuter - LIST_STATIC_HORIZONTAL_PAD);
-    const raw = (inner - gaps) / cols;
-    const cell = Number.isFinite(raw) && raw > 0 ? raw : inner / Math.max(cols, 1);
-    return Math.max(36, cell);
-  }, [embedded, embeddedListWidth, windowWidth, discoverColumnCount]);
-
   const getDiscoverOrgCardMetrics = useCallback((targetOrg: DiscoverOrg) => ({
     totalTrips: targetOrg.trip_count ?? null,
     ratingValue: targetOrg.average_rating ?? targetOrg.rating ?? null,
   }), []);
+
+  const orgPressMutualsHandler = useCallback(
+    (org: ScoredOrg) => {
+      const count = org.mutual_count ?? org.mutual_connections_count ?? 0;
+      if (count <= 0 || !onPressMutuals) return undefined;
+      return () => onPressMutuals({ id: org.id, name: org.name });
+    },
+    [onPressMutuals],
+  );
 
   const closeRequestRoleModal = useCallback(() => {
     if (connecting) return;
@@ -575,12 +474,12 @@ export function DiscoverView({
       return;
     }
     setConnecting(org.id);
-    setRequestRoleModalOrg(null);
     const { error, alreadyInvited, requestId } = await createConnectionRequest(orgId, org.id, {
       requestShipperClient: mode === "client",
       requestCarrierSupplier: mode === "supplier",
     });
     setConnecting(null);
+    setRequestRoleModalOrg(null);
     if (error) {
       const msg = error.message;
       if (looksLikeConnectionRateLimitError(msg)) {
@@ -590,7 +489,7 @@ export function DiscoverView({
       }
       return;
     }
-    setOptimisticHiddenIds((prev) => new Set(prev).add(org.id));
+    setSentRequestRoles((prev) => ({ ...prev, [org.id]: mode }));
     if (alreadyInvited) {
       invalidateDiscoverCache();
       void refetchDiscover(search);
@@ -635,9 +534,9 @@ export function DiscoverView({
     if (!deleted) {
       Alert.alert("Request already changed", "Refreshing the latest network state.");
     }
-    setOptimisticHiddenIds((prev) => {
-      const next = new Set(prev);
-      next.delete(org.id);
+    setSentRequestRoles((prev) => {
+      const next = { ...prev };
+      delete next[org.id];
       return next;
     });
     queryClient.setQueryData<ConnectionRequestRow[]>(
@@ -653,10 +552,17 @@ export function DiscoverView({
     | { _type: 'header'; label: string; count: number }
     | { _type: 'org'; org: ScoredOrg };
 
-  const discoverListOrgs = useMemo(
-    () => (search ? connectableOrgs : [...recommended, ...rest]),
-    [connectableOrgs, recommended, rest, search],
-  );
+  const discoverListOrgs = useMemo(() => {
+    if (embedded && !search) return embeddedHubRecommendations;
+    return search ? connectableOrgs : [...recommended, ...rest];
+  }, [
+    embedded,
+    search,
+    connectableOrgs,
+    embeddedHubRecommendations,
+    recommended,
+    rest,
+  ]);
 
   const discoverPaginationKey = `${search}:${discoverListOrgs.length}`;
 
@@ -679,61 +585,216 @@ export function DiscoverView({
     return items;
   }, [connectableOrgs, discoverListOrgs, discoverDisplayCap, embedded, search]);
 
-  const embeddedDiscoverRows = useMemo(
-    () => chunkBySize(visibleDiscoverOrgs, discoverColumnCount),
-    [visibleDiscoverOrgs, discoverColumnCount],
-  );
+  const discoverListCompact = windowWidth < 1100;
 
-  const embeddedProfileCardBody = (
-    <View style={[styles.discoverCardList, networkCompactListStyle]}>
-      {embeddedDiscoverRows.map((row, rowIndex) => (
-        <View key={`discover-row-${rowIndex}`} style={styles.discoverGridRow}>
-          {row.map((org) => (
-            <View key={org.id} style={styles.discoverGridCellEmbeddedFlex}>
-              <View style={styles.discoverGridCardWrapStretch}>
-                <OrgCard
-                  org={org}
-                  locationFallback={discoverOrgLocationFallback(org)}
-                  {...getDiscoverOrgCardMetrics(org)}
-                  onConnect={() => tryBeginConnectionRequest(org)}
-                  onCancel={() => void handleCancelRequest(org)}
-                  loading={connecting === org.id}
-                  stretchCellHeight
-                  onOpenProfile={() => {
-                    const metrics = getDiscoverOrgCardMetrics(org);
-                    onOpenProfile?.({
-                      ...org,
-                      rating_value: metrics.ratingValue,
-                      location_value: getBusinessLocation(
-                        org,
-                        discoverOrgLocationFallback(org),
-                      ),
-                    });
-                  }}
-                />
-              </View>
+  type PaneListGridOptions = {
+    columns: number;
+    compact?: boolean;
+    desktopPane?: boolean;
+  };
+
+  const renderEmbeddedPaneListGrid = useCallback(
+    (
+      orgs: ScoredOrg[],
+      keyPrefix: string,
+      containerStyle?: typeof styles.hubMobileListPane,
+      options?: PaneListGridOptions,
+    ) => {
+      const columns = options?.columns ?? NETWORK_HUB_SPLIT_GRID_COLUMNS;
+      const compact = options?.compact ?? discoverListCompact;
+      const desktopPane = options?.desktopPane ?? false;
+      const rows = chunkBySize(orgs, columns);
+      const singleColumn = columns === 1;
+      return (
+        <View style={[networkHubSplitStyles.paneListGrid, containerStyle]}>
+          {rows.map((row, rowIndex) => (
+            <View
+              key={`${keyPrefix}-row-${rowIndex}`}
+              style={[
+                networkHubSplitStyles.paneListRow,
+                singleColumn && networkHubSplitStyles.paneListRowSingle,
+              ]}
+            >
+              {Array.from({ length: columns }, (_, colIndex) => {
+                  const org = row[colIndex];
+                  return (
+                    <View
+                      key={
+                        org
+                          ? org.id
+                          : `${keyPrefix}-empty-${rowIndex}-${colIndex}`
+                      }
+                      style={[
+                        networkHubSplitStyles.paneListCell,
+                        singleColumn && networkHubSplitStyles.paneListCellFull,
+                      ]}
+                    >
+                      {org ? (
+                        <OrgCard
+                          org={org}
+                          compact={compact}
+                          desktopPane={desktopPane}
+                          locationFallback={discoverOrgLocationFallback(org)}
+                          {...getDiscoverOrgCardMetrics(org)}
+                          onConnect={() => tryBeginConnectionRequest(org)}
+                          onCancel={() => void handleCancelRequest(org)}
+                          onDismiss={
+                            !search
+                              ? () => handleDismissRecommendation(org.id)
+                              : undefined
+                          }
+                          loading={connecting === org.id}
+                          onOpenProfile={() => {
+                            const metrics = getDiscoverOrgCardMetrics(org);
+                            onOpenProfile?.({
+                              ...org,
+                              rating_value: metrics.ratingValue,
+                              location_value: getBusinessLocation(
+                                org,
+                                discoverOrgLocationFallback(org),
+                              ),
+                            });
+                          }}
+                          onPressMutuals={orgPressMutualsHandler(org)}
+                          onPressMutual={onPressMutual}
+                          viewerOrgId={orgId}
+                          pendingRole={sentRequestRoles[org.id] ?? null}
+                        />
+                      ) : null}
+                    </View>
+                  );
+                },
+              )}
             </View>
           ))}
         </View>
-      ))}
-      {hasMoreDiscover ? (
-        <NetworkLoadMoreButton
-          remaining={remainingDiscover}
-          onPress={loadMoreDiscover}
-        />
+      );
+    },
+    [
+      connecting,
+      discoverListCompact,
+      getDiscoverOrgCardMetrics,
+      sentRequestRoles,
+      handleCancelRequest,
+      handleDismissRecommendation,
+      onOpenProfile,
+      onPressMutual,
+      orgId,
+      orgPressMutualsHandler,
+      search,
+      tryBeginConnectionRequest,
+    ],
+  );
+
+  const splitStacked = isNetworkHubSplitStacked(windowWidth);
+
+  useEffect(() => {
+    if (!embedded) {
+      onSplitMetaChange?.(false);
+      return;
+    }
+    if (search.trim() || splitStacked) {
+      onSplitMetaChange?.(false);
+      return;
+    }
+    onSplitMetaChange?.(peopleYouMayKnow.length > 0);
+  }, [embedded, onSplitMetaChange, peopleYouMayKnow.length, search, splitStacked]);
+
+  const splitPaneGridOptions: PaneListGridOptions = {
+    columns: splitPaneLayout.columns,
+    compact: splitPaneLayout.compact,
+    desktopPane: splitPaneLayout.columns === 1,
+  };
+
+  const embeddedHubSplitBody = (
+    <NetworkHubSplitLayout
+      windowWidth={windowWidth}
+      left={
+        growNetworkRecommendations.length > 0
+          ? renderEmbeddedPaneListGrid(
+              growNetworkRecommendations,
+              "grow",
+              undefined,
+              splitPaneGridOptions,
+            )
+          : null
+      }
+      rightHeader={
+        splitStacked && peopleYouMayKnow.length > 0 ? (
+          <>
+            <Text style={styles.mayKnowKicker}>{t("networkDiscoverSuggestions")}</Text>
+            <Text style={styles.mayKnowHeading}>{t("networkPeopleYouMayKnow")}</Text>
+          </>
+        ) : null
+      }
+      right={
+        peopleYouMayKnow.length > 0
+          ? renderEmbeddedPaneListGrid(
+              peopleYouMayKnow,
+              "may-know",
+              undefined,
+              splitPaneGridOptions,
+            )
+          : null
+      }
+    />
+  );
+
+  const embeddedHubMobileListBody = (
+    <View style={styles.hubMobileListRoot}>
+      {growNetworkRecommendations.length > 0
+        ? renderEmbeddedPaneListGrid(
+            growNetworkRecommendations,
+            "grow",
+            styles.hubMobileListPane,
+            splitPaneGridOptions,
+          )
+        : null}
+      {peopleYouMayKnow.length > 0 ? (
+        <View style={styles.hubMobileListSection}>
+          <View style={styles.hubMobileListSectionHeader}>
+            <Text style={styles.mayKnowKicker}>{t("networkDiscoverSuggestions")}</Text>
+            <Text style={styles.mayKnowHeading}>{t("networkPeopleYouMayKnow")}</Text>
+          </View>
+          {renderEmbeddedPaneListGrid(
+            peopleYouMayKnow,
+            "may-know",
+            styles.hubMobileListPane,
+            splitPaneGridOptions,
+          )}
+        </View>
       ) : null}
     </View>
   );
 
+  const embeddedHubSearchBody = (
+    <View style={styles.hubListFull}>
+      {renderEmbeddedPaneListGrid(visibleDiscoverOrgs, "discover-search", undefined, {
+        columns: NETWORK_HUB_SPLIT_GRID_COLUMNS,
+        compact: discoverListCompact,
+      })}
+      {hasMoreDiscover ? (
+        <View style={styles.hubListLoadMore}>
+          <NetworkLoadMoreButton
+            remaining={remainingDiscover}
+            onPress={loadMoreDiscover}
+          />
+        </View>
+      ) : null}
+    </View>
+  );
+
+  const embeddedHubBody =
+    embedded && !search
+      ? splitStacked
+        ? embeddedHubMobileListBody
+        : embeddedHubSplitBody
+      : embedded && search
+        ? embeddedHubSearchBody
+        : null;
+
   return (
-    <View
-      style={[styles.container, embedded && styles.containerEmbedded]}
-      onLayout={
-        embedded
-          ? (e) => recordEmbeddedListWidth(e.nativeEvent.layout.width)
-          : undefined
-      }
-    >
+    <View style={[styles.container, embedded && styles.containerEmbedded]}>
       {showSearchChrome ? (
         <View style={styles.searchBox}>
           <Search size={16} color={Theme.textSecondary} />
@@ -785,7 +846,7 @@ export function DiscoverView({
               <LoadingIndicator size="small" color={Theme.primary} />
             </View>
           ) : (
-            embeddedProfileCardBody
+            embeddedHubBody
           )}
         </View>
       ) : (
@@ -804,6 +865,7 @@ export function DiscoverView({
                 onConnect={() => tryBeginConnectionRequest(item.org)}
                 onCancel={() => void handleCancelRequest(item.org)}
                 loading={connecting === item.org.id}
+                pendingRole={sentRequestRoles[item.org.id] ?? null}
                 onOpenProfile={() => {
                   const metrics = getDiscoverOrgCardMetrics(item.org);
                   onOpenProfile?.({
@@ -812,6 +874,9 @@ export function DiscoverView({
                     location_value: getBusinessLocation(item.org),
                   });
                 }}
+                onPressMutuals={orgPressMutualsHandler(item.org)}
+                onPressMutual={onPressMutual}
+                viewerOrgId={orgId}
               />
             );
           }}
@@ -838,82 +903,23 @@ export function DiscoverView({
           }
         />
       )}
-      <Modal
+      <ConnectionRoleModal
         visible={Boolean(requestRoleModalOrg)}
-        transparent
-        animationType="fade"
-        onRequestClose={closeRequestRoleModal}
-      >
-        <View style={styles.requestRoleModalBackdrop}>
-          <Pressable
-            style={styles.requestRoleModalBackdropTouch}
-            onPress={closeRequestRoleModal}
-            disabled={Boolean(connecting)}
-          />
-          <View style={styles.requestRoleModalCard}>
-            <Text style={styles.requestRoleModalKicker}>Connection type</Text>
-            <Text style={styles.requestRoleModalTitle} numberOfLines={2}>
-              {requestRoleModalOrg ? `Invite ${requestRoleModalOrg.name}` : "Invite organization"}
-            </Text>
-            <Text style={styles.requestRoleModalSubTitle}>
-              Choose how this organization should be added to your network.
-            </Text>
-
-            <Pressable
-              style={({ pressed }) => [
-                styles.requestRoleOptionBtn,
-                pressed && styles.requestRoleOptionBtnPressed,
-              ]}
-              onPress={() =>
-                requestRoleModalOrg ? void handleConnect(requestRoleModalOrg, "client") : undefined
-              }
-              disabled={!requestRoleModalOrg || Boolean(connecting)}
-            >
-              <Text style={styles.requestRoleOptionTitle}>Add as client</Text>
-              <Text style={styles.requestRoleOptionDesc}>
-                They appear in your clients list after approval.
-              </Text>
-            </Pressable>
-
-            <Pressable
-              style={({ pressed }) => [
-                styles.requestRoleOptionBtn,
-                pressed && styles.requestRoleOptionBtnPressed,
-              ]}
-              onPress={() =>
-                requestRoleModalOrg ? void handleConnect(requestRoleModalOrg, "supplier") : undefined
-              }
-              disabled={!requestRoleModalOrg || Boolean(connecting)}
-            >
-              <Text style={styles.requestRoleOptionTitle}>Add as supplier</Text>
-              <Text style={styles.requestRoleOptionDesc}>
-                They appear in your suppliers list after approval.
-              </Text>
-            </Pressable>
-
-            <Pressable
-              style={({ pressed }) => [
-                styles.requestRoleCancelBtn,
-                pressed && styles.requestRoleCancelBtnPressed,
-              ]}
-              onPress={closeRequestRoleModal}
-              disabled={Boolean(connecting)}
-            >
-              {connecting ? (
-                <LoadingIndicator size={14} color={Theme.textPrimaryDark} />
-              ) : (
-                <Text style={styles.requestRoleCancelText}>Cancel</Text>
-              )}
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
+        companyName={requestRoleModalOrg?.name ?? ""}
+        submitting={Boolean(
+          requestRoleModalOrg && connecting === requestRoleModalOrg.id,
+        )}
+        onClose={closeRequestRoleModal}
+        onConfirm={(role) => {
+          if (requestRoleModalOrg) void handleConnect(requestRoleModalOrg, role);
+        }}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  container: { flex: 1, backgroundColor: Theme.networkPageBackground },
   containerEmbedded: {
     flex: 0,
     flexGrow: 0,
@@ -958,483 +964,11 @@ const styles = StyleSheet.create({
     width: "100%",
     alignSelf: "stretch",
   },
-  discoverCardList: {
+  discoverListItemShell: {
     width: "100%",
-    gap: 8,
-  },
-  listStatic: {
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingBottom: 16,
-    width: "100%",
-    flexDirection: "column",
-    gap: DISCOVER_GRID_GAP_PX,
-    alignItems: "stretch",
-  },
-  gridHeaderCell: { width: "100%" },
-  discoverGridRow: {
-    flexDirection: "row",
-    alignItems: "stretch",
-    flexWrap: "nowrap",
-    width: "100%",
-    maxWidth: "100%",
-    gap: DISCOVER_GRID_GAP_PX,
-    justifyContent: "flex-start",
-  },
-  discoverGridCell: {
-    flexGrow: 0,
-    flexShrink: 0,
-    flexBasis: "auto",
-    minWidth: 0,
-  },
-  discoverGridCellEmbeddedFlex: {
-    flex: 1,
-    minWidth: 0,
-    alignSelf: "stretch",
-  },
-  discoverGridCellEmbeddedFixedHeight: {
-    height: DISCOVER_EMBEDDED_CARD_HEIGHT,
-    minHeight: DISCOVER_EMBEDDED_CARD_HEIGHT,
-    maxHeight: DISCOVER_EMBEDDED_CARD_HEIGHT,
-  },
-  discoverGridCardWrap: {
-    width: "100%",
-    minWidth: 0,
-  },
-  discoverGridCardWrapStretch: {
-    flex: 1,
-    alignSelf: "stretch",
-  },
-  card: {
-    width: "100%",
-    minHeight: 0,
-    backgroundColor: Theme.screenBackground,
-    borderRadius: NETWORK_PROFILE_CARD_RADIUS,
-    borderWidth: 1,
-    borderColor: Theme.surfaceBorder,
-    shadowColor: Theme.shadow,
-    shadowOpacity: 0.055,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 7 },
-    overflow: 'hidden',
-    flexDirection: "column",
-  },
-  cardStretchEmbedded: {
-    flex: 1,
-    height: "100%",
-  },
-  cardFixedHeightEmbedded: {
-    height: DISCOVER_EMBEDDED_CARD_HEIGHT,
-    minHeight: DISCOVER_EMBEDDED_CARD_HEIGHT,
-    maxHeight: DISCOVER_EMBEDDED_CARD_HEIGHT,
-  },
-  cardConnected: { borderColor: Theme.borderLight },
-  cardRecommended: { borderColor: Theme.aggregatePillBorder, borderWidth: 1 },
-  recommendedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#6366f10e',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#6366f120',
-  },
-  recommendedText: { fontSize: 9, fontWeight: '800', color: '#6366f1', letterSpacing: 0.4 },
-  cardRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
-  discoverCover: {
-    height: NETWORK_PROFILE_COVER_HEIGHT,
-    overflow: "hidden",
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderLight,
-    backgroundColor: Theme.surfaceGray,
-  },
-  discoverCoverOrb: {
-    position: "absolute",
-    width: 132,
-    height: 70,
-    borderRadius: 66,
-    top: -20,
-    left: -28,
-    backgroundColor: Theme.borderLight,
-    transform: [{ rotate: "-9deg" }],
-  },
-  discoverCoverOrbSmall: {
-    position: "absolute",
-    width: 92,
-    height: 54,
-    borderRadius: 46,
-    right: -22,
-    bottom: -16,
-    backgroundColor: Theme.surface,
-    transform: [{ rotate: "12deg" }],
-  },
-  discoverCoverPlane: {
-    position: "absolute",
-    width: 112,
-    height: 52,
-    borderRadius: 14,
-    right: 28,
-    top: 10,
-    backgroundColor: Theme.screenBackground,
-    opacity: 0.58,
-    transform: [{ rotate: "-8deg" }],
-  },
-  coverSignalChip: {
-    position: "absolute",
-    top: 6,
-    right: 6,
-    minHeight: 16,
-    justifyContent: "center",
-    paddingHorizontal: 5,
-    borderRadius: 8,
-    backgroundColor: Theme.screenBackground,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
-  },
-  coverSignalText: {
-    fontSize: 7,
-    fontWeight: "600",
-    fontStyle: "italic",
-    letterSpacing: 0.8,
-    color: Theme.textPrimaryDark,
-    includeFontPadding: false,
-  },
-  profileBlock: {
-    position: "relative",
-    alignItems: "center",
-    paddingHorizontal: 8,
-    paddingBottom: 4,
-  },
-  profileBlockFlex: {
-    flex: 1,
-    minHeight: 0,
-    justifyContent: "flex-start",
-  },
-  profileBlockPress: {
-    alignItems: "center",
-    width: "100%",
-  },
-  profileHeroStack: {
-    alignItems: "center",
-    width: "100%",
-    marginTop: -22,
-    paddingHorizontal: 4,
-    zIndex: 5,
-    gap: 6,
-  },
-  profileMetricsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-    width: "100%",
-  },
-  hubMetricPill: {
-    minHeight: 18,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 9,
-    backgroundColor: Theme.screenBackground,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
-    flexShrink: 1,
-    maxWidth: "48%",
-  },
-  hubMetricPillRating: {
-    gap: 4,
-  },
-  hubMetricPillRatingEmpty: {
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    minHeight: 20,
-  },
-  hubTripsText: {
-    fontSize: 7,
-    fontWeight: "600",
-    fontStyle: "italic",
-    color: Theme.textSecondary,
-    textAlign: "center",
-    lineHeight: 9,
-  },
-  hubRatingText: {
-    fontSize: 9,
-    fontWeight: "600",
-    color: Theme.textPrimaryDark,
-  },
-  hubRatingTextEmpty: {
-    fontSize: 7,
-    fontWeight: "500",
-    color: Theme.textMutedDemo,
-    letterSpacing: -0.1,
-  },
-  heroAvatar: {
-    width: NETWORK_PROFILE_AVATAR_SIZE_DISCOVER + 4,
-    height: NETWORK_PROFILE_AVATAR_SIZE_DISCOVER + 4,
-    borderRadius: (NETWORK_PROFILE_AVATAR_SIZE_DISCOVER + 4) / 2,
-    overflow: "hidden",
-    backgroundColor: Theme.screenBackground,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-    shadowColor: Theme.shadow,
-    shadowOpacity: 0.12,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 2,
-  },
-  heroAvatarImage: {
-    borderWidth: 2,
-    borderColor: Theme.screenBackground,
-  },
-  info: { flex: 1, gap: 5 },
-  orgName: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: Theme.textPrimaryDark,
-    letterSpacing: -0.1,
-    textAlign: "center",
-    marginTop: 4,
-    lineHeight: 12,
-    height: 12,
-    maxHeight: 12,
-    width: "100%",
-    paddingHorizontal: 6,
-    includeFontPadding: false,
-    flexShrink: 1,
-  },
-  locationRow: {
-    height: 12,
-    maxHeight: 12,
-    width: "100%",
-    marginTop: 2,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-    maxWidth: "100%",
-    paddingHorizontal: 4,
-  },
-  locationText: {
-    fontSize: 8,
-    fontWeight: "500",
-    fontStyle: "italic",
-    color: Theme.textMutedDemo,
-    lineHeight: 11,
-    textAlign: "center",
-    includeFontPadding: false,
-  },
-  locationTextEmpty: {
-    fontSize: 8,
-    fontWeight: "600",
-    fontStyle: "italic",
-    color: Theme.textSecondary,
-    lineHeight: 11,
-    textAlign: "center",
-    opacity: 0.85,
-    includeFontPadding: false,
-  },
-  cardMetaStack: {
-    width: "100%",
-    paddingHorizontal: 6,
-    marginTop: 0,
-    marginBottom: 4,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  discoveryMetaChip: {
-    minHeight: 18,
-    maxWidth: "100%",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 3,
-    paddingHorizontal: 6,
-    borderRadius: 9,
-    backgroundColor: Theme.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
-  },
-  discoveryMetaChipStrong: {
-    backgroundColor: Theme.textPrimaryDark,
-    borderColor: Theme.textPrimaryDark,
-  },
-  discoveryMetaText: {
-    fontSize: 7,
-    fontWeight: "700",
-    fontStyle: "italic",
-    color: Theme.textSecondary,
-  },
-  discoveryMetaTextStrong: {
-    color: Theme.textOnPrimary,
-  },
-  detailStack: { marginTop: 14 },
-  detailRow: {
-    minHeight: 38,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-    paddingHorizontal: 14,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.borderLight,
-  },
-  detailLabel: {
-    fontSize: 9,
-    fontWeight: "600",
-    fontStyle: "italic",
-    color: Theme.textMutedDemo,
-    letterSpacing: 0.35,
-  },
-  ratingPill: {
-    minHeight: 24,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 5,
-    paddingHorizontal: 9,
-    borderRadius: 12,
-    backgroundColor: Theme.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
-  },
-  ratingValue: {
-    fontSize: 12,
-    fontWeight: "600",
-    fontStyle: "italic",
-    color: Theme.textPrimaryDark,
-  },
-  memberStack: { flexDirection: "row", alignItems: "center" },
-  memberAvatar: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: Theme.screenBackground,
-    backgroundColor: Theme.surface,
-  },
-  memberAvatarMuted: {
-    opacity: 0.55,
-  },
-  memberAvatarText: { fontSize: 7, fontWeight: "600", fontStyle: "italic", letterSpacing: -0.4, color: Theme.textPrimaryDark },
-  mutualCountPill: {
-    minWidth: 24,
-    height: 20,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    gap: 3,
-    backgroundColor: Theme.textPrimaryDark,
-    borderWidth: 2,
-    borderColor: Theme.screenBackground,
-    marginLeft: -4,
-    paddingHorizontal: 5,
-    maxWidth: 96,
-  },
-  mutualCountPillEmpty: {
-    backgroundColor: Theme.surface,
-  },
-  mutualCountText: {
-    fontSize: 8,
-    fontWeight: "600",
-    fontStyle: "italic",
-    color: Theme.textOnPrimary,
-  },
-  mutualCountTextEmpty: {
-    color: Theme.textSecondary,
-  },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  connectedLabel: { fontSize: 10, fontWeight: '700', color: '#10b981' },
-  pendingLabel: { fontSize: 10, fontWeight: '700', color: '#f59e0b' },
-  cardFooter: {
-    minHeight: 28,
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.borderLight,
-    alignItems: "stretch",
-    justifyContent: "center",
-  },
-  footerAction: {
-    minHeight: 26,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 5,
-    borderRadius: 13,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
-    shadowColor: Theme.shadow,
-    shadowOpacity: 0.04,
-    shadowRadius: 7,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 1,
-  },
-  footerActionPrimary: {
-    borderColor: Theme.textPrimaryDark,
-    width: "100%",
-  },
-  footerActionPending: {
-    borderColor: Theme.borderMedium,
-  },
-  footerActionFlex: {
     flex: 1,
     minWidth: 0,
   },
-  footerActionLoading: {
-    opacity: 0.72,
-  },
-  footerActionText: {
-    fontSize: 10,
-    fontWeight: "700",
-    fontStyle: "italic",
-    color: Theme.textPrimaryDark,
-    letterSpacing: 0.2,
-    includeFontPadding: false,
-  },
-  pendingFooter: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    width: "100%",
-  },
-  cancelRequestBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
-    flexShrink: 0,
-    shadowColor: Theme.shadow,
-    shadowOpacity: 0.025,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 1,
-  },
-  cancelRequestBtnLoading: {
-    opacity: 0.68,
-  },
-  connectedBadge: {
-    width: 36, height: 36, borderRadius: 10, backgroundColor: '#10b98114',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  pendingBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: '#f59e0b14', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8,
-  },
-  pendingBadgeText: { fontSize: 10, fontWeight: '800', color: '#f59e0b' },
   empty: { alignItems: 'center', paddingTop: 56, paddingHorizontal: 40, gap: 12 },
   emptyIconWrap: {
     width: 72, height: 72, borderRadius: 20, backgroundColor: Theme.surface,
@@ -1448,90 +982,48 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 48,
   },
-  requestRoleModalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.44)",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 18,
-  },
-  requestRoleModalBackdropTouch: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  requestRoleModalCard: {
+  hubListFull: {
     width: "100%",
-    maxWidth: 400,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.screenBackground,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    gap: 10,
-    shadowColor: Theme.shadow,
-    shadowOpacity: 0.16,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 10,
+    paddingHorizontal: NETWORK_HUB_GRID_ROW_PADDING_H,
+    gap: NETWORK_HUB_GRID_GAP_PX,
+    paddingBottom: 4,
   },
-  requestRoleModalKicker: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: Theme.textSecondary,
-    letterSpacing: 0.8,
+  hubListLoadMore: {
+    width: "100%",
+    paddingTop: 4,
+  },
+  mayKnowKicker: {
+    fontSize: 9,
+    fontWeight: "600",
+    letterSpacing: 0.6,
+    color: Theme.textMuted,
     textTransform: "uppercase",
   },
-  requestRoleModalTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: Theme.textPrimaryDark,
-    lineHeight: 20,
-  },
-  requestRoleModalSubTitle: {
-    fontSize: 12,
-    color: Theme.textSecondary,
-    lineHeight: 17,
-    marginBottom: 4,
-  },
-  requestRoleOptionBtn: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.surfaceGray,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    gap: 4,
-  },
-  requestRoleOptionBtnPressed: {
-    opacity: 0.8,
-  },
-  requestRoleOptionTitle: {
+  mayKnowHeading: {
     fontSize: 13,
-    fontWeight: "800",
-    color: Theme.textPrimaryDark,
-  },
-  requestRoleOptionDesc: {
-    fontSize: 11,
-    color: Theme.textSecondary,
-    lineHeight: 15,
-  },
-  requestRoleCancelBtn: {
-    minHeight: 40,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
-    backgroundColor: Theme.screenBackground,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 2,
-  },
-  requestRoleCancelBtnPressed: {
-    opacity: 0.75,
-  },
-  requestRoleCancelText: {
-    fontSize: 12,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
+    letterSpacing: -0.2,
+  },
+  hubMobileListRoot: {
+    width: "100%",
+    gap: 0,
+  },
+  hubMobileListSection: {
+    width: "100%",
+    marginTop: 16,
+    gap: 8,
+  },
+  hubMobileListSectionHeader: {
+    width: "100%",
+    paddingHorizontal: NETWORK_HUB_GRID_ROW_PADDING_H,
+    gap: 2,
+    marginBottom: 4,
+  },
+  hubMobileListPane: {
+    width: "100%",
+    paddingHorizontal: NETWORK_HUB_GRID_ROW_PADDING_H,
+    gap: NETWORK_HUB_GRID_GAP_PX,
   },
   inviteCounterRow: {
     flexDirection: 'row',

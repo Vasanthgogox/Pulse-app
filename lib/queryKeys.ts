@@ -160,6 +160,9 @@ export const queryKeys = {
       ["q", "discover", orgId, search] as const,
   },
 
+  mutualConnections: (viewerOrgId: string, targetOrgId: string) =>
+    ["q", "network", "mutual-connections", viewerOrgId, targetOrgId] as const,
+
   orgMembers: {
     all: (orgId: string) => ["q", "org-members", orgId] as const,
     list: (orgId: string) => ["q", "org-members", orgId, "list"] as const,
