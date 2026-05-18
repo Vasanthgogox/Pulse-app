@@ -40,7 +40,6 @@ import { validatePhone } from '@/lib/phoneValidation';
 import { VALIDATION, maxLength, validateFullName } from '@/lib/validation';
 import * as authService from '../services/auth.service';
 
-/** Default preset seed when no uploaded avatar (same as driver — assets/drivers/driver-1.png etc.). */
 const DEFAULT_AVATAR_SEED = 'driver-1';
 
 /** Driver edit screen — cool white page (reference: #FDFEFF). */
@@ -96,11 +95,10 @@ export function EditProfileModal({
 }: EditProfileModalProps) {
   const insets = useSafeAreaInsets();
   const { profile } = useAuth();
-  const isUser2D = avatarPresetStyle === 'user-2d';
   // Use the same clean, form-first modal layout across driver + user flows.
   // Keeps interactions identical while matching app theme consistently.
   const driverRefLayout = false;
-  const accent = isUser2D ? Theme.primary : Theme.positive;
+
   const [fullName, setFullName] = useState(initialFullName);
   const [phone, setPhone] = useState(initialPhone);
   const [companyName, setCompanyName] = useState(initialCompanyName);
@@ -264,17 +262,6 @@ export function EditProfileModal({
     });
   };
 
-  const userPreset =
-    USER_2D_AVATARS.find((a) => a.seed === selectedPresetSeed) ?? USER_2D_AVATARS[0];
-  const selectedPreset =
-    avatarPresetStyle === 'user-2d'
-      ? {
-          seed: userPreset.seed,
-          name: userPreset.name,
-          image: { uri: getUser2DAvatarUriForSeed(userPreset.seed) },
-        }
-      : ALL_PRESET_AVATARS.find((a) => a.seed === selectedPresetSeed) ?? ALL_PRESET_AVATARS[0];
-
   const handleRemovePhoto = async () => {
     setError(null);
     const { error: updateErr } = await authService.updateProfile({
@@ -372,10 +359,7 @@ export function EditProfileModal({
             const seed = (av as { seed: string }).seed;
             const name = (av as { name?: string }).name ?? 'Avatar';
             const isSelected = selectedPresetSeed === seed;
-            const imageSource =
-              avatarPresetStyle === 'user-2d'
-                ? ({ uri: getUser2DAvatarUriForSeed(seed) } as const)
-                : (av as (typeof ALL_PRESET_AVATARS)[number]).image;
+            const imageSource = (av as (typeof ALL_PRESET_AVATARS)[number]).image;
             return (
               <View key={seed} style={styles.avatarGridCell}>
                 <TouchableOpacity

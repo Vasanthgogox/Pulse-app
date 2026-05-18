@@ -32,7 +32,7 @@ const driver8 = require('../assets/drivers/driver-8.png');
 const driver9 = require('../assets/drivers/driver-9.png');
 const driver10 = require('../assets/drivers/driver-10.png');
 
-/** All driver preset avatars (bundled in assets/drivers). Replace placeholder PNGs with your icons. */
+/** All driver preset avatars (bundled in assets/drivers). */
 export const DRIVER_PRESET_AVATARS: PresetAvatar[] = [
   { name: 'Happy Captain', seed: 'driver-1', image: driver1 },
   { name: 'Trusty Veteran', seed: 'driver-2', image: driver2 },
