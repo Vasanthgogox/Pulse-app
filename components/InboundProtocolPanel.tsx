@@ -2,6 +2,7 @@
  * Inbound Protocol — connection-request invitation popover (desktop bell).
  * Data from global sync bootstrap (requests + batch partner avatars).
  */
+import { PartyAvatar } from "@/components/PartyAvatar";
 import { useEffect } from "react";
 import Theme from "@/constants/Theme";
 import type { InboundProtocolInviteItem } from "@/lib/globalSync/inboundProtocol.types";
@@ -9,7 +10,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { UserCheck, UserPlus, X } from "lucide-react-native";
 import {
   ActivityIndicator,
-  Image,
   Platform,
   Pressable,
   ScrollView,
@@ -50,17 +50,6 @@ export type InboundProtocolPanelProps = {
   showFooter?: boolean;
 };
 
-function inviteInitials(name: string): string {
-  return (
-    name
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((p) => p[0]?.toUpperCase())
-      .join("") || "?"
-  );
-}
-
 function EmptyProtocolState() {
   const pulse = useSharedValue(0.35);
 
@@ -97,21 +86,16 @@ function EmptyProtocolState() {
 }
 
 function InviteAvatar({ item }: { item: InboundProtocolInviteItem }) {
-  const initials = inviteInitials(item.name);
-  if (item.avatarUri) {
-    return (
-      <View style={styles.inviteAvatar}>
-        <Image
-          source={{ uri: item.avatarUri }}
-          style={styles.inviteAvatarImage}
-          accessibilityLabel={`${item.name} avatar`}
-        />
-      </View>
-    );
-  }
   return (
     <View style={styles.inviteAvatar}>
-      <Text style={styles.inviteAvatarText}>{initials}</Text>
+      <PartyAvatar
+        name={item.name}
+        initialsColorSeed={item.partnerOrgId}
+        avatarUrl={item.avatarUri}
+        entityType="client"
+        size={40}
+        borderStyle={styles.inviteAvatarImage}
+      />
     </View>
   );
 }

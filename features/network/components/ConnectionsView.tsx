@@ -34,7 +34,7 @@ import {
     useSuppliersQuery,
     useTripsQuery,
 } from "@/lib/queries";
-import { getInitials } from "@/lib/stringUtils";
+import { ConnectionEntityAvatar } from "@/features/network/utils/connectionEntityAvatar";
 import { supabase } from "@/lib/supabase";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -91,21 +91,6 @@ function seedColor(id: string): string {
   for (let i = 0; i < id.length; i++)
     h = (h + id.charCodeAt(i)) % COVER_TOKENS.length;
   return COVER_TOKENS[h];
-}
-
-function subtleAvatarTone(seed: string): {
-  bg: string;
-  border: string;
-  text: string;
-  dot: string;
-} {
-  const shift = seed.length % 2;
-  return {
-    bg: shift === 0 ? "#F8FAFC" : "#F1F5F9",
-    border: "#EEF2F7",
-    text: shift === 0 ? "#64748B" : "#475569",
-    dot: "#94A3B8",
-  };
 }
 
 function roleTone(role: ConnectedOrg["role"]) {
@@ -165,7 +150,6 @@ function normalizeName(value: string | null | undefined): string {
 function GridCard({ item }: { item: ConnectedOrg }) {
   const scale = React.useRef(new Animated.Value(1)).current;
   const color = seedColor(item.id);
-  const avatarTone = subtleAvatarTone(item.id);
   const tone = roleTone(item.role);
   const roleSub =
     item.role === "CLIENT"
@@ -194,23 +178,8 @@ function GridCard({ item }: { item: ConnectedOrg }) {
           ]}
         />
         <View style={styles.gridAvatarOverlap}>
-          <View
-            style={[
-              styles.gridAvatar,
-              {
-                backgroundColor: avatarTone.bg,
-                borderColor: avatarTone.border,
-              },
-            ]}
-          >
-            <Text style={[styles.gridAvatarText, { color: avatarTone.text }]}>
-              {getInitials(item.name)}
-            </Text>
-            {item.is_integrated && (
-              <View style={styles.gridZapDot}>
-                <Zap size={7} color="#fff" fill="#fff" />
-              </View>
-            )}
+          <View style={styles.gridAvatar}>
+            <ConnectionEntityAvatar item={item} size={58} />
           </View>
         </View>
         <View style={styles.gridBody}>
@@ -223,7 +192,7 @@ function GridCard({ item }: { item: ConnectedOrg }) {
           </Text>
           <View style={styles.gridMutualRow}>
             <View
-              style={[styles.gridMiniDot, { backgroundColor: avatarTone.dot }]}
+              style={[styles.gridMiniDot, { backgroundColor: Theme.iconSlate }]}
             />
             <Text style={styles.gridMutualText} numberOfLines={1}>
               In your Q network
@@ -263,7 +232,6 @@ function GridCard({ item }: { item: ConnectedOrg }) {
 
 function ListCard({ item }: { item: ConnectedOrg }) {
   const scale = React.useRef(new Animated.Value(1)).current;
-  const avatarTone = subtleAvatarTone(item.id);
   const tone = roleTone(item.role);
 
   const onIn = () =>
@@ -274,20 +242,8 @@ function ListCard({ item }: { item: ConnectedOrg }) {
   return (
     <Pressable onPressIn={onIn} onPressOut={onOut}>
       <Animated.View style={[styles.listCard, { transform: [{ scale }] }]}>
-        <View
-          style={[
-            styles.listAvatar,
-            { backgroundColor: avatarTone.bg, borderColor: avatarTone.border },
-          ]}
-        >
-          <Text style={[styles.listAvatarText, { color: avatarTone.text }]}>
-            {getInitials(item.name)}
-          </Text>
-          {item.is_integrated && (
-            <View style={styles.listZapDot}>
-              <Zap size={7} color="#fff" fill="#fff" />
-            </View>
-          )}
+        <View style={styles.listAvatar}>
+          <ConnectionEntityAvatar item={item} size={50} />
         </View>
 
         <View style={styles.listInfo}>
@@ -1373,30 +1329,8 @@ const styles = StyleSheet.create({
   gridAvatar: {
     width: 64,
     height: 64,
-    borderRadius: 32,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 3,
-    position: "relative",
-  },
-  gridAvatarText: {
-    fontSize: 13,
-    fontWeight: "400",
-    letterSpacing: 0.24,
-    color: "#6B7280",
-  },
-  gridZapDot: {
-    position: "absolute",
-    bottom: 2,
-    right: 2,
-    width: 17,
-    height: 17,
-    borderRadius: 9,
-    backgroundColor: Theme.positive,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: Theme.screenBackground,
   },
   gridName: {
     fontSize: 12,
@@ -1427,30 +1361,8 @@ const styles = StyleSheet.create({
   listAvatar: {
     width: 50,
     height: 50,
-    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1.5,
-    position: "relative",
-  },
-  listAvatarText: {
-    fontSize: 11,
-    fontWeight: "400",
-    letterSpacing: 0.2,
-    color: "#6B7280",
-  },
-  listZapDot: {
-    position: "absolute",
-    bottom: -2,
-    right: -2,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: Theme.positive,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: Theme.screenBackground,
   },
   listInfo: { flex: 1, gap: 5 },
   listName: {

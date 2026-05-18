@@ -12,7 +12,6 @@ import {
   NETWORK_PROFILE_COVER_HEIGHT,
 } from "@/features/network/constants/networkProfileCardLayout";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
-import { getInitials } from "@/lib/stringUtils";
 import {
     Check,
     Send,
@@ -305,8 +304,6 @@ export function HubConnectionListCard({
 }
 
 export function HubConnectionGridCard({ item }: { item: HubConnectionItem }) {
-  const color = seedColor(item.id);
-  const avatarBg = subtleAvatarBg(item.id);
   const rs = ROLE_STYLES[item.role];
   return (
     <View style={styles.gridOuter}>
@@ -324,10 +321,22 @@ export function HubConnectionGridCard({ item }: { item: HubConnectionItem }) {
       </View>
       <View style={[styles.gridInner, { borderColor: Theme.borderLight }]}>
         <View style={styles.gridAvatarWrap}>
-          <View style={[styles.gridAvatar, { backgroundColor: avatarBg }]}>
-            <Text style={[styles.gridAvatarTxt, { color }]}>
-              {getInitials(item.name)}
-            </Text>
+          <View style={styles.gridAvatar}>
+            <PartyAvatar
+              name={item.name}
+              avatarUrl={item.avatarUrl}
+              avatarSeed={item.avatarSeed}
+              entityType={
+                item.entityType ??
+                (item.role === "DRIVER"
+                  ? "driver"
+                  : item.role === "SUPPLIER"
+                    ? "supplier"
+                    : "client")
+              }
+              size={52}
+              borderStyle={styles.gridAvatarImage}
+            />
           </View>
           <View style={styles.gridOnlineDot} />
         </View>
@@ -840,17 +849,13 @@ const styles = StyleSheet.create({
   gridAvatar: {
     width: 52,
     height: 52,
-    borderRadius: 26,
     alignItems: "center",
     justifyContent: "center",
+  },
+  gridAvatarImage: {
+    borderRadius: 26,
     borderWidth: 1,
     borderColor: "#EEF2F7",
-  },
-  gridAvatarTxt: {
-    fontSize: 11,
-    fontWeight: "400",
-    letterSpacing: 0.2,
-    color: "#6B7280",
   },
   gridOnlineDot: {
     position: "absolute",

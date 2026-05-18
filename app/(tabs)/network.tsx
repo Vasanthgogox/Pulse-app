@@ -5,6 +5,7 @@
 import { HomePageHeader } from "@/components/HomePageHeader";
 import { InboundProtocolPanel } from "@/components/InboundProtocolPanel";
 import { LoadingIndicator } from "@/components/LoadingIndicator";
+import { EntityAvatar } from "@/components/EntityAvatar";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
@@ -129,6 +130,9 @@ type NetworkProfileNode = {
   rating: number | null;
   mutuals: number;
   phone?: string | null;
+  avatar_url?: string | null;
+  avatar_seed?: string | null;
+  is_integrated?: boolean;
 };
 
 const UUID_REGEX =
@@ -423,6 +427,9 @@ function NetworkScreenInner() {
       rating: item.rating ?? null,
       mutuals: item.mutual_count ?? 0,
       phone: item.phone ?? null,
+      avatar_url: item.avatar_url ?? null,
+      avatar_seed: item.avatar_seed ?? null,
+      is_integrated: item.is_integrated,
     });
   };
 
@@ -430,6 +437,7 @@ function NetworkScreenInner() {
       org: {
         id: string;
         name: string;
+        avatar_seed?: string | null;
         connection_status?: string | null;
         mutual_count?: number | null;
         mutual_connections_count?: number | null;
@@ -452,6 +460,7 @@ function NetworkScreenInner() {
         status,
         rating: org.rating_value ?? null,
         mutuals: org.mutual_count ?? org.mutual_connections_count ?? 0,
+        avatar_seed: org.avatar_seed ?? null,
       });
   };
 
@@ -977,14 +986,21 @@ function NetworkScreenInner() {
               >
                 <View style={[styles.profileIdentityCardModern, styles.profileIdentityCardModal]}>
                   <View style={styles.profileAvatarLgModern}>
-                    <Text style={styles.profileAvatarLgText}>
-                      {selectedProfileNode.name
-                        .split(" ")
-                        .map((p) => p[0])
-                        .join("")
-                        .slice(0, 2)
-                        .toUpperCase()}
-                    </Text>
+                    <EntityAvatar
+                      name={selectedProfileNode.name}
+                      avatarUrl={selectedProfileNode.avatar_url}
+                      avatarSeed={selectedProfileNode.avatar_seed}
+                      entityType={
+                        selectedProfileNode.type === "DRIVER"
+                          ? "driver"
+                          : selectedProfileNode.type === "SUPPLIER"
+                            ? "supplier"
+                            : "client"
+                      }
+                      isIntegrated={selectedProfileNode.is_integrated ?? false}
+                      size={96}
+                      showIntegrationBadge={false}
+                    />
                   </View>
                   <View style={styles.profileNameRow}>
                     <Text style={styles.profileName} numberOfLines={2}>
@@ -1532,7 +1548,7 @@ const styles = StyleSheet.create({
     width: 108,
     height: 108,
     borderRadius: 30,
-    backgroundColor: Theme.textPrimaryDark,
+    backgroundColor: "transparent",
     alignItems: "center",
     justifyContent: "center",
     shadowColor: Theme.shadow,

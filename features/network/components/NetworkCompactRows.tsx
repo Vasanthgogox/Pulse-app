@@ -6,8 +6,8 @@ import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import type { ConnectedOrg } from "@/features/network/components/ConnectionsView";
+import { ConnectionEntityAvatar } from "@/features/network/utils/connectionEntityAvatar";
 import type { DiscoverOrg } from "@/features/network/services/discover.service";
-import { getInitials } from "@/lib/stringUtils";
 import { ChevronRight, Clock3, UserPlus, X, Zap } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -95,12 +95,7 @@ export function ConnectionCompactRow({
     >
       <View style={styles.cardRow}>
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{getInitials(item.name)}</Text>
-          {item.is_integrated ? (
-            <View style={styles.liveDot}>
-              <Zap size={7} color={Theme.textOnPrimary} fill={Theme.textOnPrimary} />
-            </View>
-          ) : null}
+          <ConnectionEntityAvatar item={item} size={42} />
         </View>
         <View style={styles.rowMain}>
           <Text style={styles.rowTitle} numberOfLines={1}>
