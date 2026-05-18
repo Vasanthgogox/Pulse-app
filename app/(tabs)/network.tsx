@@ -380,6 +380,55 @@ function NetworkScreenInner() {
     };
   }, [selectedProfileNode?.id]);
 
+  const handleOpenProfileFromDiscover = useCallback(
+    (org: {
+      id: string;
+      name: string;
+      connection_status?: string | null;
+      mutual_count?: number | null;
+      mutual_connections_count?: number | null;
+      rating_value?: number | null;
+      location_value?: string | null;
+    }) => {
+      const normalized = String(org.connection_status ?? "").toLowerCase();
+      const status: NetworkProfileNode["status"] =
+        normalized === "approved"
+          ? "CONNECTED"
+          : normalized === "pending"
+            ? "REQUEST SENT"
+            : "LIVE";
+      setSelectedProfileNode({
+        id: org.id,
+        name: org.name,
+        type: "SUPPLIER",
+        location: org.location_value?.trim() || "Not available",
+        status,
+        rating: org.rating_value ?? null,
+        mutuals: org.mutual_count ?? org.mutual_connections_count ?? 0,
+      });
+    },
+    [],
+  );
+
+  const handlePressMutuals = useCallback((target: { id: string; name: string }) => {
+    setMutualModalTarget({ targetOrgId: target.id, targetOrgName: target.name });
+  }, []);
+
+  const handleOpenMutualProfile = useCallback(
+    (row: MutualConnectionRow) => {
+      handleOpenProfileFromDiscover({
+        id: row.id,
+        name: row.name,
+        connection_status: "approved",
+        mutual_count: 0,
+        mutual_connections_count: 0,
+        rating_value: null,
+        location_value: undefined,
+      });
+    },
+    [handleOpenProfileFromDiscover],
+  );
+
   if (!orgId) {
     if (orgLoading) {
       return (
@@ -447,51 +496,6 @@ function NetworkScreenInner() {
       phone: item.phone ?? null,
     });
   };
-
-  const handlePressMutuals = useCallback((target: { id: string; name: string }) => {
-    setMutualModalTarget({ targetOrgId: target.id, targetOrgName: target.name });
-  }, []);
-
-  const handleOpenProfileFromDiscover = (
-      org: {
-        id: string;
-        name: string;
-        connection_status?: string | null;
-        mutual_count?: number | null;
-        mutual_connections_count?: number | null;
-        rating_value?: number | null;
-        location_value?: string | null;
-      },
-    ) => {
-      const normalized = String(org.connection_status ?? "").toLowerCase();
-      const status: NetworkProfileNode["status"] =
-        normalized === "approved"
-          ? "CONNECTED"
-          : normalized === "pending"
-            ? "REQUEST SENT"
-            : "LIVE";
-      setSelectedProfileNode({
-        id: org.id,
-        name: org.name,
-        type: "SUPPLIER",
-        location: org.location_value?.trim() || "Not available",
-        status,
-        rating: org.rating_value ?? null,
-        mutuals: org.mutual_count ?? org.mutual_connections_count ?? 0,
-      });
-  };
-
-  const handleOpenMutualProfile = useCallback((row: MutualConnectionRow) => {
-    handleOpenProfileFromDiscover({
-      id: row.id,
-      name: row.name,
-      connection_status: "approved",
-      mutual_count: 0,
-      mutual_connections_count: 0,
-      rating_value: null,
-      location_value: undefined,
-    });
-  }, []);
 
   const handleSendProtocolFromProfile = async () => {
     if (!selectedProfileNode || !orgId) return;

@@ -54,6 +54,7 @@ import {
   Alert,
   Animated,
   FlatList,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -213,6 +214,8 @@ function OrgCard({
   pendingRole = null,
   compact,
   desktopPane,
+  mobileGrid,
+  nativeListRow,
 }: {
   org: ScoredOrg;
   locationFallback?: { city?: string | null; state?: string | null; address_line?: string | null } | null;
@@ -229,6 +232,8 @@ function OrgCard({
   pendingRole?: ConnectionInviteRole | null;
   compact?: boolean;
   desktopPane?: boolean;
+  mobileGrid?: boolean;
+  nativeListRow?: boolean;
 }) {
   const { t } = useLanguage();
   const mutuals = org.mutual_count ?? org.mutual_connections_count ?? 0;
@@ -251,6 +256,8 @@ function OrgCard({
         loading={loading}
         compact={compact}
         desktopPane={desktopPane}
+        mobileGrid={mobileGrid}
+        nativeListRow={nativeListRow}
         onOpenProfile={onOpenProfile}
         onPressMutuals={onPressMutuals}
         onPressMutual={onPressMutual}
@@ -284,7 +291,9 @@ const DISCOVER_GRID_BREAKPOINT = 820;
 const DISCOVER_COLS_DESKTOP = 7;
 const DISCOVER_ROWS_DESKTOP = 2;
 const DISCOVER_COLS_MOBILE = 2;
+const DISCOVER_COLS_NATIVE = 1;
 const DISCOVER_ROWS_MOBILE = 3;
+const DISCOVER_ROWS_NATIVE = 6;
 /** Matches discoverOrganizations fetch limit — show full result set inside embedded scroll. */
 const EMBEDDED_SCROLL_ITEM_CAP = 40;
 const DISCOVER_GRID_GAP_PX = 8;
@@ -371,9 +380,10 @@ export function DiscoverView({
   const recommended = connectableOrgs.filter((o) => o.score > 0);
   const rest = connectableOrgs.filter((o) => o.score <= 0);
 
+  const isNativeApp = Platform.OS !== "web";
   const splitPaneLayout = useMemo(
-    () => getNetworkHubSplitPaneLayout(windowWidth),
-    [windowWidth],
+    () => getNetworkHubSplitPaneLayout(windowWidth, { nativeApp: isNativeApp }),
+    [windowWidth, isNativeApp],
   );
 
   const growNetworkRecommendations = useMemo(() => {
@@ -415,10 +425,14 @@ export function DiscoverView({
   const isDiscoverDesktopGrid = windowWidth >= DISCOVER_GRID_BREAKPOINT;
   const discoverColumnCount = isDiscoverDesktopGrid
     ? DISCOVER_COLS_DESKTOP
-    : DISCOVER_COLS_MOBILE;
+    : isNativeApp
+      ? DISCOVER_COLS_NATIVE
+      : DISCOVER_COLS_MOBILE;
   const discoverRowCap = isDiscoverDesktopGrid
     ? DISCOVER_ROWS_DESKTOP
-    : DISCOVER_ROWS_MOBILE;
+    : isNativeApp
+      ? DISCOVER_ROWS_NATIVE
+      : DISCOVER_ROWS_MOBILE;
   const discoverMaxVisible = discoverColumnCount * discoverRowCap;
 
   const embeddedScrollMaxHeight = useMemo(() => {
@@ -585,12 +599,15 @@ export function DiscoverView({
     return items;
   }, [connectableOrgs, discoverListOrgs, discoverDisplayCap, embedded, search]);
 
-  const discoverListCompact = windowWidth < 1100;
+  const isMobileHub = isNetworkHubSplitStacked(windowWidth);
+  const discoverListCompact = !isMobileHub && windowWidth < 1100;
 
   type PaneListGridOptions = {
     columns: number;
     compact?: boolean;
     desktopPane?: boolean;
+    mobileGrid?: boolean;
+    nativeListRow?: boolean;
   };
 
   const renderEmbeddedPaneListGrid = useCallback(
@@ -603,68 +620,66 @@ export function DiscoverView({
       const columns = options?.columns ?? NETWORK_HUB_SPLIT_GRID_COLUMNS;
       const compact = options?.compact ?? discoverListCompact;
       const desktopPane = options?.desktopPane ?? false;
-      const rows = chunkBySize(orgs, columns);
+      const mobileGrid = options?.mobileGrid ?? (isMobileHub && columns > 1);
+      const nativeListRow =
+        options?.nativeListRow ?? (isNativeApp && columns === 1);
       const singleColumn = columns === 1;
+      const renderOrgCard = (org: ScoredOrg) => (
+        <OrgCard
+          org={org}
+          compact={compact}
+          desktopPane={desktopPane}
+          mobileGrid={mobileGrid}
+          nativeListRow={nativeListRow}
+          locationFallback={discoverOrgLocationFallback(org)}
+          {...getDiscoverOrgCardMetrics(org)}
+          onConnect={() => tryBeginConnectionRequest(org)}
+          onCancel={() => void handleCancelRequest(org)}
+          onDismiss={!search ? () => handleDismissRecommendation(org.id) : undefined}
+          loading={connecting === org.id}
+          onOpenProfile={() => {
+            const metrics = getDiscoverOrgCardMetrics(org);
+            onOpenProfile?.({
+              ...org,
+              rating_value: metrics.ratingValue,
+              location_value: getBusinessLocation(org, discoverOrgLocationFallback(org)),
+            });
+          }}
+          onPressMutuals={orgPressMutualsHandler(org)}
+          onPressMutual={onPressMutual}
+          viewerOrgId={orgId}
+          pendingRole={sentRequestRoles[org.id] ?? null}
+        />
+      );
+
+      if (singleColumn) {
+        return (
+          <View style={[networkHubSplitStyles.nativePaneList, containerStyle]}>
+            {orgs.map((org) => (
+              <View key={`${keyPrefix}-${org.id}`} style={networkHubSplitStyles.nativePaneListItem}>
+                {renderOrgCard(org)}
+              </View>
+            ))}
+          </View>
+        );
+      }
+
+      const rows = chunkBySize(orgs, columns);
       return (
         <View style={[networkHubSplitStyles.paneListGrid, containerStyle]}>
           {rows.map((row, rowIndex) => (
-            <View
-              key={`${keyPrefix}-row-${rowIndex}`}
-              style={[
-                networkHubSplitStyles.paneListRow,
-                singleColumn && networkHubSplitStyles.paneListRowSingle,
-              ]}
-            >
+            <View key={`${keyPrefix}-row-${rowIndex}`} style={networkHubSplitStyles.paneListRow}>
               {Array.from({ length: columns }, (_, colIndex) => {
-                  const org = row[colIndex];
-                  return (
-                    <View
-                      key={
-                        org
-                          ? org.id
-                          : `${keyPrefix}-empty-${rowIndex}-${colIndex}`
-                      }
-                      style={[
-                        networkHubSplitStyles.paneListCell,
-                        singleColumn && networkHubSplitStyles.paneListCellFull,
-                      ]}
-                    >
-                      {org ? (
-                        <OrgCard
-                          org={org}
-                          compact={compact}
-                          desktopPane={desktopPane}
-                          locationFallback={discoverOrgLocationFallback(org)}
-                          {...getDiscoverOrgCardMetrics(org)}
-                          onConnect={() => tryBeginConnectionRequest(org)}
-                          onCancel={() => void handleCancelRequest(org)}
-                          onDismiss={
-                            !search
-                              ? () => handleDismissRecommendation(org.id)
-                              : undefined
-                          }
-                          loading={connecting === org.id}
-                          onOpenProfile={() => {
-                            const metrics = getDiscoverOrgCardMetrics(org);
-                            onOpenProfile?.({
-                              ...org,
-                              rating_value: metrics.ratingValue,
-                              location_value: getBusinessLocation(
-                                org,
-                                discoverOrgLocationFallback(org),
-                              ),
-                            });
-                          }}
-                          onPressMutuals={orgPressMutualsHandler(org)}
-                          onPressMutual={onPressMutual}
-                          viewerOrgId={orgId}
-                          pendingRole={sentRequestRoles[org.id] ?? null}
-                        />
-                      ) : null}
-                    </View>
-                  );
-                },
-              )}
+                const org = row[colIndex];
+                return (
+                  <View
+                    key={org ? org.id : `${keyPrefix}-empty-${rowIndex}-${colIndex}`}
+                    style={networkHubSplitStyles.paneListCell}
+                  >
+                    {org ? renderOrgCard(org) : null}
+                  </View>
+                );
+              })}
             </View>
           ))}
         </View>
@@ -677,6 +692,8 @@ export function DiscoverView({
       sentRequestRoles,
       handleCancelRequest,
       handleDismissRecommendation,
+      isMobileHub,
+      isNativeApp,
       onOpenProfile,
       onPressMutual,
       orgId,
@@ -702,8 +719,10 @@ export function DiscoverView({
 
   const splitPaneGridOptions: PaneListGridOptions = {
     columns: splitPaneLayout.columns,
-    compact: splitPaneLayout.compact,
+    compact: splitPaneLayout.compact && !isMobileHub,
     desktopPane: splitPaneLayout.columns === 1,
+    mobileGrid: isMobileHub && splitPaneLayout.columns > 1,
+    nativeListRow: isNativeApp && splitPaneLayout.columns === 1,
   };
 
   const embeddedHubSplitBody = (
@@ -742,14 +761,20 @@ export function DiscoverView({
 
   const embeddedHubMobileListBody = (
     <View style={styles.hubMobileListRoot}>
-      {growNetworkRecommendations.length > 0
-        ? renderEmbeddedPaneListGrid(
+      {growNetworkRecommendations.length > 0 ? (
+        <View style={styles.hubMobileListSection}>
+          <View style={styles.hubMobileListSectionHeader}>
+            <Text style={styles.mayKnowKicker}>{t("networkDiscoverAlliesKicker")}</Text>
+            <Text style={styles.mayKnowHeading}>{t("networkDiscoverGrowSlots")}</Text>
+          </View>
+          {renderEmbeddedPaneListGrid(
             growNetworkRecommendations,
             "grow",
             styles.hubMobileListPane,
             splitPaneGridOptions,
-          )
-        : null}
+          )}
+        </View>
+      ) : null}
       {peopleYouMayKnow.length > 0 ? (
         <View style={styles.hubMobileListSection}>
           <View style={styles.hubMobileListSectionHeader}>
@@ -966,8 +991,8 @@ const styles = StyleSheet.create({
   },
   discoverListItemShell: {
     width: "100%",
-    flex: 1,
     minWidth: 0,
+    alignSelf: "stretch",
   },
   empty: { alignItems: 'center', paddingTop: 56, paddingHorizontal: 40, gap: 12 },
   emptyIconWrap: {
@@ -1007,7 +1032,9 @@ const styles = StyleSheet.create({
   },
   hubMobileListRoot: {
     width: "100%",
+    alignSelf: "stretch",
     gap: 0,
+    paddingHorizontal: NETWORK_HUB_GRID_ROW_PADDING_H,
   },
   hubMobileListSection: {
     width: "100%",
@@ -1022,7 +1049,8 @@ const styles = StyleSheet.create({
   },
   hubMobileListPane: {
     width: "100%",
-    paddingHorizontal: NETWORK_HUB_GRID_ROW_PADDING_H,
+    alignSelf: "stretch",
+    paddingHorizontal: 0,
     gap: NETWORK_HUB_GRID_GAP_PX,
   },
   inviteCounterRow: {

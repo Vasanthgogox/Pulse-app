@@ -10,6 +10,7 @@ import { NetworkPartyHubListCard } from "@/features/network/components/NetworkPa
 import { NetworkHubConnectionsPagedGrid } from "@/features/network/components/NetworkHubConnectionsPagedGrid";
 import {
   getNetworkHubConnectionsLayout,
+  SPLIT_STACK_BREAKPOINT,
   NETWORK_HUB_GRID_GAP_PX,
   NETWORK_HUB_GRID_ROW_PADDING_H,
 } from "@/features/network/constants/networkHubGrid";
@@ -49,6 +50,7 @@ import {
     Alert,
     Animated,
     FlatList,
+    Platform,
     Pressable,
     RefreshControl,
     ScrollView,
@@ -183,6 +185,8 @@ function rolePillsForConnection(item: ConnectedOrg): NetworkPartyRolePill[] {
 function ConnectionProfileCard({
   item,
   compact,
+  mobileGrid,
+  nativeListRow,
   onOpenProfile,
   onPressMutuals,
   onPressMutual,
@@ -192,6 +196,8 @@ function ConnectionProfileCard({
 }: {
   item: ConnectedOrg;
   compact?: boolean;
+  mobileGrid?: boolean;
+  nativeListRow?: boolean;
   onOpenProfile?: (item: ConnectedOrg) => void;
   onPressMutuals?: (org: { id: string; name: string }) => void;
   onPressMutual?: (org: { id: string; name: string; avatar_seed?: string | null }) => void;
@@ -225,6 +231,8 @@ function ConnectionProfileCard({
               : "client"
         }
         compact={compact}
+        mobileGrid={mobileGrid}
+        nativeListRow={nativeListRow}
         rolePills={rolePillsForConnection(item)}
         totalTrips={item.total_trips ?? null}
         ratingValue={item.rating ?? null}
@@ -255,7 +263,8 @@ function ConnectionProfileCard({
 const hubCardStyles = StyleSheet.create({
   listShell: {
     width: "100%",
-    flex: 1,
+    maxWidth: "100%",
+    alignSelf: "stretch",
     minWidth: 0,
   },
 });
@@ -947,9 +956,10 @@ export function ConnectionsView({
     tripCountByDriverId,
   ]);
 
+  const isNativeApp = Platform.OS !== "web";
   const hubConnectionsLayout = useMemo(
-    () => getNetworkHubConnectionsLayout(windowWidth),
-    [windowWidth],
+    () => getNetworkHubConnectionsLayout(windowWidth, { nativeApp: isNativeApp }),
+    [windowWidth, isNativeApp],
   );
   const connectionsPaginationKey = `${effectiveFilter}:${effectiveSearch}:${hubConnectionsLayout.columns}x${hubConnectionsLayout.rows}`;
 
@@ -991,13 +1001,17 @@ export function ConnectionsView({
     onConnectionsComputed?.(connections);
   }, [connections, onConnectionsComputed]);
 
+  const isMobileHub = windowWidth < SPLIT_STACK_BREAKPOINT;
   const hubListCompact =
-    hubConnectionsLayout.columns >= 3 ? windowWidth < 1280 : windowWidth < 1100;
+    !isMobileHub &&
+    (hubConnectionsLayout.columns >= 3 ? windowWidth < 1280 : windowWidth < 1100);
 
   const renderHubConnectionListCard = (item: ConnectedOrg) => (
     <ConnectionProfileCard
       item={item}
       compact={hubListCompact}
+      mobileGrid={isMobileHub && hubConnectionsLayout.columns > 1}
+      nativeListRow={isNativeApp && hubConnectionsLayout.columns === 1}
       onOpenProfile={onOpenProfile}
       onPressMutuals={onPressMutuals}
       onPressMutual={onPressMutual}

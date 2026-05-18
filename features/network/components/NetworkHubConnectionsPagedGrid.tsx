@@ -6,6 +6,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import type { NetworkHubConnectionsLayout } from "@/features/network/constants/networkHubGrid";
 import {
   NETWORK_HUB_GRID_GAP_PX,
+  NETWORK_HUB_NATIVE_LIST_GAP_PX,
   NETWORK_HUB_GRID_ROW_PADDING_H,
 } from "@/features/network/constants/networkHubGrid";
 import { ChevronLeft, ChevronRight } from "lucide-react-native";
@@ -72,26 +73,38 @@ export function NetworkHubConnectionsPagedGrid<T>({
     return null;
   }
 
+  const singleColumn = columns === 1;
+
   return (
     <View style={styles.root}>
-      <View style={styles.grid}>
-        {gridRows.map((row, rowIndex) => (
-          <View key={`hub-page-row-${rowIndex}`} style={styles.row}>
-            {row.map((item, colIndex) => (
-              <View
-                key={
-                  item
-                    ? keyExtractor(item)
-                    : `hub-page-empty-${rowIndex}-${colIndex}`
-                }
-                style={styles.cell}
-              >
-                {item ? renderItem(item) : null}
-              </View>
-            ))}
-          </View>
-        ))}
-      </View>
+      {singleColumn ? (
+        <View style={styles.nativeList}>
+          {pageItems.map((item) => (
+            <View key={keyExtractor(item)} style={styles.nativeListItem}>
+              {renderItem(item)}
+            </View>
+          ))}
+        </View>
+      ) : (
+        <View style={styles.grid}>
+          {gridRows.map((row, rowIndex) => (
+            <View key={`hub-page-row-${rowIndex}`} style={styles.row}>
+              {row.map((item, colIndex) => (
+                <View
+                  key={
+                    item
+                      ? keyExtractor(item)
+                      : `hub-page-empty-${rowIndex}-${colIndex}`
+                  }
+                  style={styles.cell}
+                >
+                  {item ? renderItem(item) : null}
+                </View>
+              ))}
+            </View>
+          ))}
+        </View>
+      )}
 
       {pageCount > 1 ? (
         <View style={styles.pager}>
@@ -170,6 +183,17 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     overflow: "hidden",
+  },
+  nativeList: {
+    width: "100%",
+    alignSelf: "stretch",
+    paddingHorizontal: NETWORK_HUB_GRID_ROW_PADDING_H,
+    gap: NETWORK_HUB_NATIVE_LIST_GAP_PX,
+  },
+  nativeListItem: {
+    width: "100%",
+    maxWidth: "100%",
+    alignSelf: "stretch",
   },
   pager: {
     flexDirection: "row",

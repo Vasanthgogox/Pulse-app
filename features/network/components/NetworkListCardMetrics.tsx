@@ -1,47 +1,71 @@
 /**
  * Muted metric tiles for network hub list rows — flat surfaces for crisp corners.
+ * Uses lucide icons (not react-native-svg) for Expo Go / New Architecture compatibility.
  */
 import Theme from "@/constants/Theme";
 import { NETWORK_HUB_RADIUS } from "@/features/network/components/networkHubListCardChrome";
-import { useId } from "react";
+import { Route, Star } from "lucide-react-native";
 import { StyleSheet, Text, View } from "react-native";
-import Svg, { Circle, Defs, LinearGradient as SvgGradient, Path, Stop } from "react-native-svg";
 
 const METRIC_BOX_DEFAULT = 40;
 const METRIC_BOX_COMPACT = 36;
+const METRIC_BOX_MOBILE = 30;
+
+/** Full-width native list footer — readable trips + rating (no tiny bordered tiles). */
+export function NetworkHubMetricsInlineRow({
+  trips,
+  rating,
+}: {
+  trips: string;
+  rating: string;
+}) {
+  return (
+    <View style={styles.inlineRow} accessibilityLabel={`${trips} trips, ${rating} rating`}>
+      <View style={styles.inlineItem}>
+        <View style={[styles.inlineIconWrap, styles.inlineIconWrapTrips]}>
+          <Route size={12} color="#6366F1" strokeWidth={2} />
+        </View>
+        <Text style={styles.inlineValue} numberOfLines={1}>
+          {trips}
+        </Text>
+      </View>
+      <View style={styles.inlineDivider} />
+      <View style={styles.inlineItem}>
+        <View style={[styles.inlineIconWrap, styles.inlineIconWrapRating]}>
+          <Star
+            size={11}
+            color={Theme.networkHubListCardRatingStar}
+            fill={Theme.networkHubListCardRatingStar}
+            strokeWidth={2}
+          />
+        </View>
+        <Text style={styles.inlineValue} numberOfLines={1}>
+          {rating}
+        </Text>
+      </View>
+    </View>
+  );
+}
 
 export function TransitNodeMetric({
   count,
   compact,
+  mobile,
 }: {
   count: string;
   compact?: boolean;
+  mobile?: boolean;
 }) {
-  const box = compact ? METRIC_BOX_COMPACT : METRIC_BOX_DEFAULT;
-  const icon = compact ? 16 : 18;
-  const gradId = `transitLineGrad-${useId().replace(/:/g, "")}`;
+  const box = mobile ? METRIC_BOX_MOBILE : compact ? METRIC_BOX_COMPACT : METRIC_BOX_DEFAULT;
+  const icon = mobile ? 14 : compact ? 16 : 18;
   return (
     <View style={styles.metricCol} accessibilityLabel={`${count} trips`}>
       <View style={[styles.metricTile, { width: box, height: box }]}>
-        <Svg width={icon} height={icon} viewBox="0 0 24 24">
-          <Defs>
-            <SvgGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="0%">
-              <Stop offset="0%" stopColor="#6366F1" />
-              <Stop offset="100%" stopColor="#A855F7" />
-            </SvgGradient>
-          </Defs>
-          <Path
-            d="M4 18C8 8 16 8 20 18"
-            stroke={`url(#${gradId})`}
-            strokeWidth={2}
-            strokeLinecap="round"
-            fill="none"
-          />
-          <Circle cx={4} cy={18} r={2.5} fill="#6366F1" stroke="#fff" strokeWidth={1.2} />
-          <Circle cx={20} cy={18} r={2.5} fill="#A855F7" stroke="#fff" strokeWidth={1.2} />
-        </Svg>
-        <View style={styles.metricBadgeDark}>
-          <Text style={styles.metricBadgeDarkText}>{count}</Text>
+        <Route size={icon} color="#6366F1" strokeWidth={2.2} />
+        <View style={[styles.metricBadgeDark, mobile && styles.metricBadgeMobile]}>
+          <Text style={[styles.metricBadgeDarkText, mobile && styles.metricBadgeTextMobile]}>
+            {count}
+          </Text>
         </View>
       </View>
     </View>
@@ -51,23 +75,27 @@ export function TransitNodeMetric({
 export function MutedStarMetric({
   rating,
   compact,
+  mobile,
 }: {
   rating: string;
   compact?: boolean;
+  mobile?: boolean;
 }) {
-  const box = compact ? METRIC_BOX_COMPACT : METRIC_BOX_DEFAULT;
-  const icon = compact ? 14 : 16;
+  const box = mobile ? METRIC_BOX_MOBILE : compact ? METRIC_BOX_COMPACT : METRIC_BOX_DEFAULT;
+  const icon = mobile ? 12 : compact ? 14 : 16;
   return (
     <View style={styles.metricCol} accessibilityLabel={`${rating} rating`}>
       <View style={[styles.metricTile, { width: box, height: box }]}>
-        <Svg width={icon} height={icon} viewBox="0 0 24 24">
-          <Path
-            d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"
-            fill={Theme.networkHubListCardRatingStar}
-          />
-        </Svg>
-        <View style={styles.metricBadgeRating}>
-          <Text style={styles.metricBadgeRatingText}>{rating}</Text>
+        <Star
+          size={icon}
+          color={Theme.networkHubListCardRatingStar}
+          fill={Theme.networkHubListCardRatingStar}
+          strokeWidth={2}
+        />
+        <View style={[styles.metricBadgeRating, mobile && styles.metricBadgeMobile]}>
+          <Text style={[styles.metricBadgeRatingText, mobile && styles.metricBadgeTextMobile]}>
+            {rating}
+          </Text>
         </View>
       </View>
     </View>
@@ -132,5 +160,56 @@ const styles = StyleSheet.create({
     color: Theme.networkHubListCardRatingText,
     letterSpacing: 0.1,
     textAlign: "center",
+  },
+  metricBadgeMobile: {
+    bottom: 2,
+    left: 3,
+    right: 3,
+    paddingVertical: 1,
+    minWidth: 16,
+  },
+  metricBadgeTextMobile: {
+    fontSize: 7,
+    letterSpacing: 0.2,
+  },
+  inlineRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flexShrink: 0,
+  },
+  inlineItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexShrink: 0,
+  },
+  inlineIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 7,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  inlineIconWrapTrips: {
+    backgroundColor: "rgba(99, 102, 241, 0.12)",
+  },
+  inlineIconWrapRating: {
+    backgroundColor: Theme.networkHubListCardRatingBg,
+  },
+  inlineValue: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: Theme.textSecondary,
+    letterSpacing: 0,
+    lineHeight: 15,
+    minWidth: 18,
+  },
+  inlineDivider: {
+    width: StyleSheet.hairlineWidth,
+    height: 20,
+    backgroundColor: Theme.borderLight,
+    flexShrink: 0,
   },
 });

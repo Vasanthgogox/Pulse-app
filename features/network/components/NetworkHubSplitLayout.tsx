@@ -3,6 +3,7 @@
  */
 import {
   NETWORK_HUB_GRID_GAP_PX,
+  NETWORK_HUB_NATIVE_LIST_GAP_PX,
   NETWORK_HUB_GRID_ROW_PADDING_H,
   NETWORK_HUB_PANE_HEADER_MIN_HEIGHT,
   NETWORK_HUB_SPLIT_COLUMN_GAP_PX,
@@ -117,10 +118,24 @@ export const networkHubSplitStyles = StyleSheet.create({
     minWidth: 0,
     overflow: "hidden",
   },
+  /** Single-column native/web list — override flex:1 from paneListCell. */
   paneListCellFull: {
+    flex: 0,
     flexGrow: 0,
     flexShrink: 0,
-    flexBasis: "auto",
     width: "100%",
+    maxWidth: "100%",
+    alignSelf: "stretch",
+    overflow: "visible",
+  },
+  nativePaneList: {
+    width: "100%",
+    alignSelf: "stretch",
+    gap: NETWORK_HUB_NATIVE_LIST_GAP_PX,
+  },
+  nativePaneListItem: {
+    width: "100%",
+    maxWidth: "100%",
+    alignSelf: "stretch",
   },
 });

@@ -1,15 +1,23 @@
 /** Shared hub layout for Network tab (connections + discover). */
 export const NETWORK_HUB_GRID_COLUMNS = 3;
 export const NETWORK_HUB_GRID_GAP_PX = 8;
+/** Vertical gap between native full-width hub cards (page shows through gap). */
+export const NETWORK_HUB_NATIVE_LIST_GAP_PX = 10;
 export const NETWORK_HUB_GRID_ROW_PADDING_H = 22;
 /** Horizontal space between Grow your network and People you may know (desktop split). */
 export const NETWORK_HUB_SPLIT_COLUMN_GAP_PX = 24;
 
-/** Your connections — mobile: 2 columns × 3 rows per page. */
+/** Your connections — mobile web: 2 columns × 3 rows per page. */
 export const NETWORK_HUB_CONNECTION_SCROLL_COLUMNS = 2;
 export const NETWORK_HUB_CONNECTION_SCROLL_ROWS = 3;
 export const NETWORK_HUB_CONNECTION_PAGE_SIZE =
   NETWORK_HUB_CONNECTION_SCROLL_COLUMNS * NETWORK_HUB_CONNECTION_SCROLL_ROWS;
+
+/** Your connections — native app: 1 column × 6 rows per page. */
+export const NETWORK_HUB_CONNECTION_NATIVE_COLUMNS = 1;
+export const NETWORK_HUB_CONNECTION_NATIVE_ROWS = 6;
+export const NETWORK_HUB_CONNECTION_NATIVE_PAGE_SIZE =
+  NETWORK_HUB_CONNECTION_NATIVE_COLUMNS * NETWORK_HUB_CONNECTION_NATIVE_ROWS;
 
 /** Your connections — desktop: 3 columns × 2 rows per page. */
 export const NETWORK_HUB_CONNECTION_DESKTOP_COLUMNS = 3;
@@ -23,15 +31,28 @@ export type NetworkHubConnectionsLayout = {
   pageSize: number;
 };
 
-/** Your connections grid from viewport (desktop 3-up, mobile 2-up). */
+export type NetworkHubLayoutOptions = {
+  /** iOS/Android — single-column hub grids. */
+  nativeApp?: boolean;
+};
+
+/** Your connections grid from viewport (desktop 3-up, mobile web 2-up, native 1-up). */
 export function getNetworkHubConnectionsLayout(
   windowWidth: number,
+  options?: NetworkHubLayoutOptions,
 ): NetworkHubConnectionsLayout {
   if (windowWidth >= SPLIT_STACK_BREAKPOINT) {
     return {
       columns: NETWORK_HUB_CONNECTION_DESKTOP_COLUMNS,
       rows: NETWORK_HUB_CONNECTION_DESKTOP_ROWS,
       pageSize: NETWORK_HUB_CONNECTION_DESKTOP_PAGE_SIZE,
+    };
+  }
+  if (options?.nativeApp) {
+    return {
+      columns: NETWORK_HUB_CONNECTION_NATIVE_COLUMNS,
+      rows: NETWORK_HUB_CONNECTION_NATIVE_ROWS,
+      pageSize: NETWORK_HUB_CONNECTION_NATIVE_PAGE_SIZE,
     };
   }
   return {
@@ -41,11 +62,17 @@ export function getNetworkHubConnectionsLayout(
   };
 }
 
-/** Grow / recommendations — stacked mobile: 2 per row × 3 rows. */
+/** Grow / recommendations — stacked mobile web: 2 per row × 3 rows. */
 export const NETWORK_HUB_SPLIT_GRID_COLUMNS = 2;
 export const NETWORK_HUB_SPLIT_GRID_ROWS = 3;
 export const NETWORK_HUB_SPLIT_SLOT_LIMIT =
   NETWORK_HUB_SPLIT_GRID_COLUMNS * NETWORK_HUB_SPLIT_GRID_ROWS;
+
+/** Grow / recommendations — native app stacked: 1 per row × 6 rows. */
+export const NETWORK_HUB_SPLIT_NATIVE_COLUMNS = 1;
+export const NETWORK_HUB_SPLIT_NATIVE_ROWS = 6;
+export const NETWORK_HUB_SPLIT_NATIVE_SLOT_LIMIT =
+  NETWORK_HUB_SPLIT_NATIVE_COLUMNS * NETWORK_HUB_SPLIT_NATIVE_ROWS;
 
 /** Grow / recommendations — desktop split panes: 1 per row × 5 rows. */
 export const NETWORK_HUB_SPLIT_DESKTOP_COLUMNS = 1;
@@ -63,8 +90,17 @@ export type NetworkHubSplitPaneLayout = {
 /** Layout for Grow / People you may know panes from viewport width. */
 export function getNetworkHubSplitPaneLayout(
   windowWidth: number,
+  options?: NetworkHubLayoutOptions,
 ): NetworkHubSplitPaneLayout {
   if (isNetworkHubSplitStacked(windowWidth)) {
+    if (options?.nativeApp) {
+      return {
+        columns: NETWORK_HUB_SPLIT_NATIVE_COLUMNS,
+        rows: NETWORK_HUB_SPLIT_NATIVE_ROWS,
+        slotLimit: NETWORK_HUB_SPLIT_NATIVE_SLOT_LIMIT,
+        compact: true,
+      };
+    }
     return {
       columns: NETWORK_HUB_SPLIT_GRID_COLUMNS,
       rows: NETWORK_HUB_SPLIT_GRID_ROWS,
@@ -87,7 +123,11 @@ export const NETWORK_HUB_SPLIT_LIST_LIMIT = 8;
 export const NETWORK_HUB_PANE_HEADER_MIN_HEIGHT = 40;
 
 /** Full-width discover search grid (non-split). */
-export function networkHubGridColumnCount(windowWidth: number): number {
+export function networkHubGridColumnCount(
+  windowWidth: number,
+  options?: NetworkHubLayoutOptions,
+): number {
+  if (options?.nativeApp && windowWidth < SPLIT_STACK_BREAKPOINT) return 1;
   if (windowWidth < 480) return 1;
   if (windowWidth < 820) return 2;
   return NETWORK_HUB_GRID_COLUMNS;

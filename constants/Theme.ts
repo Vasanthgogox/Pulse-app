@@ -275,8 +275,8 @@ export const Theme = {
   feedbackModalBadgeRing: "#F59E0B",
 
   // ---- Network UI grading (clean neutrals + semantic accents) ----
-  /** Network hub page canvas — clean white. */
-  networkPageBackground: "#FFFFFF",
+  /** Network hub page canvas — muted grey so white cards read clearly. */
+  networkPageBackground: "#F1F3F6",
   networkCardBackground: "#FFFFFF",
   networkCardBorder: "#E2E8F0",
   /** Elevated list rows on white hub sections. */
