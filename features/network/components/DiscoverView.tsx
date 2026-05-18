@@ -19,21 +19,7 @@ import {
   NETWORK_PROFILE_COVER_HEIGHT,
 } from "@/features/network/constants/networkProfileCardLayout";
 import { discoverOrganizations, type DiscoverOrg } from '@/features/network/services/discover.service';
-import { getOrganizationLocationsByIds } from '@/features/organization/services/organization.service';
-import {
-  averageRatingForRatedParty,
-  averageScoreDeduped,
-  getRatingsForClients,
-  getRatingsForSuppliers,
-  type RatingRow,
-} from '@/features/ratings';
 import { showAppAlert } from "@/lib/appAlert";
-import {
-  useClientsQuery,
-  useSuppliersQuery,
-  useTripsQuery,
-} from '@/lib/queries';
-import { supabase } from '@/lib/supabase';
 import { todayPendingInviteCountFromSent } from "@/lib/todayPendingInviteCount";
 import {
   cancelPendingConnectionRequestByOrgPair,
@@ -45,11 +31,9 @@ import {
   looksLikeConnectionRateLimitError,
 } from "@/services/connectionRequestsService";
 import { useConnectionRequestsSentQuery, useInvalidateNetwork } from '@/lib/queries/useNetworkQueries';
-import { useIndentsQuery } from '@/lib/queries/useIndentsQuery';
-import { useNetworkFeedQuery } from '@/lib/queries/usePostsQuery';
 import { queryKeys } from '@/lib/queryKeys';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Check,
   Clock3,
@@ -155,11 +139,6 @@ function getBusinessLocation(
   return null;
 }
 
-function extractCity(location: string | null | undefined): string {
-  if (!location) return '';
-  return location.split(',')[0].trim().toLowerCase();
-}
-
 function chunkBySize<T>(arr: T[], size: number): T[][] {
   if (size < 1) return arr.length ? [arr] : [];
   const out: T[][] = [];
@@ -169,43 +148,45 @@ function chunkBySize<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
-function scoreOrgs(
-  orgs: DiscoverOrg[],
-  myLocations: Set<string>,
-  feedOrgLocations: Map<string, Set<string>>,
-): ScoredOrg[] {
-  return orgs.map((org) => {
-    const signals: RecommendationSignal[] = [];
-    let score = 0;
-    const mutuals = org.mutual_count ?? org.mutual_connections_count ?? 0;
+/** Maps RPC-enriched discover row to scored card model (DB already sorted). */
+function mapDiscoverOrgToScored(org: DiscoverOrg): ScoredOrg {
+  const signals: RecommendationSignal[] = [];
+  const mutuals = org.mutual_count ?? org.mutual_connections_count ?? 0;
+  const laneOverlaps = org.lane_overlap_count ?? 0;
 
-    if (mutuals > 0) {
-      score += 2;
-      signals.push({
-        type: "mutual",
-        label: `${mutuals} mutual${mutuals === 1 ? "" : "s"}`,
-      });
-    }
+  if (mutuals > 0) {
+    signals.push({
+      type: "mutual",
+      label: `${mutuals} mutual${mutuals === 1 ? "" : "s"}`,
+    });
+  }
+  if (laneOverlaps >= 1 || org.is_in_user_trip_city) {
+    signals.push({ type: "location", label: "Active on your routes" });
+  }
+  if (laneOverlaps >= 2) {
+    signals.push({
+      type: "lane",
+      label: `${laneOverlaps} lane overlaps`,
+    });
+  }
 
-    const orgPostCities = feedOrgLocations.get(org.id);
-    if (orgPostCities) {
-      let matches = 0;
-      for (const city of orgPostCities) {
-        if (myLocations.has(city)) matches++;
-      }
-      if (matches >= 1) {
-        score += 2;
-        signals.push({ type: 'location', label: 'Active on your routes' });
-      }
-      if (matches >= 2) {
-        score += 1;
-        signals.push({ type: 'lane', label: `${matches} lane overlaps` });
-      }
-    }
+  const score =
+    typeof org.recommendation_score === "number"
+      ? org.recommendation_score
+      : signals.length === 0
+        ? -1
+        : 0;
 
-    if (signals.length === 0) score = -1;
-    return { ...org, score, signals };
-  });
+  return { ...org, score, signals };
+}
+
+function discoverOrgLocationFallback(org: DiscoverOrg) {
+  if (!org.city && !org.state && !org.address_line) return null;
+  return {
+    city: org.city ?? null,
+    state: org.state ?? null,
+    address_line: org.address_line ?? null,
+  };
 }
 
 // --- Org card ---
@@ -478,50 +459,14 @@ export function DiscoverView({
     onInviteCountChange?.(todayInviteCount, DAILY_CONNECTION_INVITE_LIMIT);
   }, [todayInviteCount, onInviteCountChange]);
 
-  const feedQ = useNetworkFeedQuery(orgId);
-  const indentsQ = useIndentsQuery(orgId);
-  const clientsQ = useClientsQuery(orgId);
-  const suppliersQ = useSuppliersQuery(orgId);
-  const tripsQ = useTripsQuery(orgId);
   const invalidateNetwork = useInvalidateNetwork(orgId);
-  const [discoverRatingsByOrgId, setDiscoverRatingsByOrgId] = useState<
-    Record<string, number | null>
-  >({});
-  const [discoverOrgTripCounts, setDiscoverOrgTripCounts] = useState<
-    Record<string, number | null>
-  >({});
   const search = searchProp ?? internalSearch;
   const setSearch = onSearchChange ?? setInternalSearch;
 
-  const myLocations = useMemo<Set<string>>(() => {
-    const set = new Set<string>();
-    const indents = (indentsQ.data ?? []) as { pickup_area?: string; drop_location?: string }[];
-    for (const indent of indents) {
-      const pickup = extractCity(indent.pickup_area);
-      const drop = extractCity(indent.drop_location);
-      if (pickup) set.add(pickup);
-      if (drop) set.add(drop);
-    }
-    return set;
-  }, [indentsQ.data]);
-
-  const feedOrgLocations = useMemo<Map<string, Set<string>>>(() => {
-    const map = new Map<string, Set<string>>();
-    for (const post of feedQ.data ?? []) {
-      if (post.type !== 'LOAD' && post.type !== 'VEHICLE_AVAILABILITY') continue;
-      if (!map.has(post.organization_id)) map.set(post.organization_id, new Set());
-      const origin = extractCity(post.origin);
-      const dest = extractCity(post.destination);
-      if (origin) map.get(post.organization_id)!.add(origin);
-      if (dest) map.get(post.organization_id)!.add(dest);
-    }
-    return map;
-  }, [feedQ.data]);
-
-  const scoredOrgs = useMemo<ScoredOrg[]>(() => {
-    const scored = scoreOrgs(orgs, myLocations, feedOrgLocations);
-    return scored.sort((a, b) => b.score !== a.score ? b.score - a.score : a.name.localeCompare(b.name));
-  }, [orgs, myLocations, feedOrgLocations]);
+  const scoredOrgs = useMemo<ScoredOrg[]>(
+    () => orgs.map(mapDiscoverOrgToScored),
+    [orgs],
+  );
 
   const connectableOrgs = useMemo(
     () => scoredOrgs.filter((o) => {
@@ -581,212 +526,10 @@ export function DiscoverView({
     return Math.max(36, cell);
   }, [embedded, embeddedListWidth, windowWidth, discoverColumnCount]);
 
-  const discoverOrgIds = useMemo(
-    () => [...new Set(orgs.map((org) => org.id).filter(Boolean))].sort(),
-    [orgs],
-  );
-  const organizationLocationsQ = useQuery({
-    queryKey: ['network', 'discover', 'organization-locations', discoverOrgIds],
-    queryFn: async () => {
-      const { error: orgErr, locations } = await getOrganizationLocationsByIds(discoverOrgIds);
-      if (orgErr) {
-        if (__DEV__) console.warn('[DiscoverView] organization locations:', orgErr.message);
-        return [];
-      }
-      return locations;
-    },
-    enabled: discoverOrgIds.length > 0,
-  });
-  const organizationLocationById = useMemo(() => {
-    const map: Record<string, { city: string | null; state: string | null; address_line: string | null }> = {};
-    for (const location of organizationLocationsQ.data ?? []) {
-      map[location.id] = {
-        city: location.city ?? null,
-        state: location.state ?? null,
-        address_line: location.address_line ?? null,
-      };
-    }
-    return map;
-  }, [organizationLocationsQ.data]);
-
-  const linkedPartnerByOrgId = useMemo(() => {
-    const map: Record<string, { clientId?: string; supplierId?: string }> = {};
-    for (const client of (clientsQ.data ?? []) as Array<{
-      id: string;
-      linked_organization_id?: string | null;
-    }>) {
-      const linkedOrgId = client.linked_organization_id?.trim();
-      if (!linkedOrgId) continue;
-      map[linkedOrgId] = { ...map[linkedOrgId], clientId: client.id };
-    }
-    for (const supplier of (suppliersQ.data ?? []) as Array<{
-      id: string;
-      linked_organization_id?: string | null;
-    }>) {
-      const linkedOrgId = supplier.linked_organization_id?.trim();
-      if (!linkedOrgId) continue;
-      map[linkedOrgId] = { ...map[linkedOrgId], supplierId: supplier.id };
-    }
-    return map;
-  }, [clientsQ.data, suppliersQ.data]);
-
-  const tripCountByClientId = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const trip of tripsQ.data ?? []) {
-      if (trip.client_id) {
-        map.set(trip.client_id, (map.get(trip.client_id) ?? 0) + 1);
-      }
-    }
-    return map;
-  }, [tripsQ.data]);
-
-  const tripCountBySupplierId = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const trip of tripsQ.data ?? []) {
-      if (trip.supplier_id) {
-        map.set(trip.supplier_id, (map.get(trip.supplier_id) ?? 0) + 1);
-      }
-    }
-    return map;
-  }, [tripsQ.data]);
-
-  const discoverPartnerClientIds = useMemo(
-    () =>
-      discoverOrgIds
-        .map((id) => linkedPartnerByOrgId[id]?.clientId)
-        .filter((id): id is string => Boolean(id)),
-    [discoverOrgIds, linkedPartnerByOrgId],
-  );
-
-  const discoverPartnerSupplierIds = useMemo(
-    () =>
-      discoverOrgIds
-        .map((id) => linkedPartnerByOrgId[id]?.supplierId)
-        .filter((id): id is string => Boolean(id)),
-    [discoverOrgIds, linkedPartnerByOrgId],
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-    const clientIds = discoverPartnerClientIds;
-    const supplierIds = discoverPartnerSupplierIds;
-    if (clientIds.length === 0 && supplierIds.length === 0) {
-      setDiscoverRatingsByOrgId({});
-      return;
-    }
-
-    void (async () => {
-      const [clientRes, supplierRes] = await Promise.all([
-        clientIds.length > 0
-          ? getRatingsForClients(clientIds)
-          : Promise.resolve({ byClientId: {} as Record<string, RatingRow[]> }),
-        supplierIds.length > 0
-          ? getRatingsForSuppliers(supplierIds)
-          : Promise.resolve({ bySupplierId: {} as Record<string, RatingRow[]> }),
-      ]);
-      if (cancelled) return;
-
-      const next: Record<string, number | null> = {};
-      for (const discoverOrgId of discoverOrgIds) {
-        const partner = linkedPartnerByOrgId[discoverOrgId];
-        if (!partner) continue;
-        if (partner.clientId) {
-          next[discoverOrgId] = averageRatingForRatedParty(
-            clientRes.byClientId,
-            partner.clientId,
-            discoverOrgId,
-          );
-        } else if (partner.supplierId) {
-          next[discoverOrgId] = averageRatingForRatedParty(
-            supplierRes.bySupplierId,
-            partner.supplierId,
-            discoverOrgId,
-          );
-        }
-        if (next[discoverOrgId] === undefined && partner.clientId) {
-          next[discoverOrgId] = averageScoreDeduped(
-            clientRes.byClientId[partner.clientId] ?? [],
-          );
-        }
-        if (next[discoverOrgId] === undefined && partner.supplierId) {
-          next[discoverOrgId] = averageScoreDeduped(
-            supplierRes.bySupplierId[partner.supplierId] ?? [],
-          );
-        }
-      }
-      setDiscoverRatingsByOrgId(next);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    discoverOrgIds,
-    discoverPartnerClientIds,
-    discoverPartnerSupplierIds,
-    linkedPartnerByOrgId,
-  ]);
-
-  const discoverOrgIdsForTripFetch = useMemo(
-    () => discoverOrgIds.filter((id) => !linkedPartnerByOrgId[id]),
-    [discoverOrgIds, linkedPartnerByOrgId],
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-    if (discoverOrgIdsForTripFetch.length === 0) {
-      setDiscoverOrgTripCounts({});
-      return;
-    }
-
-    void (async () => {
-      const entries = await Promise.all(
-        discoverOrgIdsForTripFetch.map(async (targetOrgId) => {
-          const { count, error } = await supabase()
-            .from('trips')
-            .select('id', { count: 'exact', head: true })
-            .eq('organization_id', targetOrgId);
-          if (error) return [targetOrgId, null] as const;
-          return [targetOrgId, count ?? 0] as const;
-        }),
-      );
-      if (cancelled) return;
-      setDiscoverOrgTripCounts(Object.fromEntries(entries));
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [discoverOrgIdsForTripFetch]);
-
-  const getDiscoverOrgCardMetrics = useCallback(
-    (targetOrg: DiscoverOrg) => {
-      const partner = linkedPartnerByOrgId[targetOrg.id];
-      let totalTrips: number | null = null;
-      if (partner?.clientId) {
-        totalTrips = tripCountByClientId.get(partner.clientId) ?? null;
-      } else if (partner?.supplierId) {
-        totalTrips = tripCountBySupplierId.get(partner.supplierId) ?? null;
-      } else {
-        totalTrips = discoverOrgTripCounts[targetOrg.id] ?? null;
-      }
-
-      const rating =
-        discoverRatingsByOrgId[targetOrg.id] ??
-        targetOrg.rating ??
-        targetOrg.average_rating ??
-        null;
-
-      return { totalTrips, ratingValue: rating };
-    },
-    [
-      linkedPartnerByOrgId,
-      tripCountByClientId,
-      tripCountBySupplierId,
-      discoverOrgTripCounts,
-      discoverRatingsByOrgId,
-    ],
-  );
+  const getDiscoverOrgCardMetrics = useCallback((targetOrg: DiscoverOrg) => ({
+    totalTrips: targetOrg.trip_count ?? null,
+    ratingValue: targetOrg.average_rating ?? targetOrg.rating ?? null,
+  }), []);
 
   const fetchOrgs = useCallback(async (q: string) => {
     setLoading(true);
@@ -939,7 +682,7 @@ export function DiscoverView({
               <View style={styles.discoverGridCardWrapStretch}>
                 <OrgCard
                   org={org}
-                  locationFallback={organizationLocationById[org.id]}
+                  locationFallback={discoverOrgLocationFallback(org)}
                   {...getDiscoverOrgCardMetrics(org)}
                   onConnect={() => tryBeginConnectionRequest(org)}
                   onCancel={() => void handleCancelRequest(org)}
@@ -952,7 +695,7 @@ export function DiscoverView({
                       rating_value: metrics.ratingValue,
                       location_value: getBusinessLocation(
                         org,
-                        organizationLocationById[org.id],
+                        discoverOrgLocationFallback(org),
                       ),
                     });
                   }}
@@ -1041,7 +784,7 @@ export function DiscoverView({
             return (
               <OrgCard
                 org={item.org}
-                locationFallback={organizationLocationById[item.org.id]}
+                locationFallback={discoverOrgLocationFallback(item.org)}
                 {...getDiscoverOrgCardMetrics(item.org)}
                 onConnect={() => tryBeginConnectionRequest(item.org)}
                 onCancel={() => void handleCancelRequest(item.org)}
