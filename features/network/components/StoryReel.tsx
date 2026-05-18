@@ -11,7 +11,7 @@ import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { Plus } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Animated, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 interface StoryReelProps {
   posts: PostRow[];
@@ -271,18 +271,26 @@ export function StoryReel({ posts, orgId, onCreatePost }: StoryReelProps) {
             });
           }}
           badge={
-            <Pressable
+            <View
               style={styles.addBadge}
-              onPress={(event) => {
-                event.stopPropagation();
-                router.push("/(modals)/create-post");
-              }}
+              {...(Platform.OS === "web"
+                ? {
+                    // @ts-expect-error -- RNW supports onClick on View
+                    onClick: (e: { stopPropagation: () => void }) => {
+                      e.stopPropagation();
+                      router.push("/(modals)/create-post");
+                    },
+                  }
+                : {
+                    onStartShouldSetResponder: () => true,
+                    onResponderRelease: () => router.push("/(modals)/create-post"),
+                  })}
               hitSlop={8}
-              accessibilityRole="button"
+              {...(Platform.OS !== "web" && { accessibilityRole: "button" as const })}
               accessibilityLabel="Add story"
             >
               <Plus size={11} color={Theme.textOnPrimary} strokeWidth={2.6} />
-            </Pressable>
+            </View>
           }
         >
           <StoryAvatar
