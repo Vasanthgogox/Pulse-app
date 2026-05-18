@@ -18,7 +18,8 @@ import {
   NETWORK_PROFILE_CARD_RADIUS,
   NETWORK_PROFILE_COVER_HEIGHT,
 } from "@/features/network/constants/networkProfileCardLayout";
-import { discoverOrganizations, type DiscoverOrg } from '@/features/network/services/discover.service';
+import { useNetworkDiscovery } from '@/features/network/hooks/useNetworkDiscovery';
+import type { DiscoverOrg } from '@/features/network/services/discover.service';
 import { showAppAlert } from "@/lib/appAlert";
 import { todayPendingInviteCountFromSent } from "@/lib/todayPendingInviteCount";
 import {
@@ -434,13 +435,31 @@ export function DiscoverView({
     if (w > 0) setEmbeddedListWidth((prev) => Math.max(prev, w));
   }, []);
   const [internalSearch, setInternalSearch] = useState("");
-  const [orgs, setOrgs] = useState<DiscoverOrg[]>([]);
-  const [loading, setLoading] = useState(false);
   const [connecting, setConnecting] = useState<string | null>(null);
   const [requestRoleModalOrg, setRequestRoleModalOrg] = useState<ScoredOrg | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const queryClient = useQueryClient();
+  const search = searchProp ?? internalSearch;
+  const setSearch = onSearchChange ?? setInternalSearch;
+  const {
+    orgs,
+    loading,
+    error,
+    refetch: refetchDiscover,
+    invalidateCache: invalidateDiscoverCache,
+  } = useNetworkDiscovery({ orgId, search });
+  /** Optimistic removals after connect (pending orgs are hidden until refetch). */
+  const [optimisticHiddenIds, setOptimisticHiddenIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  useEffect(() => {
+    setOptimisticHiddenIds(new Set());
+  }, [orgId, search]);
+
+  const visibleOrgs = useMemo(
+    () => orgs.filter((o) => !optimisticHiddenIds.has(o.id)),
+    [orgs, optimisticHiddenIds],
+  );
 
   const sentQ = useConnectionRequestsSentQuery(orgId);
 
@@ -460,12 +479,10 @@ export function DiscoverView({
   }, [todayInviteCount, onInviteCountChange]);
 
   const invalidateNetwork = useInvalidateNetwork(orgId);
-  const search = searchProp ?? internalSearch;
-  const setSearch = onSearchChange ?? setInternalSearch;
 
   const scoredOrgs = useMemo<ScoredOrg[]>(
-    () => orgs.map(mapDiscoverOrgToScored),
-    [orgs],
+    () => visibleOrgs.map(mapDiscoverOrgToScored),
+    [visibleOrgs],
   );
 
   const connectableOrgs = useMemo(
@@ -531,21 +548,6 @@ export function DiscoverView({
     ratingValue: targetOrg.average_rating ?? targetOrg.rating ?? null,
   }), []);
 
-  const fetchOrgs = useCallback(async (q: string) => {
-    setLoading(true);
-    setError(null);
-    const { orgs: results, error: err } = await discoverOrganizations(orgId, q, 40, 0);
-    if (err) setError('Could not load — run db:push to deploy the migration');
-    setOrgs(results);
-    setLoading(false);
-  }, [orgId]);
-
-  useEffect(() => {
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => fetchOrgs(search), 300);
-    return () => { if (timer.current) clearTimeout(timer.current); };
-  }, [search, fetchOrgs]);
-
   const closeRequestRoleModal = useCallback(() => {
     if (connecting) return;
     setRequestRoleModalOrg(null);
@@ -587,12 +589,14 @@ export function DiscoverView({
       }
       return;
     }
+    setOptimisticHiddenIds((prev) => new Set(prev).add(org.id));
     if (alreadyInvited) {
-      setOrgs((prev) => prev.filter((o) => o.id !== org.id));
+      invalidateDiscoverCache();
+      void refetchDiscover(search);
       invalidateNetwork();
       return;
     }
-    setOrgs((prev) => prev.filter((o) => o.id !== org.id));
+    invalidateDiscoverCache();
     if (requestId) {
       queryClient.setQueryData<ConnectionRequestRow[]>(
         queryKeys.connectionRequests.sent(orgId),
@@ -616,6 +620,7 @@ export function DiscoverView({
       );
     }
     invalidateNetwork();
+    invalidateDiscoverCache();
   };
 
   const handleCancelRequest = async (org: ScoredOrg) => {
@@ -629,13 +634,18 @@ export function DiscoverView({
     if (!deleted) {
       Alert.alert("Request already changed", "Refreshing the latest network state.");
     }
-    setOrgs((prev) => prev.map((o) => (o.id === org.id ? { ...o, connection_status: "none" } : o)));
+    setOptimisticHiddenIds((prev) => {
+      const next = new Set(prev);
+      next.delete(org.id);
+      return next;
+    });
     queryClient.setQueryData<ConnectionRequestRow[]>(
       queryKeys.connectionRequests.sent(orgId),
       (prev = []) => prev.filter((r) => !(r.to_organization_id === org.id && r.status === "pending"))
     );
+    invalidateDiscoverCache();
+    void refetchDiscover(search);
     invalidateNetwork();
-    void fetchOrgs(search);
   };
 
   type ListItem =
