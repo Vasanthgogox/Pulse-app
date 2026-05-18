@@ -919,6 +919,7 @@ export function onAuthStateChange(
 ): () => void {
   let isProcessing = false;
   let queuedPayload: { user: AuthUser; profile: AuthProfile } | null | undefined;
+  let signOutVerifyInFlight = false;
 
   const runCallback = (payload: { user: AuthUser; profile: AuthProfile } | null) => {
     if (isProcessing) {
@@ -943,12 +944,6 @@ export function onAuthStateChange(
   const {
     data: { subscription },
   } = supabase().auth.onAuthStateChange((event, session) => {
-    // TOKEN_REFRESHED and INITIAL_SESSION are internal SDK lifecycle events.
-    // The SDK manages token rotation silently; propagating them triggers a full
-    // DB profile re-verification on every tab focus / cold-start subscription
-    // fire, causing unnecessary re-renders and the "reload to Trips" symptom.
-    // USER_UPDATED fires after updateUser() which already calls refreshSession()
-    // in the callers — no need to double-process here.
     if (
       event === 'TOKEN_REFRESHED' ||
       event === 'INITIAL_SESSION' ||
@@ -959,8 +954,37 @@ export function onAuthStateChange(
     const userId = session?.user?.id ?? null;
     if (shouldSkipAuthEvent(event, userId)) return;
     flushAuthEventGate();
+
     if (!session?.user) {
-      runCallback(null);
+      // SDK says SIGNED_OUT — but auto-refresh failures can trigger this spuriously.
+      // Verify by reading persisted session + hitting /auth/v1/user before propagating.
+      if (event === 'SIGNED_OUT' && !signOutVerifyInFlight) {
+        signOutVerifyInFlight = true;
+        void (async () => {
+          try {
+            const { data: { session: stored } } = await supabase().auth.getSession();
+            if (stored?.user) {
+              // Session still exists in storage — refresh token race or transient failure.
+              // Attempt a server-verified refresh to re-establish the session.
+              const { data: { session: refreshed }, error } = await supabase().auth.refreshSession();
+              if (refreshed?.user && !error) {
+                if (__DEV__) console.info("[auth] SIGNED_OUT suppressed — session recovered via refresh");
+                return; // Session recovered; SDK will emit TOKEN_REFRESHED (which we skip) — no sign-out.
+              }
+            }
+            // Session truly gone — propagate sign-out.
+            if (__DEV__) console.info("[auth] SIGNED_OUT confirmed — session unrecoverable");
+            runCallback(null);
+          } catch {
+            // Network failure during verify — don't sign out on connectivity loss.
+            if (__DEV__) console.warn("[auth] SIGNED_OUT verify failed (network?) — suppressing");
+          } finally {
+            signOutVerifyInFlight = false;
+          }
+        })();
+      } else if (event !== 'SIGNED_OUT') {
+        runCallback(null);
+      }
       return;
     }
     runCallback(mapSupabaseUserToAuth(session.user));

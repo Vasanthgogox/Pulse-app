@@ -237,7 +237,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               const wasRequested = signOutRequestedRef.current;
               signOutRequestedRef.current = false;
               clearAuthState(!wasRequested);
-              logAuthRouteDecision("auth_state_signed_out", {});
+              logAuthRouteDecision("auth_state_signed_out", { requested: wasRequested });
             }
           } catch (err) {
             if (!mounted || !isCurrentListenerSeq(seqId)) return;
@@ -263,9 +263,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Proceed with restore even if first-launch clear fails
       }
 
-      // Restore session, then subscribe to auth changes.
-      // getSession() never rejects (it catches and returns null for invalid/refresh token errors).
-      // When "Keep me signed in" was unchecked, do not restore session on cold start (sign out immediately).
       authService
         .getSession()
         .then(async (session) => {
@@ -287,9 +284,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 });
               } else {
                 setSessionExpired(false);
-                // Do not expose JWT-only metadata to routing before DB merge: stale
-                // `user_metadata.role` can disagree with `profiles.role` and send fleet
-                // users to the driver app until refresh completes.
                 let nextUser = session.user;
                 let nextProfile = session.profile;
                 let verifiedDbProfile: authService.AuthProfile | null = null;
@@ -317,7 +311,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     }
                   }
                 } catch {
-                  // Treat restore/profile verification failures as auth failures.
                   if (mounted && isCurrentAuthAttempt(initAttemptId)) setRoleVerified(false);
                 }
                 if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
@@ -339,8 +332,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               logAuthRouteDecision("restore_no_session", {});
             }
           } finally {
-            // Always unblock UI for the active restore attempt (avoids infinite spinner when
-            // an inner branch returns early after StrictMode remount or aborted refresh).
             if (mounted && isCurrentAuthAttempt(initAttemptId)) {
               setLoading(false);
               setupAuthSubscription();
@@ -348,7 +339,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         })
       .catch(() => {
-        // Defensive: if getSession ever rejects (e.g. unhandled throw), show sign-in
         if (mounted && isCurrentAuthAttempt(initAttemptId)) {
           clearAuthState(true);
           setLoading(false);
