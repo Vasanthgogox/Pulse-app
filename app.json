@@ -36,7 +36,12 @@
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/favicon.png",
+      "meta": {
+        "viewport": {
+          "content": "width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=overlays-content"
+        }
+      }
     },
     "plugins": [
       [

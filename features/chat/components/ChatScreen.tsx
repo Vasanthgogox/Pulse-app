@@ -4516,6 +4516,38 @@ function ChatConversationLayout({
     ? 10
     : dockPaddingBottom(insets.bottom, keyboardVisible);
 
+  // Refs for direct DOM style mutation on mobile web — bypasses React re-render lag
+  // so keyboard position tracks the visual viewport synchronously (frame-perfect).
+  const composerWebRef = useRef<View>(null);
+  const msgsWebRef = useRef<View>(null);
+
+  useEffect(() => {
+    if (!mobileWeb) return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+
+    const update = () => {
+      // Keyboard height = gap between layout viewport bottom and visual viewport bottom.
+      const keyboardH = Math.max(0, Math.round(window.innerHeight - vv.height - (vv.offsetTop ?? 0)));
+      const safeB = keyboardH >= 48 ? 4 : insets.bottom;
+      // setNativeProps → direct DOM style write, zero React reconciler overhead.
+      (composerWebRef.current as any)?.setNativeProps?.({
+        style: { bottom: keyboardH, paddingBottom: safeB },
+      });
+      (msgsWebRef.current as any)?.setNativeProps?.({
+        style: { paddingBottom: WEB_CHAT_COMPOSER_RESERVE_PX + safeB + keyboardH },
+      });
+    };
+
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, [mobileWeb, insets.bottom]);
+
   const messagesPane = (
     <>
       {header}
@@ -4555,24 +4587,27 @@ function ChatConversationLayout({
     return (
       <View style={s.detailPanel}>
         <View
+          ref={msgsWebRef}
           style={[
             s.conversationBody,
             {
               flex: 1,
               minHeight: 0,
               backgroundColor: CHAT_MOBILE.wallpaper,
-              paddingBottom:
-                WEB_CHAT_COMPOSER_RESERVE_PX + dockBottomPad + keyboardHeight,
+              // Initial padding before first visualViewport event; setNativeProps takes over.
+              paddingBottom: WEB_CHAT_COMPOSER_RESERVE_PX + dockBottomPad + keyboardHeight,
             },
           ]}
         >
           {messagesPane}
         </View>
         <View
+          ref={composerWebRef}
           style={[
             s.chatInputDockWebFixed,
             s.chatInputDock,
             nativeMobile && s.chatInputDockMobile,
+            // Initial position; setNativeProps overrides each visualViewport frame.
             { bottom: keyboardHeight, paddingBottom: dockBottomPad },
           ]}
         >

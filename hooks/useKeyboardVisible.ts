@@ -4,6 +4,14 @@ import { Keyboard, Platform } from "react-native";
 /** Ignore visualViewport jitter from mobile browser chrome (URL bar). */
 const WEB_KEYBOARD_INSET_THRESHOLD_PX = 48;
 
+/** CSS custom property written synchronously on every viewport event — bypasses React re-render lag. */
+const CSS_VAR_KEYBOARD_HEIGHT = "--keyboard-height";
+
+function setCssKeyboardHeight(px: number): void {
+  if (typeof document === "undefined") return;
+  document.documentElement.style.setProperty(CSS_VAR_KEYBOARD_HEIGHT, `${px}px`);
+}
+
 type NavigatorWithVK = Navigator & {
   virtualKeyboard?: VirtualKeyboard;
 };
@@ -30,12 +38,6 @@ function readVirtualKeyboardInset(): number {
   return h > 0 ? Math.round(h) : 0;
 }
 
-/** Fallback when overlays-content hides keyboard from visualViewport (common on Android Chrome). */
-function estimateOverlayKeyboardHeight(): number {
-  const h = window.innerHeight;
-  return Math.round(Math.min(Math.max(h * 0.42, 260), 480));
-}
-
 /**
  * Tracks keyboard visibility and occluded height.
  *
@@ -53,13 +55,15 @@ export function useKeyboardVisible() {
         return;
       }
 
-      let focusActive = false;
       let rafId = 0;
       let focusOutTimer: ReturnType<typeof setTimeout> | undefined;
 
       const applyInset = (inset: number) => {
         const open = inset >= WEB_KEYBOARD_INSET_THRESHOLD_PX;
-        setKeyboardHeight(open ? inset : 0);
+        const height = open ? inset : 0;
+        // Write CSS var synchronously — no React lag, layout adjusts this frame.
+        setCssKeyboardHeight(height);
+        setKeyboardHeight(height);
         setKeyboardVisible(open);
       };
 
@@ -68,9 +72,7 @@ export function useKeyboardVisible() {
           readVisualViewportInset(),
           readVirtualKeyboardInset(),
         );
-        if (measured >= WEB_KEYBOARD_INSET_THRESHOLD_PX) return measured;
-        if (focusActive) return estimateOverlayKeyboardHeight();
-        return 0;
+        return measured >= WEB_KEYBOARD_INSET_THRESHOLD_PX ? measured : 0;
       };
 
       const sync = () => {
@@ -84,18 +86,17 @@ export function useKeyboardVisible() {
 
       const onFocusIn = (e: FocusEvent) => {
         if (!isEditableTarget(e.target)) return;
-        focusActive = true;
         scheduleSync();
-        setTimeout(sync, 60);
-        setTimeout(sync, 180);
-        setTimeout(sync, 320);
+        // Single delayed sync after keyboard has fully animated open (~350ms on Android Chrome).
+        setTimeout(sync, 350);
       };
 
       const onFocusOut = () => {
         focusOutTimer = setTimeout(() => {
           const active = document.activeElement;
           if (isEditableTarget(active)) return;
-          focusActive = false;
+          // Reset immediately in CSS so layout doesn't wait for React re-render.
+          setCssKeyboardHeight(0);
           sync();
         }, 120);
       };
