@@ -64,7 +64,7 @@ export default function TripDetailRoute() {
   };
 
   return (
-    <Suspense fallback={<CenteredLoadingView message="Loading trip…" />}>
+    <Suspense fallback={<CenteredLoadingView variant="preparing" message="Loading trip…" />}>
       <TripDetailScreen {...screenProps} />
     </Suspense>
   );

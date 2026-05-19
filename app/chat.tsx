@@ -12,7 +12,7 @@ const ChatScreen = lazy(() =>
 
 export default function ChatRoute() {
   return (
-    <Suspense fallback={<CenteredLoadingView message="Loading chat…" />}>
+    <Suspense fallback={<CenteredLoadingView variant="preparing" message="Loading chat…" />}>
       <ChatScreen />
     </Suspense>
   );

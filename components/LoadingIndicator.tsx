@@ -1,6 +1,6 @@
 /**
  * Inline loading spinner used across screens (buttons, lists, modals).
- * For full-screen loading with safe area, use `CenteredLoadingView`.
+ * For full-screen loading with safe area, use `AppLoadingSplash` or `CenteredLoadingView`.
  */
 import Theme from "@/constants/Theme";
 import {

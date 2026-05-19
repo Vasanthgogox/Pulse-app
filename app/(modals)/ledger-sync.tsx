@@ -2,6 +2,7 @@
  * Full-page Ledger Sync — add or edit a ledger entry (double-entry aligned).
  * Reuses AddTransactionModal in fullPage mode; data flow per docs/CORE_ACCOUNTING_MODEL.md.
  */
+import { AppLoadingSplash } from "@/components/AppLoadingSplash";
 import type { PartyOption, TripOption, VehicleOption } from "@/components/AddTransactionModal";
 import {
   AddTransactionModal,
@@ -1031,8 +1032,8 @@ export default function LedgerSyncScreen() {
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Ledger</Text>
         </View>
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={Theme.primary} />
+        <View style={[styles.centered, { flex: 1 }]}>
+          <AppLoadingSplash variant="preparing" style={{ flex: 1 }} />
         </View>
       </View>
     );

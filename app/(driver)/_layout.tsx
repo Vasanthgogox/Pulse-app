@@ -3,7 +3,7 @@
  * Tabs: Dashboard, Trip, History, Earnings. Trip chat opens from trip detail (hidden route).
  * Not to be confused with app/driver/ which is for dispatchers (e.g. /driver/[id] = driver detail).
  */
-import { LoadingIndicator } from "@/components/LoadingIndicator";
+import { AppLoadingSplash } from '@/components/AppLoadingSplash';
 import { DriverTabBar } from '@/components/driver/DriverTabBar';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -122,9 +122,10 @@ export default function DriverAppLayout() {
 
   if (gate) {
     return (
-      <View style={styles.gate}>
-        <LoadingIndicator size="large" color={Theme.primary} />
-      </View>
+      <AppLoadingSplash
+        variant={loading ? 'session' : !fontsReady ? 'preparing' : 'verify'}
+        style={styles.gate}
+      />
     );
   }
 

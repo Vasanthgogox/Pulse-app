@@ -1,5 +1,5 @@
 import Layout from '@/constants/Layout';
-import { LoadingIndicator } from "@/components/LoadingIndicator";
+import { AppLoadingSplash } from '@/components/AppLoadingSplash';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -75,37 +75,43 @@ export default function Index() {
     });
   }, [user, profile, roleVerified, loading, pathname, router, isFocused]);
 
-  const splashMessage = useMemo(() => {
-    if (loading) return t('splashRestoringSession');
-    if (user && profile?.role === 'driver' && !roleVerified) return t('splashVerifyingAccount');
-    if (user && !profile) return t('splashVerifyingAccount');
-    return t('loading');
-  }, [loading, profile, roleVerified, t, user]);
+  const splashVariant = useMemo(() => {
+    if (loading) return 'session' as const;
+    if (user && profile?.role === 'driver' && !roleVerified) return 'verify' as const;
+    if (user && !profile) return 'verify' as const;
+    return 'generic' as const;
+  }, [loading, profile, roleVerified, user]);
 
   const showOfflineHint = !loading && !isOnline;
   const showRetry = !loading && isOnline && user && profile?.role === 'driver' && !roleVerified;
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-      <LoadingIndicator size="large" color={Theme.primary} />
-      <Text style={styles.splashTitle} accessibilityRole="text">
-        {splashMessage}
-      </Text>
-      {showOfflineHint ? (
-        <Text style={styles.splashHint}>{t('splashOfflineHint')}</Text>
-      ) : null}
-      {showRetry ? (
-        <TouchableOpacity
-          accessibilityRole="button"
-          accessibilityLabel={t('splashRetrySession')}
-          style={styles.retryButton}
-          onPress={() => {
-            void refreshSession();
-          }}
+    <View style={styles.container}>
+      <AppLoadingSplash variant={splashVariant} />
+      {(showOfflineHint || showRetry) && (
+        <View
+          style={[
+            styles.footer,
+            { paddingBottom: Math.max(insets.bottom, Layout.spacingMedium) },
+          ]}
         >
-          <Text style={styles.retryLabel}>{t('splashRetrySession')}</Text>
-        </TouchableOpacity>
-      ) : null}
+          {showOfflineHint ? (
+            <Text style={styles.splashHint}>{t('splashOfflineHint')}</Text>
+          ) : null}
+          {showRetry ? (
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={t('splashRetrySession')}
+              style={styles.retryButton}
+              onPress={() => {
+                void refreshSession();
+              }}
+            >
+              <Text style={styles.retryLabel}>{t('splashRetrySession')}</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      )}
     </View>
   );
 }
@@ -113,28 +119,24 @@ export default function Index() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
     backgroundColor: Theme.screenBackground,
-    paddingHorizontal: Layout.screenPaddingHorizontal,
   },
-  splashTitle: {
-    marginTop: Layout.spacingExtraLarge,
-    fontSize: 16,
-    fontWeight: '600',
-    color: Theme.textPrimary,
-    textAlign: 'center',
-    maxWidth: 320,
+  footer: {
+    position: 'absolute',
+    left: Layout.screenPaddingHorizontal,
+    right: Layout.screenPaddingHorizontal,
+    bottom: 0,
+    alignItems: 'center',
   },
   splashHint: {
-    marginTop: Layout.spacingMedium,
+    marginBottom: Layout.spacingMedium,
     fontSize: 14,
     color: Theme.textSecondary,
     textAlign: 'center',
     maxWidth: 300,
   },
   retryButton: {
-    marginTop: Layout.sectionSpacing,
+    marginTop: Layout.spacingMedium,
     minHeight: Layout.minTouchTargetSize,
     paddingHorizontal: Layout.sectionSpacing,
     justifyContent: 'center',

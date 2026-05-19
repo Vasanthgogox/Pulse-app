@@ -35,7 +35,9 @@ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client
 import { useFonts } from 'expo-font';
 import { Stack, usePathname, useRouter, type ErrorBoundaryProps } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo } from 'react';
+import { AppBootGate } from '@/components/AppBootGate';
+import { AppLoadingSplash } from '@/components/AppLoadingSplash';
 import { LogBox, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useWebLayoutWidth } from '@/lib/useWebLayoutWidth';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -153,6 +155,9 @@ const styles = StyleSheet.create({
   /** Required so RNGH components (e.g. hold-to-accept Pressable) work on Android; stabilizes iOS. */
   ghRoot: {
     flex: 1,
+    ...(Platform.OS === 'web'
+      ? { minHeight: '100vh' as const, backgroundColor: Theme.screenBackground }
+      : null),
   },
   rootTabBarWrap: {
     width: '100%',
@@ -180,7 +185,6 @@ export default function RootLayout() {
     installWebDeployRecoveryListener();
   }, []);
 
-  const splashHidden = useRef(false);
   const [loaded, error] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
     ...FontAwesome.font,
@@ -199,18 +203,6 @@ export default function RootLayout() {
   useEffect(() => {
     if (error) throw error;
   }, [error]);
-
-  useEffect(() => {
-    if (!loaded || splashHidden.current) return;
-    splashHidden.current = true;
-    // Defer so the active view controller has the splash registered (avoids "No native splash screen registered" in dev client).
-    const id = setTimeout(() => {
-      SplashScreen.hideAsync().catch(() => {
-        // Ignore: "No native splash screen registered" can occur when VC has changed (e.g. dev client, simulator).
-      });
-    }, 0);
-    return () => clearTimeout(id);
-  }, [loaded]);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -240,7 +232,11 @@ export default function RootLayout() {
   }, []);
 
   if (!loaded) {
-    return null;
+    return (
+      <SafeAreaProvider>
+        <AppLoadingSplash variant="preparing" useGlobalI18n />
+      </SafeAreaProvider>
+    );
   }
 
   // Avoid any Supabase call when config is missing (prevents "Network request failed" from invalid URL)
@@ -273,7 +269,9 @@ export default function RootLayout() {
                   <WalletProvider>
                     <KeyboardAccessoryProvider>
                       <GlobalSyncProvider>
-                        <RootLayoutNav />
+                        <AppBootGate>
+                          <RootLayoutNav />
+                        </AppBootGate>
                       </GlobalSyncProvider>
                     </KeyboardAccessoryProvider>
                   </WalletProvider>

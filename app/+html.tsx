@@ -50,18 +50,13 @@ html, body, #root {
 }
 
 body {
-  background-color: #fff;
+  /* Match Theme.screenBackground + native splash — avoids white/black flash on reload */
+  background-color: #ffffff;
   /* Prevent pull-to-refresh and over-scroll bounce on iOS / Android */
   overscroll-behavior: none;
   /* Prevent iOS from enlarging small text (e.g. inside cards) */
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
-}
-
-@media (prefers-color-scheme: dark) {
-  body {
-    background-color: #000;
-  }
 }
 
 /* Remove the gray/blue tap flash on tappable elements (iOS/Android) */

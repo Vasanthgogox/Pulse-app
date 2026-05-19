@@ -1,3 +1,4 @@
+import { AppLoadingSplash } from "@/components/AppLoadingSplash";
 import { DriverHeader } from "@/components/driver/DriverHeader";
 import { LiveRouteInfoCard } from "@/components/driver/LiveRouteInfoCard";
 import { DriverInviteCard } from "@/components/driver/DriverInviteCard";
@@ -5103,7 +5104,11 @@ export default function DriverRadarScreen() {
             ]}
           >
             {loading && !assignmentFeedback ? (
-              <ActivityIndicator size="large" color={colors.primary} />
+              <AppLoadingSplash
+                variant="preparing"
+                accentColor={colors.primary}
+                style={{ flex: 1, minHeight: 280 }}
+              />
             ) : (
               <ScrollView
                 style={styles.tripsScroll}

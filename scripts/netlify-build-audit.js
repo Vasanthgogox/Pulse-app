@@ -140,11 +140,17 @@ function analyzeProject() {
   // Node modules size
   const nmSize = dirSize(path.join(ROOT, 'node_modules'));
 
-  // Assets
+  // Assets — skip app-store/EAS assets that must stay as PNG
+  const APP_STORE_ASSETS = new Set([
+    'icon.png', 'splash-icon.png', 'adaptive-icon.png',
+    'favicon.png', 'splash.png', 'notification-icon.png',
+  ]);
   const assetDir    = path.join(ROOT, 'assets');
   const assetSize   = dirSize(assetDir);
   const bigImages   = largestFiles(assetDir, ['.png', '.jpg', '.jpeg', '.gif', '.webp']);
-  const unoptPngs   = bigImages.filter((f) => f.size > 500 * 1024); // > 500 KB
+  const unoptPngs   = bigImages.filter(
+    (f) => f.size > 500 * 1024 && !APP_STORE_ASSETS.has(path.basename(f.file))
+  );
 
   // Dist
   const distDir   = path.join(ROOT, 'dist');
@@ -157,11 +163,12 @@ function analyzeProject() {
   const hasNodeVersion = netlifyToml.includes('NODE_VERSION') || fs.existsSync(path.join(ROOT, '.node-version')) || fs.existsSync(path.join(ROOT, '.nvmrc'));
   const hasNpmCi       = !netlifyToml.includes('npm install ') || netlifyToml.includes('npm ci');
 
-  // Metro cache — does it persist anywhere useful?
+  // Metro cache — only flag if tmpdir is used unconditionally (not behind process.env.CI guard)
   const metroConfig = fs.existsSync(path.join(ROOT, 'metro.config.js'))
     ? fs.readFileSync(path.join(ROOT, 'metro.config.js'), 'utf8') : '';
-  const metroTmp   = metroConfig.includes('tmpdir') || metroConfig.includes('os.tmpdir');
-  const metroCacheDir = metroTmp ? os.tmpdir() + '/q-web-metro-cache' : null;
+  const metroHasCiGuard = metroConfig.includes('process.env.CI') && metroConfig.includes('.metro-cache');
+  const metroTmp        = (metroConfig.includes('tmpdir') || metroConfig.includes('os.tmpdir')) && !metroHasCiGuard;
+  const metroCacheDir   = metroTmp ? os.tmpdir() + '/q-web-metro-cache' : null;
 
   // SVG transformer
   const hasSvgTransformer = metroConfig.includes('svg-transformer');

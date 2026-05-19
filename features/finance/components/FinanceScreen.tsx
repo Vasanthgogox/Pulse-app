@@ -1,4 +1,4 @@
-import { LoadingIndicator } from "@/components/LoadingIndicator";
+import { AppLoadingSplash } from "@/components/AppLoadingSplash";
 import type {
     DriverPaymentType,
     PartyOption,
@@ -1407,14 +1407,12 @@ export function FinanceScreen() {
 
   const orgId = currentOrganization?.id ?? null;
 
-  if (isOrgLoading) {
-    return (
-      <View style={[styles.container, { paddingTop: screenTopPad }]}>
-        <View style={[styles.centered, { flex: 1, paddingTop: 24 }]}>
-          <LoadingIndicator size="large" color={Theme.primary} />
-        </View>
-      </View>
-    );
+  const financeDataLoading =
+    isOrgLoading ||
+    (entitiesLoading && ledgerLoading && ledgerTransactions === null);
+
+  if (financeDataLoading) {
+    return <AppLoadingSplash variant="preparing" />;
   }
 
   if (!orgId) {

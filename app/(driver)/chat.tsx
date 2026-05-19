@@ -3,6 +3,7 @@
  * Fleet-only system status logs (message_type system) are hidden here; they remain visible in Command Hub.
  * Ledger cards and doc-share are visible but actions are read-only (no add-to-book or share).
  */
+import { AppLoadingSplash } from "@/components/AppLoadingSplash";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -469,9 +470,7 @@ export default function DriverChatScreen() {
     if (openingTripThread) {
       return (
         <View style={[dr.root, screenPadding]}>
-          <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-            <ActivityIndicator color={Theme.primary} size="large" />
-          </View>
+          <AppLoadingSplash variant="preparing" style={{ flex: 1 }} />
         </View>
       );
     }
@@ -502,9 +501,7 @@ export default function DriverChatScreen() {
     if (selectedId && !selectedConv) {
       return (
         <View style={[dr.root, screenPadding]}>
-          <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-            <ActivityIndicator color={Theme.primary} size="large" />
-          </View>
+          <AppLoadingSplash variant="preparing" style={{ flex: 1 }} />
         </View>
       );
     }
@@ -530,9 +527,7 @@ export default function DriverChatScreen() {
     }
     return (
       <View style={[dr.root, screenPadding]}>
-        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-          <ActivityIndicator color={Theme.primary} size="large" />
-        </View>
+        <AppLoadingSplash variant="preparing" style={{ flex: 1 }} />
       </View>
     );
   }
@@ -554,9 +549,7 @@ export default function DriverChatScreen() {
           </View>
 
           {isLoading ? (
-            <View style={{ paddingTop: 48, alignItems: "center" }}>
-              <ActivityIndicator color={Theme.primary} />
-            </View>
+            <AppLoadingSplash variant="preparing" style={{ flex: 1 }} />
           ) : conversations.length === 0 ? (
             <View style={{ alignItems: "center", paddingTop: 64, gap: 12 }}>
               <MessageSquare size={36} color="#e2e8f0" />

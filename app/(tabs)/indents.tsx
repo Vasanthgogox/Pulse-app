@@ -1,3 +1,4 @@
+import { AppLoadingSplash } from "@/components/AppLoadingSplash";
 import { EntityRow } from "@/components/EntityRow";
 import { FAB } from "@/components/FAB";
 import { ListScreenLayout } from "@/components/ListScreenLayout";
@@ -84,11 +85,13 @@ export default function IndentsScreen() {
     );
   }
 
+  if (loading && indents.length === 0) {
+    return <AppLoadingSplash variant="preparing" />;
+  }
+
   const emptyComponent = (
     <View style={styles.emptyWrap}>
-      <Text style={styles.empty}>
-        {loading ? "Loading…" : "No indents yet."}
-      </Text>
+      <Text style={styles.empty}>No indents yet.</Text>
     </View>
   );
 

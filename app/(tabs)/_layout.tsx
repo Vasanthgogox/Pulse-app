@@ -5,7 +5,8 @@
 import React, { useEffect } from 'react';
 import { Tabs, useRouter } from 'expo-router';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { View, StyleSheet, Platform, useWindowDimensions, ActivityIndicator } from 'react-native';
+import { AppLoadingSplash } from '@/components/AppLoadingSplash';
+import { View, StyleSheet, Platform, useWindowDimensions } from 'react-native';
 import { DemoTabBar, type DemoTabId } from '@/components/demo';
 import {
   DemoTabBarAutoHideShell,
@@ -148,9 +149,10 @@ export default function TabLayout() {
 
   if (loading || !user || !profile || !roleVerified || profile.role === 'driver') {
     return (
-      <View style={styles.gate}>
-        <ActivityIndicator size="large" color={Theme.primary} />
-      </View>
+      <AppLoadingSplash
+        variant={loading ? 'session' : 'verify'}
+        style={styles.gate}
+      />
     );
   }
 
@@ -176,11 +178,13 @@ function TabsWithProfileDrawer({ isDesktopWeb }: { isDesktopWeb: boolean }) {
         headerShown: false,
         tabBarShowLabel: false,
         tabBarStyle: { display: 'none' },
-        sceneStyle: isDesktopWeb
-          ? {
-              paddingTop: Layout.desktopTopNavOffset,
-            }
-          : undefined,
+        sceneStyle: {
+          flex: 1,
+          backgroundColor: Theme.screenBackground,
+          ...(isDesktopWeb
+            ? { paddingTop: Layout.desktopTopNavOffset }
+            : null),
+        },
       }}
     >
       <Tabs.Screen name="index" options={{ title: 'Home' }} />

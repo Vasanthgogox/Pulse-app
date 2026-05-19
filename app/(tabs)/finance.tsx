@@ -1,8 +1,7 @@
 /**
- * Finance tab — thin route. All logic and UI live in features/finance (FinanceScreen).
- * Compare with finance.tsx.reference for the pre-refactor single-file version.
+ * Finance tab — thin route. UI in features/finance (FinanceScreen).
  */
-import { FinanceScreen } from "@/features/finance";
+import { FinanceScreen } from '@/features/finance';
 
 export default function Finance() {
   return <FinanceScreen />;
