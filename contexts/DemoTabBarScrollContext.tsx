@@ -18,14 +18,27 @@ import {
   type NativeSyntheticEvent,
 } from "react-native";
 import Animated, {
+  Easing,
+  Extrapolation,
+  interpolate,
   type SharedValue,
   useAnimatedStyle,
   useSharedValue,
+  withSpring,
   withTiming,
 } from "react-native-reanimated";
 
-const HIDE_MS = 300;
-const SHOW_MS = 300;
+/** Glide off-screen — ease-in so it accelerates away naturally. */
+const HIDE_TIMING = {
+  duration: 360,
+  easing: Easing.inOut(Easing.cubic),
+} as const;
+/** Glide back — light spring for a premium settle (not bouncy). */
+const SHOW_SPRING = {
+  damping: 26,
+  stiffness: 300,
+  mass: 0.72,
+} as const;
 const SHOW_DELAY_MS = 0;
 const WEB_IDLE_MS = 380;
 /** Ignore hide until user has scrolled past top bounce. */
@@ -93,7 +106,7 @@ export function DemoTabBarScrollProvider({
     clearSchedule();
     setScrollInProgress(true);
     emitScrollHideStart();
-    progress.value = withTiming(0, { duration: HIDE_MS });
+    progress.value = withTiming(0, HIDE_TIMING);
   }, [clearSchedule, progress]);
 
   const scheduleShow = useCallback(() => {
@@ -101,7 +114,7 @@ export function DemoTabBarScrollProvider({
     clearSchedule();
     scrollEndTimeoutRef.current = setTimeout(() => {
       setScrollInProgress(false);
-      progress.value = withTiming(1, { duration: SHOW_MS });
+      progress.value = withSpring(1, SHOW_SPRING);
       scrollEndTimeoutRef.current = null;
     }, SHOW_DELAY_MS);
   }, [clearSchedule, progress]);
@@ -118,7 +131,7 @@ export function DemoTabBarScrollProvider({
     if (!autoHideEnabledRef.current) return;
     clearSchedule();
     setScrollInProgress(false);
-    progress.value = withTiming(1, { duration: SHOW_MS });
+    progress.value = withSpring(1, SHOW_SPRING);
   }, [clearSchedule, progress]);
 
   useEffect(() => () => clearSchedule(), [clearSchedule]);
@@ -183,7 +196,8 @@ export function useDemoTabBarScrollInProgress(): boolean {
   );
 }
 
-const OFF_TRANSLATE = 120;
+/** Full slide distance (dock + safe area). Slightly over-travel avoids edge peek. */
+const OFF_TRANSLATE = 128;
 
 export function DemoTabBarAutoHideShell({
   children,
@@ -195,9 +209,25 @@ export function DemoTabBarAutoHideShell({
   const ctx = useContext(ProgressCtx);
   if (!ctx) return <>{children}</>;
   const { progress } = ctx;
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: (1 - progress.value) * OFF_TRANSLATE }],
-  }));
+  const animatedStyle = useAnimatedStyle(() => {
+    const p = progress.value;
+    return {
+      opacity: interpolate(p, [0, 0.4, 1], [0, 0.92, 1], Extrapolation.CLAMP),
+      transform: [
+        {
+          translateY: interpolate(
+            p,
+            [0, 1],
+            [OFF_TRANSLATE, 0],
+            Extrapolation.CLAMP,
+          ),
+        },
+        {
+          scale: interpolate(p, [0, 1], [0.94, 1], Extrapolation.CLAMP),
+        },
+      ],
+    };
+  });
   return (
     <Animated.View style={[style, animatedStyle]} pointerEvents="box-none">
       {children}
