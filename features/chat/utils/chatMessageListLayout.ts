@@ -17,21 +17,23 @@ export function estimateTripMessageRowHeight(
     case "ledger_event":
     case "ledger":
     case "payment":
-      return 176;
+    case "ledger_update":
+      return 200;
     case "feedback_request":
     case "feedback":
       return 380;
     case "system":
     case "update":
     case "system_log":
-      return 88;
+      return 128;
     case "location_log":
-      return 200;
+      return 248;
     case "status_change":
+      return 128;
     case "image":
       return 104;
     case "tracking":
-      return 200;
+      return 248;
     default:
       return Math.min(240, 76 + Math.ceil((m.content?.length ?? 0) / 34) * 18);
   }

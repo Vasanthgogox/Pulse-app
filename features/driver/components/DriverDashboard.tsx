@@ -2042,8 +2042,9 @@ export default function DriverDashboard() {
         <GestureHandlerRootViewComponent style={styles.olaDriverRoot}>
           <KeyboardAvoidingView
             style={styles.olaDriverKeyboardAvoid}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
             keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 12 : 0}
+            enabled={Platform.OS !== 'web'}
           >
             {showNewAssignmentCard && effectiveFirstIncoming && (
               <DriverHeader

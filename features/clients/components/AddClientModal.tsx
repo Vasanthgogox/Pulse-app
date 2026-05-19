@@ -848,7 +848,7 @@ const styles = StyleSheet.create({
   ledgerAmountRow: { flexDirection: "row", alignItems: "center" },
   ledgerAmountInput: {
     flex: 1,
-    fontSize: 10,
+    fontSize: 16,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
     textTransform: "uppercase",

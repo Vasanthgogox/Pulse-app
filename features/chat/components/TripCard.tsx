@@ -52,7 +52,7 @@ export function TripCard({
   lastMessagePreview,
 }: TripCardProps) {
   const hasIndent = Boolean(indentId && String(indentId).trim());
-  /** Hub chrome + [MANUAL]/[INTEGRATED] tags follow bootstrap `indent_id` only (not chatFlow). */
+  /** Hub lead icon: network (indent-backed) vs truck (manual) — from bootstrap `indent_id` only. */
   const showIntegrated = hasIndent;
   const showVehicleLate = trackingStatus === "RUNNING_LATE";
 
@@ -86,41 +86,6 @@ export function TripCard({
             </View>
             <View style={styles.tripHubHeroTextCol}>
               <View style={styles.tripHubTitleRow}>
-                {hasIndent ? (
-                  <View
-                    style={[
-                      styles.hubFlowBadge,
-                      tripActive ? styles.hubFlowBadgeIntegratedOn : styles.hubFlowBadgeIntegrated,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.hubFlowBadgeText,
-                        tripActive && styles.hubFlowBadgeTextIntegratedOn,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      [INTEGRATED]
-                    </Text>
-                  </View>
-                ) : (
-                  <View
-                    style={[
-                      styles.hubFlowBadge,
-                      tripActive ? styles.hubFlowBadgeManualOn : styles.hubFlowBadgeManual,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.hubFlowBadgeText,
-                        tripActive && styles.hubFlowBadgeTextOn,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      [MANUAL]
-                    </Text>
-                  </View>
-                )}
                 <Text
                   style={[styles.tripHubTripTitle, tripActive && styles.tripHubTripTitleOn]}
                   numberOfLines={1}
@@ -307,42 +272,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(99,102,241,0.22)",
     borderColor: "rgba(165,180,252,0.45)",
     shadowOpacity: 0.15,
-  },
-  hubFlowBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    flexShrink: 0,
-  },
-  hubFlowBadgeManual: {
-    backgroundColor: "rgba(100,116,139,0.18)",
-    borderWidth: 1,
-    borderColor: "rgba(100,116,139,0.35)",
-  },
-  hubFlowBadgeManualOn: {
-    backgroundColor: "rgba(148,163,184,0.22)",
-    borderColor: "rgba(226,232,240,0.45)",
-  },
-  hubFlowBadgeIntegrated: {
-    backgroundColor: "rgba(167,139,250,0.22)",
-    borderWidth: 1,
-    borderColor: "rgba(139,92,246,0.45)",
-  },
-  hubFlowBadgeIntegratedOn: {
-    backgroundColor: "rgba(196,181,253,0.2)",
-    borderColor: "rgba(196,181,253,0.55)",
-  },
-  hubFlowBadgeText: {
-    fontSize: 8,
-    fontWeight: "900",
-    letterSpacing: 0.4,
-    color: "#475569",
-  },
-  hubFlowBadgeTextOn: {
-    color: "#e2e8f0",
-  },
-  hubFlowBadgeTextIntegratedOn: {
-    color: "#e9d5ff",
   },
   tripHubHeroTrail: {
     flexDirection: "row",

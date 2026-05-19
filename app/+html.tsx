@@ -10,16 +10,33 @@ export default function Root({ children }: { children: React.ReactNode }) {
       <head>
         <meta charSet="utf-8" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
-        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+        {/*
+          maximum-scale=1, user-scalable=no: Prevents iOS Safari from auto-zooming when a
+          text input with font-size < 16px is focused. This is the primary fix for the
+          "form field zoom" bug on mobile web.
 
-        {/* 
-          Disable body scrolling on web. This makes ScrollView components work closer to how they do on native. 
+          viewport-fit=cover: Allows content to render under the device notch/home indicator,
+          so safe-area insets are applied correctly by the app.
+
+          interactive-widget=overlays-content: Prevents Android Chrome from resizing the
+          layout viewport when the virtual keyboard appears. Without this, window.innerHeight
+          shrinks on keyboard open, causing Dimensions-based modal heights to recalculate and
+          visually collapse ("layout crash"). The keyboard overlays content instead, matching
+          native app behaviour.
+        */}
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=overlays-content"
+        />
+
+        {/*
+          Disable body scrolling on web. This makes ScrollView components work closer to how they do on native.
           However, body scrolling is often nice to have for mobile web. If you want to enable it, remove this line.
         */}
         <ScrollViewStyleReset />
 
         {/* Static CSS only; no user input — safe for dangerouslySetInnerHTML. */}
-        <style dangerouslySetInnerHTML={{ __html: responsiveBackground }} />
+        <style dangerouslySetInnerHTML={{ __html: mobileWebReset }} />
         {/* Add any additional <head> elements that you want globally available on web... */}
       </head>
       <body>{children}</body>
@@ -27,12 +44,54 @@ export default function Root({ children }: { children: React.ReactNode }) {
   );
 }
 
-const responsiveBackground = `
+const mobileWebReset = `
 body {
   background-color: #fff;
+  /* Prevent pull-to-refresh and over-scroll bounce on iOS / Android */
+  overscroll-behavior: none;
+  /* Prevent iOS from enlarging small text (e.g. inside cards) */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
+
 @media (prefers-color-scheme: dark) {
   body {
     background-color: #000;
   }
-}`;
+}
+
+/* Remove the gray/blue tap flash on tappable elements (iOS/Android) */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/*
+  Eliminate the 300 ms tap delay on interactive elements.
+  "manipulation" allows single-tap and scroll but disables double-tap zoom,
+  which is what causes the delay.
+*/
+a, button, input, textarea, select, label, [role="button"] {
+  touch-action: manipulation;
+}
+
+/*
+  Remove the browser's default blue focus ring from inputs on mobile web.
+  React Native Web applies its own focus styles via StyleSheet.
+*/
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+}
+
+/*
+  Strip iOS Safari's inner shadow and system appearance from inputs so they
+  render exactly as styled by React Native Web's StyleSheet.
+*/
+input,
+textarea,
+select {
+  -webkit-appearance: none;
+  appearance: none;
+}
+`;

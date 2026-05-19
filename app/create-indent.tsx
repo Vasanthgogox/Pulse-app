@@ -1636,7 +1636,12 @@ export default function CreateIndentScreen() {
                 <View
                   style={[styles.sheetGrid, !isWide && styles.sheetGridStacked]}
                 >
-                  <View style={styles.sheetField}>
+                  <View
+                    style={[
+                      styles.sheetField,
+                      !isWide && styles.sheetFieldStacked,
+                    ]}
+                  >
                     <Text style={styles.sheetLabel}>Vehicle</Text>
                     {vehicleTypeIsOther ? (
                       <TextInput
@@ -1691,7 +1696,12 @@ export default function CreateIndentScreen() {
                       </Text>
                     ) : null}
                   </View>
-                  <View style={styles.sheetField}>
+                  <View
+                    style={[
+                      styles.sheetField,
+                      !isWide && styles.sheetFieldStacked,
+                    ]}
+                  >
                     <Text style={styles.sheetLabel}>Load Type</Text>
                     <TouchableOpacity
                       style={[
@@ -1722,6 +1732,94 @@ export default function CreateIndentScreen() {
 
               </View>
                 </View>
+
+              <View style={styles.actionFooterBar}>
+                <View
+                  ref={indentActionsHostRef}
+                  style={styles.actionButtonsHoverHost}
+                >
+                  {actionHelpHint ? (
+                    <View
+                      style={styles.actionHelpTooltip}
+                      pointerEvents="none"
+                      accessibilityLiveRegion="polite"
+                    >
+                      <Text style={styles.actionHelpTooltipTitle}>
+                        Save Draft
+                      </Text>
+                      <Text style={styles.actionHelpTooltipText}>
+                        Indent stays editable. You can save updates again and share
+                        later.
+                      </Text>
+                    </View>
+                  ) : null}
+                  <View
+                    style={styles.actionButtonsRow}
+                    {...(Platform.OS === "web"
+                      ? {
+                          onMouseLeave: () => {
+                            requestAnimationFrame(() => {
+                              if (typeof document === "undefined") return;
+                              const host =
+                                indentActionsHostRef.current as unknown as HTMLElement | null;
+                              const active = document.activeElement;
+                              if (
+                                host &&
+                                active &&
+                                typeof host.contains === "function" &&
+                                host.contains(active)
+                              ) {
+                                return;
+                              }
+                              setActionHelpHint(null);
+                            });
+                          },
+                        }
+                      : {})}
+                  >
+                    <View
+                      style={styles.actionBtnHoverCell}
+                      {...(Platform.OS === "web"
+                        ? {
+                            onMouseEnter: () => setActionHelpHint("draft"),
+                          }
+                        : {})}
+                    >
+                      <TouchableOpacity
+                        style={[
+                          styles.draftBtn,
+                          (!canSaveDraft || submitting) &&
+                            styles.submitBtnDisabled,
+                        ]}
+                        onPress={persistDraft}
+                        disabled={!canSaveDraft || submitting}
+                        activeOpacity={0.8}
+                        focusable
+                        onFocus={onDraftActionFocus}
+                        onBlur={scheduleClearActionHelpHint}
+                        accessibilityHint="Indent stays editable. You can save updates again and share later."
+                      >
+                        {submitting ? (
+                          <ActivityIndicator
+                            size="small"
+                            color={Theme.textPrimaryDark}
+                          />
+                        ) : (
+                          <View style={styles.actionBtnInner}>
+                            <FileEdit size={16} color={Theme.textPrimaryDark} />
+                            <Text style={styles.draftBtnText}>Save Draft</Text>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              </View>
+                </View>
+
+              </View>
+            </View>
+          </ScrollView>
 
               {vehicleTypePickerOpen ? (
                 <Modal
@@ -2072,93 +2170,6 @@ export default function CreateIndentScreen() {
                 </Modal>
               ) : null}
 
-              <View style={styles.actionFooterBar}>
-                <View
-                  ref={indentActionsHostRef}
-                  style={styles.actionButtonsHoverHost}
-                >
-                  {actionHelpHint ? (
-                    <View
-                      style={styles.actionHelpTooltip}
-                      pointerEvents="none"
-                      accessibilityLiveRegion="polite"
-                    >
-                      <Text style={styles.actionHelpTooltipTitle}>
-                        Save Draft
-                      </Text>
-                      <Text style={styles.actionHelpTooltipText}>
-                        Indent stays editable. You can save updates again and share
-                        later.
-                      </Text>
-                    </View>
-                  ) : null}
-                  <View
-                    style={styles.actionButtonsRow}
-                    {...(Platform.OS === "web"
-                      ? {
-                          onMouseLeave: () => {
-                            requestAnimationFrame(() => {
-                              if (typeof document === "undefined") return;
-                              const host =
-                                indentActionsHostRef.current as unknown as HTMLElement | null;
-                              const active = document.activeElement;
-                              if (
-                                host &&
-                                active &&
-                                typeof host.contains === "function" &&
-                                host.contains(active)
-                              ) {
-                                return;
-                              }
-                              setActionHelpHint(null);
-                            });
-                          },
-                        }
-                      : {})}
-                  >
-                    <View
-                      style={styles.actionBtnHoverCell}
-                      {...(Platform.OS === "web"
-                        ? {
-                            onMouseEnter: () => setActionHelpHint("draft"),
-                          }
-                        : {})}
-                    >
-                      <TouchableOpacity
-                        style={[
-                          styles.draftBtn,
-                          (!canSaveDraft || submitting) &&
-                            styles.submitBtnDisabled,
-                        ]}
-                        onPress={persistDraft}
-                        disabled={!canSaveDraft || submitting}
-                        activeOpacity={0.8}
-                        focusable
-                        onFocus={onDraftActionFocus}
-                        onBlur={scheduleClearActionHelpHint}
-                        accessibilityHint="Indent stays editable. You can save updates again and share later."
-                      >
-                        {submitting ? (
-                          <ActivityIndicator
-                            size="small"
-                            color={Theme.textPrimaryDark}
-                          />
-                        ) : (
-                          <View style={styles.actionBtnInner}>
-                            <FileEdit size={16} color={Theme.textPrimaryDark} />
-                            <Text style={styles.draftBtnText}>Save Draft</Text>
-                          </View>
-                        )}
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </View>
-              </View>
-                </View>
-
-              </View>
-            </View>
-          </ScrollView>
 
           <View style={styles.blobA} pointerEvents="none" />
           <View style={styles.blobB} pointerEvents="none" />
@@ -2260,6 +2271,11 @@ const styles = StyleSheet.create({
     flexDirection: "column",
   },
   sheetField: { flex: 1, minWidth: 0 },
+  sheetFieldStacked: {
+    flex: 0,
+    flexGrow: 0,
+    alignSelf: "stretch",
+  },
   hiddenLabel: { height: 0, margin: 0, padding: 0, opacity: 0 },
   sheetSection: { marginBottom: 8 },
   sheetLabel: {

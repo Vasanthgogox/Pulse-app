@@ -129,47 +129,67 @@ export function LoadCenterHubMobileShell({
 
   return (
     <View style={styles.shell}>
-      {/* Row 1 — title + search + add */}
+      {/* Row 1 — title + add (matches Trips mobile header) */}
       <View style={styles.mmtScreenHeaderRow}>
         <Text style={styles.mmtScreenTitle}>My Loads</Text>
-        <View style={styles.mmtHeaderActions}>
-          <TouchableOpacity
-            style={[
-              styles.headerSearchBtn,
-              (searchOpen || hasSearchQuery) && styles.headerSearchBtnActive,
-            ]}
-            onPress={toggleSearch}
-            activeOpacity={0.72}
-            accessibilityRole="button"
-            accessibilityLabel={searchOpen ? "Close search" : "Search loads"}
-            accessibilityState={{ selected: searchOpen }}
-          >
-            <FontAwesome
-              name="search"
-              size={15}
-              color={
-                searchOpen || hasSearchQuery
-                  ? LOADS_HUB_ACCENT
-                  : Theme.textPrimaryDark
-              }
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.mmtAddBtn}
-            onPress={onCreateIndentPress}
-            activeOpacity={0.88}
-            accessibilityRole="button"
-            accessibilityLabel="Add load"
-          >
-            <View style={styles.mmtAddIconBadge}>
-              <FontAwesome name="cube" size={9} color={LOADS_HUB_ACCENT} />
-            </View>
-            <Text style={styles.mmtAddText}>Add Load</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          style={styles.mmtAddBtn}
+          onPress={onCreateIndentPress}
+          activeOpacity={0.88}
+          accessibilityRole="button"
+          accessibilityLabel="Add load"
+        >
+          <View style={styles.mmtAddIconBadge}>
+            <FontAwesome name="cube" size={9} color={LOADS_HUB_ACCENT} />
+          </View>
+          <Text style={styles.mmtAddText}>Add Load</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Row 2 — expanded search field */}
+      {/* Row 2 — search + primary tabs (matches Trips filter + Active/History row) */}
+      <View style={styles.mmtTabHeaderRow}>
+        <TouchableOpacity
+          style={[
+            styles.mmtFilterBtn,
+            (searchOpen || hasSearchQuery) && styles.mmtFilterBtnActive,
+          ]}
+          onPress={toggleSearch}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={searchOpen ? "Close search" : "Search loads"}
+          accessibilityState={{ selected: searchOpen || hasSearchQuery }}
+        >
+          <FontAwesome
+            name="search"
+            size={15}
+            color={
+              searchOpen || hasSearchQuery
+                ? LOADS_HUB_ACCENT
+                : Theme.textPrimaryDark
+            }
+          />
+        </TouchableOpacity>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled
+          contentContainerStyle={styles.mmtPrimaryTabsContent}
+          style={styles.mmtPrimaryTabsScroll}
+        >
+          {mainTabs.map((tab) => (
+            <LoadHubMmtUnderlineTab
+              key={tab.key}
+              label={`${tab.label}${tab.count > 0 ? ` (${tab.count})` : ""}`}
+              isActive={activeMainTab === tab.key}
+              onPress={() => onMainTabChange(tab.key)}
+            />
+          ))}
+        </ScrollView>
+      </View>
+
+      <View style={styles.mmtTabDivider} />
+
       {searchOpen ? (
         <View style={styles.searchRow}>
           <FontAwesome
@@ -203,33 +223,13 @@ export function LoadCenterHubMobileShell({
         </View>
       ) : null}
 
-      {/* Row 3 — main tabs */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.mmtPrimaryTabsContent}
-        style={styles.mmtPrimaryTabsScroll}
-      >
-        {mainTabs.map((tab) => (
-          <LoadHubMmtUnderlineTab
-            key={tab.key}
-            label={`${tab.label}${tab.count > 0 ? ` (${tab.count})` : ""}`}
-            isActive={activeMainTab === tab.key}
-            onPress={() => onMainTabChange(tab.key)}
-          />
-        ))}
-      </ScrollView>
-
-      <View style={styles.mmtTabDivider} />
-
       {showStatusTabs && statusTabs.length > 0 ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={styles.statusTabsContent}
-          style={styles.statusTabsScroll}
+          contentContainerStyle={styles.mmtMetricTabsContent}
+          style={styles.mmtMetricTabsScroll}
         >
           {statusTabs.map((tab) => (
             <LoadHubMmtUnderlineTab
@@ -258,7 +258,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingTop: 4,
-    paddingBottom: 8,
+    paddingBottom: 10,
     gap: 12,
   },
   mmtScreenTitle: {
@@ -267,26 +267,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: Theme.textPrimaryDark,
     letterSpacing: -0.4,
-  },
-  mmtHeaderActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    flexShrink: 0,
-  },
-  headerSearchBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.screenBackground,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerSearchBtnActive: {
-    borderColor: Theme.pulseTabActiveBorder,
-    backgroundColor: Theme.pulseTabActiveBg,
   },
   mmtAddBtn: {
     flexDirection: "row",
@@ -330,7 +310,8 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.screenBackground,
     paddingLeft: 10,
     paddingRight: 6,
-    marginBottom: 6,
+    marginTop: 6,
+    marginBottom: 4,
   },
   searchLeadingIcon: {
     marginRight: 6,
@@ -348,9 +329,27 @@ const styles = StyleSheet.create({
       default: {},
     }),
   },
+  mmtTabHeaderRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    minHeight: 36,
+  },
+  mmtFilterBtn: {
+    width: 34,
+    height: 34,
+    marginRight: 2,
+    marginBottom: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  mmtFilterBtnActive: {
+    borderRadius: 10,
+    backgroundColor: Theme.pulseTabActiveBg,
+  },
   mmtPrimaryTabsScroll: {
+    flex: 1,
     minWidth: 0,
-    alignSelf: "stretch",
   },
   mmtPrimaryTabsContent: {
     flexDirection: "row",
@@ -404,15 +403,15 @@ const styles = StyleSheet.create({
   mmtTabDivider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: Theme.borderLight,
-    marginTop: 2,
-    marginBottom: 8,
+    marginBottom: 0,
   },
-  statusTabsScroll: {
+  mmtMetricTabsScroll: {
     minWidth: 0,
     alignSelf: "stretch",
-    marginBottom: 4,
+    marginTop: 2,
+    marginBottom: 2,
   },
-  statusTabsContent: {
+  mmtMetricTabsContent: {
     flexDirection: "row",
     alignItems: "flex-end",
     paddingRight: 4,

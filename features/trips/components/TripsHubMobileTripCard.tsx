@@ -234,7 +234,6 @@ export type TripsHubMobileTripCardProps = {
   typeLabel?: string;
   showSupplierParty?: boolean;
   missionStatus?: string;
-  subTypeLabel?: string;
   pickupIso?: string | null;
   origin: string;
   dest: string;
@@ -510,7 +509,7 @@ const styles = StyleSheet.create({
   },
   legCity: {
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "600",
     color: REF.ink,
     letterSpacing: -0.15,
     lineHeight: 14,

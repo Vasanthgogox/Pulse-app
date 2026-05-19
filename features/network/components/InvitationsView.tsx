@@ -964,7 +964,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: Theme.cinematicHeaderChipBg,
   },
-  hubSearchInput: { flex: 1, fontSize: 14, color: Theme.textPrimaryDark, fontWeight: "500" },
+  hubSearchInput: { flex: 1, fontSize: 16, color: Theme.textPrimaryDark, fontWeight: "500" },
   centered: { flex: 1, alignItems: "center", justifyContent: "center" },
   emptyInbox: {
     alignItems: "center",

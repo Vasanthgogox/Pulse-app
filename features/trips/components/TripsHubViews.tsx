@@ -16,7 +16,6 @@ import { isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import {
     isAggregateTrip,
     shouldShowAggregateTripKindPill,
-    shouldShowIntegratedSubtypePillForHub,
 } from "@/lib/driverUtils";
 import {
     formatINR,
@@ -511,9 +510,6 @@ export function TripsHubTripCard({
   });
   const showAssetTripIcon = !showAggregateKindPill;
   const typeLabel = showAssetTripIcon ? tr("tripAsset") : tr("tripAggregate");
-  const subTypeLabel = shouldShowIntegratedSubtypePillForHub(trip)
-    ? tr("integrated")
-    : tr("manual");
   /** `undefined` while adjustment map loads — hub uses raw rates. */
   const adj = financeAdjustments;
   const revenue = tripHubRevenue(trip, currentOrganizationId, adj);
@@ -646,11 +642,6 @@ export function TripsHubTripCard({
               <View style={styles.fleetBadgeRow}>
                 <View style={styles.fleetBadgeBlue}>
                   <Text style={styles.fleetBadgeBlueText}>{typeLabel}</Text>
-                </View>
-                <View style={styles.fleetBadgeViolet}>
-                  <Text style={styles.fleetBadgeVioletText}>
-                    {subTypeLabel}
-                  </Text>
                 </View>
               </View>
               <Text style={styles.fleetTripId}>{tripNo}</Text>
@@ -1519,9 +1510,6 @@ export function TripsHubTableView({
             const typeLabel = showAssetTripIcon
               ? tr("tripAsset")
               : tr("tripAggregate");
-            const subTypeLabel = shouldShowIntegratedSubtypePillForHub(t)
-              ? tr("integrated")
-              : tr("manual");
             const routeShort = `${t.pickup_area ?? "—"} → ${t.drop_location ?? "—"}`;
             const routeDisplay = routeShort.toUpperCase();
             const pnl = tripHubPnl(t, currentOrganizationId, rowAdj, hubCostOpts);
@@ -1687,11 +1675,6 @@ export function TripsHubTableView({
                             <View style={styles.tableBadgeBlue}>
                               <Text style={styles.tableBadgeBlueText}>
                                 {typeLabel}
-                              </Text>
-                            </View>
-                            <View style={styles.tableBadgeViolet}>
-                              <Text style={styles.tableBadgeVioletText}>
-                                {subTypeLabel}
                               </Text>
                             </View>
                           </View>

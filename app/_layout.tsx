@@ -1,3 +1,4 @@
+import 'react-native-gesture-handler';
 import { AppAlertHost } from '@/components/AppAlertHost';
 import { ContentErrorState } from '@/components/ContentErrorState';
 import { GlobalOperationsToast } from '@/components/GlobalOperationsToast';
@@ -37,7 +38,6 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useMemo, useRef } from 'react';
 import { LogBox, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useWebLayoutWidth } from '@/lib/useWebLayoutWidth';
-import 'react-native-gesture-handler';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -48,6 +48,7 @@ import { useOptionalAuth } from '@/contexts/AuthContext';
 import { LanguageProvider, tGlobal } from '@/contexts/LanguageContext';
 import { NetworkProvider } from '@/contexts/NetworkContext';
 import { OrganizationProvider } from '@/contexts/OrganizationContext';
+import { KeyboardAccessoryProvider } from '@/contexts/KeyboardAccessoryContext';
 import { WalletProvider } from '@/contexts/WalletContext';
 import { TripChatProvider } from '@/features/chat/contexts/TripChatContext';
 import { IntegratedChatProvider } from '@/features/chat/contexts/IntegratedChatContext';
@@ -270,9 +271,11 @@ export default function RootLayout() {
               <AuthProvider>
                 <OrganizationProvider>
                   <WalletProvider>
-                    <GlobalSyncProvider>
-                      <RootLayoutNav />
-                    </GlobalSyncProvider>
+                    <KeyboardAccessoryProvider>
+                      <GlobalSyncProvider>
+                        <RootLayoutNav />
+                      </GlobalSyncProvider>
+                    </KeyboardAccessoryProvider>
                   </WalletProvider>
                 </OrganizationProvider>
               </AuthProvider>

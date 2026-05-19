@@ -1132,7 +1132,7 @@ const styles = StyleSheet.create({
   aiFieldLabel: { fontSize: 12, color: Theme.textMuted, fontWeight: '600', flex: 1 },
   aiFieldEmpty: { fontSize: 14, color: Theme.textMuted, flex: 1, textAlign: 'right', fontWeight: '500' },
   aiFieldInputWrapper: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8 },
-  aiFieldInput: { backgroundColor: Theme.cardWhite, borderWidth: 1, borderColor: Theme.borderInput, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6, fontSize: 13, fontWeight: '600', color: Theme.textPrimaryDark, minWidth: 100, textAlign: 'right' },
+  aiFieldInput: { backgroundColor: Theme.cardWhite, borderWidth: 1, borderColor: Theme.borderInput, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6, fontSize: 16, fontWeight: '600', color: Theme.textPrimaryDark, minWidth: 100, textAlign: 'right' },
   aiFieldInputWarning: { borderColor: '#f59e0b', backgroundColor: '#fffbeb' },
   confidenceBadge: { backgroundColor: '#dcfce7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   confidenceText: { fontSize: 10, color: '#166534', fontWeight: '700' },
@@ -1180,7 +1180,7 @@ const styles = StyleSheet.create({
   chatText: { fontSize: 13, color: '#fff', fontWeight: '500' },
   chatTextAssistant: { fontSize: 13, color: Theme.textPrimaryDark, fontWeight: '500' },
   chatInputWrapper: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  chatInput: { flex: 1, backgroundColor: Theme.cardWhite, borderWidth: 1, borderColor: Theme.borderInput, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 12, fontSize: 14 },
+  chatInput: { flex: 1, backgroundColor: Theme.cardWhite, borderWidth: 1, borderColor: Theme.borderInput, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 12, fontSize: 16 },
   chatSendBtn: { backgroundColor: Theme.primary, width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
 
   mobileDocViewer: { marginTop: 24, marginBottom: 24 },
