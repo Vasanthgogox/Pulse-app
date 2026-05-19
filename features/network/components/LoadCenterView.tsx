@@ -3,8 +3,16 @@
  * Header "Load Center" / "Find or Hire Work", three sub-tabs, cards, modals.
  */
 import { ContentErrorState } from '@/components/ContentErrorState';
+import { HubListPaginationBar } from "@/components/hub/HubListPaginationBar";
+import { useHubGridPagination } from "@/components/hub/useHubGridPagination";
 import { LoadCardRouteRow } from "@/components/LoadCardRouteRow";
 import { LoadCardSpecsRow } from "@/components/LoadCardSpecsRow";
+import {
+  ClaimedIndentCardActions,
+  GetLoadIndentCardActions,
+  GiveLoadIndentCardActions,
+  LoadCenterIndentCardFooter,
+} from "@/features/network/components/LoadCenterIndentCardActions";
 import {
   LoadCenterHubMobileIndentCard,
   LoadCenterHubMobileListCanvas,
@@ -137,7 +145,7 @@ export function LoadCenterView({
   const [localBidHistoryByIndentId, setLocalBidHistoryByIndentId] = useState<
     Record<string, { amount: number; updatedAt: string }[]>
   >({});
-  const isSingleRowHeader = Platform.OS === "web" && width >= 1200;
+  const isSingleRowHeader = Platform.OS === "web" && width >= 1024;
   const isCompactModalLayout = Platform.OS === "web" && width < 920;
 
   const { data: indents = [], isLoading } = useIndentsQuery(orgId);
@@ -169,7 +177,8 @@ export function LoadCenterView({
     }).start();
   }, [loadSubTabIndex, loadTabsActiveAnim]);
 
-  const useGridLayout = width >= 1024;
+  /** Desktop web: 5 indent cards per row (mobile <820 uses hub list cards). */
+  const useGridLayout = Platform.OS === "web" && width >= 1024;
   const isMobileView = width < 820;
   /** Narrow / grid cards: stack bid meta + actions so CTAs stay aligned and tappable. */
   const compactIndentFooter = width < 520;
@@ -229,6 +238,20 @@ export function LoadCenterView({
     filteredClaimedLoads,
     statusTabCounts,
   } = filters;
+
+  const loadGridPaginationResetKey = `${loadSubTab}|${statusFilterTab}|${searchQuery}`;
+  const giveLoadGridPagination = useHubGridPagination(
+    filteredHirePartnerLoads,
+    loadGridPaginationResetKey,
+  );
+  const findWorkGridPagination = useHubGridPagination(
+    filteredFindWorkList,
+    loadGridPaginationResetKey,
+  );
+  const claimedGridPagination = useHubGridPagination(
+    filteredClaimedLoads,
+    loadGridPaginationResetKey,
+  );
 
   // ── Award Quote hook ────────────────────────────────────────────────────────
   const awardModal = useAwardQuote({ orgId, queryClient, invalidateIndents, onSuccess: triggerSuccess });
@@ -539,6 +562,248 @@ export function LoadCenterView({
       );
     },
     [loadAvatarByIndentId, myQuotes, onIndentPress],
+  );
+
+  const renderGiveLoadGridCard = useCallback(
+    (load: IndentRow) => {
+      const status = (load.status || "").toLowerCase();
+      const isDraft = status === "draft";
+      const isAwardedPendingTrip =
+        status === "awarded" && !indentIdsWithTrip.has(load.id);
+      const isDone = statusMatchesFilter(status, "DONE");
+      const hasDirectSupplier = !!load["assigned_supplier_id"];
+      const isAwaitingSupplierDeploy =
+        isAwardedPendingTrip || hasDirectSupplier;
+      const bidCount = quoteCounts[load.id] ?? 0;
+      const terminalForQuotePill =
+        status === "awarded" || statusMatchesFilter(status, "DONE");
+      const displayStatus =
+        !terminalForQuotePill && bidCount > 0 ? "quoted" : status;
+      const vehicleDetail = (load.vehicle_type || "—").toUpperCase();
+      const loadTypeDetail = (load.load_type || "General").toUpperCase();
+      const clientName = (load.client_name || "—").trim() || "—";
+      const parseAmount = (value: unknown): number | null => {
+        if (value == null) return null;
+        if (typeof value === "number") {
+          return Number.isFinite(value) ? value : null;
+        }
+        if (typeof value === "string") {
+          const normalized = value.replace(/[^0-9.-]/g, "");
+          const parsed = Number(normalized);
+          return Number.isFinite(parsed) ? parsed : null;
+        }
+        return null;
+      };
+      const awardedAmount =
+        parseAmount(load["assigned_supplier_rate"]) ??
+        parseAmount(load["awarded_amount"]) ??
+        parseAmount(load["supplier_rate"]) ??
+        parseAmount(load.supplier_target) ??
+        parseAmount(load.client_price);
+      const showPulseToNetwork =
+        Boolean(onShareToNetwork) &&
+        indentCanBroadcastToPulseNetwork(load) &&
+        !isDone;
+
+      return (
+        <LoadCenterHubMobileIndentCard
+          indent={load}
+          titleName={clientName}
+          statusLabel={displayStatus}
+          origin={load.pickup_area || "—"}
+          dest={load.drop_location || "—"}
+          pickupIso={load.pickup_date}
+          leftFooterLabel={vehicleDetail}
+          rightFooterLabel={
+            bidCount > 0
+              ? `${bidCount} bid${bidCount === 1 ? "" : "s"}`
+              : loadTypeDetail
+          }
+          onPress={() => onIndentPress(load)}
+          dense
+          fillGrid
+          actions={
+            <LoadCenterIndentCardFooter dense>
+              <GiveLoadIndentCardActions
+                load={load}
+                bidCount={bidCount}
+                isDone={isDone}
+                isDraft={isDraft}
+                isAwardedPendingTrip={isAwardedPendingTrip}
+                isAwaitingSupplierDeploy={isAwaitingSupplierDeploy}
+                showPulseToNetwork={showPulseToNetwork}
+                awardedAmountLabel={
+                  awardedAmount != null ? formatINR(awardedAmount) : null
+                }
+                onShareToNetwork={onShareToNetwork}
+                onIndentPress={onIndentPress}
+                onShareIndent={handleShareIndent}
+                onBroadcastDraft={handleBroadcastDraft}
+                onOpenAwardModal={awardModal.open}
+                dense
+              />
+            </LoadCenterIndentCardFooter>
+          }
+        />
+      );
+    },
+    [
+      awardModal.open,
+      handleBroadcastDraft,
+      handleShareIndent,
+      indentIdsWithTrip,
+      onIndentPress,
+      onShareToNetwork,
+      quoteCounts,
+    ],
+  );
+
+  const renderGetLoadGridCard = useCallback(
+    (load: IndentRow) => {
+      const existingQuote = myQuoteByIndentId.get(load.id);
+      const quoteStatus = (existingQuote?.status ?? "").toLowerCase();
+      const isPending = quoteStatus === "pending";
+      const isRejected = quoteStatus === "rejected";
+      const isAccepted = quoteStatus === "accepted";
+      const isDoneOutcome =
+        statusMatchesFilter(load.status || "", "DONE") ||
+        indentIdsWithTrip.has(load.id);
+      const vehicleDetail = (load.vehicle_type || "—").toUpperCase();
+      const loadTypeDetail = (load.load_type || "—").toUpperCase();
+      const clientLabel = (
+        load.creator_organization_name ||
+        load.client_name ||
+        "Partner"
+      ).trim();
+      const statusLabel = isAccepted
+        ? "awarded"
+        : isRejected
+          ? "declined"
+          : isPending
+            ? "quoted"
+            : "open";
+      const quoteAmount = Number(existingQuote?.amount ?? 0);
+      const quoteVariant = isDoneOutcome
+        ? "done"
+        : isAccepted
+          ? "accepted"
+          : isRejected
+            ? "rejected"
+            : isPending
+              ? "pending"
+              : "open";
+      const rightFooter = isAccepted
+        ? "Awarded"
+        : loadTypeDetail;
+      const ctaLabel = isAccepted
+        ? isDoneOutcome
+          ? "View details"
+          : "View claimed"
+        : isPending
+          ? "Update quote"
+          : isRejected
+            ? "New quote"
+            : "Bid now";
+
+      return (
+        <LoadCenterHubMobileIndentCard
+          indent={load}
+          titleName={clientLabel}
+          statusLabel={statusLabel}
+          origin={load.pickup_area || "—"}
+          dest={load.drop_location || "—"}
+          pickupIso={load.pickup_date}
+          leftFooterLabel={vehicleDetail}
+          rightFooterLabel={rightFooter}
+          avatarUrl={loadAvatarByIndentId[load.id]}
+          onPress={() => onIndentPress(load)}
+          dense
+          fillGrid
+          actions={
+            <LoadCenterIndentCardFooter dense>
+              <GetLoadIndentCardActions
+                load={load}
+                isAccepted={isAccepted}
+                isDoneOutcome={isDoneOutcome}
+                ctaLabel={ctaLabel}
+                quoteVariant={quoteVariant}
+                quoteAmount={quoteAmount}
+                onIndentPress={onIndentPress}
+                onShareIndent={handleShareIndent}
+                onOpenBidModal={setBidLoad}
+                onGoToClaimed={() => setLoadSubTab("AWARDED")}
+                dense
+              />
+            </LoadCenterIndentCardFooter>
+          }
+        />
+      );
+    },
+    [
+      handleShareIndent,
+      indentIdsWithTrip,
+      loadAvatarByIndentId,
+      myQuoteByIndentId,
+      onIndentPress,
+      setLoadSubTab,
+    ],
+  );
+
+  const renderClaimedGridCard = useCallback(
+    (load: IndentRow, isDone: boolean) => {
+      const acceptedQuote = myQuotes.find(
+        (q) =>
+          (q.status || "").toLowerCase() === "accepted" &&
+          q.indent_id === load.id,
+      );
+      const supplierRate =
+        acceptedQuote?.amount != null
+          ? Number(acceptedQuote.amount)
+          : Number(load.client_price || 0);
+      const clientLabel = (
+        load.creator_organization_name ||
+        load.client_name ||
+        "Claimed load"
+      ).trim();
+
+      return (
+        <LoadCenterHubMobileIndentCard
+          indent={load}
+          titleName={clientLabel}
+          statusLabel={isDone ? "completed" : "claimed"}
+          origin={load.pickup_area || "—"}
+          dest={load.drop_location || "—"}
+          pickupIso={load.pickup_date}
+          leftFooterLabel={(load.vehicle_type || "—").toUpperCase()}
+          rightFooterLabel={isDone ? "On books" : formatINR(supplierRate)}
+          avatarUrl={loadAvatarByIndentId[load.id]}
+          onPress={() => onIndentPress(load)}
+          dense
+          fillGrid
+          actions={
+            <LoadCenterIndentCardFooter dense>
+              <ClaimedIndentCardActions
+                load={load}
+                isDone={isDone}
+                assigning={tripDeployment.assigningTripId === load.id}
+                onIndentPress={onIndentPress}
+                onShareIndent={handleShareIndent}
+                onAssignDeploy={handshake.open}
+                dense
+              />
+            </LoadCenterIndentCardFooter>
+          }
+        />
+      );
+    },
+    [
+      handleShareIndent,
+      handshake.open,
+      loadAvatarByIndentId,
+      myQuotes,
+      onIndentPress,
+      tripDeployment.assigningTripId,
+    ],
   );
 
   const renderClaimedLoadCard = (
@@ -1068,7 +1333,20 @@ export function LoadCenterView({
                       </Text>
                     ) : null}
                   </View>
-                  {filteredHirePartnerLoads.map((load) => {
+                  {useGridLayout
+                    ? giveLoadGridPagination.paginatedItems.map((load) => (
+                        <View
+                          key={load.id}
+                          style={[
+                            styles.gridCardWrap,
+                            highlightedIndentId === load.id &&
+                              styles.highlightedIndentCard,
+                          ]}
+                        >
+                          {renderGiveLoadGridCard(load)}
+                        </View>
+                      ))
+                    : filteredHirePartnerLoads.map((load) => {
                     const status = (load.status || "").toLowerCase();
                     const isDraft = status === "draft";
                     const isAwardedPendingTrip =
@@ -1119,15 +1397,9 @@ export function LoadCenterView({
                       indentCanBroadcastToPulseNetwork(load) &&
                       !isDone;
                     return (
-                      <View
-                        key={load.id}
-                        style={useGridLayout ? styles.gridCardWrap : undefined}
-                      >
+                      <View key={load.id}>
                         <TouchableOpacity
-                          style={[
-                            styles.loadCard,
-                            useGridLayout && styles.loadCardGrid,
-                          ]}
+                          style={styles.loadCard}
                           onPress={() => onIndentPress(load)}
                           activeOpacity={0.7}
                         >
@@ -1159,7 +1431,6 @@ export function LoadCenterView({
                           <LoadCardRouteRow
                             origin={load.pickup_area || "—"}
                             destination={load.drop_location || "—"}
-                            compact={useGridLayout}
                           />
                           <Text
                             style={styles.loadCardIdCompact}
@@ -1186,7 +1457,6 @@ export function LoadCenterView({
                           <View
                             style={[
                               styles.loadCardFooter,
-                              useGridLayout && styles.loadCardFooterGrid,
                               stackIndentCardFooter && styles.loadCardFooterCompact,
                             ]}
                           >
@@ -1353,6 +1623,31 @@ export function LoadCenterView({
                       </View>
                     );
                   })}
+                  {useGridLayout && giveLoadGridPagination.totalItems > 0 ? (
+                    <View style={styles.gridPaginationWrap}>
+                      <HubListPaginationBar
+                        page={giveLoadGridPagination.page}
+                        totalPages={giveLoadGridPagination.totalPages}
+                        totalItems={giveLoadGridPagination.totalItems}
+                        pageSize={giveLoadGridPagination.pageSize}
+                        onPageSizeChange={giveLoadGridPagination.setPageSize}
+                        itemLabel="loads"
+                        onPrev={() =>
+                          giveLoadGridPagination.setPage((p) =>
+                            Math.max(0, p - 1),
+                          )
+                        }
+                        onNext={() =>
+                          giveLoadGridPagination.setPage((p) =>
+                            Math.min(
+                              giveLoadGridPagination.totalPages - 1,
+                              p + 1,
+                            ),
+                          )
+                        }
+                      />
+                    </View>
+                  ) : null}
                 </View>
               )}
             </>
@@ -1402,7 +1697,20 @@ export function LoadCenterView({
                     <Text style={styles.loadSectionPillText}>Live</Text>
                   </View>
                 </View>
-                {filteredFindWorkList.map((load) => {
+                {useGridLayout
+                  ? findWorkGridPagination.paginatedItems.map((load) => (
+                      <View
+                        key={load.id}
+                        style={[
+                          styles.gridCardWrap,
+                          highlightedIndentId === load.id &&
+                            styles.highlightedIndentCard,
+                        ]}
+                      >
+                        {renderGetLoadGridCard(load)}
+                      </View>
+                    ))
+                  : filteredFindWorkList.map((load) => {
                   const existingQuote = myQuoteByIndentId.get(load.id);
                   const quoteStatus = (
                     existingQuote?.status ?? ""
@@ -1499,15 +1807,9 @@ export function LoadCenterView({
                         ? "New quote"
                         : "Bid now";
                   return (
-                    <View
-                      key={load.id}
-                      style={useGridLayout ? styles.gridCardWrap : undefined}
-                    >
+                    <View key={load.id}>
                       <TouchableOpacity
-                        style={[
-                          styles.loadCard,
-                          useGridLayout && styles.loadCardGrid,
-                        ]}
+                        style={styles.loadCard}
                         onPress={() => onIndentPress(load)}
                         activeOpacity={0.7}
                       >
@@ -1538,15 +1840,9 @@ export function LoadCenterView({
                         <LoadCardRouteRow
                           origin={load.pickup_area || "—"}
                           destination={load.drop_location || "—"}
-                          compact={useGridLayout}
                         />
                         {clientLabel ? (
-                          <View
-                            style={[
-                              styles.loadMarketClientRow,
-                              useGridLayout && styles.loadMarketClientRowGrid,
-                            ]}
-                          >
+                          <View style={styles.loadMarketClientRow}>
                             <View style={styles.getLoadAvatarWrap}>
                               {loadAvatarByIndentId[load.id] ? (
                                 <Image
@@ -1573,8 +1869,6 @@ export function LoadCenterView({
                               {clientLabel.toUpperCase()}
                             </Text>
                           </View>
-                        ) : useGridLayout ? (
-                          <View style={styles.loadMarketClientRowGridReserve} />
                         ) : null}
                         <Text
                           style={styles.loadCardIdCompact}
@@ -1604,7 +1898,6 @@ export function LoadCenterView({
                         <View
                           style={[
                             styles.loadCardFooter,
-                            useGridLayout && styles.loadCardFooterGrid,
                             stackIndentCardFooter && styles.loadCardFooterCompact,
                           ]}
                         >
@@ -1689,6 +1982,31 @@ export function LoadCenterView({
                     </View>
                   );
                 })}
+                {useGridLayout && findWorkGridPagination.totalItems > 0 ? (
+                  <View style={styles.gridPaginationWrap}>
+                    <HubListPaginationBar
+                      page={findWorkGridPagination.page}
+                      totalPages={findWorkGridPagination.totalPages}
+                      totalItems={findWorkGridPagination.totalItems}
+                      pageSize={findWorkGridPagination.pageSize}
+                      onPageSizeChange={findWorkGridPagination.setPageSize}
+                      itemLabel="loads"
+                      onPrev={() =>
+                        findWorkGridPagination.setPage((p) =>
+                          Math.max(0, p - 1),
+                        )
+                      }
+                      onNext={() =>
+                        findWorkGridPagination.setPage((p) =>
+                          Math.min(
+                            findWorkGridPagination.totalPages - 1,
+                            p + 1,
+                          ),
+                        )
+                      }
+                    />
+                  </View>
+                ) : null}
               </View>
             ))}
 
@@ -1725,20 +2043,43 @@ export function LoadCenterView({
                 </View>
                 {useGridLayout ? (
                   <View style={styles.gridList}>
-                    {filteredClaimedLoads.map((load) => (
+                    {claimedGridPagination.paginatedItems.map((load) => (
                       <View
                         key={`claimed-${load.id}`}
                         style={[
-                          width >= 1280
-                            ? styles.gridCardWrap
-                            : styles.gridCardWrapHalf,
+                          styles.gridCardWrap,
                           highlightedIndentId === load.id &&
                             styles.highlightedIndentCard,
                         ]}
                       >
-                        {renderClaimedLoadCard(load, false, true)}
+                        {renderClaimedGridCard(load, false)}
                       </View>
                     ))}
+                    {claimedGridPagination.totalItems > 0 ? (
+                      <View style={styles.gridPaginationWrap}>
+                        <HubListPaginationBar
+                          page={claimedGridPagination.page}
+                          totalPages={claimedGridPagination.totalPages}
+                          totalItems={claimedGridPagination.totalItems}
+                          pageSize={claimedGridPagination.pageSize}
+                          onPageSizeChange={claimedGridPagination.setPageSize}
+                          itemLabel="loads"
+                          onPrev={() =>
+                            claimedGridPagination.setPage((p) =>
+                              Math.max(0, p - 1),
+                            )
+                          }
+                          onNext={() =>
+                            claimedGridPagination.setPage((p) =>
+                              Math.min(
+                                claimedGridPagination.totalPages - 1,
+                                p + 1,
+                              ),
+                            )
+                          }
+                        />
+                      </View>
+                    ) : null}
                   </View>
                 ) : (
                   <FlashList<IndentRow>
@@ -2461,20 +2802,24 @@ const styles = StyleSheet.create({
   gridList: {
     flexDirection: "row",
     flexWrap: "wrap",
-    marginHorizontal: -6,
+    marginHorizontal: -4,
     alignItems: "stretch",
   },
+  /** Desktop load grid only — 4 cards per row (25% each). */
   gridCardWrap: {
-    width: "33.333%",
-    paddingHorizontal: 6,
+    width: "25%",
+    maxWidth: "25%",
+    flexBasis: "25%",
+    paddingHorizontal: 4,
     marginBottom: 12,
     alignSelf: "stretch",
   },
-  gridCardWrapHalf: {
-    width: "50%",
-    paddingHorizontal: 6,
-    marginBottom: 12,
-    alignSelf: "stretch",
+  gridPaginationWrap: {
+    width: "100%",
+    flexBasis: "100%",
+    paddingHorizontal: 4,
+    marginTop: 4,
+    marginBottom: 8,
   },
   loadCardGrid: {
     flex: 1,

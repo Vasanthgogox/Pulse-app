@@ -53,6 +53,14 @@ export const chatFilterChromeStyles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 1,
   },
+  /** Size to label + count — use on Trips / toolbars where equal flex causes truncation. */
+  tabPillHug: {
+    flexGrow: 0,
+    flexShrink: 0,
+    flexBasis: "auto",
+    minWidth: 0,
+    paddingHorizontal: 12,
+  },
   tabPillLabel: {
     fontSize: 8,
     fontWeight: "600",
@@ -63,6 +71,9 @@ export const chatFilterChromeStyles = StyleSheet.create({
   },
   tabPillLabelActive: {
     color: "#ffffff",
+  },
+  tabPillLabelHug: {
+    flexShrink: 0,
   },
   searchScopeStrip: {
     flexDirection: "row",
@@ -123,5 +134,59 @@ export const chatFilterChromeStyles = StyleSheet.create({
   },
   scopePillTextActive: {
     color: "#ffffff",
+  },
+  /** Header row: supply tabs left, main tabs + view toggle right. */
+  filterHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    width: "100%",
+    minWidth: 0,
+    flexWrap: "nowrap",
+  },
+  filterHeaderRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexShrink: 0,
+    marginLeft: "auto",
+  },
+  tabRowHug: {
+    flexGrow: 0,
+    flexShrink: 0,
+    alignSelf: "flex-start",
+  },
+  /** Grid / list view switcher — same tray as `tabRow`. */
+  iconToggleTray: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+    borderRadius: 18,
+    backgroundColor: CHAT_FILTER_TRAY_BG,
+    borderWidth: 1,
+    borderColor: CHAT_FILTER_TRAY_BORDER,
+    flexShrink: 0,
+  },
+  iconToggleBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: CHAT_FILTER_TRAY_BORDER,
+    backgroundColor: "#ffffff",
+  },
+  iconToggleBtnActive: {
+    borderColor: CHAT_FILTER_ACTIVE_BG,
+    backgroundColor: CHAT_FILTER_ACTIVE_BG,
+    shadowColor: CHAT_FILTER_ACTIVE_BG,
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
   },
 });

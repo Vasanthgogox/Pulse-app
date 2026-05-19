@@ -42,7 +42,7 @@ export type NetworkPartyHubListCardProps = {
   avatarSeed?: string | null;
   avatarUrl?: string | null;
   entityType?: PartyEntityType;
-  avatarTintBg: string;
+  avatarTintBg?: string;
   rolePills: NetworkPartyRolePill[];
   totalTrips?: number | null;
   ratingValue?: number | null;
@@ -51,6 +51,7 @@ export type NetworkPartyHubListCardProps = {
   showOnline?: boolean;
   viewerOrgId?: string | null;
   onPressCard?: () => void;
+  onOpenProfile?: () => void;
   onPressMutuals?: () => void;
   onPressMutual?: (org: MutualConnectionRow) => void;
   onConnectionAction?: () => void;
@@ -79,6 +80,7 @@ export function NetworkPartyHubListCard({
   showOnline = false,
   viewerOrgId,
   onPressCard,
+  onOpenProfile,
   onPressMutuals,
   onPressMutual,
   onConnectionAction,
@@ -183,19 +185,21 @@ export function NetworkPartyHubListCard({
   ) : null;
 
   if (nativeListRow) {
+    const avatarPressHandler = onOpenProfile ?? onPressCard;
     return (
       <View style={nativeStyles.card}>
-        <Pressable
-          onPress={onPressCard}
-          disabled={!onPressCard}
-          style={({ pressed }) => [
-            nativeStyles.headerPressable,
-            pressed && onPressCard && nativeStyles.headerPressed,
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel={displayName}
-        >
-          <View style={nativeStyles.avatarCol}>
+        <View style={nativeStyles.headerPressable}>
+          <Pressable
+            onPress={avatarPressHandler}
+            disabled={!avatarPressHandler}
+            hitSlop={4}
+            style={({ pressed }) => [
+              nativeStyles.avatarCol,
+              pressed && avatarPressHandler && nativeStyles.headerPressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={displayName}
+          >
             <View style={styles.avatarWrap}>
               <PartyAvatar
                 name={displayName}
@@ -207,9 +211,18 @@ export function NetworkPartyHubListCard({
               />
             </View>
             {showOnline ? <View style={styles.onlineDot} /> : null}
-          </View>
+          </Pressable>
 
-          <View style={nativeStyles.identity}>
+          <Pressable
+            onPress={onPressCard}
+            disabled={!onPressCard}
+            style={({ pressed }) => [
+              nativeStyles.identity,
+              pressed && onPressCard && nativeStyles.headerPressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={displayName}
+          >
             <Text style={styles.partyNameNativeList} numberOfLines={2}>
               {displayName}
             </Text>
@@ -230,8 +243,8 @@ export function NetworkPartyHubListCard({
                 </Text>
               </View>
             ) : null}
-          </View>
-        </Pressable>
+          </Pressable>
+        </View>
 
         <View style={nativeStyles.footer}>
           <View style={nativeStyles.footerMetrics}>{metricsTiles}</View>
@@ -270,7 +283,18 @@ export function NetworkPartyHubListCard({
               mobileGrid && styles.leftMobileGrid,
             ]}
           >
-            <View style={[styles.avatarCol, mobileGrid && styles.avatarColMobileGrid]}>
+            <Pressable
+              onPress={onOpenProfile ?? onPressCard}
+              disabled={!onOpenProfile && !onPressCard}
+              hitSlop={4}
+              style={({ pressed }) => [
+                styles.avatarCol,
+                mobileGrid && styles.avatarColMobileGrid,
+                pressed && (onOpenProfile ?? onPressCard) && { opacity: 0.85 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={displayName}
+            >
               <View style={styles.avatarWrap}>
                 <PartyAvatar
                   name={displayName}
@@ -282,7 +306,7 @@ export function NetworkPartyHubListCard({
                 />
               </View>
               {showOnline ? <View style={styles.onlineDot} /> : null}
-            </View>
+            </Pressable>
 
             <View style={[styles.identity, mobileGrid && styles.identityMobileGrid]}>
               <Text

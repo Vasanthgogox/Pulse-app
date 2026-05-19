@@ -257,6 +257,7 @@ function ConnectionProfileCard({
         }
         onPressMutual={onPressMutual}
         onPressCard={onOpenProfile ? () => onOpenProfile(item) : undefined}
+        onOpenProfile={onOpenProfile ? () => onOpenProfile(item) : undefined}
         connectionIntegrated={item.is_integrated}
         onConnectionAction={onConnectionAction}
         connectionActionDisabled={item.role === "DRIVER" && !item.phone}

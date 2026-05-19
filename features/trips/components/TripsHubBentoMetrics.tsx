@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { useEffect } from "react";
 import Theme from "@/constants/Theme";
 import type { TripMetricId } from "@/features/trips/utils/tripHubMetrics";
+import { formatINRChip } from "@/lib/format";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { LinearGradient } from "expo-linear-gradient";
 import { Radar } from "lucide-react-native";
@@ -332,6 +333,261 @@ export function TripsHubBentoMetrics({
   );
 }
 
+export type HistoryTripMetricId =
+  | "due_to_get"
+  | "no_due_to_get"
+  | "due_to_pay"
+  | "no_due_to_pay";
+
+export type HistoryBentoMetricItem = {
+  id: HistoryTripMetricId;
+  count: number;
+  amount: number;
+  title: string;
+  subtitle: string;
+  variant: BentoMetricVariant;
+  showsAmount: boolean;
+};
+
+const HISTORY_VARIANT: Record<
+  HistoryTripMetricId,
+  { variant: BentoMetricVariant; showsAmount: boolean }
+> = {
+  due_to_get: { variant: "emerald", showsAmount: true },
+  no_due_to_get: { variant: "slate", showsAmount: false },
+  due_to_pay: { variant: "orange", showsAmount: true },
+  no_due_to_pay: { variant: "slate", showsAmount: false },
+};
+
+function HistoryBentoMetricCard({
+  item,
+  active,
+  onPress,
+}: {
+  item: HistoryBentoMetricItem;
+  active: boolean;
+  onPress: () => void;
+}) {
+  const hover = useSharedValue(0);
+  const press = useSharedValue(0);
+  const blobColor = VARIANT_BLOB[item.variant];
+  const isZero = item.count === 0;
+  const dueAttention =
+    item.showsAmount && item.amount > 0 && !active;
+
+  const cardAnim = useAnimatedStyle(() => ({
+    transform: [
+      {
+        translateY: interpolate(hover.value, [0, 1], [0, active ? -4 : -2]),
+      },
+      {
+        scale:
+          (active ? 1.02 : 1) *
+          interpolate(hover.value, [0, 1], [1, 1.006]) *
+          interpolate(press.value, [0, 1], [1, 0.988]),
+      },
+    ],
+  }));
+
+  return (
+    <Pressable
+      onPress={onPress}
+      onHoverIn={() => {
+        hover.value = withTiming(1, { duration: 140 });
+      }}
+      onHoverOut={() => {
+        hover.value = withTiming(0, { duration: 160 });
+      }}
+      onPressIn={() => {
+        press.value = withSpring(1, { damping: 18, stiffness: 300 });
+      }}
+      onPressOut={() => {
+        press.value = withSpring(0, { damping: 18, stiffness: 300 });
+      }}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={`${item.title}, ${item.count} trips`}
+      style={[styles.cardPressable, styles.flexSmall]}
+    >
+      <Animated.View
+        style={[
+          styles.card,
+          active ? styles.cardGlow : styles.cardIdle,
+          dueAttention && styles.cardDueAttention,
+          cardAnim,
+        ]}
+      >
+        {!active ? (
+          <View style={[StyleSheet.absoluteFill, styles.cardIdleBg]} />
+        ) : (
+          <LinearGradient
+            colors={["#171A20", "#1e293b"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+        )}
+
+        <View
+          style={[
+            styles.cornerBlob,
+            { backgroundColor: blobColor },
+            active && styles.cornerBlobActive,
+          ]}
+          pointerEvents="none"
+        />
+
+        <View style={[styles.cardBody, styles.cardBodySmall]}>
+          <View style={styles.countRow}>
+            <Text
+              style={[
+                styles.count,
+                styles.countSmall,
+                active && styles.countActive,
+                isZero && !active && styles.countZero,
+              ]}
+            >
+              {item.count}
+            </Text>
+            {item.showsAmount ? (
+              <Text
+                style={[
+                  styles.historyAmount,
+                  active
+                    ? styles.historyAmountActive
+                    : styles.historyAmountIdle,
+                  item.amount > 0 && styles.historyAmountDue,
+                ]}
+                numberOfLines={1}
+              >
+                {formatINRChip(item.amount)}
+              </Text>
+            ) : (
+              <View
+                style={[
+                  styles.iconOrb,
+                  {
+                    backgroundColor: `${blobColor}18`,
+                    borderColor: `${blobColor}30`,
+                  },
+                ]}
+              >
+                <FontAwesome
+                  name={
+                    item.id === "no_due_to_get" || item.id === "no_due_to_pay"
+                      ? "check"
+                      : "rupee"
+                  }
+                  size={10}
+                  color={blobColor}
+                />
+              </View>
+            )}
+          </View>
+          <View style={styles.labelBlock}>
+            <Text
+              style={[
+                styles.label,
+                active ? styles.labelActive : styles.labelIdle,
+              ]}
+              numberOfLines={2}
+            >
+              {item.title}
+            </Text>
+            <Text
+              style={[
+                styles.sub,
+                active ? styles.subActive : styles.subIdle,
+              ]}
+              numberOfLines={2}
+            >
+              {item.subtitle}
+            </Text>
+          </View>
+        </View>
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+export type TripsHubHistoryBentoMetricsProps = {
+  metricOrder: HistoryTripMetricId[];
+  activeMetricTab: HistoryTripMetricId | null;
+  onSelectMetric: (id: HistoryTripMetricId | null) => void;
+  getMetric: (id: HistoryTripMetricId) => {
+    count: number;
+    amount: number;
+    title: string;
+    hint: string;
+  };
+  missionPulseLabel: string;
+  receivableSectionLabel: string;
+  payableSectionLabel: string;
+  isDesktop: boolean;
+  style?: StyleProp<ViewStyle>;
+};
+
+export function TripsHubHistoryBentoMetrics({
+  metricOrder,
+  activeMetricTab,
+  onSelectMetric,
+  getMetric,
+  missionPulseLabel,
+  receivableSectionLabel,
+  payableSectionLabel,
+  isDesktop,
+  style,
+}: TripsHubHistoryBentoMetricsProps) {
+  const items: HistoryBentoMetricItem[] = metricOrder.map((id) => {
+    const meta = HISTORY_VARIANT[id];
+    const m = getMetric(id);
+    return {
+      id,
+      count: m.count,
+      amount: m.amount,
+      title: m.title,
+      subtitle: m.hint,
+      variant: meta.variant,
+      showsAmount: meta.showsAmount,
+    };
+  });
+
+  const renderCard = (item: HistoryBentoMetricItem) => (
+    <HistoryBentoMetricCard
+      key={item.id}
+      item={item}
+      active={activeMetricTab === item.id}
+      onPress={() =>
+        onSelectMetric(activeMetricTab === item.id ? null : item.id)
+      }
+    />
+  );
+
+  if (!isDesktop) {
+    return (
+      <View style={[styles.hub, style]}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.mobileScroll}
+        >
+          {items.map(renderCard)}
+        </ScrollView>
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.hub, style]}>
+      <BentoSectionHeader
+        missionLabel={missionPulseLabel}
+        sections={[receivableSectionLabel, payableSectionLabel]}
+      />
+      <View style={styles.bentoRow}>{items.map(renderCard)}</View>
+    </View>
+  );
+}
+
 /** @deprecated Use TripsHubBentoMetrics — kept for history tab rails if needed. */
 export function TripsHubMetricGroupRail({
   children,
@@ -563,6 +819,42 @@ const styles = StyleSheet.create({
   },
   subActive: {
     color: "rgba(255,255,255,0.42)",
+  },
+  historyAmount: {
+    fontSize: FS_CAPTION + 1,
+    fontWeight: "800",
+    fontVariant: ["tabular-nums"],
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: "48%",
+    textAlign: "right" as const,
+    letterSpacing: -0.2,
+    lineHeight: FS_CAPTION + 4,
+  },
+  historyAmountIdle: {
+    color: Theme.textSecondary,
+  },
+  historyAmountActive: {
+    color: "rgba(255,255,255,0.72)",
+  },
+  historyAmountDue: {
+    color: Theme.teslaRed,
+  },
+  cardDueAttention: {
+    borderColor: Theme.teslaRed,
+    borderWidth: 1.5,
+    ...Platform.select({
+      web: {
+        boxShadow: "0 8px 24px -8px rgba(220,38,38,0.25)",
+      },
+      default: {
+        shadowColor: Theme.teslaRed,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 3,
+      },
+    }),
   },
   legacyRail: {
     flexDirection: "row",

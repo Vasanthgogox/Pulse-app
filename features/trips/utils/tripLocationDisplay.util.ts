@@ -305,6 +305,74 @@ export function splitTripLocationDisplay(
   }
 }
 
+export type HubRouteLocationParts = {
+  /** City / locality — never a full street address when parsing succeeds. */
+  city: string;
+  /** State / region line (e.g. Tamil Nadu). Empty when unknown. */
+  state: string;
+};
+
+/**
+ * Hub / load cards: bold city + state only (no street/venue block in the second line).
+ */
+export function splitHubRouteLocationDisplay(
+  location: string | null | undefined,
+): HubRouteLocationParts {
+  const raw = (location ?? "").trim();
+  if (!raw) return { city: "—", state: "" };
+
+  const { city, detail } = splitTripLocationDisplay(raw);
+  let cityLine = (city || "—").trim();
+  let stateLine = "";
+
+  const detailBits = detail
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  for (const bit of detailBits) {
+    if (isIndianRegionPart(bit)) stateLine = bit;
+  }
+  if (!stateLine && detail && isIndianRegionPart(detail)) {
+    stateLine = detail.trim();
+  }
+
+  if (looksLikeAddress(cityLine) || cityLine.length > 28) {
+    const embedded = findEmbeddedLocality(raw);
+    if (embedded) {
+      cityLine = embedded.city;
+      if (!stateLine && embedded.detail) {
+        for (const bit of embedded.detail.split(",").map((p) => p.trim())) {
+          if (isIndianRegionPart(bit)) stateLine = bit;
+        }
+      }
+    } else {
+      let parts = raw
+        .split(",")
+        .map((p) => p.trim())
+        .filter(Boolean);
+      parts = stripTrailingCountryAndPostal(parts);
+      for (let i = parts.length - 1; i >= 0; i--) {
+        if (isKnownLocality(parts[i]) && !looksLikeAddress(parts[i])) {
+          cityLine = parts[i];
+          if (!stateLine) {
+            for (let j = i + 1; j < parts.length; j++) {
+              if (isIndianRegionPart(parts[j])) stateLine = parts[j];
+            }
+          }
+          break;
+        }
+      }
+    }
+  }
+
+  if (looksLikeAddress(cityLine) && cityLine.length > 22) {
+    cityLine = `${cityLine.slice(0, 20).trim()}…`;
+  }
+
+  return { city: cityLine || "—", state: stateLine };
+}
+
 function splitTripLocationDisplayInner(
   location: string | null | undefined,
 ): TripLocationDisplayParts {

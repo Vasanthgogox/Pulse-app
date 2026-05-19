@@ -30,6 +30,7 @@ import {
   TripsHubMobileTripListCanvas,
   MOBILE_TRIP_CANVAS_BG,
 } from "./TripsHubMobileTripCard";
+import { TripsHubTripCardToolbar } from "./TripsHubTripCardToolbar";
 
 export { MOBILE_TRIP_CANVAS_BG, TripsHubMobileTripListCanvas };
 import { Search, X } from "lucide-react-native";
@@ -448,8 +449,9 @@ export type TripsHubTripCardProps = {
   onPress: () => void;
   tr: (key: string) => string;
   rowWebStyle?: ViewStyle;
-  /** Optional: same ledger rows as hub table for cash-in total / counts. */
+  /** Optional: same ledger rows as hub table for cash-in / cash-out totals. */
   ledgerReceivedTotal?: number;
+  ledgerPaidTotal?: number;
   ledgerTxnCount?: number;
   lastLedgerDateLabel?: string;
   /**
@@ -467,6 +469,8 @@ export type TripsHubTripCardProps = {
   > | null;
   /** Subcontract + non-supplier outflows for hub cost / margin (indent aggregate). */
   hubCostContext?: TripHubCostOptions | null;
+  /** Desktop 4-column grid — hub ticket card + toolbar (not legacy fleet card). */
+  hubGrid?: boolean;
 };
 
 export function TripsHubTripCard({
@@ -494,11 +498,14 @@ export function TripsHubTripCard({
   tr,
   rowWebStyle,
   ledgerReceivedTotal,
+  ledgerPaidTotal,
   ledgerTxnCount,
   lastLedgerDateLabel,
   financeAdjustments,
   kindPillMeta,
   hubCostContext,
+  /** Desktop 4-column grid — hub ticket card + finance toolbar (matches Load Center indents). */
+  hubGrid = false,
 }: TripsHubTripCardProps) {
   const { width: cardViewportWidth } = useWindowDimensions();
   const compactMetricGrid = cardViewportWidth > 0 && cardViewportWidth < 640;
@@ -576,38 +583,68 @@ export function TripsHubTripCard({
 
   const mobilePlanLayout = useMobilePlanCardLayout(cardViewportWidth);
 
-  if (mobilePlanLayout) {
+  const hubMobileCardProps = {
+    trip,
+    displayClientName,
+    displaySupplierName: supplierLine,
+    displayDriverName,
+    isAssetTrip: showAssetTripIcon,
+    typeLabel,
+    showSupplierParty,
+    clientAvatarUrl,
+    clientAvatarSeed,
+    clientAvatarFallbackSeed: clientFb,
+    clientOrganizationImageUrl,
+    clientOrganizationAvatarSeed,
+    supplierAvatarUrl,
+    supplierAvatarSeed,
+    supplierAvatarFallbackSeed: supplierFb,
+    supplierOrganizationImageUrl,
+    supplierOrganizationAvatarSeed,
+    driverAvatarUrl,
+    driverAvatarSeed,
+    driverAvatarFallbackSeed: driverFb,
+    stageLabel,
+    pickupIso: trip.pickup_date ?? trip.created_at,
+    origin,
+    dest,
+    onPress,
+    tr,
+    style: rowWebStyle,
+  };
+
+  const receivedForReceivable =
+    ledgerReceivedTotal != null
+      ? ledgerReceivedTotal
+      : Number(trip.amount_paid ?? 0);
+  const paidForPayable = ledgerPaidTotal ?? 0;
+  const receivableDue = Math.max(0, revenue - receivedForReceivable);
+  const payableDue = Math.max(0, cost - paidForPayable);
+
+  if (hubGrid) {
     return (
       <TripsHubMobileTripCard
-        trip={trip}
-        displayClientName={displayClientName}
-        displaySupplierName={supplierLine}
-        displayDriverName={displayDriverName}
-        isAssetTrip={showAssetTripIcon}
-        typeLabel={typeLabel}
-        showSupplierParty={showSupplierParty}
-        clientAvatarUrl={clientAvatarUrl}
-        clientAvatarSeed={clientAvatarSeed}
-        clientAvatarFallbackSeed={clientFb}
-        clientOrganizationImageUrl={clientOrganizationImageUrl}
-        clientOrganizationAvatarSeed={clientOrganizationAvatarSeed}
-        supplierAvatarUrl={supplierAvatarUrl}
-        supplierAvatarSeed={supplierAvatarSeed}
-        supplierAvatarFallbackSeed={supplierFb}
-        supplierOrganizationImageUrl={supplierOrganizationImageUrl}
-        supplierOrganizationAvatarSeed={supplierOrganizationAvatarSeed}
-        driverAvatarUrl={driverAvatarUrl}
-        driverAvatarSeed={driverAvatarSeed}
-        driverAvatarFallbackSeed={driverFb}
-        stageLabel={stageLabel}
-        pickupIso={trip.pickup_date ?? trip.created_at}
-        origin={origin}
-        dest={dest}
-        onPress={onPress}
-        tr={tr}
-        style={rowWebStyle}
+        {...hubMobileCardProps}
+        dense
+        fillGrid
+        actions={
+          <TripsHubTripCardToolbar
+            revenue={revenue}
+            receivableDue={receivableDue}
+            payableDue={payableDue}
+            salesLabel={tr("tripsHubColSales")}
+            receivableLabel={tr("tripsHubColDue")}
+            payableLabel={tr("tripsHubMetricGroupPayable")}
+            clearedLabel={tr("tripsHubSettlementCleared")}
+            dense
+          />
+        }
       />
     );
+  }
+
+  if (mobilePlanLayout) {
+    return <TripsHubMobileTripCard {...hubMobileCardProps} />;
   }
 
   return (
@@ -1029,6 +1066,8 @@ export function TripsHubTableView({
   /** Narrow viewports: shorter settlement cards (no bar, tighter padding, single-line name). */
   const compactSettlement = layoutWidth > 0 && layoutWidth < 520;
   const useMobileToolbarLayout = compactSettlement;
+  const useDesktopToolbarRow =
+    Platform.OS === "web" && layoutWidth >= 1024;
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const [visibleCols, setVisibleCols] = useState<
     Record<TripsHubTableColumnId, boolean>
@@ -1163,6 +1202,83 @@ export function TripsHubTableView({
   };
 
   const mobileCardList = Boolean(renderBody);
+  const tripsCountLabel = `Showing ${rowsForTableBody.length} of ${displayedTrips.length} trips`;
+
+  const desktopDatePresets = (
+    [
+      { id: "all" as const, label: "ALL" },
+      { id: "today" as const, label: "TODAY" },
+      { id: "yesterday" as const, label: "YESTERDAY" },
+      { id: "this_week" as const, label: "THIS WEEK" },
+      { id: "this_month" as const, label: "THIS MONTH" },
+    ] as const
+  ).map(({ id, label }) => (
+    <TouchableOpacity
+      key={id}
+      style={[
+        styles.auditDateChip,
+        dateRangeFilter === id && styles.auditDateChipActive,
+      ]}
+      onPress={() => onDateRangeFilterChange?.(id)}
+      activeOpacity={0.85}
+      accessibilityRole="button"
+      accessibilityState={{ selected: dateRangeFilter === id }}
+    >
+      <Text
+        style={[
+          styles.auditDateChipText,
+          dateRangeFilter === id && styles.auditDateChipTextActive,
+        ]}
+        numberOfLines={1}
+      >
+        {label}
+      </Text>
+    </TouchableOpacity>
+  ));
+
+  const sortToolbarBtn = (
+    <TouchableOpacity
+      style={styles.auditToolbarBtn}
+      onPress={cycleSortKey}
+      activeOpacity={0.85}
+      accessibilityRole="button"
+      accessibilityLabel="Cycle table sort"
+    >
+      <FontAwesome name="sort" size={11} color="#64748b" />
+      <Text style={styles.auditToolbarText}>Sort: {sortLabel}</Text>
+      <FontAwesome name="chevron-down" size={9} color="#64748b" />
+    </TouchableOpacity>
+  );
+
+  const tableSearchField = (
+    <View
+      style={[
+        styles.auditSearchWrap,
+        useDesktopToolbarRow && styles.auditSearchWrapDesktopInline,
+        useMobileToolbarLayout && styles.auditSearchWrapMobile,
+      ]}
+    >
+      <Search size={12} color="#94a3b8" style={{ marginRight: 5 }} />
+      <TextInput
+        value={tableQuery}
+        onChangeText={setTableQuery}
+        placeholder="Search trip / client / supplier"
+        placeholderTextColor="#94a3b8"
+        autoCapitalize="none"
+        style={styles.auditSearchInput}
+      />
+      {tableQuery ? (
+        <Pressable
+          onPress={() => setTableQuery("")}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Clear table search"
+        >
+          <X size={12} color="#94a3b8" />
+        </Pressable>
+      ) : null}
+    </View>
+  );
 
   return (
     <View
@@ -1174,22 +1290,80 @@ export function TripsHubTableView({
       <View
         style={[
           styles.auditToolbar,
-          mobileCardList && styles.auditToolbarMobileCards,
+          mobileCardList &&
+            !useDesktopToolbarRow &&
+            styles.auditToolbarMobileCards,
+          useDesktopToolbarRow && styles.auditToolbarDesktop,
         ]}
       >
-        {!mobileCardList ? (
-          <Text style={styles.auditToolbarCount} numberOfLines={1}>
-            Showing {rowsForTableBody.length} of {displayedTrips.length} trips
-          </Text>
-        ) : null}
-        <View
-          style={[
-            styles.auditToolbarControls,
-            useMobileToolbarLayout && styles.auditToolbarControlsMobile,
-          ]}
-        >
-          {onDateRangeFilterChange ? (
-            useMobileToolbarLayout ? (
+        {useDesktopToolbarRow ? (
+          <View style={styles.auditToolbarDesktopRow}>
+            <View
+              style={[
+                styles.auditToolbarCountInline,
+                styles.auditToolbarCountInlineDesktop,
+              ]}
+            >
+              <Text
+                style={styles.auditToolbarCountInlineText}
+                numberOfLines={1}
+              >
+                {tripsCountLabel}
+              </Text>
+            </View>
+            {onDateRangeFilterChange ? (
+              <View
+                style={[
+                  styles.auditDatePresetTray,
+                  styles.auditDatePresetTrayDesktop,
+                ]}
+              >
+                <View style={styles.auditDatePresetRowInner}>
+                  {desktopDatePresets}
+                  {onOpenDateRangePicker ? (
+                    <TouchableOpacity
+                      style={[
+                        styles.auditDateIconBtn,
+                        dateRangeFilter === "custom" &&
+                          styles.auditDateChipActive,
+                      ]}
+                      onPress={onOpenDateRangePicker}
+                      activeOpacity={0.8}
+                      accessibilityRole="button"
+                      accessibilityLabel="Open custom date range"
+                    >
+                      <FontAwesome
+                        name="calendar"
+                        size={12}
+                        color={
+                          dateRangeFilter === "custom"
+                            ? "#ffffff"
+                            : "#64748b"
+                        }
+                      />
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              </View>
+            ) : null}
+            {sortToolbarBtn}
+            {tableSearchField}
+          </View>
+        ) : (
+          <>
+            {!mobileCardList ? (
+              <Text style={styles.auditToolbarCount} numberOfLines={1}>
+                {tripsCountLabel}
+              </Text>
+            ) : null}
+            <View
+              style={[
+                styles.auditToolbarControls,
+                useMobileToolbarLayout && styles.auditToolbarControlsMobile,
+              ]}
+            >
+              {onDateRangeFilterChange ? (
+                useMobileToolbarLayout ? (
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -1333,89 +1507,53 @@ export function TripsHubTableView({
               </View>
             )
           ) : null}
-          {!useMobileToolbarLayout ? (
-            <TouchableOpacity
-              style={styles.auditToolbarBtn}
-              onPress={cycleSortKey}
-              activeOpacity={0.85}
-              accessibilityRole="button"
-              accessibilityLabel="Cycle table sort"
-            >
-              <FontAwesome name="sort" size={11} color="#64748b" />
-              <Text style={styles.auditToolbarText}>Sort: {sortLabel}</Text>
-              <FontAwesome name="chevron-down" size={9} color="#64748b" />
-            </TouchableOpacity>
-          ) : null}
-          {mobileCardList ? (
-            <View style={styles.auditToolbarSearchRow}>
-              <View style={styles.auditToolbarCountInline}>
-                <Text
-                  style={styles.auditToolbarCountInlineText}
-                  numberOfLines={1}
-                >
-                  Showing {rowsForTableBody.length} of {displayedTrips.length}{" "}
-                  trips
-                </Text>
-              </View>
-              <View style={styles.auditSearchWrapStandard}>
-                <Search
-                  size={14}
-                  color={Theme.textMuted}
-                  style={styles.auditSearchIcon}
-                />
-                <TextInput
-                  value={tableQuery}
-                  onChangeText={setTableQuery}
-                  placeholder="Search trip / client / supplier"
-                  placeholderTextColor={Theme.textMuted}
-                  autoCapitalize="none"
-                  style={styles.auditSearchInputStandard}
-                />
-                {tableQuery ? (
-                  <Pressable
-                    onPress={() => setTableQuery("")}
-                    hitSlop={8}
-                    accessibilityRole="button"
-                    accessibilityLabel="Clear table search"
-                  >
-                    <X size={14} color={Theme.textMuted} />
-                  </Pressable>
-                ) : null}
-              </View>
+              {!useMobileToolbarLayout ? sortToolbarBtn : null}
+              {mobileCardList ? (
+                <View style={styles.auditToolbarSearchRow}>
+                  <View style={styles.auditToolbarCountInline}>
+                    <Text
+                      style={styles.auditToolbarCountInlineText}
+                      numberOfLines={1}
+                    >
+                      {tripsCountLabel}
+                    </Text>
+                  </View>
+                  <View style={styles.auditSearchWrapStandard}>
+                    <Search
+                      size={14}
+                      color={Theme.textMuted}
+                      style={styles.auditSearchIcon}
+                    />
+                    <TextInput
+                      value={tableQuery}
+                      onChangeText={setTableQuery}
+                      placeholder="Search trip / client / supplier"
+                      placeholderTextColor={Theme.textMuted}
+                      autoCapitalize="none"
+                      style={styles.auditSearchInputStandard}
+                    />
+                    {tableQuery ? (
+                      <Pressable
+                        onPress={() => setTableQuery("")}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel="Clear table search"
+                      >
+                        <X size={14} color={Theme.textMuted} />
+                      </Pressable>
+                    ) : null}
+                  </View>
+                </View>
+              ) : (
+                tableSearchField
+              )}
             </View>
-          ) : (
-            <View
-              style={[
-                styles.auditSearchWrap,
-                useMobileToolbarLayout && styles.auditSearchWrapMobile,
-              ]}
-            >
-              <Search size={12} color="#94a3b8" style={{ marginRight: 5 }} />
-              <TextInput
-                value={tableQuery}
-                onChangeText={setTableQuery}
-                placeholder="Search trip / client / supplier"
-                placeholderTextColor="#94a3b8"
-                autoCapitalize="none"
-                style={styles.auditSearchInput}
-              />
-              {tableQuery ? (
-                <Pressable
-                  onPress={() => setTableQuery("")}
-                  hitSlop={8}
-                  accessibilityRole="button"
-                  accessibilityLabel="Clear table search"
-                >
-                  <X size={12} color="#94a3b8" />
-                </Pressable>
-              ) : null}
-            </View>
-          )}
-        </View>
+          </>
+        )}
       </View>
 
       {renderBody ? (
-        renderBody(displayedTrips)
+        renderBody(rowsForTableBody)
       ) : (
         <>
           <View style={styles.manifestHeaderRow}>
@@ -3077,6 +3215,18 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Theme.surfaceBorder,
   },
+  auditToolbarDesktop: {
+    flexWrap: "nowrap",
+    paddingVertical: 10,
+  },
+  auditToolbarDesktopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    width: "100%",
+    minWidth: 0,
+    flexWrap: "nowrap",
+  },
   auditToolbarMobileCards: {
     flexDirection: "column",
     alignItems: "stretch",
@@ -3118,6 +3268,11 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Theme.textRouteCard,
   },
+  auditToolbarCountInlineDesktop: {
+    maxWidth: 168,
+    height: 34,
+    paddingHorizontal: 10,
+  },
   auditToolbarControls: {
     flexDirection: "row",
     alignItems: "center",
@@ -3131,6 +3286,13 @@ const styles = StyleSheet.create({
     flexDirection: "column",
     alignItems: "stretch",
     gap: 8,
+  },
+  auditSearchWrapDesktopInline: {
+    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 120,
+    maxWidth: "100%" as const,
   },
   auditSearchWrap: {
     flexGrow: 1,
@@ -3222,6 +3384,9 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surface,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
+  },
+  auditDatePresetTrayDesktop: {
+    flexShrink: 0,
   },
   auditDatePresetTrayScroll: {
     flexDirection: "row",

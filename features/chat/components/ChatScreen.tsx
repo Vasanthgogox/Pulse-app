@@ -103,6 +103,7 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -4728,6 +4729,7 @@ function ChatBubble({
   deliveryStatus,
   isNew,
   isMobile,
+  onAvatarPress,
 }: {
   isOwn: boolean;
   content: string;
@@ -4740,6 +4742,7 @@ function ChatBubble({
    *  Bootstrap messages start fully visible to avoid the "flash of invisible" blink. */
   isNew?: boolean;
   isMobile?: boolean;
+  onAvatarPress?: () => void;
 }) {
   const avatarSize = isMobile ? CHAT_MOBILE.avatarSize : 32;
   const bubbleMaxWidth = isMobile ? CHAT_MOBILE.bubbleMaxWidthPct : "72%";
@@ -4803,12 +4806,23 @@ function ChatBubble({
       ]}
     >
       {!isOwn && (
-        <PartyAvatar
-          name={senderName ?? "?"}
-          entityType="client"
-          size={avatarSize}
-          avatarSeed={avatarSeed ?? null}
-        />
+        onAvatarPress ? (
+          <Pressable onPress={onAvatarPress} hitSlop={6}>
+            <PartyAvatar
+              name={senderName ?? "?"}
+              entityType="client"
+              size={avatarSize}
+              avatarSeed={avatarSeed ?? null}
+            />
+          </Pressable>
+        ) : (
+          <PartyAvatar
+            name={senderName ?? "?"}
+            entityType="client"
+            size={avatarSize}
+            avatarSeed={avatarSeed ?? null}
+          />
+        )
       )}
       <View style={{ maxWidth: bubbleMaxWidth }}>
         <View
@@ -5182,6 +5196,7 @@ function TripConversationDetailLoaded({
   onOpenCompose: () => void | Promise<void>;
   onFeedbackSubmitted: () => void;
 }) {
+  const router = useRouter();
   const { profile } = useAuth();
   const selfUid = (profile as any)?.uid ?? null;
   const { currentOrganization } = useOrganization();
@@ -5901,6 +5916,16 @@ function TripConversationDetailLoaded({
             : m.sender_role === "driver"
               ? "Driver"
               : "Partner");
+    let onAvatarPress: (() => void) | undefined;
+    if (!own) {
+      if (m.sender_role === "client" && clientId) {
+        onAvatarPress = () => router.push(`/public-profile/client/${clientId}`);
+      } else if (m.sender_role === "supplier" && supplierId) {
+        onAvatarPress = () => router.push(`/public-profile/supplier/${supplierId}`);
+      } else if (m.sender_role === "driver" && driverId) {
+        onAvatarPress = () => router.push(`/public-profile/driver/${driverId}`);
+      }
+    }
     return (
       <ChatBubble
         isOwn={own}
@@ -5911,9 +5936,11 @@ function TripConversationDetailLoaded({
         deliveryStatus={own ? resolveOutgoingDeliveryStatus(m) : undefined}
         isNew={Date.parse(m.created_at) > mountedAtMs}
         isMobile={!isDesktop}
+        onAvatarPress={onAvatarPress}
       />
     );
   }, [
+    router,
     currentOrgId,
     liveConv,
     isDesktop,
