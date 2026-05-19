@@ -1,7 +1,10 @@
 /**
- * Profile modal metric cell — 3D icon + label + value (tile or compact row).
+ * Profile modal metric cell — frosted glass + tinted icon chips.
  */
 import Theme from "@/constants/Theme";
+import {
+  NetworkProfileGlassPanel,
+} from "@/features/network/components/NetworkProfileGlassShell";
 import {
   NetworkProfileDepthIcon,
   type NetworkProfileDepthIconVariant,
@@ -29,82 +32,81 @@ export function NetworkProfileMetricTile({
 
   if (layout === "row") {
     return (
-      <View style={[styles.rowTile, style]}>
-        {icon}
-        <View style={styles.rowTextCol}>
-          <Text style={styles.rowLabel} numberOfLines={1}>
-            {label}
-          </Text>
-          <Text
-            style={[styles.rowValue, valueTone === "live" && styles.valueLive]}
-            numberOfLines={1}
-          >
-            {value}
-          </Text>
+      <NetworkProfileGlassPanel compact style={[styles.rowTileOuter, style]}>
+        <View style={styles.rowTile}>
+          {icon}
+          <View style={styles.rowTextCol}>
+            <Text style={styles.rowLabel} numberOfLines={1}>
+              {label}
+            </Text>
+            <Text
+              style={[styles.rowValue, valueTone === "live" && styles.valueLive]}
+              numberOfLines={1}
+            >
+              {value}
+            </Text>
+          </View>
         </View>
-      </View>
+      </NetworkProfileGlassPanel>
     );
   }
 
   return (
-    <View style={[styles.tile, style]}>
-      <View style={styles.tileIconRow}>{icon}</View>
-      <Text style={styles.tileLabel} numberOfLines={2}>
-        {label}
-      </Text>
-      <Text
-        style={[styles.tileValue, valueTone === "live" && styles.valueLive]}
-        numberOfLines={1}
-      >
-        {value}
-      </Text>
-    </View>
+    <NetworkProfileGlassPanel compact style={[styles.tileOuter, style]}>
+      <View style={styles.tile}>
+        <View style={styles.tileIconRow}>{icon}</View>
+        <Text style={styles.tileLabel} numberOfLines={2}>
+          {label}
+        </Text>
+        <Text
+          style={[styles.tileValue, valueTone === "live" && styles.valueLive]}
+          numberOfLines={1}
+        >
+          {value}
+        </Text>
+      </View>
+    </NetworkProfileGlassPanel>
   );
 }
 
 const styles = StyleSheet.create({
-  tile: {
+  tileOuter: {
+    flex: 1,
     minWidth: 0,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.surface,
-    paddingVertical: 12,
-    paddingHorizontal: 10,
+  },
+  tile: {
     alignItems: "center",
     gap: 6,
+    paddingVertical: 2,
   },
   tileIconRow: {
     marginBottom: 2,
   },
   tileLabel: {
     fontSize: 9,
-    fontWeight: "700",
+    fontWeight: "600",
     color: Theme.textMuted,
-    letterSpacing: 0.8,
+    letterSpacing: 0.9,
     textAlign: "center",
     textTransform: "uppercase",
     lineHeight: 12,
   },
   tileValue: {
-    fontSize: 15,
-    fontWeight: "800",
+    fontSize: 16,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
     textAlign: "center",
-    letterSpacing: -0.2,
+    letterSpacing: -0.3,
   },
-  rowTile: {
+  rowTileOuter: {
     flex: 1,
     minWidth: 0,
+  },
+  rowTile: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.surface,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingVertical: 2,
   },
   rowTextCol: {
     flex: 1,
@@ -113,20 +115,21 @@ const styles = StyleSheet.create({
   },
   rowLabel: {
     fontSize: 9,
-    fontWeight: "700",
+    fontWeight: "600",
     color: Theme.textMuted,
-    letterSpacing: 0.7,
+    letterSpacing: 0.75,
     textTransform: "uppercase",
   },
   rowValue: {
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
     textTransform: "uppercase",
-    letterSpacing: 0.2,
+    letterSpacing: 0.15,
   },
   valueLive: {
     color: Theme.positive,
+    fontWeight: "600",
     fontStyle: "italic",
   },
 });
