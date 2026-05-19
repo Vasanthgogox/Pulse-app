@@ -176,9 +176,11 @@ export function FinanceScreen() {
     canAccess,
     refreshKey: entitiesRefreshKey,
   });
+  // tripRows from useTripsQuery already includes cross-org supplier trips (get_trips_for_org returns both).
+  // Do NOT concat tripsWhereOrgIsSupplier again — that's a derived subset of tripRows, not additional data.
   const allTripsForLedger = useMemo(
-    () => [...entities.tripRows, ...entities.tripsWhereOrgIsSupplier],
-    [entities.tripRows, entities.tripsWhereOrgIsSupplier],
+    () => entities.tripRows,
+    [entities.tripRows],
   );
 
   const ledger = useFinanceLedger({

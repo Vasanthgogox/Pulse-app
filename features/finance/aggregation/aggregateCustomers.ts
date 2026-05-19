@@ -224,8 +224,7 @@ export function aggregateCustomers(
     const fromLedgerName = ledgerByPartyName[nameKey];
 
     const billed = billedByClientId[id] ?? 0;
-    const received =
-      (fromLedgerId?.received ?? 0) + (fromLedgerName?.received ?? 0);
+    const ledgerReceived = (fromLedgerId?.received ?? 0) + (fromLedgerName?.received ?? 0);
     const pendingLedger = (fromLedgerId?.pending ?? 0) + (fromLedgerName?.pending ?? 0);
     const clientTrips = tripsByClientId[id] ?? [];
     const clientTripIds = tripIdsByClientId[id];
@@ -269,8 +268,14 @@ export function aggregateCustomers(
       );
     } else {
       // No trips with ids (indent-only or ledger-only): use legacy formula.
-      pending = billed > 0 ? Math.max(0, billed - received) : pendingLedger;
+      pending = billed > 0 ? Math.max(0, billed - ledgerReceived) : pendingLedger;
     }
+
+    // For clients with trips: derive received = billed - pending (matches ClientDetailScreen formula).
+    // For ledger-only parties (no trips): use actual ledger payment data.
+    const received = clientTrips.length > 0
+      ? Math.max(0, billed - pending)
+      : ledgerReceived;
 
     totalBilling += billed;
     totalBalance += pending;
