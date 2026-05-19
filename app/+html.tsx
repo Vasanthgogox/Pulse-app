@@ -45,6 +45,10 @@ export default function Root({ children }: { children: React.ReactNode }) {
 }
 
 const mobileWebReset = `
+html, body, #root {
+  height: 100%;
+}
+
 body {
   background-color: #fff;
   /* Prevent pull-to-refresh and over-scroll bounce on iOS / Android */

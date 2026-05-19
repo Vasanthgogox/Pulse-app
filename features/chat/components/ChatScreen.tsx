@@ -3942,6 +3942,15 @@ const s = StyleSheet.create({
     backgroundColor: "transparent",
     borderTopWidth: 0,
   },
+  chatInputDockWebFixed: {
+    position: "fixed",
+    left: 0,
+    right: 0,
+    zIndex: 40,
+    backgroundColor: CHAT_MOBILE.composerBar,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: CHAT_MOBILE.headerBorder,
+  },
   msgs: { flex: 1, backgroundColor: "transparent" },
   msgsContent: { paddingHorizontal: 14, paddingTop: 12, gap: 10, paddingBottom: 12 },
   msgsContentMobile: {
@@ -4485,6 +4494,9 @@ const cm = StyleSheet.create({
 
 // ── Conversation detail (module scope: stable component identity so TextInput keeps focus) ─
 
+/** Reserve space above a fixed mobile-web composer (attach row + multiline field). */
+const WEB_CHAT_COMPOSER_RESERVE_PX = 58;
+
 function ChatConversationLayout({
   isDesktop,
   header,
@@ -4498,37 +4510,76 @@ function ChatConversationLayout({
 }) {
   const insets = useSafeAreaInsets();
   const nativeMobile = isChatNativeMobile(isDesktop);
+  const mobileWeb = Platform.OS === "web" && !isDesktop;
   const { keyboardVisible, keyboardHeight } = useKeyboardVisible();
-  const body = (
-    <View
-      style={[
-        s.conversationBody,
-        nativeMobile && { backgroundColor: CHAT_MOBILE.wallpaper },
-      ]}
-    >
+  const dockBottomPad = isDesktop
+    ? 10
+    : dockPaddingBottom(insets.bottom, keyboardVisible);
+
+  const messagesPane = (
+    <>
       {header}
       <View style={s.chatMessagesFlex}>{messages}</View>
-      <View
-        style={[
-          s.chatInputDock,
-          nativeMobile && s.chatInputDockMobile,
-          {
-            paddingBottom: isDesktop
-              ? 10
-              : dockPaddingBottom(insets.bottom, keyboardVisible),
-            // Mobile web: layout viewport does not shrink (overlays-content); lift dock by occluded height.
-            marginBottom:
-              Platform.OS === "web" && !isDesktop ? keyboardHeight : 0,
-          },
-        ]}
-      >
-        {inputBar}
-      </View>
+    </>
+  );
+
+  const composerDock = (
+    <View
+      style={[
+        s.chatInputDock,
+        nativeMobile && s.chatInputDockMobile,
+        { paddingBottom: dockBottomPad },
+      ]}
+    >
+      {inputBar}
     </View>
   );
 
   if (isDesktop) {
-    return <View style={s.detailPanel}>{body}</View>;
+    return (
+      <View style={s.detailPanel}>
+        <View
+          style={[
+            s.conversationBody,
+            nativeMobile && { backgroundColor: CHAT_MOBILE.wallpaper },
+          ]}
+        >
+          {messagesPane}
+          {composerDock}
+        </View>
+      </View>
+    );
+  }
+
+  if (mobileWeb) {
+    return (
+      <View style={s.detailPanel}>
+        <View
+          style={[
+            s.conversationBody,
+            {
+              flex: 1,
+              minHeight: 0,
+              backgroundColor: CHAT_MOBILE.wallpaper,
+              paddingBottom:
+                WEB_CHAT_COMPOSER_RESERVE_PX + dockBottomPad + keyboardHeight,
+            },
+          ]}
+        >
+          {messagesPane}
+        </View>
+        <View
+          style={[
+            s.chatInputDockWebFixed,
+            s.chatInputDock,
+            nativeMobile && s.chatInputDockMobile,
+            { bottom: keyboardHeight, paddingBottom: dockBottomPad },
+          ]}
+        >
+          {inputBar}
+        </View>
+      </View>
+    );
   }
 
   return (
@@ -4538,7 +4589,15 @@ function ChatConversationLayout({
       keyboardVerticalOffset={0}
       enabled={Platform.OS === "ios"}
     >
-      {body}
+      <View
+        style={[
+          s.conversationBody,
+          nativeMobile && { backgroundColor: CHAT_MOBILE.wallpaper },
+        ]}
+      >
+        {messagesPane}
+        {composerDock}
+      </View>
     </KeyboardAvoidingView>
   );
 }
