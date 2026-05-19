@@ -3,7 +3,6 @@
  * then hides the native splash. Prevents blank flashes between splash and content.
  */
 import { AppLoadingSplash } from '@/components/AppLoadingSplash';
-import { preloadDispatcherNavigationGraph } from '@/lib/preloadRoutes';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOptionalOrganization } from '@/contexts/OrganizationContext';
 import * as SplashScreen from 'expo-splash-screen';
@@ -39,7 +38,6 @@ export function AppBootGate({ children }: AppBootGateProps) {
   useEffect(() => {
     if (!bootReady || splashHidden.current) return;
     splashHidden.current = true;
-    preloadDispatcherNavigationGraph();
     const id = requestAnimationFrame(() => {
       SplashScreen.hideAsync().catch(() => {});
     });

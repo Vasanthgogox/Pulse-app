@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "scripts": {
     "postinstall": "patch-package",
-    "dev": "cross-env NODE_OPTIONS=--max-old-space-size=4096 CI=false npm run web",
+    "dev": "cross-env NODE_OPTIONS=--max-old-space-size=8192 CI=false npm run web",
     "start": "cross-env NODE_OPTIONS=--max-old-space-size=8192 DOTENV_CONFIG_QUIET=true node -r dotenv/config node_modules/expo/bin/cli start --go",
     "start:clean": "node scripts/kill-metro-ports.js && rm -rf .metro-cache node_modules/.cache/metro && cross-env NODE_OPTIONS=--max-old-space-size=8192 DOTENV_CONFIG_QUIET=true node -r dotenv/config node_modules/expo/bin/cli start --go -c",
     "start:dev-client": "cross-env DOTENV_CONFIG_QUIET=true node -r dotenv/config node_modules/expo/bin/cli start",
@@ -14,7 +14,7 @@
     "start:tunnel": "cross-env DOTENV_CONFIG_QUIET=true node -r dotenv/config node_modules/expo/bin/cli start --tunnel",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "web": "cross-env DOTENV_CONFIG_QUIET=true DOTENV_CONFIG_OVERRIDE=true NODE_OPTIONS=--max-old-space-size=6144 node -r dotenv/config node_modules/expo/bin/cli start --web",
+    "web": "cross-env DOTENV_CONFIG_QUIET=true DOTENV_CONFIG_OVERRIDE=true NODE_OPTIONS=--max-old-space-size=8192 node -r dotenv/config node_modules/expo/bin/cli start --web",
     "web:clean": "node scripts/kill-metro-ports.js && node -e \"require('fs').rmSync(require('path').join(require('os').tmpdir(),'q-web-metro-cache'),{recursive:true,force:true})\" && rm -rf node_modules/.cache/metro && cross-env DOTENV_CONFIG_QUIET=true DOTENV_CONFIG_OVERRIDE=true NODE_OPTIONS=--max-old-space-size=6144 node -r dotenv/config node_modules/expo/bin/cli start --web -c",
     "build": "npm run build:web",
     "build:web": "expo export --platform web && node scripts/compress-dist.js",
