@@ -3,46 +3,46 @@
  * Animated icons, report icon-only, used on Treasury and Entity detail.
  */
 import {
-  CHAT_FILTER_MUTED,
-  chatFilterChromeStyles as chatChrome,
+    CHAT_FILTER_MUTED,
+    chatFilterChromeStyles as chatChrome,
 } from "@/constants/ChatFilterChrome";
 import Theme from '@/constants/Theme';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type ComponentProps,
-  type ReactNode,
+    useCallback,
+    useEffect,
+    useRef,
+    useState,
+    type ComponentProps,
+    type ReactNode,
 } from 'react';
 import {
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  useWindowDimensions,
-  View,
-  type StyleProp,
-  type TextStyle,
-  type ViewStyle,
+    Modal,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    TouchableWithoutFeedback,
+    useWindowDimensions,
+    View,
+    type StyleProp,
+    type TextStyle,
+    type ViewStyle,
 } from 'react-native';
 import Animated, {
-  cancelAnimation,
-  Easing,
-  runOnJS,
-  useAnimatedReaction,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withSequence,
-  withSpring,
-  withTiming,
+    cancelAnimation,
+    Easing,
+    runOnJS,
+    useAnimatedReaction,
+    useAnimatedStyle,
+    useSharedValue,
+    withRepeat,
+    withSequence,
+    withSpring,
+    withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { FinancePeriodFilter, LedgerCategory } from '../types';

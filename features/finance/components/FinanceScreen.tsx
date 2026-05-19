@@ -65,6 +65,7 @@ import {
     View,
     useWindowDimensions,
 } from "react-native";
+import { useLayoutInsets } from "@/lib/layoutInsets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFinanceAddEntityHandlers } from "../hooks/useFinanceAddEntityHandlers";
 import { useFinanceEntities } from "../hooks/useFinanceEntities";
@@ -143,6 +144,7 @@ function createReportRow({
 
 export function FinanceScreen() {
   const insets = useSafeAreaInsets();
+  const layout = useLayoutInsets();
   const screenTopPad =
     Platform.OS === "web" ? 0 : insets.top + Layout.headerPaddingBelowInset;
   const { width: screenWidth } = useWindowDimensions();
@@ -1579,9 +1581,7 @@ export function FinanceScreen() {
               }
               refreshing={refreshing}
               onRefresh={handleRefresh}
-              bottomInset={
-                24 + insets.bottom + Layout.demoTabBarScrollBottomInset + 40
-              }
+              bottomInset={layout.scrollBottomPadding(64)}
               profileImages={profileImages}
               linkedOrgDisplayMap={linkedOrgDisplayMap}
               tripFinanceAdjustmentsByTripId={tripFinanceAdjustmentsByTripId}
@@ -1621,11 +1621,7 @@ export function FinanceScreen() {
             style={[
               styles.fabAbsoluteWrap,
               {
-                bottom:
-                  Layout.demoTabBarScrollBottomInset +
-                  insets.bottom +
-                  Layout.tabBarBottomPaddingMin +
-                  Layout.fabStackOffset,
+                bottom: layout.fabBottom({ stackOffset: Layout.fabStackOffset }),
               },
             ]}
           >

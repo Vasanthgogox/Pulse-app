@@ -20,8 +20,10 @@ import Animated, {
 
 const HIDE_MS = 200;
 const SHOW_MS = 200;
-const WEB_IDLE_MS = 380;
 const SHOW_DELAY_MS = 0;
+
+/** Scroll-to-hide is native-only; mobile web keeps the dock visible (nested scroll + window quirks). */
+const TAB_BAR_AUTO_HIDE_ENABLED = Platform.OS !== "web";
 
 type ScrollControls = {
   onScrollBeginDrag: () => void;
@@ -69,6 +71,7 @@ export function DemoTabBarScrollProvider({
   }, []);
 
   const onScrollBeginDrag = useCallback(() => {
+    if (!TAB_BAR_AUTO_HIDE_ENABLED) return;
     clearSchedule();
     setScrollInProgress(true);
     emitScrollHideStart();
@@ -76,6 +79,7 @@ export function DemoTabBarScrollProvider({
   }, [clearSchedule, progress]);
 
   const scheduleShow = useCallback(() => {
+    if (!TAB_BAR_AUTO_HIDE_ENABLED) return;
     clearSchedule();
     scrollEndTimeoutRef.current = setTimeout(() => {
       setScrollInProgress(false);
@@ -98,25 +102,8 @@ export function DemoTabBarScrollProvider({
     progress.value = withTiming(1, { duration: SHOW_MS });
   }, [clearSchedule, progress]);
 
-  useEffect(() => {
-    if (Platform.OS !== "web" || typeof window === "undefined") return;
-    let webIdleTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const onWindowScroll = () => {
-      onScrollBeginDrag();
-      if (webIdleTimer) clearTimeout(webIdleTimer);
-      webIdleTimer = setTimeout(() => {
-        onScrollEnd();
-        webIdleTimer = null;
-      }, WEB_IDLE_MS);
-    };
-
-    window.addEventListener("scroll", onWindowScroll, { passive: true });
-    return () => {
-      window.removeEventListener("scroll", onWindowScroll);
-      if (webIdleTimer) clearTimeout(webIdleTimer);
-    };
-  }, [onScrollBeginDrag, onScrollEnd]);
+  // Window scroll listener removed: mobile web uses nested ScrollViews; hiding the dock
+  // on document scroll left the bar stuck off-screen on some devices (Netlify / Safari).
 
   useEffect(() => () => clearSchedule(), [clearSchedule]);
 
@@ -213,31 +200,9 @@ export function useTabBarAwareScrollProps(): {
   scrollEventThrottle?: number;
 } {
   const ctx = useDemoTabBarScrollOptional();
-  const webIdleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(
-    () => () => {
-      if (webIdleRef.current) clearTimeout(webIdleRef.current);
-    },
-    [],
-  );
 
   return useMemo(() => {
-    if (!ctx) return {};
-
-    if (Platform.OS === "web") {
-      return {
-        onScroll: () => {
-          ctx.onScrollBeginDrag();
-          if (webIdleRef.current) clearTimeout(webIdleRef.current);
-          webIdleRef.current = setTimeout(() => {
-            ctx.onScrollEnd();
-            webIdleRef.current = null;
-          }, WEB_IDLE_MS);
-        },
-        scrollEventThrottle: 16,
-      };
-    }
+    if (!ctx || !TAB_BAR_AUTO_HIDE_ENABLED) return {};
 
     return {
       onScrollBeginDrag: ctx.onScrollBeginDrag,

@@ -16,6 +16,7 @@ import {
 import { SemanticAddIcon } from "@/components/SemanticAddIcon";
 import { getAvatarUriForSeed } from "@/constants/DriverLevels";
 import Layout from "@/constants/Layout";
+import { useLayoutInsets } from "@/lib/layoutInsets";
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
 import { useOrganization } from "@/contexts/OrganizationContext";
@@ -116,6 +117,7 @@ export function LoadCenterView({
   onShareToNetwork,
 }: LoadCenterViewProps) {
   const insets = useSafeAreaInsets();
+  const layout = useLayoutInsets();
   const { width } = useWindowDimensions();
   const { currentOrganization } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
@@ -401,16 +403,14 @@ export function LoadCenterView({
   );
 
   /** Keep add-load FAB above the global chat FAB, tab bar, and safe area. */
-  const hirePartnerFabBottom =
-    Layout.demoTabBarScrollBottomInset +
-    insets.bottom +
-    Layout.tabBarBottomPaddingMin +
-    Layout.fabStackOffset;
+  const hirePartnerFabBottom = layout.fabBottom({
+    stackOffset: Layout.fabStackOffset,
+  });
   const paddingBottom = useMemo(() => {
-    const base = 24 + Layout.demoTabBarScrollBottomInset + insets.bottom + 24;
+    const base = layout.scrollBottomPadding(36);
     if (isMobileView || loadSubTab !== "GIVE_LOAD") return base;
     return hirePartnerFabBottom + Layout.fabSize + Layout.fabBottomOffset;
-  }, [hirePartnerFabBottom, insets.bottom, isMobileView, loadSubTab]);
+  }, [hirePartnerFabBottom, isMobileView, layout, loadSubTab]);
   const statusTabsForRole = useMemo(() => {
     return isClaimedTab ? [] : STATUS_TABS;
   }, [isClaimedTab]);

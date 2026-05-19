@@ -11,7 +11,7 @@ import {
   Platform,
   type ListRenderItem,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useLayoutInsets } from '@/lib/layoutInsets';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Theme from '@/constants/Theme';
 
@@ -67,8 +67,8 @@ export function ListScreenLayout<T = unknown>(props: ListScreenLayoutProps<T>) {
     refreshing = false,
   } = props;
 
-  const insets = useSafeAreaInsets();
-  const bottomPadding = 100 + insets.bottom;
+  const layout = useLayoutInsets();
+  const bottomPadding = layout.scrollBottomPadding(24);
   const isFlatList =
     'listData' in props &&
     props.listData != null &&
@@ -81,7 +81,7 @@ export function ListScreenLayout<T = unknown>(props: ListScreenLayoutProps<T>) {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+      <View style={[styles.header, { paddingTop: layout.top + 16 }]}>
         <Text style={styles.headerTitle}>{title}</Text>
         {subtitle != null && <Text style={styles.headerSubtitle}>{subtitle}</Text>}
       </View>

@@ -52,6 +52,9 @@ html, body, #root {
 body {
   /* Match Theme.screenBackground + native splash — avoids white/black flash on reload */
   background-color: #ffffff;
+  /* Let env(safe-area-inset-*) resolve for RN web probes (viewport-fit=cover in meta). */
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
   /* Prevent pull-to-refresh and over-scroll bounce on iOS / Android */
   overscroll-behavior: none;
   /* Prevent iOS from enlarging small text (e.g. inside cards) */

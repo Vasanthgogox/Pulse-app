@@ -86,6 +86,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import { useLayoutInsets } from "@/lib/layoutInsets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
 
@@ -191,6 +192,7 @@ function useAnimatedCount(target: number, durationMs = 720): number {
 
 function NetworkScreenInner() {
   const insets = useSafeAreaInsets();
+  const layout = useLayoutInsets();
   const { width } = useWindowDimensions();
   const searchParams = useLocalSearchParams<{ view?: string }>();
   const isWideNetwork = Platform.OS === "web" && width >= 1180;
@@ -464,7 +466,7 @@ function NetworkScreenInner() {
         <InboundProtocolPanel
           layout="fullscreen"
           topInset={insets.top}
-          bottomInset={insets.bottom}
+          bottomInset={layout.scrollBottomPadding()}
           tab={inviteTab}
           onTabChange={setInviteTab}
           onClose={() => setViewMode("dashboard")}
@@ -602,13 +604,7 @@ function NetworkScreenInner() {
       contentContainerStyle={[
         styles.scrollContent,
         !showHomePageHeader && { paddingTop: insets.top + 8 },
-        {
-          paddingBottom:
-            24 +
-            insets.bottom +
-            Layout.demoTabBarScrollBottomInset +
-            Layout.tabBarBottomPaddingMin,
-        },
+        { paddingBottom: layout.scrollBottomPadding(32) },
       ]}
       showsVerticalScrollIndicator={false}
       nestedScrollEnabled

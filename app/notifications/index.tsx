@@ -4,11 +4,11 @@ import { useAlertRegistryFinanceHandlers } from "@/lib/hooks/useAlertRegistryFin
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useLayoutInsets } from "@/lib/layoutInsets";
 
 export default function NotificationsScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
+  const layout = useLayoutInsets();
   const [tab, setTab] = useState<"active" | "history">("active");
   const { finance, refreshRegistry } = useAlertRegistryFinanceHandlers();
 
@@ -21,8 +21,8 @@ export default function NotificationsScreen() {
     <View style={styles.root}>
       <AlertRegistryPanel
         layout="fullscreen"
-        topInset={insets.top}
-        bottomInset={insets.bottom}
+        topInset={layout.top}
+        bottomInset={layout.scrollBottomPadding()}
         tab={tab}
         onTabChange={setTab}
         onClose={close}

@@ -12,8 +12,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { usePathname, useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { OpsAgentBotSvg } from '@/features/ops-agent/components/OpsAgentBotSvg';
+import { useLayoutInsets } from '@/lib/layoutInsets';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 
@@ -36,7 +36,7 @@ function useShowFloatingOpsAgent(): boolean {
 
 export function FloatingOpsAgentButton() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
+  const layout = useLayoutInsets();
   const { width } = useWindowDimensions();
   const show = useShowFloatingOpsAgent();
   const isMobile = width < 560;
@@ -65,11 +65,7 @@ export function FloatingOpsAgentButton() {
 
   if (!show) return null;
 
-  const bottom =
-    Layout.demoTabBarScrollBottomInset +
-    insets.bottom +
-    Layout.tabBarBottomPaddingMin +
-    chatStackOffset;
+  const bottom = layout.fabBottom({ stackOffset: chatStackOffset });
 
   return (
     <View

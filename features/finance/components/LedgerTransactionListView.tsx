@@ -5,17 +5,17 @@
 import { PartyAvatar } from "@/components/PartyAvatar";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import type { DriverRow } from "@/features/drivers/services/drivers.service";
-import { useLanguage } from "@/contexts/LanguageContext";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
+import { useLanguage } from "@/contexts/LanguageContext";
+import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import { getDoubleEntryDisplayLabel } from "@/features/finance/accounting/accountingModel";
-import { partyAvatarInitialsTextColor } from "@/lib/partyAvatarDisplay";
 import {
-  getLedgerFlowForRow,
-  LedgerFlowChip,
+    getLedgerFlowForRow,
+    LedgerFlowChip,
 } from "@/features/finance/components/LedgerFlowChip";
 import { type LedgerRow } from "@/features/finance/services/finance.service";
 import { formatLedgerAmount } from "@/lib/format";
+import { partyAvatarInitialsTextColor } from "@/lib/partyAvatarDisplay";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import {

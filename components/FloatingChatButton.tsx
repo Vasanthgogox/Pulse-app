@@ -2,8 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "expo-router";
 import { Hash, MessageSquare, Plus, Users, X } from "lucide-react-native";
 import { Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Layout from "@/constants/Layout";
+import { useLayoutInsets } from "@/lib/layoutInsets";
 import Theme from "@/constants/Theme";
 import { useIntegratedChat } from "@/features/chat/contexts/IntegratedChatContext";
 import { useTripChat } from "@/features/chat/contexts/TripChatContext";
@@ -42,7 +41,7 @@ function useTotalUnread(): number {
 export function FloatingChatButton() {
   const router = useRouter();
   const pathname = usePathname();
-  const insets = useSafeAreaInsets();
+  const layout = useLayoutInsets();
   const { width } = useWindowDimensions();
   const show = useShouldShow();
   const unread = useTotalUnread();
@@ -106,10 +105,7 @@ export function FloatingChatButton() {
   if (!show) return null;
 
   const bottom =
-    Layout.demoTabBarScrollBottomInset +
-    insets.bottom +
-    Layout.tabBarBottomPaddingMin +
-    (networkDockExpanded ? 78 : 0);
+    layout.scrollBottomPadding() + (networkDockExpanded ? 78 : 0);
 
   const previewWidth = Math.max(290, Math.min(380, width - 28));
 

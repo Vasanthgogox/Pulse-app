@@ -66,8 +66,8 @@ export const Layout = {
    */
   desktopTopNavOffset: 84,
   /**
-   * Vertical space to reserve for the floating demo tab bar (dock + margin) when it is
-   * docked at the bottom — use for scroll content paddingBottom and FAB offset.
+   * @deprecated Static estimate only — ignores safe area on mobile web.
+   * Use `useLayoutInsets().scrollBottomPadding()` or `scrollClearanceAboveTabBar()` from `@/lib/layoutInsets`.
    */
   demoTabBarScrollBottomInset: 56 + 32 + 22,
   /** Bottom corner radius of demo tab bar (matches device curve) */

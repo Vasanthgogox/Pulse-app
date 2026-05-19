@@ -83,6 +83,7 @@ import {
     type TextStyle,
     type ViewStyle,
 } from "react-native";
+import { useLayoutInsets } from "@/lib/layoutInsets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type SupplyFilter = "all" | "asset" | "aggregated";
@@ -321,16 +322,12 @@ export default function TripsScreen() {
   // Use mobile layout behavior for narrow web widths as well.
   const isMobileViewport = width < 820;
   const insets = useSafeAreaInsets();
-  const webChatFabBaseBottom =
-    Layout.demoTabBarScrollBottomInset +
-    insets.bottom +
-    Layout.tabBarBottomPaddingMin;
-  const tripsFabBottom = webChatFabBaseBottom + Layout.fabStackOffset;
+  const layout = useLayoutInsets();
+  const tripsFabBottom = layout.fabBottom({ stackOffset: Layout.fabStackOffset });
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const screenTopPad =
     Platform.OS === "web" ? 0 : insets.top + Layout.headerPaddingBelowInset;
-  const tripsScrollBottomPad =
-    24 + Layout.demoTabBarScrollBottomInset + insets.bottom + 16;
+  const tripsScrollBottomPad = layout.scrollBottomPadding(40);
   const router = useRouter();
   const { t: tr } = useLanguage();
   const { currentOrganization } = useOrganization();

@@ -38,6 +38,7 @@ import {
     View,
     useWindowDimensions,
 } from "react-native";
+import { useLayoutInsets } from "@/lib/layoutInsets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 function formatShortDate(value?: string | null): string {
@@ -82,6 +83,7 @@ interface LogIncomingPodsScreenProps {
 
 export function LogIncomingPodsScreen({ embedded = false }: LogIncomingPodsScreenProps) {
   const insets = useSafeAreaInsets();
+  const layout = useLayoutInsets();
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
   const { profile } = useAuth();
@@ -982,7 +984,7 @@ export function LogIncomingPodsScreen({ embedded = false }: LogIncomingPodsScree
         ) : (
           <ScrollView
             contentContainerStyle={{
-              paddingBottom: Layout.demoTabBarScrollBottomInset + 36,
+              paddingBottom: layout.scrollBottomPadding(36),
             }}
             {...tabBarScrollProps}
           >
@@ -1002,8 +1004,7 @@ export function LogIncomingPodsScreen({ embedded = false }: LogIncomingPodsScree
           style={[
             styles.footer,
             {
-              paddingBottom:
-                insets.bottom + Layout.demoTabBarScrollBottomInset + 8,
+              paddingBottom: layout.scrollBottomPadding(8),
             },
           ]}
         >

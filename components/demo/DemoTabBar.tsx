@@ -71,7 +71,11 @@ import Animated, {
     withSpring,
     withTiming,
 } from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  tabBarFooterPadding,
+  resolveTabBarLayoutPlatform,
+} from "@/lib/layoutInsets";
+import { useEffectiveBottomInset } from "@/lib/safeAreaWeb";
 
 function AnimatedPress({
   children,
@@ -758,7 +762,7 @@ export function DemoTabBar({
     await Promise.all([receivedQ.refetch(), sentQ.refetch()]);
   };
 
-  const insets = useSafeAreaInsets();
+  const bottomInset = useEffectiveBottomInset();
   const { width: windowWidth } = useWindowDimensions();
   const { t } = useLanguage();
   const fallbackDockVisibilityProgress = useSharedValue(1);
@@ -815,10 +819,12 @@ export function DemoTabBar({
       .map((p) => p[0]?.toUpperCase())
       .join("") || "US";
 
-  const dockBottom = insets.bottom;
-  /** Tighter dock padding — bottom safe area handled by footer wrap. */
+  const tabBarPlatform = resolveTabBarLayoutPlatform({
+    isWeb,
+    isDesktopWeb,
+  });
   const footerPadTop = 4;
-  const footerPadBottom = Math.max(Math.round(dockBottom * 0.35), 10);
+  const footerPadBottom = tabBarFooterPadding(bottomInset, tabBarPlatform);
   const collapseNetworkDock = useCallback(() => {
     setIsNetworkExpanded(false);
     setMobileNetworkDockExpanded(false);

@@ -1,6 +1,6 @@
 /**
  * Demo layout: 3 tabs (FISCAL | TRIPS | NETWORK) + floating bottom dock (web + native).
- * Ops Agent via floating icon. Dock hides while scrolling; resets when idle or tab changes.
+ * Ops Agent via floating icon. Dock hides while scrolling on native; stays visible on mobile web.
  */
 import React, { useEffect } from 'react';
 import { Tabs, useRouter } from 'expo-router';
@@ -13,8 +13,8 @@ import {
   DemoTabBarScrollProvider,
   useDemoTabBarScroll,
 } from '@/contexts/DemoTabBarScrollContext';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { saveLastTabRoute } from '@/lib/lastRoute';
+import { useLayoutInsets } from '@/lib/layoutInsets';
 import { preloadPulseLoadsRoute, preloadTabScreen } from '@/lib/preloadRoutes';
 import type { PreloadableTab } from '@/lib/preloadRoutes';
 import { ROUTES } from '@/lib/routes';
@@ -30,9 +30,10 @@ function DemoCustomTabBar(
   const { resetBarVisible } = useDemoTabBarScroll();
   const { onOpenProfileDrawer } = props;
   const { state, navigation } = props;
-  const insets = useSafeAreaInsets();
+  const layout = useLayoutInsets();
   const { width } = useWindowDimensions();
   const isDesktopWeb = Platform.OS === 'web' && width >= 1024;
+  const isMobileWeb = Platform.OS === 'web' && !isDesktopWeb;
   const routeName = state.routes[state.index]?.name;
   const activeTab: DemoTabId =
     routeName === 'finance' ? 'finance'
@@ -84,8 +85,7 @@ function DemoCustomTabBar(
       zIndex: 100,
       width: '100%' as const,
     },
-    // Mobile web: dock overlays the scene so when it auto-hides (translate) no grey strip
-    // remains in document flow; main scroll area fills to the viewport bottom.
+    // Mobile web: dock overlays the scene (no scroll-to-hide) so content can use full height.
     !isDesktopWeb && Platform.OS === 'web' && {
       position: 'absolute' as const,
       left: 0,
@@ -101,32 +101,27 @@ function DemoCustomTabBar(
       zIndex: 100,
       elevation: 100,
       backgroundColor: 'transparent',
-      paddingBottom: insets.bottom > 0 ? 0 : 4,
+      // Mobile web: DemoTabBar applies env(safe-area-inset-bottom); avoid double pad here.
+      paddingBottom: isMobileWeb ? 0 : layout.bottom > 0 ? 0 : 4,
     },
   ];
 
-  if (isDesktopWeb) {
-    return (
-      <View style={shellStyle}>
-        <DemoTabBar
-          activeTab={activeTab}
-          onTabChange={onTabChange}
-          onProfilePress={onProfilePress}
-          onNotificationsPress={() => router.push("/notifications")}
-        />
-      </View>
-    );
+  const tabBar = (
+    <DemoTabBar
+      activeTab={activeTab}
+      onTabChange={onTabChange}
+      onProfilePress={onProfilePress}
+      onNotificationsPress={() => router.push("/notifications")}
+    />
+  );
+
+  // Desktop + mobile web: fixed dock (no translate-away). Native: hide while scrolling.
+  if (isDesktopWeb || Platform.OS === 'web') {
+    return <View style={shellStyle}>{tabBar}</View>;
   }
 
   return (
-    <DemoTabBarAutoHideShell style={shellStyle}>
-      <DemoTabBar
-        activeTab={activeTab}
-        onTabChange={onTabChange}
-        onProfilePress={onProfilePress}
-        onNotificationsPress={() => router.push("/notifications")}
-      />
-    </DemoTabBarAutoHideShell>
+    <DemoTabBarAutoHideShell style={shellStyle}>{tabBar}</DemoTabBarAutoHideShell>
   );
 }
 

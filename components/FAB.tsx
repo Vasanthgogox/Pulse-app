@@ -7,7 +7,7 @@ import { Plus, type LucideIcon } from 'lucide-react-native';
 import type { ComponentProps } from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import Animated from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useLayoutInsets } from '@/lib/layoutInsets';
 
 interface FABProps {
   label?: string;
@@ -27,7 +27,7 @@ export function FAB({
   LucideIconComponent,
   showPlusSuffix = true,
 }: FABProps) {
-  const insets = useSafeAreaInsets();
+  const layout = useLayoutInsets();
   const { shellStyle, ringStyle } = useGlobalFabAnimation();
   const IconComponent = LucideIconComponent ?? Plus;
   const shouldRenderLucideIcon = LucideIconComponent != null;
@@ -39,7 +39,7 @@ export function FAB({
     <Animated.View
       style={[
         styles.fab,
-        { bottom: Layout.fabBottomOffset + insets.bottom },
+        { bottom: layout.fabBottom() },
         shellStyle,
       ]}
       pointerEvents="box-none"

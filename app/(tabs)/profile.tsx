@@ -54,6 +54,7 @@ import {
     Text,
     View,
 } from "react-native";
+import { useLayoutInsets } from "@/lib/layoutInsets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const SLATE_900 = "#0f172a";
@@ -290,6 +291,7 @@ function BusinessRoadmapPanel({ completedTrips, onBack }: RoadmapPanelProps) {
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
+  const layout = useLayoutInsets();
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -615,9 +617,7 @@ export default function ProfileScreen() {
           styles.scrollContent,
           {
             paddingBottom:
-              Layout.sectionSpacing +
-              insets.bottom +
-              Layout.demoTabBarScrollBottomInset,
+              Layout.sectionSpacing + layout.scrollBottomPadding(),
           },
         ]}
         showsVerticalScrollIndicator={false}
