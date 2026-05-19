@@ -325,9 +325,9 @@ export function NetworkPartyHubListCard({
           <View style={[styles.right, compact && styles.rightCompact, mobileGrid && styles.rightMobileGrid]}>
             <View
               style={[
-                styles.metricsBlock,
-                metricsCompact && styles.metricsBlockCompact,
-                mobileGrid && networkHubListCardChromeStyles.metricsBlockMobileGrid,
+                styles.metricsRow,
+                metricsCompact && styles.metricsRowCompact,
+                mobileGrid && networkHubListCardChromeStyles.metricsRowMobileGrid,
               ]}
             >
               {metricsTiles}

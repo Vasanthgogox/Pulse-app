@@ -10,6 +10,7 @@ import { NetworkPartyHubListCard } from "@/features/network/components/NetworkPa
 import { NetworkHubConnectionsPagedGrid } from "@/features/network/components/NetworkHubConnectionsPagedGrid";
 import {
   getNetworkHubConnectionsLayout,
+  NETWORK_HUB_CONNECTION_DESKTOP_COLUMNS,
   SPLIT_STACK_BREAKPOINT,
   NETWORK_HUB_GRID_GAP_PX,
   NETWORK_HUB_GRID_ROW_PADDING_H,
@@ -446,14 +447,16 @@ export function ConnectionsView({
     driver: number | null;
   }>({ client: null, supplier: null, driver: null });
   const gridNumColumns = hubMode
-    ? windowWidth >= 900
-      ? 2
+    ? windowWidth >= SPLIT_STACK_BREAKPOINT
+      ? NETWORK_HUB_CONNECTION_DESKTOP_COLUMNS
       : 1
     : windowWidth >= 1200
       ? 4
       : windowWidth >= 900
         ? 3
-        : 2;
+        : windowWidth >= SPLIT_STACK_BREAKPOINT
+          ? 2
+          : 1;
 
   const clientsQ = useClientsQuery(orgId);
   const suppliersQ = useSuppliersQuery(orgId);
@@ -987,7 +990,7 @@ export function ConnectionsView({
       item={item}
       compact={hubListCompact}
       mobileGrid={isMobileHub && hubConnectionsLayout.columns > 1}
-      nativeListRow={isNativeApp && hubConnectionsLayout.columns === 1}
+      nativeListRow={hubConnectionsLayout.columns === 1}
       onOpenProfile={onOpenProfile}
       onPressMutuals={onPressMutuals}
       onPressMutual={onPressMutual}

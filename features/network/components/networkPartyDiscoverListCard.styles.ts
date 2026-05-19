@@ -193,8 +193,8 @@ export const discoverListCardStyles = StyleSheet.create({
     justifyContent: "space-between",
     width: "100%",
   },
-  metricsBlock: networkHubListCardChromeStyles.metricsBlock,
-  metricsBlockCompact: networkHubListCardChromeStyles.metricsBlockCompact,
+  metricsRow: networkHubListCardChromeStyles.metricsRow,
+  metricsRowCompact: networkHubListCardChromeStyles.metricsRowCompact,
   mutualsSlot: {
     alignItems: "center",
     justifyContent: "center",
