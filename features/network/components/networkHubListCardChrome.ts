@@ -85,34 +85,22 @@ export const networkHubListCardChromeStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.networkHubListCardAvatarBorder,
   },
-  metricsBlock: {
+  /** Row for trip + rating tiles — no outer chrome (tiles carry their own borders). */
+  metricsRow: {
     flexDirection: "row",
     alignItems: "center",
     alignSelf: "center",
     gap: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-    borderRadius: NETWORK_HUB_RADIUS.inset,
-    backgroundColor: Theme.networkHubListCardMetricsBg,
-    borderWidth: 1,
-    borderColor: Theme.networkHubListCardMetricsBorder,
-    minHeight: 44,
-    overflow: "hidden",
+    flexShrink: 0,
   },
-  metricsBlockCompact: {
+  metricsRowCompact: {
     gap: 5,
-    paddingHorizontal: 5,
-    paddingVertical: 3,
-    minHeight: 40,
   },
-  metricsBlockMobileGrid: {
+  metricsRowMobileGrid: {
     flex: 1,
     alignSelf: "stretch",
     justifyContent: "center",
     gap: 4,
-    paddingHorizontal: 4,
-    paddingVertical: 3,
-    minHeight: 34,
   },
   controlBase: {
     overflow: "hidden",

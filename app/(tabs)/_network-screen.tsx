@@ -7,6 +7,7 @@ import { InboundProtocolPanel } from "@/components/InboundProtocolPanel";
 import { AppLoadingSplash } from "@/components/AppLoadingSplash";
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { EntityAvatar } from "@/components/EntityAvatar";
+import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
@@ -24,6 +25,7 @@ import {
   NETWORK_HUB_SPLIT_COLUMN_GAP_PX,
 } from "@/features/network/constants/networkHubGrid";
 import { NetworkLoadsQuickCards } from "@/features/network/components/NetworkLoadsQuickCards";
+import { NetworkProfileMetricTile } from "@/features/network/components/NetworkProfileMetricTile";
 import { ContentErrorState } from "@/components/ContentErrorState";
 import { NetworkTabErrorBoundary } from "@/components/network/NetworkTabErrorBoundary";
 import { StoryReel } from "@/features/network/components/StoryReel";
@@ -58,11 +60,8 @@ import {
   Mail,
   MapPin,
   Search,
-  Signal,
-  Truck,
   User,
   UserPlus,
-  Users,
   Verified,
   Warehouse,
   X,
@@ -1152,7 +1151,9 @@ function NetworkScreenInner() {
           {selectedProfileNode ? (
             <View style={[styles.profileModalCard, isMobileLayout && styles.profileModalCardMobile]}>
               <View style={styles.profileModalHead}>
-                <Text style={styles.profileModalKicker}>Network profile</Text>
+                <Text style={[styles.profileModalKicker, FinanceTxnTypography.columnTitle, styles.profileModalKickerOnDark]}>
+                  Network profile
+                </Text>
                 <Pressable
                   onPress={() => setSelectedProfileNode(null)}
                   style={({ pressed }) => [styles.profileModalClose, pressed && { opacity: 0.72 }]}
@@ -1167,68 +1168,101 @@ function NetworkScreenInner() {
                 contentContainerStyle={styles.profileModalScroll}
               >
                 <View style={[styles.profileIdentityCardModern, styles.profileIdentityCardModal]}>
-                  <View style={styles.profileAvatarLgModern}>
-                    <EntityAvatar
-                      name={selectedProfileNode.name}
-                      avatarUrl={selectedProfileNode.avatar_url}
-                      avatarSeed={selectedProfileNode.avatar_seed}
-                      entityType={
-                        selectedProfileNode.type === "DRIVER"
-                          ? "driver"
-                          : selectedProfileNode.type === "SUPPLIER"
-                            ? "supplier"
-                            : "client"
-                      }
-                      isIntegrated={selectedProfileNode.is_integrated ?? false}
-                      size={96}
-                      showIntegrationBadge={false}
+                  <View style={styles.profileHero}>
+                    <View style={styles.profileAvatarRing}>
+                      <EntityAvatar
+                        name={selectedProfileNode.name}
+                        avatarUrl={selectedProfileNode.avatar_url}
+                        avatarSeed={selectedProfileNode.avatar_seed}
+                        entityType={
+                          selectedProfileNode.type === "DRIVER"
+                            ? "driver"
+                            : selectedProfileNode.type === "SUPPLIER"
+                              ? "supplier"
+                              : "client"
+                        }
+                        isIntegrated={selectedProfileNode.is_integrated ?? false}
+                        size={80}
+                        showIntegrationBadge={false}
+                      />
+                    </View>
+                    <View style={styles.profileNameRow}>
+                      <Text style={styles.profileNameHero} numberOfLines={2}>
+                        {selectedProfileNode.name.toUpperCase()}
+                      </Text>
+                      <Verified size={16} color={Theme.primary} strokeWidth={2.4} />
+                    </View>
+                    <View style={styles.profileLocationRow}>
+                      <MapPin size={13} color={Theme.primary} strokeWidth={2.2} />
+                      <Text style={styles.profileLocationHero} numberOfLines={2}>
+                        {selectedProfileNode.location}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.profileStatusRow}>
+                    <NetworkProfileMetricTile
+                      layout="row"
+                      variant="role"
+                      label="Role"
+                      value={selectedProfileNode.type}
+                    />
+                    <NetworkProfileMetricTile
+                      layout="row"
+                      variant="connection"
+                      label="Connection"
+                      value={selectedProfileNode.status.replace(/_/g, " ")}
                     />
                   </View>
-                  <View style={styles.profileNameRow}>
-                    <Text style={styles.profileName} numberOfLines={2}>
-                      {selectedProfileNode.name.toUpperCase()}
-                    </Text>
-                    <Verified size={18} color={Theme.primary} />
-                  </View>
-                  <View style={styles.profileLocationRow}>
-                    <MapPin size={13} color={Theme.textSecondary} />
-                    <Text style={styles.profileLocation} numberOfLines={2}>
-                      {selectedProfileNode.location}
-                    </Text>
-                  </View>
 
-                  <View style={styles.profileInfoTable}>
-                    <View style={styles.profileInfoRow}>
-                      <Text style={styles.profileInfoLabel}>Role</Text>
-                      <Text style={styles.profileInfoValue}>{selectedProfileNode.type}</Text>
-                    </View>
-                    <View style={styles.profileInfoRow}>
-                      <Text style={styles.profileInfoLabel}>Connection</Text>
-                      <Text style={styles.profileInfoValue}>{selectedProfileNode.status.replace(/_/g, " ")}</Text>
-                    </View>
-                    {selectedProfileNode.phone ? (
-                      <View style={styles.profileInfoRow}>
-                        <Text style={styles.profileInfoLabel}>Phone</Text>
-                        <Text style={styles.profileInfoValue} numberOfLines={1}>
-                          {selectedProfileNode.phone}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
+                  {selectedProfileNode.phone ? (
+                    <NetworkProfileMetricTile
+                      layout="row"
+                      variant="phone"
+                      label="Phone"
+                      value={selectedProfileNode.phone}
+                      style={styles.profilePhoneTile}
+                    />
+                  ) : null}
 
-                  <View style={styles.profileStatRow}>
-                    <View style={styles.profileStatCell}>
-                      <Text style={styles.profileStatN}>
-                        {selectedProfileNode.rating != null ? selectedProfileNode.rating.toFixed(1) : "New"}
-                      </Text>
-                      <Text style={styles.profileStatL}>Global avg rating</Text>
-                    </View>
-                    <View style={styles.profileStatCell}>
-                      <Text style={styles.profileStatN}>
-                        {profileStatsLoading ? "…" : selectedProfileStats.totalTrips ?? 0}
-                      </Text>
-                      <Text style={styles.profileStatL}>Trips operated</Text>
-                    </View>
+                  <View style={styles.profileMetricsGrid}>
+                    <NetworkProfileMetricTile
+                      style={styles.profileMetricGridItem}
+                      variant="rating"
+                      label="Global avg rating"
+                      value={
+                        selectedProfileNode.rating != null
+                          ? selectedProfileNode.rating.toFixed(1)
+                          : "New"
+                      }
+                    />
+                    <NetworkProfileMetricTile
+                      style={styles.profileMetricGridItem}
+                      variant="trips"
+                      label="Trips operated"
+                      value={
+                        profileStatsLoading ? "…" : String(selectedProfileStats.totalTrips ?? 0)
+                      }
+                    />
+                    <NetworkProfileMetricTile
+                      style={styles.profileMetricGridItem}
+                      variant="presence"
+                      label="Network presence"
+                      value={
+                        selectedProfileNode.status === "CONNECTED"
+                          ? "LIVE"
+                          : selectedProfileNode.status
+                      }
+                      valueTone={
+                        selectedProfileNode.status === "CONNECTED" ? "live" : "default"
+                      }
+                    />
+                    <NetworkProfileMetricTile
+                      style={styles.profileMetricGridItem}
+                      variant="mutuals"
+                      label="Mutuals"
+                      value={String(selectedProfileNode.mutuals)}
+                    />
                   </View>
 
                   <View style={styles.profileCtaStack}>
@@ -1238,7 +1272,7 @@ function NetworkScreenInner() {
                           style={({ pressed }) => [styles.profilePrimaryBtn, pressed && { opacity: 0.88 }]}
                           onPress={() => void handleSendProtocolFromProfile()}
                         >
-                          <UserPlus size={14} color={Theme.textOnPrimary} />
+                          <UserPlus size={12} color={Theme.textOnPrimary} />
                           <Text style={styles.profilePrimaryBtnText}>
                             {selectedProfileNode.status === "REQUEST SENT" ? "Request sent" : "Send protocol"}
                           </Text>
@@ -1283,36 +1317,9 @@ function NetworkScreenInner() {
                       style={({ pressed }) => [styles.profileSecondaryBtn, pressed && { opacity: 0.88 }]}
                       onPress={() => void handleOpenDirectMessage()}
                     >
-                      <Mail size={14} color={Theme.textOnPrimary} />
+                      <Mail size={14} color={Theme.textOnPrimary} strokeWidth={2.2} />
                       <Text style={styles.profileSecondaryBtnText}>Direct message</Text>
                     </Pressable>
-                  </View>
-                </View>
-
-                <View style={[styles.profileOverviewCardModern, styles.profileOverviewCardModal]}>
-                  <Text style={styles.profileOverviewTitle}>Ally dossier</Text>
-                  <Text style={styles.profileOverviewBody}>
-                    Authorized {selectedProfileNode.type.toLowerCase()} partner — network activity in{" "}
-                    {selectedProfileNode.location}. Ratings reflect trip reviews where available; otherwise the
-                    profile shows the global average.
-                  </Text>
-                  <View style={styles.profileMetricGrid}>
-                    <View style={styles.profileMetricCardModern}>
-                      <View style={styles.profileMetricHead}>
-                        <Signal size={16} color={Theme.primary} />
-                        <Text style={styles.profileMetricHeadText}>Network presence</Text>
-                      </View>
-                      <Text style={styles.profileMetricValue}>
-                        {selectedProfileNode.status === "CONNECTED" ? "LIVE" : selectedProfileNode.status}
-                      </Text>
-                    </View>
-                    <View style={styles.profileMetricCardModern}>
-                      <View style={styles.profileMetricHead}>
-                        <Users size={16} color={Theme.primary} />
-                        <Text style={styles.profileMetricHeadText}>Mutuals</Text>
-                      </View>
-                      <Text style={styles.profileMetricValue}>{selectedProfileNode.mutuals}</Text>
-                    </View>
                   </View>
                 </View>
               </ScrollView>
@@ -1416,7 +1423,7 @@ const styles = StyleSheet.create({
     width: "100%",
     gap: 0,
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    minHeight: 88,
+    minHeight: 108,
   },
   storyLoadsRowStories: {
     flexGrow: 0,
@@ -1626,59 +1633,136 @@ const styles = StyleSheet.create({
   },
   profileModalCard: {
     width: "100%",
-    maxWidth: 720,
+    maxWidth: 420,
     maxHeight: "88%",
-    borderRadius: 34,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: Theme.networkCardBorder,
     backgroundColor: Theme.networkCardBackground,
     overflow: "hidden",
     shadowColor: Theme.shadow,
-    shadowOpacity: 0.18,
-    shadowRadius: 28,
-    shadowOffset: { width: 0, height: 16 },
-    elevation: 8,
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
   },
   profileModalCardMobile: {
     maxHeight: "92%",
-    borderRadius: 28,
+    maxWidth: "100%",
+    borderRadius: 16,
   },
   profileModalHead: {
-    minHeight: 56,
-    paddingHorizontal: 18,
+    minHeight: 44,
+    paddingHorizontal: 14,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: Theme.textPrimaryDark,
   },
   profileModalKicker: {
-    fontSize: 10,
-    fontWeight: "900",
+    fontSize: 9,
+    fontWeight: "800",
     color: Theme.textOnPrimary,
-    letterSpacing: 1.5,
+    letterSpacing: 1.2,
     textTransform: "uppercase",
   },
+  profileModalKickerOnDark: {
+    color: Theme.textOnPrimary,
+  },
   profileModalClose: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.screenBackground,
   },
   profileModalScroll: {
-    padding: 14,
-    paddingBottom: 22,
-    gap: 12,
+    padding: 12,
+    paddingBottom: 18,
+    gap: 10,
     alignItems: "stretch",
   },
   profileIdentityCardModal: {
-    borderRadius: 28,
-    shadowOpacity: 0.04,
+    borderRadius: 16,
+    padding: 16,
+    gap: 12,
+    shadowOpacity: 0.03,
+  },
+  profileHero: {
+    width: "100%",
+    alignItems: "center",
+    gap: 8,
+    paddingBottom: 4,
+  },
+  profileAvatarRing: {
+    padding: 3,
+    borderRadius: 24,
+    backgroundColor: Theme.surface,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    ...Platform.select({
+      ios: {
+        shadowColor: Theme.primary,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.14,
+        shadowRadius: 10,
+      },
+      android: { elevation: 4 },
+      default: {},
+    }),
+  },
+  profileNameHero: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 14,
+    fontWeight: "600",
+    fontStyle: "italic",
+    color: Theme.textPrimaryDark,
+    textAlign: "center",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  profileLocationHero: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 9,
+    fontWeight: "500",
+    color: Theme.textSecondary,
+    textAlign: "center",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    lineHeight: 13,
+  },
+  profileStatusRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 8,
+    width: "100%",
+  },
+  profileMetricsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    width: "100%",
+  },
+  profileMetricGridItem: {
+    flexGrow: 1,
+    flexBasis: "47%",
+    maxWidth: "48%",
+  },
+  profilePhoneTile: {
+    width: "100%",
+    flexGrow: 0,
+    flexBasis: "auto",
+    maxWidth: "100%",
   },
   profileOverviewCardModal: {
-    borderRadius: 28,
-    shadowOpacity: 0.04,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 8,
+    shadowOpacity: 0.03,
   },
   profileShell: {
     flex: 1,
@@ -1746,31 +1830,32 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   profileIdentityCardModern: {
-    borderRadius: 44,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
-    padding: 22,
+    padding: 14,
     alignItems: "center",
-    gap: 12,
+    gap: 8,
+    width: "100%",
     shadowColor: Theme.shadow,
-    shadowOpacity: 0.08,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 3,
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
   profileAvatarLgModern: {
-    width: 108,
-    height: 108,
-    borderRadius: 30,
+    width: 76,
+    height: 76,
+    borderRadius: 20,
     backgroundColor: "transparent",
     alignItems: "center",
     justifyContent: "center",
     shadowColor: Theme.shadow,
-    shadowOpacity: 0.16,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 3,
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
   profileAvatarLg: {
     width: 92,
@@ -1789,66 +1874,169 @@ const styles = StyleSheet.create({
   profileNameRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    justifyContent: "center",
+    gap: 5,
+    width: "100%",
+    paddingHorizontal: 2,
   },
   profileName: {
     flex: 1,
-    fontSize: 17,
-    fontWeight: "900",
-    color: Theme.textPrimaryDark,
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
+    minWidth: 0,
+    textAlign: "center",
   },
   profileLocationRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
     width: "100%",
-    paddingHorizontal: 4,
+    paddingHorizontal: 2,
   },
   profileLocation: {
     flex: 1,
-    fontSize: 11,
-    fontWeight: "600",
-    color: Theme.textSecondary,
-    letterSpacing: 0.2,
-    lineHeight: 15,
+    minWidth: 0,
+    textAlign: "center",
+    lineHeight: 12,
   },
   profileInfoTable: {
     width: "100%",
-    marginTop: 4,
-    borderRadius: 16,
+    marginTop: 2,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    gap: 0,
+  },
+  profileInfoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    paddingVertical: 5,
+  },
+  profileInfoLabelWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexShrink: 1,
+  },
+  profileInfoLabel: {
+    fontSize: 8,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  profileIconWell: {
+    width: 22,
+    height: 22,
+    borderRadius: 7,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  profileIconWellRole: {
+    backgroundColor: Theme.networkClientTintBg,
+  },
+  profileIconWellLink: {
+    backgroundColor: Theme.networkSupplierTintBg,
+  },
+  profileIconWellPhone: {
+    backgroundColor: Theme.networkMessageTintBg,
+  },
+  profileIconWellRating: {
+    backgroundColor: Theme.networkDriverTintBg,
+  },
+  profileIconWellTrips: {
+    backgroundColor: Theme.networkHubListCardPrimaryTintBg,
+  },
+  profileIconWellPresence: {
+    backgroundColor: Theme.positiveMutedDark,
+  },
+  profileIconWellMutuals: {
+    backgroundColor: Theme.networkGlassSupplyTint,
+  },
+  profileInfoValue: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    textAlign: "right",
+    lineHeight: 14,
+    textTransform: "uppercase",
+  },
+  profileInsightsCard: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    width: "100%",
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.surface,
     paddingVertical: 10,
     paddingHorizontal: 12,
-    gap: 0,
   },
-  profileInfoRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 12,
-    paddingVertical: 7,
-  },
-  profileInfoLabel: {
-    width: 96,
-    fontSize: 9,
-    fontWeight: "900",
-    color: Theme.textMutedDemo,
-    letterSpacing: 0.9,
-    textTransform: "uppercase",
-    paddingTop: 2,
-  },
-  profileInfoValue: {
+  profileInsightsHalf: {
     flex: 1,
     minWidth: 0,
-    fontSize: 12,
+    alignItems: "center",
+  },
+  profileInsightHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    marginBottom: 4,
+  },
+  profileInsightsDivider: {
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: Theme.borderLight,
+    marginHorizontal: 10,
+  },
+  profileInsightsLabel: {
+    fontSize: 8,
     fontWeight: "700",
+    color: Theme.textMuted,
+    letterSpacing: 1,
+    textAlign: "center",
+  },
+  profileInsightsValue: {
+    fontSize: 12,
+    fontWeight: "500",
     color: Theme.textPrimaryDark,
-    textAlign: "right",
-    lineHeight: 16,
+    textAlign: "center",
+  },
+  profileMetaRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 8,
+    width: "100%",
+  },
+  profileMetaChip: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  profileMetaChipText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  profileMetaChipValue: {
+    fontSize: 9,
+    fontWeight: "400",
+    fontStyle: "italic",
+    color: Theme.textPrimaryDark,
   },
   profileStatRow: {
     flexDirection: "row",
@@ -1858,63 +2046,74 @@ const styles = StyleSheet.create({
   },
   profileStatCell: {
     flex: 1,
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.surface,
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 64,
+    minHeight: 52,
+    paddingVertical: 8,
   },
   profileStatN: {
-    fontSize: 20,
-    fontWeight: "900",
+    fontSize: 16,
+    fontWeight: "800",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.3,
+    letterSpacing: -0.2,
   },
   profileStatL: {
-    marginTop: 3,
+    marginTop: 2,
     fontSize: 8,
-    fontWeight: "900",
-    color: Theme.textSecondary,
+    fontWeight: "700",
+    color: Theme.textMuted,
     textTransform: "uppercase",
-    letterSpacing: 0.8,
+    letterSpacing: 1,
   },
   profileCtaStack: {
     width: "100%",
     gap: 8,
   },
   profilePrimaryBtn: {
-    minHeight: 40,
-    borderRadius: 14,
+    minHeight: 36,
+    borderRadius: 12,
     backgroundColor: Theme.primary,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+    gap: 5,
   },
   profilePrimaryBtnText: {
-    fontSize: 10,
-    fontWeight: "900",
+    fontSize: 9,
+    fontWeight: "800",
     color: Theme.textOnPrimary,
     textTransform: "uppercase",
-    letterSpacing: 0.7,
+    letterSpacing: 0.6,
   },
   profileSecondaryBtn: {
-    minHeight: 40,
+    minHeight: 42,
     borderRadius: 14,
     backgroundColor: Theme.textPrimaryDark,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+    gap: 8,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#0F172A",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+      },
+      android: { elevation: 4 },
+      default: {},
+    }),
   },
   profileSecondaryBtnText: {
-    fontSize: 10,
-    fontWeight: "900",
+    fontSize: 11,
+    fontWeight: "700",
     color: Theme.textOnPrimary,
     textTransform: "uppercase",
-    letterSpacing: 0.7,
+    letterSpacing: 0.8,
   },
   profileRolePicker: {
     borderRadius: 12,
@@ -2017,13 +2216,14 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   profileOverviewCardModern: {
-    borderRadius: 44,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
-    paddingHorizontal: 24,
-    paddingVertical: 24,
-    gap: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 8,
+    width: "100%",
   },
   profileOverviewHead: {
     flexDirection: "row",
@@ -2031,10 +2231,10 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   profileOverviewTitle: {
-    fontSize: 18,
-    fontWeight: "900",
-    color: Theme.textPrimaryDark,
-    fontStyle: "italic",
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    letterSpacing: 1.2,
     textTransform: "uppercase",
   },
   profileLivePill: {
@@ -2054,8 +2254,9 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   profileOverviewBody: {
-    fontSize: 13,
-    lineHeight: 20,
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: "500",
     color: Theme.textSecondary,
   },
   profileMetricGrid: {
@@ -2074,31 +2275,32 @@ const styles = StyleSheet.create({
   },
   profileMetricCardModern: {
     flex: 1,
-    borderRadius: 28,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.surface,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    gap: 6,
   },
   profileMetricValue: {
-    fontSize: 28,
-    fontWeight: "900",
+    fontSize: 16,
+    fontWeight: "800",
     color: Theme.textPrimaryDark,
-    fontStyle: "italic",
-    letterSpacing: -0.4,
+    letterSpacing: -0.2,
   },
   profileMetricHead: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    justifyContent: "center",
+    gap: 4,
+    marginBottom: 2,
   },
   profileMetricHeadText: {
-    fontSize: 9,
-    fontWeight: "900",
-    color: Theme.primary,
-    letterSpacing: 0.7,
+    fontSize: 8,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    letterSpacing: 1,
     textTransform: "uppercase",
   },
   profileLaneLine: {

@@ -23,9 +23,41 @@ interface StoryReelProps {
   embedded?: boolean;
 }
 
-/** Matches hub connection list avatar (NetworkPartyHubListCard). */
-const STORY_AVATAR = 56;
-const STORY_RING = STORY_AVATAR + 8;
+type StoryMetrics = {
+  avatar: number;
+  ring: number;
+  itemWidth: number;
+  labelSize: number;
+  labelLineHeight: number;
+  addBadge: number;
+  plusSize: number;
+};
+
+/** Mobile / stacked layout — compact story bubbles. */
+const STORY_METRICS_DEFAULT: StoryMetrics = {
+  avatar: 56,
+  ring: 64,
+  itemWidth: 72,
+  labelSize: 10,
+  labelLineHeight: 13,
+  addBadge: 24,
+  plusSize: 14,
+};
+
+/** Desktop story column (embedded 80% row) — larger avatars and labels. */
+const STORY_METRICS_EMBEDDED: StoryMetrics = {
+  avatar: 72,
+  ring: 84,
+  itemWidth: 92,
+  labelSize: 12,
+  labelLineHeight: 15,
+  addBadge: 28,
+  plusSize: 16,
+};
+
+function storyMetricsFor(embedded: boolean): StoryMetrics {
+  return embedded ? STORY_METRICS_EMBEDDED : STORY_METRICS_DEFAULT;
+}
 
 const RING_UNSEEN = ["#f43f5e", "#f59e0b", "#a855f7", "#6366f1"] as const;
 const RING_SEEN = ["#cbd5e1", "#94a3b8"] as const;
@@ -44,35 +76,18 @@ function storySeenKey(post: PostRow): string {
   return `${post.organization_id}:${post.type}`;
 }
 
-function StoryGradientRing({
-  colors,
-  children,
-}: {
-  colors: readonly string[];
-  children: React.ReactNode;
-}) {
-  return (
-    <LinearGradient
-      colors={[...colors]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={styles.ringGradient}
-    >
-      <View style={styles.ringGap}>{children}</View>
-    </LinearGradient>
-  );
-}
-
 function StoryAvatar({
   name,
   avatarUrl,
   avatarSeed,
   entityType = "supplier" as const,
+  size,
 }: {
   name: string;
   avatarUrl?: string | null;
   avatarSeed?: string | null;
   entityType?: "client" | "supplier" | "driver";
+  size: number;
 }) {
   return (
     <PartyAvatar
@@ -80,16 +95,54 @@ function StoryAvatar({
       avatarUrl={avatarUrl}
       avatarSeed={avatarSeed}
       entityType={entityType}
-      size={STORY_AVATAR}
+      size={size}
       style={styles.avatarPlain}
       borderStyle={styles.avatarPlain}
     />
   );
 }
 
+function StoryGradientRingSized({
+  colors,
+  ringSize,
+  gapSize,
+  children,
+}: {
+  colors: readonly string[];
+  ringSize: number;
+  gapSize: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <LinearGradient
+      colors={[...colors]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={[
+        styles.ringGradientBase,
+        { width: ringSize, height: ringSize, borderRadius: ringSize / 2 },
+      ]}
+    >
+      <View
+        style={[
+          styles.ringGapBase,
+          {
+            width: gapSize,
+            height: gapSize,
+            borderRadius: gapSize / 2,
+          },
+        ]}
+      >
+        {children}
+      </View>
+    </LinearGradient>
+  );
+}
+
 function StoryBubble({
   label,
   ringColors,
+  metrics,
   onPress,
   onPressIn,
   onPressOut,
@@ -99,6 +152,7 @@ function StoryBubble({
 }: {
   label: string;
   ringColors: readonly string[];
+  metrics: StoryMetrics;
   onPress: () => void;
   onPressIn?: () => void;
   onPressOut?: () => void;
@@ -106,22 +160,44 @@ function StoryBubble({
   children: React.ReactNode;
   badge?: React.ReactNode;
 }) {
+  const gapSize = metrics.avatar + 3;
   return (
     <Pressable
       onPress={onPress}
       onPressIn={onPressIn}
       onPressOut={onPressOut}
-      style={({ pressed }) => [styles.storyItem, pressed && styles.storyItemPressed]}
+      style={({ pressed }) => [
+        styles.storyItem,
+        { width: metrics.itemWidth },
+        pressed && styles.storyItemPressed,
+      ]}
       accessibilityRole="button"
       accessibilityLabel={label}
     >
       <Animated.View style={scale ? { transform: [{ scale }] } : undefined}>
-        <View style={styles.ringStack}>
-          <StoryGradientRing colors={ringColors}>{children}</StoryGradientRing>
+        <View
+          style={[
+            styles.ringStack,
+            { width: metrics.ring, height: metrics.ring },
+          ]}
+        >
+          <StoryGradientRingSized
+            colors={ringColors}
+            ringSize={metrics.ring}
+            gapSize={gapSize}
+          >
+            {children}
+          </StoryGradientRingSized>
           {badge}
         </View>
       </Animated.View>
-      <Text style={styles.storyName} numberOfLines={1}>
+      <Text
+        style={[
+          styles.storyName,
+          { fontSize: metrics.labelSize, lineHeight: metrics.labelLineHeight },
+        ]}
+        numberOfLines={1}
+      >
         {label}
       </Text>
     </Pressable>
@@ -132,10 +208,12 @@ function BroadcastStory({
   post,
   seen,
   onPress,
+  metrics,
 }: {
   post: PostRow;
   seen: boolean;
   onPress: () => void;
+  metrics: StoryMetrics;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
   const accent = seedColor(post.organization_id);
@@ -159,6 +237,7 @@ function BroadcastStory({
     <StoryBubble
       label={shortName}
       ringColors={ringColors}
+      metrics={metrics}
       onPress={onPress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
@@ -169,6 +248,7 @@ function BroadcastStory({
         avatarUrl={postAvatarUrl}
         avatarSeed={post.org_avatar_seed}
         entityType="supplier"
+        size={metrics.avatar}
       />
     </StoryBubble>
   );
@@ -251,18 +331,24 @@ export function StoryReel({
   const hasOwnStories = ownStoryQueue.length > 0;
 
   const mineRing = hasOwnStories ? RING_MINE_ACTIVE : RING_MINE_IDLE;
+  const metrics = storyMetricsFor(embedded);
 
   return (
     <View style={[styles.wrap, embedded && styles.wrapEmbedded]}>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={[styles.scroll, embedded && styles.scrollEmbedded]}
+        contentContainerStyle={[
+          styles.scroll,
+          embedded && styles.scrollEmbedded,
+          embedded && styles.scrollEmbeddedDesktop,
+        ]}
       >
-        <View style={styles.mineCluster}>
+        <View style={[styles.mineCluster, embedded && styles.mineClusterEmbedded]}>
           <StoryBubble
             label="Mine"
             ringColors={mineRing}
+            metrics={metrics}
             onPress={() => {
             if (!latestOwnStory) {
               onCreatePost();
@@ -281,7 +367,14 @@ export function StoryReel({
           }}
           badge={
             <View
-              style={styles.addBadge}
+              style={[
+                styles.addBadge,
+                {
+                  width: metrics.addBadge,
+                  height: metrics.addBadge,
+                  borderRadius: metrics.addBadge / 2,
+                },
+              ]}
               {...(Platform.OS === "web"
                 ? {
                     // @ts-expect-error -- RNW supports onClick on View
@@ -298,7 +391,7 @@ export function StoryReel({
               {...(Platform.OS !== "web" && { accessibilityRole: "button" as const })}
               accessibilityLabel="Add story"
             >
-              <Plus size={14} color={Theme.textOnPrimary} strokeWidth={2.6} />
+              <Plus size={metrics.plusSize} color={Theme.textOnPrimary} strokeWidth={2.6} />
             </View>
           }
         >
@@ -307,11 +400,19 @@ export function StoryReel({
             avatarUrl={profile?.avatar_url ?? null}
             avatarSeed={profile?.avatar_seed ?? null}
             entityType="supplier"
+            size={metrics.avatar}
           />
           </StoryBubble>
-          <View style={styles.pulseStoryWatermark} pointerEvents="none">
-            <Text style={styles.watermarkPulse}>Pulse.</Text>
-            <Text style={styles.watermarkStory}>story</Text>
+          <View
+            style={[styles.pulseStoryWatermark, embedded && styles.pulseStoryWatermarkEmbedded]}
+            pointerEvents="none"
+          >
+            <Text style={[styles.watermarkPulse, embedded && styles.watermarkPulseEmbedded]}>
+              Pulse.
+            </Text>
+            <Text style={[styles.watermarkStory, embedded && styles.watermarkStoryEmbedded]}>
+              story
+            </Text>
           </View>
         </View>
 
@@ -319,6 +420,7 @@ export function StoryReel({
           <BroadcastStory
             key={post.id}
             post={post}
+            metrics={metrics}
             seen={!!seenKeys[storySeenKey(post)]}
             onPress={() => {
               markStorySeen(post);
@@ -345,8 +447,8 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   wrapEmbedded: {
-    paddingTop: 8,
-    paddingBottom: 8,
+    paddingTop: 10,
+    paddingBottom: 10,
     flex: 1,
     minWidth: 0,
     justifyContent: "center",
@@ -362,6 +464,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     paddingRight: 8,
   },
+  scrollEmbeddedDesktop: {
+    gap: 14,
+    paddingVertical: 4,
+  },
   mineCluster: {
     flexDirection: "row",
     alignItems: "center",
@@ -370,11 +476,20 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     paddingVertical: 2,
   },
+  mineClusterEmbedded: {
+    gap: 14,
+    marginRight: 8,
+    paddingVertical: 4,
+  },
   pulseStoryWatermark: {
     alignSelf: "center",
     justifyContent: "center",
     opacity: 0.11,
     minWidth: 52,
+  },
+  pulseStoryWatermarkEmbedded: {
+    opacity: 0.12,
+    minWidth: 64,
   },
   watermarkPulse: {
     fontSize: 22,
@@ -383,6 +498,11 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     letterSpacing: -0.8,
     lineHeight: 24,
+  },
+  watermarkPulseEmbedded: {
+    fontSize: 28,
+    lineHeight: 30,
+    letterSpacing: -1,
   },
   watermarkStory: {
     fontSize: 16,
@@ -394,8 +514,11 @@ const styles = StyleSheet.create({
     alignSelf: "flex-end",
     marginTop: -2,
   },
+  watermarkStoryEmbedded: {
+    fontSize: 20,
+    lineHeight: 23,
+  },
   storyItem: {
-    width: 72,
     alignItems: "center",
     justifyContent: "flex-start",
   },
@@ -404,23 +527,15 @@ const styles = StyleSheet.create({
   },
   ringStack: {
     position: "relative",
-    width: STORY_RING,
-    height: STORY_RING,
     alignItems: "center",
     justifyContent: "center",
   },
-  ringGradient: {
-    width: STORY_RING,
-    height: STORY_RING,
-    borderRadius: STORY_RING / 2,
+  ringGradientBase: {
     padding: 2,
     alignItems: "center",
     justifyContent: "center",
   },
-  ringGap: {
-    width: STORY_AVATAR + 3,
-    height: STORY_AVATAR + 3,
-    borderRadius: (STORY_AVATAR + 3) / 2,
+  ringGapBase: {
     backgroundColor: Theme.screenBackground,
     alignItems: "center",
     justifyContent: "center",
@@ -435,9 +550,6 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: -2,
     bottom: -2,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
     backgroundColor: Theme.primary,
     borderWidth: 2,
     borderColor: Theme.screenBackground,
@@ -451,12 +563,10 @@ const styles = StyleSheet.create({
   },
   storyName: {
     marginTop: 6,
-    fontSize: 10,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
     letterSpacing: 0.1,
     textAlign: "center",
     width: "100%",
-    lineHeight: 13,
   },
 });

@@ -722,7 +722,7 @@ export function DiscoverView({
     compact: splitPaneLayout.compact && !isMobileHub,
     desktopPane: splitPaneLayout.columns === 1,
     mobileGrid: isMobileHub && splitPaneLayout.columns > 1,
-    nativeListRow: isNativeApp && splitPaneLayout.columns === 1,
+    nativeListRow: splitPaneLayout.columns === 1,
   };
 
   const embeddedHubSplitBody = (
