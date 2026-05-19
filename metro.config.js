@@ -4,11 +4,8 @@ const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
 
-// On CI/Netlify: store inside repo so netlify-plugin-cache can persist it.
-// On local dev: use os.tmpdir() so Watchman never triggers a rebuild loop.
-const metroCacheRoot = process.env.CI
-  ? path.join(__dirname, '.metro-cache')
-  : path.join(require('os').tmpdir(), 'q-web-metro-cache');
+// Ephemeral tmpdir avoids Watchman rebuild loops and symlink issues when caching node_modules on CI.
+const metroCacheRoot = path.join(require('os').tmpdir(), 'q-web-metro-cache');
 
 config.cacheStores = [
   new FileStore({ root: metroCacheRoot }),

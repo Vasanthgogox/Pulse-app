@@ -9,18 +9,8 @@
   # Expo export is memory-hungry; give it headroom
   NODE_OPTIONS  = "--max-old-space-size=4096"
 
-# Cache node_modules (post-patch-package) and Metro transform cache.
-# First deploy will be slow; every subsequent deploy restores from cache.
-# Cache is busted automatically when package-lock.json changes.
-# Install once: npm install -D netlify-plugin-cache
-[[plugins]]
-  package = "netlify-plugin-cache"
-  [plugins.inputs]
-    paths = [
-      "node_modules",
-      ".metro-cache",
-      ".expo",
-    ]
+# Dependency install: Netlify caches npm from package-lock.json (no custom plugin).
+# Keep NODE_VERSION + .nvmrc aligned so cache keys stay stable.
 
 [functions]
   directory = "netlify/functions"

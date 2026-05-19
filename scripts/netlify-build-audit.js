@@ -159,16 +159,15 @@ function analyzeProject() {
 
   // Netlify checks
   const hasNodePlugin  = netlifyToml.includes('netlify-plugin-node');
-  const hasCachePlugin = netlifyToml.includes('netlify-plugin-cache') || netlifyToml.includes('cache-node-modules');
+  const hasLegacyCachePlugin = netlifyToml.includes('netlify-plugin-cache') || netlifyToml.includes('cache-node-modules');
   const hasNodeVersion = netlifyToml.includes('NODE_VERSION') || fs.existsSync(path.join(ROOT, '.node-version')) || fs.existsSync(path.join(ROOT, '.nvmrc'));
   const hasNpmCi       = !netlifyToml.includes('npm install ') || netlifyToml.includes('npm ci');
 
   // Metro cache — only flag if tmpdir is used unconditionally (not behind process.env.CI guard)
   const metroConfig = fs.existsSync(path.join(ROOT, 'metro.config.js'))
     ? fs.readFileSync(path.join(ROOT, 'metro.config.js'), 'utf8') : '';
-  const metroHasCiGuard = metroConfig.includes('process.env.CI') && metroConfig.includes('.metro-cache');
-  const metroTmp        = (metroConfig.includes('tmpdir') || metroConfig.includes('os.tmpdir')) && !metroHasCiGuard;
-  const metroCacheDir   = metroTmp ? os.tmpdir() + '/q-web-metro-cache' : null;
+  const metroTmp      = metroConfig.includes('tmpdir') || metroConfig.includes('os.tmpdir');
+  const metroCacheDir = metroTmp ? os.tmpdir() + '/q-web-metro-cache' : null;
 
   // SVG transformer
   const hasSvgTransformer = metroConfig.includes('svg-transformer');
@@ -194,7 +193,7 @@ function analyzeProject() {
     pkg, lockFile, deps, devDeps, buildCmd, expoVersion,
     nmSize, assetSize, bigImages, unoptPngs,
     distSize, distBundles,
-    hasNodePlugin, hasCachePlugin, hasNodeVersion, hasNpmCi,
+    hasNodePlugin, hasLegacyCachePlugin, hasNodeVersion, hasNpmCi,
     metroTmp, metroCacheDir, hasSvgTransformer, hasReanimated,
     hasPatches, patchCount,
     heavyWebDeps, netlifyToml,
@@ -206,19 +205,36 @@ function analyzeProject() {
 function buildFindings(project, log) {
   const findings = [];
 
-  // ── 1. Node modules not cached ──────────────────────────────────────────────
-  if (!project.hasCachePlugin) {
+  // ── 1. Legacy cache plugin (breaks on Node 20 + symlinks) ─────────────────
+  if (project.hasLegacyCachePlugin) {
     findings.push({
       severity: 'critical',
-      area: 'Dependency install',
-      title: 'node_modules not cached between deploys',
-      detail: `${project.deps.length} prod deps + ${project.devDeps.length} dev deps re-installed every build. `
-            + `node_modules is ~${FMT_MB(project.nmSize)}. With netlify-plugin-cache this is restored in seconds.`,
+      area: 'Cache',
+      title: 'netlify-plugin-cache is configured — remove it',
+      detail: 'Caching node_modules/.bin symlinks fails with EISDIR on Netlify (cpy + Node 20). '
+            + 'Netlify already caches npm from package-lock.json when NODE_VERSION is pinned.',
       fix: [
-        'Add netlify-plugin-cache to netlify.toml (see recommended config below)',
-        'Cache key: package-lock.json hash so cache auto-busts on dep changes',
+        'Remove [[plugins]] netlify-plugin-cache from netlify.toml',
+        'npm uninstall netlify-plugin-cache',
+        'Keep NODE_VERSION, .nvmrc, and NPM_FLAGS = "--prefer-offline"',
+        'Clear deploy cache once in Netlify UI after removing the plugin',
       ],
-      estimatedSaving: '3–6 min',
+      estimatedSaving: 'fixes post-build cache failures',
+    });
+  } else if (!project.hasNodeVersion || !project.lockFile) {
+    findings.push({
+      severity: 'high',
+      area: 'Dependency install',
+      title: 'Unstable Netlify dependency cache keys',
+      detail: `${project.deps.length} prod + ${project.devDeps.length} dev deps (~${FMT_MB(project.nmSize)} node_modules). `
+            + 'Pin Node and commit package-lock.json so Netlify native npm cache hits reliably.',
+      fix: [
+        'Set NODE_VERSION = "20" in netlify.toml and add .nvmrc',
+        'Use npm ci (default on Netlify when package-lock.json exists)',
+        'Set NPM_FLAGS = "--prefer-offline" in netlify.toml',
+        'Do not cache node_modules with a custom plugin',
+      ],
+      estimatedSaving: '1–3 min on warm installs',
     });
   }
 
@@ -237,19 +253,19 @@ function buildFindings(project, log) {
     });
   }
 
-  // ── 3. Metro cache in /tmp (never persisted) ─────────────────────────────
+  // ── 3. Metro cache in /tmp (expected on CI) ───────────────────────────────
   if (project.metroTmp) {
     findings.push({
-      severity: 'high',
+      severity: 'info',
       area: 'Build cache',
-      title: 'Metro transform cache stored in /tmp — never restored on Netlify',
-      detail: `metro.config.js routes its FileStore to ${project.metroCacheDir}. `
-            + 'Netlify build containers are ephemeral: /tmp is wiped each build, so Metro re-transforms every module from scratch.',
+      title: 'Metro transform cache is ephemeral on Netlify (expected)',
+      detail: `metro.config.js uses ${project.metroCacheDir}. `
+            + 'Netlify containers wipe /tmp each build. Avoid caching node_modules or .metro-cache with custom plugins (symlink EISDIR).',
       fix: [
-        'Change Metro cacheStores root to a path inside the repo (e.g. .metro-cache/) so netlify-plugin-cache can save/restore it',
-        'Cache key: concatenation of package-lock.json + metro.config.js hashes',
+        'Accept cold Metro transform on CI, or optimize bundle size / lazy imports instead',
+        'Keep tmpdir for Metro locally to avoid Watchman rebuild loops',
       ],
-      estimatedSaving: '2–4 min',
+      estimatedSaving: 'n/a (reliability tradeoff)',
     });
   }
 
@@ -302,8 +318,8 @@ function buildFindings(project, log) {
       detail: 'Each patch-package run re-applies patches after npm ci. '
             + 'This blocks the install step and prevents full node_modules caching (patched files differ from lock hash).',
       fix: [
-        'Cache node_modules AFTER postinstall (netlify-plugin-cache caches the post-patch state)',
         'Long term: upstream patches or fork packages to avoid postinstall cost',
+        'Netlify re-runs postinstall after npm ci; keep patch count small',
       ],
       estimatedSaving: '15–60 s',
     });
@@ -334,7 +350,10 @@ function buildFindings(project, log) {
         area: 'Cache',
         title: 'Every build is a full cold build (cache miss detected in logs)',
         detail: 'Netlify logs show "cache not found". No build cache is being restored.',
-        fix: ['Configure netlify-plugin-cache (see recommended config below)'],
+        fix: [
+          'Pin NODE_VERSION + package-lock.json for Netlify native npm cache',
+          'Remove netlify-plugin-cache if present (symlink copy failures)',
+        ],
         estimatedSaving: '4–8 min per deploy',
       });
     }
@@ -432,18 +451,8 @@ function renderConfig(project) {
   # Speeds up npm ci by using the local cache when possible
   NODE_OPTIONS  = "--max-old-space-size=4096"
 
-# Cache node_modules + Metro transform cache between builds.
-# Install: npm install -D netlify-plugin-cache
-[[plugins]]
-  package = "netlify-plugin-cache"
-  [plugins.inputs]
-    paths = [
-      "node_modules",
-      ".metro-cache",         # rename metro cacheStores root to .metro-cache/
-      ".expo",
-    ]
-    # Cache key: rebuild only when lockfile or Metro config changes
-    cacheKey = "{{ package-lock.json }}-{{ metro.config.js }}"
+# Netlify caches npm from package-lock.json when NODE_VERSION is pinned.
+# Do not use netlify-plugin-cache for node_modules (symlink EISDIR on Node 20).
 
 [functions]
   directory = "netlify/functions"
@@ -475,20 +484,6 @@ function renderConfig(project) {
   for = "/_expo/static/*.js"
   [headers.values]
     Content-Encoding = "br"
-`);
-
-  lines.push('═══════════════════════════════════════════════════════════════');
-  lines.push('  RECOMMENDED metro.config.js cache path change');
-  lines.push('═══════════════════════════════════════════════════════════════');
-  lines.push('');
-  lines.push(`// Change this in metro.config.js:
-config.cacheStores = [
-  new FileStore({
-    // Use repo-relative path so Netlify can cache it
-    root: path.join(__dirname, '.metro-cache'),
-  }),
-];
-// Add .metro-cache/ to .gitignore
 `);
 
   lines.push('═══════════════════════════════════════════════════════════════');
@@ -575,16 +570,14 @@ function renderMarkdown(project, _log, findings) {
   md += '## Recommended netlify.toml\n\n';
   md += '```toml\n[build]\n  command = "npm run build:web"\n  publish = "dist"\n\n';
   md += '[build.environment]\n  NODE_VERSION = "20"\n  NPM_FLAGS    = "--prefer-offline"\n  NODE_OPTIONS = "--max-old-space-size=4096"\n\n';
-  md += '[[plugins]]\n  package = "netlify-plugin-cache"\n  [plugins.inputs]\n';
-  md += '    paths = ["node_modules", ".metro-cache", ".expo"]\n```\n\n';
+  md += '# Native npm cache only — no netlify-plugin-cache\n```\n\n';
 
   md += '## Quick Win Priority Order\n\n';
-  md += '1. **netlify-plugin-cache** → restores node_modules + Metro cache (~6 min saving)\n';
-  md += '2. **Pin NODE_VERSION = "20"** in netlify.toml → stable cache hits (~1 min)\n';
-  md += '3. **Move Metro cacheStores to `.metro-cache/`** → Metro re-transforms nothing on cache hit (~3 min)\n';
-  md += '4. **Compress PNGs → WebP** → faster upload + smaller dist (~2 min upload)\n';
-  md += '5. **Lazy-load heavy screens** (map, chat, opsAgent) → smaller initial bundle\n';
-  md += '6. **Add brotli/gzip post-build step** → CDN serves pre-compressed files\n';
+  md += '1. **Pin NODE_VERSION = "20"** + `.nvmrc` → stable Netlify npm cache hits\n';
+  md += '2. **Remove netlify-plugin-cache** if present → avoids EISDIR on node_modules/.bin\n';
+  md += '3. **Compress PNGs → WebP** → faster upload + smaller dist\n';
+  md += '4. **Lazy-load heavy screens** (map, chat, opsAgent) → smaller initial bundle\n';
+  md += '5. **brotli/gzip post-build** → CDN serves pre-compressed files\n';
 
   return md;
 }

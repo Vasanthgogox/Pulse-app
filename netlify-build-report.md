@@ -62,7 +62,7 @@ Each patch-package run re-applies patches after npm ci. This blocks the install 
 ```
 
 **Fixes:**
-- [ ] Cache node_modules AFTER postinstall (netlify-plugin-cache caches the post-patch state)
+- [ ] Rely on Netlify native npm cache (NODE_VERSION + package-lock.json); do not use netlify-plugin-cache
 - [ ] Long term: upstream patches or fork packages to avoid postinstall cost
 
 > Estimated saving: **15–60 s**
@@ -120,17 +120,13 @@ Each patch-package run re-applies patches after npm ci. This blocks the install 
   NPM_FLAGS    = "--prefer-offline"
   NODE_OPTIONS = "--max-old-space-size=4096"
 
-[[plugins]]
-  package = "netlify-plugin-cache"
-  [plugins.inputs]
-    paths = ["node_modules", ".metro-cache", ".expo"]
+# Native npm cache only — no netlify-plugin-cache
 ```
 
 ## Quick Win Priority Order
 
-1. **netlify-plugin-cache** → restores node_modules + Metro cache (~6 min saving)
-2. **Pin NODE_VERSION = "20"** in netlify.toml → stable cache hits (~1 min)
-3. **Move Metro cacheStores to `.metro-cache/`** → Metro re-transforms nothing on cache hit (~3 min)
-4. **Compress PNGs → WebP** → faster upload + smaller dist (~2 min upload)
-5. **Lazy-load heavy screens** (map, chat, opsAgent) → smaller initial bundle
-6. **Add brotli/gzip post-build step** → CDN serves pre-compressed files
+1. **Pin NODE_VERSION = "20"** + `.nvmrc` → stable Netlify npm cache hits
+2. **Remove netlify-plugin-cache** if present → avoids EISDIR on `node_modules/.bin`
+3. **Compress PNGs → WebP** → faster upload + smaller dist
+4. **Lazy-load heavy screens** (map, chat, opsAgent) → smaller initial bundle
+5. **brotli/gzip post-build** → CDN serves pre-compressed files
