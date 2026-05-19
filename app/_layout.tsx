@@ -30,6 +30,10 @@ import {
   isStaleWebChunkError,
   recoverStaleWebDeploy,
 } from '@/lib/webDeployRecovery';
+import {
+  installWebViewportHeight,
+  WEB_APP_VIEWPORT_STYLE,
+} from '@/lib/webViewportHeight';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
@@ -159,7 +163,11 @@ const styles = StyleSheet.create({
   ghRoot: {
     flex: 1,
     ...(Platform.OS === 'web'
-      ? { minHeight: '100vh' as const, backgroundColor: Theme.screenBackground }
+      ? {
+          ...WEB_APP_VIEWPORT_STYLE,
+          backgroundColor: Theme.screenBackground,
+          overflow: 'hidden' as const,
+        }
       : null),
   },
   rootTabBarWrap: {
@@ -186,6 +194,8 @@ LogBox.ignoreLogs([
 export default function RootLayout() {
   useEffect(() => {
     installWebDeployRecoveryListener();
+    if (Platform.OS !== 'web') return;
+    return installWebViewportHeight();
   }, []);
 
   const [loaded, error] = useFonts({
@@ -405,61 +415,39 @@ function RootOverlayTabBar() {
       width: '100%' as const,
     },
     !isDesktopWeb && Platform.OS === 'web' && {
-      position: 'absolute' as const,
+      position: 'fixed' as const,
       left: 0,
       right: 0,
       bottom: 0,
-      zIndex: 100,
+      zIndex: 1000,
     },
   ];
 
-  if (isDesktopWeb) {
-    return (
-      <View style={shellStyle}>
-        <DemoTabBar
-          activeTab={activeTab}
-          onTabChange={(tab) => {
-            if (tab === 'loadCenter') preloadPulseLoadsRoute();
-            router.push(
-              (tab === 'finance'
-                ? ROUTES.TABS.FINANCE
-                : tab === 'trips'
-                  ? ROUTES.TABS.TRIPS
-                  : tab === 'network'
-                    ? ROUTES.TABS.NETWORK
-                    : tab === 'loadCenter'
-                      ? ROUTES.PULSE_LOADS
-                      : ROUTES.TABS.RESOURCES) as '/'
-            );
-          }}
-          onProfilePress={() => router.push('/(tabs)/profile')}
-          onNotificationsPress={() => router.push('/notifications')}
-        />
-      </View>
-    );
+  const tabBar = (
+    <DemoTabBar
+      activeTab={activeTab}
+      onTabChange={(tab) => {
+        if (tab === 'loadCenter') preloadPulseLoadsRoute();
+        router.push(
+          (tab === 'finance'
+            ? ROUTES.TABS.FINANCE
+            : tab === 'trips'
+              ? ROUTES.TABS.TRIPS
+              : tab === 'network'
+                ? ROUTES.TABS.NETWORK
+                : tab === 'loadCenter'
+                  ? ROUTES.PULSE_LOADS
+                  : ROUTES.TABS.RESOURCES) as '/'
+        );
+      }}
+      onProfilePress={() => router.push('/(tabs)/profile')}
+      onNotificationsPress={() => router.push('/notifications')}
+    />
+  );
+
+  if (isDesktopWeb || Platform.OS === 'web') {
+    return <View style={shellStyle}>{tabBar}</View>;
   }
 
-  return (
-    <DemoTabBarAutoHideShell style={shellStyle}>
-      <DemoTabBar
-        activeTab={activeTab}
-        onTabChange={(tab) => {
-          if (tab === 'loadCenter') preloadPulseLoadsRoute();
-          router.push(
-            (tab === 'finance'
-              ? ROUTES.TABS.FINANCE
-              : tab === 'trips'
-                ? ROUTES.TABS.TRIPS
-                : tab === 'network'
-                  ? ROUTES.TABS.NETWORK
-                  : tab === 'loadCenter'
-                    ? ROUTES.PULSE_LOADS
-                    : ROUTES.TABS.RESOURCES) as '/'
-          );
-        }}
-        onProfilePress={() => router.push('/(tabs)/profile')}
-        onNotificationsPress={() => router.push('/notifications')}
-      />
-    </DemoTabBarAutoHideShell>
-  );
+  return <DemoTabBarAutoHideShell style={shellStyle}>{tabBar}</DemoTabBarAutoHideShell>;
 }

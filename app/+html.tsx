@@ -37,6 +37,7 @@ export default function Root({ children }: { children: React.ReactNode }) {
 
         {/* Static CSS only; no user input — safe for dangerouslySetInnerHTML. */}
         <style dangerouslySetInnerHTML={{ __html: mobileWebReset }} />
+        <script dangerouslySetInnerHTML={{ __html: viewportHeightBootstrap }} />
         {/* Add any additional <head> elements that you want globally available on web... */}
       </head>
       <body>{children}</body>
@@ -44,9 +45,40 @@ export default function Root({ children }: { children: React.ReactNode }) {
   );
 }
 
+const viewportHeightBootstrap = `
+(function () {
+  function setAppVh() {
+    var vv = window.visualViewport;
+    var h = Math.round((vv && vv.height) ? vv.height : window.innerHeight);
+    document.documentElement.style.setProperty('--app-vh', h + 'px');
+  }
+  setAppVh();
+  window.addEventListener('resize', setAppVh);
+  window.addEventListener('orientationchange', setAppVh);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', setAppVh);
+    window.visualViewport.addEventListener('scroll', setAppVh);
+  }
+})();
+`;
+
 const mobileWebReset = `
 html, body, #root {
+  /* Fallback chain: JS --app-vh (visualViewport) → dvh → legacy % / fill-available */
   height: 100%;
+  height: 100dvh;
+  height: var(--app-vh, 100dvh);
+  min-height: 100%;
+  min-height: 100dvh;
+  min-height: var(--app-vh, 100dvh);
+  max-height: var(--app-vh, 100dvh);
+  overflow: hidden;
+}
+
+@supports (-webkit-touch-callout: none) {
+  html, body, #root {
+    min-height: -webkit-fill-available;
+  }
 }
 
 body {

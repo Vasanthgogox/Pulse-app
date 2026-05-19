@@ -85,15 +85,15 @@ function DemoCustomTabBar(
       zIndex: 100,
       width: '100%' as const,
     },
-    // Mobile web: dock overlays the scene (no scroll-to-hide) so content can use full height.
+    // Mobile web: fixed to visual viewport (not 100vh flex box) so dock isn't clipped by Chrome UI.
     !isDesktopWeb && Platform.OS === 'web' && {
-      position: 'absolute' as const,
+      position: 'fixed' as const,
       left: 0,
       right: 0,
       bottom: 0,
-      zIndex: 100,
+      zIndex: 1000,
     },
-    !isDesktopWeb && {
+    !isDesktopWeb && Platform.OS !== 'web' && {
       position: 'absolute' as const,
       left: 0,
       right: 0,
@@ -101,9 +101,13 @@ function DemoCustomTabBar(
       zIndex: 100,
       elevation: 100,
       backgroundColor: 'transparent',
-      // Mobile web: DemoTabBar applies env(safe-area-inset-bottom); avoid double pad here.
-      paddingBottom: isMobileWeb ? 0 : layout.bottom > 0 ? 0 : 4,
+      paddingBottom: layout.bottom > 0 ? 0 : 4,
     },
+    !isDesktopWeb &&
+      Platform.OS === 'web' && {
+        backgroundColor: 'transparent',
+        paddingBottom: 0,
+      },
   ];
 
   const tabBar = (

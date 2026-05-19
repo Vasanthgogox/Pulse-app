@@ -18,6 +18,15 @@ export function readWebSafeAreaInsetBottom(): number {
   } catch {
     // ignore
   }
+
+  // Android Chrome: env() is often 0 even with viewport-fit=cover; reserve gesture band.
+  if (
+    typeof window !== "undefined" &&
+    window.matchMedia("(pointer: coarse)").matches &&
+    window.innerWidth < 1024
+  ) {
+    return 12;
+  }
   return 0;
 }
 
