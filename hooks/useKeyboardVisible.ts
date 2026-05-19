@@ -1,13 +1,51 @@
 import { useEffect, useState } from "react";
 import { Keyboard, Platform } from "react-native";
 
-/** Tracks native keyboard visibility and height (mobile only). */
+/** Ignore visualViewport jitter from mobile browser chrome (URL bar, toolbars). */
+const WEB_KEYBOARD_INSET_THRESHOLD_PX = 72;
+
+function readWebKeyboardInset(): number {
+  if (typeof window === "undefined") return 0;
+  const vv = window.visualViewport;
+  if (!vv) return 0;
+  const layoutH = window.innerHeight;
+  const inset = Math.max(0, layoutH - vv.height - (vv.offsetTop ?? 0));
+  return Math.round(inset);
+}
+
+/**
+ * Tracks keyboard visibility and occluded height.
+ *
+ * - Native: React Native `Keyboard` events (`endCoordinates.height`).
+ * - Mobile web: `visualViewport` vs layout viewport (`interactive-widget=overlays-content`
+ *   in app/+html.tsx — the keyboard overlays content; RN Keyboard does not fire).
+ */
 export function useKeyboardVisible() {
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   useEffect(() => {
-    if (Platform.OS === "web") return;
+    if (Platform.OS === "web") {
+      if (typeof window === "undefined") return;
+
+      const sync = () => {
+        const inset = readWebKeyboardInset();
+        const open = inset >= WEB_KEYBOARD_INSET_THRESHOLD_PX;
+        setKeyboardHeight(open ? inset : 0);
+        setKeyboardVisible(open);
+      };
+
+      sync();
+      const vv = window.visualViewport;
+      vv?.addEventListener("resize", sync);
+      vv?.addEventListener("scroll", sync);
+      window.addEventListener("resize", sync);
+      return () => {
+        vv?.removeEventListener("resize", sync);
+        vv?.removeEventListener("scroll", sync);
+        window.removeEventListener("resize", sync);
+      };
+    }
 
     const showEvt =
       Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";

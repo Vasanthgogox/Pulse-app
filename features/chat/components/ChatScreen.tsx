@@ -4498,7 +4498,7 @@ function ChatConversationLayout({
 }) {
   const insets = useSafeAreaInsets();
   const nativeMobile = isChatNativeMobile(isDesktop);
-  const { keyboardVisible } = useKeyboardVisible();
+  const { keyboardVisible, keyboardHeight } = useKeyboardVisible();
   const body = (
     <View
       style={[
@@ -4516,6 +4516,9 @@ function ChatConversationLayout({
             paddingBottom: isDesktop
               ? 10
               : dockPaddingBottom(insets.bottom, keyboardVisible),
+            // Mobile web: layout viewport does not shrink (overlays-content); lift dock by occluded height.
+            marginBottom:
+              Platform.OS === "web" && !isDesktop ? keyboardHeight : 0,
           },
         ]}
       >
@@ -5884,26 +5887,16 @@ function TripConversationDetailLoaded({
     liveConv.party_type,
   );
 
-  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const { keyboardVisible: keyboardOpen } = useKeyboardVisible();
   useEffect(() => {
-    if (isDesktop) return;
-    const showEvt =
-      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
-    const hideEvt =
-      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
-    const showSub = Keyboard.addListener(showEvt, () => {
-      setKeyboardOpen(true);
-      setTimeout(
-        () => messagesRef.current?.scrollToEnd({ animated: true }),
-        Platform.OS === "ios" ? 80 : 120,
-      );
-    });
-    const hideSub = Keyboard.addListener(hideEvt, () => setKeyboardOpen(false));
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, [isDesktop, messagesRef]);
+    if (isDesktop || !keyboardOpen) return;
+    const delay = Platform.OS === "ios" ? 80 : Platform.OS === "web" ? 50 : 120;
+    const t = setTimeout(
+      () => messagesRef.current?.scrollToEnd({ animated: true }),
+      delay,
+    );
+    return () => clearTimeout(t);
+  }, [isDesktop, keyboardOpen, messagesRef]);
 
   const missionBar = (
       <View style={[s.detailMissionBar, !isDesktop && s.detailMissionBarMobile]}>
@@ -6186,20 +6179,7 @@ function NetworkDetailPanel({
   inputOverlayMaxWidth: number;
   onCloseDetail: () => void;
 }) {
-  const [keyboardOpen, setKeyboardOpen] = useState(false);
-  useEffect(() => {
-    if (isDesktop) return;
-    const showEvt =
-      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
-    const hideEvt =
-      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
-    const showSub = Keyboard.addListener(showEvt, () => setKeyboardOpen(true));
-    const hideSub = Keyboard.addListener(hideEvt, () => setKeyboardOpen(false));
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, [isDesktop]);
+  const { keyboardVisible: keyboardOpen } = useKeyboardVisible();
 
   if (!selectedNet) return <EmptyDetail />;
   return (

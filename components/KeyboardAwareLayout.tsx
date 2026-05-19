@@ -6,10 +6,10 @@
  * For `decimal-pad` / `number-pad` fields, wire `useKeyboardAccessoryField` from
  * `@/contexts/KeyboardAccessoryContext` (Done / Next bar is mounted in app root).
  *
- * On web the virtual keyboard is handled by the viewport meta tag
- * (interactive-widget=overlays-content in app/+html.tsx), so KeyboardAvoidingView
- * is bypassed — it would try to shift layout based on a keyboard height that the
- * browser never reports through the RN Keyboard API, producing incorrect padding.
+ * On web, KeyboardAvoidingView is bypassed (RN Keyboard does not fire on mobile
+ * browsers). Bottom-docked inputs (chat, ops agent) use `useKeyboardVisible()` +
+ * visualViewport inset; forms in scroll views rely on the same hook or manual inset.
+ * See app/+html.tsx `interactive-widget=overlays-content`.
  */
 import type { ReactNode } from 'react';
 import {
