@@ -1,2 +1,11 @@
-/** Route entry — eager import avoids blank tab scene while Metro lazy-bundles. */
-export { default } from './_network-screen';
+import { LazyRouteScreen } from '@/components/LazyRouteScreen';
+
+/** Thin route — Suspense splash while Metro bundles _network-screen. */
+export default function NetworkTab() {
+  return (
+    <LazyRouteScreen
+      loader={() => import('./_network-screen')}
+      message="Loading network…"
+    />
+  );
+}

@@ -19,6 +19,7 @@ import {
   PlusJakartaSans_800ExtraBold,
   useFonts as usePlusJakartaFonts,
 } from '@expo-google-fonts/plus-jakarta-sans';
+import { routeStackScreenOptions } from '@/lib/routeStackOptions';
 import { Tabs, usePathname, useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
@@ -29,7 +30,7 @@ function DriverTabsNavigator() {
       backBehavior="history"
       tabBar={(props) => <DriverTabBar {...props} />}
       screenOptions={{
-        headerShown: false,
+        ...routeStackScreenOptions,
         tabBarStyle: {
           position: 'absolute',
           backgroundColor: 'transparent',

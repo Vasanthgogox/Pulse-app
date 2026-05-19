@@ -1,7 +1,7 @@
 import { routeStackScreenOptions } from '@/lib/routeStackOptions';
 import { Stack } from 'expo-router';
 
-/** Trip detail stack — keeps `/trip/[id]` lazy bundles isolated from tabs/chat. */
-export default function TripLayout() {
+/** Standard layout for a converted route folder (`index` + `loading`). */
+export default function RouteSegmentLayout() {
   return <Stack screenOptions={routeStackScreenOptions} />;
 }

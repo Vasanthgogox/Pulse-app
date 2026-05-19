@@ -6,6 +6,8 @@ import { FloatingChatButton } from '@/components/FloatingChatButton';
 import { DemoTabBar, type DemoTabId } from '@/components/demo';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
+import { routeStackScreenOptions } from '@/lib/routeStackOptions';
+import { preloadPulseLoadsRoute } from '@/lib/preloadRoutes';
 import { ROUTES } from '@/lib/routes';
 import {
   DemoTabBarAutoHideShell,
@@ -38,6 +40,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useMemo } from 'react';
 import { AppBootGate } from '@/components/AppBootGate';
 import { AppLoadingSplash } from '@/components/AppLoadingSplash';
+import { NavigationLoadingOverlay } from '@/components/NavigationLoadingOverlay';
 import { LogBox, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useWebLayoutWidth } from '@/lib/useWebLayoutWidth';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -334,7 +337,7 @@ function RootLayoutNav() {
             <View style={{ flex: 1 }}>
               <GlobalOperationsToast />
               <AppAlertHost />
-              <Stack screenOptions={{ headerShown: false }}>
+              <Stack screenOptions={routeStackScreenOptions}>
                 <Stack.Screen name="index" />
                 <Stack.Screen name="welcome" options={{ animation: 'fade' }} />
                 <Stack.Screen name="sign-in" options={{ animation: 'fade' }} />
@@ -358,6 +361,7 @@ function RootLayoutNav() {
                 <Stack.Screen name="(modals)" options={{ presentation: 'modal' }} />
                 <Stack.Screen name="+not-found" options={{ headerShown: false }} />
               </Stack>
+              <NavigationLoadingOverlay />
               <RootOverlayTabBar />
               {isDesktopWeb ? <FloatingChatButton /> : null}
             </View>
@@ -414,7 +418,8 @@ function RootOverlayTabBar() {
       <View style={shellStyle}>
         <DemoTabBar
           activeTab={activeTab}
-          onTabChange={(tab) =>
+          onTabChange={(tab) => {
+            if (tab === 'loadCenter') preloadPulseLoadsRoute();
             router.push(
               (tab === 'finance'
                 ? ROUTES.TABS.FINANCE
@@ -425,8 +430,8 @@ function RootOverlayTabBar() {
                     : tab === 'loadCenter'
                       ? ROUTES.PULSE_LOADS
                       : ROUTES.TABS.RESOURCES) as '/'
-            )
-          }
+            );
+          }}
           onProfilePress={() => router.push('/(tabs)/profile')}
           onNotificationsPress={() => router.push('/notifications')}
         />
@@ -438,7 +443,8 @@ function RootOverlayTabBar() {
     <DemoTabBarAutoHideShell style={shellStyle}>
       <DemoTabBar
         activeTab={activeTab}
-        onTabChange={(tab) =>
+        onTabChange={(tab) => {
+          if (tab === 'loadCenter') preloadPulseLoadsRoute();
           router.push(
             (tab === 'finance'
               ? ROUTES.TABS.FINANCE
@@ -449,8 +455,8 @@ function RootOverlayTabBar() {
                   : tab === 'loadCenter'
                     ? ROUTES.PULSE_LOADS
                     : ROUTES.TABS.RESOURCES) as '/'
-          )
-        }
+          );
+        }}
         onProfilePress={() => router.push('/(tabs)/profile')}
         onNotificationsPress={() => router.push('/notifications')}
       />

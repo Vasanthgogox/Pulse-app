@@ -348,8 +348,8 @@ export default function DriverControlScreen() {
 
   if (!isAuthorizedForTrip) {
     // Trip is not assigned to any of the current user's driver rows:
-    // redirect is handled in useEffect above; return null until navigation completes.
-    return null;
+    // redirect is handled in useEffect above; show splash until navigation completes.
+    return <CenteredLoadingView />;
   }
 
   // "reached" = POD upload phase, between transit and completed.

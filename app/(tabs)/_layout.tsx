@@ -15,11 +15,19 @@ import {
 } from '@/contexts/DemoTabBarScrollContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { saveLastTabRoute } from '@/lib/lastRoute';
+import {
+  preloadDispatcherNavigationGraph,
+  preloadPulseLoadsRoute,
+  preloadTabsScreens,
+} from '@/lib/preloadRoutes';
 import { ROUTES } from '@/lib/routes';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { ProfileMenuDrawerProvider, useProfileMenuDrawer } from '@/contexts/ProfileMenuDrawerContext';
+
+/** Start tab chunk downloads as soon as the tabs layout module loads (before first paint). */
+preloadTabsScreens();
 
 function DemoCustomTabBar(
   props: BottomTabBarProps & { onOpenProfileDrawer: () => void },
@@ -41,8 +49,12 @@ function DemoCustomTabBar(
 
   const onTabChange = (tab: DemoTabId) => {
     if (tab === 'loadCenter') {
+      preloadPulseLoadsRoute();
       router.push(ROUTES.PULSE_LOADS);
       return;
+    }
+    if (tab === 'trips' || tab === 'network' || tab === 'finance') {
+      preloadTabsScreens();
     }
     navigation.navigate(tab);
   };
@@ -131,6 +143,10 @@ export default function TabLayout() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isDesktopWeb = Platform.OS === 'web' && width >= 1024;
+
+  useEffect(() => {
+    preloadDispatcherNavigationGraph();
+  }, []);
 
   useEffect(() => {
     if (loading) return;

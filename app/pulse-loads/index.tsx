@@ -2,6 +2,7 @@
  * Load Center + share indent to Pulse network (story broadcast).
  * Lives outside the Network tab so Network stays: connections, invites, discover, stories strip only.
  */
+import { AppLoadingSplash } from '@/components/AppLoadingSplash';
 import Theme from "@/constants/Theme";
 import Layout from "@/constants/Layout";
 import { LoadCenterView } from "@/features/network/components/LoadCenterView";
@@ -28,7 +29,7 @@ export default function PulseLoadsScreen() {
   const invalidatePosts = useInvalidatePosts(orgId);
 
   if (!orgId) {
-    return null;
+    return <AppLoadingSplash variant="preparing" style={styles.root} />;
   }
 
   return (
