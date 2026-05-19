@@ -1,6 +1,6 @@
 /**
  * Demo layout: 3 tabs (FISCAL | TRIPS | NETWORK) + floating bottom dock (web + native).
- * Ops Agent via floating icon. Dock hides while scrolling on native; stays visible on mobile web.
+ * Ops Agent via floating icon. Dock hides on scroll (native + mobile web); fixed to viewport on mobile web.
  */
 import React, { useEffect } from 'react';
 import { Tabs, useRouter } from 'expo-router';
@@ -119,8 +119,8 @@ function DemoCustomTabBar(
     />
   );
 
-  // Desktop + mobile web: fixed dock (no translate-away). Native: hide while scrolling.
-  if (isDesktopWeb || Platform.OS === 'web') {
+  // Desktop web: top nav only. Mobile web + native: fixed/absolute shell with scroll auto-hide.
+  if (isDesktopWeb) {
     return <View style={shellStyle}>{tabBar}</View>;
   }
 

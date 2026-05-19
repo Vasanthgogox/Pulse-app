@@ -445,9 +445,11 @@ function RootOverlayTabBar() {
     />
   );
 
-  if (isDesktopWeb || Platform.OS === 'web') {
+  if (isDesktopWeb) {
     return <View style={shellStyle}>{tabBar}</View>;
   }
 
-  return <DemoTabBarAutoHideShell style={shellStyle}>{tabBar}</DemoTabBarAutoHideShell>;
+  return (
+    <DemoTabBarAutoHideShell style={shellStyle}>{tabBar}</DemoTabBarAutoHideShell>
+  );
 }
