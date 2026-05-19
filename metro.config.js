@@ -4,12 +4,14 @@ const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
 
-// Cache stored outside project tree so Watchman never sees Metro's own writes
-// and doesn't trigger a rebuild loop.
+// On CI/Netlify: store inside repo so netlify-plugin-cache can persist it.
+// On local dev: use os.tmpdir() so Watchman never triggers a rebuild loop.
+const metroCacheRoot = process.env.CI
+  ? path.join(__dirname, '.metro-cache')
+  : path.join(require('os').tmpdir(), 'q-web-metro-cache');
+
 config.cacheStores = [
-  new FileStore({
-    root: path.join(require('os').tmpdir(), 'q-web-metro-cache'),
-  }),
+  new FileStore({ root: metroCacheRoot }),
 ];
 
 // Disable package exports resolution so Metro can resolve subpaths inside

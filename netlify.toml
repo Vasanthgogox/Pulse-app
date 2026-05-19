@@ -2,6 +2,26 @@
   command = "npm run build:web"
   publish = "dist"
 
+[build.environment]
+  NODE_VERSION  = "20"
+  # Use cached packages before hitting the registry
+  NPM_FLAGS     = "--prefer-offline"
+  # Expo export is memory-hungry; give it headroom
+  NODE_OPTIONS  = "--max-old-space-size=4096"
+
+# Cache node_modules (post-patch-package) and Metro transform cache.
+# First deploy will be slow; every subsequent deploy restores from cache.
+# Cache is busted automatically when package-lock.json changes.
+# Install once: npm install -D netlify-plugin-cache
+[[plugins]]
+  package = "netlify-plugin-cache"
+  [plugins.inputs]
+    paths = [
+      "node_modules",
+      ".metro-cache",
+      ".expo",
+    ]
+
 [functions]
   directory = "netlify/functions"
 
@@ -11,7 +31,7 @@
 # lib/webDeployRecovery.ts for one-shot reload after deploy.
 [[redirects]]
   from = "/*"
-  to = "/index.html"
+  to   = "/index.html"
   status = 200
 
 [[headers]]
@@ -24,6 +44,9 @@
   [headers.values]
     Cache-Control = "no-cache, no-store, must-revalidate"
 
+# Content-hashed chunks — safe to cache forever.
+# Netlify auto-serves .br / .gz sidecars (created by scripts/compress-dist.js)
+# based on Accept-Encoding; no manual Content-Encoding header needed.
 [[headers]]
   for = "/_expo/static/*"
   [headers.values]
