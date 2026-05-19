@@ -110,12 +110,10 @@ const styles = StyleSheet.create({
   },
   metricTile: {
     borderRadius: NETWORK_HUB_RADIUS.metric,
-    borderWidth: 1,
-    borderColor: Theme.networkHubListCardMetricsBorder,
-    backgroundColor: Theme.networkHubListCardBackground,
+    backgroundColor: "transparent",
     alignItems: "center",
     justifyContent: "center",
-    overflow: "hidden",
+    overflow: "visible",
     paddingBottom: 10,
   },
   metricBadgeDark: {
