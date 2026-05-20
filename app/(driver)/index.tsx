@@ -113,6 +113,10 @@ import Reanimated, {
     useSharedValue,
     withTiming,
 } from "react-native-reanimated";
+import {
+  effectiveKeyboardInset,
+  useKeyboardVisible,
+} from "@/hooks/useKeyboardVisible";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 /** Default map region when driver location is not yet available (India center). */
@@ -491,6 +495,14 @@ export default function DriverRadarScreen() {
   const [otpValue, setOtpValue] = useState("");
   const [otpSubmitting, setOtpSubmitting] = useState(false);
   const [otpError, setOtpError] = useState<string | null>(null);
+  const { keyboardVisible, keyboardHeight } = useKeyboardVisible();
+  const otpKeyboardInset = useMemo(
+    () =>
+      otpClaimTripId
+        ? effectiveKeyboardInset(keyboardVisible, keyboardHeight)
+        : 0,
+    [otpClaimTripId, keyboardVisible, keyboardHeight],
+  );
   const previousTripsRef = useRef<Map<string, string>>(new Map());
   const searchPulseAnim = useRef(new Animated.Value(0)).current;
   const [locationLabel, setLocationLabel] = useState<string | null>(null);
@@ -1119,6 +1131,7 @@ export default function DriverRadarScreen() {
         styles.centerCardConstraint,
         styles.otpClaimCard,
         { backgroundColor: colors.surface, borderColor: colors.border },
+        otpKeyboardInset > 0 && { paddingBottom: otpKeyboardInset },
       ]}
     >
       <Text style={[styles.otpClaimTitle, { color: colors.text }]}>
@@ -1989,8 +2002,10 @@ export default function DriverRadarScreen() {
     String(acceptedTripId ?? "").toLowerCase() ===
       String(effectiveFirstIncoming.id).toLowerCase(),
   );
+  /** Static sizing hides OTP behind the keyboard; use scrollable sheet while entering OTP. */
   const shouldUseStaticMapSheetCard = Boolean(
-    showNewAssignmentCard || activeMission || isAcceptedIncomingFlow || otpClaimTripId,
+    (showNewAssignmentCard || activeMission || isAcceptedIncomingFlow) &&
+      !otpClaimTripId,
   );
   useEffect(() => {
     if (!showNewAssignmentCard) return;
@@ -2159,6 +2174,16 @@ export default function DriverRadarScreen() {
     },
     [snapSheetToIndex, shouldShowMap, clearNotifyOnlyAfterMission],
   );
+
+  useEffect(() => {
+    if (!otpClaimTripId || !shouldShowMap) return;
+    snapSheetToIndex(2);
+  }, [otpClaimTripId, shouldShowMap, snapSheetToIndex]);
+
+  useEffect(() => {
+    if (!otpClaimTripId || !shouldShowMap || otpKeyboardInset <= 0) return;
+    snapSheetToIndex(2);
+  }, [otpClaimTripId, shouldShowMap, otpKeyboardInset, snapSheetToIndex]);
 
   // Clear OTP claim UI only on explicit cancel or after a successful claim feedback timeout.
   // We removed the auto-clear useEffect to prevent race conditions during backend lag.
@@ -4510,6 +4535,15 @@ export default function DriverRadarScreen() {
             edgeToEdge={mapSheet}
             variant={mapSheet ? "page" : "card"}
             assignedByLine={assignerLineForJobCard}
+            OtpInputComponent={mapSheet ? OtpInputComponent : undefined}
+            onOtpFocus={
+              mapSheet
+                ? () => {
+                    snapSheetToIndex(2);
+                  }
+                : undefined
+            }
+            otpKeyboardInset={mapSheet ? otpKeyboardInset : 0}
           />
           </>
         ) : showNotifyOnlyAssignmentsHint ? (
@@ -4748,8 +4782,16 @@ export default function DriverRadarScreen() {
         <GestureHandlerRootView style={styles.olaDriverRoot}>
           <KeyboardAvoidingView
             style={styles.olaDriverKeyboardAvoid}
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
-            keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 12 : 0}
+            behavior={
+              Platform.OS === "ios"
+                ? "padding"
+                : Platform.OS === "android"
+                  ? "padding"
+                  : undefined
+            }
+            keyboardVerticalOffset={
+              Platform.OS === "ios" ? insets.top + 12 : 0
+            }
           >
             {/* Common Header for Map Mode */}
             {(showNewAssignmentCard ||
@@ -4826,7 +4868,7 @@ export default function DriverRadarScreen() {
               enableOverDrag={!shouldUseStaticMapSheetCard}
               enableDynamicSizing={shouldUseStaticMapSheetCard}
               ref={bottomSheetRef}
-              keyboardBehavior="interactive"
+              keyboardBehavior={otpClaimTripId ? "extend" : "interactive"}
               keyboardBlurBehavior="restore"
               android_keyboardInputMode="adjustResize"
               onChange={(index) => {
@@ -4914,7 +4956,9 @@ export default function DriverRadarScreen() {
                   contentContainerStyle={[
                     styles.olaSheetContent,
                     {
-                      paddingBottom: insets.bottom,
+                      paddingBottom:
+                        insets.bottom +
+                        (otpClaimTripId ? otpKeyboardInset : 0),
                       paddingHorizontal: Layout.screenPaddingHorizontal,
                     },
                   ]}

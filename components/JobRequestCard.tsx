@@ -5,7 +5,7 @@
  */
 import Theme from "@/constants/Theme";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import {
   Platform,
   Pressable,
@@ -14,6 +14,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  type TextInputProps,
 } from "react-native";
 
 const CARD_PADDING = 24;
@@ -98,6 +99,12 @@ export interface JobRequestCardProps {
    * Dispatcher / org display, e.g. "Alex Kumar · ACME Logistics" (same logic as Notifications).
    */
   assignedByLine?: string | null;
+  /** Bottom sheet map mode: use BottomSheetTextInput for keyboard sync. */
+  OtpInputComponent?: ComponentType<TextInputProps>;
+  /** Called when the hidden OTP field receives focus (e.g. expand sheet). */
+  onOtpFocus?: () => void;
+  /** Extra bottom padding when the software keyboard is open (web / native). */
+  otpKeyboardInset?: number;
 }
 
 export function JobRequestCard({
@@ -129,6 +136,9 @@ export function JobRequestCard({
   variant = "card",
   assignmentId,
   assignedByLine = null,
+  OtpInputComponent: OtpInput = TextInput,
+  onOtpFocus,
+  otpKeyboardInset = 0,
 }: JobRequestCardProps) {
   const [isAccepted, setIsAccepted] = useState(false);
   const [holdProgress, setHoldProgress] = useState(0);
@@ -233,7 +243,12 @@ export function JobRequestCard({
         </TouchableOpacity>
       ) : null}
       {otpMode ? (
-        <View style={styles.otpPageWrap}>
+        <View
+          style={[
+            styles.otpPageWrap,
+            otpKeyboardInset > 0 && { paddingBottom: otpKeyboardInset },
+          ]}
+        >
           <Text
             style={[styles.otpPageTitle, { color: primaryTextColor }]}
           >
@@ -292,12 +307,13 @@ export function JobRequestCard({
               </View>
             ))}
           </TouchableOpacity>
-          <TextInput
-            ref={otpInputRef}
+          <OtpInput
+            ref={otpInputRef as never}
             value={otpValue}
             onChangeText={(value) =>
               onOtpChange?.(value.replace(/\D/g, "").slice(0, OTP_LENGTH))
             }
+            onFocus={onOtpFocus}
             keyboardType="number-pad"
             maxLength={OTP_LENGTH}
             style={styles.otpHiddenInput}
