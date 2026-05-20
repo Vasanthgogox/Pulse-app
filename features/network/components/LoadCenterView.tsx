@@ -238,8 +238,17 @@ export function LoadCenterView({
     filteredHirePartnerLoads,
     filteredFindWorkList,
     filteredClaimedLoads,
+    filteredClaimedDoneLoads,
     statusTabCounts,
   } = filters;
+
+  const displayedClaimedLoads = useMemo(
+    () =>
+      statusFilterTab === "DONE"
+        ? filteredClaimedDoneLoads
+        : filteredClaimedLoads,
+    [statusFilterTab, filteredClaimedDoneLoads, filteredClaimedLoads],
+  );
 
   const loadGridPaginationResetKey = `${loadSubTab}|${statusFilterTab}|${searchQuery}`;
   const giveLoadGridPagination = useHubGridPagination(
@@ -251,7 +260,7 @@ export function LoadCenterView({
     loadGridPaginationResetKey,
   );
   const claimedGridPagination = useHubGridPagination(
-    filteredClaimedLoads,
+    displayedClaimedLoads,
     loadGridPaginationResetKey,
   );
 
@@ -353,7 +362,7 @@ export function LoadCenterView({
   useEffect(() => {
     // Keep status filter valid per role tab to avoid confusing empty views.
     if (loadSubTab === "AWARDED") {
-      if (statusFilterTab !== "AWARDED") {
+      if (statusFilterTab !== "AWARDED" && statusFilterTab !== "DONE") {
         setStatusFilterTab("AWARDED");
       }
       return;
@@ -435,7 +444,8 @@ export function LoadCenterView({
     return hirePartnerFabBottom + Layout.fabSize + Layout.fabBottomOffset;
   }, [hirePartnerFabBottom, isMobileView, layout, loadSubTab]);
   const statusTabsForRole = useMemo(() => {
-    return isClaimedTab ? [] : STATUS_TABS;
+    if (!isClaimedTab) return STATUS_TABS;
+    return STATUS_TABS.filter((t) => t.id === "AWARDED" || t.id === "DONE");
   }, [isClaimedTab]);
 
   const mobileStatusTabs = useMemo(
@@ -1130,7 +1140,7 @@ export function LoadCenterView({
                   autoCorrect={false}
                 />
               </View>
-              {!isClaimedTab ? (
+              {statusTabsForRole.length > 0 ? (
                 <View style={styles.loadTypeFilterWrap}>
                   {statusTabsForRole.map((tab) => {
                     const count = statusTabCounts[tab.id];
@@ -1198,7 +1208,7 @@ export function LoadCenterView({
                 autoCorrect={false}
               />
             </View>
-            {!isClaimedTab ? (
+            {statusTabsForRole.length > 0 ? (
               <View style={styles.loadTypeFilterWrap}>
                 {statusTabsForRole.map((tab) => {
                   const count = statusTabCounts[tab.id];
@@ -2011,7 +2021,7 @@ export function LoadCenterView({
             ))}
 
           {loadSubTab === "AWARDED" &&
-            (filteredClaimedLoads.length === 0 ? (
+            (displayedClaimedLoads.length === 0 ? (
               <View style={styles.emptyWrap}>
                 <View style={styles.emptyIconWrapGold}>
                   <FontAwesome
@@ -2020,9 +2030,13 @@ export function LoadCenterView({
                     color={Theme.driverGold}
                   />
                 </View>
-                <Text style={styles.emptyTitle}>Claimed</Text>
+                <Text style={styles.emptyTitle}>
+                  {statusFilterTab === "DONE" ? "Done" : "Claimed"}
+                </Text>
                 <Text style={styles.emptySub}>
-                  Claimed loads will appear here.
+                  {statusFilterTab === "DONE"
+                    ? "Completed claimed loads will appear here."
+                    : "Claimed loads will appear here."}
                 </Text>
               </View>
             ) : isMobileView ? (
@@ -2034,10 +2048,15 @@ export function LoadCenterView({
             ) : (
               <View style={styles.securedSection}>
                 <View style={styles.loadSectionRow}>
-                  <Text style={styles.loadSectionTitle}>Ready to deploy</Text>
+                  <Text style={styles.loadSectionTitle}>
+                    {statusFilterTab === "DONE"
+                      ? "Completed claimed loads"
+                      : "Ready to deploy"}
+                  </Text>
                   <View style={styles.loadSectionPill}>
                     <Text style={styles.loadSectionPillText}>
-                      {filteredClaimedLoads.length} live
+                      {displayedClaimedLoads.length}{" "}
+                      {statusFilterTab === "DONE" ? "done" : "live"}
                     </Text>
                   </View>
                 </View>
@@ -2052,7 +2071,10 @@ export function LoadCenterView({
                             styles.highlightedIndentCard,
                         ]}
                       >
-                        {renderClaimedGridCard(load, false)}
+                        {renderClaimedGridCard(
+                          load,
+                          statusFilterTab === "DONE",
+                        )}
                       </View>
                     ))}
                     {claimedGridPagination.totalItems > 0 ? (
@@ -2083,7 +2105,7 @@ export function LoadCenterView({
                   </View>
                 ) : (
                   <FlashList<IndentRow>
-                    data={filteredClaimedLoads}
+                    data={displayedClaimedLoads}
                     renderItem={({ item: load }: { item: IndentRow }) => (
                       <View
                         style={[
@@ -2092,7 +2114,11 @@ export function LoadCenterView({
                             : null,
                         ]}
                       >
-                        {renderClaimedLoadCard(load, false, false)}
+                        {renderClaimedLoadCard(
+                          load,
+                          statusFilterTab === "DONE",
+                          false,
+                        )}
                       </View>
                     )}
                     estimatedItemSize={168}
@@ -4179,6 +4205,9 @@ const styles = StyleSheet.create({
     borderColor: Theme.primary,
     backgroundColor: Theme.surfaceLight,
   },
+  assignEntityRowDisabled: {
+    opacity: 0.6,
+  },
   assignEntityIconWrap: {
     width: 34,
     height: 34,
@@ -4267,6 +4296,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
+  },
+  assignSummaryWarningText: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.warning,
+    lineHeight: 18,
   },
   assignInputWrap: {
     marginBottom: 6,

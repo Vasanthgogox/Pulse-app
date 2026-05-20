@@ -30,27 +30,42 @@ function parseEnvFile(filePath) {
   return out;
 }
 
-let supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
-let supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
-let geminiApiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
+const envVars = parseEnvFile(envPath);
+const localVars = fs.existsSync(envLocalPath) ? parseEnvFile(envLocalPath) : {};
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  const envVars = parseEnvFile(envPath);
-  const localVars = fs.existsSync(envLocalPath) ? parseEnvFile(envLocalPath) : {};
-  supabaseUrl = supabaseUrl || localVars.EXPO_PUBLIC_SUPABASE_URL || envVars.EXPO_PUBLIC_SUPABASE_URL || envVars.VITE_SUPABASE_URL || '';
-  supabaseAnonKey = supabaseAnonKey || localVars.EXPO_PUBLIC_SUPABASE_ANON_KEY || envVars.EXPO_PUBLIC_SUPABASE_ANON_KEY || envVars.VITE_SUPABASE_ANON_KEY || '';
-}
+// Source of truth order (file-only, deterministic):
+// 1) .env.local (developer override)
+// 2) .env (project default)
+// Intentionally avoid process.env fallback to prevent stale shell-injected
+// EXPO_PUBLIC_* values from forcing a different Supabase project at runtime.
+let supabaseUrl =
+  localVars.EXPO_PUBLIC_SUPABASE_URL ||
+  envVars.EXPO_PUBLIC_SUPABASE_URL ||
+  envVars.VITE_SUPABASE_URL ||
+  '';
+let supabaseAnonKey =
+  localVars.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
+  envVars.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
+  envVars.VITE_SUPABASE_ANON_KEY ||
+  '';
+let geminiApiKey =
+  localVars.EXPO_PUBLIC_GEMINI_API_KEY ||
+  envVars.EXPO_PUBLIC_GEMINI_API_KEY ||
+  '';
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.warn(
     '[q-mobile] Missing EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_ANON_KEY. Add them to .env in the project root and restart: npx expo start'
   );
-}
-
-if (!geminiApiKey) {
-  const envVars = parseEnvFile(envPath);
-  const localVars = fs.existsSync(envLocalPath) ? parseEnvFile(envLocalPath) : {};
-  geminiApiKey = envVars.EXPO_PUBLIC_GEMINI_API_KEY || localVars.EXPO_PUBLIC_GEMINI_API_KEY || '';
+} else {
+  try {
+    const host = new URL(supabaseUrl).hostname;
+    console.log('[q-mobile][config] envPath:', envPath);
+    console.log('[q-mobile][config] envLocalPath:', envLocalPath);
+    console.log('[q-mobile][config] resolved Supabase host:', host);
+  } catch (_) {
+    // no-op
+  }
 }
 
 // Security: do not embed Gemini key in production builds (EAS). Use proxy only; key stays server-side.

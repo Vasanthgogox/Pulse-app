@@ -19,6 +19,9 @@ import {
   extractTagsFromRatingComment,
   findTripRatingMatchingFeedbackMeta,
 } from "../utils/mergeTripFeedbackMessages.util";
+import { syncDomainRows } from "@/lib/cache/domainSync";
+import { mergeDeltaRows } from "@/lib/cache/mergeDelta";
+import type { DeltaResponse } from "@/lib/cache/deltaTypes";
 import type { ChatLanes } from "../utils/laneMultiplexer.util";
 import {
   buildChatLanesFromConversations,
@@ -314,7 +317,7 @@ function isMissingTripsDisplayTripIdError(err: unknown): boolean {
   );
 }
 
-export async function getConversationsByOrganization(
+async function getConversationsByOrganizationLight(
   organizationId: string,
 ): Promise<TripConversation[]> {
   async function loadMerged(tripEmbedFields: string): Promise<unknown[]> {
@@ -343,18 +346,26 @@ export async function getConversationsByOrganization(
         .from("trip_conversations")
         .select(selectConv)
         .in("trip_id", supplierTripIds)
-        .order("last_message_at", { ascending: false, nullsFirst: false })
-        .order("created_at", { ascending: false, referencedTable: "trip_messages" })
-        .limit(TRIP_MESSAGES_EMBED_RECENT, { referencedTable: "trip_messages" });
+        .order("last_message_at", { ascending: false, nullsFirst: false });
       if (supErr) throw supErr;
       supplierRows = supRows ?? [];
     }
 
     const byId = new Map<string, Record<string, unknown>>();
-    for (const row of ownOrgRows ?? [])
-      byId.set((row as unknown as { id: string }).id, row as unknown as Record<string, unknown>);
-    for (const row of supplierRows)
-      byId.set((row as unknown as { id: string }).id, row as unknown as Record<string, unknown>);
+    for (const row of ownOrgRows ?? []) {
+      if (!row || typeof row !== "object" || !("id" in row)) continue;
+      const record = row as Record<string, unknown>;
+      const id = String(record.id ?? "");
+      if (!id) continue;
+      byId.set(id, record);
+    }
+    for (const row of supplierRows) {
+      if (!row || typeof row !== "object" || !("id" in row)) continue;
+      const record = row as Record<string, unknown>;
+      const id = String(record.id ?? "");
+      if (!id) continue;
+      byId.set(id, record);
+    }
 
     return Array.from(byId.values()).sort((a, b) => {
       const ta = a.last_message_at as string | null | undefined;
@@ -363,7 +374,7 @@ export async function getConversationsByOrganization(
     });
   }
 
-  let merged: unknown[];
+  let merged: Awaited<ReturnType<typeof loadMerged>>;
   try {
     merged = await loadMerged(TRIP_EMBED_FIELDS_FULL);
   } catch (err) {
@@ -393,6 +404,12 @@ export async function getConversationsByOrganization(
 
   const resolved = await resolveGenericPartyNamesForTrips(conversations);
   return enrichIndentCreatorOrganizationNamesForViewer(organizationId, resolved);
+}
+
+export async function getConversationsByOrganization(
+  organizationId: string,
+): Promise<TripConversation[]> {
+  return getConversationsByOrganizationLight(organizationId);
 }
 
 /**
@@ -570,10 +587,8 @@ export async function sendChatMessage(params: {
     p_sender_name: senderName,
     p_sender_user_id: senderUserId,
     p_message_type: messageType,
+    p_metadata: metadata,
   };
-  if (metadata != null) {
-    rpcPayload.p_metadata = metadata;
-  }
   const { data: rpcData, error: rpcError } = await supabase().rpc(
     "send_trip_chat_message",
     rpcPayload as {
@@ -583,58 +598,13 @@ export async function sendChatMessage(params: {
       p_sender_name: string;
       p_sender_user_id: string | null;
       p_message_type: string;
-      p_metadata?: Record<string, unknown> | null;
+      p_metadata: Record<string, unknown> | null;
     },
   );
 
   if (!rpcError && rpcData) return rpcData as TripMessageRow;
 
-  // Fallback for environments that don't have the migration yet.
-  const isMissingRpc =
-    rpcError != null &&
-    (rpcError.code === "42883" ||
-      String(rpcError.message ?? "")
-        .toLowerCase()
-        .includes("send_trip_chat_message"));
-
-  // Drivers are usually not organization_members; older RPC versions rejected them.
-  // Direct insert still succeeds via RLS policy "Drivers can send messages in their conversations".
-  const isDriverRpcDenied =
-    rpcError != null &&
-    senderRole === "driver" &&
-    String(rpcError.message ?? "").toLowerCase().includes("not authorized");
-
-  if (!isMissingRpc && !isDriverRpcDenied && rpcError) throw rpcError;
-
-  const { data: convMeta, error: convMetaErr } = await supabase()
-    .from("trip_conversations")
-    .select("organization_id")
-    .eq("id", conversationId)
-    .maybeSingle();
-
-  if (convMetaErr) throw convMetaErr;
-  const messageOrgId = (convMeta?.organization_id as string | undefined) ?? organizationId;
-
-  const insertRow: Record<string, unknown> = {
-    conversation_id: conversationId,
-    organization_id: messageOrgId,
-    sender_user_id: senderUserId,
-    sender_role: senderRole,
-    sender_name: senderName,
-    content,
-    message_type: messageType,
-    is_read: false,
-  };
-  if (metadata != null) insertRow.metadata = metadata;
-
-  const { data, error } = await supabase()
-    .from("trip_messages")
-    .insert(insertRow as never)
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data;
+  throw rpcError ?? new Error("Trip chat RPC did not return a message.");
 }
 
 export async function markConversationRead(
@@ -731,6 +701,70 @@ export async function getNetworkConversationsByOrg(
       ),
     };
   }) as unknown as NetworkConversation[];
+}
+
+export async function getNetworkConversationsDelta(
+  organizationId: string,
+  since: { updatedAt: string; tieBreakerId?: string | null },
+): Promise<{ error: Error | null; delta: DeltaResponse<NetworkConversation> }> {
+  const { data, error } = await supabase().rpc("get_network_conversations_delta", {
+    p_org_id: organizationId,
+    p_since: since.updatedAt,
+    p_limit: 500,
+  });
+  if (error) {
+    return {
+      error: new Error(error.message),
+      delta: { changed: [], deletedIds: [], nextCursor: since },
+    };
+  }
+  const row = (Array.isArray(data) ? data[0] : data) as
+    | { changed?: NetworkConversation[]; deleted_ids?: string[]; next_cursor?: string | null }
+    | null;
+  return {
+    error: null,
+    delta: {
+      changed: (row?.changed ?? []) as NetworkConversation[],
+      deletedIds: (row?.deleted_ids ?? []) as string[],
+      nextCursor: row?.next_cursor ? { updatedAt: row.next_cursor } : since,
+    },
+  };
+}
+
+export async function syncNetworkConversationsWithCache(
+  organizationId: string,
+  currentRows: NetworkConversation[],
+): Promise<{ error: Error | null; conversations: NetworkConversation[] }> {
+  try {
+    const conversations = await syncDomainRows<NetworkConversation>({
+      domain: "network-conversations",
+      orgId: organizationId,
+      schemaVersion: "1",
+      policy: { maxDeltaLagMs: 60_000, fullSyncEveryMs: 60 * 60_000 },
+      currentRows,
+      getFull: async () => getNetworkConversationsByOrg(organizationId),
+      getDelta: async (cursor) => {
+        const res = await getNetworkConversationsDelta(organizationId, cursor);
+        if (res.error) throw res.error;
+        return res.delta;
+      },
+      merge: (existing, delta) =>
+        mergeDeltaRows({
+          existing,
+          changed: delta.changed,
+          deletedIds: delta.deletedIds,
+          compare: (a, b) =>
+            new Date(b.last_message_at ?? "").getTime() -
+            new Date(a.last_message_at ?? "").getTime(),
+        }),
+    });
+    return { error: null, conversations };
+  } catch (e) {
+    return {
+      error: e instanceof Error ? e : new Error(String(e)),
+      conversations: currentRows,
+    };
+  }
 }
 
 export async function getOrCreateNetworkConversation(params: {
@@ -1188,24 +1222,16 @@ export async function sendDocumentShareMessage(params: {
     metadata,
   } = params;
 
-  const { data, error } = await supabase()
-    .from("trip_messages")
-    .insert({
-      conversation_id: conversationId,
-      organization_id: organizationId,
-      sender_user_id: senderUserId,
-      sender_role: senderRole,
-      sender_name: senderName,
-      content: `Shared document: ${metadata.document_name}`,
-      message_type: "document_share",
-      is_read: false,
-      metadata,
-    })
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data;
+  return sendChatMessage({
+    conversationId,
+    organizationId,
+    senderRole,
+    senderName,
+    senderUserId,
+    content: `Shared document: ${metadata.document_name}`,
+    messageType: "document_share",
+    metadata: metadata as unknown as Record<string, unknown>,
+  });
 }
 
 /** Fetches shareable documents for a trip (vehicle + driver docs). */

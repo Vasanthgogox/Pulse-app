@@ -4,8 +4,10 @@ const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
 
-// Ephemeral tmpdir avoids Watchman rebuild loops and symlink issues when caching node_modules on CI.
-const metroCacheRoot = path.join(require('os').tmpdir(), 'q-web-metro-cache');
+// Project-local cache (gitignored). Must NOT use os.tmpdir() — `expo start -c` only clears
+// `.metro-cache` here; a tmpdir FileStore kept stale "unable to resolve" errors in node_modules
+// (e.g. react-native-gesture-handler/handlersRegistry) after npm install / merge.
+const metroCacheRoot = path.join(__dirname, '.metro-cache');
 
 config.cacheStores = [
   new FileStore({ root: metroCacheRoot }),

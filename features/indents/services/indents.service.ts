@@ -3,6 +3,9 @@
  * Service-layer validation: single pass over inputs before insert.
  */
 import { getClientById } from "@/features/clients/services/clients.service";
+import { syncDomainRows } from "@/lib/cache/domainSync";
+import { mergeDeltaRows } from "@/lib/cache/mergeDelta";
+import type { DeltaResponse } from "@/lib/cache/deltaTypes";
 import { DEFAULT_PAGE_SIZE, type PageOpts } from "@/lib/pagination";
 import { supabase } from "@/lib/supabase";
 import {
@@ -158,6 +161,62 @@ export async function getIndentsByOrganization(
   return { error: null, indents };
 }
 
+export async function getIndentsDelta(
+  orgId: string,
+  since: { updatedAt: string; tieBreakerId?: string | null },
+): Promise<{ error: Error | null; delta: DeltaResponse<IndentRow> }> {
+  const { data, error } = await supabase().rpc("get_indents_delta", {
+    p_org_id: orgId,
+    p_since: since.updatedAt,
+    p_limit: 1000,
+  });
+  if (error) return { error: new Error(error.message), delta: { changed: [], deletedIds: [], nextCursor: since } };
+  const row = (Array.isArray(data) ? data[0] : data) as
+    | { changed?: IndentRow[]; deleted_ids?: string[]; next_cursor?: string | null }
+    | null;
+  return {
+    error: null,
+    delta: {
+      changed: (row?.changed ?? []) as IndentRow[],
+      deletedIds: (row?.deleted_ids ?? []) as string[],
+      nextCursor: row?.next_cursor ? { updatedAt: row.next_cursor } : since,
+    },
+  };
+}
+
+export async function syncIndentsWithCache(orgId: string, currentRows: IndentRow[]) {
+  try {
+    const indents = await syncDomainRows<IndentRow>({
+      domain: "indents",
+      orgId,
+      schemaVersion: "1",
+      policy: { maxDeltaLagMs: 3 * 60_000, fullSyncEveryMs: 4 * 60 * 60_000 },
+      currentRows,
+      getFull: async () => {
+        const res = await getIndentsByOrganization(orgId);
+        if (res.error) throw res.error;
+        return res.indents;
+      },
+      getDelta: async (cursor) => {
+        const res = await getIndentsDelta(orgId, cursor);
+        if (res.error) throw res.error;
+        return res.delta;
+      },
+      merge: (existing, delta) =>
+        mergeDeltaRows({
+          existing,
+          changed: delta.changed,
+          deletedIds: delta.deletedIds,
+          compare: (a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        }),
+    });
+    return { error: null, indents };
+  } catch (e) {
+    return { error: e instanceof Error ? e : new Error(String(e)), indents: currentRows };
+  }
+}
+
 /**
  * Partner shipper org → earliest ISO time the link became active (matches market_indents_for_org).
  * Precedence per shipper: organization_relations; else suppliers (caller = linked_organization_id);
@@ -224,6 +283,46 @@ async function fetchPartnerShipperLinkSinceMap(
   return map;
 }
 
+/**
+ * Ensure integrated suppliers can see currently active loads from linked shippers,
+ * including rows created before the connection timestamp.
+ * This is a read-merge only safety net layered above RPC/fallback paths.
+ */
+async function mergeLinkedShipperActiveIndents(
+  orgId: string,
+  baseIndents: IndentRow[],
+): Promise<IndentRow[]> {
+  const existing = new Map(baseIndents.map((i) => [i.id, i]));
+  const linkMap = await fetchPartnerShipperLinkSinceMap(orgId);
+  if (linkMap.size === 0) return baseIndents;
+
+  const shipperIds = [...linkMap.keys()];
+  const { data: rows, error } = await supabase()
+    .from("indents")
+    .select("*, organizations(name)")
+    .in("organization_id", shipperIds)
+    .in("circulation_target", ["integrated_supplier", "both"])
+    .not("status", "in", '("completed","cancelled","closed","expired")')
+    .neq("status", "draft")
+    .order("created_at", { ascending: false });
+  if (error || !rows?.length) return baseIndents;
+
+  const merged = [...baseIndents];
+  for (const row of rows as Array<
+    IndentRow & { organizations?: { name: string | null } | null }
+  >) {
+    if (existing.has(row.id)) continue;
+    const { organizations, ...rest } = row;
+    const normalized: IndentRow = {
+      ...rest,
+      creator_organization_name: organizations?.name ?? null,
+    } as IndentRow;
+    existing.set(normalized.id, normalized);
+    merged.push(normalized);
+  }
+  return merged;
+}
+
 /** Market-facing indents visible to the current organization (as integrated supplier). Uses RPC (SECURITY DEFINER) then direct table fallback. */
 export async function getMarketIndentsForOrganization(
   orgId: string,
@@ -245,7 +344,9 @@ export async function getMarketIndentsForOrganization(
         null;
       return { ...rest, creator_organization_name: name } as IndentRow;
     });
-    return { error: null, indents };
+    const withActiveLinked = await mergeLinkedShipperActiveIndents(orgId, indents);
+    const merged = await mergeQuotedIndentsForSupplier(orgId, withActiveLinked);
+    return { error: null, indents: merged };
   }
 
   const linkMap = await fetchPartnerShipperLinkSinceMap(orgId);
@@ -265,6 +366,13 @@ export async function getMarketIndentsForOrganization(
   const rows = (data ?? []).filter((row) => {
     const since = linkMap.get(String(row.organization_id ?? ""));
     if (!since) return false;
+    const status = String(row.status ?? "").toLowerCase();
+    const isActive =
+      status !== "completed" &&
+      status !== "cancelled" &&
+      status !== "closed" &&
+      status !== "expired";
+    if (isActive) return true;
     return String(row.created_at ?? "") >= since;
   }) as (IndentRow & {
     organizations?: { name: string | null } | null;
@@ -276,7 +384,63 @@ export async function getMarketIndentsForOrganization(
       creator_organization_name: organizations?.name ?? null,
     } as IndentRow;
   });
-  return { error: null, indents };
+  const merged = await mergeQuotedIndentsForSupplier(orgId, indents);
+  return { error: null, indents: merged };
+}
+
+/**
+ * Safety net for supplier load pages:
+ * if supplier has already quoted/bid on an indent (incl. story bid -> direct_quote),
+ * ensure that indent appears in market loads even when partner-link/date filters exclude it.
+ */
+async function mergeQuotedIndentsForSupplier(
+  orgId: string,
+  baseIndents: IndentRow[],
+): Promise<IndentRow[]> {
+  const existing = new Map(baseIndents.map((i) => [i.id, i]));
+
+  const { data: myQuotes, error: quoteErr } = await supabase()
+    .from("direct_quotes")
+    .select("indent_id")
+    .eq("supplier_organization_id", orgId);
+  if (quoteErr || !myQuotes?.length) return baseIndents;
+
+  const quotedIndentIds = Array.from(
+    new Set(
+      (myQuotes as Array<{ indent_id?: string | null }>)
+        .map((q) => (q.indent_id ?? "").trim())
+        .filter(Boolean),
+    ),
+  ).filter((id) => !existing.has(id));
+
+  if (quotedIndentIds.length === 0) return baseIndents;
+
+  const { data: extraRows, error: extraErr } = await supabase()
+    .from("indents")
+    .select("*, organizations(name)")
+    .in("id", quotedIndentIds)
+    .neq("status", "draft")
+    .order("created_at", { ascending: false });
+  if (extraErr || !extraRows?.length) return baseIndents;
+
+  const extras = (extraRows as Array<
+    IndentRow & { organizations?: { name: string | null } | null }
+  >).map((row) => {
+    const { organizations, ...rest } = row;
+    return {
+      ...rest,
+      creator_organization_name: organizations?.name ?? null,
+    } as IndentRow;
+  });
+
+  const merged = [...baseIndents];
+  for (const row of extras) {
+    if (!existing.has(row.id)) {
+      existing.set(row.id, row);
+      merged.push(row);
+    }
+  }
+  return merged;
 }
 
 /** Fetch a single indent by id (for detail screen). */

@@ -3,6 +3,9 @@
  */
 import { supabase } from '@/lib/supabase';
 import { DEFAULT_PAGE_SIZE, type PageOpts } from '@/lib/pagination';
+import { syncDomainRows } from '@/lib/cache/domainSync';
+import { mergeDeltaRows } from '@/lib/cache/mergeDelta';
+import type { DeltaResponse } from '@/lib/cache/deltaTypes';
 import type { VehicleDocuments } from '../utils/vehicleDocuments.util';
 
 export interface VehicleRow {
@@ -67,6 +70,61 @@ export async function getVehiclesByOrganization(
   const { data, error } = await base();
   if (error) return { error: new Error(error.message), vehicles: [] };
   return { error: null, vehicles: (data ?? []) as VehicleRow[] };
+}
+
+export async function getVehiclesDelta(
+  orgId: string,
+  since: { updatedAt: string; tieBreakerId?: string | null },
+): Promise<{ error: Error | null; delta: DeltaResponse<VehicleRow> }> {
+  const { data, error } = await supabase().rpc('get_vehicles_delta', {
+    p_org_id: orgId,
+    p_since: since.updatedAt,
+    p_limit: 1000,
+  });
+  if (error) return { error: new Error(error.message), delta: { changed: [], deletedIds: [], nextCursor: since } };
+  const row = (Array.isArray(data) ? data[0] : data) as
+    | { changed?: VehicleRow[]; deleted_ids?: string[]; next_cursor?: string | null }
+    | null;
+  return {
+    error: null,
+    delta: {
+      changed: (row?.changed ?? []) as VehicleRow[],
+      deletedIds: (row?.deleted_ids ?? []) as string[],
+      nextCursor: row?.next_cursor ? { updatedAt: row.next_cursor } : since,
+    },
+  };
+}
+
+export async function syncVehiclesWithCache(orgId: string, currentRows: VehicleRow[]) {
+  try {
+    const vehicles = await syncDomainRows<VehicleRow>({
+      domain: 'vehicles',
+      orgId,
+      schemaVersion: '1',
+      policy: { maxDeltaLagMs: 5 * 60_000, fullSyncEveryMs: 8 * 60 * 60_000 },
+      currentRows,
+      getFull: async () => {
+        const res = await getVehiclesByOrganization(orgId);
+        if (res.error) throw res.error;
+        return res.vehicles;
+      },
+      getDelta: async (cursor) => {
+        const res = await getVehiclesDelta(orgId, cursor);
+        if (res.error) throw res.error;
+        return res.delta;
+      },
+      merge: (existing, delta) =>
+        mergeDeltaRows({
+          existing,
+          changed: delta.changed,
+          deletedIds: delta.deletedIds,
+          compare: (a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''),
+        }),
+    });
+    return { error: null, vehicles };
+  } catch (e) {
+    return { error: e instanceof Error ? e : new Error(String(e)), vehicles: currentRows };
+  }
 }
 
 export async function getVehicleById(

@@ -4,6 +4,9 @@
  * One service per domain (microservices). Same DB as Q-unified-base.
  */
 import { DEFAULT_PAGE_SIZE, type PageOpts } from "@/lib/pagination";
+import { syncDomainRows } from "@/lib/cache/domainSync";
+import { mergeDeltaRows } from "@/lib/cache/mergeDelta";
+import type { DeltaResponse } from "@/lib/cache/deltaTypes";
 import { supabase } from "@/lib/supabase";
 
 const DRIVER_COLUMNS = [
@@ -122,6 +125,61 @@ export async function getDriversByOrganization(
   if (error) return { error: new Error(error.message), drivers: [] };
   const raw = excludeTrackingOnly((data ?? []) as unknown as DriverRow[]);
   return { error: null, drivers: raw.map((d) => normalizeDriverRow(d)) };
+}
+
+export async function getDriversDelta(
+  orgId: string,
+  since: { updatedAt: string; tieBreakerId?: string | null },
+): Promise<{ error: Error | null; delta: DeltaResponse<DriverRow> }> {
+  const { data, error } = await supabase().rpc("get_drivers_delta", {
+    p_org_id: orgId,
+    p_since: since.updatedAt,
+    p_limit: 1000,
+  });
+  if (error) return { error: new Error(error.message), delta: { changed: [], deletedIds: [], nextCursor: since } };
+  const row = (Array.isArray(data) ? data[0] : data) as
+    | { changed?: DriverRow[]; deleted_ids?: string[]; next_cursor?: string | null }
+    | null;
+  return {
+    error: null,
+    delta: {
+      changed: (row?.changed ?? []) as DriverRow[],
+      deletedIds: (row?.deleted_ids ?? []) as string[],
+      nextCursor: row?.next_cursor ? { updatedAt: row.next_cursor } : since,
+    },
+  };
+}
+
+export async function syncDriversWithCache(orgId: string, currentRows: DriverRow[]) {
+  try {
+    const drivers = await syncDomainRows<DriverRow>({
+      domain: "drivers",
+      orgId,
+      schemaVersion: "1",
+      policy: { maxDeltaLagMs: 5 * 60_000, fullSyncEveryMs: 8 * 60 * 60_000 },
+      currentRows,
+      getFull: async () => {
+        const res = await getDriversByOrganization(orgId);
+        if (res.error) throw res.error;
+        return res.drivers;
+      },
+      getDelta: async (cursor) => {
+        const res = await getDriversDelta(orgId, cursor);
+        if (res.error) throw res.error;
+        return res.delta;
+      },
+      merge: (existing, delta) =>
+        mergeDeltaRows({
+          existing,
+          changed: delta.changed,
+          deletedIds: delta.deletedIds,
+          compare: (a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""),
+        }),
+    });
+    return { error: null, drivers };
+  } catch (e) {
+    return { error: e instanceof Error ? e : new Error(String(e)), drivers: currentRows };
+  }
 }
 
 export async function getDriverById(

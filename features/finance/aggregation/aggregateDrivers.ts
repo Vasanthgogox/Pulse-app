@@ -48,7 +48,7 @@ export function aggregateDrivers(
   trips: TripForDriver[],
   transactions: LedgerTx[],
   offersByDriverId?: Record<string, DriverOfferForAggregation> | null,
-  tripPartyMap?: TripPartyMap | null
+  _tripPartyMap?: TripPartyMap | null
 ): { rows: FinancialRowData[]; totals: AggregationTotals } {
   const dueFromTrips: Record<string, number> = {};
   const paidFromLedger: Record<string, number> = {};
@@ -84,13 +84,9 @@ export function aggregateDrivers(
       continue;
     }
 
-    if (tripPartyMap && tx.trip_id && tripPartyMap[tx.trip_id]) {
-      const fallback = tripPartyMap[tx.trip_id]!;
-      const did = fallback.supplier_id ?? fallback.driver_id ?? null;
-      if (did && driverIds.has(did)) {
-        paidFromLedger[did] = (paidFromLedger[did] ?? 0) + amtOut;
-      }
-    }
+    // Intentionally do not infer driver payments from generic trip-linked cash-out rows.
+    // Only explicit driver-linked ledger rows (contact_type=driver) should reduce due,
+    // otherwise supplier/vehicle/other expenses can incorrectly zero-out driver pending.
   }
 
   const rows: FinancialRowData[] = [];
