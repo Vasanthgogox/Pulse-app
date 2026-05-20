@@ -3,10 +3,18 @@
  * while Metro lazy-bundles a screen). Works with expo `loading.tsx` on each segment.
  */
 import { AppLoadingSplash } from '@/components/AppLoadingSplash';
+import Layout from '@/constants/Layout';
+import { pathnameHasRootTopNav } from '@/lib/rootChromeRoutes';
 import { ROUTES } from '@/lib/routes';
 import { usePathname, useSegments } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { InteractionManager, Platform, StyleSheet, View } from 'react-native';
+import {
+  InteractionManager,
+  Platform,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 
 const MIN_VISIBLE_MS = 120;
 
@@ -29,12 +37,17 @@ function shouldShowNavigationOverlay(
   ) {
     return false;
   }
+  // These routes show the root top tab bar — use segment `loading.tsx` instead.
+  if (pathnameHasRootTopNav(pathname)) return false;
   return true;
 }
 
 export function NavigationLoadingOverlay() {
   const pathname = usePathname();
   const segments = useSegments() as string[];
+  const { width } = useWindowDimensions();
+  const isDesktopWeb = Platform.OS === 'web' && width >= Layout.webDesktopMinWidth;
+  const reserveTopNav = isDesktopWeb && pathnameHasRootTopNav(pathname);
   const [visible, setVisible] = useState(false);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shownAt = useRef(0);
@@ -66,7 +79,10 @@ export function NavigationLoadingOverlay() {
 
   return (
     <View
-      style={styles.overlay}
+      style={[
+        styles.overlay,
+        reserveTopNav && { top: Layout.desktopTopNavOffset },
+      ]}
       pointerEvents="auto"
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
@@ -76,11 +92,13 @@ export function NavigationLoadingOverlay() {
   );
 }
 
+const ROOT_TAB_BAR_Z = 100;
+
 const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    zIndex: 9998,
-    elevation: 9998,
+    zIndex: ROOT_TAB_BAR_Z - 1,
+    elevation: ROOT_TAB_BAR_Z - 1,
     ...(Platform.OS === 'web' ? { position: 'fixed' as const } : null),
   },
   splash: {

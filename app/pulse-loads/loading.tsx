@@ -1,1 +1,1 @@
-export { default } from '@/components/RouteLoadingScreen';
+export { default } from '@/components/RootChromeLoadingScreen';

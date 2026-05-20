@@ -8,6 +8,7 @@ import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { routeStackScreenOptions } from '@/lib/routeStackOptions';
 import { preloadPulseLoadsRoute } from '@/lib/preloadRoutes';
+import { pathnameHasRootTopNav } from '@/lib/rootChromeRoutes';
 import { ROUTES } from '@/lib/routes';
 import {
   DemoTabBarAutoHideShell,
@@ -388,11 +389,7 @@ function RootOverlayTabBar() {
   const { resetBarVisible } = useDemoTabBarScroll();
   const layoutWidth = useWebLayoutWidth();
 
-  const showOnRootScreens =
-    pathname === '/pod-reconciliation' ||
-    pathname === '/invoicing-execute' ||
-    pathname === '/log-incoming-pods' ||
-    pathname === ROUTES.PULSE_LOADS;
+  const showOnRootScreens = pathnameHasRootTopNav(pathname);
 
   useEffect(() => {
     if (showOnRootScreens) resetBarVisible();

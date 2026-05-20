@@ -2,7 +2,7 @@
  * Load Center + share indent to Pulse network (story broadcast).
  * Lives outside the Network tab so Network stays: connections, invites, discover, stories strip only.
  */
-import { AppLoadingSplash } from '@/components/AppLoadingSplash';
+import { AppLoadingSplash } from "@/components/AppLoadingSplash";
 import Theme from "@/constants/Theme";
 import Layout from "@/constants/Layout";
 import { LoadCenterView } from "@/features/network/components/LoadCenterView";
@@ -24,21 +24,21 @@ export default function PulseLoadsScreen() {
   const router = useRouter();
   const { currentOrganization: organization } = useOrganization();
   const orgId = organization?.id ?? null;
+  const contentTopInset = isDesktopWeb ? Layout.desktopTopNavOffset : insets.top;
   const [shareLoad, setShareLoad] = useState<IndentRow | null>(null);
   const invalidateNetwork = useInvalidateNetwork(orgId);
   const invalidatePosts = useInvalidatePosts(orgId);
 
   if (!orgId) {
-    return <AppLoadingSplash variant="preparing" style={styles.root} />;
+    return (
+      <View style={[styles.root, { paddingTop: contentTopInset }]}>
+        <AppLoadingSplash variant="preparing" style={styles.splashFill} />
+      </View>
+    );
   }
 
   return (
-    <View
-      style={[
-        styles.root,
-        { paddingTop: isDesktopWeb ? Layout.desktopTopNavOffset : insets.top },
-      ]}
-    >
+    <View style={[styles.root, { paddingTop: contentTopInset }]}>
       <LoadCenterView
         onCreateIndentPress={() => router.push(ROUTES.CREATE_INDENT as import("expo-router").Href)}
         onIndentPress={(indent) => router.push(`/indent/${indent.id}` as import("expo-router").Href)}
@@ -62,4 +62,5 @@ export default function PulseLoadsScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Theme.surface },
+  splashFill: { flex: 1 },
 });
