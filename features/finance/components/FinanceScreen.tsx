@@ -185,6 +185,19 @@ export function FinanceScreen() {
     [entities.tripRows],
   );
 
+  // Org-owned trips only for customer billing. allTripsForLedger includes supplier-view trips
+  // from get_trips_for_org (trips owned by partner orgs where we are the carrier). Those must
+  // not feed aggregateCustomers — Client Detail only counts trips this org owns where the entity
+  // is the client, and the two screens must use the same scope.
+  const tripsForCustomerAgg = useMemo(
+    () => {
+      const oid = currentOrganization?.id;
+      if (!oid) return [];
+      return allTripsForLedger.filter((t) => t.organization_id === oid);
+    },
+    [allTripsForLedger, currentOrganization?.id],
+  );
+
   const ledger = useFinanceLedger({
     organizationId: currentOrganization?.id ?? null,
     canAccess,
@@ -581,10 +594,9 @@ export function FinanceScreen() {
   );
 
   const desktopCardMetrics = useMemo(() => {
-    const allTrips = [...tripRows, ...tripsWhereOrgIsSupplier];
     const customersAgg = aggregateCustomers(
       clientRows,
-      allTrips,
+      tripsForCustomerAgg,
       ledgerTransactions ?? [],
       tripPartyMap,
       indentsForFinance,
@@ -773,10 +785,9 @@ export function FinanceScreen() {
     }
 
     if (financeSubTab === "customers") {
-      const allTrips = [...tripRows, ...tripsWhereOrgIsSupplier];
       const { rows } = aggregateCustomers(
         clientRows,
-        allTrips,
+        tripsForCustomerAgg,
         ledgerRows,
         tripPartyMap,
         indentsForFinance,
@@ -806,7 +817,7 @@ export function FinanceScreen() {
       });
       const linkedClientIdByOrgId = buildUniqueLinkedOrgIdMap(clientRows);
       const latestTripDateByClientId: Record<string, string> = {};
-      allTrips.forEach((trip) => {
+      tripsForCustomerAgg.forEach((trip) => {
         const nameKey = (trip.client_name || "").trim().toLowerCase();
         let clientId =
           trip.client_id ?? (nameKey ? clientIdByNameKey[nameKey] : undefined);

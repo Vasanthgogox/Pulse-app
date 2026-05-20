@@ -85,8 +85,6 @@ interface DiscoverViewProps {
   onInviteCountChange?: (count: number, limit: number) => void;
   /** When true (e.g. header shows max invites), block Send request with daily-limit alert even if query count lags. */
   inviteDailyCapReached?: boolean;
-  /** Desktop split: whether the right “People you may know” column has cards. */
-  onSplitMetaChange?: (hasPeopleYouMayKnow: boolean) => void;
 }
 
 // --- Scoring ---
@@ -310,7 +308,6 @@ export function DiscoverView({
   onPressMutual,
   onInviteCountChange,
   inviteDailyCapReached = false,
-  onSplitMetaChange,
 }: DiscoverViewProps) {
   const { t } = useLanguage();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
@@ -705,18 +702,6 @@ export function DiscoverView({
 
   const splitStacked = isNetworkHubSplitStacked(windowWidth);
 
-  useEffect(() => {
-    if (!embedded) {
-      onSplitMetaChange?.(false);
-      return;
-    }
-    if (search.trim() || splitStacked) {
-      onSplitMetaChange?.(false);
-      return;
-    }
-    onSplitMetaChange?.(peopleYouMayKnow.length > 0);
-  }, [embedded, onSplitMetaChange, peopleYouMayKnow.length, search, splitStacked]);
-
   const splitPaneGridOptions: PaneListGridOptions = {
     columns: splitPaneLayout.columns,
     compact: splitPaneLayout.compact && !isMobileHub,
@@ -728,6 +713,11 @@ export function DiscoverView({
   const embeddedHubSplitBody = (
     <NetworkHubSplitLayout
       windowWidth={windowWidth}
+      leftHeader={
+        !splitStacked && growNetworkRecommendations.length > 0 ? (
+          <Text style={styles.mayKnowHeading}>{t("networkDiscoverRecommended")}</Text>
+        ) : null
+      }
       left={
         growNetworkRecommendations.length > 0
           ? renderEmbeddedPaneListGrid(
@@ -739,7 +729,7 @@ export function DiscoverView({
           : null
       }
       rightHeader={
-        splitStacked && peopleYouMayKnow.length > 0 ? (
+        peopleYouMayKnow.length > 0 ? (
           <>
             <Text style={styles.mayKnowKicker}>{t("networkDiscoverSuggestions")}</Text>
             <Text style={styles.mayKnowHeading}>{t("networkPeopleYouMayKnow")}</Text>
