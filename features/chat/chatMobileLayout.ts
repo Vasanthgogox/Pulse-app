@@ -50,3 +50,8 @@ export function isChatNativeMobile(isDesktop: boolean): boolean {
   return Platform.OS !== "web" && !isDesktop;
 }
 
+/** Space reserved above a fixed mobile-web composer (input row + safe padding). */
+export function mobileWebComposerReservePx(): number {
+  return CHAT_MOBILE.composerMinHeight + 20;
+}
+

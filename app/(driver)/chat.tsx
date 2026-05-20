@@ -20,7 +20,11 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowLeft, MessageSquare } from "lucide-react-native";
 import { CHAT_MOBILE } from "@/features/chat/chatMobileLayout";
-import { dockPaddingBottom, useKeyboardVisible } from "@/hooks/useKeyboardVisible";
+import {
+  dockPaddingBottom,
+  effectiveKeyboardInset,
+  useKeyboardVisible,
+} from "@/hooks/useKeyboardVisible";
 import { ChatMobileComposer } from "@/features/chat/components/ChatMobileComposer";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import Layout from "@/constants/Layout";
@@ -207,7 +211,8 @@ function MessageThread({
 }) {
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
-  const { keyboardVisible: keyboardOpen } = useKeyboardVisible();
+  const { keyboardVisible: keyboardOpen, keyboardHeight } = useKeyboardVisible();
+  const keyboardInset = effectiveKeyboardInset(keyboardOpen, keyboardHeight);
   const [trip, setTrip] = useState<TripRow | null>(null);
 
   // Scroll to bottom when keyboard opens so composer stays visible
@@ -302,13 +307,54 @@ function MessageThread({
     void onSend();
   }, [onSend]);
 
-  return (
-    <KeyboardAvoidingView
-      style={dr.threadRoot}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={0}
-      enabled={Platform.OS === "ios"}
+  const composerDock = (
+    <View
+      style={[
+        dr.composerDock,
+        { paddingBottom: dockPaddingBottom(insets.bottom, keyboardOpen) },
+        Platform.OS === "android" && keyboardInset > 0 && { marginBottom: keyboardInset },
+      ]}
     >
+      {predefinedForStep.length > 0 ? (
+        <View style={dr.quickStatusBlock}>
+          <Text style={dr.quickStatusLabel}>Quick status</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={dr.quickStatusChipRow}
+            keyboardShouldPersistTaps="handled"
+          >
+            {predefinedForStep.map((label) => (
+              <TouchableOpacity
+                key={label}
+                style={[dr.quickStatusChip, statusSending === label && dr.quickStatusChipBusy]}
+                onPress={() => void sendStatusLine(label)}
+                disabled={!!statusSending || !trip}
+                activeOpacity={0.75}
+              >
+                {statusSending === label ? (
+                  <ActivityIndicator size="small" color="#0f172a" />
+                ) : (
+                  <Text style={dr.quickStatusChipText} numberOfLines={2}>{label}</Text>
+                )}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      ) : null}
+      <ChatMobileComposer
+        value={messageInput}
+        onChangeText={setMessageInput}
+        onSend={handleComposerSend}
+        quickMessages={DRIVER_QUICK_MESSAGES}
+        hideQuickChips={keyboardOpen}
+        placeholder="Message"
+      />
+    </View>
+  );
+
+  const threadBody = (
+    <>
       <View style={dr.threadHeader}>
         <TouchableOpacity onPress={onBack} hitSlop={10} style={dr.threadBackBtn}>
           <ArrowLeft size={22} color="#111B21" />
@@ -345,51 +391,23 @@ function MessageThread({
           )
         )}
       </ScrollView>
-
-      <View
-        style={[
-          dr.composerDock,
-          { paddingBottom: dockPaddingBottom(insets.bottom, keyboardOpen) },
-        ]}
-      >
-        {predefinedForStep.length > 0 ? (
-          <View style={dr.quickStatusBlock}>
-            <Text style={dr.quickStatusLabel}>Quick status</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={dr.quickStatusChipRow}
-              keyboardShouldPersistTaps="handled"
-            >
-              {predefinedForStep.map((label) => (
-                <TouchableOpacity
-                  key={label}
-                  style={[dr.quickStatusChip, statusSending === label && dr.quickStatusChipBusy]}
-                  onPress={() => void sendStatusLine(label)}
-                  disabled={!!statusSending || !trip}
-                  activeOpacity={0.75}
-                >
-                  {statusSending === label ? (
-                    <ActivityIndicator size="small" color="#0f172a" />
-                  ) : (
-                    <Text style={dr.quickStatusChipText} numberOfLines={2}>{label}</Text>
-                  )}
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        ) : null}
-        <ChatMobileComposer
-          value={messageInput}
-          onChangeText={setMessageInput}
-          onSend={handleComposerSend}
-          quickMessages={DRIVER_QUICK_MESSAGES}
-          hideQuickChips={keyboardOpen}
-          placeholder="Message"
-        />
-      </View>
-    </KeyboardAvoidingView>
+      {composerDock}
+    </>
   );
+
+  if (Platform.OS === "ios") {
+    return (
+      <KeyboardAvoidingView
+        style={dr.threadRoot}
+        behavior="padding"
+        keyboardVerticalOffset={0}
+      >
+        {threadBody}
+      </KeyboardAvoidingView>
+    );
+  }
+
+  return <View style={dr.threadRoot}>{threadBody}</View>;
 }
 
 export default function DriverChatScreen() {

@@ -156,3 +156,18 @@ export function dockPaddingBottom(
 ): number {
   return keyboardVisible ? closedMin : Math.max(bottomInset, closedMin);
 }
+
+/**
+ * Lift for bottom-docked composers when the keyboard occludes the viewport.
+ * Mobile web may report `keyboardVisible` before `keyboardHeight` is measured.
+ */
+export function effectiveKeyboardInset(
+  keyboardVisible: boolean,
+  keyboardHeight: number,
+  fallbackWhenVisible = 240,
+): number {
+  if (!keyboardVisible) return 0;
+  return keyboardHeight >= WEB_KEYBOARD_INSET_THRESHOLD_PX
+    ? keyboardHeight
+    : fallbackWhenVisible;
+}

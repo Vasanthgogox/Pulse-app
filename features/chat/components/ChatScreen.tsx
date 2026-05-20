@@ -9,8 +9,13 @@ import { CHAT_ACCENT, CHAT_ACCENT_BORDER, CHAT_ACCENT_SOFT, CHAT_ICON_MUTED } fr
 import {
   CHAT_MOBILE,
   isChatNativeMobile,
+  mobileWebComposerReservePx,
 } from "@/features/chat/chatMobileLayout";
-import { dockPaddingBottom, useKeyboardVisible } from "@/hooks/useKeyboardVisible";
+import {
+  dockPaddingBottom,
+  effectiveKeyboardInset,
+  useKeyboardVisible,
+} from "@/hooks/useKeyboardVisible";
 import { ChatMobileComposer } from "@/features/chat/components/ChatMobileComposer";
 import { MessageTick } from "@/features/chat/components/MessageTick";
 import { SystemEventCard } from "@/features/chat/components/SystemEventCard";
@@ -4498,9 +4503,6 @@ const cm = StyleSheet.create({
 
 // ── Conversation detail (module scope: stable component identity so TextInput keeps focus) ─
 
-/** Reserve space above a fixed mobile-web composer (attach row + multiline field). */
-const WEB_CHAT_COMPOSER_RESERVE_PX = 58;
-
 function ChatConversationLayout({
   isDesktop,
   header,
@@ -4519,6 +4521,8 @@ function ChatConversationLayout({
   const dockBottomPad = isDesktop
     ? 10
     : dockPaddingBottom(insets.bottom, keyboardVisible);
+  const webComposerReserve = mobileWebComposerReservePx();
+  const keyboardInset = effectiveKeyboardInset(keyboardVisible, keyboardHeight);
 
   // Refs for direct DOM style mutation on mobile web — bypasses React re-render lag
   // so keyboard position tracks the visual viewport synchronously (frame-perfect).
@@ -4532,14 +4536,23 @@ function ChatConversationLayout({
 
     const update = () => {
       // Keyboard height = gap between layout viewport bottom and visual viewport bottom.
-      const keyboardH = Math.max(0, Math.round(window.innerHeight - vv.height - (vv.offsetTop ?? 0)));
-      const safeB = keyboardH >= 48 ? 4 : insets.bottom;
+      const measured = Math.max(
+        0,
+        Math.round(window.innerHeight - vv.height - (vv.offsetTop ?? 0)),
+      );
+      const active = document.activeElement;
+      const focusedEditable =
+        active instanceof HTMLElement &&
+        (active.tagName === "INPUT" || active.tagName === "TEXTAREA");
+      const open = measured >= 48 || focusedEditable;
+      const keyboardH = effectiveKeyboardInset(open, measured);
+      const safeB = keyboardH > 0 ? 4 : insets.bottom;
       // setNativeProps → direct DOM style write, zero React reconciler overhead.
       (composerWebRef.current as any)?.setNativeProps?.({
         style: { bottom: keyboardH, paddingBottom: safeB },
       });
       (msgsWebRef.current as any)?.setNativeProps?.({
-        style: { paddingBottom: WEB_CHAT_COMPOSER_RESERVE_PX + safeB + keyboardH },
+        style: { paddingBottom: webComposerReserve + safeB + keyboardH },
       });
     };
 
@@ -4550,7 +4563,7 @@ function ChatConversationLayout({
       vv.removeEventListener("resize", update);
       vv.removeEventListener("scroll", update);
     };
-  }, [mobileWeb, insets.bottom]);
+  }, [mobileWeb, insets.bottom, webComposerReserve]);
 
   const messagesPane = (
     <>
@@ -4565,24 +4578,31 @@ function ChatConversationLayout({
         s.chatInputDock,
         nativeMobile && s.chatInputDockMobile,
         { paddingBottom: dockBottomPad },
+        nativeMobile &&
+          Platform.OS === "android" &&
+          keyboardInset > 0 && { marginBottom: keyboardInset },
       ]}
     >
       {inputBar}
     </View>
   );
 
+  const conversationBody = (
+    <View
+      style={[
+        s.conversationBody,
+        nativeMobile && { backgroundColor: CHAT_MOBILE.wallpaper },
+      ]}
+    >
+      {messagesPane}
+      {composerDock}
+    </View>
+  );
+
   if (isDesktop) {
     return (
       <View style={s.detailPanel}>
-        <View
-          style={[
-            s.conversationBody,
-            nativeMobile && { backgroundColor: CHAT_MOBILE.wallpaper },
-          ]}
-        >
-          {messagesPane}
-          {composerDock}
-        </View>
+        {conversationBody}
       </View>
     );
   }
@@ -4599,7 +4619,7 @@ function ChatConversationLayout({
               minHeight: 0,
               backgroundColor: CHAT_MOBILE.wallpaper,
               // Initial padding before first visualViewport event; setNativeProps takes over.
-              paddingBottom: WEB_CHAT_COMPOSER_RESERVE_PX + dockBottomPad + keyboardHeight,
+              paddingBottom: webComposerReserve + dockBottomPad + keyboardInset,
             },
           ]}
         >
@@ -4612,7 +4632,7 @@ function ChatConversationLayout({
             s.chatInputDock,
             nativeMobile && s.chatInputDockMobile,
             // Initial position; setNativeProps overrides each visualViewport frame.
-            { bottom: keyboardHeight, paddingBottom: dockBottomPad },
+            { bottom: keyboardInset, paddingBottom: dockBottomPad },
           ]}
         >
           {inputBar}
@@ -4621,24 +4641,19 @@ function ChatConversationLayout({
     );
   }
 
-  return (
-    <KeyboardAvoidingView
-      style={s.detailPanel}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={0}
-      enabled={Platform.OS === "ios"}
-    >
-      <View
-        style={[
-          s.conversationBody,
-          nativeMobile && { backgroundColor: CHAT_MOBILE.wallpaper },
-        ]}
+  if (Platform.OS === "ios") {
+    return (
+      <KeyboardAvoidingView
+        style={s.detailPanel}
+        behavior="padding"
+        keyboardVerticalOffset={0}
       >
-        {messagesPane}
-        {composerDock}
-      </View>
-    </KeyboardAvoidingView>
-  );
+        {conversationBody}
+      </KeyboardAvoidingView>
+    );
+  }
+
+  return <View style={s.detailPanel}>{conversationBody}</View>;
 }
 
 function ChatDetailHeader({
