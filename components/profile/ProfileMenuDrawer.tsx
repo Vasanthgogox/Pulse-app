@@ -115,6 +115,7 @@ export function ProfileMenuDrawer({ visible, onClose }: ProfileMenuDrawerProps) 
   const slideX = useRef(new Animated.Value(-panelWidth)).current;
 
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
+  const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
 
   const displayName = (profile?.full_name ?? profile?.displayName ?? "User").trim();
@@ -159,6 +160,12 @@ export function ProfileMenuDrawer({ visible, onClose }: ProfileMenuDrawerProps) 
     }).start();
   }, [visible, panelWidth, slideX]);
 
+  useEffect(() => {
+    if (!visible && !signingOut) {
+      setShowSignOutConfirm(false);
+    }
+  }, [visible, signingOut]);
+
   const navigate = (path: string) => {
     onClose();
     requestAnimationFrame(() => {
@@ -202,26 +209,29 @@ export function ProfileMenuDrawer({ visible, onClose }: ProfileMenuDrawerProps) 
     },
   ];
 
-  const handleSignOut = () => {
-    Alert.alert("Sign out", "Are you sure you want to sign out?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Sign out",
-        style: "destructive",
-        onPress: () => {
-          void (async () => {
-            setSigningOut(true);
-            try {
-              onClose();
-              await signOut();
-              router.replace(ROUTES.SIGN_IN_DIRECT);
-            } finally {
-              setSigningOut(false);
-            }
-          })();
-        },
-      },
-    ]);
+  const openSignOutConfirm = () => {
+    if (signingOut) return;
+    setShowSignOutConfirm(true);
+  };
+
+  const closeSignOutConfirm = () => {
+    if (signingOut) return;
+    setShowSignOutConfirm(false);
+  };
+
+  const confirmSignOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      setShowSignOutConfirm(false);
+      onClose();
+      await signOut();
+      router.replace(ROUTES.SIGN_IN_DIRECT as Parameters<typeof router.replace>[0]);
+    } catch {
+      Alert.alert("Sign out failed", "Please try again.");
+    } finally {
+      setSigningOut(false);
+    }
   };
 
   const handleSupport = () => {
@@ -239,31 +249,33 @@ export function ProfileMenuDrawer({ visible, onClose }: ProfileMenuDrawerProps) 
   };
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      onRequestClose={onClose}
-      statusBarTranslucent
-    >
-      <View style={styles.root}>
-        <Pressable
-          style={styles.backdrop}
-          onPress={onClose}
-          accessibilityRole="button"
-          accessibilityLabel="Close menu"
-        />
-        <Animated.View
-          style={[
-            styles.panel,
-            {
-              width: panelWidth,
-              paddingTop: insets.top + 8,
-              paddingBottom: insets.bottom + 12,
-              transform: [{ translateX: slideX }],
-            },
-          ]}
-        >
+    <>
+      <Modal
+        visible={visible}
+        transparent
+        animationType="none"
+        onRequestClose={onClose}
+        statusBarTranslucent
+      >
+        <View style={styles.root}>
+          <Pressable
+            style={styles.backdrop}
+            onPress={onClose}
+            accessibilityRole="button"
+            accessibilityLabel="Close menu"
+          />
+          <Animated.View
+            style={[
+              styles.panel,
+              {
+                width: panelWidth,
+                paddingTop: insets.top + 8,
+                paddingBottom: insets.bottom + 12,
+                transform: [{ translateX: slideX }],
+                zIndex: 2,
+              },
+            ]}
+          >
           <ScrollView
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.panelScroll}
@@ -361,7 +373,7 @@ export function ProfileMenuDrawer({ visible, onClose }: ProfileMenuDrawerProps) 
                 </Text>
               </View>
               <Pressable
-                onPress={handleSignOut}
+                onPress={() => void openSignOutConfirm()}
                 disabled={signingOut}
                 style={({ pressed }) => [
                   styles.signOutRow,
@@ -380,9 +392,55 @@ export function ProfileMenuDrawer({ visible, onClose }: ProfileMenuDrawerProps) 
               </Pressable>
             </View>
           </ScrollView>
-        </Animated.View>
-      </View>
-    </Modal>
+          </Animated.View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showSignOutConfirm}
+        transparent
+        animationType="fade"
+        onRequestClose={closeSignOutConfirm}
+        statusBarTranslucent
+      >
+        <View style={styles.signOutConfirmBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={closeSignOutConfirm} />
+          <View style={styles.signOutConfirmCard}>
+            <Text style={styles.signOutConfirmTitle}>Sign out</Text>
+            <Text style={styles.signOutConfirmBody}>
+              Are you sure you want to sign out?
+            </Text>
+            <View style={styles.signOutConfirmActions}>
+              <Pressable
+                onPress={closeSignOutConfirm}
+                style={({ pressed }) => [
+                  styles.signOutConfirmCancelBtn,
+                  pressed && styles.signOutConfirmCancelBtnPressed,
+                ]}
+                accessibilityRole="button"
+                disabled={signingOut}
+              >
+                <Text style={styles.signOutConfirmCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => void confirmSignOut()}
+                style={({ pressed }) => [
+                  styles.signOutConfirmCtaBtn,
+                  pressed && styles.signOutConfirmCtaBtnPressed,
+                  signingOut && styles.signOutConfirmCtaBtnDisabled,
+                ]}
+                accessibilityRole="button"
+                disabled={signingOut}
+              >
+                <Text style={styles.signOutConfirmCtaText}>
+                  {signingOut ? "Signing out..." : "Sign out"}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </>
   );
 }
 
@@ -394,6 +452,7 @@ const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(15, 23, 42, 0.42)",
+    zIndex: 0,
   },
   panel: {
     backgroundColor: Theme.screenBackground,
@@ -403,6 +462,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 4, height: 0 },
     elevation: 12,
     maxHeight: "100%",
+    zIndex: 1,
   },
   panelScroll: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
@@ -615,5 +675,83 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "700",
     color: Theme.negative,
+  },
+  signOutConfirmBackdrop: {
+    flex: 1,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    justifyContent: "center",
+    backgroundColor: Theme.overlayBackdrop,
+  },
+  signOutConfirmCard: {
+    backgroundColor: Theme.surface,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: Theme.border,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 16,
+    maxWidth: 420,
+    width: "100%",
+    alignSelf: "center",
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.22,
+    shadowRadius: 18,
+    elevation: 10,
+  },
+  signOutConfirmTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    marginBottom: 6,
+  },
+  signOutConfirmBody: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: Theme.textSecondary,
+    marginBottom: 14,
+  },
+  signOutConfirmActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 10,
+  },
+  signOutConfirmCancelBtn: {
+    minHeight: Layout.minTouchTargetSize,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: Theme.backgroundInput,
+    borderWidth: 1,
+    borderColor: Theme.border,
+  },
+  signOutConfirmCancelBtnPressed: {
+    backgroundColor: Theme.surfaceGray,
+  },
+  signOutConfirmCancelText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  signOutConfirmCtaBtn: {
+    minHeight: Layout.minTouchTargetSize,
+    paddingHorizontal: 18,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: Theme.teslaRed,
+  },
+  signOutConfirmCtaBtnPressed: {
+    opacity: 0.9,
+  },
+  signOutConfirmCtaBtnDisabled: {
+    opacity: 0.7,
+  },
+  signOutConfirmCtaText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.textOnDark,
   },
 });
