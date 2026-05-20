@@ -93,7 +93,9 @@ export function MutualConnectionsFacepile({
     </View>
   );
 
-  if (!openViewAll) {
+  // When individual faces are tappable, the MutualAvatarStack handles its own
+  // press targets — wrapping in another Pressable would nest <button> inside <button>.
+  if (!openViewAll || onPressMutual) {
     return inner;
   }
 
