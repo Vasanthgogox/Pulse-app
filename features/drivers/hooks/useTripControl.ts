@@ -36,17 +36,12 @@ export function useTripControl(tripId: string | undefined) {
 
       if (res.trip) {
         const s = (res.trip.status ?? "").toLowerCase();
-        const hasStarted = !!res.trip.started_at;
 
         if (s === "completed" || s === "delivered" || s === "done") {
           setStep("completed");
         } else if (s === "at_drop") {
           setStep("reached");
-        } else if (
-          s === "in_transit" ||
-          s === "transit" ||
-          (s === "in_progress" && hasStarted)
-        ) {
+        } else if (s === "in_transit" || s === "transit") {
           setStep("transit");
         } else if (s === "picked_up" || s === "pickup" || s === "in_progress") {
           setStep("pickup");

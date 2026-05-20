@@ -272,8 +272,9 @@ export function AddVehicleEntryModal({
   const formContent = (
     <KeyboardAvoidingView
       style={[styles.keyboardAvoid, fullPage && styles.keyboardAvoidFullPage]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
       keyboardVerticalOffset={fullPage ? 56 : insets.top + 16}
+      enabled={Platform.OS !== 'web'}
     >
       <View
         style={[

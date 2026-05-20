@@ -9,6 +9,8 @@
  *   Ledger = your truth. This feed = external input. Mixing them kills clarity.
  *   (PRD §6) This screen is deliberately its own surface.
  */
+import { ContentErrorState } from '@/components/ContentErrorState';
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from "@/constants/Theme";
 import { TeslaHeader } from "@/components/TeslaHeader";
 import { useOptionalAuth } from "@/contexts/AuthContext";
@@ -18,7 +20,6 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   RefreshControl,
   StyleSheet,
@@ -198,18 +199,15 @@ export default function ClientFeedScreen() {
       {/* Body */}
       {loading ? (
         <View style={styles.loadingState}>
-          <ActivityIndicator color={Theme.textPrimaryDark} />
+          <LoadingIndicator color={Theme.textPrimaryDark} />
         </View>
       ) : errorMsg ? (
-        <View style={styles.emptyWrap}>
-          <FontAwesome
-            name="exclamation-circle"
-            size={20}
-            color={Theme.warning}
-          />
-          <Text style={styles.emptyTitle}>Couldn't load feed</Text>
-          <Text style={styles.emptyBody}>{errorMsg}</Text>
-        </View>
+        <ContentErrorState
+          variant="feed"
+          message={errorMsg}
+          onRetry={() => void loadFeed()}
+          retrying={loading}
+        />
       ) : !bundle || bundle.entries.length === 0 ? (
         <EmptyIntro />
       ) : filteredEntries.length === 0 ? (

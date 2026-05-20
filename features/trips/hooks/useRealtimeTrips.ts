@@ -1,6 +1,8 @@
 /**
- * Supabase Realtime subscriptions for trips. Call onInvalidate when data changes (refetch once).
+ * Supabase Realtime subscriptions for trips.
+ * Per-trip subscription passes the Postgres payload so callers can merge silently.
  */
+import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { subscribeSharedPostgresChanges } from '@/lib/realtimeRegistry';
 import { useEffect, useRef } from 'react';
 
@@ -28,10 +30,13 @@ export function useRealtimeTrips(organizationId: string | null, onInvalidate: ()
   }, [organizationId]);
 }
 
-/** Subscribe to a single trip by id; call onInvalidate when it changes. */
-export function useRealtimeTrip(tripId: string | null, onInvalidate: () => void) {
-  const onInvalidateRef = useRef(onInvalidate);
-  onInvalidateRef.current = onInvalidate;
+/** Subscribe to a single trip by id; listener receives each Realtime payload. */
+export function useRealtimeTrip(
+  tripId: string | null,
+  onChange: (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => void,
+) {
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   useEffect(() => {
     if (!tripId) return;
@@ -45,8 +50,8 @@ export function useRealtimeTrip(tripId: string | null, onInvalidate: () => void)
           filter: `id=eq.${tripId}`,
         },
       ],
-      () => {
-        onInvalidateRef.current();
+      (payload) => {
+        onChangeRef.current(payload);
       }
     );
   }, [tripId]);

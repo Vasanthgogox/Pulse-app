@@ -1,19 +1,17 @@
 /**
- * Network broadcasts row — compact market signal cards.
+ * Network stories row — circular avatars with gradient rings (unseen / seen).
  */
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import Typography from "@/constants/Typography";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { type PostRow } from "@/features/network/services/posts.service";
-import { getInitials } from "@/lib/stringUtils";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
-import { Package, Plus, Radio, Truck } from "lucide-react-native";
+import { Plus } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Animated, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 interface StoryReelProps {
   posts: PostRow[];
@@ -21,124 +19,247 @@ interface StoryReelProps {
   orgName?: string;
   onCreatePost: () => void;
   headerActions?: React.ReactNode;
+  /** Inside desktop 80% story column — trim outer horizontal padding. */
+  embedded?: boolean;
 }
 
-const ACCENT_TOKENS = [Theme.teslaRed, Theme.darkGreen, Theme.primary, Theme.textPrimaryDark] as const;
+type StoryMetrics = {
+  avatar: number;
+  ring: number;
+  itemWidth: number;
+  labelSize: number;
+  labelLineHeight: number;
+  addBadge: number;
+  plusSize: number;
+};
+
+/** Mobile / stacked layout — compact story bubbles. */
+const STORY_METRICS_DEFAULT: StoryMetrics = {
+  avatar: 56,
+  ring: 64,
+  itemWidth: 72,
+  labelSize: 10,
+  labelLineHeight: 13,
+  addBadge: 24,
+  plusSize: 14,
+};
+
+/** Desktop story column (embedded 80% row) — larger avatars and labels. */
+const STORY_METRICS_EMBEDDED: StoryMetrics = {
+  avatar: 72,
+  ring: 84,
+  itemWidth: 92,
+  labelSize: 12,
+  labelLineHeight: 15,
+  addBadge: 28,
+  plusSize: 16,
+};
+
+function storyMetricsFor(embedded: boolean): StoryMetrics {
+  return embedded ? STORY_METRICS_EMBEDDED : STORY_METRICS_DEFAULT;
+}
+
+const RING_UNSEEN = ["#f43f5e", "#f59e0b", "#a855f7", "#6366f1"] as const;
+const RING_SEEN = ["#cbd5e1", "#94a3b8"] as const;
+const RING_MINE_ACTIVE = ["#6366f1", "#22d3ee", "#10b981"] as const;
+const RING_MINE_IDLE = ["#e2e8f0", "#cbd5e1"] as const;
+
+const ACCENT_TOKENS = [Theme.teslaRed, Theme.darkGreen, Theme.primary, "#8b5cf6"] as const;
+
 function seedColor(id: string): string {
   let h = 0;
   for (let i = 0; i < id.length; i++) h = (h + id.charCodeAt(i)) % ACCENT_TOKENS.length;
   return ACCENT_TOKENS[h];
 }
 
-function withAlpha(hex: string, a: string): string {
-  if (hex.length === 7) return `${hex}${a}`;
-  return hex;
-}
-
-function shortPlace(value: string | null | undefined): string {
-  const clean = (value ?? "").split(",")[0]?.trim();
-  return clean || "Open lane";
-}
-
-function previewText(post: PostRow): string {
-  if (post.type === "VEHICLE_AVAILABILITY") {
-    return (post.vehicle_type?.trim() || "VEHICLE AVAILABLE").toUpperCase();
-  }
-  if (post.type === "LOAD") {
-    const route = `${shortPlace(post.origin)} → ${shortPlace(post.destination)}`;
-    const requiredVehicle = post.vehicle_type?.trim() || "VEHICLE REQUIRED";
-    return `${requiredVehicle.toUpperCase()} · ${route}`;
-  }
-  const fromContent = (post.content ?? "").trim();
-  if (fromContent.length > 0) return fromContent;
-  return "Network update";
-}
-
-function timeAgoShort(iso: string | null | undefined): string {
-  if (!iso) return "now";
-  const ms = Date.now() - new Date(iso).getTime();
-  const mins = Math.max(1, Math.floor(ms / 60000));
-  if (mins < 60) return `${mins}m`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h`;
-  const days = Math.floor(hrs / 24);
-  return `${days}d`;
-}
-
 function storySeenKey(post: PostRow): string {
   return `${post.organization_id}:${post.type}`;
 }
 
-function BroadcastCard({
-  post,
+function StoryAvatar({
+  name,
+  avatarUrl,
+  avatarSeed,
+  entityType = "supplier" as const,
+  size,
+}: {
+  name: string;
+  avatarUrl?: string | null;
+  avatarSeed?: string | null;
+  entityType?: "client" | "supplier" | "driver";
+  size: number;
+}) {
+  return (
+    <PartyAvatar
+      name={name}
+      avatarUrl={avatarUrl}
+      avatarSeed={avatarSeed}
+      entityType={entityType}
+      size={size}
+      style={styles.avatarPlain}
+      borderStyle={styles.avatarPlain}
+    />
+  );
+}
+
+function StoryGradientRingSized({
+  colors,
+  ringSize,
+  gapSize,
+  children,
+}: {
+  colors: readonly string[];
+  ringSize: number;
+  gapSize: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <LinearGradient
+      colors={[...colors]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={[
+        styles.ringGradientBase,
+        { width: ringSize, height: ringSize, borderRadius: ringSize / 2 },
+      ]}
+    >
+      <View
+        style={[
+          styles.ringGapBase,
+          {
+            width: gapSize,
+            height: gapSize,
+            borderRadius: gapSize / 2,
+          },
+        ]}
+      >
+        {children}
+      </View>
+    </LinearGradient>
+  );
+}
+
+function StoryBubble({
+  label,
+  ringColors,
+  metrics,
   onPress,
+  onPressIn,
+  onPressOut,
+  scale,
+  children,
+  badge,
+}: {
+  label: string;
+  ringColors: readonly string[];
+  metrics: StoryMetrics;
+  onPress: () => void;
+  onPressIn?: () => void;
+  onPressOut?: () => void;
+  scale?: Animated.Value;
+  children: React.ReactNode;
+  badge?: React.ReactNode;
+}) {
+  const gapSize = metrics.avatar + 3;
+  return (
+    <Pressable
+      onPress={onPress}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      style={({ pressed }) => [
+        styles.storyItem,
+        { width: metrics.itemWidth },
+        pressed && styles.storyItemPressed,
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      <Animated.View style={scale ? { transform: [{ scale }] } : undefined}>
+        <View
+          style={[
+            styles.ringStack,
+            { width: metrics.ring, height: metrics.ring },
+          ]}
+        >
+          <StoryGradientRingSized
+            colors={ringColors}
+            ringSize={metrics.ring}
+            gapSize={gapSize}
+          >
+            {children}
+          </StoryGradientRingSized>
+          {badge}
+        </View>
+      </Animated.View>
+      <Text
+        style={[
+          styles.storyName,
+          { fontSize: metrics.labelSize, lineHeight: metrics.labelLineHeight },
+        ]}
+        numberOfLines={1}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function BroadcastStory({
+  post,
   seen,
+  onPress,
+  metrics,
 }: {
   post: PostRow;
-  onPress: () => void;
   seen: boolean;
+  onPress: () => void;
+  metrics: StoryMetrics;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
-  const color = seedColor(post.organization_id);
-  const isLoad = post.type === "LOAD";
-  const isVehicle = post.type === "VEHICLE_AVAILABILITY";
-  const storyPreview = previewText(post);
-  const meta = `${isLoad ? "LOAD" : "CAPACITY"} · ${timeAgoShort(post.created_at)}`;
+  const accent = seedColor(post.organization_id);
   const rawPost = post as PostRow & {
     org_avatar_url?: string | null;
     avatar_url?: string | null;
   };
   const postAvatarUrl = rawPost.org_avatar_url ?? rawPost.avatar_url ?? null;
+  const ringColors = seen
+    ? RING_SEEN
+    : ([accent, RING_UNSEEN[1], RING_UNSEEN[2]] as const);
+
   const handlePressIn = () =>
-    Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start();
+    Animated.spring(scale, { toValue: 0.94, useNativeDriver: true }).start();
   const handlePressOut = () =>
     Animated.spring(scale, { toValue: 1, tension: 80, friction: 6, useNativeDriver: true }).start();
 
+  const shortName = post.org_name.trim().split(/\s+/)[0] ?? post.org_name;
+
   return (
-    <Pressable onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut}>
-      <Animated.View style={[styles.storyItem, { transform: [{ scale }] }]}>
-        <LinearGradient
-          colors={
-            seen
-              ? [withAlpha(Theme.textSection, "66"), withAlpha(Theme.textSection, "2A")]
-              : [withAlpha(color, "66"), withAlpha(color, "28")]
-          }
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.storyRing}
-        >
-          <View style={styles.storyAvatar}>
-            <PartyAvatar
-              name={post.org_name}
-              avatarUrl={postAvatarUrl}
-              avatarSeed={post.org_avatar_seed}
-              entityType="supplier"
-              size={64}
-              borderStyle={styles.storyAvatarImage}
-            />
-            <View style={[styles.storyAvatarIconWrap, { borderColor: withAlpha(color, "44") }]}>
-              {isLoad ? (
-                <Package size={12} color={color} strokeWidth={2.2} />
-              ) : isVehicle ? (
-                <Truck size={12} color={color} strokeWidth={2.2} />
-              ) : (
-                <Text style={[styles.initials, { color }]}>{getInitials(post.org_name)}</Text>
-              )}
-            </View>
-          </View>
-        </LinearGradient>
-        <Text style={styles.storyName} numberOfLines={1}>
-          {post.org_name.toUpperCase()}
-        </Text>
-        <Text style={styles.storyMeta} numberOfLines={1}>
-          {meta}
-        </Text>
-      </Animated.View>
-    </Pressable>
+    <StoryBubble
+      label={shortName}
+      ringColors={ringColors}
+      metrics={metrics}
+      onPress={onPress}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      scale={scale}
+    >
+      <StoryAvatar
+        name={post.org_name}
+        avatarUrl={postAvatarUrl}
+        avatarSeed={post.org_avatar_seed}
+        entityType="supplier"
+        size={metrics.avatar}
+      />
+    </StoryBubble>
   );
 }
 
-export function StoryReel({ posts, orgId, onCreatePost, headerActions }: StoryReelProps) {
+export function StoryReel({
+  posts,
+  orgId,
+  onCreatePost,
+  embedded = false,
+}: StoryReelProps) {
   const router = useRouter();
   const { profile } = useAuth();
   const [seenKeys, setSeenKeys] = useState<Record<string, true>>({});
@@ -209,15 +330,26 @@ export function StoryReel({ posts, orgId, onCreatePost, headerActions }: StoryRe
   const ownStoryQueueIds = ownStoryQueue.map((s) => s.id).join(",");
   const hasOwnStories = ownStoryQueue.length > 0;
 
+  const mineRing = hasOwnStories ? RING_MINE_ACTIVE : RING_MINE_IDLE;
+  const metrics = storyMetricsFor(embedded);
+
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, embedded && styles.wrapEmbedded]}>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[
+          styles.scroll,
+          embedded && styles.scrollEmbedded,
+          embedded && styles.scrollEmbeddedDesktop,
+        ]}
       >
-        <Pressable
-          onPress={() => {
+        <View style={[styles.mineCluster, embedded && styles.mineClusterEmbedded]}>
+          <StoryBubble
+            label="Mine"
+            ringColors={mineRing}
+            metrics={metrics}
+            onPress={() => {
             if (!latestOwnStory) {
               onCreatePost();
               return;
@@ -233,50 +365,62 @@ export function StoryReel({ posts, orgId, onCreatePost, headerActions }: StoryRe
               },
             });
           }}
-          style={({ pressed }) => [pressed && { opacity: 0.92 }]}
-        >
-          <View style={styles.storyItem}>
-            <LinearGradient
-              colors={
-                hasOwnStories
-                  ? [withAlpha(Theme.primary, "A8"), withAlpha(Theme.darkGreen, "A8")]
-                  : [withAlpha(Theme.textSection, "66"), withAlpha(Theme.textSection, "2A")]
-              }
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.launchRing}
+          badge={
+            <View
+              style={[
+                styles.addBadge,
+                {
+                  width: metrics.addBadge,
+                  height: metrics.addBadge,
+                  borderRadius: metrics.addBadge / 2,
+                },
+              ]}
+              {...(Platform.OS === "web"
+                ? {
+                    // @ts-expect-error -- RNW supports onClick on View
+                    onClick: (e: { stopPropagation: () => void }) => {
+                      e.stopPropagation();
+                      router.push("/(modals)/create-post");
+                    },
+                  }
+                : {
+                    onStartShouldSetResponder: () => true,
+                    onResponderRelease: () => router.push("/(modals)/create-post"),
+                  })}
+              hitSlop={8}
+              {...(Platform.OS !== "web" && { accessibilityRole: "button" as const })}
+              accessibilityLabel="Add story"
             >
-              <View style={styles.launchAvatarWrap}>
-                <PartyAvatar
-                  name={profile?.displayName ?? profile?.full_name ?? "Mine"}
-                  avatarUrl={profile?.avatar_url ?? null}
-                  avatarSeed={profile?.avatar_seed ?? null}
-                  entityType="supplier"
-                  size={64}
-                  borderStyle={styles.storyAvatarImage}
-                />
-              </View>
-              <Pressable
-                style={styles.mineAddIconWrap}
-                onPress={(event) => {
-                  event.stopPropagation();
-                  router.push("/(modals)/create-post");
-                }}
-                hitSlop={8}
-              >
-                <Plus size={12} color={Theme.textOnPrimary} strokeWidth={2.8} />
-              </Pressable>
-            </LinearGradient>
-            <Text style={styles.storyName}>Mine</Text>
-            <Text style={styles.storyMeta} numberOfLines={1}>
-              {hasOwnStories ? `${ownStoryQueue.length} ${ownStoryQueue.length > 1 ? "stories" : "story"}` : "Add story"}
+              <Plus size={metrics.plusSize} color={Theme.textOnPrimary} strokeWidth={2.6} />
+            </View>
+          }
+        >
+          <StoryAvatar
+            name={profile?.displayName ?? profile?.full_name ?? "Mine"}
+            avatarUrl={profile?.avatar_url ?? null}
+            avatarSeed={profile?.avatar_seed ?? null}
+            entityType="supplier"
+            size={metrics.avatar}
+          />
+          </StoryBubble>
+          <View
+            style={[styles.pulseStoryWatermark, embedded && styles.pulseStoryWatermarkEmbedded]}
+            pointerEvents="none"
+          >
+            <Text style={[styles.watermarkPulse, embedded && styles.watermarkPulseEmbedded]}>
+              Pulse.
+            </Text>
+            <Text style={[styles.watermarkStory, embedded && styles.watermarkStoryEmbedded]}>
+              story
             </Text>
           </View>
-        </Pressable>
+        </View>
+
         {stories.map((post) => (
-          <BroadcastCard
+          <BroadcastStory
             key={post.id}
             post={post}
+            metrics={metrics}
             seen={!!seenKeys[storySeenKey(post)]}
             onPress={() => {
               markStorySeen(post);
@@ -299,103 +443,113 @@ export function StoryReel({ posts, orgId, onCreatePost, headerActions }: StoryRe
 
 const styles = StyleSheet.create({
   wrap: {
-    backgroundColor: "transparent",
     paddingTop: 12,
-    paddingBottom: 16,
+    paddingBottom: 12,
+  },
+  wrapEmbedded: {
+    paddingTop: 10,
+    paddingBottom: 10,
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "center",
   },
   scroll: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    gap: 20,
+    gap: 10,
     alignItems: "center",
-    paddingRight: 28,
+    paddingRight: 12,
+    paddingVertical: 2,
+  },
+  scrollEmbedded: {
+    paddingHorizontal: 0,
+    paddingRight: 8,
+  },
+  scrollEmbeddedDesktop: {
+    gap: 14,
+    paddingVertical: 4,
+  },
+  mineCluster: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginRight: 4,
+    flexShrink: 0,
+    paddingVertical: 2,
+  },
+  mineClusterEmbedded: {
+    gap: 14,
+    marginRight: 8,
+    paddingVertical: 4,
+  },
+  pulseStoryWatermark: {
+    alignSelf: "center",
+    justifyContent: "center",
+    opacity: 0.11,
+    minWidth: 52,
+  },
+  pulseStoryWatermarkEmbedded: {
+    opacity: 0.12,
+    minWidth: 64,
+  },
+  watermarkPulse: {
+    fontSize: 22,
+    fontWeight: "800",
+    fontStyle: "italic",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.8,
+    lineHeight: 24,
+  },
+  watermarkPulseEmbedded: {
+    fontSize: 28,
+    lineHeight: 30,
+    letterSpacing: -1,
+  },
+  watermarkStory: {
+    fontSize: 16,
+    fontWeight: "600",
+    fontStyle: "italic",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.4,
+    lineHeight: 19,
+    alignSelf: "flex-end",
+    marginTop: -2,
+  },
+  watermarkStoryEmbedded: {
+    fontSize: 20,
+    lineHeight: 23,
   },
   storyItem: {
-    width: 108,
     alignItems: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 4,
+    justifyContent: "flex-start",
   },
-  storyRing: {
-    width: 96,
-    height: 96,
-    borderRadius: 34,
+  storyItemPressed: {
+    opacity: 0.92,
+  },
+  ringStack: {
+    position: "relative",
     alignItems: "center",
     justifyContent: "center",
-    padding: 3,
-    shadowColor: "#0f172a",
-    shadowOpacity: 0.12,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
   },
-  storyAvatar: {
-    width: 90,
-    height: 90,
-    borderRadius: 30,
+  ringGradientBase: {
+    padding: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ringGapBase: {
     backgroundColor: Theme.screenBackground,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    overflow: "visible",
+    padding: 1.5,
   },
-  storyAvatarImage: {
-    borderWidth: 1.5,
-    borderColor: Theme.networkCardBackground,
-  },
-  storyAvatarPreview: {
-    width: "76%",
-    fontSize: 8,
-    fontWeight: "700",
-    fontStyle: "italic",
-    lineHeight: 10.5,
-    color: Theme.textMutedDemo,
-    textAlign: "center",
-    opacity: 0.86,
-    letterSpacing: 0.08,
-  },
-  storyAvatarIconWrap: {
-    position: "absolute",
-    top: -5,
-    right: -4,
-    width: 26,
-    height: 26,
-    borderRadius: 10,
-    borderWidth: 1,
-    backgroundColor: Theme.screenBackground,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  launchRing: {
-    width: 96,
-    height: 96,
-    borderRadius: 34,
-    borderWidth: 1,
-    borderColor: "rgba(26,35,126,0.12)",
-    borderStyle: "dashed",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 2.5,
-    backgroundColor: "rgba(255,255,255,0.5)",
-  },
-  launchAvatarWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    backgroundColor: Theme.textPrimaryDark,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
+  avatarPlain: {
     overflow: "hidden",
+    borderWidth: 0,
+    borderColor: "transparent",
   },
-  mineAddIconWrap: {
+  addBadge: {
     position: "absolute",
-    right: 10,
-    bottom: 2,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    right: -2,
+    bottom: -2,
     backgroundColor: Theme.primary,
     borderWidth: 2,
     borderColor: Theme.screenBackground,
@@ -403,32 +557,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     shadowColor: Theme.primary,
     shadowOpacity: 0.35,
-    shadowRadius: 6,
+    shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
     elevation: 3,
   },
-  initials: {
-    fontSize: 12,
-    fontWeight: "800",
-    fontStyle: "italic",
-    letterSpacing: -0.5,
-  },
   storyName: {
-    marginTop: 10,
-    fontSize: 12,
-    fontWeight: "800",
+    marginTop: 6,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
-    letterSpacing: 0.2,
-    textAlign: "center",
-    width: "100%",
-  },
-  storyMeta: {
-    marginTop: 3,
-    fontSize: 8,
-    fontWeight: "800",
-    color: Theme.textSecondary,
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
+    letterSpacing: 0.1,
     textAlign: "center",
     width: "100%",
   },

@@ -3,6 +3,7 @@
  * Location modal matches Create Trip pickers (FleetEntityPickerModal — centered sheet, search, rich rows).
  */
 import { CreateTripSheetSearchInput } from "@/components/CreateTripSheetSearchInput";
+import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { addToPlacesCache, getPopularPlacesInIndia, searchPlacesInIndia, type PlaceResult } from "@/lib/placesService";
@@ -42,6 +43,8 @@ export interface LocationSearchFieldProps {
   inputStyle?: object;
   labelStyle?: object;
   onDropdownOpenChange?: (open: boolean) => void;
+  /** Tighter field height and typography for native / narrow create-trip forms. */
+  compact?: boolean;
 }
 
 const DEBOUNCE_MS = 300;
@@ -57,6 +60,7 @@ export function LocationSearchField({
   inputStyle,
   labelStyle,
   onDropdownOpenChange,
+  compact = false,
 }: LocationSearchFieldProps) {
   const { width: winW } = useWindowDimensions();
   const horizontalPad = Layout.screenPaddingHorizontal * 2;
@@ -227,11 +231,14 @@ export function LocationSearchField({
   );
 
   return (
-    <View style={styles.wrapper} collapsable={false}>
+    <View style={[styles.wrapper, compact && styles.wrapperCompact]} collapsable={false}>
       <Text style={labelStyle}>{label}</Text>
       <View style={styles.inputRow}>
         {leadingIcon ? (
-          <View style={styles.leadingIconWrap} pointerEvents="none">
+          <View
+            style={[styles.leadingIconWrap, compact && styles.leadingIconWrapCompact]}
+            pointerEvents="none"
+          >
             {leadingIcon}
           </View>
         ) : null}
@@ -240,14 +247,17 @@ export function LocationSearchField({
           onPress={openDropdown}
           style={[
             styles.input,
+            compact && styles.inputCompact,
             inputStyle,
             styles.inputPressable,
             leadingIcon ? styles.inputWithLeadingIcon : null,
+            leadingIcon && compact ? styles.inputWithLeadingIconCompact : null,
           ]}
         >
           <Text
             style={[
               styles.inputValueText,
+              compact && styles.inputValueTextCompact,
               { color: value.trim() ? Theme.textPrimary : Theme.placeholder },
             ]}
             numberOfLines={1}
@@ -326,6 +336,7 @@ export function LocationSearchField({
                   spellCheck={false}
                   autoComplete="off"
                   autoFocus
+                  compactChat
                   shellStyle={styles.searchShell}
                   accessibilityLabel="Search places"
                 />
@@ -354,6 +365,9 @@ const styles = StyleSheet.create({
     zIndex: 1,
     marginBottom: 12,
   },
+  wrapperCompact: {
+    marginBottom: 4,
+  },
   inputRow: {
     position: "relative",
     marginBottom: 4,
@@ -366,26 +380,47 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     zIndex: 1,
   },
+  leadingIconWrapCompact: {
+    left: 10,
+  },
   inputWithLeadingIcon: {
     paddingLeft: 44,
   },
+  inputWithLeadingIconCompact: {
+    paddingLeft: 36,
+  },
   input: {
     borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    minHeight: 48,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 12,
+    fontWeight: "500",
+    fontStyle: "italic",
+    minHeight: 44,
     paddingRight: 44,
     ...Platform.select({
       web: { outlineStyle: "none" } as TextStyle,
     }),
   },
+  inputCompact: {
+    borderRadius: 10,
+    minHeight: 40,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    paddingRight: 40,
+  },
   inputPressable: {
     justifyContent: "center",
   },
   inputValueText: {
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 12,
+    fontWeight: "500",
+    fontStyle: "italic",
+  },
+  inputValueTextCompact: {
+    fontSize: 14,
+    fontStyle: "normal",
+    fontWeight: "400",
   },
   clearBtn: {
     position: "absolute",
@@ -457,15 +492,15 @@ const styles = StyleSheet.create({
     paddingRight: 12,
   },
   sheetTitle: {
-    fontSize: 20,
-    fontWeight: "800",
+    ...FinanceTxnTypography.partyTitle,
+    fontSize: 12,
+    letterSpacing: 0.25,
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.3,
   },
   sheetSubtitle: {
-    marginTop: 4,
-    fontSize: 14,
-    fontWeight: "500",
+    ...FinanceTxnTypography.routeWhy,
+    fontSize: 9,
+    marginTop: 3,
     color: Theme.textMuted,
   },
   closeBtn: {
@@ -480,7 +515,7 @@ const styles = StyleSheet.create({
   },
   searchShell: {
     marginHorizontal: 20,
-    marginBottom: 16,
+    marginBottom: 12,
   },
   sheetScroll: {
     maxHeight: 340,
@@ -515,10 +550,11 @@ const styles = StyleSheet.create({
   placeRowText: {
     flex: 1,
     minWidth: 0,
-    fontSize: 15,
-    fontWeight: "700",
+    ...FinanceTxnTypography.fieldValue,
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: "500",
     color: Theme.textPrimaryDark,
-    lineHeight: 20,
   },
   customAddressRow: {
     flexDirection: "row",
@@ -562,11 +598,10 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   sectionLabel: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 1,
+    ...FinanceTxnTypography.columnTitle,
+    fontSize: 9,
+    fontWeight: "600",
+    letterSpacing: 0.35,
     paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 8,

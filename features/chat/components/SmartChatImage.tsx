@@ -1,0 +1,420 @@
+/**
+ * SmartChatImage — thin WhatsApp-style chat image pipeline.
+ *
+ * - Prefers **metadata.thumb_url** (or event_payload.thumb_url) — no Storage RPC on receive.
+ * - Else **public render URL** `.../render/image/public/...?width=&quality=` (CDN/imgproxy, not Postgres).
+ * - Else cached **signed transform** via resolveChatImageThumbnail (single flight + module TTL cache).
+ * - Lightbox: if the thumbnail already loaded from the public render URL, reuse CDN at full width
+ *   instead of calling Storage `createSignedUrl` again (cuts Storage/imgproxy load).
+ * - Resets lightbox state when `storagePath` changes so list virtualization cannot leak URLs across rows.
+ * - **expo-image** disk+memory cache + optional **blurhash** / data-URI placeholder to avoid layout jump.
+ */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Modal,
+  Platform,
+  Pressable,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { Image } from "expo-image";
+import { X, ZoomIn } from "lucide-react-native";
+import Theme from "@/constants/Theme";
+import type { TripMessageRow } from "../types/chat.types";
+import {
+  peekChatImageFullDisplayUrl,
+  peekChatImageThumbnailUrl,
+  resolveChatDocumentStorageUrl,
+  resolveChatImageFullDisplayUrl,
+  resolveChatImageThumbnail,
+} from "../utils/resolveChatDocumentUrl.util";
+import {
+  appendImageTransformQuery,
+  buildSupabaseRenderImagePublicUrl,
+} from "../utils/storageRenderImageUrl";
+import { extractThinImagePayload } from "../utils/thinImageMetadata";
+
+const PLACEHOLDER_TINT = "rgba(148, 163, 184, 0.35)";
+
+/** Lightbox max edge — keep in sync with {@link resolveChatImageFullDisplayUrl} default. */
+const FULL_DISPLAY_MAX_EDGE = 1280;
+const FULL_DISPLAY_QUALITY = 80;
+
+export interface SmartChatImageProps {
+  storagePath: string;
+  isOwn?: boolean;
+  /** When set, thumb_url / blurhash from metadata avoid extra work on Realtime insert. */
+  message?: Pick<TripMessageRow, "metadata"> | null;
+  thumbWidth?: number;
+  thumbHeight?: number;
+  thumbQuality?: number;
+}
+
+type LoadState = "idle" | "loading" | "ready" | "error";
+
+function thumbKey(path: string, w: number, h: number, q: number): string {
+  return `${path}|${w}|${h}|${q}`;
+}
+
+export function SmartChatImage({
+  storagePath,
+  isOwn = false,
+  message = null,
+  thumbWidth = 200,
+  thumbHeight = 200,
+  thumbQuality = 60,
+}: SmartChatImageProps) {
+  const thin = useMemo(() => extractThinImagePayload(message ?? undefined), [message]);
+
+  const prebuiltThumb = useMemo(() => {
+    if (!thin.thumbUrl) return null;
+    return appendImageTransformQuery(thin.thumbUrl, thumbWidth, thumbQuality);
+  }, [thin.thumbUrl, thumbWidth, thumbQuality]);
+
+  const publicRenderThumb = useMemo(() => {
+    if (prebuiltThumb) return null;
+    return buildSupabaseRenderImagePublicUrl({
+      storagePath,
+      width: thumbWidth,
+      quality: thumbQuality,
+    });
+  }, [prebuiltThumb, storagePath, thumbWidth, thumbQuality]);
+
+  const initialThumb =
+    prebuiltThumb ??
+    publicRenderThumb ??
+    (storagePath ? peekChatImageThumbnailUrl(storagePath, thumbWidth, thumbHeight, thumbQuality) : null);
+
+  const [thumbUri, setThumbUri] = useState<string | null>(initialThumb);
+  const [thumbState, setThumbState] = useState<LoadState>(() => {
+    if (!storagePath) return "error";
+    return initialThumb ? "ready" : "idle";
+  });
+  const [fullUri, setFullUri] = useState<string | null>(() =>
+    storagePath ? peekChatImageFullDisplayUrl(storagePath) : null,
+  );
+  const [fullState, setFullState] = useState<LoadState>("idle");
+  const [modalVisible, setModalVisible] = useState(false);
+  const [publicFailed, setPublicFailed] = useState(false);
+
+  const inFlightRef = useRef<string | null>(null);
+  /** Invalidates in-flight lightbox loads when `storagePath` changes (list recycle). */
+  const fullLightboxGenRef = useRef(0);
+
+  // List virtualization can reuse this row for a different message — reset lightbox
+  // state so we never show another row's URL or skip `createSignedUrl` incorrectly.
+  useEffect(() => {
+    fullLightboxGenRef.current += 1;
+    if (!storagePath) {
+      setFullUri(null);
+      setFullState("idle");
+      setModalVisible(false);
+      return;
+    }
+    const peekFull = peekChatImageFullDisplayUrl(storagePath, FULL_DISPLAY_MAX_EDGE, FULL_DISPLAY_QUALITY);
+    setFullUri(peekFull);
+    setFullState(peekFull ? "ready" : "idle");
+    setModalVisible(false);
+  }, [storagePath]);
+
+  useEffect(() => {
+    if (!storagePath) {
+      setThumbState("error");
+      setThumbUri(null);
+      return;
+    }
+    const key = thumbKey(storagePath, thumbWidth, thumbHeight, thumbQuality);
+    const fromPeek = peekChatImageThumbnailUrl(storagePath, thumbWidth, thumbHeight, thumbQuality);
+    const first =
+      prebuiltThumb ?? (!publicFailed ? publicRenderThumb : null) ?? fromPeek;
+    if (first) {
+      setThumbUri(first);
+      setThumbState("ready");
+      void Image.prefetch(first, "memory-disk").catch(() => {});
+      return;
+    }
+    if (inFlightRef.current === key) return;
+    inFlightRef.current = key;
+    let cancelled = false;
+    setThumbState("loading");
+    void resolveChatImageThumbnail(storagePath, thumbWidth, thumbHeight, thumbQuality).then((url) => {
+      if (cancelled || inFlightRef.current !== key) return;
+      inFlightRef.current = null;
+      if (url) {
+        setThumbUri(url);
+        setThumbState("ready");
+        void Image.prefetch(url, "memory-disk").catch(() => {});
+      } else {
+        setThumbState("error");
+      }
+    });
+    return () => {
+      cancelled = true;
+      inFlightRef.current = null;
+    };
+  }, [
+    storagePath,
+    thumbWidth,
+    thumbHeight,
+    thumbQuality,
+    prebuiltThumb,
+    publicRenderThumb,
+    publicFailed,
+  ]);
+
+  const onThumbError = useCallback(() => {
+    if (publicRenderThumb && thumbUri === publicRenderThumb && !publicFailed) {
+      setPublicFailed(true);
+    }
+  }, [publicRenderThumb, thumbUri, publicFailed]);
+
+  const placeholderSource = useMemo(() => {
+    if (thin.thumbhash) return { thumbhash: thin.thumbhash };
+    if (thin.blurhash) {
+      return { blurhash: thin.blurhash, width: thumbWidth, height: thumbHeight };
+    }
+    if (thin.thumbDataUri) return { uri: thin.thumbDataUri };
+    return undefined;
+  }, [thin.blurhash, thin.thumbhash, thin.thumbDataUri, thumbWidth, thumbHeight]);
+
+  const loadFullSize = useCallback(async () => {
+    const gen = ++fullLightboxGenRef.current;
+    const instant = peekChatImageFullDisplayUrl(storagePath, FULL_DISPLAY_MAX_EDGE, FULL_DISPLAY_QUALITY);
+    if (instant) {
+      setFullUri(instant);
+      setFullState("ready");
+      setModalVisible(true);
+      return;
+    }
+
+    setModalVisible(true);
+    setFullState("loading");
+    setFullUri(null);
+
+    // Thumbnail already proved `…/render/image/public/…` works — reuse CDN for lightbox
+    // instead of hammering Storage `createSignedUrl` (reduces API / imgproxy pressure).
+    const thumbUsedPublicCdn =
+      Boolean(publicRenderThumb && thumbUri === publicRenderThumb && !publicFailed);
+    const publicFull =
+      thumbUsedPublicCdn &&
+      buildSupabaseRenderImagePublicUrl({
+        storagePath,
+        width: FULL_DISPLAY_MAX_EDGE,
+        quality: FULL_DISPLAY_QUALITY,
+      });
+    if (publicFull) {
+      if (gen !== fullLightboxGenRef.current) return;
+      setFullUri(publicFull);
+      setFullState("ready");
+      return;
+    }
+
+    const transformed = await resolveChatImageFullDisplayUrl(storagePath);
+    if (gen !== fullLightboxGenRef.current) return;
+    if (transformed) {
+      setFullUri(transformed);
+      setFullState("ready");
+      return;
+    }
+    const raw = await resolveChatDocumentStorageUrl(storagePath);
+    if (gen !== fullLightboxGenRef.current) return;
+    if (raw) {
+      setFullUri(raw);
+      setFullState("ready");
+    } else {
+      setFullState("error");
+    }
+  }, [storagePath, publicRenderThumb, thumbUri, publicFailed]);
+
+  if (thumbState === "error") {
+    return (
+      <View style={[s.placeholder, isOwn && s.placeholderOwn]}>
+        <Text style={s.errorText}>Image unavailable</Text>
+      </View>
+    );
+  }
+
+  const showBlurMatte =
+    (thumbState === "loading" || thumbState === "idle") && !placeholderSource;
+
+  return (
+    <>
+      <TouchableOpacity
+        style={s.thumbWrap}
+        onPress={() => { void loadFullSize(); }}
+        activeOpacity={0.85}
+        accessibilityRole="button"
+        accessibilityLabel="View full image"
+      >
+        <View style={s.thumbFrame}>
+          {showBlurMatte ? <View style={s.blurMatte} pointerEvents="none" /> : null}
+          {thumbState === "loading" || thumbState === "idle" ? (
+            <View style={s.loaderOverlay}>
+              <LoadingIndicator size="small" color={isOwn ? "#e0e7ff" : "#64748b"} />
+            </View>
+          ) : null}
+          {thumbUri ? (
+            <Image
+              source={{ uri: thumbUri }}
+              style={s.thumb}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              recyclingKey={thumbUri}
+              placeholder={placeholderSource}
+              placeholderContentFit="cover"
+              onError={() => { onThumbError(); }}
+              accessibilityLabel="Chat image thumbnail"
+            />
+          ) : null}
+        </View>
+        <View style={s.zoomBadge}>
+          <ZoomIn size={12} color="#fff" strokeWidth={2.5} />
+        </View>
+      </TouchableOpacity>
+
+      <Modal
+        visible={modalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModalVisible(false)}
+        statusBarTranslucent
+      >
+        <SafeAreaView style={s.modalBg}>
+          <TouchableOpacity
+            style={s.modalClose}
+            onPress={() => setModalVisible(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Close"
+          >
+            <X size={22} color="#fff" />
+          </TouchableOpacity>
+
+          {fullState === "loading" && (
+            <View style={s.modalLoading}>
+              <LoadingIndicator size="large" color="#fff" />
+              <Text style={s.modalLoadingText}>Loading full image…</Text>
+            </View>
+          )}
+
+          {fullState === "ready" && fullUri && (
+            <Pressable style={s.modalImgWrap} onPress={() => setModalVisible(false)}>
+              <Image
+                source={{ uri: fullUri }}
+                style={s.modalImg}
+                contentFit="contain"
+                cachePolicy="memory-disk"
+                recyclingKey={fullUri}
+                accessibilityLabel="Full-size chat image"
+              />
+            </Pressable>
+          )}
+
+          {fullState === "error" && (
+            <View style={s.modalLoading}>
+              <Text style={[s.modalLoadingText, { color: "#fca5a5" }]}>Could not load full image</Text>
+            </View>
+          )}
+        </SafeAreaView>
+      </Modal>
+    </>
+  );
+}
+
+const s = StyleSheet.create({
+  placeholder: {
+    width: "100%",
+    height: 160,
+    borderRadius: 14,
+    backgroundColor: "rgba(0,0,0,0.06)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  placeholderOwn: {
+    backgroundColor: "rgba(255,255,255,0.12)",
+  },
+  errorText: {
+    fontSize: 11,
+    color: "#94a3b8",
+    fontWeight: "600",
+  },
+  thumbWrap: {
+    borderRadius: 14,
+    overflow: "hidden",
+    position: "relative",
+    backgroundColor: "rgba(0,0,0,0.04)",
+  },
+  thumbFrame: {
+    width: "100%",
+    height: 180,
+    position: "relative",
+    backgroundColor: "rgba(226, 232, 240, 0.5)",
+  },
+  blurMatte: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: PLACEHOLDER_TINT,
+    zIndex: 1,
+  },
+  loaderOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 2,
+  },
+  thumb: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 0,
+  },
+  zoomBadge: {
+    position: "absolute",
+    bottom: 8,
+    right: 8,
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 3,
+  },
+  modalBg: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.92)",
+    justifyContent: "center",
+  },
+  modalClose: {
+    position: "absolute",
+    top: Platform.OS === "ios" ? 56 : 16,
+    right: 16,
+    zIndex: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalImgWrap: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalImg: {
+    width: "100%",
+    height: "85%",
+  },
+  modalLoading: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    flex: 1,
+  },
+  modalLoadingText: {
+    fontSize: 13,
+    color: Theme.textMuted,
+    fontWeight: "600",
+  },
+});

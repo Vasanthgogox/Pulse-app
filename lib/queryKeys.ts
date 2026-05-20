@@ -30,6 +30,10 @@ export const queryKeys = {
       ["q", "trips", "orgIsSupplier", orgId] as const,
     shipperNamesForSupplier: (orgId: string) =>
       ["q", "trips", "shipperNames", orgId] as const,
+    /** Prefix: `invalidateQueries` with this refetches every assignment-audit batch. */
+    assignmentAuditRoot: ["q", "trips", "assignment-audit"] as const,
+    assignmentAudit: (tripIdsKey: string) =>
+      ["q", "trips", "assignment-audit", tripIdsKey] as const,
   },
 
   transactions: {
@@ -168,6 +172,9 @@ export const queryKeys = {
       ["q", "discover", orgId, search] as const,
   },
 
+  mutualConnections: (viewerOrgId: string, targetOrgId: string) =>
+    ["q", "network", "mutual-connections", viewerOrgId, targetOrgId] as const,
+
   orgMembers: {
     all: (orgId: string) => ["q", "org-members", orgId] as const,
     list: (orgId: string) => ["q", "org-members", orgId, "list"] as const,
@@ -183,5 +190,11 @@ export const queryKeys = {
       ["q", "trip-conversations", "detail", conversationId] as const,
     messages: (conversationId: string) =>
       ["q", "trip-conversations", "messages", conversationId] as const,
+  },
+
+  disputes: {
+    all: (orgId: string) => ["q", "disputes", orgId] as const,
+    received: (orgId: string) => ["q", "disputes", orgId, "received"] as const,
+    open: (orgId: string) => ["q", "disputes", orgId, "open"] as const,
   },
 } as const;

@@ -15,6 +15,10 @@ export interface ReportDriverLocationParams {
   longitude: number;
   accuracy?: number | null;
   source: DriverLocationSource;
+  /** Hubometer (km) when available from the vehicle / driver input. */
+  odometerKm?: number | null;
+  /** Explicit capture time (defaults to DB `now()`). */
+  recordedAt?: string | null;
 }
 
 export interface ReportDriverLocationResult {
@@ -35,18 +39,33 @@ export interface DriverLocationRow {
 export async function reportDriverLocation(
   params: ReportDriverLocationParams
 ): Promise<ReportDriverLocationResult> {
-  const { driverId, organizationId, tripId, latitude, longitude, accuracy, source } = params;
-  const { error } = await supabase()
-    .from('driver_locations')
-    .insert({
-      driver_id: driverId,
-      organization_id: organizationId,
-      trip_id: tripId,
-      latitude,
-      longitude,
-      accuracy: accuracy ?? null,
-      source,
-    });
+  const {
+    driverId,
+    organizationId,
+    tripId,
+    latitude,
+    longitude,
+    accuracy,
+    source,
+    odometerKm,
+    recordedAt,
+  } = params;
+  const row: Record<string, unknown> = {
+    driver_id: driverId,
+    organization_id: organizationId,
+    trip_id: tripId,
+    latitude,
+    longitude,
+    accuracy: accuracy ?? null,
+    source,
+  };
+  if (odometerKm != null && Number.isFinite(odometerKm)) {
+    row.odometer_km = odometerKm;
+  }
+  if (typeof recordedAt === 'string' && recordedAt.trim() !== '') {
+    row.recorded_at = recordedAt.trim();
+  }
+  const { error } = await supabase().from('driver_locations').insert(row);
   if (error) {
     if (__DEV__) {
       console.warn('[driver_locations] save failed', {
@@ -179,6 +198,7 @@ export async function getLatestDriverLocationForTripOrDriver(
 /**
  * Fetch the most recent N location pings for a trip (newest first). Dev use: last-3 trail.
  * Requires "Drivers read own locations" RLS policy on driver_locations.
+ * For all trip stakeholders (owner + client + supplier) use getLastNLocationsForTripViaRpc.
  */
 export async function getLastNLocationsForTrip(
   tripId: string,
@@ -193,6 +213,28 @@ export async function getLastNLocationsForTrip(
 
   if (error) return { error: new Error(error.message), points: [] };
   return { error: null, points: (data ?? []) as { latitude: number; longitude: number; recorded_at: string }[] };
+}
+
+/**
+ * Partner-safe: last N location pings via SECURITY DEFINER RPC.
+ * Works for fleet org, client org, and supplier org members.
+ * Points are returned newest-first by the DB; caller receives them in that order.
+ */
+export async function getLastNLocationsForTripViaRpc(
+  tripId: string,
+  n = 3,
+): Promise<{ error: Error | null; points: { latitude: number; longitude: number; recorded_at: string }[] }> {
+  const { data, error } = await supabase().rpc('get_last_n_locations_for_trip', {
+    p_trip_id: tripId,
+    p_n: n,
+  });
+  if (error) {
+    console.warn('[tracking] get_last_n_locations_for_trip RPC error', { tripId, n, error: error.message });
+    return { error: new Error(error.message), points: [] };
+  }
+  const points = (Array.isArray(data) ? data : []) as { latitude: number; longitude: number; recorded_at: string }[];
+  console.log('[tracking] getLastNLocationsForTripViaRpc', { tripId, n, returned: points.length });
+  return { error: null, points };
 }
 
 /**

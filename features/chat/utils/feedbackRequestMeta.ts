@@ -1,4 +1,8 @@
-import type { FeedbackRequestMetadata, TripMessageRow } from "../types/chat.types";
+import type {
+  FeedbackRequestMetadata,
+  TripConversationRow,
+  TripMessageRow,
+} from "../types/chat.types";
 
 function coerceRatedId(raw: unknown): string | null {
   if (raw == null) return null;
@@ -32,7 +36,8 @@ function normalizeRatedPartyType(raw: unknown): "client" | "supplier" | "driver"
 export function parseFeedbackRequestMetadata(
   message: Pick<TripMessageRow, "message_type" | "metadata">,
 ): FeedbackRequestMetadata | null {
-  if (message.message_type !== "feedback_request") return null;
+  if (message.message_type !== "feedback_request" && message.message_type !== "feedback")
+    return null;
 
   let rawMeta: unknown = message.metadata;
   if (typeof rawMeta === "string") {
@@ -71,16 +76,63 @@ export function parseFeedbackRequestMetadata(
         ? Number(submittedScore)
         : undefined;
 
+  const ratingStatus = o.rating_status === "rated" ? "rated" : undefined;
+
+  let rating: number | undefined;
+  const rawRating = o.rating;
+  if (typeof rawRating === "number" && Number.isFinite(rawRating)) {
+    rating = rawRating;
+  } else if (typeof rawRating === "string" && rawRating.trim() && Number.isFinite(Number(rawRating))) {
+    rating = Number(rawRating);
+  }
+
   return {
     feedback_version: feedbackVersion,
     rated_party_type: rt,
     rated_id: ratedId,
     rated_display_name:
       typeof o.rated_display_name === "string" ? o.rated_display_name : undefined,
+    rating,
     submitted_at: typeof o.submitted_at === "string" ? o.submitted_at : undefined,
     submitted_score: scoreNum,
     submitted_tags: Array.isArray(o.submitted_tags)
       ? (o.submitted_tags as unknown[]).filter((t): t is string => typeof t === "string")
       : undefined,
+    rating_status: ratingStatus,
   };
+}
+
+/**
+ * True when this message belongs in the given party thread: same conversation row,
+ * and metadata rates exactly that thread's client / supplier / driver.
+ * Use this so a debrief card never appears in the wrong party tab.
+ */
+export function tripFeedbackRequestMatchesConversation(
+  message: Pick<TripMessageRow, "id" | "conversation_id" | "message_type" | "metadata">,
+  conv: Pick<
+    TripConversationRow,
+    "id" | "party_type" | "client_id" | "supplier_id" | "driver_id"
+  >,
+  resolvedPartyIds?: {
+    client_id?: string | null;
+    supplier_id?: string | null;
+    driver_id?: string | null;
+  },
+): boolean {
+  if (message.message_type !== "feedback_request" && message.message_type !== "feedback")
+    return false;
+  if (message.conversation_id !== conv.id) return false;
+  const meta = parseFeedbackRequestMetadata(message);
+  if (!meta) return false;
+  if (meta.rated_party_type !== conv.party_type) return false;
+  const partyId =
+    conv.party_type === "client"
+      ? conv.client_id ?? resolvedPartyIds?.client_id
+      : conv.party_type === "supplier"
+        ? conv.supplier_id ?? resolvedPartyIds?.supplier_id
+        : conv.driver_id ?? resolvedPartyIds?.driver_id;
+  if (partyId == null || String(partyId).trim() === "") {
+    return true;
+  }
+  return String(meta.rated_id).trim() === String(partyId).trim();
 }

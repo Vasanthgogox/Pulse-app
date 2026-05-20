@@ -2,21 +2,47 @@
  * Single card: summary (Total In / Out) + toolbar (search, report icon, filter).
  * Animated icons, report icon-only, used on Treasury and Entity detail.
  */
+import {
+    CHAT_FILTER_MUTED,
+    chatFilterChromeStyles as chatChrome,
+} from "@/constants/ChatFilterChrome";
 import Theme from '@/constants/Theme';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
+import {
+    useCallback,
+    useEffect,
+    useRef,
+    useState,
+    type ComponentProps,
+    type ReactNode,
+} from 'react';
+import {
+    Modal,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    TouchableWithoutFeedback,
+    useWindowDimensions,
+    View,
+    type StyleProp,
+    type TextStyle,
+    type ViewStyle,
+} from 'react-native';
 import Animated, {
-  cancelAnimation,
-  Easing,
-  runOnJS,
-  useAnimatedReaction,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withSequence,
-  withSpring,
-  withTiming,
+    cancelAnimation,
+    Easing,
+    runOnJS,
+    useAnimatedReaction,
+    useAnimatedStyle,
+    useSharedValue,
+    withRepeat,
+    withSequence,
+    withSpring,
+    withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { FinancePeriodFilter, LedgerCategory } from '../types';
@@ -369,7 +395,11 @@ export function TreasurySummaryCard({
   const periodAndSourceFilters = (
     <>
       {filterLabel != null && !hideEntityFilterDropdown && (
-        <View ref={refPeriodFilter} style={styles.filterBlock} collapsable={false}>
+        <View
+          ref={refPeriodFilter}
+          style={styles.filterBlock as ViewStyle}
+          collapsable={false}
+        >
           <TouchableOpacity
             activeOpacity={0.8}
             onPress={() => {
@@ -403,12 +433,12 @@ export function TreasurySummaryCard({
             onPressOut={() => {
               filterBtnScale.value = withSpring(1, springConfig);
             }}
-            style={styles.filterTrigger}
+            style={styles.filterTrigger as ViewStyle}
           >
             <Animated.View
               style={[
-                styles.filterTriggerInner,
-                isLightToolbar && styles.filterTriggerInnerLight,
+                styles.filterTriggerInner as ViewStyle,
+                isLightToolbar && (styles.filterTriggerInnerLight as ViewStyle),
                 filterAnimatedStyle,
               ]}
             >
@@ -419,8 +449,8 @@ export function TreasurySummaryCard({
               />
               <Text
                 style={[
-                  styles.filterTriggerText,
-                  isLightToolbar && styles.filterTriggerTextLight,
+                  styles.filterTriggerText as TextStyle,
+                  isLightToolbar && (styles.filterTriggerTextLight as TextStyle),
                 ]}
                 numberOfLines={1}
               >
@@ -440,7 +470,7 @@ export function TreasurySummaryCard({
                 setShowSourceDropdown(false);
               }}
             >
-              <View style={styles.filterModalOverlay}>
+              <View style={styles.filterModalOverlay as ViewStyle}>
                 <TouchableWithoutFeedback
                   onPress={() => {
                     setShowFilterDropdown(false);
@@ -453,7 +483,7 @@ export function TreasurySummaryCard({
                 </TouchableWithoutFeedback>
                 <View
                   style={[
-                    styles.filterModalCardWrap,
+                    styles.filterModalCardWrap as ViewStyle,
                     {
                       top:
                         dropdownAnchorY > 0
@@ -625,7 +655,19 @@ export function TreasurySummaryCard({
                                 {ledgerCategory === c && <View style={styles.dropdownItemAccent} />}
                                 <View style={[styles.dropdownItemIconWrap, ledgerCategory === c && styles.dropdownItemIconWrapActive]}>
                                   <FontAwesome
-                                    name={c === 'all' ? 'list' : c === 'customers' ? 'building' : c === 'suppliers' ? 'warehouse' : c === 'vehicle' ? 'truck' : 'user'}
+                                    name={
+                                      (c === "all"
+                                        ? "list"
+                                        : c === "customers"
+                                          ? "building"
+                                          : c === "suppliers"
+                                            ? "warehouse"
+                                            : c === "vehicle"
+                                              ? "truck"
+                                              : "user") as ComponentProps<
+                                        typeof FontAwesome
+                                      >["name"]
+                                    }
                                     size={14}
                                     color={ledgerCategory === c ? Theme.teslaRed : Theme.textMutedDemo}
                                   />
@@ -666,7 +708,19 @@ export function TreasurySummaryCard({
                             {ledgerCategory === c && <View style={styles.dropdownItemAccent} />}
                             <View style={[styles.dropdownItemIconWrap, ledgerCategory === c && styles.dropdownItemIconWrapActive]}>
                               <FontAwesome
-                                name={c === 'all' ? 'list' : c === 'customers' ? 'building' : c === 'suppliers' ? 'warehouse' : c === 'vehicle' ? 'truck' : 'user'}
+                                name={
+                                  (c === "all"
+                                    ? "list"
+                                    : c === "customers"
+                                      ? "building"
+                                      : c === "suppliers"
+                                        ? "warehouse"
+                                        : c === "vehicle"
+                                          ? "truck"
+                                          : "user") as ComponentProps<
+                                    typeof FontAwesome
+                                  >["name"]
+                                }
                                 size={14}
                                 color={ledgerCategory === c ? Theme.teslaRed : Theme.textMutedDemo}
                               />
@@ -723,7 +777,11 @@ export function TreasurySummaryCard({
         </View>
       )}
       {sourceFilterLabel != null && !showInlineSourceChips && (
-        <View ref={refSourceFilter} style={styles.filterBlock} collapsable={false}>
+        <View
+          ref={refSourceFilter}
+          style={styles.filterBlock as ViewStyle}
+          collapsable={false}
+        >
           <TouchableOpacity
             activeOpacity={0.8}
             onPress={() => {
@@ -741,12 +799,12 @@ export function TreasurySummaryCard({
             onPressOut={() => {
               filterBtnScale.value = withSpring(1, springConfig);
             }}
-            style={styles.filterTrigger}
+            style={styles.filterTrigger as ViewStyle}
           >
             <Animated.View
               style={[
-                styles.filterTriggerInner,
-                isLightToolbar && styles.filterTriggerInnerLight,
+                styles.filterTriggerInner as ViewStyle,
+                isLightToolbar && (styles.filterTriggerInnerLight as ViewStyle),
                 filterAnimatedStyle,
               ]}
             >
@@ -757,8 +815,8 @@ export function TreasurySummaryCard({
               />
               <Text
                 style={[
-                  styles.filterTriggerText,
-                  isLightToolbar && styles.filterTriggerTextLight,
+                  styles.filterTriggerText as TextStyle,
+                  isLightToolbar && (styles.filterTriggerTextLight as TextStyle),
                 ]}
                 numberOfLines={1}
               >
@@ -945,155 +1003,140 @@ export function TreasurySummaryCard({
           ]}
         >
           <View style={[styles.toolbarLeft, styles.toolbarLeftNetwork]}>
-            <View style={styles.networkSearchRow}>
-              {showInlineSourceChips && (
-                <View style={styles.inlineSourceChipRail}>
-                  {(['all', 'asset', 'aggregate'] as const).map((s) => (
+            <View style={chatChrome.toolbarStack}>
+              {showInlineSourceChips ? (
+                <View style={chatChrome.tabRow}>
+                  {(["all", "asset", "aggregate"] as const).map((s) => {
+                    const active = sourceFilter === s;
+                    return (
+                      <TouchableOpacity
+                        key={s}
+                        style={[
+                          chatChrome.tabPill,
+                          active && chatChrome.tabPillActive,
+                        ]}
+                        onPress={() => onSourceFilterChange?.(s)}
+                        activeOpacity={0.75}
+                        accessibilityRole="tab"
+                        accessibilityState={{ selected: active }}
+                      >
+                        <FontAwesome
+                          name={
+                            s === "all"
+                              ? "list"
+                              : s === "asset"
+                                ? "truck"
+                                : "sitemap"
+                          }
+                          size={12}
+                          color={active ? "#ffffff" : CHAT_FILTER_MUTED}
+                        />
+                        <Text
+                          style={[
+                            chatChrome.tabPillLabel,
+                            active && chatChrome.tabPillLabelActive,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {SOURCE_FILTER_LABELS[s]}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ) : null}
+
+              <View style={chatChrome.searchScopeStrip}>
+                <View style={chatChrome.searchWrap}>
+                  <AnimatedIcon
+                    name="search"
+                    size={12}
+                    color="#94a3b8"
+                    style={styles.searchIcon}
+                  />
+                  <TextInput
+                    style={[
+                      chatChrome.searchInput,
+                      Platform.OS === "web" &&
+                        ({ outlineStyle: "none" } as unknown as TextStyle),
+                    ]}
+                    value={searchQuery}
+                    onChangeText={onSearchChange}
+                    placeholder={searchPlaceholder}
+                    placeholderTextColor="#94a3b8"
+                    returnKeyType="search"
+                    autoCorrect={false}
+                    spellCheck={false}
+                    autoComplete="off"
+                  />
+                  {searchQuery !== "" ? (
                     <TouchableOpacity
-                      key={s}
-                      style={[
-                        styles.inlineSourceChip,
-                        isLightToolbar && styles.inlineSourceChipLight,
-                        sourceFilter === s && styles.inlineSourceChipActive,
-                        sourceFilter === s &&
-                          isLightToolbar &&
-                          styles.inlineSourceChipActiveLight,
-                      ]}
-                      onPress={() => onSourceFilterChange?.(s)}
-                      activeOpacity={0.8}
+                      onPress={() => onSearchChange("")}
+                      style={styles.searchClearIcon}
+                      hitSlop={8}
                     >
                       <FontAwesome
-                        name={s === 'all' ? 'list' : s === 'asset' ? 'truck' : 'sitemap'}
-                        size={11}
-                        color={
-                          sourceFilter === s
-                            ? isLightToolbar
-                              ? Theme.textPrimary
-                              : Theme.textOnDark
-                            : isLightToolbar
-                              ? Theme.textSecondary
-                              : Theme.textOnDarkMuted
-                        }
+                        name="times-circle"
+                        size={12}
+                        color="#94a3b8"
                       />
-                      <Text
-                        style={[
-                          styles.inlineSourceChipText,
-                          isLightToolbar && styles.inlineSourceChipTextLight,
-                          sourceFilter === s && styles.inlineSourceChipTextActive,
-                          sourceFilter === s &&
-                            isLightToolbar &&
-                            styles.inlineSourceChipTextActiveLight,
-                        ]}
-                      >
-                        {SOURCE_FILTER_LABELS[s]}
-                      </Text>
                     </TouchableOpacity>
-                  ))}
+                  ) : null}
                 </View>
-              )}
-              <View
-                style={[
-                  styles.searchWrap,
-                  styles.searchWrapNetwork,
-                  isLightToolbar && styles.searchWrapNetworkLight,
-                ]}
-              >
-                <AnimatedIcon
-                  name="search"
-                  size={14}
-                  color={isLightToolbar ? Theme.textSecondary : Theme.textOnDarkMuted}
-                  style={styles.searchIcon}
-                />
-                <TextInput
-                  style={[
-                    styles.searchInput,
-                    styles.searchInputNetwork,
-                    isLightToolbar && styles.searchInputNetworkLight,
-                  ]}
-                  value={searchQuery}
-                  onChangeText={onSearchChange}
-                  placeholder={searchPlaceholder}
-                  placeholderTextColor={
-                    isLightToolbar ? Theme.textSecondary : Theme.textOnDarkMuted
-                  }
-                  returnKeyType="search"
-                  autoCorrect={false}
-                  spellCheck={false}
-                  autoComplete="off"
-                />
-                {searchQuery !== '' && (
+
+                {onEntityFilterChange != null ? (
+                  <View style={chatChrome.scopeSegment}>
+                    {(["all", "has_due", "no_due"] as const).map((f) => {
+                      const active = entityFilter === f;
+                      return (
+                        <TouchableOpacity
+                          key={f}
+                          style={[
+                            chatChrome.scopePill,
+                            active && chatChrome.scopePillActive,
+                          ]}
+                          onPress={() => onEntityFilterChange(f)}
+                          activeOpacity={0.82}
+                          accessibilityRole="tab"
+                          accessibilityState={{ selected: active }}
+                        >
+                          <Text
+                            style={[
+                              chatChrome.scopePillText,
+                              active && chatChrome.scopePillTextActive,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {effectiveEntityFilterLabels[f]}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                ) : null}
+
+                {onEntityFilterChange == null ? periodAndSourceFilters : null}
+
+                {isAnyFilterActive ? (
                   <TouchableOpacity
-                    onPress={() => onSearchChange('')}
-                    style={styles.searchClearIcon}
-                  >
-                    <FontAwesome
-                      name="times-circle"
-                      size={14}
-                      color={isLightToolbar ? Theme.textSecondary : Theme.textOnDarkMuted}
-                    />
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {onEntityFilterChange != null && (
-                <View style={styles.networkEntityChipsWrap}>
-                  {(['all', 'has_due', 'no_due'] as const).map((f) => (
-                    <TouchableOpacity
-                      key={f}
-                      style={[
-                        styles.networkTypeChip,
-                        entityFilter === f && styles.networkTypeChipActive,
-                      ]}
-                      onPress={() => onEntityFilterChange(f)}
-                      activeOpacity={0.8}
-                    >
-                      <Text
-                        style={[
-                          styles.networkTypeChipText,
-                          entityFilter === f && styles.networkTypeChipTextActive,
-                        ]}
-                      >
-                        {effectiveEntityFilterLabels[f]}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-
-              {/* When no entity filter (Cash tab), show period/source filters in-line like Network chips */}
-              {onEntityFilterChange == null && periodAndSourceFilters}
-
-              {isAnyFilterActive && (
-                <TouchableOpacity
-                  onPress={onClearFilters}
-                  activeOpacity={0.7}
-                  style={[
-                    styles.clearFiltersBtn,
-                    isLightToolbar && styles.clearFiltersBtnLight,
-                  ]}
-                >
-                  <FontAwesome
-                    name="times"
-                    size={10}
-                    color={isLightToolbar ? Theme.textPrimary : Theme.textOnDark}
-                  />
-                  <Text
+                    onPress={onClearFilters}
+                    activeOpacity={0.7}
                     style={[
-                      styles.clearFiltersText,
-                      isLightToolbar && styles.clearFiltersTextLight,
+                      chatChrome.scopePill,
+                      styles.clearFiltersBtnChat,
                     ]}
                   >
-                    Clear
-                  </Text>
-                </TouchableOpacity>
-              )}
+                    <FontAwesome name="times" size={10} color={CHAT_FILTER_MUTED} />
+                  </TouchableOpacity>
+                ) : null}
 
-              {filterRowRight != null && (
-                <View style={styles.filterRowRight}>{filterRowRight}</View>
-              )}
+                {filterRowRight != null ? (
+                  <View style={styles.filterRowRight}>{filterRowRight}</View>
+                ) : null}
+              </View>
             </View>
 
-            {onEntityFilterChange != null && periodAndSourceFilters}
+            {onEntityFilterChange != null ? periodAndSourceFilters : null}
           </View>
 
           {!hideReportInToolbar && (
@@ -1115,7 +1158,11 @@ export function TreasurySummaryCard({
           <View style={[styles.searchWrap, compactToolbar && styles.searchWrapStacked]}>
             <AnimatedIcon name="search" size={11} color={Theme.textMutedDemo} style={styles.searchIcon} />
             <TextInput
-              style={styles.searchInput}
+              style={[
+                styles.searchInput,
+                Platform.OS === "web" &&
+                  ({ outlineStyle: "none" } as unknown as TextStyle),
+              ]}
               value={searchQuery}
               onChangeText={onSearchChange}
               placeholder={searchPlaceholder}
@@ -1189,9 +1236,15 @@ const styles = StyleSheet.create({
     borderColor: Theme.separatorDark,
     overflow: 'visible',
     padding: 12,
-    shadowColor: Theme.shadow,
-    boxShadow: "0px 2px 6px 0px rgba(0, 0, 0, 0.15)",
-    elevation: 4,
+    ...(Platform.OS === "web"
+      ? ({ boxShadow: "0px 2px 6px 0px rgba(0, 0, 0, 0.15)" } as ViewStyle)
+      : ({
+          shadowColor: Theme.shadow,
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.2,
+          shadowRadius: 6,
+          elevation: 4,
+        } as ViewStyle)),
   },
   cardFullWidth: {
     marginHorizontal: 0,
@@ -1313,11 +1366,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 14,
     color: Theme.textOnDark,
-    ...Platform.select({
-      web: {
-        outlineStyle: 'none',
-      } as any,
-    }),
   },
   searchInputNetworkLight: {
     color: Theme.textPrimary,
@@ -1501,11 +1549,6 @@ const styles = StyleSheet.create({
     color: Theme.textOnDark,
     paddingVertical: 0,
     minWidth: 0,
-    ...Platform.select({
-      web: {
-        outlineStyle: 'none',
-      } as any,
-    }),
   },
   reportIconBtn: {
     width: 32,
@@ -1570,9 +1613,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.2)',
     gap: 5,
-    shadowColor: '#000',
-    boxShadow: "0px 1px 2px 0px rgba(0, 0, 0, 0.12)",
-    elevation: 2,
+    ...(Platform.OS === "web"
+      ? ({ boxShadow: "0px 1px 2px 0px rgba(0, 0, 0, 0.12)" } as ViewStyle)
+      : ({
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.12,
+          shadowRadius: 2,
+          elevation: 2,
+        } as ViewStyle)),
   },
   filterTriggerInnerLight: {
     backgroundColor: Theme.screenBackground,
@@ -1614,7 +1663,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.28)',
   },
   inlineSourceChipActiveLight: {
-    backgroundColor: Theme.cardBackground,
+    backgroundColor: Theme.surface,
     borderColor: Theme.textSecondary,
   },
   inlineSourceChipText: {
@@ -1632,6 +1681,11 @@ const styles = StyleSheet.create({
   },
   inlineSourceChipTextActiveLight: {
     color: Theme.textPrimary,
+  },
+  clearFiltersBtnChat: {
+    minWidth: 34,
+    maxWidth: 34,
+    paddingHorizontal: 0,
   },
   filterModalOverlay: {
     flex: 1,
@@ -1656,9 +1710,15 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 12,
-    shadowColor: '#000',
-    boxShadow: "0px 3px 8px 0px rgba(0, 0, 0, 0.22)",
-    elevation: 12,
+    ...(Platform.OS === "web"
+      ? ({ boxShadow: "0px 3px 8px 0px rgba(0, 0, 0, 0.22)" } as ViewStyle)
+      : ({
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.22,
+          shadowRadius: 8,
+          elevation: 12,
+        } as ViewStyle)),
     overflow: 'hidden',
   },
   filterModalHandle: {
@@ -1704,9 +1764,15 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 8,
     zIndex: 10000,
-    elevation: 10000,
-    shadowColor: '#000',
-    boxShadow: "0px 4px 12px 0px rgba(0, 0, 0, 0.3)",
+    ...(Platform.OS === "web"
+      ? ({ boxShadow: "0px 4px 12px 0px rgba(0, 0, 0, 0.3)" } as ViewStyle)
+      : ({
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.3,
+          shadowRadius: 12,
+          elevation: 10000,
+        } as ViewStyle)),
   },
   dropdownItem: {
     flexDirection: 'row',
@@ -1755,4 +1821,4 @@ const styles = StyleSheet.create({
   dropdownItemCheck: {
     marginLeft: 6,
   },
-});
+} as any);

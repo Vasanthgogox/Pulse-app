@@ -2,11 +2,12 @@
  * Ledger report preview: table of transactions with Print, Share (WhatsApp), and Download.
  * Shown when user taps Report icon on Treasury or entity detail.
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
 import * as XLSX from 'xlsx';
-import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView, Share, Alert, Linking, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView, Share, Alert, Linking,  Platform } from 'react-native';
 import { useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
@@ -371,7 +372,8 @@ export function LedgerReportModal({
         }
         return;
       }
-      if (!FileSystem.cacheDirectory) throw new Error('No cache directory available');
+      const cacheDirectory = (FileSystem as { cacheDirectory?: string }).cacheDirectory;
+      if (!cacheDirectory) throw new Error('No cache directory available');
       const workbook = isCustomReport
         ? (() => {
             const ws = XLSX.utils.aoa_to_sheet([
@@ -384,8 +386,8 @@ export function LedgerReportModal({
           })()
         : buildLedgerWorkbook(sortedTransactions, totalIn, totalOut);
       const base64 = XLSX.write(workbook, { type: 'base64', bookType: 'xlsx' });
-      const uri = `${FileSystem.cacheDirectory}ledger-report-${Date.now()}.xlsx`;
-      await FileSystem.writeAsStringAsync(uri, base64, { encoding: FileSystem.EncodingType.Base64 });
+      const uri = `${cacheDirectory}ledger-report-${Date.now()}.xlsx`;
+      await FileSystem.writeAsStringAsync(uri, base64, { encoding: 'base64' });
       const sharingAvailable = await Sharing.isAvailableAsync();
       if (sharingAvailable) {
         await Sharing.shareAsync(uri, {
@@ -563,7 +565,7 @@ export function LedgerReportModal({
               disabled={downloadInProgress}
             >
               {downloadInProgress ? (
-                <ActivityIndicator size="small" color={Theme.textPrimary} />
+                <LoadingIndicator size="small" color={Theme.textPrimary} />
               ) : (
                 <FontAwesome name="download" size={16} color={Theme.textPrimary} />
               )}

@@ -2,21 +2,18 @@
  * Create story — LOAD (from an existing indent or manual) or VEHICLE AVAILABILITY.
  * Expires in 24h. No social updates.
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from "@/constants/Theme";
 import Layout from "@/constants/Layout";
 import { useAuth } from "@/contexts/AuthContext";
 import { BroadcastPickIndentCard } from "@/features/network/components/BroadcastPickIndentCard";
 import { createPost, type PostType } from "@/features/network/services/posts.service";
-import { createIndent, getIndentDisplayNumber } from "@/features/indents";
+import { createIndent, getIndentDisplayNumber } from "@/features/indents/services/indents.service";
 import { indentCanBroadcastToPulseNetwork } from "@/features/network/utils/indentBroadcastEligibility.util";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import {
-  useInvalidatePosts,
-  useIndentsQuery,
-  useDirectQuoteCountsQuery,
-  useInvalidateIndents,
-  useVehiclesQuery,
-} from "@/lib/queries";
+import { useInvalidatePosts } from "@/lib/queries/usePostsQuery";
+import { useIndentsQuery, useDirectQuoteCountsQuery, useInvalidateIndents } from "@/lib/queries/useIndentsQuery";
+import { useVehiclesQuery } from "@/lib/queries/useVehiclesQuery";
 import { ROUTES } from "@/lib/routes";
 import { useRouter } from "expo-router";
 import {
@@ -30,7 +27,6 @@ import {
 } from "lucide-react-native";
 import React, { useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -285,7 +281,7 @@ export default function CreatePostScreen() {
           disabled={!canSubmit || submitting}
         >
           {submitting ? (
-            <ActivityIndicator size={14} color="#fff" />
+            <LoadingIndicator size={14} color="#fff" />
           ) : (
             <Text style={styles.publishBtnText}>Deploy</Text>
           )}
@@ -293,7 +289,8 @@ export default function CreatePostScreen() {
       </View>
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" ? "padding" : "padding"}
+        enabled={Platform.OS !== "web"}
         style={{ flex: 1 }}
         keyboardVerticalOffset={insets.top + 60}
       >
@@ -389,7 +386,7 @@ export default function CreatePostScreen() {
 
               {indentsLoading ? (
                 <View style={styles.loadListLoading}>
-                  <ActivityIndicator size="small" color={Theme.primary} />
+                  <LoadingIndicator size="small" color={Theme.primary} />
                   <Text style={styles.loadListLoadingText}>Loading your indents…</Text>
                 </View>
               ) : broadcastableIndents.length === 0 ? (
@@ -631,7 +628,7 @@ export default function CreatePostScreen() {
                   <Text style={styles.sectionTitle}>IDLE VEHICLES *</Text>
                   {vehiclesLoading ? (
                     <View style={styles.loadListLoading}>
-                      <ActivityIndicator size="small" color={Theme.primary} />
+                      <LoadingIndicator size="small" color={Theme.primary} />
                       <Text style={styles.loadListLoadingText}>Loading idle vehicles…</Text>
                     </View>
                   ) : idleVehicles.length === 0 ? (

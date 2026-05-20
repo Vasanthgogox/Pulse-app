@@ -1,6 +1,8 @@
 -- Compatibility view for dashboard queries expecting dashboard_trip_metrics.
 -- Aggregates trip counts and finance metrics at organization level.
 
+ALTER TABLE public.trips ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+
 CREATE OR REPLACE VIEW public.dashboard_trip_metrics
 WITH (security_invoker = true)
 AS

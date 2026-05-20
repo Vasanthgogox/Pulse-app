@@ -3,6 +3,7 @@
  * Driver layout matches reference: hero avatar + sectioned form + primary Save; avatar tap opens action sheet.
  * Avatar: profile.avatar_url (signed) or preset (driver / user-2d). Colors from Theme only.
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
@@ -12,7 +13,7 @@ import {
   StyleSheet,
   Modal,
   ScrollView,
-  ActivityIndicator,
+  
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -39,7 +40,6 @@ import { validatePhone } from '@/lib/phoneValidation';
 import { VALIDATION, maxLength, validateFullName } from '@/lib/validation';
 import * as authService from '../services/auth.service';
 
-/** Default preset seed when no uploaded avatar (same as driver — assets/drivers/driver-1.png etc.). */
 const DEFAULT_AVATAR_SEED = 'driver-1';
 
 /** Driver edit screen — cool white page (reference: #FDFEFF). */
@@ -95,11 +95,10 @@ export function EditProfileModal({
 }: EditProfileModalProps) {
   const insets = useSafeAreaInsets();
   const { profile } = useAuth();
-  const isUser2D = avatarPresetStyle === 'user-2d';
   // Use the same clean, form-first modal layout across driver + user flows.
   // Keeps interactions identical while matching app theme consistently.
   const driverRefLayout = false;
-  const accent = isUser2D ? Theme.primary : Theme.positive;
+
   const [fullName, setFullName] = useState(initialFullName);
   const [phone, setPhone] = useState(initialPhone);
   const [companyName, setCompanyName] = useState(initialCompanyName);
@@ -263,17 +262,6 @@ export function EditProfileModal({
     });
   };
 
-  const userPreset =
-    USER_2D_AVATARS.find((a) => a.seed === selectedPresetSeed) ?? USER_2D_AVATARS[0];
-  const selectedPreset =
-    avatarPresetStyle === 'user-2d'
-      ? {
-          seed: userPreset.seed,
-          name: userPreset.name,
-          image: { uri: getUser2DAvatarUriForSeed(userPreset.seed) },
-        }
-      : ALL_PRESET_AVATARS.find((a) => a.seed === selectedPresetSeed) ?? ALL_PRESET_AVATARS[0];
-
   const handleRemovePhoto = async () => {
     setError(null);
     const { error: updateErr } = await authService.updateProfile({
@@ -371,10 +359,7 @@ export function EditProfileModal({
             const seed = (av as { seed: string }).seed;
             const name = (av as { name?: string }).name ?? 'Avatar';
             const isSelected = selectedPresetSeed === seed;
-            const imageSource =
-              avatarPresetStyle === 'user-2d'
-                ? ({ uri: getUser2DAvatarUriForSeed(seed) } as const)
-                : (av as (typeof ALL_PRESET_AVATARS)[number]).image;
+            const imageSource = (av as (typeof ALL_PRESET_AVATARS)[number]).image;
             return (
               <View key={seed} style={styles.avatarGridCell}>
                 <TouchableOpacity
@@ -447,7 +432,7 @@ export function EditProfileModal({
               accessibilityLabel="Save profile"
             >
               {saving ? (
-                <ActivityIndicator size="small" color={Theme.driverEmerald} />
+                <LoadingIndicator size="small" color={Theme.driverEmerald} />
               ) : (
                 <Text style={styles.driverHeaderSavePillText}>Save</Text>
               )}
@@ -513,7 +498,7 @@ export function EditProfileModal({
                           <Image source={{ uri: avatarUri }} style={styles.driverAvatarImageSq} resizeMode="cover" />
                           {photoUploading ? (
                             <View style={styles.driverAvatarLoading}>
-                              <ActivityIndicator color={Theme.textOnPrimary} size="large" />
+                              <LoadingIndicator color={Theme.textOnPrimary} size="large" />
                             </View>
                           ) : null}
                         </View>
@@ -630,7 +615,7 @@ export function EditProfileModal({
                   accessibilityRole="button"
                   accessibilityLabel={hasEmail ? 'Email address (read-only)' : 'Add email'}
                 >
-                  <View style={[styles.driverContactIconMail, styles.driverContactIconBg]}>
+                  <View style={styles.driverContactIconBg}>
                     <Mail size={22} color={Theme.driverEmerald} strokeWidth={2.2} />
                   </View>
                   <View style={styles.driverContactMid}>
@@ -647,7 +632,7 @@ export function EditProfileModal({
                 </TouchableOpacity>
 
                 <View style={styles.driverContactRow}>
-                  <View style={[styles.driverContactIconPhone, styles.driverContactIconBgBlue]}>
+                  <View style={styles.driverContactIconBgBlue}>
                     <Phone size={22} color="#2563eb" strokeWidth={2.2} />
                   </View>
                   <View style={styles.driverContactMid}>
@@ -705,7 +690,7 @@ export function EditProfileModal({
                 accessibilityLabel="Save changes"
               >
                 {saving ? (
-                  <ActivityIndicator size="small" color={Theme.textOnPrimary} />
+                  <LoadingIndicator size="small" color={Theme.textOnPrimary} />
                 ) : (
                   <Text style={styles.driverSaveChangesBtnText}>UPDATE PROFILE INFORMATION</Text>
                 )}
@@ -748,7 +733,7 @@ export function EditProfileModal({
                       <Image source={{ uri: avatarUri }} style={styles.avatarPreview} />
                       {photoUploading ? (
                         <View style={styles.avatarPreviewLoading}>
-                          <ActivityIndicator size="small" color={Theme.textOnPrimary} />
+                          <LoadingIndicator size="small" color={Theme.textOnPrimary} />
                         </View>
                       ) : null}
                     </View>
@@ -877,7 +862,7 @@ export function EditProfileModal({
               activeOpacity={0.8}
             >
               {saving ? (
-                <ActivityIndicator size="small" color={Theme.textOnPrimary} />
+                <LoadingIndicator size="small" color={Theme.textOnPrimary} />
               ) : (
                 <Text style={styles.saveBtnText}>Save</Text>
               )}

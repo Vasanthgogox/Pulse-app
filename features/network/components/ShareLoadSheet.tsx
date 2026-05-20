@@ -2,6 +2,7 @@
  * ShareLoadSheet — dark bottom sheet to broadcast an indent to the Q Pulse network.
  * Story broadcast (24h) + optional WhatsApp share with public story-detail URL (bidding page).
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from '@/constants/Theme';
 import { type IndentRow } from '@/features/indents';
 import { createPost } from '@/features/network/services/posts.service';
@@ -19,7 +20,6 @@ import {
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Animated,
   Easing,
   Keyboard,
@@ -221,18 +221,25 @@ export function ShareLoadSheet({
     const storyUrl = buildPulseStoryPublicUrl(successPostId, orgId, 'LOAD');
     const routeLabel = `${(indent.pickup_area || '—').toUpperCase()} → ${(indent.drop_location || '—').toUpperCase()}`;
     const message = `Load broadcast · ${routeLabel}\n\nView & bid:\n${storyUrl}`;
+    const encoded = encodeURIComponent(message);
+    const waWeb = `https://wa.me/?text=${encoded}`;
+    const waNative = `whatsapp://send?text=${encoded}`;
     try {
-      const waUrl = `whatsapp://send?text=${encodeURIComponent(message)}`;
-      const canOpen = await Linking.canOpenURL(waUrl);
-      if (canOpen) {
-        await Linking.openURL(waUrl);
-      } else if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(storyUrl, { dialogTitle: message });
-      } else {
-        await Sharing.shareAsync(storyUrl, { dialogTitle: message });
+      if (Platform.OS === 'web') {
+        await Linking.openURL(waWeb);
+        return;
       }
+      // iOS: canOpenURL is false unless whatsapp is in LSApplicationQueriesSchemes — fall back to wa.me.
+      const canNative = await Linking.canOpenURL(waNative);
+      await Linking.openURL(canNative ? waNative : waWeb);
     } catch {
-      await Sharing.shareAsync(storyUrl, { dialogTitle: message });
+      try {
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(storyUrl, { dialogTitle: message });
+        }
+      } catch {
+        // ignore
+      }
     }
   }, [indent, successPostId, orgId]);
 
@@ -290,7 +297,8 @@ export function ShareLoadSheet({
           <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
 
           <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+            enabled={Platform.OS !== 'web'}
             style={styles.kvContainer}
           >
             <Animated.View
@@ -365,7 +373,7 @@ export function ShareLoadSheet({
                     disabled={loading}
                   >
                     {loading ? (
-                      <ActivityIndicator color="#0F172A" />
+                      <LoadingIndicator color="#0F172A" />
                     ) : (
                       <>
                         <Zap size={16} color="#0F172A" fill="#0F172A" />

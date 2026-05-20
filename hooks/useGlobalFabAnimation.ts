@@ -30,16 +30,21 @@ export function useGlobalFabAnimation() {
     );
   }, [idlePulse]);
 
-  const shellStyle = useAnimatedStyle(() => ({
-    opacity: visibilityProgress.value,
-    transform: [
-      {
-        scale:
-          (0.92 + visibilityProgress.value * 0.08) *
-          (0.985 + idlePulse.value * 0.015),
-      },
-    ],
-  }));
+  const shellStyle = useAnimatedStyle(() => {
+    const p = visibilityProgress.value;
+    return {
+      opacity: p * (0.88 + idlePulse.value * 0.04),
+      transform: [
+        {
+          translateY: (1 - p) * 18,
+        },
+        {
+          scale:
+            (0.9 + p * 0.1) * (0.985 + idlePulse.value * 0.015),
+        },
+      ],
+    };
+  });
 
   const ringStyle = useAnimatedStyle(() => ({
     opacity: 0.14 + idlePulse.value * 0.14,

@@ -2,11 +2,11 @@
  * ClientProfileEditModal — 3-tab edit sidebar for client profile.
  * Tabs: BASIC INFORMATION | OPERATIONS HUBS | ROUTE CONTRACTS
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from '@/constants/Theme';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Modal,
   Platform,
@@ -255,7 +255,7 @@ function BasicInfoPanel({
         activeOpacity={0.85}
       >
         {saving ? (
-          <ActivityIndicator color="#fff" size="small" />
+          <LoadingIndicator color="#fff" size="small" />
         ) : (
           <Text style={styles.saveBtnText}>SAVE CHANGES</Text>
         )}
@@ -397,7 +397,7 @@ function HubsPanel({
               disabled={deletingId === wh.id}
             >
               {deletingId === wh.id ? (
-                <ActivityIndicator size="small" color={Theme.negative} />
+                <LoadingIndicator size="small" color={Theme.negative} />
               ) : (
                 <FontAwesome name="trash-o" size={13} color={Theme.negative} />
               )}
@@ -481,7 +481,7 @@ function HubsPanel({
               activeOpacity={0.85}
             >
               {saving ? (
-                <ActivityIndicator color="#fff" size="small" />
+                <LoadingIndicator color="#fff" size="small" />
               ) : (
                 <Text style={styles.saveBtnText}>{editingId ? 'UPDATE HUB' : 'SAVE HUB'}</Text>
               )}
@@ -650,7 +650,7 @@ function ContractsPanel({
               activeOpacity={0.8}
             >
               {deletingId === c.id ? (
-                <ActivityIndicator size="small" color={Theme.negative} />
+                <LoadingIndicator size="small" color={Theme.negative} />
               ) : (
                 <FontAwesome name="trash-o" size={13} color={Theme.negative} />
               )}
@@ -769,7 +769,7 @@ function ContractsPanel({
               activeOpacity={0.85}
             >
               {saving ? (
-                <ActivityIndicator color="#fff" size="small" />
+                <LoadingIndicator color="#fff" size="small" />
               ) : (
                 <Text style={styles.saveBtnText}>{editingId ? 'UPDATE LANE' : 'SAVE LANE'}</Text>
               )}

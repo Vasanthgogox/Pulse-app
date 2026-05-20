@@ -3,7 +3,7 @@
  * O(n): one filter for trip entries, one getExpenseGroupedForTrip pass.
  */
 import Theme from "@/constants/Theme";
-import { getTripDisplayNumber, type TripRow } from "@/features/trips";
+import { getTripDisplayNumber, type TripRow } from "@/features/trips/services/trips.service";
 import { formatINR, formatLedgerDate } from "@/lib/format";
 import {
   getExpenseGroupedForTrip,

@@ -1,40 +1,35 @@
 /**
- * Full-screen centered loading state that respects safe area.
- * Use on any screen that shows a spinner before content (e.g. detail pages).
+ * Full-screen loading — delegates to AppLoadingSplash for a calm, branded wait.
+ * Use for route gates, query initial load, and Suspense fallbacks.
  */
-import { View, ActivityIndicator, Text, StyleSheet } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Theme from '@/constants/Theme';
+import {
+  AppLoadingSplash,
+  type AppLoadingSplashVariant,
+} from '@/components/AppLoadingSplash';
+import type { StyleProp, ViewStyle } from 'react-native';
 
 interface CenteredLoadingViewProps {
   message?: string;
   color?: string;
+  variant?: AppLoadingSplashVariant;
+  style?: StyleProp<ViewStyle>;
+  useGlobalI18n?: boolean;
 }
 
-export function CenteredLoadingView({ message, color = Theme.primary }: CenteredLoadingViewProps) {
-  const insets = useSafeAreaInsets();
+export function CenteredLoadingView({
+  message,
+  color,
+  variant = 'generic',
+  style,
+  useGlobalI18n,
+}: CenteredLoadingViewProps) {
   return (
-    <View
-      style={[
-        styles.centered,
-        styles.container,
-        {
-          paddingTop: insets.top,
-          paddingBottom: insets.bottom,
-          paddingHorizontal: 24,
-        },
-      ]}
-    >
-      <ActivityIndicator size="large" color={color} />
-      {message != null && message !== '' && (
-        <Text style={styles.message}>{message}</Text>
-      )}
-    </View>
+    <AppLoadingSplash
+      variant={variant}
+      message={message}
+      accentColor={color}
+      style={style}
+      useGlobalI18n={useGlobalI18n}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Theme.screenBackground },
-  centered: { justifyContent: 'center', alignItems: 'center' },
-  message: { marginTop: 12, fontSize: 14, color: Theme.textSecondary },
-});

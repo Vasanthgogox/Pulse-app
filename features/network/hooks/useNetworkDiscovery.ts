@@ -1,0 +1,140 @@
+/**
+ * Cached discover list with realtime invalidation and offline fallback.
+ */
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  clearDiscoveryCache,
+  getDiscoveryCache,
+  getDiscoveryCacheStale,
+  hydrateDiscoveryCacheFromStorage,
+  setDiscoveryCache,
+} from '@/features/network/lib/discoveryCache';
+import {
+  discoverOrganizations,
+  type DiscoverOrg,
+} from '@/features/network/services/discover.service';
+import { useRealtimeDiscoverInvalidation } from '@/features/network/hooks/useRealtimeDiscoverInvalidation';
+
+const SEARCH_DEBOUNCE_MS = 300;
+
+export type UseNetworkDiscoveryOptions = {
+  orgId: string | null;
+  search: string;
+  enabled?: boolean;
+};
+
+export function useNetworkDiscovery({
+  orgId,
+  search,
+  enabled = true,
+}: UseNetworkDiscoveryOptions) {
+  const [orgs, setOrgs] = useState<DiscoverOrg[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  const isMountedRef = useRef(true);
+  const searchRef = useRef(search);
+  const orgIdRef = useRef(orgId);
+  const fetchGenRef = useRef(0);
+
+  orgIdRef.current = orgId;
+  searchRef.current = debouncedSearch;
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    void hydrateDiscoveryCacheFromStorage();
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const fetchOrgs = useCallback(async (term: string, force = false) => {
+    const currentOrgId = orgIdRef.current;
+    if (!currentOrgId || !enabled) return;
+
+    if (!force) {
+      const cached = getDiscoveryCache(currentOrgId, term);
+      if (cached) {
+        setOrgs(cached.data);
+        setError(null);
+        return;
+      }
+    }
+
+    const gen = ++fetchGenRef.current;
+    setLoading(true);
+    setError(null);
+
+    const { orgs: results, error: err } = await discoverOrganizations(
+      currentOrgId,
+      term,
+      40,
+      0,
+    );
+
+    if (!isMountedRef.current || gen !== fetchGenRef.current) return;
+
+    if (err) {
+      const stale = getDiscoveryCacheStale(currentOrgId, term);
+      if (stale) {
+        setOrgs(stale.data);
+        setError(null);
+      } else {
+        setError(
+          err.message.includes('discover_organizations')
+            ? 'Could not load — run db:push to deploy the migration'
+            : err.message,
+        );
+        setOrgs([]);
+      }
+      setLoading(false);
+      return;
+    }
+
+    setDiscoveryCache(currentOrgId, term, results);
+    setOrgs(results);
+    setLoading(false);
+    setError(null);
+  }, [enabled]);
+
+  useEffect(() => {
+    if (!orgId || !enabled) {
+      setOrgs([]);
+      return;
+    }
+    void fetchOrgs(debouncedSearch);
+  }, [orgId, debouncedSearch, enabled, fetchOrgs]);
+
+  const refetch = useCallback(
+    (term?: string) => {
+      const q = term ?? searchRef.current;
+      void fetchOrgs(q, true);
+    },
+    [fetchOrgs],
+  );
+
+  useRealtimeDiscoverInvalidation(orgId, () => {
+    void fetchOrgs(searchRef.current, true);
+  });
+
+  const invalidateCache = useCallback(() => {
+    if (orgId) clearDiscoveryCache(orgId);
+  }, [orgId]);
+
+  return {
+    orgs,
+    loading,
+    error,
+    refetch,
+    invalidateCache,
+    setSearchTerm: (term: string) => {
+      searchRef.current = term;
+      void fetchOrgs(term);
+    },
+  };
+}

@@ -364,6 +364,79 @@ function getGoogleRedirectTo(): string {
   return Linking.createURL("/auth/callback");
 }
 
+/**
+ * URL Supabase redirects to after the user taps "reset password" in email.
+ * Must be listed under Authentication → URL configuration → Redirect URLs in Supabase Dashboard.
+ * Native builds without EXPO_PUBLIC_WEB_BASE_URL use the app scheme from `Linking.createURL`.
+ */
+export function getPasswordRecoveryRedirectTo(): string {
+  const webBase = process.env.EXPO_PUBLIC_WEB_BASE_URL?.trim().replace(/\/$/, "");
+  if (Platform.OS === "web" && typeof window !== "undefined" && window.location?.origin) {
+    return `${window.location.origin}/auth/reset-password`;
+  }
+  if (webBase && /^https?:\/\//i.test(webBase)) {
+    return `${webBase}/auth/reset-password`;
+  }
+  return Linking.createURL("/auth/reset-password");
+}
+
+/** Sends Supabase password recovery email (does not reveal whether the email is registered). */
+export async function requestPasswordResetEmail(email: string): Promise<SignInResult> {
+  const trimmedEmail = (email ?? "").trim();
+  if (trimmedEmail.length === 0) {
+    return { error: new Error("Enter your email address.") };
+  }
+  if (containsNullByte(trimmedEmail)) {
+    return { error: new Error("Input contains invalid characters.") };
+  }
+  const emailErr = validateEmail(trimmedEmail);
+  if (emailErr) return { error: new Error(emailErr) };
+  try {
+    const { error } = await supabase().auth.resetPasswordForEmail(trimmedEmail, {
+      redirectTo: getPasswordRecoveryRedirectTo(),
+    });
+    if (error) {
+      return { error: new Error(error.message || "Could not send reset email.") };
+    }
+    return { error: null };
+  } catch (e) {
+    if (isNetworkError(e)) {
+      return {
+        error: new Error(
+          "Cannot reach server. Check your internet connection and try again.",
+        ),
+      };
+    }
+    return { error: e instanceof Error ? e : new Error("Could not send reset email.") };
+  }
+}
+
+/** Call while authenticated with a recovery session (after opening the email link). */
+export async function updatePasswordWithCurrentSession(newPassword: string): Promise<SignInResult> {
+  if (containsNullByte(newPassword)) {
+    return { error: new Error("Password contains invalid characters.") };
+  }
+  const trimmed = newPassword.trim();
+  const pwdErr = validatePassword(trimmed);
+  if (pwdErr) return { error: new Error(pwdErr) };
+  try {
+    const { error } = await supabase().auth.updateUser({ password: trimmed });
+    if (error) {
+      return { error: new Error(error.message || "Could not update password.") };
+    }
+    return { error: null };
+  } catch (e) {
+    if (isNetworkError(e)) {
+      return {
+        error: new Error(
+          "Cannot reach server. Check your internet connection and try again.",
+        ),
+      };
+    }
+    return { error: e instanceof Error ? e : new Error("Could not update password.") };
+  }
+}
+
 /** Google OAuth sign-in for web and native (Expo). */
 export async function signInWithGoogle(): Promise<SignInResult> {
   try {
@@ -846,6 +919,7 @@ export function onAuthStateChange(
 ): () => void {
   let isProcessing = false;
   let queuedPayload: { user: AuthUser; profile: AuthProfile } | null | undefined;
+  let signOutVerifyInFlight = false;
 
   const runCallback = (payload: { user: AuthUser; profile: AuthProfile } | null) => {
     if (isProcessing) {
@@ -870,12 +944,6 @@ export function onAuthStateChange(
   const {
     data: { subscription },
   } = supabase().auth.onAuthStateChange((event, session) => {
-    // TOKEN_REFRESHED and INITIAL_SESSION are internal SDK lifecycle events.
-    // The SDK manages token rotation silently; propagating them triggers a full
-    // DB profile re-verification on every tab focus / cold-start subscription
-    // fire, causing unnecessary re-renders and the "reload to Trips" symptom.
-    // USER_UPDATED fires after updateUser() which already calls refreshSession()
-    // in the callers — no need to double-process here.
     if (
       event === 'TOKEN_REFRESHED' ||
       event === 'INITIAL_SESSION' ||
@@ -886,8 +954,37 @@ export function onAuthStateChange(
     const userId = session?.user?.id ?? null;
     if (shouldSkipAuthEvent(event, userId)) return;
     flushAuthEventGate();
+
     if (!session?.user) {
-      runCallback(null);
+      // SDK says SIGNED_OUT — but auto-refresh failures can trigger this spuriously.
+      // Verify by reading persisted session + hitting /auth/v1/user before propagating.
+      if (event === 'SIGNED_OUT' && !signOutVerifyInFlight) {
+        signOutVerifyInFlight = true;
+        void (async () => {
+          try {
+            const { data: { session: stored } } = await supabase().auth.getSession();
+            if (stored?.user) {
+              // Session still exists in storage — refresh token race or transient failure.
+              // Attempt a server-verified refresh to re-establish the session.
+              const { data: { session: refreshed }, error } = await supabase().auth.refreshSession();
+              if (refreshed?.user && !error) {
+                if (__DEV__) console.info("[auth] SIGNED_OUT suppressed — session recovered via refresh");
+                return; // Session recovered; SDK will emit TOKEN_REFRESHED (which we skip) — no sign-out.
+              }
+            }
+            // Session truly gone — propagate sign-out.
+            if (__DEV__) console.info("[auth] SIGNED_OUT confirmed — session unrecoverable");
+            runCallback(null);
+          } catch {
+            // Network failure during verify — don't sign out on connectivity loss.
+            if (__DEV__) console.warn("[auth] SIGNED_OUT verify failed (network?) — suppressing");
+          } finally {
+            signOutVerifyInFlight = false;
+          }
+        })();
+      } else if (event !== 'SIGNED_OUT') {
+        runCallback(null);
+      }
       return;
     }
     runCallback(mapSupabaseUserToAuth(session.user));

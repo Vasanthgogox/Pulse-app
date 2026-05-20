@@ -1,6 +1,7 @@
 /**
  * Log incoming PODs — fleet ops. Ported from cashflow LogIncomingPodsPage (RN layout).
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -25,7 +26,6 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
-    ActivityIndicator,
     Alert,
     FlatList,
     Modal,
@@ -38,6 +38,7 @@ import {
     View,
     useWindowDimensions,
 } from "react-native";
+import { useLayoutInsets } from "@/lib/layoutInsets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 function formatShortDate(value?: string | null): string {
@@ -82,6 +83,7 @@ interface LogIncomingPodsScreenProps {
 
 export function LogIncomingPodsScreen({ embedded = false }: LogIncomingPodsScreenProps) {
   const insets = useSafeAreaInsets();
+  const layout = useLayoutInsets();
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
   const { profile } = useAuth();
@@ -518,7 +520,7 @@ export function LogIncomingPodsScreen({ embedded = false }: LogIncomingPodsScree
           {courierLabel || "Select courier partner…"}
         </Text>
         {loadingCouriers ? (
-          <ActivityIndicator size="small" color={Theme.primary} />
+          <LoadingIndicator size="small" color={Theme.primary} />
         ) : (
           <FontAwesome name="chevron-down" size={14} color={Theme.textMuted} />
         )}
@@ -697,7 +699,7 @@ export function LogIncomingPodsScreen({ embedded = false }: LogIncomingPodsScree
           >
             {logMutation.isPending ? (
               <>
-                <ActivityIndicator
+                <LoadingIndicator
                   color={Theme.buttonPrimaryText}
                   size="small"
                   style={{ marginRight: 8 }}
@@ -941,7 +943,7 @@ export function LogIncomingPodsScreen({ embedded = false }: LogIncomingPodsScree
           >
             {logMutation.isPending ? (
               <>
-                <ActivityIndicator
+                <LoadingIndicator
                   color={Theme.buttonPrimaryText}
                   size="small"
                   style={{ marginRight: 8 }}
@@ -982,7 +984,7 @@ export function LogIncomingPodsScreen({ embedded = false }: LogIncomingPodsScree
         ) : (
           <ScrollView
             contentContainerStyle={{
-              paddingBottom: Layout.demoTabBarScrollBottomInset + 36,
+              paddingBottom: layout.scrollBottomPadding(36),
             }}
             {...tabBarScrollProps}
           >
@@ -1002,8 +1004,7 @@ export function LogIncomingPodsScreen({ embedded = false }: LogIncomingPodsScree
           style={[
             styles.footer,
             {
-              paddingBottom:
-                insets.bottom + Layout.demoTabBarScrollBottomInset + 8,
+              paddingBottom: layout.scrollBottomPadding(8),
             },
           ]}
         >
@@ -1016,7 +1017,7 @@ export function LogIncomingPodsScreen({ embedded = false }: LogIncomingPodsScree
             disabled={isLogDisabled}
           >
             {logMutation.isPending ? (
-              <ActivityIndicator color={Theme.buttonPrimaryText} />
+              <LoadingIndicator color={Theme.buttonPrimaryText} />
             ) : (
               <Text style={styles.logBtnText}>
                 Log {totalSelectedPODs} PODs
@@ -1114,7 +1115,7 @@ export function LogIncomingPodsScreen({ embedded = false }: LogIncomingPodsScree
                       style={{ flexDirection: "row", alignItems: "center" }}
                     >
                       {addCourierPartner.isPending ? (
-                        <ActivityIndicator size="small" color={Theme.primary} />
+                        <LoadingIndicator size="small" color={Theme.primary} />
                       ) : (
                         <FontAwesome
                           name="plus-circle"

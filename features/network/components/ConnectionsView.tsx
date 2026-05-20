@@ -2,13 +2,22 @@
  * Connections tab — clients, suppliers, and fleet drivers.
  * `hubMode`: Network screen layout (nested cards, shared header search/filters in parent).
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
+import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import type { NetworkPartyRolePill } from "@/features/network/components/NetworkPartyProfileCard";
+import { NetworkPartyHubListCard } from "@/features/network/components/NetworkPartyHubListCard";
+import { NetworkHubConnectionsPagedGrid } from "@/features/network/components/NetworkHubConnectionsPagedGrid";
 import {
-    HUB_CAROUSEL_MIN_HEIGHT,
-    HubConnectionListCard,
-    type HubConnectionItem,
-} from "@/features/network/components/NetworkConnectionHubCards";
+  getNetworkHubConnectionsLayout,
+  NETWORK_HUB_CONNECTION_DESKTOP_COLUMNS,
+  SPLIT_STACK_BREAKPOINT,
+  NETWORK_HUB_GRID_GAP_PX,
+  NETWORK_HUB_GRID_ROW_PADDING_H,
+} from "@/features/network/constants/networkHubGrid";
+import { networkCompactListStyle } from "@/features/network/components/NetworkCompactRows";
 import { runConnectionInvite } from "@/features/network/utils/connectionInvite.util";
+import { formatPartyContactPhone } from "@/features/network/utils/partyContactDisplay.util";
 import {
     getOrganizationLocationsByIds,
     getOrganizationLocationsByNames,
@@ -26,7 +35,7 @@ import {
     useSuppliersQuery,
     useTripsQuery,
 } from "@/lib/queries";
-import { getInitials } from "@/lib/stringUtils";
+import { ConnectionEntityAvatar } from "@/features/network/utils/connectionEntityAvatar";
 import { supabase } from "@/lib/supabase";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -39,10 +48,10 @@ import {
 } from "lucide-react-native";
 import React, { useEffect, useMemo, useState } from "react";
 import {
-    ActivityIndicator,
     Alert,
     Animated,
     FlatList,
+    Platform,
     Pressable,
     RefreshControl,
     ScrollView,
@@ -59,6 +68,8 @@ interface ConnectionsViewProps {
   orgId: string;
   onRefresh?: () => void;
   onOpenProfile?: (item: ConnectedOrg) => void;
+  onPressMutuals?: (org: { id: string; name: string }) => void;
+  onPressMutual?: (org: { id: string; name: string; avatar_seed?: string | null }) => void;
   onConnectionsComputed?: (items: ConnectedOrg[]) => void;
   /** Render list without internal scroll (nested in parent ScrollView). */
   embedded?: boolean;
@@ -86,27 +97,27 @@ function seedColor(id: string): string {
   return COVER_TOKENS[h];
 }
 
-function subtleAvatarTone(seed: string): {
-  bg: string;
-  border: string;
-  text: string;
-  dot: string;
-} {
-  const shift = seed.length % 2;
-  return {
-    bg: shift === 0 ? "#F8FAFC" : "#F1F5F9",
-    border: "#EEF2F7",
-    text: shift === 0 ? "#64748B" : "#475569",
-    dot: "#94A3B8",
-  };
-}
-
 function roleTone(role: ConnectedOrg["role"]) {
   if (role === "CLIENT")
-    return { bg: Theme.networkClientTintBg, text: Theme.primary };
+    return {
+      bg: Theme.networkBadgeClientBg,
+      gradientTop: Theme.networkBadgeClientGradientTop,
+      text: Theme.networkBadgeClientText,
+      border: Theme.networkBadgeClientBorder,
+    };
   if (role === "DRIVER")
-    return { bg: Theme.networkDriverTintBg, text: Theme.warning };
-  return { bg: Theme.networkSupplierTintBg, text: Theme.positive };
+    return {
+      bg: Theme.networkBadgeDriverBg,
+      gradientTop: Theme.networkBadgeDriverGradientTop,
+      text: Theme.networkBadgeDriverText,
+      border: Theme.networkBadgeDriverBorder,
+    };
+  return {
+    bg: Theme.networkBadgeSupplierBg,
+    gradientTop: Theme.networkBadgeSupplierGradientTop,
+    text: Theme.networkBadgeSupplierText,
+    border: Theme.networkBadgeSupplierBorder,
+  };
 }
 
 export interface ConnectedOrg {
@@ -153,12 +164,122 @@ function normalizeName(value: string | null | undefined): string {
   return (value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+function rolePillsForConnection(item: ConnectedOrg): NetworkPartyRolePill[] {
+  const tone = roleTone(item.role);
+  const pills: NetworkPartyRolePill[] = [
+    {
+      label: item.role,
+      backgroundColor: tone.bg,
+      gradientTop: tone.gradientTop,
+      color: tone.text,
+      borderColor: tone.border,
+    },
+  ];
+  if (item.is_integrated) {
+    pills.push({
+      label: "INTEGRATED",
+      backgroundColor: Theme.networkBadgeIntegratedBg,
+      gradientTop: Theme.networkBadgeIntegratedGradientTop,
+      color: Theme.networkBadgeIntegratedText,
+      borderColor: Theme.networkBadgeIntegratedBorder,
+      highlightColor: Theme.networkBadgeIntegratedHighlight,
+    });
+  }
+  return pills;
+}
+
+function ConnectionProfileCard({
+  item,
+  compact,
+  mobileGrid,
+  nativeListRow,
+  onOpenProfile,
+  onPressMutuals,
+  onPressMutual,
+  viewerOrgId,
+  onConnectionAction,
+  actionLoading,
+}: {
+  item: ConnectedOrg;
+  compact?: boolean;
+  mobileGrid?: boolean;
+  nativeListRow?: boolean;
+  onOpenProfile?: (item: ConnectedOrg) => void;
+  onPressMutuals?: (org: { id: string; name: string }) => void;
+  onPressMutual?: (org: { id: string; name: string; avatar_seed?: string | null }) => void;
+  viewerOrgId?: string | null;
+  onConnectionAction: () => void;
+  actionLoading: boolean;
+}) {
+  const location = getConnectionLocation(item);
+  const roleLine =
+    item.role === "CLIENT"
+      ? "Client partner"
+      : item.role === "SUPPLIER"
+        ? "Supplier partner"
+        : "Fleet driver";
+
+  return (
+    <View style={hubCardStyles.listShell}>
+      <NetworkPartyHubListCard
+        partyId={item.id}
+        name={item.name}
+        partyType={roleLine}
+        phone={formatPartyContactPhone(item.phone)}
+        location={location ?? undefined}
+        avatarSeed={item.avatar_seed}
+        avatarUrl={item.avatar_url}
+        entityType={
+          item.role === "DRIVER"
+            ? "driver"
+            : item.role === "SUPPLIER"
+              ? "supplier"
+              : "client"
+        }
+        compact={compact}
+        mobileGrid={mobileGrid}
+        nativeListRow={nativeListRow}
+        rolePills={rolePillsForConnection(item)}
+        totalTrips={item.total_trips ?? null}
+        ratingValue={item.rating ?? null}
+        mutualCount={item.mutual_count ?? 0}
+        showVerified={item.is_integrated}
+        showOnline={item.is_integrated}
+        viewerOrgId={viewerOrgId}
+        onPressMutuals={
+          (item.mutual_count ?? 0) > 0 && onPressMutuals
+            ? () =>
+                onPressMutuals({
+                  id: item.linked_organization_id ?? item.id,
+                  name: item.name,
+                })
+            : undefined
+        }
+        onPressMutual={onPressMutual}
+        onPressCard={onOpenProfile ? () => onOpenProfile(item) : undefined}
+        connectionIntegrated={item.is_integrated}
+        onConnectionAction={onConnectionAction}
+        connectionActionDisabled={item.role === "DRIVER" && !item.phone}
+        loading={actionLoading}
+      />
+    </View>
+  );
+}
+
+const hubCardStyles = StyleSheet.create({
+  listShell: {
+    width: "100%",
+    maxWidth: "100%",
+    alignSelf: "stretch",
+    minWidth: 0,
+  },
+});
+
 // ─── Grid Card (LinkedIn-style: cover + overlapping avatar) ───────────────────
 
 function GridCard({ item }: { item: ConnectedOrg }) {
   const scale = React.useRef(new Animated.Value(1)).current;
   const color = seedColor(item.id);
-  const avatarTone = subtleAvatarTone(item.id);
   const tone = roleTone(item.role);
   const roleSub =
     item.role === "CLIENT"
@@ -187,23 +308,8 @@ function GridCard({ item }: { item: ConnectedOrg }) {
           ]}
         />
         <View style={styles.gridAvatarOverlap}>
-          <View
-            style={[
-              styles.gridAvatar,
-              {
-                backgroundColor: avatarTone.bg,
-                borderColor: avatarTone.border,
-              },
-            ]}
-          >
-            <Text style={[styles.gridAvatarText, { color: avatarTone.text }]}>
-              {getInitials(item.name)}
-            </Text>
-            {item.is_integrated && (
-              <View style={styles.gridZapDot}>
-                <Zap size={7} color="#fff" fill="#fff" />
-              </View>
-            )}
+          <View style={styles.gridAvatar}>
+            <ConnectionEntityAvatar item={item} size={58} />
           </View>
         </View>
         <View style={styles.gridBody}>
@@ -216,7 +322,7 @@ function GridCard({ item }: { item: ConnectedOrg }) {
           </Text>
           <View style={styles.gridMutualRow}>
             <View
-              style={[styles.gridMiniDot, { backgroundColor: avatarTone.dot }]}
+              style={[styles.gridMiniDot, { backgroundColor: Theme.iconSlate }]}
             />
             <Text style={styles.gridMutualText} numberOfLines={1}>
               In your Q network
@@ -256,7 +362,6 @@ function GridCard({ item }: { item: ConnectedOrg }) {
 
 function ListCard({ item }: { item: ConnectedOrg }) {
   const scale = React.useRef(new Animated.Value(1)).current;
-  const avatarTone = subtleAvatarTone(item.id);
   const tone = roleTone(item.role);
 
   const onIn = () =>
@@ -267,20 +372,8 @@ function ListCard({ item }: { item: ConnectedOrg }) {
   return (
     <Pressable onPressIn={onIn} onPressOut={onOut}>
       <Animated.View style={[styles.listCard, { transform: [{ scale }] }]}>
-        <View
-          style={[
-            styles.listAvatar,
-            { backgroundColor: avatarTone.bg, borderColor: avatarTone.border },
-          ]}
-        >
-          <Text style={[styles.listAvatarText, { color: avatarTone.text }]}>
-            {getInitials(item.name)}
-          </Text>
-          {item.is_integrated && (
-            <View style={styles.listZapDot}>
-              <Zap size={7} color="#fff" fill="#fff" />
-            </View>
-          )}
+        <View style={styles.listAvatar}>
+          <ConnectionEntityAvatar item={item} size={50} />
         </View>
 
         <View style={styles.listInfo}>
@@ -324,6 +417,8 @@ export function ConnectionsView({
   orgId,
   onRefresh,
   onOpenProfile,
+  onPressMutuals,
+  onPressMutual,
   onConnectionsComputed,
   embedded,
   hubMode = false,
@@ -351,7 +446,17 @@ export function ConnectionsView({
     supplier: number | null;
     driver: number | null;
   }>({ client: null, supplier: null, driver: null });
-  const gridNumColumns = windowWidth >= 1200 ? 4 : windowWidth >= 900 ? 3 : 2;
+  const gridNumColumns = hubMode
+    ? windowWidth >= SPLIT_STACK_BREAKPOINT
+      ? NETWORK_HUB_CONNECTION_DESKTOP_COLUMNS
+      : 1
+    : windowWidth >= 1200
+      ? 4
+      : windowWidth >= 900
+        ? 3
+        : windowWidth >= SPLIT_STACK_BREAKPOINT
+          ? 2
+          : 1;
 
   const clientsQ = useClientsQuery(orgId);
   const suppliersQ = useSuppliersQuery(orgId);
@@ -830,27 +935,12 @@ export function ConnectionsView({
     tripCountByDriverId,
   ]);
 
-  const toHubItem = (c: ConnectedOrg): HubConnectionItem => ({
-    id: c.id,
-    name: c.name,
-    role: c.role,
-    is_integrated: c.is_integrated,
-    avatarUrl: c.avatar_url,
-    avatarSeed: c.avatar_seed,
-    entityType:
-      c.role === "DRIVER"
-        ? "driver"
-        : c.role === "SUPPLIER"
-          ? "supplier"
-          : "client",
-    mutualCount: c.mutual_count,
-    rating: c.rating,
-    locationLabel: getConnectionLocation(c),
-    actionLabel: c.is_integrated ? "Connected" : "Send invite",
-    actionLoading: invitingId === c.id,
-    actionDisabled: c.role === "DRIVER" && !c.phone,
-    totalTrips: c.total_trips ?? null,
-  });
+  const isNativeApp = Platform.OS !== "web";
+  const hubConnectionsLayout = useMemo(
+    () => getNetworkHubConnectionsLayout(windowWidth, { nativeApp: isNativeApp }),
+    [windowWidth, isNativeApp],
+  );
+  const connectionsPaginationKey = `${effectiveFilter}:${effectiveSearch}:${hubConnectionsLayout.columns}x${hubConnectionsLayout.rows}`;
 
   const inviteOffAppParty = async (item: ConnectedOrg) => {
     if (item.is_integrated) return;
@@ -890,10 +980,40 @@ export function ConnectionsView({
     onConnectionsComputed?.(connections);
   }, [connections, onConnectionsComputed]);
 
+  const isMobileHub = windowWidth < SPLIT_STACK_BREAKPOINT;
+  const hubListCompact =
+    !isMobileHub &&
+    (hubConnectionsLayout.columns >= 3 ? windowWidth < 1280 : windowWidth < 1100);
+
+  const renderHubConnectionListCard = (item: ConnectedOrg) => (
+    <ConnectionProfileCard
+      item={item}
+      compact={hubListCompact}
+      mobileGrid={isMobileHub && hubConnectionsLayout.columns > 1}
+      nativeListRow={hubConnectionsLayout.columns === 1}
+      onOpenProfile={onOpenProfile}
+      onPressMutuals={onPressMutuals}
+      onPressMutual={onPressMutual}
+      viewerOrgId={orgId}
+      onConnectionAction={() => void inviteOffAppParty(item)}
+      actionLoading={invitingId === item.id}
+    />
+  );
+
+  const renderHubConnectionsBody = () => (
+    <NetworkHubConnectionsPagedGrid
+      items={connections}
+      layout={hubConnectionsLayout}
+      resetKey={connectionsPaginationKey}
+      keyExtractor={(item) => `${item.role}-${item.id}`}
+      renderItem={renderHubConnectionListCard}
+    />
+  );
+
   const embeddedBody = useHubLayout ? (
     isLoading ? (
       <View style={styles.embeddedLoading}>
-        <ActivityIndicator color={Theme.primary} size="small" />
+        <LoadingIndicator color={Theme.primary} size="small" />
         <Text style={styles.embeddedLoadingText}>Loading your network…</Text>
       </View>
     ) : connections.length === 0 ? (
@@ -901,31 +1021,11 @@ export function ConnectionsView({
         <EmptyState />
       </View>
     ) : (
-      <ScrollView
-        horizontal
-        nestedScrollEnabled
-        showsHorizontalScrollIndicator={false}
-        style={styles.hubScrollViewport}
-        contentContainerStyle={styles.hubScrollContent}
-      >
-        {connections.map((item) => (
-          <View
-            key={`hub-scroll-${item.role}-${item.id}`}
-            style={styles.hubScrollCardWrap}
-          >
-            <HubConnectionListCard
-              item={toHubItem(item)}
-              layout="carousel"
-              onActionPress={() => void inviteOffAppParty(item)}
-              onCardPress={() => onOpenProfile?.(item)}
-            />
-          </View>
-        ))}
-      </ScrollView>
+      renderHubConnectionsBody()
     )
   ) : isLoading ? (
     <View style={styles.embeddedLoading}>
-      <ActivityIndicator color={Theme.primary} size="small" />
+      <LoadingIndicator color={Theme.primary} size="small" />
       <Text style={styles.embeddedLoadingText}>Loading your network…</Text>
     </View>
   ) : connections.length === 0 ? (
@@ -1046,31 +1146,15 @@ export function ConnectionsView({
       {embedded ? (
         embeddedBody
       ) : isLoading ? (
-        <ActivityIndicator color={Theme.primary} style={{ marginTop: 48 }} />
+        <LoadingIndicator color={Theme.primary} style={{ marginTop: 48 }} />
       ) : useHubLayout ? (
-        <FlatList
-          key="hub-list"
-          data={connections}
-          keyExtractor={(item) => `hub-${item.role}-${item.id}`}
-          renderItem={({ item }) => (
-            <HubConnectionListCard
-              item={toHubItem(item)}
-              onActionPress={() => void inviteOffAppParty(item)}
-            />
-          )}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          scrollEnabled
-          nestedScrollEnabled
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor={Theme.primary}
-            />
-          }
-          ListEmptyComponent={<EmptyState />}
-        />
+        connections.length === 0 ? (
+          <EmptyState />
+        ) : (
+          <View style={[styles.listContent, networkCompactListStyle]}>
+            {renderHubConnectionsBody()}
+          </View>
+        )
       ) : isGrid ? (
         <FlatList
           key="grid"
@@ -1146,51 +1230,38 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Theme.textSecondary,
   },
+  compactList: {},
+  hubGridRoot: {
+    width: "100%",
+    gap: 8,
+    paddingBottom: 4,
+  },
+  hubScrollWrap: {
+    width: "100%",
+  },
+  hubScrollLoadMore: {
+    paddingHorizontal: NETWORK_HUB_GRID_ROW_PADDING_H,
+    paddingTop: 4,
+  },
+  hubListVertical: {
+    width: "100%",
+    gap: 8,
+    paddingHorizontal: NETWORK_HUB_GRID_ROW_PADDING_H,
+    paddingBottom: 4,
+  },
+  hubListLoadMore: {
+    width: "100%",
+    paddingTop: 4,
+  },
   embeddedEmptyWrap: { minHeight: 200, paddingBottom: 16 },
   embeddedGridRoot: { paddingBottom: 8 },
   gridRowEmbedded: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    paddingHorizontal: 22,
+    alignItems: "stretch",
+    paddingHorizontal: NETWORK_HUB_GRID_ROW_PADDING_H,
+    gap: NETWORK_HUB_GRID_GAP_PX,
   },
   listContentEmbedded: { paddingHorizontal: 22, paddingBottom: 16, gap: 8 },
-  hubGridEmbedded: {
-    paddingHorizontal: 14,
-    paddingTop: 8,
-    paddingBottom: 18,
-    gap: 12,
-  },
-  hubScrollViewport: {
-    height: HUB_CAROUSEL_MIN_HEIGHT + 30,
-    minHeight: HUB_CAROUSEL_MIN_HEIGHT + 30,
-    maxHeight: HUB_CAROUSEL_MIN_HEIGHT + 30,
-    paddingTop: 8,
-    paddingBottom: 14,
-  },
-  hubScrollContent: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    paddingHorizontal: 14,
-    gap: 12,
-    height: HUB_CAROUSEL_MIN_HEIGHT,
-    minHeight: HUB_CAROUSEL_MIN_HEIGHT,
-  },
-  hubScrollCardWrap: {
-    width: 176,
-    height: HUB_CAROUSEL_MIN_HEIGHT,
-    minHeight: HUB_CAROUSEL_MIN_HEIGHT,
-    flexGrow: 0,
-    flexShrink: 0,
-  },
-  hubGridRow: {
-    flexDirection: "row",
-    alignItems: "stretch",
-    gap: 12,
-  },
-  hubGridSpacer: {
-    flex: 1,
-    minWidth: 0,
-  },
 
   statsBar: {
     flexDirection: "row",
@@ -1370,30 +1441,8 @@ const styles = StyleSheet.create({
   gridAvatar: {
     width: 64,
     height: 64,
-    borderRadius: 32,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 3,
-    position: "relative",
-  },
-  gridAvatarText: {
-    fontSize: 13,
-    fontWeight: "400",
-    letterSpacing: 0.24,
-    color: "#6B7280",
-  },
-  gridZapDot: {
-    position: "absolute",
-    bottom: 2,
-    right: 2,
-    width: 17,
-    height: 17,
-    borderRadius: 9,
-    backgroundColor: Theme.positive,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: Theme.screenBackground,
   },
   gridName: {
     fontSize: 12,
@@ -1424,30 +1473,8 @@ const styles = StyleSheet.create({
   listAvatar: {
     width: 50,
     height: 50,
-    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1.5,
-    position: "relative",
-  },
-  listAvatarText: {
-    fontSize: 11,
-    fontWeight: "400",
-    letterSpacing: 0.2,
-    color: "#6B7280",
-  },
-  listZapDot: {
-    position: "absolute",
-    bottom: -2,
-    right: -2,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: Theme.positive,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: Theme.screenBackground,
   },
   listInfo: { flex: 1, gap: 5 },
   listName: {

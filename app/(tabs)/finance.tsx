@@ -1,9 +1,15 @@
-/**
- * Finance tab — thin route. All logic and UI live in features/finance (FinanceScreen).
- * Compare with finance.tsx.reference for the pre-refactor single-file version.
- */
-import { FinanceScreen } from "@/features/finance";
+import { LazyRouteScreen } from '@/components/LazyRouteScreen';
 
-export default function Finance() {
-  return <FinanceScreen />;
+/** Thin route — Suspense splash while Metro bundles FinanceScreen. */
+export default function FinanceTab() {
+  return (
+    <LazyRouteScreen
+      loader={() =>
+        import('@/features/finance/components/FinanceScreen').then((m) => ({
+          default: m.FinanceScreen,
+        }))
+      }
+      message="Loading fiscal…"
+    />
+  );
 }

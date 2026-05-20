@@ -2,7 +2,9 @@
 -- A standalone driver who signs up gets an org (where they are owner_id) and a driver row.
 -- They shouldn't be considered "Already in a fleet" when someone else wants to invite them.
 
-CREATE OR REPLACE FUNCTION public.get_driver_invitee_by_phone(p_phone text)
+DROP FUNCTION IF EXISTS public.get_driver_invitee_by_phone(text);
+
+CREATE FUNCTION public.get_driver_invitee_by_phone(p_phone text)
 RETURNS TABLE(
   user_id uuid,
   full_name text,

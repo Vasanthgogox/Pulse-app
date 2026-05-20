@@ -1,107 +1,70 @@
 /**
- * Auth context — Supabase Auth. Uses services/authService for sign in/out and session.
- * Restores session from storage on mount so "Keep me signed in" works across reloads.
- * When "Keep me signed in" is unchecked, signs out on app background (see lib/keepSignedInPreference).
+ * Auth context — thin React adapter around lib/authEngine.
+ *
+ * Public API: user, profile, status, roleVerified, signIn/Out/Up/Google, refreshSession.
+ * Derived: loading = status === "restoring", sessionExpired = status === "expired".
+ *
+ * Platform-specific side effects live in dedicated hooks:
+ *   - useMobileKeepSignedInSignOut (AppState)
+ *   - useWebKeepSignedInSignOut   (cross-tab storage sync only)
+ *
+ * Core auth logic (profile merge, comparison, timeout, circuit-breaker)
+ * lives in lib/authEngine.
  */
-import type {
-    AuthUser,
-} from "@/features/auth/services/auth.service";
+import type { AuthUser } from "@/features/auth/services/auth.service";
 import * as authService from "@/features/auth/services/auth.service";
 import { isFirstLaunchDone, setFirstLaunchDone } from "@/lib/firstLaunch";
 import { getKeepSignedIn, setKeepSignedIn } from "@/lib/keepSignedInPreference";
 import { supabase } from "@/lib/supabase";
 import { clearAllRealtimeChannels } from "@/lib/realtimeRegistry";
 import {
-    createContext,
-    useContext,
-    useEffect,
-    useRef,
-    useState,
-    type ReactNode,
+  type AuthStatus,
+  type UserProfile,
+  AUTH_TIMEOUT_MS,
+  AuthError,
+  authProfileToUserProfile,
+  areUserProfilesEqual,
+  freezeInDev,
+  isCircuitBreakerTripped,
+  isForceExpiredSessionEnabled,
+  logAuth,
+  logAuthError,
+  mergeAuthProfiles,
+  recordCircuitBreakerHit,
+  resetCircuitBreaker,
+  TimeoutError,
+  withTimeout,
+} from "@/lib/authEngine";
+import { useMobileKeepSignedInSignOut } from "@/hooks/useMobileKeepSignedInSignOut";
+import { useWebKeepSignedInSignOut } from "@/hooks/useWebKeepSignedInSignOut";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
 } from "react";
-import { AppState } from "react-native";
 
-export interface UserProfile {
-  uid: string;
-  email: string;
-  displayName: string;
-  role: authService.UserRole;
-  aggregated?: boolean;
-  asset?: boolean;
-  full_name?: string;
-  avatar_url?: string;
-  /** Custom avatar seed for presets (e.g. pilot-1). */
-  avatar_seed?: string;
-  phone?: string;
-  company_name?: string;
-  /** Profile quote/status (WhatsApp-style). */
-  status_text?: string;
-}
+export type { UserProfile } from "@/lib/authEngine";
+export type { AuthStatus } from "@/lib/authEngine";
+export { AuthError } from "@/lib/authEngine";
+export type { AuthErrorCode } from "@/lib/authEngine";
 
-function authProfileToUserProfile(p: authService.AuthProfile): UserProfile {
-  return {
-    uid: p.uid,
-    email: p.email,
-    displayName: p.displayName,
-    role: p.role,
-    aggregated: p.aggregated ?? true,
-    asset: p.asset ?? true,
-    full_name: p.full_name,
-    avatar_url: p.avatar_url,
-    avatar_seed: p.avatar_seed,
-    phone: p.phone,
-    company_name: p.company_name,
-    status_text: p.status_text,
-  };
-}
-
-function areUserProfilesEqual(a: UserProfile | null, b: UserProfile | null): boolean {
-  if (a === b) return true;
-  if (!a || !b) return false;
-  return (
-    a.uid === b.uid &&
-    a.email === b.email &&
-    a.displayName === b.displayName &&
-    a.role === b.role &&
-    a.aggregated === b.aggregated &&
-    a.asset === b.asset &&
-    a.full_name === b.full_name &&
-    a.avatar_url === b.avatar_url &&
-    a.avatar_seed === b.avatar_seed &&
-    a.phone === b.phone &&
-    a.company_name === b.company_name &&
-    a.status_text === b.status_text
-  );
-}
-
-function mergeAuthProfiles(
-  base: authService.AuthProfile,
-  db: authService.AuthProfile | null,
-): authService.AuthProfile {
-  if (!db) return base;
-  return {
-    ...base,
-    ...db,
-    // Prefer DB when present, but keep fresh auth metadata values when DB field is empty/stale.
-    avatar_url: db.avatar_url ?? base.avatar_url,
-    avatar_seed: db.avatar_seed ?? base.avatar_seed,
-    status_text: db.status_text ?? base.status_text,
-    company_name: db.company_name ?? base.company_name,
-    phone: db.phone ?? base.phone,
-    full_name: db.full_name ?? base.full_name,
-    displayName: db.displayName || base.displayName,
-  };
-}
+// ---------------------------------------------------------------------------
+// Context type — narrow public surface
+// ---------------------------------------------------------------------------
 
 interface AuthContextType {
   user: AuthUser | null;
   profile: UserProfile | null;
-  /** True only when role has been verified from server-backed profile data. */
   roleVerified: boolean;
+  status: AuthStatus;
+  /** @deprecated Use `status === "restoring"` */
   loading: boolean;
-  /** True when the previous session was invalid/expired (e.g. refresh token not found). */
+  /** @deprecated Use `status === "expired"` */
   sessionExpired: boolean;
-  /** Refetch session from server so profile (e.g. avatar_url) is up to date. Call after updating profile. */
   refreshSession: () => Promise<void>;
   signIn: (email: string, password: string, keepSignedIn?: boolean) => Promise<{ error: Error | null }>;
   signInWithGoogle: (keepSignedIn?: boolean) => Promise<{ error: Error | null }>;
@@ -138,76 +101,111 @@ export function useAuth() {
   return context;
 }
 
+// ---------------------------------------------------------------------------
+// Provider
+// ---------------------------------------------------------------------------
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [roleVerified, setRoleVerified] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [sessionExpired, setSessionExpired] = useState(false);
+  const [status, setStatus] = useState<AuthStatus>("restoring");
+
   const signOutRequestedRef = useRef(false);
   const authAttemptRef = useRef(0);
   const listenerSeqRef = useRef(0);
   const unsubscribeRef = useRef<(() => void) | undefined>(undefined);
 
+  // ---- sequence guards ----
+
   const beginAuthAttempt = () => {
     authAttemptRef.current += 1;
     return authAttemptRef.current;
   };
-
-  const isCurrentAuthAttempt = (attemptId: number) => {
-    return authAttemptRef.current === attemptId;
-  };
+  const isCurrentAuthAttempt = (id: number) => authAttemptRef.current === id;
 
   const beginListenerSeq = () => {
     listenerSeqRef.current += 1;
     return listenerSeqRef.current;
   };
+  const isCurrentListenerSeq = (id: number) => listenerSeqRef.current === id;
 
-  const isCurrentListenerSeq = (seqId: number) => {
-    return listenerSeqRef.current === seqId;
-  };
+  // ---- state transitions ----
 
-  const logAuthRouteDecision = (event: string, details: Record<string, unknown>) => {
-    if (!__DEV__) return;
-    console.info("[AuthGuard]", event, details);
-  };
-
-  const clearAuthState = (expired: boolean) => {
+  const clearAuthState = useCallback((expired: boolean) => {
     setUser(null);
     setProfile(null);
     setRoleVerified(false);
-    setSessionExpired(expired);
-  };
+    setStatus(expired ? "expired" : "unauthenticated");
+  }, []);
 
-  const forceSignOutOnAuthFailure = async (reason: string) => {
+  const forceSignOutOnAuthFailure = useCallback(async (reason: string) => {
+    recordCircuitBreakerHit();
+    if (isCircuitBreakerTripped()) {
+      logAuth(
+        "circuit_breaker_tripped",
+        { reason },
+        "warn",
+      );
+      clearAuthState(true);
+      return;
+    }
+
     signOutRequestedRef.current = true;
     try {
-      await authService.signOut();
+      await withTimeout(authService.signOut(), AUTH_TIMEOUT_MS);
     } catch (e) {
-      console.warn("[auth] forceSignOut: signOut call failed", e instanceof Error ? e.message : e);
+      logAuthError("force_sign_out_error", e, { reason });
     }
     clearAuthState(true);
-    logAuthRouteDecision("forced_sign_out_auth_failure", { reason });
-  };
+    logAuth("forced_sign_out", { reason });
+  }, [clearAuthState]);
 
-  const getVerifiedDbProfile = async (uid: string): Promise<authService.AuthProfile | null> => {
-    let dbProfile = await authService.getProfile(uid);
-    if (dbProfile) return dbProfile;
-    const provision = await authService.ensureCurrentUserProfile();
-    if (provision.error) return null;
-    dbProfile = await authService.getProfile(uid);
-    return dbProfile;
-  };
+  // ---- profile verification with timeout ----
+
+  const getVerifiedDbProfile = useCallback(
+    async (uid: string): Promise<authService.AuthProfile | null> => {
+      try {
+        const dbProfile = await authService.getProfile(uid);
+        if (dbProfile) return dbProfile;
+
+        const provision = await authService.ensureCurrentUserProfile();
+        if (provision.error) return null;
+
+        return await authService.getProfile(uid);
+      } catch (e) {
+        logAuthError("profile_verification_error", e, { uid });
+        return null;
+      }
+    },
+    [],
+  );
+
+  /** Apply session from auth metadata when DB profile is not yet available (zombie recovery will retry). */
+  const applyDegradedAuthSession = useCallback(
+    (auth: { user: AuthUser; profile: authService.AuthProfile }) => {
+      const nextProfile = freezeInDev(authProfileToUserProfile(auth.profile));
+      setUser(auth.user);
+      setProfile(nextProfile);
+      setRoleVerified(false);
+      setStatus("authenticated");
+      logAuth("profile_verification_degraded", { uid: auth.user.uid }, "warn");
+    },
+    [],
+  );
+
+  // ---- session restore + subscription ----
 
   useEffect(() => {
-    // Always attempt to restore session from storage so "Keep me signed in" works on reload.
-    // On first launch after install, clear any lingering Keychain auth data, then proceed.
     let mounted = true;
 
-    // Single subscription handler shared by both the success and error paths of session restore.
-    // getVerifiedDbProfile already provisions missing profiles internally.
-    // Do NOT call refreshSession() here — it fires TOKEN_REFRESHED which
-    // re-triggers this handler, causing an infinite cascade that freezes the app.
+    // Dev toggle: skip restore and jump straight to expired
+    if (isForceExpiredSessionEnabled()) {
+      logAuth("dev_force_expired_session", {}, "warn");
+      clearAuthState(true);
+      return;
+    }
+
     const setupAuthSubscription = () => {
       if (unsubscribeRef.current) return;
       try {
@@ -219,34 +217,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               const dbProfile = await getVerifiedDbProfile(auth.user.uid);
               if (!mounted || !isCurrentListenerSeq(seqId)) return;
               if (!dbProfile) {
-                await forceSignOutOnAuthFailure("auth_state_profile_verification_failed");
+                applyDegradedAuthSession(auth);
                 return;
               }
               const merged = mergeAuthProfiles(auth.profile, dbProfile);
-              const nextProfile = authProfileToUserProfile(merged);
+              const nextProfile = freezeInDev(authProfileToUserProfile(merged));
               setUser((prev) => (prev?.uid === auth.user.uid ? prev : auth.user));
               setProfile((prev) => (areUserProfilesEqual(prev, nextProfile) ? prev : nextProfile));
               setRoleVerified(true);
-              setSessionExpired(false);
-              logAuthRouteDecision("auth_state_signed_in", {
+              setStatus("authenticated");
+              resetCircuitBreaker();
+              logAuth("auth_state_signed_in", {
                 uid: auth.user.uid,
                 role: merged.role,
-                roleVerified: true,
               });
             } else {
               const wasRequested = signOutRequestedRef.current;
               signOutRequestedRef.current = false;
               clearAuthState(!wasRequested);
-              logAuthRouteDecision("auth_state_signed_out", {});
+              logAuth("auth_state_signed_out", { requested: wasRequested });
             }
           } catch (err) {
             if (!mounted || !isCurrentListenerSeq(seqId)) return;
-            console.warn("[auth] onAuthStateChange callback error, forcing sign out:", err);
+            logAuthError("auth_state_callback_error", err);
             await forceSignOutOnAuthFailure("auth_state_callback_error");
           }
         });
       } catch {
-        // Subscription setup failed; app can still use sign-in
+        // Subscription setup failed; sign-in still works
       }
     };
 
@@ -263,94 +261,99 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Proceed with restore even if first-launch clear fails
       }
 
-      // Restore session, then subscribe to auth changes.
-      // getSession() never rejects (it catches and returns null for invalid/refresh token errors).
-      // When "Keep me signed in" was unchecked, do not restore session on cold start (sign out immediately).
       authService
         .getSession()
         .then(async (session) => {
-        if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
-        if (session) {
-          const keep = await getKeepSignedIn();
           if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
-          if (!keep) {
-            signOutRequestedRef.current = true;
-            await authService.signOut();
-            if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
-            setUser(null);
-            setProfile(null);
-            setRoleVerified(false);
-            setSessionExpired(false);
-            logAuthRouteDecision("restore_signed_out_keep_off", {
-              uid: session.user.uid,
-            });
-          } else {
-            setSessionExpired(false);
-            // Do not expose JWT-only metadata to routing before DB merge: stale
-            // `user_metadata.role` can disagree with `profiles.role` and send fleet
-            // users to the driver app until refresh completes.
-            let nextUser = session.user;
-            let nextProfile = session.profile;
-            let verifiedDbProfile: authService.AuthProfile | null = null;
-            try {
-              const refreshed = await authService.refreshSession();
-              if (mounted && isCurrentAuthAttempt(initAttemptId) && refreshed) {
-                nextUser = refreshed.user;
-                nextProfile = refreshed.profile;
-                verifiedDbProfile = await getVerifiedDbProfile(refreshed.user.uid);
-                if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
-                if (verifiedDbProfile) {
-                  nextProfile = mergeAuthProfiles(refreshed.profile, verifiedDbProfile);
-                  setRoleVerified(true);
-                } else {
-                  setRoleVerified(false);
-                }
-              } else if (mounted && isCurrentAuthAttempt(initAttemptId)) {
-                verifiedDbProfile = await getVerifiedDbProfile(session.user.uid);
-                if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
-                if (verifiedDbProfile) {
-                  nextProfile = mergeAuthProfiles(session.profile, verifiedDbProfile);
-                  setRoleVerified(true);
-                } else {
-                  setRoleVerified(false);
-                }
-              }
-            } catch {
-              // Treat restore/profile verification failures as auth failures.
-              if (mounted && isCurrentAuthAttempt(initAttemptId)) setRoleVerified(false);
-            }
-            if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
-            if (!verifiedDbProfile) {
-              await forceSignOutOnAuthFailure("restore_profile_verification_failed");
+          try {
+            if (session) {
+              const keep = await getKeepSignedIn();
               if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
-              setLoading(false);
-              return;
+              if (!keep) {
+                signOutRequestedRef.current = true;
+                await authService.signOut();
+                if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
+                setUser(null);
+                setProfile(null);
+                setRoleVerified(false);
+                setStatus("unauthenticated");
+                logAuth("restore_signed_out_keep_off", { uid: session.user.uid });
+              } else {
+                let nextUser = session.user;
+                let nextProfile = session.profile;
+                let verifiedDbProfile: authService.AuthProfile | null = null;
+                try {
+                  const refreshed = await withTimeout(
+                    authService.refreshSession(),
+                    AUTH_TIMEOUT_MS,
+                  );
+                  if (mounted && isCurrentAuthAttempt(initAttemptId) && refreshed) {
+                    nextUser = refreshed.user;
+                    nextProfile = refreshed.profile;
+                    verifiedDbProfile = await getVerifiedDbProfile(refreshed.user.uid);
+                    if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
+                    if (verifiedDbProfile) {
+                      nextProfile = mergeAuthProfiles(refreshed.profile, verifiedDbProfile);
+                      setRoleVerified(true);
+                    } else {
+                      setRoleVerified(false);
+                    }
+                  } else if (mounted && isCurrentAuthAttempt(initAttemptId)) {
+                    verifiedDbProfile = await getVerifiedDbProfile(session.user.uid);
+                    if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
+                    if (verifiedDbProfile) {
+                      nextProfile = mergeAuthProfiles(session.profile, verifiedDbProfile);
+                      setRoleVerified(true);
+                    } else {
+                      setRoleVerified(false);
+                    }
+                  }
+                } catch (e) {
+                  if (mounted && isCurrentAuthAttempt(initAttemptId)) {
+                    setRoleVerified(false);
+                    if (e instanceof TimeoutError) {
+                      logAuthError("restore_refresh_timeout", e);
+                    }
+                  }
+                }
+                if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
+                if (!verifiedDbProfile) {
+                  setUser(nextUser);
+                  setProfile(freezeInDev(authProfileToUserProfile(nextProfile)));
+                  setRoleVerified(false);
+                  setStatus("authenticated");
+                  logAuth("restore_profile_degraded", { uid: nextUser.uid }, "warn");
+                  return;
+                }
+                const finalProfile = freezeInDev(authProfileToUserProfile(nextProfile));
+                setUser(nextUser);
+                setProfile(finalProfile);
+                setStatus("authenticated");
+                resetCircuitBreaker();
+                logAuth("restore_completed", {
+                  uid: nextUser.uid,
+                  role: nextProfile.role,
+                });
+              }
+            } else {
+              // No stored session — unauthenticated, not "expired" (nothing expired).
+              clearAuthState(false);
+              logAuth("restore_no_session");
             }
-            setUser(nextUser);
-            setProfile(authProfileToUserProfile(nextProfile));
-            logAuthRouteDecision("restore_completed", {
-              uid: nextUser.uid,
-              role: nextProfile.role,
-              roleVerified: true,
-            });
+          } finally {
+            if (mounted && isCurrentAuthAttempt(initAttemptId)) {
+              setStatus((prev) => (prev === "restoring" ? "unauthenticated" : prev));
+              setupAuthSubscription();
+            }
           }
-        } else {
-          clearAuthState(true);
-          logAuthRouteDecision("restore_no_session", {});
-        }
-        if (!isCurrentAuthAttempt(initAttemptId)) return;
-        setLoading(false);
-        setupAuthSubscription();
-      })
-      .catch(() => {
-        // Defensive: if getSession ever rejects (e.g. unhandled throw), show sign-in
-        if (mounted && isCurrentAuthAttempt(initAttemptId)) {
-          clearAuthState(true);
-          setLoading(false);
-          logAuthRouteDecision("restore_error", {});
-        }
-        setupAuthSubscription();
-      });
+        })
+        .catch(() => {
+          if (mounted && isCurrentAuthAttempt(initAttemptId)) {
+            clearAuthState(false);
+            logAuth("restore_error");
+          }
+          setupAuthSubscription();
+        });
     })();
 
     return () => {
@@ -358,20 +361,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       unsubscribeRef.current?.();
       unsubscribeRef.current = undefined;
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Zombie recovery: if user+profile exist but roleVerified stays false after
-  // loading completes, retry verification once then force sign out.
+  // ---- zombie recovery ----
+
   useEffect(() => {
-    if (loading || !user || roleVerified) return;
+    if (status === "restoring" || !user || roleVerified) return;
     const timer = setTimeout(async () => {
       if (!user) return;
-      logAuthRouteDecision("zombie_recovery_triggered", { uid: user.uid });
+      logAuth("zombie_recovery_triggered", { uid: user.uid });
       try {
         const dbProfile = await getVerifiedDbProfile(user.uid);
         if (dbProfile) {
           setRoleVerified(true);
-          logAuthRouteDecision("zombie_recovery_success", { uid: user.uid });
+          resetCircuitBreaker();
+          logAuth("zombie_recovery_success", { uid: user.uid });
           return;
         }
       } catch {
@@ -380,50 +384,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await forceSignOutOnAuthFailure("zombie_recovery_failed");
     }, 10_000);
     return () => clearTimeout(timer);
-  }, [loading, user, roleVerified]);
+  }, [status, user, roleVerified, getVerifiedDbProfile, forceSignOutOnAuthFailure]);
 
-  // When "Keep me signed in" is off, sign out on app background so next open shows sign-in.
-  useEffect(() => {
-    const sub = AppState.addEventListener("change", (nextState) => {
-      if (nextState !== "background") return;
-      getKeepSignedIn().then((keep) => {
-        if (keep) return;
-        signOutRequestedRef.current = true;
-        authService.signOut().finally(() => {
-          clearAuthState(false);
-        });
-      });
-    });
-    return () => sub.remove();
-  }, []);
+  // ---- platform hooks: sign out on background/hidden when keep-signed-in is off ----
 
-  const signIn = async (email: string, password: string, keepSignedIn: boolean = true) => {
+  useMobileKeepSignedInSignOut(clearAuthState, signOutRequestedRef);
+  useWebKeepSignedInSignOut(clearAuthState, signOutRequestedRef);
+
+  // ---- actions ----
+
+  const signIn = useCallback(async (
+    email: string,
+    password: string,
+    keepSignedIn: boolean = true,
+  ) => {
     const signInAttemptId = beginAuthAttempt();
     const result = await authService.signInWithPassword(email, password);
     if (!result.error) {
-      setSessionExpired(false);
+      setStatus("authenticated");
+      resetCircuitBreaker();
       await setKeepSignedIn(keepSignedIn);
-      // Wait for the session state to be fully populated before returning,
-      // ensuring the redirect doesn't hit an empty state and bounce back.
       if (!isCurrentAuthAttempt(signInAttemptId)) return { error: null };
-      await refreshSession();
+      await refreshSessionInternal();
     }
-    return result;
-  };
+    return wrapActionResult(result);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const signInWithGoogle = async (keepSignedIn: boolean = true) => {
+  const signInWithGoogle = useCallback(async (keepSignedIn: boolean = true) => {
     const signInAttemptId = beginAuthAttempt();
     const result = await authService.signInWithGoogle();
     if (!result.error) {
-      setSessionExpired(false);
+      setStatus("authenticated");
+      resetCircuitBreaker();
       await setKeepSignedIn(keepSignedIn);
       if (!isCurrentAuthAttempt(signInAttemptId)) return { error: null };
-      await refreshSession();
+      await refreshSessionInternal();
     }
-    return result;
-  };
+    return wrapActionResult(result);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const signUp = async (
+  const signUp = useCallback(async (
     email: string,
     password: string,
     fullName?: string,
@@ -456,49 +456,81 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       skipOrgCreation,
     });
     if (!result.error) {
-      await refreshSession();
+      await refreshSessionInternal();
+    }
+    return wrapActionResult(result);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const refreshSessionInternal = async () => {
+    const refreshAttemptId = beginAuthAttempt();
+    try {
+      const session = await withTimeout(
+        authService.refreshSession(),
+        AUTH_TIMEOUT_MS,
+      );
+      if (!isCurrentAuthAttempt(refreshAttemptId)) return;
+      if (session) {
+        const dbProfile = await getVerifiedDbProfile(session.user.uid);
+        if (!isCurrentAuthAttempt(refreshAttemptId)) return;
+        if (!dbProfile) {
+          setUser(session.user);
+          setProfile(freezeInDev(authProfileToUserProfile(session.profile)));
+          setRoleVerified(false);
+          setStatus("authenticated");
+          logAuth("refresh_profile_degraded", { uid: session.user.uid }, "warn");
+          return;
+        }
+        const merged = mergeAuthProfiles(session.profile, dbProfile);
+        const finalProfile = freezeInDev(authProfileToUserProfile(merged));
+        setUser(session.user);
+        setProfile(finalProfile);
+        setRoleVerified(true);
+        setStatus("authenticated");
+        resetCircuitBreaker();
+        logAuth("refresh_completed", {
+          uid: session.user.uid,
+          role: merged.role,
+        });
+      } else {
+        clearAuthState(true);
+      }
+    } catch (e) {
+      if (e instanceof TimeoutError) {
+        logAuthError("refresh_session_timeout", e);
+      }
+      if (isCurrentAuthAttempt(refreshAttemptId)) {
+        clearAuthState(true);
+      }
+    }
+  };
+
+  /**
+   * Wraps a service-layer `{ error }` result: if the original error
+   * is a TimeoutError, returns an AuthError with code so callers
+   * can show tailored UI (e.g. retry button vs generic message).
+   */
+  const wrapActionResult = (result: { error: Error | null }): { error: Error | null } => {
+    if (!result.error) return result;
+    if (result.error instanceof TimeoutError) {
+      return { error: new AuthError("NETWORK_TIMEOUT", result.error.message, result.error) };
     }
     return result;
   };
 
-  const refreshSession = async () => {
-    const refreshAttemptId = beginAuthAttempt();
-    const session = await authService.refreshSession();
-    if (!isCurrentAuthAttempt(refreshAttemptId)) return;
-    if (session) {
-      const dbProfile = await getVerifiedDbProfile(session.user.uid);
-      if (!isCurrentAuthAttempt(refreshAttemptId)) return;
-      if (!dbProfile) {
-        await forceSignOutOnAuthFailure("manual_refresh_profile_verification_failed");
-        return;
-      }
-      const merged = dbProfile
-        ? mergeAuthProfiles(session.profile, dbProfile)
-        : session.profile;
-      setUser(session.user);
-      setProfile(authProfileToUserProfile(merged));
-      setRoleVerified(true);
-      setSessionExpired(false);
-      logAuthRouteDecision("refresh_completed", {
-        uid: session.user.uid,
-        role: merged.role,
-        roleVerified: true,
-      });
-    } else {
-      clearAuthState(true);
-    }
-  };
+  const refreshSession = useCallback(refreshSessionInternal, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     signOutRequestedRef.current = true;
     clearAllRealtimeChannels();
     try {
-      await authService.signOut();
-    } catch (error) {
-      console.error("Error during signOut in AuthContext:", error);
+      await withTimeout(authService.signOut(), AUTH_TIMEOUT_MS);
+    } catch (e) {
+      logAuthError("sign_out_error", e);
     }
     clearAuthState(false);
-  };
+  }, [clearAuthState]);
+
+  // ---- render ----
 
   return (
     <AuthContext.Provider
@@ -506,8 +538,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         profile,
         roleVerified,
-        loading,
-        sessionExpired,
+        status,
+        loading: status === "restoring",
+        sessionExpired: status === "expired",
         refreshSession,
         signIn,
         signInWithGoogle,

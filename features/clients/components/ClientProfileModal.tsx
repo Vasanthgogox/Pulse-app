@@ -3,6 +3,7 @@
  * Shows hero, admin registry, tax identity, warehouses, and route contracts.
  * Web desktop: 2-column layout. Mobile: stacked.
  */
+import { EntityAvatar } from '@/components/EntityAvatar';
 import Theme from '@/constants/Theme';
 import type { TripRow } from '@/features/trips/services/trips.service';
 import { formatINR } from '@/lib/format';
@@ -95,7 +96,6 @@ export function ClientProfileModal({
   const [showEdit, setShowEdit] = useState(false);
 
   const clientName = (client.name || client.contact_person || '').trim() || 'Client';
-  const initials = getInitials(clientName);
   const shortId = (client.display_id ?? client.id?.slice(0, 8) ?? '').toUpperCase();
   const readiness = profileReadiness(client, warehouses, contracts);
   const totalSales = trips.reduce((sum, t) => sum + Number(t.client_price ?? 0), 0);
@@ -144,7 +144,15 @@ export function ClientProfileModal({
           {/* Hero */}
           <View style={styles.hero}>
             <View style={styles.avatarCircle}>
-              <Text style={styles.avatarInitials}>{initials || '?'}</Text>
+              <EntityAvatar
+                name={clientName}
+                avatarUrl={client.avatar_url}
+                avatarSeed={client.avatar_seed}
+                entityType="client"
+                isIntegrated={isIntegrated}
+                size={72}
+                showIntegrationBadge={false}
+              />
             </View>
             <View style={styles.heroInfo}>
               <Text style={styles.heroName} numberOfLines={2}>{clientName}</Text>

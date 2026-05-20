@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import {
   Modal,
   View,
@@ -7,7 +8,7 @@ import {
   Pressable,
   ScrollView,
   TextInput,
-  ActivityIndicator,
+  
   Alert,
   Image,
   Linking,
@@ -523,7 +524,7 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
         ))}
         {isChatLoading && (
           <View style={[styles.chatBubble, styles.chatBubbleAssistant]}>
-            <ActivityIndicator size="small" color={Theme.primary} />
+            <LoadingIndicator size="small" color={Theme.primary} />
           </View>
         )}
       </ScrollView>
@@ -590,7 +591,7 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
     <View style={styles.section}>
       <Text style={styles.sectionLabel}>Attachments ({attachments.length})</Text>
       {isLoadingAttachments ? (
-        <ActivityIndicator size="small" color={Theme.primary} />
+        <LoadingIndicator size="small" color={Theme.primary} />
       ) : attachments.length === 0 ? (
         <Text style={styles.emptyText}>No documents attached.</Text>
       ) : (
@@ -622,7 +623,7 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
                     disabled={isScanning}
                   >
                     {isScanning ? (
-                      <ActivityIndicator size="small" color="#fff" />
+                      <LoadingIndicator size="small" color="#fff" />
                     ) : (
                       <>
                         <FontAwesome name="magic" size={12} color="#fff" />
@@ -643,7 +644,7 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
     <View style={styles.documentViewerContainer}>
       {isLoadingAttachments ? (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color={Theme.primary} />
+          <LoadingIndicator size="large" color={Theme.primary} />
           <Text style={styles.loadingText}>Syncing Secure Assets...</Text>
         </View>
       ) : attachments.length === 0 ? (
@@ -753,7 +754,7 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
 
             {docLoading && (
               <View style={styles.docLoadingOverlay}>
-                <ActivityIndicator size="large" color={Theme.primary} />
+                <LoadingIndicator size="large" color={Theme.primary} />
                 <Text style={styles.loadingText}>Loading preview…</Text>
               </View>
             )}
@@ -807,14 +808,14 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
               </Text>
             </Pressable>
             <Pressable style={styles.btnPrimaryLight} onPress={handleScanWithAI} disabled={isScanning || isSubmitting}>
-              {isScanning ? <ActivityIndicator size="small" color={Theme.primary} /> : <FontAwesome name="magic" size={12} color={Theme.primary} />}
+              {isScanning ? <LoadingIndicator size="small" color={Theme.primary} /> : <FontAwesome name="magic" size={12} color={Theme.primary} />}
               <Text style={styles.btnPrimaryLightText}>{isScanning ? `SCANNING ${scanProgress}%` : 'SCAN WITH AI'}</Text>
             </Pressable>
             <Pressable style={styles.btnDangerOutline} onPress={handleReject} disabled={isSubmitting}>
               <Text style={styles.btnDangerOutlineText}>RAISE DISPUTE</Text>
             </Pressable>
             <Pressable style={styles.btnPrimaryFilled} onPress={handleValidate} disabled={isSubmitting}>
-              {isSubmitting ? <ActivityIndicator size="small" color="#fff" /> : <FontAwesome name="shield" size={12} color="#fff" />}
+              {isSubmitting ? <LoadingIndicator size="small" color="#fff" /> : <FontAwesome name="shield" size={12} color="#fff" />}
               <Text style={styles.btnPrimaryFilledText}>APPROVE INVOICING</Text>
             </Pressable>
           </View>
@@ -923,7 +924,7 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
                 disabled={isSubmitting}
               >
                 {isSubmitting ? (
-                  <ActivityIndicator color="#fff" />
+                  <LoadingIndicator color="#fff" />
                 ) : (
                   <Text style={styles.submitBtnText}>Approve Invoicing</Text>
                 )}
@@ -1131,7 +1132,7 @@ const styles = StyleSheet.create({
   aiFieldLabel: { fontSize: 12, color: Theme.textMuted, fontWeight: '600', flex: 1 },
   aiFieldEmpty: { fontSize: 14, color: Theme.textMuted, flex: 1, textAlign: 'right', fontWeight: '500' },
   aiFieldInputWrapper: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8 },
-  aiFieldInput: { backgroundColor: Theme.cardWhite, borderWidth: 1, borderColor: Theme.borderInput, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6, fontSize: 13, fontWeight: '600', color: Theme.textPrimaryDark, minWidth: 100, textAlign: 'right' },
+  aiFieldInput: { backgroundColor: Theme.cardWhite, borderWidth: 1, borderColor: Theme.borderInput, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6, fontSize: 16, fontWeight: '600', color: Theme.textPrimaryDark, minWidth: 100, textAlign: 'right' },
   aiFieldInputWarning: { borderColor: '#f59e0b', backgroundColor: '#fffbeb' },
   confidenceBadge: { backgroundColor: '#dcfce7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   confidenceText: { fontSize: 10, color: '#166534', fontWeight: '700' },
@@ -1179,7 +1180,7 @@ const styles = StyleSheet.create({
   chatText: { fontSize: 13, color: '#fff', fontWeight: '500' },
   chatTextAssistant: { fontSize: 13, color: Theme.textPrimaryDark, fontWeight: '500' },
   chatInputWrapper: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  chatInput: { flex: 1, backgroundColor: Theme.cardWhite, borderWidth: 1, borderColor: Theme.borderInput, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 12, fontSize: 14 },
+  chatInput: { flex: 1, backgroundColor: Theme.cardWhite, borderWidth: 1, borderColor: Theme.borderInput, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 12, fontSize: 16 },
   chatSendBtn: { backgroundColor: Theme.primary, width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
 
   mobileDocViewer: { marginTop: 24, marginBottom: 24 },

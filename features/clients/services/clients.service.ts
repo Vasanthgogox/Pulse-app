@@ -51,7 +51,7 @@ export async function getClientsByOrganization(
     });
 
     if (!rpcError && data) {
-      const raw = (data ?? []) as ClientRow[];
+      const raw = (data ?? []) as unknown as ClientRow[];
       if (opts != null) {
         const limit = opts.limit ?? DEFAULT_PAGE_SIZE;
         const offset = opts.offset ?? 0;
@@ -214,7 +214,14 @@ export async function getLinkedOrgProfile(linkedOrganizationId: string): Promise
   };
 }
 
-type OrgDisplayProfile = { organizationName: string; contactPerson: string; phone: string; avatarUrl?: string; avatarSeed?: string };
+type OrgDisplayProfile = {
+  organizationName: string;
+  contactPerson: string;
+  phone: string;
+  avatarUrl?: string;
+  avatarSeed?: string;
+  ownerId?: string;
+};
 
 /** Batch-fetch display profiles for multiple linked orgs in one RPC call. */
 export async function getLinkedOrgProfilesBatch(
@@ -225,16 +232,25 @@ export async function getLinkedOrgProfilesBatch(
     p_linked_organization_ids: linkedOrganizationIds,
   });
   if (error || data == null || typeof data !== 'object') return {};
-  const raw = data as Record<string, { organizationName?: string; contactPerson?: string; phone?: string; avatarUrl?: string; avatarSeed?: string }>;
+  const raw = data as Record<string, {
+    organizationName?: string;
+    contactPerson?: string;
+    phone?: string;
+    avatarUrl?: string;
+    avatarSeed?: string;
+    ownerId?: string;
+  }>;
   const result: Record<string, OrgDisplayProfile> = {};
   for (const [oid, entry] of Object.entries(raw)) {
     if (!entry) continue;
+    const ownerId = (entry.ownerId ?? '').trim();
     result[oid] = {
       organizationName: (entry.organizationName ?? '').trim() || 'Connected',
       contactPerson: (entry.contactPerson ?? '').trim(),
       phone: (entry.phone ?? '').trim(),
       avatarUrl: (entry.avatarUrl ?? '').trim(),
       avatarSeed: (entry.avatarSeed ?? '').trim(),
+      ...(ownerId ? { ownerId } : {}),
     };
   }
   return result;

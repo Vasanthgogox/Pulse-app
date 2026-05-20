@@ -5,8 +5,16 @@
  */
 import Theme from "@/constants/Theme";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { useEffect } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useEffect, useState } from "react";
+import {
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  useWindowDimensions,
+} from "react-native";
 import Animated, {
     Easing,
     useAnimatedStyle,
@@ -109,6 +117,11 @@ export interface LedgerExpandedCardProps {
   formatNumSignedFn?: (n: number) => string;
   /** Id of the current ledger entry (expanded row); this transaction is highlighted in the list. */
   highlightTransactionId?: string | null;
+  /**
+   * Desktop web three-column layout (Ledger | Trip | Settlement/history).
+   * Use only in party-detail transaction contexts — main Finance cash/ledger row expand stays stacked.
+   */
+  enableDesktopThreeColumn?: boolean;
   /** Optional: called when user taps "Download Trip Protocol". */
   onDownloadPress?: () => void;
   /** Whether the counterparty (client/supplier) is integrated. When false, the reconciliation hero shows an offline empty state. */
@@ -237,7 +250,50 @@ export function LedgerExpandedCard({
   formatNumSignedFn = defaultFormatNumSigned,
   highlightTransactionId,
   onDownloadPress,
+  enableDesktopThreeColumn = false,
 }: LedgerExpandedCardProps) {
+  const { width: windowWidth } = useWindowDimensions();
+  const useDesktopThreeColumnLayout =
+    Platform.OS === "web" &&
+    windowWidth >= 1024 &&
+    enableDesktopThreeColumn;
+
+  const showSummaryBar =
+    showReceivablesRow || showPayablesRow || showDriverRow || showVehicleRow || hasSameTx;
+
+  /** Intrinsic heights for desktop row — row height follows content (trip-led), not a fixed min. */
+  const [desktopTripIntrinsicHeight, setDesktopTripIntrinsicHeight] = useState(0);
+  const [desktopLedgerIntrinsicHeight, setDesktopLedgerIntrinsicHeight] = useState(0);
+
+  useEffect(() => {
+    setDesktopTripIntrinsicHeight(0);
+    setDesktopLedgerIntrinsicHeight(0);
+  }, [
+    useDesktopThreeColumnLayout,
+    hasMergedDetails,
+    hasTripDetail,
+    tripNumber,
+    tripDateStr,
+    routeStr,
+    clientStr,
+    truckStr,
+    driverStr,
+    tripSaleValue,
+    tripSupplierCost,
+    formattedDate,
+    note,
+    paymentMode,
+    paymentReference,
+    paymentIn,
+    paymentOut,
+    showSummaryBar,
+    hasSameTx,
+    sameTx.length,
+    receivedSum,
+    paidSum,
+    showReceivablesRow,
+    showPayablesRow,
+  ]);
   const hasNote = (note ?? "").trim() !== "";
   const showAmountReceived = paymentIn > 0;
   const showAmountPaid = paymentOut > 0;
@@ -247,8 +303,389 @@ export function LedgerExpandedCard({
   const marginValue = tripSaleValue - tripSupplierCost;
   const marginPct =
     tripSaleValue > 0 ? ((tripSaleValue - tripSupplierCost) / tripSaleValue) * 100 : 0;
-  const showSummaryBar =
-    showReceivablesRow || showPayablesRow || showDriverRow || showVehicleRow || hasSameTx;
+
+  const ledgerDetailsBody = (
+    <>
+      <View style={styles.detailGridRow}>
+        <View style={styles.detailGridHalf}>
+          <Text style={styles.detailLabel}>Type</Text>
+          <Text style={styles.detailValue} numberOfLines={2}>
+            {transactionTypeLabel ?? "—"}
+          </Text>
+        </View>
+        <View style={[styles.detailGridHalf, styles.detailGridHalfRight]}>
+          <Text style={styles.detailLabel}>Aging</Text>
+          <Text style={styles.detailValue}>{agingLabel}</Text>
+        </View>
+      </View>
+      <View style={styles.detailGridRow}>
+        <View style={styles.detailGridHalf}>
+          <Text style={styles.detailLabel}>Entry Date</Text>
+          <Text style={styles.detailValue}>{formattedDate}</Text>
+        </View>
+        <View style={[styles.detailGridHalf, styles.detailGridHalfRight]}>
+          <Text style={styles.detailLabel}>Amount Sync</Text>
+          {showAmountReceived ? (
+            <View style={styles.amountPillGreen}>
+              <Text style={styles.amountPillText}>₹{formatNumFn(paymentIn)}</Text>
+            </View>
+          ) : showAmountPaid ? (
+            <View style={styles.amountPillRed}>
+              <Text style={styles.amountPillText}>₹{formatNumFn(paymentOut)}</Text>
+            </View>
+          ) : (
+            <Text style={styles.detailValue}>—</Text>
+          )}
+        </View>
+      </View>
+      {(paymentMode || paymentReference) && (
+        <View style={styles.detailGridRow}>
+          <View style={styles.detailGridHalf}>
+            <Text style={styles.detailLabel}>Payment mode</Text>
+            <Text style={styles.detailValue}>{paymentMode ?? "—"}</Text>
+          </View>
+          <View style={[styles.detailGridHalf, styles.detailGridHalfRight]}>
+            <Text style={styles.detailLabel}>Reference</Text>
+            <Text style={styles.detailValue} numberOfLines={1}>
+              {paymentReference ?? "—"}
+            </Text>
+          </View>
+        </View>
+      )}
+      {hasNote ? (
+        <View style={styles.detailNoteRow}>
+          <Text style={styles.detailLabel}>Note</Text>
+          <Text
+            style={[styles.detailValue, styles.detailNoteValue]}
+            numberOfLines={useDesktopThreeColumnLayout ? 4 : 2}
+          >
+            {note}
+          </Text>
+        </View>
+      ) : null}
+    </>
+  );
+
+  const tripFieldsBody = (
+    <>
+      {hasTripDetail ? (
+        <>
+          <View style={styles.detailGridRow}>
+            <View style={styles.detailGridHalf}>
+              <Text style={styles.detailLabel}>Trip ID</Text>
+              <Text style={[styles.detailValue, styles.detailValueBold]} numberOfLines={1}>
+                {tripNumber}
+              </Text>
+              <View style={styles.detailUnderline} />
+            </View>
+            <View style={[styles.detailGridHalf, styles.detailGridHalfRight]}>
+              <Text style={styles.detailLabel}>Trip Date</Text>
+              <Text style={styles.detailValue}>{tripDateStr}</Text>
+              <View style={styles.detailUnderline} />
+            </View>
+          </View>
+          <View style={styles.detailGridRow}>
+            <View style={styles.detailGridHalf}>
+              <Text style={styles.detailLabel}>Route</Text>
+              <Text style={[styles.detailValue, styles.detailValueItalic]} numberOfLines={2}>
+                {routeStr || "—"}
+              </Text>
+              <View style={styles.detailUnderline} />
+            </View>
+            <View style={[styles.detailGridHalf, styles.detailGridHalfRight]}>
+              <Text style={styles.detailLabel}>Client</Text>
+              <Text style={styles.detailValue} numberOfLines={1}>
+                {clientStr || "—"}
+              </Text>
+              <View style={styles.detailUnderline} />
+            </View>
+          </View>
+          <View style={styles.detailGridRow}>
+            <View style={styles.detailGridHalf}>
+              <Text style={styles.detailLabel}>Client Price</Text>
+              <Text style={styles.detailValue}>₹{formatNumFn(tripSaleValue)}</Text>
+            </View>
+            <View style={[styles.detailGridHalf, styles.detailGridHalfRight]}>
+              <Text style={styles.detailLabel}>Supplier Cost</Text>
+              <Text style={styles.detailValue}>₹{formatNumFn(tripSupplierCost)}</Text>
+            </View>
+          </View>
+          <View style={[styles.detailGridRow, styles.detailMarginRow]}>
+            <View style={styles.detailGridHalf}>
+              <Text style={[styles.detailLabel, styles.detailLabelItalic]}>Margin</Text>
+              <Text
+                style={[
+                  styles.detailValueMargin,
+                  marginValue >= 0 ? styles.detailValueGreen : styles.detailValueRed,
+                ]}
+                numberOfLines={1}
+              >
+                ₹{formatNumSignedFn(marginValue)}
+              </Text>
+            </View>
+            <View style={[styles.detailGridHalf, styles.detailGridHalfRight]}>
+              <Text style={[styles.detailLabel, styles.detailLabelItalic]}>Margin %</Text>
+              <Text
+                style={[
+                  styles.detailValueMargin,
+                  marginPct >= 0 ? styles.detailValueGreen : styles.detailValueRed,
+                ]}
+                numberOfLines={1}
+              >
+                {tripSaleValue > 0 ? `${marginPct >= 0 ? "+" : ""}${marginPct.toFixed(1)}%` : "—"}
+              </Text>
+            </View>
+          </View>
+          {showTruckDriverRow ? (
+            <View style={styles.detailGridRow}>
+              {hasTruckStr ? (
+                <View style={styles.detailGridHalf}>
+                  <Text style={styles.detailLabel}>Truck</Text>
+                  <Text style={styles.detailValue} numberOfLines={1}>
+                    {(truckStr ?? "").trim()}
+                  </Text>
+                </View>
+              ) : null}
+              {hasDriverStr ? (
+                <View style={[styles.detailGridHalf, styles.detailGridHalfRight]}>
+                  <Text style={styles.detailLabel}>Driver</Text>
+                  <Text style={styles.detailValue} numberOfLines={1}>
+                    {driverStr}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+        </>
+      ) : (
+        <>
+          {showTruckDriverRow ? (
+            <View style={styles.detailGridRow}>
+              {hasTruckStr ? (
+                <View style={styles.detailGridHalf}>
+                  <Text style={styles.detailLabel}>Truck</Text>
+                  <Text style={styles.detailValue} numberOfLines={1}>
+                    {(truckStr ?? "").trim()}
+                  </Text>
+                </View>
+              ) : null}
+              {hasDriverStr ? (
+                <View style={[styles.detailGridHalf, styles.detailGridHalfRight]}>
+                  <Text style={styles.detailLabel}>Driver</Text>
+                  <Text style={styles.detailValue} numberOfLines={1}>
+                    {driverStr}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+        </>
+      )}
+    </>
+  );
+
+  const summaryBarMetricsOnly = (
+    <>
+      {showReceivablesRow ? (
+        <View style={styles.summaryBarRow}>
+          <View style={styles.summaryBarCell}>
+            <Text style={styles.summaryBarLabel}>Sale</Text>
+            <Text style={styles.summaryBarValue}>₹{formatNumFn(tripSaleValue)}</Text>
+          </View>
+          <View style={styles.summaryBarCell}>
+            <Text style={styles.summaryBarLabelReceived}>Received</Text>
+            <Text style={styles.summaryBarValueGreen}>₹{formatNumFn(receivedSum)}</Text>
+          </View>
+          <View style={styles.summaryBarCell}>
+            <Text style={styles.summaryBarLabel}>Due</Text>
+            <Text
+              style={[
+                styles.summaryBarValue,
+                receivablesDueRaw === 0 && styles.summaryBarValueMuted,
+              ]}
+              numberOfLines={1}
+            >
+              ₹{formatNumSignedFn(receivablesDueRaw)}
+            </Text>
+          </View>
+        </View>
+      ) : (hasTripSummary && summary) && (partyType === "client" || partyType === null) ? (
+        <View style={styles.summaryBarRow}>
+          <View style={styles.summaryBarCell}>
+            <Text style={styles.summaryBarLabel}>Sale</Text>
+            <Text style={styles.summaryBarValue}>—</Text>
+          </View>
+          <View style={styles.summaryBarCell}>
+            <Text style={styles.summaryBarLabelReceived}>Received</Text>
+            <Text style={styles.summaryBarValueGreen}>₹{formatNumFn(summary!.received)}</Text>
+          </View>
+          <View style={styles.summaryBarCell}>
+            <Text style={styles.summaryBarLabel}>Due</Text>
+            <Text style={styles.summaryBarValueMuted}>—</Text>
+          </View>
+        </View>
+      ) : null}
+      {showPayablesRow ? (
+        <View style={[styles.summaryBarRow, !hasSameTx && styles.summaryBarRowLast]}>
+          <View style={styles.summaryBarCell}>
+            <Text style={styles.summaryBarLabel}>Supplier cost</Text>
+            <Text style={styles.summaryBarValue}>₹{formatNumSignedFn(payablesCostDisplay)}</Text>
+          </View>
+          <View style={styles.summaryBarCell}>
+            <Text style={styles.summaryBarLabelReceived}>Paid</Text>
+            <Text style={styles.summaryBarValueGreen}>₹{formatNumFn(paidSum)}</Text>
+          </View>
+          <View style={styles.summaryBarCell}>
+            <Text style={styles.summaryBarLabel}>Due</Text>
+            <Text style={styles.summaryBarValue}>₹{formatNumSignedFn(payablesDueRaw)}</Text>
+          </View>
+        </View>
+      ) : null}
+      <View style={styles.summaryBarDivider} />
+    </>
+  );
+
+  const txHistoryRowsEl = (
+    <View style={styles.txHistoryList}>
+      {sameTx.map((tx, idx) => (
+        <TransactionHistoryRow
+          key={tx.id}
+          tx={tx}
+          formatNumFn={formatNumFn}
+          isLast={idx === sameTx.length - 1}
+          isHighlighted={tx.id === highlightTransactionId}
+          styles={styles}
+        />
+      ))}
+    </View>
+  );
+
+  const summaryBarInner = (
+    <>
+      {summaryBarMetricsOnly}
+      {hasSameTx ? (
+        <>
+          <Text style={styles.summaryBarTxTitle}>Transaction History</Text>
+          {txHistoryRowsEl}
+        </>
+      ) : null}
+    </>
+  );
+
+  const downloadBtnEl =
+    onDownloadPress != null ? (
+      <TouchableOpacity
+        style={[
+          styles.downloadBtn,
+          useDesktopThreeColumnLayout && styles.downloadBtnDesktop,
+        ]}
+        onPress={onDownloadPress}
+        activeOpacity={0.8}
+      >
+        <FontAwesome name="download" size={12} color={Theme.primary} />
+        <Text style={styles.downloadBtnText}>Download Trip Protocol</Text>
+      </TouchableOpacity>
+    ) : null;
+
+  if (useDesktopThreeColumnLayout) {
+    /** Third column needs at least summary chrome (or placeholder); tx list scrolls inside remainder. */
+    const desktopTxStripMinHeight = showSummaryBar ? 156 : 44;
+    const desktopRowHeight =
+      desktopTripIntrinsicHeight > 0 || (hasMergedDetails && desktopLedgerIntrinsicHeight > 0)
+        ? Math.max(
+            desktopTripIntrinsicHeight,
+            hasMergedDetails ? desktopLedgerIntrinsicHeight : 0,
+            desktopTxStripMinHeight,
+          )
+        : undefined;
+
+    const desktopSummaryPanel = showSummaryBar ? (
+      <View style={[styles.summaryBar, styles.summaryBarDesktopColumn]}>
+        {summaryBarMetricsOnly}
+        {hasSameTx ? (
+          <>
+            <Text style={[styles.summaryBarTxTitle, styles.summaryBarTxTitleDesktop]}>Transaction History</Text>
+            <ScrollView
+              style={styles.desktopTxHistoryScroll}
+              contentContainerStyle={styles.desktopTxHistoryScrollContent}
+              nestedScrollEnabled
+              showsVerticalScrollIndicator
+            >
+              {txHistoryRowsEl}
+            </ScrollView>
+          </>
+        ) : null}
+      </View>
+    ) : (
+      <View style={styles.desktopRelatedTxPlaceholder} />
+    );
+
+    return (
+      <View style={styles.detailOuter}>
+        <View style={styles.detailCard}>
+          <View
+            style={[
+              styles.desktopExpandRow,
+              desktopRowHeight != null ? { height: desktopRowHeight } : null,
+            ]}
+          >
+            {hasMergedDetails ? (
+              <View style={[styles.desktopExpandCol, styles.desktopExpandColDivider]}>
+                <View style={styles.desktopExpandColInner}>
+                  <View
+                    style={styles.desktopIntrinsicMeasureWrap}
+                    onLayout={(e) => {
+                      const h = Math.round(e.nativeEvent.layout.height);
+                      if (h > 0) {
+                        setDesktopLedgerIntrinsicHeight(h);
+                      }
+                    }}
+                  >
+                    <View style={styles.detailBlock}>
+                      <View style={styles.detailBlockHeader}>
+                        <Text style={styles.detailBlockHeaderText}>Ledger Details</Text>
+                      </View>
+                      <View style={[styles.detailBlockContent, styles.desktopExpandDetailContentNatural]}>
+                        {ledgerDetailsBody}
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              </View>
+            ) : null}
+
+            <View style={[styles.desktopExpandCol, styles.desktopExpandColDivider]}>
+              <View style={styles.desktopExpandColInner}>
+                <View
+                  style={styles.desktopIntrinsicMeasureWrap}
+                  onLayout={(e) => {
+                    const h = Math.round(e.nativeEvent.layout.height);
+                    if (h > 0) {
+                      setDesktopTripIntrinsicHeight(h);
+                    }
+                  }}
+                >
+                  <View style={styles.detailBlock}>
+                    <View style={styles.detailBlockHeader}>
+                      <Text style={styles.detailBlockHeaderText}>Associated Trip</Text>
+                    </View>
+                    <View style={[styles.detailBlockContent, styles.desktopExpandDetailContentNatural]}>
+                      {tripFieldsBody}
+                    </View>
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.desktopExpandCol}>
+              <View style={styles.desktopRelatedTxCol}>{desktopSummaryPanel}</View>
+            </View>
+          </View>
+          {downloadBtnEl}
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.detailOuter}>
@@ -259,274 +696,24 @@ export function LedgerExpandedCard({
             <View style={styles.detailBlockHeader}>
               <Text style={styles.detailBlockHeaderText}>Ledger Details</Text>
             </View>
-            <View style={styles.detailBlockContent}>
-              <View style={styles.detailGridRow}>
-                <View style={styles.detailGridHalf}>
-                  <Text style={styles.detailLabel}>Type</Text>
-                  <Text style={styles.detailValue} numberOfLines={2}>
-                    {transactionTypeLabel ?? "—"}
-                  </Text>
-                </View>
-                <View style={[styles.detailGridHalf, styles.detailGridHalfRight]}>
-                  <Text style={styles.detailLabel}>Aging</Text>
-                  <Text style={styles.detailValue}>{agingLabel}</Text>
-                </View>
-              </View>
-              <View style={styles.detailGridRow}>
-                <View style={styles.detailGridHalf}>
-                  <Text style={styles.detailLabel}>Entry Date</Text>
-                  <Text style={styles.detailValue}>{formattedDate}</Text>
-                </View>
-                <View style={[styles.detailGridHalf, styles.detailGridHalfRight]}>
-                  <Text style={styles.detailLabel}>Amount Sync</Text>
-                  {showAmountReceived ? (
-                    <View style={styles.amountPillGreen}>
-                      <Text style={styles.amountPillText}>₹{formatNumFn(paymentIn)}</Text>
-                    </View>
-                  ) : showAmountPaid ? (
-                    <View style={styles.amountPillRed}>
-                      <Text style={styles.amountPillText}>₹{formatNumFn(paymentOut)}</Text>
-                    </View>
-                  ) : (
-                    <Text style={styles.detailValue}>—</Text>
-                  )}
-                </View>
-              </View>
-              {(paymentMode || paymentReference) && (
-                <View style={styles.detailGridRow}>
-                  <View style={styles.detailGridHalf}>
-                    <Text style={styles.detailLabel}>Payment mode</Text>
-                    <Text style={styles.detailValue}>{paymentMode ?? "—"}</Text>
-                  </View>
-                  <View style={[styles.detailGridHalf, styles.detailGridHalfRight]}>
-                    <Text style={styles.detailLabel}>Reference</Text>
-                    <Text style={styles.detailValue} numberOfLines={1}>
-                      {paymentReference ?? "—"}
-                    </Text>
-                  </View>
-                </View>
-              )}
-              {hasNote ? (
-                <View style={styles.detailNoteRow}>
-                  <Text style={styles.detailLabel}>Note</Text>
-                  <Text style={[styles.detailValue, styles.detailNoteValue]} numberOfLines={2}>
-                    {note}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
+            <View style={styles.detailBlockContent}>{ledgerDetailsBody}</View>
           </View>
         ) : null}
 
-        {/* Associated Trip — reference: black header + grid (Trip ID, Trip Date, Route, Client, Client Price, Supplier Cost, Margin, Margin %) + dark summary bar + tx list + download */}
+        {/* Associated Trip — stacked summary + tx under trip on mobile */}
         <View style={[styles.detailBlock, hasMergedDetails && styles.detailBlockSpacer]}>
           <View style={styles.detailBlockHeader}>
             <Text style={styles.detailBlockHeaderText}>Associated Trip</Text>
           </View>
           <View style={styles.detailBlockContent}>
-            {hasTripDetail ? (
-              <>
-                <View style={styles.detailGridRow}>
-                  <View style={styles.detailGridHalf}>
-                    <Text style={styles.detailLabel}>Trip ID</Text>
-                    <Text style={[styles.detailValue, styles.detailValueBold]} numberOfLines={1}>
-                      {tripNumber}
-                    </Text>
-                    <View style={styles.detailUnderline} />
-                  </View>
-                  <View style={[styles.detailGridHalf, styles.detailGridHalfRight]}>
-                    <Text style={styles.detailLabel}>Trip Date</Text>
-                    <Text style={styles.detailValue}>{tripDateStr}</Text>
-                    <View style={styles.detailUnderline} />
-                  </View>
-                </View>
-                <View style={styles.detailGridRow}>
-                  <View style={styles.detailGridHalf}>
-                    <Text style={styles.detailLabel}>Route</Text>
-                    <Text style={[styles.detailValue, styles.detailValueItalic]} numberOfLines={2}>
-                      {routeStr || "—"}
-                    </Text>
-                    <View style={styles.detailUnderline} />
-                  </View>
-                  <View style={[styles.detailGridHalf, styles.detailGridHalfRight]}>
-                    <Text style={styles.detailLabel}>Client</Text>
-                    <Text style={styles.detailValue} numberOfLines={1}>
-                      {clientStr || "—"}
-                    </Text>
-                    <View style={styles.detailUnderline} />
-                  </View>
-                </View>
-                <View style={styles.detailGridRow}>
-                  <View style={styles.detailGridHalf}>
-                    <Text style={styles.detailLabel}>Client Price</Text>
-                    <Text style={styles.detailValue}>₹{formatNumFn(tripSaleValue)}</Text>
-                  </View>
-                  <View style={[styles.detailGridHalf, styles.detailGridHalfRight]}>
-                    <Text style={styles.detailLabel}>Supplier Cost</Text>
-                    <Text style={styles.detailValue}>₹{formatNumFn(tripSupplierCost)}</Text>
-                  </View>
-                </View>
-                <View style={[styles.detailGridRow, styles.detailMarginRow]}>
-                  <View style={styles.detailGridHalf}>
-                    <Text style={[styles.detailLabel, styles.detailLabelItalic]}>Margin</Text>
-                    <Text
-                      style={[
-                        styles.detailValueMargin,
-                        marginValue >= 0 ? styles.detailValueGreen : styles.detailValueRed,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      ₹{formatNumSignedFn(marginValue)}
-                    </Text>
-                  </View>
-                  <View style={[styles.detailGridHalf, styles.detailGridHalfRight]}>
-                    <Text style={[styles.detailLabel, styles.detailLabelItalic]}>Margin %</Text>
-                    <Text
-                      style={[
-                        styles.detailValueMargin,
-                        marginPct >= 0 ? styles.detailValueGreen : styles.detailValueRed,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {tripSaleValue > 0 ? `${marginPct >= 0 ? "+" : ""}${marginPct.toFixed(1)}%` : "—"}
-                    </Text>
-                  </View>
-                </View>
-                {showTruckDriverRow ? (
-                  <View style={styles.detailGridRow}>
-                    {hasTruckStr ? (
-                      <View style={styles.detailGridHalf}>
-                        <Text style={styles.detailLabel}>Truck</Text>
-                        <Text style={styles.detailValue} numberOfLines={1}>
-                          {(truckStr ?? "").trim()}
-                        </Text>
-                      </View>
-                    ) : null}
-                    {hasDriverStr ? (
-                      <View style={[styles.detailGridHalf, styles.detailGridHalfRight]}>
-                        <Text style={styles.detailLabel}>Driver</Text>
-                        <Text style={styles.detailValue} numberOfLines={1}>
-                          {driverStr}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
-                ) : null}
-              </>
-            ) : (
-              <>
-                {showTruckDriverRow ? (
-                  <View style={styles.detailGridRow}>
-                    {hasTruckStr ? (
-                      <View style={styles.detailGridHalf}>
-                        <Text style={styles.detailLabel}>Truck</Text>
-                        <Text style={styles.detailValue} numberOfLines={1}>
-                          {(truckStr ?? "").trim()}
-                        </Text>
-                      </View>
-                    ) : null}
-                    {hasDriverStr ? (
-                      <View style={[styles.detailGridHalf, styles.detailGridHalfRight]}>
-                        <Text style={styles.detailLabel}>Driver</Text>
-                        <Text style={styles.detailValue} numberOfLines={1}>
-                          {driverStr}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
-                ) : null}
-              </>
-            )}
+            {tripFieldsBody}
 
-            {/* Summary status bar — reference: dark bg, Sale | Received | Due, divider, Transaction History list */}
+            {/* Summary status bar — dark bg, Sale | Received | Due, divider, Transaction History list */}
             {showSummaryBar ? (
-              <View style={styles.summaryBar}>
-                {showReceivablesRow ? (
-                  <View style={styles.summaryBarRow}>
-                    <View style={styles.summaryBarCell}>
-                      <Text style={styles.summaryBarLabel}>Sale</Text>
-                      <Text style={styles.summaryBarValue}>₹{formatNumFn(tripSaleValue)}</Text>
-                    </View>
-                    <View style={styles.summaryBarCell}>
-                      <Text style={styles.summaryBarLabelReceived}>Received</Text>
-                      <Text style={styles.summaryBarValueGreen}>₹{formatNumFn(receivedSum)}</Text>
-                    </View>
-                    <View style={styles.summaryBarCell}>
-                      <Text style={styles.summaryBarLabel}>Due</Text>
-                      <Text
-                        style={[
-                          styles.summaryBarValue,
-                          receivablesDueRaw === 0 && styles.summaryBarValueMuted,
-                        ]}
-                        numberOfLines={1}
-                      >
-                        ₹{formatNumSignedFn(receivablesDueRaw)}
-                      </Text>
-                    </View>
-                  </View>
-                ) : (hasTripSummary && summary) && (partyType === "client" || partyType === null) ? (
-                  <View style={styles.summaryBarRow}>
-                    <View style={styles.summaryBarCell}>
-                      <Text style={styles.summaryBarLabel}>Sale</Text>
-                      <Text style={styles.summaryBarValue}>—</Text>
-                    </View>
-                    <View style={styles.summaryBarCell}>
-                      <Text style={styles.summaryBarLabelReceived}>Received</Text>
-                      <Text style={styles.summaryBarValueGreen}>₹{formatNumFn(summary!.received)}</Text>
-                    </View>
-                    <View style={styles.summaryBarCell}>
-                      <Text style={styles.summaryBarLabel}>Due</Text>
-                      <Text style={styles.summaryBarValueMuted}>—</Text>
-                    </View>
-                  </View>
-                ) : null}
-                {showPayablesRow ? (
-                  <View style={[styles.summaryBarRow, !hasSameTx && styles.summaryBarRowLast]}>
-                    <View style={styles.summaryBarCell}>
-                      <Text style={styles.summaryBarLabel}>Supplier cost</Text>
-                      <Text style={styles.summaryBarValue}>₹{formatNumSignedFn(payablesCostDisplay)}</Text>
-                    </View>
-                    <View style={styles.summaryBarCell}>
-                      <Text style={styles.summaryBarLabelReceived}>Paid</Text>
-                      <Text style={styles.summaryBarValueGreen}>₹{formatNumFn(paidSum)}</Text>
-                    </View>
-                    <View style={styles.summaryBarCell}>
-                      <Text style={styles.summaryBarLabel}>Due</Text>
-                      <Text style={styles.summaryBarValue}>₹{formatNumSignedFn(payablesDueRaw)}</Text>
-                    </View>
-                  </View>
-                ) : null}
-                <View style={styles.summaryBarDivider} />
-                {hasSameTx ? (
-                  <>
-                    <Text style={styles.summaryBarTxTitle}>Transaction History</Text>
-                    <View style={styles.txHistoryList}>
-                      {sameTx.map((tx, idx) => (
-                        <TransactionHistoryRow
-                          key={tx.id}
-                          tx={tx}
-                          formatNumFn={formatNumFn}
-                          isLast={idx === sameTx.length - 1}
-                          isHighlighted={tx.id === highlightTransactionId}
-                          styles={styles}
-                        />
-                      ))}
-                    </View>
-                  </>
-                ) : null}
-              </View>
+              <View style={styles.summaryBar}>{summaryBarInner}</View>
             ) : null}
 
-            {onDownloadPress != null ? (
-              <TouchableOpacity
-                style={styles.downloadBtn}
-                onPress={onDownloadPress}
-                activeOpacity={0.8}
-              >
-                <FontAwesome name="download" size={12} color={Theme.primary} />
-                <Text style={styles.downloadBtnText}>Download Trip Protocol</Text>
-              </TouchableOpacity>
-            ) : null}
+            {downloadBtnEl}
           </View>
         </View>
       </View>
@@ -549,6 +736,79 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.borderLight,
     overflow: "hidden",
+  },
+  /** Web desktop: ledger | trip fields | settlement — row height follows measured trip/ledger content */
+  desktopExpandRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+  },
+  desktopExpandCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  desktopExpandColDivider: {
+    borderRightWidth: StyleSheet.hairlineWidth * 2,
+    borderRightColor: Theme.borderLight,
+  },
+  desktopExpandColInner: {
+    flex: 1,
+    alignSelf: "stretch",
+    justifyContent: "flex-start",
+    minHeight: 0,
+  },
+  /** Wrap header+body so onLayout reflects intrinsic height (not stretched empty space). */
+  desktopIntrinsicMeasureWrap: {
+    alignSelf: "flex-start",
+    width: "100%",
+  },
+  desktopExpandDetailContentNatural: {
+    paddingBottom: 12,
+  },
+  desktopRelatedTxCol: {
+    flex: 1,
+    alignSelf: "stretch",
+    justifyContent: "flex-start",
+    minWidth: 0,
+    minHeight: 0,
+  },
+  summaryBarDesktopColumn: {
+    flex: 1,
+    flexDirection: "column",
+    marginTop: 0,
+    width: "100%",
+    minHeight: 0,
+    borderRadius: 0,
+    borderWidth: 0,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+  summaryBarTxTitleDesktop: {
+    flexShrink: 0,
+  },
+  desktopTxHistoryScroll: {
+    flexGrow: 1,
+    flexShrink: 1,
+    minHeight: 0,
+  },
+  desktopTxHistoryScrollContent: {
+    paddingBottom: 4,
+  },
+  desktopRelatedTxPlaceholder: {
+    flex: 1,
+    alignSelf: "stretch",
+    width: "100%",
+    minHeight: 44,
+    borderRadius: 0,
+    borderWidth: 0,
+    backgroundColor: "rgba(10,10,11,0.04)",
+  },
+  downloadBtnDesktop: {
+    marginHorizontal: 0,
+    marginBottom: 0,
+    marginTop: 0,
+    borderRadius: 0,
+    borderLeftWidth: 0,
+    borderRightWidth: 0,
   },
   detailBlock: {
     marginBottom: 0,

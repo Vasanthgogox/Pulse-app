@@ -5,17 +5,17 @@
 import { PartyAvatar } from "@/components/PartyAvatar";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import type { DriverRow } from "@/features/drivers/services/drivers.service";
-import { useLanguage } from "@/contexts/LanguageContext";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
+import { useLanguage } from "@/contexts/LanguageContext";
+import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import { getDoubleEntryDisplayLabel } from "@/features/finance/accounting/accountingModel";
-import { partyAvatarInitialsTextColor } from "@/lib/partyAvatarDisplay";
 import {
-  getLedgerFlowForRow,
-  LedgerFlowChip,
+    getLedgerFlowForRow,
+    LedgerFlowChip,
 } from "@/features/finance/components/LedgerFlowChip";
 import { type LedgerRow } from "@/features/finance/services/finance.service";
 import { formatLedgerAmount } from "@/lib/format";
+import { partyAvatarInitialsTextColor } from "@/lib/partyAvatarDisplay";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import {
@@ -508,6 +508,11 @@ export interface LedgerTransactionListViewProps {
   expandedRowId?: string | null;
   /** Precomputed FinancialRowData for the expanded row (table-style detail: trip + same-trip transactions). */
   expandedRowData?: FinancialRowData | null;
+  /**
+   * Web desktop (≥1024): render expanded row as three columns (Ledger | Trip | Settlement/history).
+   * Enable only on party-detail transaction surfaces — leave false for main Finance Cash ledger.
+   */
+  expandedDesktopThreeColumn?: boolean;
   /** Optional row id to highlight. */
   highlightId?: string | null;
   /** Show section title above the list. Default true. */
@@ -554,6 +559,7 @@ export function LedgerTransactionListView({
   onRowPress,
   expandedRowId,
   expandedRowData,
+  expandedDesktopThreeColumn = false,
   highlightId,
   showTitle = true,
   tripDetailsMap,
@@ -1360,11 +1366,13 @@ export function LedgerTransactionListView({
                       {!useFlatList &&
                         (useTimelineLayout ? (
                           <View style={styles.dateSyncBar}>
-                            <View style={styles.dateSyncBarTopRow}>
+                            <View style={styles.dateSyncBarCardsWrap}>
                               <TouchableOpacity
-                                style={styles.dateSyncBarLeft}
+                                style={styles.dateSyncBarTopRow}
                                 onPress={() => toggleSectionExpanded(key)}
                                 activeOpacity={0.7}
+                                accessibilityRole="button"
+                                accessibilityLabel={`${sectionLabel}, ${isSectionExpanded(key) ? "collapse" : "expand"} transactions`}
                               >
                                 <Text
                                   style={styles.dateSyncBarDate}
@@ -1378,13 +1386,12 @@ export function LedgerTransactionListView({
                                       ? "chevron-up"
                                       : "chevron-down"
                                   }
-                                  size={12}
+                                  size={10}
                                   color={Theme.textMuted}
                                   style={styles.dateSyncBarChevron}
                                 />
                               </TouchableOpacity>
-                            </View>
-                            <View style={styles.dateSyncBarCardsWrap}>
+                              <View style={styles.dateSyncBarCardsRow}>
                               <TouchableOpacity
                                 style={[
                                   styles.dateSyncBarCard,
@@ -1423,7 +1430,7 @@ export function LedgerTransactionListView({
                                 >
                                   <FontAwesome
                                     name="arrow-up"
-                                    size={12}
+                                    size={10}
                                     color={Theme.teslaRed}
                                   />
                                 </View>
@@ -1466,11 +1473,12 @@ export function LedgerTransactionListView({
                                 >
                                   <FontAwesome
                                     name="arrow-down"
-                                    size={12}
+                                    size={10}
                                     color={Theme.darkGreen}
                                   />
                                 </View>
                               </TouchableOpacity>
+                              </View>
                             </View>
                           </View>
                         ) : (
@@ -1707,6 +1715,9 @@ export function LedgerTransactionListView({
                                         expandedRowId === row.id ? (
                                           <LedgerExpandedCardFromData
                                             data={expandedRowData}
+                                            enableDesktopThreeColumn={
+                                              expandedDesktopThreeColumn
+                                            }
                                           />
                                         ) : (
                                           <TransactionRowDetail row={row} />
@@ -1891,6 +1902,9 @@ export function LedgerTransactionListView({
                                     expandedRowId === row.id ? (
                                       <LedgerExpandedCardFromData
                                         data={expandedRowData}
+                                        enableDesktopThreeColumn={
+                                          expandedDesktopThreeColumn
+                                        }
                                       />
                                     ) : (
                                       <TransactionRowDetail row={row} />
@@ -2266,6 +2280,9 @@ export function LedgerTransactionListView({
                                   ) : expandedRowData != null ? (
                                     <LedgerExpandedCardFromData
                                       data={expandedRowData}
+                                      enableDesktopThreeColumn={
+                                        expandedDesktopThreeColumn
+                                      }
                                     />
                                   ) : (
                                     <TransactionRowDetail row={row} />
@@ -2837,32 +2854,30 @@ const styles = StyleSheet.create({
     color: Theme.textOnPrimary,
   },
   dateSyncBar: {
-    paddingVertical: 8,
-    paddingHorizontal: Layout.screenPaddingHorizontal + 8,
-    backgroundColor: Theme.surface,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: Theme.borderLight,
+    paddingVertical: 4,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    backgroundColor: "transparent",
   },
   dateSyncBarTopRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 6,
+    minHeight: 20,
   },
   dateSyncBarLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
   },
   dateSyncBarChevron: {
     marginLeft: 2,
   },
   dateSyncBarDate: {
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 9,
+    fontWeight: "700",
     color: Theme.textMuted,
-    letterSpacing: 0.6,
+    letterSpacing: 0.5,
     textTransform: "uppercase",
   },
   dateSyncBarHandshake: {
@@ -2885,67 +2900,71 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
   dateSyncBarCardsWrap: {
-    flexDirection: "row",
     backgroundColor: Theme.cardWhite,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: Theme.surfaceBorder,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
     shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  dateSyncBarCardsRow: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   dateSyncBarCards: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 8,
   },
   dateSyncBarCard: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 4,
-    paddingHorizontal: 12,
+    paddingVertical: 2,
+    paddingHorizontal: 6,
     backgroundColor: "transparent",
+    minHeight: 36,
   },
   dateSyncBarCardOut: {
-    paddingRight: 12,
+    paddingRight: 8,
   },
   dateSyncBarCardIn: {
     paddingRight: 0,
-    paddingLeft: 12,
-    borderLeftWidth: 1,
-    borderLeftColor: Theme.borderMedium,
+    paddingLeft: 8,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: Theme.borderLight,
   },
   dateSyncBarCardActiveOut: {
-    backgroundColor: "rgba(248,113,113,0.12)",
-    borderRadius: 999,
+    backgroundColor: "rgba(248,113,113,0.1)",
+    borderRadius: 8,
   },
   dateSyncBarCardActiveIn: {
-    backgroundColor: "rgba(34,197,94,0.12)",
-    borderRadius: 999,
+    backgroundColor: "rgba(34,197,94,0.1)",
+    borderRadius: 8,
   },
   dateSyncBarCardText: {
     flex: 1,
     minWidth: 0,
   },
   dateSyncBarCardLabel: {
-    fontSize: 8,
-    fontWeight: "800",
+    fontSize: 7,
+    fontWeight: "700",
     color: Theme.textSecondary,
-    letterSpacing: 1.2,
+    letterSpacing: 0.8,
     textTransform: "uppercase",
-    marginBottom: 4,
+    marginBottom: 2,
   },
   dateSyncBarCardAmount: {
-    fontSize: 13,
-    fontWeight: "500",
+    fontSize: 11,
+    fontWeight: "600",
     fontStyle: "italic",
-    letterSpacing: -0.3,
+    letterSpacing: -0.2,
   },
   dateSyncBarCardAmountOut: {
     color: Theme.teslaRed,
@@ -2954,12 +2973,13 @@ const styles = StyleSheet.create({
     color: Theme.darkGreen,
   },
   dateSyncBarCardIconWrap: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.surfaceGray,
+    marginLeft: 4,
   },
   dateSyncBarCardIconOut: { backgroundColor: "rgba(239,68,68,0.25)" },
   dateSyncBarCardIconIn: { backgroundColor: "rgba(16,185,129,0.25)" },
@@ -3720,7 +3740,8 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   sectionTimeline: {
-    marginTop: 6,
+    marginTop: 4,
+    marginBottom: 2,
   },
   sectionBar: {
     flexDirection: "row",

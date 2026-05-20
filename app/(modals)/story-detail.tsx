@@ -14,7 +14,9 @@ import {
 } from "@/features/network/services/posts.service";
 import { type StoryViewRow } from "@/features/network/services/story-views.service";
 import { formatINR } from "@/lib/format";
-import { useNetworkFeedQuery, useAfterPostDeleted, useInvalidatePosts, useMyBidQuery, useStoryViewsQuery, useRecordStoryViewMutation } from "@/lib/queries";
+import { useNetworkFeedQuery, useAfterPostDeleted, useInvalidatePosts } from "@/lib/queries/usePostsQuery";
+import { useMyBidQuery } from "@/lib/queries/useBidsQuery";
+import { useStoryViewsQuery, useRecordStoryViewMutation } from "@/lib/queries/useStoryViewsQuery";
 import { confirmDialog } from "@/lib/confirmDialog";
 import { ROUTES } from "@/lib/routes";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -453,7 +455,7 @@ export default function StoryDetailScreen() {
           </View>
         </View>
         <Pressable style={styles.closeBtn} onPress={() => router.back()} hitSlop={10}>
-          <X size={22} color={INK} />
+          <X size={18} color={INK} />
         </Pressable>
       </View>
 
@@ -465,9 +467,9 @@ export default function StoryDetailScreen() {
       {/* Center payload */}
       <View style={[styles.centerStage, isDesktopPreview && styles.centerStageDesktop]} pointerEvents="none">
         <View style={[styles.iconHero, isDesktopPreview && styles.iconHeroDesktop, { backgroundColor: color + "18" }]}>
-          {isLoad ? <Package size={44} color={color} strokeWidth={1.8} />
-            : isVehicle ? <Truck size={44} color={color} strokeWidth={1.8} />
-            : <Sparkles size={44} color={color} strokeWidth={1.8} />}
+          {isLoad ? <Package size={isDesktopPreview ? 40 : 30} color={color} strokeWidth={1.8} />
+            : isVehicle ? <Truck size={isDesktopPreview ? 40 : 30} color={color} strokeWidth={1.8} />
+            : <Sparkles size={isDesktopPreview ? 40 : 30} color={color} strokeWidth={1.8} />}
         </View>
         <Text style={[styles.kicker, isDesktopPreview && styles.kickerDesktop, { color }]}>{heroLabel}</Text>
         {isLoad && post.origin && post.destination ? (
@@ -486,13 +488,32 @@ export default function StoryDetailScreen() {
                   </Text>
                 ) : null}
               </View>
-              <ArrowRight size={30} color={INK} strokeWidth={3.5} />
-              <View style={styles.loadRouteHeadlinePoint}>
-                <Text style={[styles.loadCityText, isDesktopPreview && styles.loadCityTextDesktop]} numberOfLines={1}>
+              <ArrowRight
+                size={isDesktopPreview ? 22 : 16}
+                color={MUTED}
+                strokeWidth={2.25}
+                style={styles.loadRouteArrow}
+              />
+              <View style={[styles.loadRouteHeadlinePoint, styles.loadRouteHeadlinePointEnd]}>
+                <Text
+                  style={[
+                    styles.loadCityText,
+                    styles.loadCityTextEnd,
+                    isDesktopPreview && styles.loadCityTextDesktop,
+                  ]}
+                  numberOfLines={1}
+                >
                   {destinationParts.city}
                 </Text>
                 {destinationParts.state ? (
-                  <Text style={[styles.loadStateText, isDesktopPreview && styles.loadStateTextDesktop]} numberOfLines={1}>
+                  <Text
+                    style={[
+                      styles.loadStateText,
+                      styles.loadStateTextEnd,
+                      isDesktopPreview && styles.loadStateTextDesktop,
+                    ]}
+                    numberOfLines={1}
+                  >
                     {destinationParts.state}
                   </Text>
                 ) : null}
@@ -523,7 +544,7 @@ export default function StoryDetailScreen() {
                 <Text style={styles.routeLabel}>ORIGIN</Text>
                 <Text style={styles.routeText} numberOfLines={1}>{originParts.city}{originParts.state ? `, ${originParts.state}` : ""}</Text>
               </View>
-              <ArrowRight size={16} color={MUTED} />
+              <ArrowRight size={14} color={MUTED} strokeWidth={2} />
               <View style={[styles.routePoint, { alignItems: "flex-end" }]}>
                 <View style={[styles.routeDot, { backgroundColor: color }]} />
                 <Text style={styles.routeLabel}>DESTINATION</Text>
@@ -593,7 +614,7 @@ export default function StoryDetailScreen() {
               accessibilityRole="button"
               accessibilityLabel="Share story bidding link on WhatsApp"
             >
-              <FontAwesome name="whatsapp" size={20} color={Theme.textOnPrimary} />
+              <FontAwesome name="whatsapp" size={16} color={Theme.textOnPrimary} />
               <Text style={styles.shareWaBtnText}>Share on WhatsApp</Text>
             </Pressable>
           </>
@@ -617,7 +638,7 @@ export default function StoryDetailScreen() {
               accessibilityRole="button"
               accessibilityLabel="Share story bidding link on WhatsApp"
             >
-              <FontAwesome name="whatsapp" size={20} color={Theme.textOnPrimary} />
+              <FontAwesome name="whatsapp" size={16} color={Theme.textOnPrimary} />
               <Text style={styles.shareWaBtnText}>Share on WhatsApp</Text>
             </Pressable>
           </>
@@ -716,42 +737,139 @@ const styles = StyleSheet.create({
   topBarText: { flex: 1, minWidth: 0 },
   orgBrandRow: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1, minWidth: 0 },
   orgTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, minWidth: 0, paddingRight: 2 },
-  orgTitle: { flex: 1, fontSize: 15, fontWeight: "900", color: INK, letterSpacing: -0.3 },
+  orgTitle: { flex: 1, fontSize: 13, fontWeight: "800", color: INK, letterSpacing: -0.2 },
   orgTitlePulse: { fontStyle: "italic", letterSpacing: -0.45 },
   pulseGreenDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: Theme.darkGreen, marginTop: 1, flexShrink: 0 },
   inlineDeleteBtn: { width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: Theme.borderLight, backgroundColor: Theme.screenBackground, zIndex: 60 },
   inlineDeleteBtnDisabled: { opacity: 0.55 },
-  timeAgoLabel: { fontSize: 9, fontWeight: "700", color: MUTED, letterSpacing: 1.2, textTransform: "uppercase", marginTop: 2 },
-  closeBtn: { width: 42, height: 42, borderRadius: 21, backgroundColor: Theme.surfaceGray, alignItems: "center", justifyContent: "center" },
+  timeAgoLabel: { fontSize: 8, fontWeight: "700", color: MUTED, letterSpacing: 1, textTransform: "uppercase", marginTop: 1 },
+  closeBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: Theme.surfaceGray, alignItems: "center", justifyContent: "center" },
   tapZones: { position: "absolute", top: 100, left: 0, right: 0, bottom: 200, flexDirection: "row", zIndex: 30 },
   tapLeft: { flex: 1 },
   tapRight: { flex: 2.2 },
-  centerStage: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 28, marginTop: -16 },
-  centerStageDesktop: { marginTop: -8, paddingHorizontal: 56 },
-  iconHero: { width: 100, height: 100, borderRadius: 32, alignItems: "center", justifyContent: "center", marginBottom: 20 },
-  iconHeroDesktop: { width: 118, height: 118, borderRadius: 36, marginBottom: 24 },
-  kicker: { fontSize: 10, fontWeight: "900", letterSpacing: 4, textTransform: "uppercase", textAlign: "center", marginBottom: 12 },
-  kickerDesktop: { fontSize: 11, letterSpacing: 5.5, marginBottom: 14 },
-  heroTitle: { fontSize: 42, fontWeight: "900", color: INK, lineHeight: 44, textAlign: "center", fontStyle: "italic", letterSpacing: -1 },
-  heroTitleDesktop: { fontSize: 50, lineHeight: 52, letterSpacing: -1.5, maxWidth: 980 },
-  loadHeroTitleWrap: { width: "100%", maxWidth: 520, alignItems: "center", gap: 8 },
-  loadHeroTitleWrapDesktop: { maxWidth: 760, gap: 10 },
-  loadMaterialTitle: { maxWidth: "100%", fontSize: 42, fontWeight: "900", color: INK, lineHeight: 44, textAlign: "center", fontStyle: "italic", letterSpacing: -1.1 },
-  loadMaterialTitleDesktop: { fontSize: 50, lineHeight: 52, letterSpacing: -1.5 },
-  loadRouteHeadlineRow: { width: "100%", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 },
-  loadRouteHeadlinePoint: { flex: 1, minWidth: 0, alignItems: "center" },
-  loadCityText: { maxWidth: "100%", fontSize: 34, fontWeight: "900", color: INK, lineHeight: 36, textAlign: "center", fontStyle: "italic", letterSpacing: -0.9 },
-  loadCityTextDesktop: { fontSize: 42, lineHeight: 44, letterSpacing: -1.2 },
-  loadStateText: { maxWidth: "100%", marginTop: 1, fontSize: 18, fontWeight: "900", color: INK, lineHeight: 21, textAlign: "center", fontStyle: "italic", letterSpacing: -0.2 },
-  loadStateTextDesktop: { fontSize: 22, lineHeight: 25, letterSpacing: -0.35 },
-  routeCard: { marginTop: 18, minWidth: "82%", maxWidth: "95%", borderRadius: 16, borderWidth: 1, borderColor: Theme.borderLight, backgroundColor: Theme.surface, paddingHorizontal: 14, paddingVertical: 12 },
-  routeCardDesktop: { minWidth: "70%", maxWidth: 900, marginTop: 24, paddingHorizontal: 16, paddingVertical: 14 },
-  routeLine: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  routePoint: { flex: 1, minWidth: 0, gap: 2, alignItems: "flex-start" },
-  routeLabel: { fontSize: 9, fontWeight: "900", color: Theme.textMutedDemo, letterSpacing: 0.7 },
-  routeDotG: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#10b981" },
-  routeDot: { width: 8, height: 8, borderRadius: 4 },
-  routeText: { fontSize: 15, fontWeight: "800", color: INK, maxWidth: "100%" },
+  centerStage: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    marginTop: -8,
+    gap: 0,
+  },
+  centerStageDesktop: { marginTop: -4, paddingHorizontal: 56 },
+  iconHero: {
+    width: 72,
+    height: 72,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
+  },
+  iconHeroDesktop: { width: 96, height: 96, borderRadius: 28, marginBottom: 16 },
+  kicker: {
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 2.2,
+    textTransform: "uppercase",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  kickerDesktop: { fontSize: 9, letterSpacing: 3, marginBottom: 10 },
+  heroTitle: {
+    fontSize: 26,
+    fontWeight: "900",
+    color: INK,
+    lineHeight: 28,
+    textAlign: "center",
+    fontStyle: "italic",
+    letterSpacing: -0.6,
+    maxWidth: 320,
+  },
+  heroTitleDesktop: { fontSize: 40, lineHeight: 42, letterSpacing: -1, maxWidth: 980 },
+  loadHeroTitleWrap: {
+    width: "100%",
+    maxWidth: 340,
+    alignSelf: "center",
+    alignItems: "stretch",
+    gap: 6,
+  },
+  loadHeroTitleWrapDesktop: { maxWidth: 640, gap: 8 },
+  loadMaterialTitle: {
+    maxWidth: "100%",
+    fontSize: 22,
+    fontWeight: "900",
+    color: INK,
+    lineHeight: 24,
+    textAlign: "center",
+    fontStyle: "italic",
+    letterSpacing: -0.5,
+  },
+  loadMaterialTitleDesktop: { fontSize: 36, lineHeight: 38, letterSpacing: -0.9 },
+  loadRouteHeadlineRow: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: 6,
+  },
+  loadRouteHeadlinePoint: { flex: 1, minWidth: 0, alignItems: "flex-start" },
+  loadRouteHeadlinePointEnd: { alignItems: "flex-end" },
+  loadRouteArrow: { marginBottom: 4, flexShrink: 0 },
+  loadCityTextEnd: { textAlign: "right" },
+  loadStateTextEnd: { textAlign: "right" },
+  loadCityText: {
+    maxWidth: "100%",
+    fontSize: 18,
+    fontWeight: "900",
+    color: INK,
+    lineHeight: 20,
+    textAlign: "left",
+    fontStyle: "italic",
+    letterSpacing: -0.35,
+    textTransform: "uppercase",
+  },
+  loadCityTextDesktop: { fontSize: 28, lineHeight: 30, letterSpacing: -0.6 },
+  loadStateText: {
+    maxWidth: "100%",
+    marginTop: 2,
+    fontSize: 10,
+    fontWeight: "700",
+    color: MUTED,
+    lineHeight: 12,
+    textAlign: "left",
+    letterSpacing: 0.2,
+    textTransform: "uppercase",
+  },
+  loadStateTextDesktop: { fontSize: 13, lineHeight: 15 },
+  routeCard: {
+    marginTop: 12,
+    width: "100%",
+    maxWidth: 340,
+    alignSelf: "center",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  routeCardDesktop: { maxWidth: 640, marginTop: 18, paddingHorizontal: 14, paddingVertical: 12 },
+  routeLine: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  routePoint: { flex: 1, minWidth: 0, gap: 3, alignItems: "flex-start" },
+  routeLabel: {
+    fontSize: 7,
+    fontWeight: "800",
+    color: Theme.textMutedDemo,
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  routeDotG: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#10b981" },
+  routeDot: { width: 6, height: 6, borderRadius: 3 },
+  routeText: { fontSize: 12, fontWeight: "800", color: INK, maxWidth: "100%", lineHeight: 15 },
   vehicleAvailabilityBlock: { marginTop: 10, alignItems: "center", gap: 5 },
   vehicleAvailabilityBlockDesktop: { marginTop: 14, gap: 6 },
   vehicleAvailabilityLine: { flexDirection: "row", alignItems: "center", gap: 6 },
@@ -765,34 +883,84 @@ const styles = StyleSheet.create({
   vehicleLocationLabel: { fontSize: 11, fontWeight: "700", color: MUTED },
   vehicleLocationValue: { flex: 1, minWidth: 0, fontSize: 13, fontWeight: "800", color: INK },
   vehicleLocationDivider: { height: StyleSheet.hairlineWidth, backgroundColor: Theme.borderMedium },
-  metaRow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 8, marginTop: 16 },
-  metaRowDesktop: { marginTop: 20, gap: 10 },
-  metaChip: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: Theme.surface, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: Theme.borderMedium },
+  metaRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    alignSelf: "center",
+    width: "100%",
+    maxWidth: 340,
+    gap: 6,
+    marginTop: 10,
+  },
+  metaRowDesktop: { marginTop: 14, maxWidth: 640, gap: 8 },
+  metaChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: Theme.surface,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+  },
   metaChipEmphasis: { backgroundColor: Theme.screenBackground },
-  metaChipText: { fontSize: 11, fontWeight: "800", color: MUTED },
-  watermark: { position: "absolute", top: "50%", left: 0, right: 0, alignItems: "center", transform: [{ translateY: -38 }] },
-  watermarkDesktop: { transform: [{ translateY: -44 }] },
-  watermarkText: { fontSize: 76, fontWeight: "900", color: INK, opacity: 0.035, letterSpacing: -1.6, fontStyle: "italic" },
-  footer: { paddingHorizontal: Layout.screenPaddingHorizontal, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Theme.borderMedium, backgroundColor: "rgba(255,255,255,0.88)" },
-  viewersPill: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 8, marginBottom: 8 },
-  viewersPillText: { fontSize: 12, fontWeight: "700", color: MUTED, letterSpacing: 0.4 },
-  ownerHint: { fontSize: 12, color: MUTED, fontWeight: "600", textAlign: "center", marginBottom: 12, lineHeight: 17 },
-  authorizeBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, borderRadius: 22, paddingVertical: 16, paddingHorizontal: 24, marginBottom: 8 },
-  authorizeBtnText: { fontSize: 12, fontWeight: "900", color: "#fff", letterSpacing: 1.2, textTransform: "uppercase" },
+  metaChipText: { fontSize: 9, fontWeight: "800", color: MUTED, letterSpacing: 0.1 },
+  watermark: { position: "absolute", top: "50%", left: 0, right: 0, alignItems: "center", transform: [{ translateY: -28 }] },
+  watermarkDesktop: { transform: [{ translateY: -36 }] },
+  watermarkText: { fontSize: 56, fontWeight: "900", color: INK, opacity: 0.03, letterSpacing: -1.2, fontStyle: "italic" },
+  footer: {
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderMedium,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    gap: 6,
+  },
+  viewersPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    paddingVertical: 4,
+    marginBottom: 2,
+  },
+  viewersPillText: { fontSize: 10, fontWeight: "700", color: MUTED, letterSpacing: 0.3 },
+  ownerHint: {
+    fontSize: 10,
+    color: MUTED,
+    fontWeight: "600",
+    textAlign: "center",
+    marginBottom: 8,
+    lineHeight: 14,
+    paddingHorizontal: 8,
+  },
+  authorizeBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    marginBottom: 6,
+  },
+  authorizeBtnText: { fontSize: 10, fontWeight: "900", color: "#fff", letterSpacing: 0.9, textTransform: "uppercase" },
   messageGhost: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 12 },
   messageGhostText: { fontSize: 12, fontWeight: "800", color: INK, letterSpacing: 0.6 },
   shareWaBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
-    borderRadius: 22,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    marginBottom: 8,
+    gap: 8,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    marginBottom: 4,
     backgroundColor: "#25D366",
   },
-  shareWaBtnText: { fontSize: 12, fontWeight: "900", color: "#fff", letterSpacing: 1.2, textTransform: "uppercase" },
+  shareWaBtnText: { fontSize: 10, fontWeight: "900", color: "#fff", letterSpacing: 0.9, textTransform: "uppercase" },
   // Bid status
   bidStatusBanner: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#10b98110", borderRadius: 14, borderWidth: 1, borderColor: "#10b98130", paddingHorizontal: 14, paddingVertical: 12, marginBottom: 10 },
   bidStatusText: { flex: 1, minWidth: 0 },

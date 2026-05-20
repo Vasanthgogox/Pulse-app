@@ -1,7 +1,25 @@
--- Rename fleet_size → employee_count on organizations.
--- The previous migration (20260428140000) added fleet_size; this corrects the column name.
-ALTER TABLE public.organizations
-  RENAME COLUMN fleet_size TO employee_count;
+-- Rename fleet_size → employee_count when an older chain created fleet_size.
+-- Current 20260428140000 adds employee_count directly; skip rename on fresh installs.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'organizations' AND column_name = 'fleet_size'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'organizations' AND column_name = 'employee_count'
+  ) THEN
+    ALTER TABLE public.organizations RENAME COLUMN fleet_size TO employee_count;
+  ELSIF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'organizations' AND column_name = 'fleet_size'
+  ) AND EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'organizations' AND column_name = 'employee_count'
+  ) THEN
+    ALTER TABLE public.organizations DROP COLUMN fleet_size;
+  END IF;
+END $$;
 
 -- Update handle_new_user to write employee_count instead of fleet_size
 CREATE OR REPLACE FUNCTION public.handle_new_user() RETURNS trigger

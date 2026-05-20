@@ -536,13 +536,9 @@ export const styles = StyleSheet.create({
   financeDatePresetOutsideWrap: {
     backgroundColor: Theme.screenBackground,
     width: "100%",
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 10,
-    borderTopWidth: 1,
-    borderTopColor: Theme.borderLight,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 6,
+    paddingBottom: 8,
   },
   financeHeaderMetaRow: {
     flexDirection: "row",

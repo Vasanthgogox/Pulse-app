@@ -20,7 +20,7 @@ import type { SupplierFormData } from "@/features/suppliers/components/AddSuppli
 import { AddSupplierModal } from "@/features/suppliers/components/AddSupplierModal";
 import { EditSupplierModal } from "@/features/suppliers/components/EditSupplierModal";
 import type { SupplierRow, UpdateSupplierData } from "@/features/suppliers/services/suppliers.service";
-import type { TripRow } from "@/features/trips";
+import type { TripRow } from "@/features/trips/services/trips.service";
 import { AddVehicleModal } from "@/features/vehicles/components/AddVehicleModal";
 import type { AddVehicleCompletePayload } from "@/features/vehicles/components/AddVehicleModal";
 import type { VehicleRow } from "@/features/vehicles/services/vehicles.service";
@@ -293,7 +293,9 @@ export function FinanceModals(props: FinanceModalsProps) {
         onSave={onEditClientComplete}
         onSyncLatest={
           onEditClient && editingClient?.is_integrated
-            ? () => onEditClient(editingClient)
+            ? async () => {
+                await Promise.resolve(onEditClient(editingClient));
+              }
             : undefined
         }
       />
@@ -315,7 +317,9 @@ export function FinanceModals(props: FinanceModalsProps) {
         onSave={onEditSupplierComplete}
         onSyncLatest={
           onEditSupplier && editingSupplier?.supplier_type === "integrated"
-            ? () => onEditSupplier(editingSupplier)
+            ? async () => {
+                await Promise.resolve(onEditSupplier(editingSupplier));
+              }
             : undefined
         }
       />
@@ -339,7 +343,11 @@ export function FinanceModals(props: FinanceModalsProps) {
         <EntityDetailOverlay
           entity={selectedEntity.data}
           entityType={selectedEntity.entityType}
-          subTab={selectedEntity.subTab}
+          subTab={
+            selectedEntity.subTab === "cash"
+              ? "ledger"
+              : selectedEntity.subTab
+          }
           trips={selectedEntityTrips}
           transactions={selectedEntityTransactions ?? undefined}
           allLedgerTransactions={ledgerTransactions ?? undefined}
@@ -421,10 +429,13 @@ export function FinanceModals(props: FinanceModalsProps) {
         visible={showSharedLedgerModal}
         onClose={onCloseSharedLedgerModal}
         organizationId={orgId}
-        ledgerTransactions={ledgerTransactions ?? []}
+        transactions={ledgerTransactions ?? []}
         clients={clientsForSharedLedger}
         suppliers={suppliersList}
         tripCountByParty={tripCountByParty}
+        tripRows={tripRows}
+        clientRows={entityOverlayClientRows}
+        supplierRows={entityOverlaySupplierRows}
       />
     </>
   );

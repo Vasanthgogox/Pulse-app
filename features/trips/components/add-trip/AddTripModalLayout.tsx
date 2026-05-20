@@ -4,7 +4,11 @@
  */
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { useOptionalKeyboardAccessory } from "@/contexts/KeyboardAccessoryContext";
+import { dockPaddingBottom, useKeyboardVisible } from "@/hooks/useKeyboardVisible";
+import { KEYBOARD_ACCESSORY_BAR_HEIGHT } from "@/components/AppKeyboardAccessory";
 import type { ReactNode } from "react";
 import {
   ActivityIndicator,
@@ -65,7 +69,21 @@ export function AddTripModalLayout({
 }: AddTripModalLayoutProps) {
   const insets = useSafeAreaInsets();
   const { width: winW } = useWindowDimensions();
+  const { keyboardVisible } = useKeyboardVisible();
+  const keyboardAccessory = useOptionalKeyboardAccessory();
+  const extraAndroidAccessoryPad =
+    Platform.OS === "android" &&
+    keyboardVisible &&
+    (keyboardAccessory?.accessoryBarActive ?? false)
+      ? KEYBOARD_ACCESSORY_BAR_HEIGHT
+      : 0;
   const isCompactMobile = winW < 480;
+  const isDenseForm = Platform.OS !== "web" || winW < 600;
+  const footerBottomPad = dockPaddingBottom(
+    insets.bottom,
+    keyboardVisible,
+    isDenseForm ? 8 : 12,
+  );
   const submitDisabled =
     submitting || (lockPrimaryUntilValid ? !canSubmit : false);
   const shouldShowFooter =
@@ -118,10 +136,23 @@ export function AddTripModalLayout({
       
       <KeyboardAvoidingView
         style={styles.keyboardWrap}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" ? "padding" : "padding"}
         keyboardVerticalOffset={0}
+        enabled={Platform.OS !== "web"}
       >
-        <View style={[styles.body, isCompactMobile && styles.bodyCompact, { paddingBottom: Layout.sectionSpacing + insets.bottom }]}>
+        <View
+          style={[
+            styles.body,
+            isCompactMobile && styles.bodyCompact,
+            isDenseForm && styles.bodyDense,
+            {
+              paddingBottom:
+                (isDenseForm ? 8 : Layout.sectionSpacing) +
+                dockPaddingBottom(insets.bottom, keyboardVisible) +
+                extraAndroidAccessoryPad,
+            },
+          ]}
+        >
           {children}
         </View>
 
@@ -129,15 +160,17 @@ export function AddTripModalLayout({
           <View
             style={[
               styles.footer,
+              isDenseForm && styles.footerDense,
               {
-                paddingBottom: insets.bottom + 12,
-                paddingTop: 8,
+                paddingBottom: footerBottomPad,
+                paddingTop: isDenseForm ? 6 : 8,
               },
             ]}
           >
             <TouchableOpacity
               style={[
                 styles.submitBtn,
+                isDenseForm && styles.submitBtnDense,
                 submitDisabled && styles.submitBtnDisabled,
               ]}
               onPress={onSubmit}
@@ -169,7 +202,7 @@ export function AddTripModalLayout({
               )}
             </TouchableOpacity>
             {submitDisabled && !submitting && (
-              <Text style={styles.footerHint}>
+              <Text style={[styles.footerHint, isDenseForm && styles.footerHintDense]}>
                 {validationMessage ?? "Fill client, route, price and allocation to continue"}
               </Text>
             )}
@@ -236,20 +269,19 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   topBarTitle: {
-    fontSize: 20,
-    fontWeight: "900",
+    ...FinanceTxnTypography.partyTitle,
+    fontSize: 12,
+    letterSpacing: 0.3,
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.45,
-    textTransform: "uppercase",
-    fontStyle: "italic",
   },
   topBarSubtitle: {
-    marginTop: 3,
-    fontSize: 9,
+    ...FinanceTxnTypography.routeWhy,
+    fontSize: 11,
     fontWeight: "700",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 1.2,
+    fontStyle: "normal",
+    marginTop: 3,
+    letterSpacing: 0.25,
+    color: Theme.textSecondary,
   },
   topBarActions: {
     flexDirection: "row",
@@ -303,20 +335,30 @@ const styles = StyleSheet.create({
   body: {
     flex: 1,
     minHeight: 0,
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 12,
+    ...Platform.select({
+      web: { paddingHorizontal: 0, paddingTop: 6 },
+      default: {
+        paddingHorizontal: Layout.screenPaddingHorizontal,
+        paddingTop: 12,
+      },
+    }),
   },
   bodyCompact: {
     paddingHorizontal: 12,
     paddingTop: 8,
   },
+  bodyDense: {
+    paddingHorizontal: 10,
+    paddingTop: 4,
+  },
   footer: {
-    marginTop: 8,
-    backgroundColor: Theme.surface,
-    borderTopWidth: 1,
-    borderTopColor: Theme.borderLight,
-    borderRadius: 16,
+    marginTop: 4,
+    backgroundColor: Theme.screenBackground,
     paddingHorizontal: 8,
+  },
+  footerDense: {
+    marginTop: 2,
+    paddingHorizontal: 6,
   },
   submitBtn: {
     flexDirection: "row",
@@ -331,6 +373,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.16,
     shadowRadius: 10,
     elevation: 3,
+  },
+  submitBtnDense: {
+    paddingVertical: 10,
+    borderRadius: 12,
+    minHeight: Layout.minTouchTargetSize,
   },
   submitBtnDisabled: {
     opacity: 0.5,
@@ -351,5 +398,10 @@ const styles = StyleSheet.create({
     color: Theme.textMutedDemo,
     marginTop: 8,
     textAlign: "center",
+  },
+  footerHintDense: {
+    fontSize: 10,
+    marginTop: 5,
+    lineHeight: 14,
   },
 });

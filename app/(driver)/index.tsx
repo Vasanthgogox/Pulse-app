@@ -1,3 +1,4 @@
+import { AppLoadingSplash } from "@/components/AppLoadingSplash";
 import { DriverHeader } from "@/components/driver/DriverHeader";
 import { LiveRouteInfoCard } from "@/components/driver/LiveRouteInfoCard";
 import { DriverInviteCard } from "@/components/driver/DriverInviteCard";
@@ -16,7 +17,9 @@ import {
     useDriverThemeColors,
 } from "@/contexts/DriverThemeContext";
 import { computeDriverCommissionForTrip } from "@/features/finance/aggregation/aggregateDrivers";
-import { claimTripByOtp, getPendingOtpTrips } from "@/features/trips";
+import { useAdaptiveTripLocationPingLoop } from "@/features/driver/hooks/useAdaptiveTripLocationPingLoop";
+import { useDriverMapLivePositionWatch } from "@/features/driver/hooks/useDriverMapLivePositionWatch";
+import { claimTripByOtp, getPendingOtpTrips } from "@/features/trips/services/tripOtp.service";
 import { getLatestAssignmentAuditByTripIds } from "@/features/trips/services/trip-assignment-audit.service";
 import { useDriverAvatarUri } from "@/lib/avatarUpload";
 import {
@@ -146,16 +149,10 @@ type DriverGuidanceConfig = {
 
 function deriveDriverGuidanceStep(t: tripsService.TripRow): DriverGuidanceStep {
   const s = String(t.status ?? "").toLowerCase();
-  const hasStarted = !!t.started_at;
   if (s === "completed" || s === "delivered" || s === "done")
     return "completed";
   if (s === "at_drop") return "reached";
-  if (
-    s === "in_transit" ||
-    s === "transit" ||
-    (s === "in_progress" && hasStarted)
-  )
-    return "transit";
+  if (s === "in_transit" || s === "transit") return "transit";
   if (s === "picked_up" || s === "pickup" || s === "in_progress")
     return "pickup";
   return "accepted";
@@ -280,9 +277,6 @@ async function getExpoLocation(): Promise<typeof ExpoLocation | null> {
   }
 }
 
-/** Route checkpoint cadence while trip is moving (fixed 3-minute DB writes). */
-const LOCATION_REPORT_INTERVAL_MS = 3 * 60 * 1000;
-
 /** Approximate distance in metres between two WGS84 points (Haversine-style). */
 function distanceMeters(
   lat1: number,
@@ -396,11 +390,10 @@ export default function DriverRadarScreen() {
   const insets = useSafeAreaInsets();
   const { isDark, mapTheme } = useDriverTheme();
   const colors = useDriverThemeColors();
-  const tabBarVerticalPad = Math.max(insets.bottom / 4, 4);
+  const footerPadTop = 4;
+  const footerPadBottom = Math.max(Math.round(insets.bottom * 0.35), 10);
   const driverTabBarClearance =
-    // Reserve only the actual footer tab bar area (not extra modal padding),
-    // so the map stays full-bleed but bottom-sheet/content stops above tabs.
-    Layout.tabBarDockHeight + tabBarVerticalPad + (tabBarVerticalPad + 6);
+    Layout.tabBarDockHeight + footerPadTop + footerPadBottom;
   // Driver home previously used a hardcoded dark map for contrast.
   // Now it respects the "Map Style" user setting (light, dark, or auto-sync with theme).
   const mapIsDark = mapTheme === "auto" ? isDark : mapTheme === "dark";
@@ -482,6 +475,9 @@ export default function DriverRadarScreen() {
   const [assignerDisplayByTripId, setAssignerDisplayByTripId] = useState<
     Record<string, string>
   >({});
+  const [assignerTripOrgNameByTripId, setAssignerTripOrgNameByTripId] = useState<
+    Record<string, string>
+  >({});
   const [organizationNamesById, setOrganizationNamesById] = useState<
     Record<string, string>
   >({});
@@ -560,10 +556,13 @@ export default function DriverRadarScreen() {
   const [isFullMapVisible, setIsFullMapVisible] = useState(false);
   const [inlineMapViewportHeight, setInlineMapViewportHeight] = useState(0);
   const [toastMessage, setToastMessage] = useState("You are online now.");
-  const lastSentLocationRef = useRef<{ lat: number; lng: number } | null>(null);
-  const locationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
-    null,
-  );
+  const pingMapUiRef = useRef<{
+    setDriverMapPosition: (p: { latitude: number; longitude: number } | null) => void;
+    youLatSv: typeof youLatSv;
+    youLonSv: typeof youLonSv;
+    youHeadingSv: typeof youHeadingSv;
+    lastHeadingFixRef: typeof lastHeadingFixRef;
+  } | null>(null);
   const truckAnimTokenRef = useRef(0);
   const truckRafRef = useRef<ReturnType<typeof requestAnimationFrame> | null>(
     null,
@@ -672,6 +671,15 @@ export default function DriverRadarScreen() {
         setPendingOtpTrips(
           pendingTripsRes?.error ? [] : (pendingTripsRes?.trips ?? []),
         );
+        // Failed driver lookup (network, timeout) returns `drivers: []` — do not clear
+        // linked driver or flip online; that made pull-to-refresh / refetch look like "went offline".
+        if (driversRes.error) {
+          setLoading(false);
+          initialLoadDoneRef.current = true;
+          isRefreshingRef.current = false;
+          setRefreshing(false);
+          return;
+        }
         const drivers = (driversRes.drivers ?? []).filter((d) => !d.left_at);
         if (drivers.length > 0) {
           const primaryDriver = drivers[0];
@@ -727,7 +735,10 @@ export default function DriverRadarScreen() {
         } else {
           setDriver(null);
           setAllTrips([]);
-          setPendingOtpTrips([]);
+          // Do NOT reset pendingOtpTrips here — a newly registered driver with no
+          // linked driver rows yet may still have phone-preassigned trips waiting
+          // for OTP claim. setPendingOtpTrips was already called above from the
+          // getPendingOtpTrips() result before this branch ran.
           setIsOnline(false);
           previousTripsRef.current = new Map();
           setLoading(false);
@@ -999,6 +1010,7 @@ export default function DriverRadarScreen() {
       lng: number,
       accuracy: number | null,
       source: driverLocationService.DriverLocationSource,
+      extras?: { odometerKm?: number | null; recordedAt?: string },
     ) => {
       if (!driver?.organization_id) return false;
       const { error } = await driverLocationService.reportDriverLocation({
@@ -1009,6 +1021,8 @@ export default function DriverRadarScreen() {
         longitude: lng,
         accuracy,
         source,
+        odometerKm: extras?.odometerKm ?? null,
+        recordedAt: extras?.recordedAt ?? null,
       });
       return !error;
     },
@@ -1402,6 +1416,14 @@ export default function DriverRadarScreen() {
     : null;
 
   const hasIncomingTrip = visibleIncomingTrips.length > 0;
+  /** Assign / OTP / trip-flow when org-linked or phone-preassigned before a `drivers` row exists. */
+  const showDriverTripDashboard = Boolean(
+    driver ||
+      activeMission ||
+      mergedIncomingTrips.length > 0 ||
+      otpClaimTripId ||
+      assignmentFeedback != null,
+  );
   const hasAssignableIncomingTrip = visibleAssignableIncomingTrips.length > 0;
   const hasSingleAssignableIncomingTrip =
     visibleAssignableIncomingTrips.length === 1;
@@ -1483,6 +1505,8 @@ export default function DriverRadarScreen() {
           assignedByUserName,
           assignedByOrgName,
           assignerPersonDisplay,
+          assignerLinePrimary,
+          assignerLineSecondary,
           assignedByName,
         } = buildAssignerDisplayForTrip(
           trip,
@@ -1493,6 +1517,7 @@ export default function DriverRadarScreen() {
             assignerNamesByUserId,
             assignerOrgNameByUserId,
             assignerDisplayByTripId,
+            assignerTripOrgNameByTripId,
             organizationNamesById: mergedOrganizationNamesById,
           },
         );
@@ -1517,6 +1542,8 @@ export default function DriverRadarScreen() {
           assignedByUserName,
           assignedByOrgName,
           assignerPersonDisplay,
+          assignerLinePrimary,
+          assignerLineSecondary,
           requiresOtp,
           commissionForTrip,
         };
@@ -1529,6 +1556,7 @@ export default function DriverRadarScreen() {
       assignerNamesByUserId,
       assignerOrgNameByUserId,
       assignerDisplayByTripId,
+      assignerTripOrgNameByTripId,
       mergedOrganizationNamesById,
       effectiveAssignmentActorByTripId,
     ],
@@ -1546,6 +1574,8 @@ export default function DriverRadarScreen() {
         assignedByUserName: item.assignedByUserName,
         assignedByOrgName: item.assignedByOrgName,
         assignerPersonDisplay: item.assignerPersonDisplay,
+        assignerLinePrimary: item.assignerLinePrimary,
+        assignerLineSecondary: item.assignerLineSecondary,
         requiresOtp: item.requiresOtp,
         commissionForTrip: item.commissionForTrip,
       }));
@@ -1580,6 +1610,7 @@ export default function DriverRadarScreen() {
         assignerNamesByUserId,
         assignerOrgNameByUserId,
         assignerDisplayByTripId,
+        assignerTripOrgNameByTripId,
         organizationNamesById: mergedOrganizationNamesById,
       },
     ).assignedByName;
@@ -1592,6 +1623,7 @@ export default function DriverRadarScreen() {
     assignerNamesByUserId,
     assignerOrgNameByUserId,
     assignerDisplayByTripId,
+    assignerTripOrgNameByTripId,
     mergedOrganizationNamesById,
   ]);
   useEffect(() => {
@@ -1625,6 +1657,7 @@ export default function DriverRadarScreen() {
           setAssignerNamesByUserId({});
           setAssignerOrgNameByUserId({});
           setAssignerDisplayByTripId({});
+          setAssignerTripOrgNameByTripId({});
           setOrganizationNamesById({});
         }
         return;
@@ -1640,19 +1673,24 @@ export default function DriverRadarScreen() {
       const rpcAssignerUserIdByTrip: Record<string, string> = {};
       if (!cancelled && !assignerRpcError && Array.isArray(assignerRpcRows)) {
         const byTrip: Record<string, string> = {};
+        const orgByTrip: Record<string, string> = {};
         for (const row of assignerRpcRows as Array<{
           trip_id?: string;
           display_name?: string | null;
           assigner_user_id?: string | null;
+          assigning_organization_name?: string | null;
         }>) {
           const tid = row.trip_id != null ? String(row.trip_id) : "";
           const dn = String(row.display_name ?? "").trim();
           const uid = String(row.assigner_user_id ?? "").trim();
+          const orgName = String(row.assigning_organization_name ?? "").trim();
           if (tid && dn) byTrip[tid] = dn;
           if (tid && uid) rpcAssignerUserIdByTrip[tid] = uid;
+          if (tid && orgName) orgByTrip[tid] = orgName;
         }
         setAssignerDisplayByTripId(byTrip);
         setRpcAssignerUserIdByTripId(rpcAssignerUserIdByTrip);
+        setAssignerTripOrgNameByTripId(orgByTrip);
       }
 
       const userIds = Array.from(
@@ -1818,87 +1856,88 @@ export default function DriverRadarScreen() {
       ? effectiveFirstIncoming
       : null);
 
-  // Keep the driver truck moving on the map for the full guided flow:
-  // accepted -> pickup -> transit -> drop-off.
-  useEffect(() => {
-    if (!driver || !activeGuidanceTrip) {
-      if (locationIntervalRef.current) {
-        clearInterval(locationIntervalRef.current);
-        locationIntervalRef.current = null;
-      }
-      lastSentLocationRef.current = null;
-      return;
-    }
-    const tick = async () => {
-      try {
-        const expoLocation = await getExpoLocation();
-        if (!expoLocation) return;
-        const { status } = await expoLocation.getForegroundPermissionsAsync();
-        if (status !== "granted") return;
-        const pos: Awaited<
-          ReturnType<typeof ExpoLocation.getCurrentPositionAsync>
-        > = await expoLocation.getCurrentPositionAsync({});
-        const { latitude, longitude } = pos.coords;
-        const acc = pos.coords.accuracy ?? null;
-        const step = deriveDriverGuidanceStep(activeGuidanceTrip);
-        const shouldPersistCheckpoint =
-          step === "accepted" ||
-          step === "pickup" ||
-          step === "transit" ||
-          step === "reached";
-        if (shouldPersistCheckpoint) {
-          const saved = await reportLocationToDb(
-            activeGuidanceTrip.id,
-            latitude,
-            longitude,
-            acc,
-            "background",
-          );
-          if (saved) {
-            lastSentLocationRef.current = { lat: latitude, lng: longitude };
-            void fetchAndLogRecentPins(activeGuidanceTrip.id);
-          }
-        }
-        setDriverMapPosition({ latitude, longitude });
+  const guidanceStepForPing = activeGuidanceTrip
+    ? deriveDriverGuidanceStep(activeGuidanceTrip)
+    : null;
+  const shouldPersistCheckpointPing = Boolean(
+    guidanceStepForPing &&
+      (guidanceStepForPing === "accepted" ||
+        guidanceStepForPing === "pickup" ||
+        guidanceStepForPing === "transit" ||
+        guidanceStepForPing === "reached"),
+  );
 
-        // Ola-style movement: interpolate the marker between GPS fixes (avoid teleport).
-        youLatSv.value = withTiming(latitude, { duration: 450 });
-        youLonSv.value = withTiming(longitude, { duration: 450 });
+  pingMapUiRef.current = {
+    setDriverMapPosition,
+    youLatSv,
+    youLonSv,
+    youHeadingSv,
+    lastHeadingFixRef,
+  };
 
-        const rawHeading = (
-          pos.coords as {
-            latitude: number;
-            longitude: number;
-            heading?: number | null;
-          }
-        ).heading;
-        let headingDeg: number | null =
-          typeof rawHeading === "number" && Number.isFinite(rawHeading)
-            ? rawHeading
-            : null;
-        if (headingDeg == null && lastHeadingFixRef.current) {
-          const bearing = bearingDegrees(lastHeadingFixRef.current, {
-            latitude,
-            longitude,
-          });
-          if (bearing != null) headingDeg = bearing;
+  const onPingLocationFix = useCallback(
+    (args: {
+      latitude: number;
+      longitude: number;
+      accuracy: number | null;
+      position: { coords: { latitude: number; longitude: number; heading?: number | null } };
+    }) => {
+      const r = pingMapUiRef.current;
+      if (!r) return;
+      const { latitude, longitude, position } = args;
+      r.setDriverMapPosition({ latitude, longitude });
+      r.youLatSv.value = withTiming(latitude, { duration: 450 });
+      r.youLonSv.value = withTiming(longitude, { duration: 450 });
+      const rawHeading = (
+        position.coords as {
+          heading?: number | null;
         }
-        if (headingDeg != null && Number.isFinite(headingDeg)) {
-          youHeadingSv.value = withTiming(headingDeg, { duration: 350 });
-        }
-        lastHeadingFixRef.current = { latitude, longitude };
-      } catch {
-        // ignore
+      ).heading;
+      let headingDeg: number | null =
+        typeof rawHeading === "number" && Number.isFinite(rawHeading)
+          ? rawHeading
+          : null;
+      if (headingDeg == null && r.lastHeadingFixRef.current) {
+        const bearing = bearingDegrees(r.lastHeadingFixRef.current, {
+          latitude,
+          longitude,
+        });
+        if (bearing != null) headingDeg = bearing;
       }
-    };
-    tick();
-    const id = setInterval(tick, LOCATION_REPORT_INTERVAL_MS);
-    locationIntervalRef.current = id;
-    return () => {
-      clearInterval(id);
-      locationIntervalRef.current = null;
-    };
-  }, [driver, activeGuidanceTrip, reportLocationToDb, fetchAndLogRecentPins]);
+      if (headingDeg != null && Number.isFinite(headingDeg)) {
+        r.youHeadingSv.value = withTiming(headingDeg, { duration: 350 });
+      }
+      r.lastHeadingFixRef.current = { latitude, longitude };
+    },
+    [],
+  );
+
+  const reportLocationToDbWithPins = useCallback(
+    async (
+      tripId: string | null,
+      lat: number,
+      lng: number,
+      accuracy: number | null,
+      source: driverLocationService.DriverLocationSource,
+      extras?: { odometerKm?: number | null; recordedAt?: string },
+    ) => {
+      const ok = await reportLocationToDb(tripId, lat, lng, accuracy, source, extras);
+      if (ok && tripId) void fetchAndLogRecentPins(tripId);
+      return ok;
+    },
+    [fetchAndLogRecentPins, reportLocationToDb],
+  );
+
+  useAdaptiveTripLocationPingLoop({
+    driver: driver ? { id: driver.id, organization_id: driver.organization_id } : null,
+    trip: activeGuidanceTrip,
+    enabled: Boolean(driver && activeGuidanceTrip),
+    shouldPersistCheckpoint: shouldPersistCheckpointPing,
+    minDisplacementM: null,
+    source: "background",
+    reportLocationToDb: reportLocationToDbWithPins,
+    onLocationFix: onPingLocationFix,
+  });
 
   // DEV: fetch last 3 pinned locations whenever the active trip changes
   useEffect(() => {
@@ -1985,6 +2024,15 @@ export default function DriverRadarScreen() {
         (hasSingleAssignableIncomingTrip || hasAssignableIncomingTrip)) ||
       assignmentFeedback != null,
   );
+
+  /** Map-only GPS stream when not in full follow mode (follow mode has its own watch). DB cadence unchanged. */
+  useDriverMapLivePositionWatch({
+    enabled: Boolean(
+      driver && activeGuidanceTrip && shouldShowMap && !isFollowingLocation,
+    ),
+    onFix: onPingLocationFix,
+  });
+
   const activeGuidanceStep = activeGuidanceTrip
     ? deriveDriverGuidanceStep(activeGuidanceTrip)
     : null;
@@ -2238,7 +2286,9 @@ export default function DriverRadarScreen() {
     const showLeaflet =
       Platform.OS === "web" || useLeafletFallback || leafLetForced;
 
-    if (!showLeaflet && !mapRef.current) return;
+    const activeNativeMapRef = isFullMapVisible ? fullMapRef : mapRef;
+
+    if (!showLeaflet && !activeNativeMapRef.current) return;
 
     const now = Date.now();
     // Throttle to prevent over-animating on frequent GPS updates.
@@ -2267,7 +2317,7 @@ export default function DriverRadarScreen() {
     }
 
     try {
-      const map = mapRef.current;
+      const map = activeNativeMapRef.current;
       const heading = Number(youHeadingSv.value);
       map?.animateCamera?.(
         {
@@ -2288,6 +2338,10 @@ export default function DriverRadarScreen() {
     driverMapPosition?.longitude,
     shouldShowMap,
     isFollowingLocation,
+    isFullMapVisible,
+    leafLetForced,
+    useLeafletFallback,
+    youHeadingSv,
   ]);
 
   const [optimalRoute, setOptimalRoute] = useState<RouteResult | null>(null);
@@ -2956,6 +3010,9 @@ export default function DriverRadarScreen() {
   const handleFocusCurrentLocation = useCallback(async (): Promise<boolean> => {
     try {
       setIsFetchingLocation(true);
+      // Let the next follow pass center immediately (user explicitly asked to snap here).
+      lastCameraCenterRef.current = null;
+      lastCameraAnimTsRef.current = 0;
 
       // Fetch the latest accurate location
       const expoLocation = await getExpoLocation();
@@ -2999,35 +3056,46 @@ export default function DriverRadarScreen() {
       }
 
       const targetRef = isFullMapVisible ? fullMapRef : mapRef;
-      const map = targetRef.current;
-      if (!map) return true;
+      const runCamera = (): boolean => {
+        const map = targetRef.current;
+        if (!map) return false;
+        try {
+          if (map.animateCamera) {
+            map.animateCamera(
+              {
+                center: {
+                  latitude: currentPos.latitude,
+                  longitude: currentPos.longitude,
+                },
+                zoom: 18,
+                pitch: 0,
+                heading: Number(youHeadingSv.value) || 0,
+              },
+              { duration: 500 },
+            );
+          } else if (map.animateToRegion) {
+            map.animateToRegion(
+              {
+                latitude: currentPos.latitude,
+                longitude: currentPos.longitude,
+                latitudeDelta: 0.005,
+                longitudeDelta: 0.005,
+              },
+              500,
+            );
+          }
+        } catch {
+          return false;
+        }
+        return true;
+      };
 
-      // Try animateCamera first (smoother if supported)
-      if (map.animateCamera) {
-        map.animateCamera(
-          {
-            center: {
-              latitude: currentPos.latitude,
-              longitude: currentPos.longitude,
-            },
-            zoom: 18,
-            pitch: 0,
-            heading: Number(youHeadingSv.value) || 0,
-          },
-          { duration: 500 },
-        );
-      } else if (map.animateToRegion) {
-        // Fallback to animateToRegion which is universally supported
-        map.animateToRegion(
-          {
-            latitude: currentPos.latitude,
-            longitude: currentPos.longitude,
-            latitudeDelta: 0.005,
-            longitudeDelta: 0.005,
-          },
-          500,
-        );
+      if (!runCamera()) {
+        await new Promise<void>((r) => setTimeout(r, 120));
+        if (!runCamera()) return false;
       }
+      lastCameraCenterRef.current = currentPos;
+      lastCameraAnimTsRef.current = Date.now();
       return true;
     } catch {
       return false;
@@ -3176,6 +3244,13 @@ export default function DriverRadarScreen() {
             applyFollowPosition(pos.coords.latitude, pos.coords.longitude);
           },
         );
+
+        const snap = await ExpoLocation.getCurrentPositionAsync({
+          accuracy: ExpoLocation.Accuracy.High,
+        });
+        if (!cancelled) {
+          applyFollowPosition(snap.coords.latitude, snap.coords.longitude);
+        }
       } catch (e) {
         if (__DEV__) console.warn('[location] native watchPosition setup failed', e instanceof Error ? e.message : e);
       }
@@ -3219,9 +3294,13 @@ export default function DriverRadarScreen() {
     const MapCallout = Callout as ComponentType<Record<string, unknown>>;
     const mapInteractionsLocked = Boolean(otpClaimTripId);
     const controlsVariant = options?.controlsVariant ?? "modal";
-    /** Lock pan/zoom while GPS-tracking so the map stays on the driver + route leg. */
-    const mapViewportLocked =
-      mapInteractionsLocked || isFollowingLocation;
+    /**
+     * Only hard-lock pan/zoom for OTP entry (modal). When the driver is in follow mode
+     * (Head to Pickup, In-Transit, etc.) we keep gestures enabled and instead disable
+     * follow on the first pan/pinch — same UX as Google Maps / Uber. Without this,
+     * mobile drivers cannot zoom/scroll the map while a trip is active.
+     */
+    const mapViewportLocked = mapInteractionsLocked;
 
     const showLeaflet =
       Platform.OS === "web" || useLeafletFallback || leafLetForced;
@@ -3388,6 +3467,11 @@ export default function DriverRadarScreen() {
             pitchEnabled={!mapViewportLocked}
             moveOnMarkerPress={false}
             pointerEvents="auto"
+            onPanDrag={() => {
+              // Manual gesture: drop follow so we don't snap the camera back on the
+              // next GPS tick. Driver can re-engage via the "My location" pill.
+              if (isFollowingLocation) setIsFollowingLocation(false);
+            }}
             onMapReady={() => {
               // Native map became ready — clear "booting" so we don't fallback on next launch.
               void AsyncStorage.setItem(DRIVER_MAP_BOOT_KEY, "0").catch(
@@ -3922,9 +4006,7 @@ export default function DriverRadarScreen() {
   const renderDriverDashboardTripInner = (mapSheet: boolean) => (
     <>
       {/* Only show separate OTP block when first pending OTP (non-roster) is not already the main assignment card */}
-      {!shouldShowMap &&
-        !hasIncomingTrip &&
-        pendingOtpTripsRequiringOtp.length > 0 &&
+      {pendingOtpTripsRequiringOtp.length > 0 &&
         !(
           effectiveFirstIncoming &&
           pendingOtpTripsRequiringOtp[0]?.id === effectiveFirstIncoming.id
@@ -3984,9 +4066,7 @@ export default function DriverRadarScreen() {
             </TouchableOpacity>
           </View>
         )}
-      {!shouldShowMap &&
-        !hasIncomingTrip &&
-        pendingOtpTripsRequiringOtp.length > 0 &&
+      {pendingOtpTripsRequiringOtp.length > 0 &&
         !(
           effectiveFirstIncoming &&
           pendingOtpTripsRequiringOtp[0]?.id === effectiveFirstIncoming.id
@@ -4094,7 +4174,9 @@ export default function DriverRadarScreen() {
             ))}
           </View>
         )}
-      {!driver && (
+      {!driver &&
+        invites.filter((i) => i.status === "pending").length === 0 &&
+        !showDriverTripDashboard && (
         <View
           style={[
             styles.centerCardWrap,
@@ -4128,7 +4210,7 @@ export default function DriverRadarScreen() {
           </Text>
         </View>
       )}
-      {driver ? (
+      {showDriverTripDashboard ? (
         activeMission ? (
           <>
             <DriverTripFlowCard
@@ -5022,7 +5104,11 @@ export default function DriverRadarScreen() {
             ]}
           >
             {loading && !assignmentFeedback ? (
-              <ActivityIndicator size="large" color={colors.primary} />
+              <AppLoadingSplash
+                variant="preparing"
+                accentColor={colors.primary}
+                style={{ flex: 1, minHeight: 280 }}
+              />
             ) : (
               <ScrollView
                 style={styles.tripsScroll}

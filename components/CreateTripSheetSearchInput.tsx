@@ -29,6 +29,10 @@ export interface CreateTripSheetSearchInputProps {
   autoCorrect?: boolean;
   spellCheck?: boolean;
   autoComplete?: TextInputProps["autoComplete"];
+  /**
+   * Dense strip matching Chat trip sidebar search (`ChatScreen` tripSearchScopeSearchWrap).
+   */
+  compactChat?: boolean;
 }
 
 export const CreateTripSheetSearchInput = forwardRef<
@@ -47,6 +51,7 @@ export const CreateTripSheetSearchInput = forwardRef<
     autoCorrect = false,
     spellCheck = false,
     autoComplete = "off",
+    compactChat = false,
   },
   ref,
 ) {
@@ -59,21 +64,26 @@ export const CreateTripSheetSearchInput = forwardRef<
   return (
     <View
       style={[
-        styles.shell,
-        focused && styles.shellFocused,
+        compactChat ? styles.shellChat : styles.shell,
+        !compactChat && focused && styles.shellFocused,
+        compactChat && focused && styles.shellChatFocused,
         shellStyle,
       ]}
     >
-      <View style={styles.iconChip}>
-        <Search size={18} color={Theme.iconSlate} strokeWidth={2} />
-      </View>
+      {compactChat ? (
+        <Search size={12} color="#94a3b8" strokeWidth={2} style={styles.chatSearchIcon} />
+      ) : (
+        <View style={styles.iconChip}>
+          <Search size={18} color={Theme.iconSlate} strokeWidth={2} />
+        </View>
+      )}
       <TextInput
         ref={ref}
-        style={[styles.input, webCursor]}
+        style={[compactChat ? styles.inputChat : styles.input, webCursor]}
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor={Theme.placeholder}
+        placeholderTextColor={compactChat ? "#94a3b8" : Theme.placeholder}
         autoFocus={autoFocus}
         autoCapitalize={autoCapitalize}
         autoCorrect={autoCorrect}
@@ -93,9 +103,13 @@ export const CreateTripSheetSearchInput = forwardRef<
           accessibilityRole="button"
           accessibilityLabel="Clear search"
         >
-          <View style={styles.clearCircle}>
-            <X size={14} color={Theme.iconSlate} strokeWidth={2.5} />
-          </View>
+          {compactChat ? (
+            <X size={12} color="#94a3b8" strokeWidth={2.5} />
+          ) : (
+            <View style={styles.clearCircle}>
+              <X size={14} color={Theme.iconSlate} strokeWidth={2.5} />
+            </View>
+          )}
         </TouchableOpacity>
       ) : null}
     </View>
@@ -141,7 +155,7 @@ const styles = StyleSheet.create({
     paddingVertical: Platform.OS === "android" ? 4 : 6,
     borderWidth: 0,
     ...Platform.select({
-      web: { outlineStyle: "none" } as TextStyle,
+      web: { outlineStyle: "none" } as unknown as TextStyle,
     }),
   },
   clearHit: {
@@ -155,5 +169,45 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surfaceBorder,
     alignItems: "center",
     justifyContent: "center",
+  },
+  shellChat: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingLeft: 10,
+    paddingRight: 10,
+    paddingVertical: 7,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#e8ecf1",
+    backgroundColor: "#f8fafc",
+    gap: 5,
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 0,
+  },
+  shellChatFocused: {
+    borderColor: "#cbd5e1",
+    ...Platform.select({
+      web: {
+        boxShadow: "0 1px 4px rgba(15,23,42,0.06)",
+      } as object,
+      default: {},
+    }),
+  },
+  chatSearchIcon: {
+    marginRight: 0,
+  },
+  inputChat: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 11,
+    fontWeight: "500",
+    color: "#334155",
+    paddingVertical: Platform.OS === "android" ? 2 : 0,
+    borderWidth: 0,
+    ...Platform.select({
+      web: { outlineStyle: "none" } as unknown as TextStyle,
+    }),
   },
 });

@@ -7,7 +7,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useDriverAvatar } from '@/contexts/DriverAvatarContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { computeDriverCommissionForTrip } from '@/features/finance/aggregation/aggregateDrivers';
-import { claimTripByOtp, getPendingOtpTrips } from '@/features/trips';
+import { useAdaptiveTripLocationPingLoop } from '@/features/driver/hooks/useAdaptiveTripLocationPingLoop';
+import { useDriverMapLivePositionWatch } from '@/features/driver/hooks/useDriverMapLivePositionWatch';
+import { claimTripByOtp, getPendingOtpTrips } from '@/features/trips/services/tripOtp.service';
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
 import { isAggregateTrip, isRosterTrip } from '@/lib/driverUtils';
 import { formatINR } from '@/lib/format';
@@ -184,10 +186,9 @@ type DriverGuidanceConfig = {
 
 function deriveDriverGuidanceStep(t: tripsService.TripRow): DriverGuidanceStep {
   const s = String(t.status ?? '').toLowerCase();
-  const hasStarted = !!t.started_at;
   if (s === 'completed' || s === 'delivered' || s === 'done') return 'completed';
   if (s === 'at_drop') return 'reached';
-  if (s === 'in_transit' || s === 'transit' || (s === 'in_progress' && hasStarted)) return 'transit';
+  if (s === 'in_transit' || s === 'transit') return 'transit';
   if (s === 'picked_up' || s === 'pickup' || s === 'in_progress') return 'pickup';
   return 'accepted';
 }
@@ -265,8 +266,6 @@ async function getExpoLocation() {
   }
 }
 
-/** Location report interval: fixed 3 minutes when driver is on trip. */
-const LOCATION_REPORT_INTERVAL_MS = 3 * 60 * 1000;
 /** Minimum displacement (metres) before sending another point; skip noisy duplicates. */
 const MIN_DISPLACEMENT_M = 30;
 
@@ -337,11 +336,10 @@ export default function DriverDashboard() {
   const insets = useSafeAreaInsets();
   const { isDark, mapTheme } = useDriverTheme();
   const colors = useDriverThemeColors();
-  const tabBarVerticalPad = Math.max(insets.bottom / 4, 4);
+  const footerPadTop = 4;
+  const footerPadBottom = Math.max(Math.round(insets.bottom * 0.35), 10);
   const driverTabBarClearance =
-    // Reserve only the actual footer tab bar area (not extra modal padding),
-    // so the map stays full-bleed but bottom-sheet/content stops above tabs.
-    Layout.tabBarDockHeight + tabBarVerticalPad + (tabBarVerticalPad + 6);
+    Layout.tabBarDockHeight + footerPadTop + footerPadBottom;
   // Driver home previously used a hardcoded dark map for contrast.
   // Now it respects the "Map Style" user setting (light, dark, or auto-sync with theme).
   const mapIsDark = mapTheme === 'auto' ? isDark : mapTheme === 'dark';
@@ -410,8 +408,16 @@ export default function DriverDashboard() {
   const [isFullMapVisible, setIsFullMapVisible] = useState(false);
   const [inlineMapViewportHeight, setInlineMapViewportHeight] = useState(0);
   const [toastMessage, setToastMessage] = useState('You are online now.');
-  const lastSentLocationRef = useRef<{ lat: number; lng: number } | null>(null);
-  const locationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [recentPinPoints, setRecentPinPoints] = useState<
+    { latitude: number; longitude: number; recorded_at: string }[]
+  >([]);
+  const pingMapUiRef = useRef<{
+    setDriverMapPosition: (p: { latitude: number; longitude: number } | null) => void;
+    youLatSv: typeof youLatSv;
+    youLonSv: typeof youLonSv;
+    youHeadingSv: typeof youHeadingSv;
+    lastHeadingFixRef: typeof lastHeadingFixRef;
+  } | null>(null);
   const truckAnimTokenRef = useRef(0);
   const truckRafRef = useRef<ReturnType<typeof requestAnimationFrame> | null>(null);
   const truckLastUpdateMsRef = useRef(0);
@@ -512,7 +518,10 @@ export default function DriverDashboard() {
       } else {
         setDriver(null);
         setAllTrips([]);
-        setPendingOtpTrips([]);
+        // Do NOT reset pendingOtpTrips here — a newly registered driver with no
+        // linked driver rows yet may still have phone-preassigned trips waiting
+        // for OTP claim. setPendingOtpTrips was already called above from the
+        // getPendingOtpTrips() result before this branch ran.
         setIsOnline(false);
         previousTripsRef.current = new Map();
         setLoading(false);
@@ -635,10 +644,11 @@ export default function DriverDashboard() {
       lat: number,
       lng: number,
       accuracy: number | null,
-      source: driverLocationService.DriverLocationSource
+      source: driverLocationService.DriverLocationSource,
+      extras?: { odometerKm?: number | null; recordedAt?: string },
     ) => {
-      if (!driver?.organization_id) return;
-      await driverLocationService.reportDriverLocation({
+      if (!driver?.organization_id) return false;
+      const { error } = await driverLocationService.reportDriverLocation({
         driverId: driver.id,
         organizationId: driver.organization_id,
         tripId,
@@ -646,10 +656,19 @@ export default function DriverDashboard() {
         longitude: lng,
         accuracy,
         source,
+        odometerKm: extras?.odometerKm ?? null,
+        recordedAt: extras?.recordedAt ?? null,
       });
+      return !error;
     },
-    [driver]
+    [driver],
   );
+
+  const fetchAndLogRecentPins = useCallback(async (tripId: string) => {
+    const { points } = await driverLocationService.getLastNLocationsForTrip(tripId, 3);
+    console.log('[tracking] last 3 pinned coordinates for trip', tripId, points);
+    setRecentPinPoints(points);
+  }, []);
 
   useEffect(() => {
     if (!isOnline) return;
@@ -853,6 +872,15 @@ export default function DriverDashboard() {
         ) ?? null
       : null);
 
+  /** Trip UI when org-linked or phone-preassigned before a `drivers` row exists. */
+  const showDriverTripDashboard = Boolean(
+    driver ||
+      activeMission ||
+      effectiveFirstIncoming != null ||
+      otpClaimTripId != null ||
+      assignmentFeedback != null,
+  );
+
   const openOtpClaim = useCallback((trip: tripsService.TripRow) => {
     setAcceptError(null);
     setOtpError(null);
@@ -967,63 +995,93 @@ export default function DriverDashboard() {
       ? effectiveFirstIncoming
       : null);
 
-  // Keep the driver truck moving on the map for the full guided flow:
-  // accepted -> pickup -> transit -> drop-off.
-  useEffect(() => {
-    if (!driver || !activeGuidanceTrip) {
-      if (locationIntervalRef.current) {
-        clearInterval(locationIntervalRef.current);
-        locationIntervalRef.current = null;
+  const guidanceStepForPing = activeGuidanceTrip
+    ? deriveDriverGuidanceStep(activeGuidanceTrip)
+    : null;
+  const shouldPersistCheckpointPing = Boolean(
+    guidanceStepForPing &&
+      (guidanceStepForPing === 'accepted' ||
+        guidanceStepForPing === 'pickup' ||
+        guidanceStepForPing === 'transit' ||
+        guidanceStepForPing === 'reached'),
+  );
+
+  pingMapUiRef.current = {
+    setDriverMapPosition,
+    youLatSv,
+    youLonSv,
+    youHeadingSv,
+    lastHeadingFixRef,
+  };
+
+  const onPingLocationFix = useCallback(
+    (args: {
+      latitude: number;
+      longitude: number;
+      accuracy: number | null;
+      position: { coords: { latitude: number; longitude: number; heading?: number | null } };
+    }) => {
+      const r = pingMapUiRef.current;
+      if (!r) return;
+      const { latitude, longitude, position } = args;
+      r.setDriverMapPosition({ latitude, longitude });
+      r.youLatSv.value = withTiming(latitude, { duration: 450 });
+      r.youLonSv.value = withTiming(longitude, { duration: 450 });
+      const rawHeading = (position.coords as { heading?: number | null }).heading;
+      let headingDeg: number | null =
+        typeof rawHeading === 'number' && Number.isFinite(rawHeading) ? rawHeading : null;
+      if (headingDeg == null && r.lastHeadingFixRef.current) {
+        const bearing = bearingDegrees(r.lastHeadingFixRef.current, { latitude, longitude });
+        if (bearing != null) headingDeg = bearing;
       }
-      lastSentLocationRef.current = null;
+      if (headingDeg != null && Number.isFinite(headingDeg)) {
+        r.youHeadingSv.value = withTiming(headingDeg, { duration: 350 });
+      }
+      r.lastHeadingFixRef.current = { latitude, longitude };
+    },
+    [],
+  );
+
+  const reportLocationToDbWithPins = useCallback(
+    async (
+      tripId: string | null,
+      lat: number,
+      lng: number,
+      accuracy: number | null,
+      source: driverLocationService.DriverLocationSource,
+      extras?: { odometerKm?: number | null; recordedAt?: string },
+    ) => {
+      const ok = await reportLocationToDb(tripId, lat, lng, accuracy, source, extras);
+      if (ok && tripId) void fetchAndLogRecentPins(tripId);
+      return ok;
+    },
+    [fetchAndLogRecentPins, reportLocationToDb],
+  );
+
+  useAdaptiveTripLocationPingLoop({
+    driver: driver ? { id: driver.id, organization_id: driver.organization_id } : null,
+    trip: activeGuidanceTrip,
+    enabled: Boolean(driver && activeGuidanceTrip),
+    shouldPersistCheckpoint: shouldPersistCheckpointPing,
+    minDisplacementM: null,
+    source: 'background',
+    reportLocationToDb: reportLocationToDbWithPins,
+    onLocationFix: onPingLocationFix,
+  });
+
+  /** Map-only position stream; does not call `reportDriverLocation`. */
+  useDriverMapLivePositionWatch({
+    enabled: Boolean(driver && activeGuidanceTrip),
+    onFix: onPingLocationFix,
+  });
+
+  useEffect(() => {
+    if (!activeGuidanceTrip?.id) {
+      setRecentPinPoints([]);
       return;
     }
-    const tick = async () => {
-      try {
-        const Location = await getExpoLocation();
-        if (!Location) return;
-        const { status } = await Location.getForegroundPermissionsAsync();
-        if (status !== 'granted') return;
-        const pos = await Location.getCurrentPositionAsync({});
-        const { latitude, longitude } = pos.coords;
-        const acc = pos.coords.accuracy ?? null;
-        const last = lastSentLocationRef.current;
-        const shouldSend =
-          !last ||
-          distanceMeters(last.lat, last.lng, latitude, longitude) >= MIN_DISPLACEMENT_M;
-        if (shouldSend) {
-          await reportLocationToDb(activeGuidanceTrip.id, latitude, longitude, acc, 'live');
-          lastSentLocationRef.current = { lat: latitude, lng: longitude };
-        }
-        setDriverMapPosition({ latitude, longitude });
-
-        // Ola-style movement: interpolate the marker between GPS fixes (avoid teleport).
-        youLatSv.value = withTiming(latitude, { duration: 450 });
-        youLonSv.value = withTiming(longitude, { duration: 450 });
-
-        const rawHeading = (pos.coords as any).heading;
-        let headingDeg: number | null =
-          typeof rawHeading === 'number' && Number.isFinite(rawHeading) ? rawHeading : null;
-        if (headingDeg == null && lastHeadingFixRef.current) {
-          const bearing = bearingDegrees(lastHeadingFixRef.current, { latitude, longitude });
-          if (bearing != null) headingDeg = bearing;
-        }
-        if (headingDeg != null && Number.isFinite(headingDeg)) {
-          youHeadingSv.value = withTiming(headingDeg, { duration: 350 });
-        }
-        lastHeadingFixRef.current = { latitude, longitude };
-      } catch {
-        // ignore
-      }
-    };
-    tick();
-    const id = setInterval(tick, LOCATION_REPORT_INTERVAL_MS);
-    locationIntervalRef.current = id;
-    return () => {
-      clearInterval(id);
-      locationIntervalRef.current = null;
-    };
-  }, [driver, activeGuidanceTrip, reportLocationToDb]);
+    void fetchAndLogRecentPins(activeGuidanceTrip.id);
+  }, [activeGuidanceTrip?.id, fetchAndLogRecentPins]);
 
   // Blink/ping for pickup dot and Live badge on the offline "Assigned trip waiting" card (must run after effectiveFirstIncoming is defined)
   const showOfflineAssignedCard = Boolean(driver && !isOnline && effectiveFirstIncoming);
@@ -1984,8 +2042,9 @@ export default function DriverDashboard() {
         <GestureHandlerRootViewComponent style={styles.olaDriverRoot}>
           <KeyboardAvoidingView
             style={styles.olaDriverKeyboardAvoid}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
             keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 12 : 0}
+            enabled={Platform.OS !== 'web'}
           >
             {showNewAssignmentCard && effectiveFirstIncoming && (
               <DriverHeader
@@ -2287,7 +2346,7 @@ export default function DriverDashboard() {
                                   ))}
                               </View>
                             )
-                          : !driver
+                          : !driver && !showDriverTripDashboard
                             ? (
                                 <View style={[styles.centerCardWrap, styles.noDriverWrap, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                                   <View style={[styles.offlineIconWrap, { backgroundColor: colors.whiteMuted }]}>
@@ -2637,7 +2696,9 @@ export default function DriverDashboard() {
                   ))}
               </View>
             )}
-            {!driver && invites.filter((i) => i.status === 'pending').length === 0 && (
+            {!driver &&
+              invites.filter((i) => i.status === 'pending').length === 0 &&
+              !showDriverTripDashboard && (
               <View style={[styles.centerCardWrap, styles.noDriverWrap, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                 <View style={[styles.offlineIconWrap, { backgroundColor: colors.whiteMuted }]}>
                   <FontAwesome name="envelope-open" size={40} color={colors.textMuted} />
@@ -2648,7 +2709,7 @@ export default function DriverDashboard() {
                 </Text>
               </View>
             )}
-            {driver ? (
+            {showDriverTripDashboard ? (
               activeMission ? (
           <DriverTripFlowCard
             trip={activeMission}
@@ -2666,7 +2727,7 @@ export default function DriverDashboard() {
               fetch();
             }}
           />
-        ) : !isOnline ? (
+        ) : !isOnline && !effectiveFirstIncoming ? (
           <View
             style={[
               styles.centerCardWrap,

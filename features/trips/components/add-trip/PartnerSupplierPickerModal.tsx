@@ -2,6 +2,7 @@
  * Transport partner (supplier) picker — same sheet pattern as FleetEntityPickerModal +
  * shared CreateTripSheetSearchInput.
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { CreateTripSheetSearchInput } from "@/components/CreateTripSheetSearchInput";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import Layout from "@/constants/Layout";
@@ -10,7 +11,6 @@ import type { SupplierRow } from "@/features/suppliers/services/suppliers.servic
 import { X } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   Modal,
   Platform,
@@ -163,7 +163,7 @@ export function PartnerSupplierPickerModal({
               ListEmptyComponent={
                 loading && suppliers.length === 0 ? (
                   <View style={styles.loadingState}>
-                    <ActivityIndicator size="small" color={Theme.primary} />
+                    <LoadingIndicator size="small" color={Theme.primary} />
                     <Text style={[styles.loadingHint, { marginTop: 12 }]}>
                       Loading partners…
                     </Text>

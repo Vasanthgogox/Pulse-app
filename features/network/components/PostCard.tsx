@@ -8,7 +8,7 @@ import Theme from '@/constants/Theme';
 import Typography from '@/constants/Typography';
 import { type PostRow } from '@/features/network/services/posts.service';
 import { formatINR } from '@/lib/format';
-import { getInitials } from '@/lib/stringUtils';
+import { PartyAvatar } from '@/components/PartyAvatar';
 import { useRouter } from 'expo-router';
 import {
   ArrowRight,
@@ -77,9 +77,14 @@ function UpdateCard({ post, color, onPress }: { post: PostRow; color: string; on
         <View style={styles.updateInner}>
           {/* Header */}
           <View style={styles.postHeader}>
-            <View style={[styles.orgAvatar, { backgroundColor: withAlpha(color, '14') }]}>
-              <Text style={[styles.orgAvatarText, { color }]}>{getInitials(post.org_name)}</Text>
-            </View>
+            <PartyAvatar
+              name={post.org_name}
+              initialsColorSeed={post.organization_id}
+              avatarSeed={post.org_avatar_seed}
+              entityType="supplier"
+              size={40}
+              style={styles.orgAvatar}
+            />
             <View style={styles.postMeta}>
               <Text style={styles.orgName}>{post.org_name.toUpperCase()}</Text>
               <View style={styles.metaRow}>
@@ -133,9 +138,14 @@ function LoadCard({ post, color, isOwner, onBid, onPress }: {
         {/* Dark header */}
         <View style={styles.loadHeader}>
           <View style={styles.loadHeaderLeft}>
-            <View style={[styles.orgAvatarDark, { backgroundColor: withAlpha(color, '22') }]}>
-              <Text style={[styles.orgAvatarText, { color }]}>{getInitials(post.org_name)}</Text>
-            </View>
+            <PartyAvatar
+              name={post.org_name}
+              initialsColorSeed={post.organization_id}
+              avatarSeed={post.org_avatar_seed}
+              entityType="supplier"
+              size={40}
+              style={styles.orgAvatarDark}
+            />
             <View>
               <Text style={styles.orgNameDark}>{post.org_name.toUpperCase()}</Text>
               <View style={styles.metaRowDark}>

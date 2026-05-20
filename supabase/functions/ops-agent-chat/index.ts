@@ -1,6 +1,6 @@
 // Ops Agent proxy: holds GEMINI_API_KEY server-side; app sends anon key in Authorization and user JWT in X-User-Token.
 // Deploy: supabase functions deploy ops-agent-chat --set GEMINI_API_KEY=your-key
-// Security: REST token verification, per-user rate limit (20/min), CORS, security event logging, error scrubbing.
+// Security: REST token verification, per-user DB-backed rate limit (20/min, shared across isolates), CORS, security event logging, error scrubbing.
 
 const GEMINI_MODEL = 'gemini-2.0-flash';
 const ALLOWED_GEMINI_MODELS = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
@@ -8,8 +8,6 @@ const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const RATE_LIMIT_MAX_PER_USER = 20;
-/** Cap stored timestamps per user to avoid memory spikes. For multi-instance/horizontal scaling, use Redis/Upstash to centralize counters. */
-const RATE_LIMIT_MAX_STORED = 50;
 
 /** Log payload size (chars) above this may be logged as suspicious_prompt for review. No prompt text is logged. */
 const SUSPICIOUS_PROMPT_LENGTH = 50_000;
@@ -61,16 +59,55 @@ function corsHeaders(req: Request): Record<string, string> {
   };
 }
 
-const rateLimitMap = new Map<string, number[]>();
+type RateLimitRpcResult = { allowed: boolean; count?: number };
 
-function pruneAndCheckRateLimit(userId: string): boolean {
-  const now = Date.now();
-  const list = rateLimitMap.get(userId) ?? [];
-  const kept = list.filter((t) => now - t < RATE_LIMIT_WINDOW_MS).slice(-RATE_LIMIT_MAX_STORED);
-  if (kept.length >= RATE_LIMIT_MAX_PER_USER) return false;
-  kept.push(now);
-  rateLimitMap.set(userId, kept);
-  return true;
+function parseRateLimitRpcPayload(data: unknown): RateLimitRpcResult | null {
+  const row = Array.isArray(data) ? (data[0] as Record<string, unknown> | undefined) : (data as Record<string, unknown> | undefined);
+  if (!row || typeof row !== 'object') return null;
+  if (typeof row.allowed === 'boolean') {
+    return { allowed: row.allowed, count: typeof row.count === 'number' ? row.count : undefined };
+  }
+  const wrapped = row.ops_agent_rate_limit_try_consume;
+  if (wrapped && typeof wrapped === 'object' && typeof (wrapped as { allowed?: unknown }).allowed === 'boolean') {
+    const w = wrapped as { allowed: boolean; count?: number };
+    return { allowed: w.allowed, count: w.count };
+  }
+  return null;
+}
+
+/** Shared counter in Postgres (see migration ops_agent_edge_rate_limit); requires SUPABASE_SERVICE_ROLE_KEY in the function env. */
+async function tryConsumeDbRateLimit(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  userId: string,
+): Promise<'ok' | 'rate_limited' | 'rpc_error'> {
+  const url = `${supabaseUrl.replace(/\/$/, '')}/rest/v1/rpc/ops_agent_rate_limit_try_consume`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      p_user_id: userId,
+      p_max_per_window: RATE_LIMIT_MAX_PER_USER,
+      p_window_seconds: Math.round(RATE_LIMIT_WINDOW_MS / 1000),
+    }),
+  });
+  if (!res.ok) {
+    console.warn('[ops-agent-chat] rate limit RPC HTTP', res.status, await res.text().then((t) => t.slice(0, 300)));
+    return 'rpc_error';
+  }
+  let data: unknown;
+  try {
+    data = await res.json();
+  } catch {
+    return 'rpc_error';
+  }
+  const parsed = parseRateLimitRpcPayload(data);
+  if (!parsed) return 'rpc_error';
+  return parsed.allowed ? 'ok' : 'rate_limited';
 }
 
 function jsonResponse(body: object, status: number, req: Request) {
@@ -157,7 +194,16 @@ Deno.serve(async (req) => {
 
   const user = verification.user;
 
-  if (!pruneAndCheckRateLimit(user.id)) {
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!serviceRoleKey) {
+    return jsonResponse({ error: 'Server configuration error', detail: 'Rate limit requires service role key' }, 503, req);
+  }
+
+  const rateOutcome = await tryConsumeDbRateLimit(supabaseUrl, serviceRoleKey, user.id);
+  if (rateOutcome === 'rpc_error') {
+    return jsonResponse({ error: 'Service temporarily unavailable', detail: 'Rate limit check failed' }, 503, req);
+  }
+  if (rateOutcome === 'rate_limited') {
     logSecurityEvent({ type: 'rate_limit', userId: user.id, ip: getClientIp(req), time: new Date().toISOString(), requestId: reqId });
     return jsonResponse(
       { error: 'Too many requests. Limit 20 per minute.' },

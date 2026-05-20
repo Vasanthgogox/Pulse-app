@@ -51,6 +51,8 @@ export interface TripForSupplier {
   supplier_rate: number;
   /** Source indent id; used to dedup when indent-level amounts are also included (prevents double-count). */
   indent_id?: string | null;
+  /** Present on full trip rows; used for party map / driver attribution. */
+  driver_id?: string | null;
 }
 
 /**

@@ -3,24 +3,29 @@
  * Fleet-only system status logs (message_type system) are hidden here; they remain visible in Command Hub.
  * Ledger cards and doc-share are visible but actions are read-only (no add-to-book or share).
  */
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { AppLoadingSplash } from "@/components/AppLoadingSplash";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft, MessageSquare, Send, Smile } from "lucide-react-native";
+import { ArrowLeft, MessageSquare } from "lucide-react-native";
+import { CHAT_MOBILE } from "@/features/chat/chatMobileLayout";
+import { dockPaddingBottom, useKeyboardVisible } from "@/hooks/useKeyboardVisible";
+import { ChatMobileComposer } from "@/features/chat/components/ChatMobileComposer";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useDriverChat } from "@/features/chat/contexts/DriverChatContext";
-import { ChatLedgerEventCard } from "@/features/chat/components/ChatEventCard";
 import { DocumentShareCard } from "@/features/chat/components/DocumentShareCard";
 import type { TripConversation, TripMessageRow } from "@/features/chat/types/chat.types";
 import {
@@ -32,8 +37,6 @@ import {
 } from "@/lib/driverTripStatusNotes.util";
 import type { TripRow } from "@/services/tripsService";
 import * as tripsService from "@/services/tripsService";
-
-const QUICK_EMOJIS = ["👍", "🚛", "📍", "✅", "📦", "⚠️", "🕒", "📞", "💯"];
 
 /** Last chat bubble preview for list rows — fleet system broadcasts excluded. */
 function lastVisibleDriverChatMessage(messages: TripMessageRow[]): TripMessageRow | undefined {
@@ -91,18 +94,20 @@ function ChatBubble({ isOwn, content, timestamp, senderName }: {
     });
   } catch { }
 
+  const avatarSize = CHAT_MOBILE.avatarSize;
+
   return (
     <View style={[dr.bubbleWrap, isOwn ? dr.bubbleWrapOwn : dr.bubbleWrapOther]}>
-      {!isOwn && <LetterAvatar name={senderName ?? "?"} size={28} />}
-      <View style={{ maxWidth: "72%" }}>
+      {!isOwn && <LetterAvatar name={senderName ?? "?"} size={avatarSize} />}
+      <View style={{ maxWidth: CHAT_MOBILE.bubbleMaxWidthPct }}>
         <View style={[dr.bubble, isOwn ? dr.bubbleOwn : dr.bubbleOther]}>
           <Text style={[dr.bubbleText, isOwn ? dr.bubbleTextOwn : dr.bubbleTextOther]}>{content}</Text>
         </View>
-        <Text style={[dr.bubbleMeta, isOwn && { textAlign: "right" }]}>
+        <Text style={[dr.bubbleMeta, isOwn && dr.bubbleMetaOwn]}>
           {displayTime}{senderName ? ` · ${senderName.toUpperCase()}` : " · YOU"}
         </Text>
       </View>
-      {isOwn && <LetterAvatar name="Me" own size={28} />}
+      {isOwn && <LetterAvatar name="Me" own size={avatarSize} />}
     </View>
   );
 }
@@ -121,10 +126,10 @@ function ConvListItem({ conv, active, onPress }: {
     <TouchableOpacity
       style={[dr.convItem, active && dr.convItemActive]}
       onPress={onPress}
-      activeOpacity={0.8}
+      activeOpacity={0.75}
     >
       <View style={[dr.convAvatar, active && dr.convAvatarActive]}>
-        <Text style={{ fontSize: 11, fontWeight: "900", color: active ? "#fff" : "#0f172a" }}>
+        <Text style={[dr.convAvatarText, active && dr.convAvatarTextActive]}>
           {(conv.trip_number || "TR").slice(0, 3).toUpperCase()}
         </Text>
       </View>
@@ -188,8 +193,6 @@ function MessageThread({
   conv,
   messageInput,
   setMessageInput,
-  showEmoji,
-  setShowEmoji,
   onSend,
   onSendTripChat,
   onBack,
@@ -197,15 +200,25 @@ function MessageThread({
   conv: TripConversation;
   messageInput: string;
   setMessageInput: (v: string) => void;
-  showEmoji: boolean;
-  setShowEmoji: (v: boolean) => void;
   onSend: () => void;
   /** Mirrors Quick Status into trip_messages so Command Hub receives it (notes alone do not sync). */
   onSendTripChat: (text: string) => Promise<void>;
   onBack: () => void;
 }) {
+  const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
+  const { keyboardVisible: keyboardOpen } = useKeyboardVisible();
   const [trip, setTrip] = useState<TripRow | null>(null);
+
+  // Scroll to bottom when keyboard opens so composer stays visible
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    const showEvt = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const sub = Keyboard.addListener(showEvt, () => {
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), Platform.OS === "ios" ? 80 : 120);
+    });
+    return () => sub.remove();
+  }, []);
   const [statusSending, setStatusSending] = useState<string | null>(null);
 
   useEffect(() => {
@@ -273,16 +286,7 @@ function MessageThread({
       return <DocumentShareCard message={m} isOwn={m.sender_role === "driver"} />;
     }
     if (m.message_type === "ledger_event") {
-      return (
-        <ChatLedgerEventCard
-          message={m}
-          currentOrgId={conv.organization_id}
-          conversationPartyName={conv.party_name}
-          readOnly
-          onAddToBook={() => {}}
-          onDispute={() => {}}
-        />
-      );
+      return null;
     }
     return (
       <ChatBubble
@@ -294,26 +298,35 @@ function MessageThread({
     );
   };
 
+  const handleComposerSend = useCallback(() => {
+    void onSend();
+  }, [onSend]);
+
   return (
-    <View style={{ flex: 1 }}>
-      {/* Header */}
-      <View style={dr.header}>
-        <TouchableOpacity onPress={onBack} hitSlop={10} style={dr.backBtn}>
-          <ArrowLeft size={18} color="#fff" />
+    <KeyboardAvoidingView
+      style={dr.threadRoot}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={0}
+      enabled={Platform.OS === "ios"}
+    >
+      <View style={dr.threadHeader}>
+        <TouchableOpacity onPress={onBack} hitSlop={10} style={dr.threadBackBtn}>
+          <ArrowLeft size={22} color="#111B21" />
         </TouchableOpacity>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={dr.headerTitle} numberOfLines={1}>{conv.trip_number}</Text>
-          <Text style={dr.headerSub} numberOfLines={1}>
+          <Text style={dr.threadHeaderTitle} numberOfLines={1}>{conv.trip_number}</Text>
+          <Text style={dr.threadHeaderSub} numberOfLines={1}>
             {conv.pickup_area} → {conv.drop_location}
           </Text>
         </View>
       </View>
 
-      {/* Messages + trip status notes (same timeline) */}
       <ScrollView
         ref={scrollRef}
-        style={{ flex: 1 }}
-        contentContainerStyle={{ padding: 16, gap: 10, paddingBottom: 24 }}
+        style={dr.threadScroll}
+        contentContainerStyle={dr.threadScrollContent}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
         onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
       >
         {merged.length === 0 ? (
@@ -333,22 +346,12 @@ function MessageThread({
         )}
       </ScrollView>
 
-      {/* Input */}
-      <View style={dr.inputWrap}>
-        {showEmoji && (
-          <View style={dr.emojiRow}>
-            {QUICK_EMOJIS.map((e) => (
-              <TouchableOpacity
-                key={e}
-                onPress={() => { setMessageInput(messageInput + e); setShowEmoji(false); }}
-                style={dr.emojiBtn}
-                activeOpacity={0.7}
-              >
-                <Text style={{ fontSize: 22 }}>{e}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
+      <View
+        style={[
+          dr.composerDock,
+          { paddingBottom: dockPaddingBottom(insets.bottom, keyboardOpen) },
+        ]}
+      >
         {predefinedForStep.length > 0 ? (
           <View style={dr.quickStatusBlock}>
             <Text style={dr.quickStatusLabel}>Quick status</Text>
@@ -356,6 +359,7 @@ function MessageThread({
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={dr.quickStatusChipRow}
+              keyboardShouldPersistTaps="handled"
             >
               {predefinedForStep.map((label) => (
                 <TouchableOpacity
@@ -375,50 +379,16 @@ function MessageThread({
             </ScrollView>
           </View>
         ) : null}
-        {/* Quick message chips */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={dr.chipRow}
-        >
-          {DRIVER_QUICK_MESSAGES.map((qm, i) => (
-            <TouchableOpacity
-              key={i}
-              style={dr.chip}
-              onPress={() => setMessageInput(qm)}
-              activeOpacity={0.7}
-            >
-              <Text style={dr.chipText} numberOfLines={1}>{qm}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-        <View style={dr.inputRow}>
-          <TouchableOpacity
-            style={dr.emojiToggle}
-            onPress={() => setShowEmoji(!showEmoji)}
-            hitSlop={6}
-          >
-            <Smile size={19} color={showEmoji ? Theme.primary : "#94a3b8"} />
-          </TouchableOpacity>
-          <TextInput
-            style={dr.input}
-            value={messageInput}
-            onChangeText={setMessageInput}
-            placeholder="Reply…"
-            placeholderTextColor="#b0b8c8"
-            multiline
-          />
-          <TouchableOpacity
-            style={[dr.sendBtn, !messageInput.trim() && dr.sendBtnOff]}
-            onPress={onSend}
-            disabled={!messageInput.trim()}
-            activeOpacity={0.85}
-          >
-            <Send size={15} color="#fff" />
-          </TouchableOpacity>
-        </View>
+        <ChatMobileComposer
+          value={messageInput}
+          onChangeText={setMessageInput}
+          onSend={handleComposerSend}
+          quickMessages={DRIVER_QUICK_MESSAGES}
+          hideQuickChips={keyboardOpen}
+          placeholder="Message"
+        />
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -427,8 +397,9 @@ export default function DriverChatScreen() {
   const router = useRouter();
   /** Match `app/(driver)/index.tsx` — tab bar is `position: 'absolute'`, so content must clear the glass dock. */
   const driverTabBarClearance = useMemo(() => {
-    const tabBarVerticalPad = Math.max(insets.bottom / 4, 4);
-    return Layout.tabBarDockHeight + tabBarVerticalPad + (tabBarVerticalPad + 6);
+    const footerPadTop = 4;
+    const footerPadBottom = Math.max(Math.round(insets.bottom * 0.35), 10);
+    return Layout.tabBarDockHeight + footerPadTop + footerPadBottom;
   }, [insets.bottom]);
   const screenPadding = useMemo(
     () => ({ paddingTop: insets.top, paddingBottom: driverTabBarClearance }),
@@ -451,7 +422,6 @@ export default function DriverChatScreen() {
   } = useDriverChat();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
-  const [showEmoji, setShowEmoji] = useState(false);
   const [openingTripThread, setOpeningTripThread] = useState(false);
   const [tripThreadError, setTripThreadError] = useState<string | null>(null);
 
@@ -466,7 +436,6 @@ export default function DriverChatScreen() {
     setTripThreadError(null);
     setSelectedId(null);
     setMessageInput("");
-    setShowEmoji(false);
     void ensureDriverTripConversation(normalizedTripId).then((convId) => {
       if (cancelled) return;
       setOpeningTripThread(false);
@@ -488,7 +457,6 @@ export default function DriverChatScreen() {
     const text = messageInput.trim();
     if (!text || !selectedConv) return;
     setMessageInput("");
-    setShowEmoji(false);
     await sendMessage(selectedConv.id, selectedConv.organization_id, text);
   };
 
@@ -496,16 +464,13 @@ export default function DriverChatScreen() {
     setSelectedId(conv.id);
     markAsRead(conv.id);
     setMessageInput("");
-    setShowEmoji(false);
   };
 
   if (normalizedTripId) {
     if (openingTripThread) {
       return (
         <View style={[dr.root, screenPadding]}>
-          <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-            <ActivityIndicator color={Theme.primary} size="large" />
-          </View>
+          <AppLoadingSplash variant="preparing" style={{ flex: 1 }} />
         </View>
       );
     }
@@ -536,9 +501,7 @@ export default function DriverChatScreen() {
     if (selectedId && !selectedConv) {
       return (
         <View style={[dr.root, screenPadding]}>
-          <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-            <ActivityIndicator color={Theme.primary} size="large" />
-          </View>
+          <AppLoadingSplash variant="preparing" style={{ flex: 1 }} />
         </View>
       );
     }
@@ -549,8 +512,6 @@ export default function DriverChatScreen() {
             conv={selectedConv}
             messageInput={messageInput}
             setMessageInput={setMessageInput}
-            showEmoji={showEmoji}
-            setShowEmoji={setShowEmoji}
             onSend={handleSend}
             onSendTripChat={(text) =>
               sendMessage(selectedConv.id, selectedConv.organization_id, text)
@@ -558,7 +519,6 @@ export default function DriverChatScreen() {
             onBack={() => {
               setSelectedId(null);
               setMessageInput("");
-              setShowEmoji(false);
               router.back();
             }}
           />
@@ -567,9 +527,7 @@ export default function DriverChatScreen() {
     }
     return (
       <View style={[dr.root, screenPadding]}>
-        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-          <ActivityIndicator color={Theme.primary} size="large" />
-        </View>
+        <AppLoadingSplash variant="preparing" style={{ flex: 1 }} />
       </View>
     );
   }
@@ -591,9 +549,7 @@ export default function DriverChatScreen() {
           </View>
 
           {isLoading ? (
-            <View style={{ paddingTop: 48, alignItems: "center" }}>
-              <ActivityIndicator color={Theme.primary} />
-            </View>
+            <AppLoadingSplash variant="preparing" style={{ flex: 1 }} />
           ) : conversations.length === 0 ? (
             <View style={{ alignItems: "center", paddingTop: 64, gap: 12 }}>
               <MessageSquare size={36} color="#e2e8f0" />
@@ -606,7 +562,7 @@ export default function DriverChatScreen() {
             <FlatList
               data={conversations}
               keyExtractor={(c) => c.id}
-              contentContainerStyle={{ padding: 12, gap: 6 }}
+              contentContainerStyle={dr.convListContent}
               renderItem={({ item }) => (
                 <ConvListItem
                   conv={item}
@@ -622,13 +578,11 @@ export default function DriverChatScreen() {
           conv={selectedConv}
           messageInput={messageInput}
           setMessageInput={setMessageInput}
-          showEmoji={showEmoji}
-          setShowEmoji={setShowEmoji}
           onSend={handleSend}
           onSendTripChat={(text) =>
             sendMessage(selectedConv.id, selectedConv.organization_id, text)
           }
-          onBack={() => { setSelectedId(null); setMessageInput(""); setShowEmoji(false); }}
+          onBack={() => { setSelectedId(null); setMessageInput(""); }}
         />
       )}
     </View>
@@ -636,7 +590,44 @@ export default function DriverChatScreen() {
 }
 
 const dr = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#f8fafc" },
+  root: { flex: 1, backgroundColor: "#FFFFFF" },
+
+  convListContent: { paddingBottom: 8 },
+
+  threadRoot: { flex: 1, backgroundColor: CHAT_MOBILE.wallpaper },
+  threadHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    backgroundColor: CHAT_MOBILE.headerBg,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: CHAT_MOBILE.headerBorder,
+  },
+  threadBackBtn: { padding: 4 },
+  threadHeaderTitle: {
+    fontSize: CHAT_MOBILE.headerTitleSize,
+    fontWeight: "700",
+    color: "#111B21",
+    letterSpacing: -0.15,
+  },
+  threadHeaderSub: {
+    fontSize: CHAT_MOBILE.headerSubtitleSize,
+    color: "#667781",
+    marginTop: 1,
+  },
+  threadScroll: { flex: 1 },
+  threadScrollContent: {
+    paddingHorizontal: 8,
+    paddingTop: 8,
+    gap: 6,
+    paddingBottom: 12,
+  },
+  composerDock: {
+    backgroundColor: "transparent",
+    flexShrink: 0,
+  },
 
   listHeader: {
     flexDirection: "row",
@@ -665,57 +656,86 @@ const dr = StyleSheet.create({
   },
 
   convItem: {
-    flexDirection: "row", alignItems: "center", gap: 12,
-    padding: 12, borderRadius: 18,
-    backgroundColor: "#fff", borderWidth: 1, borderColor: "#eef2f7",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: CHAT_MOBILE.listRowPad,
+    paddingHorizontal: 12,
+    backgroundColor: "#FFFFFF",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#E9EDEF",
   },
   convItemActive: {
-    backgroundColor: Theme.driverEmeraldDark,
-    borderColor: Theme.driverEmeraldDark,
+    backgroundColor: "#F0F2F5",
   },
   convAvatar: {
-    width: 44, height: 44, borderRadius: 13,
-    backgroundColor: "#e8eaf6",
-    alignItems: "center", justifyContent: "center", flexShrink: 0,
+    width: CHAT_MOBILE.listAvatar,
+    height: CHAT_MOBILE.listAvatar,
+    borderRadius: CHAT_MOBILE.listAvatar / 2,
+    backgroundColor: "#E8F5E9",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
   },
-  convAvatarActive: { backgroundColor: "rgba(255,255,255,0.14)" },
+  convAvatarActive: { backgroundColor: Theme.driverEmerald },
+  convAvatarText: { fontSize: 11, fontWeight: "800", color: Theme.driverEmeraldDark },
+  convAvatarTextActive: { color: "#fff" },
   convBody: { flex: 1, minWidth: 0 },
   convRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 2 },
-  convTitle: { fontSize: 12, fontWeight: "900", color: "#0f172a", flex: 1, textTransform: "uppercase", fontStyle: "italic" },
-  convTitleActive: { color: "#fff" },
-  convTime: { fontSize: 9, color: "#94a3b8", marginLeft: 8, flexShrink: 0, fontWeight: "700", textTransform: "uppercase" },
-  convTimeActive: { color: "rgba(255,255,255,0.5)" },
-  convRoute: { fontSize: 11, color: Theme.primary, fontWeight: "700", marginBottom: 2 },
-  convRouteActive: { color: "rgba(255,255,255,0.7)" },
-  convPrev: { fontSize: 12, color: "#94a3b8", lineHeight: 16 },
-  convPrevActive: { color: "rgba(255,255,255,0.6)" },
-
-  header: {
-    flexDirection: "row", alignItems: "center", gap: 12,
-    paddingHorizontal: 16, paddingVertical: 14,
-    backgroundColor: Theme.driverEmeraldDark,
-    borderBottomLeftRadius: 18, borderBottomRightRadius: 18,
+  convTitle: {
+    fontSize: CHAT_MOBILE.listTitleSize,
+    fontWeight: "600",
+    color: "#111B21",
+    flex: 1,
   },
-  headerTitle: { fontSize: 15, fontWeight: "900", color: "#fff", textTransform: "uppercase", fontStyle: "italic" },
-  headerSub: { fontSize: 10, color: "rgba(255,255,255,0.6)", fontWeight: "600", marginTop: 2 },
+  convTitleActive: { color: "#111B21" },
+  convTime: {
+    fontSize: CHAT_MOBILE.listTimeSize,
+    color: "#667781",
+    marginLeft: 8,
+    flexShrink: 0,
+  },
+  convTimeActive: { color: "#667781" },
+  convRoute: { fontSize: 11, color: Theme.driverEmeraldDark, fontWeight: "600", marginBottom: 2 },
+  convRouteActive: { color: Theme.driverEmeraldDark },
+  convPrev: { fontSize: CHAT_MOBILE.listPreviewSize, color: "#667781", lineHeight: 17 },
+  convPrevActive: { color: "#667781" },
 
   bubbleWrap: { flexDirection: "row", alignItems: "flex-end", gap: 6 },
   bubbleWrapOwn: { justifyContent: "flex-end" },
   bubbleWrapOther: { justifyContent: "flex-start" },
-  bubble: { borderRadius: 16, paddingHorizontal: 13, paddingVertical: 9 },
+  bubble: {
+    borderRadius: 14,
+    paddingHorizontal: CHAT_MOBILE.bubblePadH,
+    paddingVertical: CHAT_MOBILE.bubblePadV,
+  },
   bubbleOwn: {
     backgroundColor: Theme.driverEmerald,
     borderBottomRightRadius: 4,
   },
   bubbleOther: {
-    backgroundColor: "#fff", borderBottomLeftRadius: 4,
-    borderWidth: 1, borderColor: "#f0f0f0",
-    shadowColor: "#0f172a", shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1,
+    backgroundColor: "#fff",
+    borderBottomLeftRadius: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(0,0,0,0.06)",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 0,
   },
-  bubbleText: { fontSize: 14, lineHeight: 20 },
+  bubbleText: {
+    fontSize: CHAT_MOBILE.bubbleFontSize,
+    lineHeight: CHAT_MOBILE.bubbleLineHeight,
+  },
   bubbleTextOwn: { color: "#fff" },
-  bubbleTextOther: { color: "#1e293b" },
-  bubbleMeta: { fontSize: 9, color: "#94a3b8", marginTop: 3, letterSpacing: 0.2 },
+  bubbleTextOther: { color: "#111B21" },
+  bubbleMeta: {
+    fontSize: CHAT_MOBILE.metaFontSize,
+    color: "#8696A0",
+    marginTop: 2,
+  },
+  bubbleMetaOwn: { textAlign: "right" },
 
   statusNoteCard: {
     flexDirection: "row",
@@ -741,11 +761,12 @@ const dr = StyleSheet.create({
   statusNoteTime: { fontSize: 11, color: "#94a3b8", marginTop: 3, fontWeight: "500" },
 
   quickStatusBlock: {
-    paddingHorizontal: 14,
-    paddingTop: 8,
+    paddingHorizontal: 8,
+    paddingTop: 6,
     paddingBottom: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
+    backgroundColor: CHAT_MOBILE.composerBar,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: CHAT_MOBILE.headerBorder,
   },
   quickStatusLabel: {
     fontSize: 10,
@@ -770,33 +791,4 @@ const dr = StyleSheet.create({
   quickStatusChipBusy: { opacity: 0.7 },
   quickStatusChipText: { fontSize: 11, color: "#047857", fontWeight: "600" },
 
-  inputWrap: { backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: "#e2e8f0", paddingBottom: 8 },
-  emojiRow: {
-    flexDirection: "row", flexWrap: "wrap", gap: 4,
-    padding: 10, borderBottomWidth: 1, borderBottomColor: "#f1f5f9",
-  },
-  emojiBtn: { width: 38, height: 38, alignItems: "center", justifyContent: "center", borderRadius: 10 },
-  chipRow: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 6, gap: 8 },
-  chip: {
-    paddingHorizontal: 12, paddingVertical: 7, borderRadius: 18,
-    backgroundColor: "#f8fafc", borderWidth: 1, borderColor: "#e8eaf6",
-  },
-  chipText: { fontSize: 11, color: "#475569", fontWeight: "500" },
-  inputRow: {
-    flexDirection: "row", alignItems: "center", gap: 6,
-    paddingHorizontal: 14, paddingTop: 4, paddingBottom: 4,
-  },
-  emojiToggle: { padding: 6 },
-  input: {
-    flex: 1, backgroundColor: "#f1f5f9", borderRadius: 16,
-    paddingHorizontal: 14, paddingVertical: 10,
-    fontSize: 14, color: "#1e293b", maxHeight: 96,
-  },
-  sendBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: Theme.driverEmerald,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  sendBtnOff: { backgroundColor: "#e2e8f0" },
 });

@@ -3,7 +3,13 @@
  * Use for full-screen forms or as the scrollable body inside modals so that
  * on Android the keyboard does not hide inputs (behavior is set for both platforms).
  *
- * Aligns with docs/ANDROID_KEYBOARD_ANALYSIS.md.
+ * For `decimal-pad` / `number-pad` fields, wire `useKeyboardAccessoryField` from
+ * `@/contexts/KeyboardAccessoryContext` (Done / Next bar is mounted in app root).
+ *
+ * On web, KeyboardAvoidingView is bypassed (RN Keyboard does not fire on mobile
+ * browsers). Bottom-docked inputs (chat, ops agent) use `useKeyboardVisible()` +
+ * visualViewport inset; forms in scroll views rely on the same hook or manual inset.
+ * See app/+html.tsx `interactive-widget=overlays-content`.
  */
 import type { ReactNode } from 'react';
 import {
@@ -11,11 +17,9 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
+  View,
   type ViewStyle,
 } from 'react-native';
-
-/** Same behavior on both platforms so Android modals shift content when keyboard opens. */
-const KEYBOARD_BEHAVIOR = Platform.OS === 'ios' ? 'padding' : 'padding';
 
 export interface KeyboardAwareLayoutProps {
   children: ReactNode;
@@ -34,10 +38,25 @@ export function KeyboardAwareLayout({
   contentContainerStyle,
   scroll = true,
 }: KeyboardAwareLayoutProps) {
+  if (Platform.OS === 'web') {
+    return scroll ? (
+      <ScrollView
+        style={[styles.scroll, style]}
+        contentContainerStyle={contentContainerStyle}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {children}
+      </ScrollView>
+    ) : (
+      <View style={[styles.wrapper, style]}>{children}</View>
+    );
+  }
+
   return (
     <KeyboardAvoidingView
       style={[styles.wrapper, style]}
-      behavior={KEYBOARD_BEHAVIOR}
+      behavior="padding"
       keyboardVerticalOffset={keyboardVerticalOffset}
     >
       {scroll ? (

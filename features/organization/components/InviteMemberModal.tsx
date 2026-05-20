@@ -2,6 +2,7 @@
  * Invite team member modal: phone lookup → role selection → confirm.
  * Matches AddDriverModal / AddClientModal patterns.
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from "@/constants/Theme";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import {
@@ -21,7 +22,6 @@ import {
 } from "lucide-react-native";
 import React, { useState } from "react";
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -374,7 +374,7 @@ export function InviteMemberModal({ orgId, onClose, onInvited }: InviteMemberMod
                 style={({ pressed }) => [modal.primaryBtn, pressed && { opacity: 0.85 }]}
               >
                 {searching ? (
-                  <ActivityIndicator size="small" color={Theme.textOnPrimary} />
+                  <LoadingIndicator size="small" color={Theme.textOnPrimary} />
                 ) : (
                   <>
                     <Search size={16} color={Theme.textOnPrimary} strokeWidth={2.4} />
@@ -417,7 +417,7 @@ export function InviteMemberModal({ orgId, onClose, onInvited }: InviteMemberMod
                 style={({ pressed }) => [modal.primaryBtn, { marginTop: 8 }, pressed && { opacity: 0.85 }]}
               >
                 {submitting ? (
-                  <ActivityIndicator size="small" color={Theme.textOnPrimary} />
+                  <LoadingIndicator size="small" color={Theme.textOnPrimary} />
                 ) : (
                   <>
                     <UserPlus2 size={16} color={Theme.textOnPrimary} strokeWidth={2.4} />

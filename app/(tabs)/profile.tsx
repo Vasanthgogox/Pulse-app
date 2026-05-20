@@ -1,4 +1,5 @@
 import { LEVELS_CONFIG } from "@/constants/DriverLevels";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
@@ -18,7 +19,9 @@ import {
 import { getSignedAvatarUrl, pickAndUploadOrgLogo, updateOrganizationLogo } from "@/lib/avatarUpload";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import { getCapabilitiesFromProfile } from "@/lib/capabilities";
-import { useClientsQuery, useDriversQuery, useTripsQuery } from "@/lib/queries";
+import { useClientsQuery } from "@/lib/queries/useClientsQuery";
+import { useDriversQuery } from "@/lib/queries/useDriversQuery";
+import { useTripsQuery } from "@/lib/queries/useTripsQuery";
 import { queryKeys } from "@/lib/queryKeys";
 import { ROUTES } from "@/lib/routes";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -40,7 +43,6 @@ import {
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-    ActivityIndicator,
     Alert,
     Image,
     Linking,
@@ -52,6 +54,7 @@ import {
     Text,
     View,
 } from "react-native";
+import { useLayoutInsets } from "@/lib/layoutInsets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const SLATE_900 = "#0f172a";
@@ -288,6 +291,7 @@ function BusinessRoadmapPanel({ completedTrips, onBack }: RoadmapPanelProps) {
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
+  const layout = useLayoutInsets();
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -613,9 +617,7 @@ export default function ProfileScreen() {
           styles.scrollContent,
           {
             paddingBottom:
-              Layout.sectionSpacing +
-              insets.bottom +
-              Layout.demoTabBarScrollBottomInset,
+              Layout.sectionSpacing + layout.scrollBottomPadding(),
           },
         ]}
         showsVerticalScrollIndicator={false}
@@ -726,7 +728,7 @@ export default function ProfileScreen() {
                     </View>
                   ) : statMiddleLoading ? (
                     <View style={[styles.ratingPillMuted, styles.ratingPillPartner]}>
-                      <ActivityIndicator size="small" color="rgba(255,255,255,0.6)" />
+                      <LoadingIndicator size="small" color="rgba(255,255,255,0.6)" />
                     </View>
                   ) : (
                     <View style={[styles.ratingPillMuted, styles.ratingPillPartner]}>
@@ -872,7 +874,7 @@ export default function ProfileScreen() {
                       </View>
                       <View style={styles.orgLogoPreviewWrap}>
                         {orgLogoUploading ? (
-                          <ActivityIndicator size="small" color={Theme.primary} />
+                          <LoadingIndicator size="small" color={Theme.primary} />
                         ) : orgLogoUri ? (
                           <Image source={{ uri: orgLogoUri }} style={styles.orgLogoPreview} />
                         ) : (

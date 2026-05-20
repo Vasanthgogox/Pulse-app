@@ -5,6 +5,7 @@
  * When visible is true, shows as Ledger-style bottom-sheet popup; when undefined, full-screen wizard (e.g. route).
  */
 import { ThemedAlertModal } from '@/components/ThemedAlertModal';
+import { partyAddModalChromeStyles } from '@/components/PartyAddModalChrome';
 import { WizardStepLayout } from '@/components/WizardStepLayout';
 import { getAvatarUriForSeed } from '@/constants/DriverLevels';
 import Layout from '@/constants/Layout';
@@ -23,6 +24,7 @@ import {
     KeyboardAvoidingView,
     Modal,
     Platform,
+    Pressable,
     ScrollView,
     StyleSheet,
     Text,
@@ -844,10 +846,14 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
 
   if (visible === true) {
     const windowHeight = Dimensions.get('window').height;
-    const panelHeight = Math.min(
+    const windowWidth = Dimensions.get('window').width;
+    const shellMaxH = Math.min(
       windowHeight * Layout.ledgerPanelHeightRatio,
-      Layout.ledgerPanelMaxHeight
+      Layout.ledgerPanelMaxHeight,
+      windowHeight * 0.92,
     );
+    const shellMaxW = Math.min(540, Math.max(280, windowWidth - 36));
+    const popupHeight = shellMaxH;
     const footerRightLabel =
       isReview && submitting
         ? (reviewUseInvite ? t('sending') : t('adding'))
@@ -859,7 +865,7 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
       <Modal
         visible
         transparent
-        animationType="slide"
+        animationType="fade"
         onRequestClose={onClose}
         presentationStyle="overFullScreen"
       >
@@ -868,18 +874,32 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
           behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
           keyboardVerticalOffset={insets.top + 16}
         >
-          <View style={popupStyles.backdrop}>
-            <TouchableOpacity style={StyleSheet.absoluteFill} onPress={onClose} activeOpacity={1} />
+          <View style={partyAddModalChromeStyles.overlay}>
+            <Pressable
+              style={partyAddModalChromeStyles.overlayDismissHit}
+              onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+            />
             <View
               style={[
-                popupStyles.panel,
+                partyAddModalChromeStyles.shell,
                 {
-                  paddingBottom: insets.bottom + Layout.modalBottomPadding,
-                  height: panelHeight,
-                  maxHeight: panelHeight,
+                  maxWidth: shellMaxW,
+                  maxHeight: shellMaxH,
+                  height: popupHeight,
                 },
               ]}
             >
+              <View
+                style={{
+                  flex: 1,
+                  minHeight: 0,
+                  paddingHorizontal: 24,
+                  paddingTop: 24,
+                  paddingBottom: insets.bottom + Layout.modalBottomPadding,
+                }}
+              >
               <View style={popupStyles.headerRow}>
                 <Text style={popupStyles.title}>{salariedOnly ? 'Add Driver (Salaried)' : 'Add Driver'}</Text>
               </View>
@@ -911,6 +931,7 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
                 >
                   <Text style={popupStyles.footerRightText}>{footerRightLabel}</Text>
                 </TouchableOpacity>
+              </View>
               </View>
             </View>
           </View>
@@ -1339,18 +1360,6 @@ const styles = StyleSheet.create({
 });
 
 const popupStyles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.3)',
-  },
-  panel: {
-    backgroundColor: Theme.screenBackground,
-    borderTopWidth: 1,
-    borderTopColor: Theme.surfaceLight,
-    paddingHorizontal: 24,
-    paddingTop: 24,
-  },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',

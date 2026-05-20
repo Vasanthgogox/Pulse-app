@@ -10,14 +10,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm start                  # Expo Go (device)
 npm run start:simulator    # iOS simulator (localhost)
 npm run start:dev-client   # Dev client (native modules)
-npm run web                # Web dev
-npm run build              # Production build
+npm run web                # Web dev (port 8081)
+npm run build              # Production build (native)
+npm run build:web          # Web export (Expo static)
 npm run lint               # ESLint
-npm test                   # Jest
+npm test                   # Jest (all)
+npm test -- --testPathPattern=<file>  # Run a single Jest test file
 npm run test:e2e           # Detox E2E (iOS)
-npm run db:push            # Supabase DB push
-npm run functions:deploy   # Deploy Edge Functions
+npm run test:web           # Playwright E2E (headless, requires web dev server)
+npm run test:web:ui        # Playwright E2E with UI
+npm run db:push            # Supabase DB push (primary project)
+npm run db:push-both       # Push to both Supabase projects
+npm run functions:deploy   # Deploy Edge Functions (primary)
+npm run functions:deploy-both  # Deploy to both projects
 npm run seed               # Seed test data
+npm run start:tunnel       # Expo tunnel mode (remote device testing)
 ```
 
 ## Architecture
@@ -91,6 +98,11 @@ app/(tabs)/trips.tsx
 - RLS enforced at DB level — no `service_role` key in app
 - Fetch wrapper: 25s timeout, 1 retry on network error
 - Env vars loaded via `app.config.js` from `.env` (see `.env.example`)
+- Edge Functions: `supabase/functions/ops-agent-chat/` (Gemini AI), `supabase/functions/check-user-by-phone/`
+- 212 migrations in `supabase/migrations/` — always add incremental files, never edit existing ones
+
+**Required env vars** (all `EXPO_PUBLIC_` prefix except local DB strings):
+`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `MAPBOX_TOKEN`, `GOOGLE_PLACES_API_KEY`, `GOOGLE_MAPS_ANDROID_KEY`, `GEMINI_API_KEY`, `ROUTE_PROXY_URL`, `WEB_BASE_URL`
 
 ### UI Conventions
 
@@ -98,6 +110,17 @@ app/(tabs)/trips.tsx
 - Theme: `constants/Theme.ts` — always use theme tokens, not raw colors
 - Lists: `@shopify/flash-list` for performance-critical lists
 - `lib/i18n.ts` + `locales/` — all user-facing strings go through i18n
+- Platform splits: map and PDF components use `.native.tsx` / `.web.tsx` file variants — changes must be verified on both platforms
+
+### ESLint Rules
+
+Custom rules enforce naming conventions inside `features/`:
+- Service files must be named `*.service.ts`
+- Utility files must be named `*.util.ts`
+
+### Playwright E2E
+
+Tests in `tests/e2e/`, POM pattern in `tests/`, fixtures in `tests/fixtures/`. Runs against the Expo web dev server on port 8081 — start `npm run web` before running Playwright tests. Config: `playwright.config.ts`.
 
 ### Path Alias
 
@@ -114,4 +137,5 @@ app/(tabs)/trips.tsx
 | Feature-specific component | `features/[domain]/components/` |
 | Theme/colors | `constants/Theme.ts` |
 | Access control rule | `lib/capabilities.ts` |
-| DB schema change | `migrations/` + `npm run db:push` |
+| DB schema change | `supabase/migrations/` (new file) + `npm run db:push` |
+| Edge Function change | `supabase/functions/[name]/` + `npm run functions:deploy` |

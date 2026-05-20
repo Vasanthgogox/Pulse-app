@@ -2,6 +2,7 @@
  * Team members list: active members and pending invites.
  * Matches InvitationsView / ConnectionsView hub styling.
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
 import { PartyAvatar } from "@/components/PartyAvatar";
@@ -26,7 +27,7 @@ import {
 import React, { useMemo, useState } from "react";
 import {
   ActionSheetIOS,
-  ActivityIndicator,
+  
   Alert,
   Platform,
   Pressable,
@@ -510,7 +511,7 @@ export function TeamMembersView({
   if (query.isLoading && !query.data) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator color={Theme.teslaRed} />
+        <LoadingIndicator color={Theme.teslaRed} />
       </View>
     );
   }
@@ -581,7 +582,7 @@ export function TeamMembersView({
                 <View key={m.id} style={styles.gridCell}>
                   {actionId === m.id ? (
                     <View style={[styles.gridCell, styles.busyCard]}>
-                      <ActivityIndicator color={Theme.teslaRed} />
+                      <LoadingIndicator color={Theme.teslaRed} />
                     </View>
                   ) : (
                     <MemberCard

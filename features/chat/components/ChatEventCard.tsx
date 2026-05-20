@@ -1,22 +1,25 @@
-import React from "react";
+import React, { useSyncExternalStore } from "react";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import {
-  ActivityIndicator,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 import {
+  Activity,
   AlertTriangle,
   CheckCircle,
   ChevronRight,
   Truck,
   MapPin,
   XCircle,
-  Navigation,
   Clock,
+  Send,
+  Package,
 } from "lucide-react-native";
 import { CHAT_ACCENT, CHAT_ACCENT_SOFT } from "@/features/chat/chatTheme";
+import { CHAT_MOBILE } from "@/features/chat/chatMobileLayout";
 import { formatChatPartyName } from "@/features/chat/utils/partyDisplay";
 import Theme from "@/constants/Theme";
 import {
@@ -25,18 +28,121 @@ import {
   partyInitialsFromName,
 } from "@/lib/partyAvatarDisplay";
 import type { LedgerEventMetadata, TripMessageRow } from "../types/chat.types";
+import { ledgerEventInvolvesOrg } from "../utils/ledgerVisibility.util";
+import {
+  getLedgerBookPendingSnapshot,
+  subscribeLedgerBookPending,
+} from "@/lib/ledgerBookPendingStore";
 
 // ── System event card (trip status changes) ───────────────────────────────────
 
-const STATUS_ICON_MAP: Record<string, { Icon: React.ComponentType<any>; color: string; bg: string }> = {
-  assigned:    { Icon: Truck,         color: CHAT_ACCENT, bg: CHAT_ACCENT_SOFT },
-  in_progress: { Icon: Navigation,    color: CHAT_ACCENT, bg: CHAT_ACCENT_SOFT },
-  picked_up:   { Icon: MapPin,        color: "#f59e0b", bg: "#fffbeb" },
-  in_transit:  { Icon: Truck,         color: "#06b6d4", bg: "#ecfeff" },
-  at_drop:     { Icon: MapPin,        color: "#10b981", bg: "#ecfdf5" },
-  completed:   { Icon: CheckCircle,   color: "#22c55e", bg: "#f0fdf4" },
-  cancelled:   { Icon: XCircle,       color: "#ef4444", bg: "#fef2f2" },
-  default:     { Icon: Clock,         color: "#94a3b8", bg: "#f8fafc" },
+type StatusIconComponent = React.ComponentType<{
+  size?: number;
+  color?: string;
+  strokeWidth?: number;
+}>;
+
+const STATUS_ICON_MAP: Record<
+  string,
+  {
+    Icon: StatusIconComponent;
+    color: string;
+    bg: string;
+    /** Short label for meta line (matches payment card middle segment). */
+    sheetLabel: string;
+    /** Bold right column (payment “amount” slot). */
+    rightWord: string;
+    rightColor: string;
+  }
+> = {
+  assigned: {
+    Icon: Truck,
+    color: CHAT_ACCENT,
+    bg: CHAT_ACCENT_SOFT,
+    sheetLabel: "Assigned",
+    rightWord: "NEW",
+    rightColor: "#4338ca",
+  },
+  in_progress: {
+    Icon: Send,
+    color: "#5c6bc0",
+    bg: "#e8eaf6",
+    sheetLabel: "In progress",
+    rightWord: "ACTIVE",
+    rightColor: "#4338ca",
+  },
+  picked_up: {
+    Icon: MapPin,
+    color: "#f59e0b",
+    bg: "#fffbeb",
+    sheetLabel: "Pickup",
+    rightWord: "LOAD",
+    rightColor: "#b45309",
+  },
+  in_transit: {
+    Icon: Truck,
+    color: "#06b6d4",
+    bg: "#ecfeff",
+    sheetLabel: "In transit",
+    rightWord: "LEG",
+    rightColor: "#0e7490",
+  },
+  at_drop: {
+    Icon: MapPin,
+    color: "#10b981",
+    bg: "#ecfdf5",
+    sheetLabel: "At drop",
+    rightWord: "DROP",
+    rightColor: "#047857",
+  },
+  completed: {
+    Icon: CheckCircle,
+    color: "#22c55e",
+    bg: "#f0fdf4",
+    sheetLabel: "Completed",
+    rightWord: "DONE",
+    rightColor: "#047857",
+  },
+  cancelled: {
+    Icon: XCircle,
+    color: "#ef4444",
+    bg: "#fef2f2",
+    sheetLabel: "Cancelled",
+    rightWord: "VOID",
+    rightColor: "#be123c",
+  },
+  pending: {
+    Icon: Clock,
+    color: "#94a3b8",
+    bg: "#f1f5f9",
+    sheetLabel: "Pending",
+    rightWord: "WAIT",
+    rightColor: "#64748b",
+  },
+  started: {
+    Icon: Send,
+    color: "#5c6bc0",
+    bg: "#e8eaf6",
+    sheetLabel: "Started",
+    rightWord: "START",
+    rightColor: "#4338ca",
+  },
+  delivered: {
+    Icon: Package,
+    color: "#10b981",
+    bg: "#ecfdf5",
+    sheetLabel: "Delivered",
+    rightWord: "POD",
+    rightColor: "#047857",
+  },
+  default: {
+    Icon: Clock,
+    color: "#94a3b8",
+    bg: "#f8fafc",
+    sheetLabel: "Update",
+    rightWord: "INFO",
+    rightColor: "#475569",
+  },
 };
 
 function inferStatusFromContent(content: string): keyof typeof STATUS_ICON_MAP {
@@ -51,32 +157,24 @@ function inferStatusFromContent(content: string): keyof typeof STATUS_ICON_MAP {
   return "default";
 }
 
-export function ChatSystemEventCard({ message }: { message: TripMessageRow }) {
-  const statusKey = inferStatusFromContent(message.content);
-  const { Icon, color, bg } = STATUS_ICON_MAP[statusKey] ?? STATUS_ICON_MAP.default;
-
-  let displayTime = message.created_at;
-  try {
-    displayTime = new Date(message.created_at).toLocaleTimeString("en-IN", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
-  } catch {
-    // keep raw
-  }
-
+/** WhatsApp-style “protocol / milestone” system ribbon (completed + protocol copy). */
+function shouldUsePulseProtocolSystemCard(
+  content: string,
+  statusKey: keyof typeof STATUS_ICON_MAP,
+): boolean {
+  const c = (content ?? "").toLowerCase();
+  if (statusKey === "completed" || statusKey === "delivered") return true;
   return (
-    <View style={s.eventCard}>
-      <View style={[s.eventIcon, { backgroundColor: bg }]}>
-        <Icon size={16} color={color} />
-      </View>
-      <View style={s.eventBody}>
-        <Text style={s.eventContent}>{message.content}</Text>
-        <Text style={s.eventTime}>{displayTime}</Text>
-      </View>
-    </View>
+    c.includes("protocol") ||
+    c.includes("threshold") ||
+    c.includes("destination threshold") ||
+    c.includes("trip protocol")
   );
+}
+
+export function getStatusEventSheetVisuals(statusKey: string) {
+  const row = STATUS_ICON_MAP[statusKey as keyof typeof STATUS_ICON_MAP];
+  return row ?? STATUS_ICON_MAP.default;
 }
 
 // ── Ledger event card (payment / adjustment) ──────────────────────────────────
@@ -88,9 +186,10 @@ interface LedgerCardProps {
   conversationPartyName?: string | null;
   onAddToBook: (message: TripMessageRow) => void;
   onDispute: (message: TripMessageRow) => void;
-  addingToBook?: boolean;
   /** Driver / embedded views: show the card UI without add-to-book or dispute actions. */
   readOnly?: boolean;
+  /** Integrated indent commercial lane only — hides Add to book / Dispute row when false. */
+  hideLedgerActions?: boolean;
 }
 
 /**
@@ -147,7 +246,7 @@ function splitOrgLine(orgLine: string): { from: string; to: string } {
   return { from: trimmed || "—", to: "" };
 }
 
-function ledgerDateUpper(iso: string): string {
+export function formatTripEventSheetDate(iso: string): string {
   try {
     return new Date(iso)
       .toLocaleDateString("en-GB", {
@@ -167,14 +266,32 @@ export function ChatLedgerEventCard({
   conversationPartyName,
   onAddToBook,
   onDispute,
-  addingToBook,
   readOnly = false,
-}: LedgerCardProps) {
+  hideLedgerActions = false,
+  isMobile = false,
+}: LedgerCardProps & { isMobile?: boolean }) {
+  const addingToBook = useSyncExternalStore(
+    subscribeLedgerBookPending,
+    () => getLedgerBookPendingSnapshot().has(message.id),
+    () => false,
+  );
+
+  if (!ledgerEventInvolvesOrg(message, currentOrgId)) return null;
   const meta = message.metadata as LedgerEventMetadata | null;
   if (!meta) return null;
 
-  const isReceiver = meta.receiver_org_id === currentOrgId;
-  const isSender = meta.sender_org_id === currentOrgId;
+  const isReceiver =
+    String(meta.receiver_org_id ?? "").trim() === String(currentOrgId ?? "").trim();
+  const isSender =
+    String(meta.sender_org_id ?? "").trim() === String(currentOrgId ?? "").trim();
+  if (!isReceiver && !isSender) return null;
+
+  const directionLabel =
+    isReceiver && !isSender
+      ? "Incoming payment"
+      : isSender && !isReceiver
+        ? "Outgoing payment"
+        : "Transfer";
 
   const paymentModeLabel = String(meta.payment_mode ?? "Cash").trim() || "Cash";
   const safeAmount = Number(meta.amount ?? 0);
@@ -187,7 +304,7 @@ export function ChatLedgerEventCard({
   }).format(Number.isFinite(safeAmount) ? safeAmount : 0);
 
   const flowPrefix = flow === "in" ? "+" : "−";
-  const isAcknowledged = !!meta.acknowledged_at;
+  const isAcknowledged = !!meta.acknowledged_at || !!meta.is_booked;
   const isDisputed = !!meta.disputed;
 
   let displayTime = message.created_at;
@@ -210,59 +327,101 @@ export function ChatLedgerEventCard({
   const avatarSeedName = titleDisplay ? titleParty : namedOther || "Payment";
   const avatarBg = partyAvatarBackgroundColor(avatarSeedName);
   const avatarFg = partyAvatarInitialsTextColor(avatarBg);
-  const dateUpper = ledgerDateUpper(message.created_at);
+  const dateUpper = formatTripEventSheetDate(message.created_at);
   const metaMid = [paymentModeLabel, meta.category].filter(Boolean).join(" · ") || "—";
   const routeLine = `${fromParty.toUpperCase()} → ${toParty.toUpperCase()}`;
 
   const isCredit = flow === "in";
   const amountColor = isCredit ? "#047857" : "#be123c";
 
+  const avatarEl = (
+    <View style={[s.ledgerAvatarWrap, s.ledgerAvatarWrapAlign, isMobile && s.ledgerAvatarWrapMobile]}>
+      <View
+        style={[
+          s.ledgerAvatar,
+          isMobile && s.ledgerAvatarMobile,
+          { backgroundColor: avatarBg },
+        ]}
+      >
+        <Text style={[s.ledgerAvatarInitials, { color: avatarFg }]}>
+          {partyInitialsFromName(avatarSeedName)}
+        </Text>
+      </View>
+      <View
+        style={[
+          s.ledgerAvatarDot,
+          { backgroundColor: isDisputed ? "#f59e0b" : "#22c55e" },
+        ]}
+      />
+    </View>
+  );
+
+  const bodyEl = (
+    <View style={s.ledgerBody}>
+      {titleDisplay ? (
+        <Text
+          style={[s.ledgerTitle, isMobile && s.ledgerTitleMobile]}
+          numberOfLines={isMobile ? 3 : 1}
+        >
+          {titleDisplay}
+        </Text>
+      ) : null}
+      <Text
+        style={[s.ledgerMeta, isMobile && s.ledgerMetaMobile]}
+        numberOfLines={isMobile ? 3 : 1}
+      >
+        {directionLabel}
+        {" · "}
+        {dateUpper}
+        {" · "}
+        {metaMid}
+      </Text>
+      <Text
+        style={[s.ledgerRoute, isMobile && s.ledgerRouteMobile]}
+        numberOfLines={isMobile ? 2 : 1}
+      >
+        {routeLine}
+      </Text>
+    </View>
+  );
+
   return (
-    <View style={s.ledgerWrap}>
-      <View style={s.ledgerCard}>
-        <View style={[s.ledgerAvatarWrap, s.ledgerAvatarWrapAlign]}>
-          <View style={[s.ledgerAvatar, { backgroundColor: avatarBg }]}>
-            <Text style={[s.ledgerAvatarInitials, { color: avatarFg }]}>
-              {partyInitialsFromName(avatarSeedName)}
-            </Text>
-          </View>
-          <View
-            style={[
-              s.ledgerAvatarDot,
-              { backgroundColor: isDisputed ? "#f59e0b" : "#22c55e" },
-            ]}
-          />
-        </View>
-
-        <View style={s.ledgerBody}>
-          {titleDisplay ? (
-            <Text style={s.ledgerTitle} numberOfLines={1}>
-              {titleDisplay}
-            </Text>
-          ) : null}
-          <Text style={s.ledgerMeta} numberOfLines={1}>
-            {dateUpper}
-            {" · "}
-            {metaMid}
-          </Text>
-          <Text style={s.ledgerRoute} numberOfLines={1}>
-            {routeLine}
-          </Text>
-        </View>
-
-        <View style={s.ledgerRight}>
-          <Text style={[s.ledgerAmount, { color: amountColor }]} numberOfLines={1}>
-            {flowPrefix}
-            {amountLabel}
-          </Text>
-          <Text style={s.ledgerTimeRight} numberOfLines={1}>
-            {displayTime}
-          </Text>
-        </View>
-
-        <View style={s.ledgerChevronWrap}>
-          <ChevronRight size={14} color="#cbd5e1" />
-        </View>
+    <View style={[s.ledgerWrap, isMobile && s.ledgerWrapMobile]}>
+      <View style={[s.ledgerCard, isMobile && s.ledgerCardMobile]}>
+        {isMobile ? (
+          <>
+            <View style={s.ledgerTopRowMobile}>
+              {avatarEl}
+              {bodyEl}
+            </View>
+            <View style={s.ledgerFooterMobile}>
+              <Text style={[s.ledgerAmountMobile, { color: amountColor }]} numberOfLines={1}>
+                {flowPrefix}
+                {amountLabel}
+              </Text>
+              <Text style={s.ledgerTimeMobile} numberOfLines={1}>
+                {displayTime}
+              </Text>
+            </View>
+          </>
+        ) : (
+          <>
+            {avatarEl}
+            {bodyEl}
+            <View style={s.ledgerRight}>
+              <Text style={[s.ledgerAmount, { color: amountColor }]} numberOfLines={1}>
+                {flowPrefix}
+                {amountLabel}
+              </Text>
+              <Text style={s.ledgerTimeRight} numberOfLines={1}>
+                {displayTime}
+              </Text>
+            </View>
+            <View style={s.ledgerChevronWrap}>
+              <ChevronRight size={14} color="#cbd5e1" />
+            </View>
+          </>
+        )}
       </View>
 
       {meta.notes ? (
@@ -281,7 +440,7 @@ export function ChatLedgerEventCard({
           <AlertTriangle size={11} color="#d97706" />
           <Text style={[s.ledgerFooterStatusText, { color: "#b45309" }]}>Dispute raised</Text>
         </View>
-      ) : !readOnly && isReceiver && !isSender ? (
+      ) : !readOnly && !hideLedgerActions && isReceiver && !isSender ? (
         <View style={s.ledgerActions}>
           <TouchableOpacity
             style={s.ledgerAddBtn}
@@ -290,7 +449,7 @@ export function ChatLedgerEventCard({
             activeOpacity={0.8}
           >
             {addingToBook ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <LoadingIndicator size="small" color="#fff" />
             ) : (
               <Text style={s.ledgerAddBtnText}>Add to book</Text>
             )}
@@ -312,46 +471,7 @@ export function ChatLedgerEventCard({
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  // System event
-  eventCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "center",
-    gap: 10,
-    backgroundColor: "#f8fafc",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    maxWidth: "85%",
-    marginVertical: 4,
-  },
-  eventIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-  eventBody: { flex: 1, minWidth: 0 },
-  eventContent: {
-    fontSize: 12,
-    color: "#334155",
-    fontWeight: "500",
-    lineHeight: 17,
-  },
-  eventTime: {
-    fontSize: 9,
-    color: "#94a3b8",
-    marginTop: 3,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-  },
-
-  // Ledger row — same footprint as system `eventCard` (compact list tile)
+  // Ledger row — same footprint as system updates (payment-style sheet)
   ledgerWrap: {
     alignSelf: "center",
     maxWidth: "85%",
@@ -360,13 +480,13 @@ const s = StyleSheet.create({
   ledgerCard: {
     flexDirection: "row",
     alignItems: "stretch",
-    gap: 12,
+    gap: 10,
     backgroundColor: "#ffffff",
-    borderRadius: 18,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: "#e8ecf1",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     shadowColor: "#0f172a",
     shadowOpacity: 0.045,
     shadowRadius: 12,
@@ -413,24 +533,25 @@ const s = StyleSheet.create({
     paddingVertical: 1,
   },
   ledgerTitle: {
-    fontSize: 11,
-    fontWeight: "300",
-    fontStyle: "italic",
+    fontSize: 12,
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
-    letterSpacing: 0.2,
+    letterSpacing: 0.1,
+    lineHeight: 16,
   },
   ledgerMeta: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "500",
     color: "#64748b",
     letterSpacing: 0.02,
+    lineHeight: 14,
   },
   ledgerRoute: {
-    fontSize: 8,
-    fontWeight: "400",
+    fontSize: 10,
+    fontWeight: "500",
     color: "#94a3b8",
-    fontStyle: "italic",
-    letterSpacing: 0.15,
+    letterSpacing: 0.1,
+    lineHeight: 13,
   },
   ledgerRight: {
     alignSelf: "stretch",
@@ -446,18 +567,18 @@ const s = StyleSheet.create({
     maxWidth: "36%",
   },
   ledgerAmount: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "800",
     fontVariant: ["tabular-nums"],
-    letterSpacing: -0.35,
-    lineHeight: 17,
+    letterSpacing: -0.3,
+    lineHeight: 16,
   },
   ledgerTimeRight: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: "600",
     color: "#94a3b8",
     textTransform: "uppercase",
-    letterSpacing: 0.4,
+    letterSpacing: 0.35,
     opacity: 0.95,
   },
   ledgerChevronWrap: {
@@ -527,4 +648,455 @@ const s = StyleSheet.create({
     fontWeight: "700",
     color: "#b45309",
   },
+  ledgerWrapMobile: {
+    alignSelf: "stretch",
+    width: "100%",
+    maxWidth: "100%",
+    marginVertical: CHAT_MOBILE.eventCardGap / 2,
+  },
+  ledgerCardMobile: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    paddingHorizontal: CHAT_MOBILE.eventCardPadH,
+    paddingVertical: CHAT_MOBILE.eventCardPadV,
+    borderRadius: CHAT_MOBILE.eventCardRadius,
+    borderColor: "#E9EDEF",
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+    gap: 0,
+  },
+  ledgerTopRowMobile: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  ledgerAvatarWrapMobile: {
+    width: CHAT_MOBILE.eventAvatar,
+    height: CHAT_MOBILE.eventAvatar,
+  },
+  ledgerAvatarMobile: {
+    width: CHAT_MOBILE.eventAvatar,
+    height: CHAT_MOBILE.eventAvatar,
+    borderRadius: CHAT_MOBILE.eventAvatar / 2,
+  },
+  ledgerTitleMobile: {
+    fontSize: CHAT_MOBILE.eventTitleSize,
+    lineHeight: CHAT_MOBILE.eventTitleLine,
+    fontWeight: "600",
+    color: "#111B21",
+  },
+  ledgerMetaMobile: {
+    fontSize: CHAT_MOBILE.eventMetaSize,
+    lineHeight: CHAT_MOBILE.eventMetaLine,
+    color: "#667781",
+    fontWeight: "500",
+    letterSpacing: 0,
+    textTransform: "none",
+  },
+  ledgerRouteMobile: {
+    fontSize: CHAT_MOBILE.eventSubSize,
+    lineHeight: 14,
+    color: "#8696A0",
+    letterSpacing: 0,
+    textTransform: "none",
+  },
+  ledgerFooterMobile: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#E9EDEF",
+    gap: 8,
+  },
+  ledgerAmountMobile: {
+    fontSize: CHAT_MOBILE.eventAmountSize,
+    fontWeight: "800",
+    fontVariant: ["tabular-nums"],
+    flexShrink: 1,
+  },
+  ledgerTimeMobile: {
+    fontSize: CHAT_MOBILE.eventTimeSize,
+    fontWeight: "600",
+    color: "#8696A0",
+    flexShrink: 0,
+    textTransform: "none",
+    letterSpacing: 0,
+  },
+  eventBadgeMobile: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    maxWidth: "72%",
+  },
+  eventBadgeTextMobile: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+  },
+  pulseProtoCardMobile: {
+    borderLeftWidth: 3,
+    borderLeftColor: "#10b981",
+  },
+  // Pulse-style system protocol ribbon (completed / milestone)
+  pulseProtoWrap: {
+    alignSelf: "center",
+    maxWidth: "92%",
+    width: "100%",
+    marginVertical: 6,
+  },
+  pulseProtoCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    borderTopWidth: 1,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderLeftWidth: 4,
+    borderTopColor: "#e8ecf1",
+    borderRightColor: "#e8ecf1",
+    borderBottomColor: "#e8ecf1",
+    borderLeftColor: "#10b981",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    shadowColor: "#059669",
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  pulseProtoIconCol: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  pulseProtoIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#ecfdf5",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pulseProtoLiveDot: {
+    position: "absolute",
+    right: 2,
+    bottom: 2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "#10b981",
+    borderWidth: 2,
+    borderColor: "#ffffff",
+  },
+  pulseProtoDivider: {
+    width: 1,
+    alignSelf: "stretch",
+    backgroundColor: "#f1f5f9",
+    marginVertical: 2,
+  },
+  pulseProtoBody: {
+    flex: 1,
+    minWidth: 0,
+    paddingLeft: 4,
+    gap: 4,
+  },
+  pulseProtoTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.15,
+    lineHeight: 16,
+  },
+  pulseProtoSubtitle: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#64748b",
+    lineHeight: 14,
+  },
+  pulseProtoRight: {
+    alignItems: "flex-end",
+    flexShrink: 0,
+    gap: 6,
+    paddingLeft: 6,
+  },
+  pulseProtoBadge: {
+    backgroundColor: "rgba(16, 185, 129, 0.12)",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  pulseProtoBadgeText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#047857",
+    letterSpacing: 0.6,
+  },
+  pulseProtoTime: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#94a3b8",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
 });
+
+export interface TripProgressEventCardProps {
+  avatarSeed: string;
+  avatarDotColor: string;
+  title: string;
+  metaLine: string;
+  subLine?: string | null;
+  rightPrimary: string;
+  rightPrimaryColor: string;
+  time: string;
+  isMobile?: boolean;
+}
+
+/**
+ * Same shell as the payment / ledger row: circular avatar + dot, body, vertical rule,
+ * bold right column, time, chevron.
+ */
+export function TripProgressEventCard({
+  avatarSeed,
+  avatarDotColor,
+  title,
+  metaLine,
+  subLine,
+  rightPrimary,
+  rightPrimaryColor,
+  time,
+  isMobile = false,
+}: TripProgressEventCardProps) {
+  const avatarBg = partyAvatarBackgroundColor(avatarSeed);
+  const avatarFg = partyAvatarInitialsTextColor(avatarBg);
+  const avatarEl = (
+    <View style={[s.ledgerAvatarWrap, s.ledgerAvatarWrapAlign, isMobile && s.ledgerAvatarWrapMobile]}>
+      <View
+        style={[
+          s.ledgerAvatar,
+          isMobile && s.ledgerAvatarMobile,
+          { backgroundColor: avatarBg },
+        ]}
+      >
+        <Text style={[s.ledgerAvatarInitials, { color: avatarFg }]}>
+          {partyInitialsFromName(avatarSeed)}
+        </Text>
+      </View>
+      <View style={[s.ledgerAvatarDot, { backgroundColor: avatarDotColor }]} />
+    </View>
+  );
+  const bodyEl = (
+    <View style={s.ledgerBody}>
+      <Text
+        style={[s.ledgerTitle, isMobile && s.ledgerTitleMobile]}
+        numberOfLines={isMobile ? 4 : 2}
+      >
+        {title}
+      </Text>
+      <Text
+        style={[s.ledgerMeta, isMobile && s.ledgerMetaMobile]}
+        numberOfLines={isMobile ? 3 : 2}
+      >
+        {metaLine}
+      </Text>
+      {subLine ? (
+        <Text
+          style={[s.ledgerRoute, isMobile && s.ledgerRouteMobile]}
+          numberOfLines={isMobile ? 2 : 2}
+        >
+          {subLine}
+        </Text>
+      ) : null}
+    </View>
+  );
+
+  return (
+    <View style={[s.ledgerWrap, isMobile && s.ledgerWrapMobile]}>
+      <View style={[s.ledgerCard, isMobile && s.ledgerCardMobile]}>
+        {isMobile ? (
+          <>
+            <View style={s.ledgerTopRowMobile}>
+              {avatarEl}
+              {bodyEl}
+            </View>
+            <View style={s.ledgerFooterMobile}>
+              <View style={[s.eventBadgeMobile, { backgroundColor: `${rightPrimaryColor}18` }]}>
+                <Text style={[s.eventBadgeTextMobile, { color: rightPrimaryColor }]} numberOfLines={1}>
+                  {rightPrimary}
+                </Text>
+              </View>
+              <Text style={s.ledgerTimeMobile} numberOfLines={1}>
+                {time}
+              </Text>
+            </View>
+          </>
+        ) : (
+          <>
+            {avatarEl}
+            {bodyEl}
+            <View style={s.ledgerRight}>
+              <Text style={[s.ledgerAmount, { color: rightPrimaryColor }]} numberOfLines={1}>
+                {rightPrimary}
+              </Text>
+              <Text style={s.ledgerTimeRight} numberOfLines={1}>
+                {time}
+              </Text>
+            </View>
+            <View style={s.ledgerChevronWrap}>
+              <ChevronRight size={14} color="#cbd5e1" />
+            </View>
+          </>
+        )}
+      </View>
+    </View>
+  );
+}
+
+function systemSheetAvatarSeed(content: string): string {
+  const m = (content ?? "").match(/\b(TRP[-A-Z0-9]+)\b/i);
+  if (m?.[1]) return m[1].toUpperCase();
+  const trip = (content ?? "").match(/\b([A-Z]{2,4}\d{2,6})\b/);
+  if (trip?.[1]) return trip[1].toUpperCase();
+  return "Trip update";
+}
+
+function PulseSystemProtocolCard({
+  title,
+  subtitle,
+  displayTime,
+  isMobile = false,
+}: {
+  title: string;
+  subtitle: string;
+  displayTime: string;
+  isMobile?: boolean;
+}) {
+  if (isMobile) {
+    return (
+      <View style={[s.ledgerWrap, s.ledgerWrapMobile]}>
+        <View style={[s.ledgerCard, s.ledgerCardMobile, s.pulseProtoCardMobile]}>
+          <View style={s.ledgerTopRowMobile}>
+            <View style={s.pulseProtoIconCol}>
+              <View style={s.pulseProtoIconCircle}>
+                <Activity size={18} color="#059669" strokeWidth={2.4} />
+              </View>
+              <View style={s.pulseProtoLiveDot} />
+            </View>
+            <View style={s.ledgerBody}>
+              <Text style={[s.ledgerTitle, s.ledgerTitleMobile]} numberOfLines={4}>
+                {title}
+              </Text>
+              <Text style={[s.ledgerMeta, s.ledgerMetaMobile]} numberOfLines={4}>
+                {subtitle}
+              </Text>
+            </View>
+          </View>
+          <View style={s.ledgerFooterMobile}>
+            <View style={s.pulseProtoBadge}>
+              <Text style={s.pulseProtoBadgeText}>SYSTEM DONE</Text>
+            </View>
+            <Text style={s.ledgerTimeMobile} numberOfLines={1}>
+              {displayTime}
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={s.pulseProtoWrap}>
+      <View style={s.pulseProtoCard}>
+        <View style={s.pulseProtoIconCol}>
+          <View style={s.pulseProtoIconCircle}>
+            <Activity size={18} color="#059669" strokeWidth={2.4} />
+          </View>
+          <View style={s.pulseProtoLiveDot} />
+        </View>
+        <View style={s.pulseProtoDivider} />
+        <View style={s.pulseProtoBody}>
+          <Text style={s.pulseProtoTitle} numberOfLines={2}>
+            {title}
+          </Text>
+          <Text style={s.pulseProtoSubtitle} numberOfLines={3}>
+            {subtitle}
+          </Text>
+        </View>
+        <View style={s.pulseProtoRight}>
+          <View style={s.pulseProtoBadge}>
+            <Text style={s.pulseProtoBadgeText}>SYSTEM DONE</Text>
+          </View>
+          <Text style={s.pulseProtoTime} numberOfLines={1}>
+            {displayTime}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+export function ChatSystemEventCard({
+  message,
+  isMobile = false,
+}: {
+  message: TripMessageRow;
+  isMobile?: boolean;
+}) {
+  const statusKey = inferStatusFromContent(message.content);
+  const cfg = STATUS_ICON_MAP[statusKey] ?? STATUS_ICON_MAP.default;
+  const dateUpper = formatTripEventSheetDate(message.created_at);
+
+  let displayTime = message.created_at;
+  try {
+    displayTime = new Date(message.created_at).toLocaleTimeString("en-IN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  } catch {
+    // keep raw
+  }
+
+  const metaLine = `System update · ${dateUpper} · ${cfg.sheetLabel}`;
+  const seed = systemSheetAvatarSeed(message.content);
+
+  if (shouldUsePulseProtocolSystemCard(message.content, statusKey)) {
+    const tripRef =
+      (message.content ?? "").match(/\b(TRP[-A-Z0-9]+)\b/i)?.[1] ??
+      (message.content ?? "").match(/\b([A-Z]{2,4}\d{2,6})\b/i)?.[1];
+    const subtitle = tripRef
+      ? `${tripRef} has reached a destination milestone on the shared trip channel.`
+      : `Recorded ${dateUpper} · ${cfg.sheetLabel}.`;
+
+    return (
+      <PulseSystemProtocolCard
+        title={message.content.trim() || "Trip protocol update"}
+        subtitle={subtitle}
+        displayTime={displayTime}
+        isMobile={isMobile}
+      />
+    );
+  }
+
+  return (
+    <TripProgressEventCard
+      avatarSeed={seed}
+      avatarDotColor={cfg.rightColor}
+      title={message.content.trim() || "Trip update"}
+      metaLine={metaLine}
+      subLine={null}
+      rightPrimary={cfg.rightWord}
+      rightPrimaryColor={cfg.rightColor}
+      time={displayTime}
+      isMobile={isMobile}
+    />
+  );
+}

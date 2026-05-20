@@ -1,10 +1,16 @@
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
-import { CounterpartyProfileSystemCard } from "@/components/CounterpartyProfileSystemCard";
+import {
+  CounterpartyProfileSystemCard,
+  type ProfileContract,
+  type ProfileWarehouse,
+} from "@/components/CounterpartyProfileSystemCard";
 import { DatePresetPillBar } from "@/components/DatePresetPillBar";
 import { DateRangePickerModal } from "@/components/DateRangePickerModal";
 import { entityCompanionCardStyles as ecc } from "@/components/entityCompanionCard.styles";
+import { entityDetailPageChromeStyles as edc } from "@/components/entityDetailPageChrome.styles";
 import { entityHeroScorecardStyles as ehs } from "@/components/entityHeroScorecard.styles";
 import { FinanceFAB } from "@/components/FinanceFAB";
+import { EntityIdentityAvatar } from "@/components/EntityIdentityAvatar";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -20,12 +26,19 @@ import {
     type LedgerRow,
 } from "@/features/finance";
 import { LedgerTransactionListView } from "@/features/finance/components/LedgerTransactionListView";
+import {
+  buildFinancialRowDataForLedgerRow,
+  resolveLedgerPartyName,
+  type LedgerTripDetailsMap,
+  type LedgerTripPartyMap,
+} from "@/features/finance/components/ledger/buildFinancialRowDataForLedgerRow";
 import { TreasuryDetailLayout } from "@/features/finance/components/TreasuryDetailLayout";
 import { ledgerDayMatchesPeriod } from "@/features/finance/lib/filterLedgerByPeriod";
 import {
     getTripSubcontracts,
     type TripSubcontractRow,
 } from "@/features/finance/services/tripSubcontracts.service";
+import { getProfileImageBatch } from "@/features/finance/services/finance.service";
 import type { FinancePeriodFilter } from "@/features/finance/types";
 import { allocateAmountsToLargestDueTrips } from "@/features/finance/utils/allocateToLargestDue";
 import { averageScore } from "@/features/ratings";
@@ -51,6 +64,11 @@ import {
 } from "@/lib/capabilities";
 import { tripDayIso } from "@/lib/dateRangePresets";
 import { formatINR, formatLedgerDate } from "@/lib/format";
+import {
+  type LedgerIdentityContext,
+  resolveLedgerRowPartyIdentity,
+} from "@/lib/entityIdentity";
+import { useDisputeMapQuery } from "@/lib/queries";
 import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import { useQueryClient } from "@tanstack/react-query";
@@ -246,6 +264,18 @@ export default function ClientDetailScreen({
   >({});
   const fetchedPartnerOrgIdsRef = useRef<Set<string>>(new Set());
   const [transactions, setTransactions] = useState<LedgerRow[]>([]);
+  /** Full org ledger for same-trip payment summary in Cash Flow expand (matches Finance Cash). */
+  const [allOrgTransactions, setAllOrgTransactions] = useState<LedgerRow[]>([]);
+  const [organizationClients, setOrganizationClients] = useState<ClientRow[]>(
+    [],
+  );
+  const [expandedCashFlowRowId, setExpandedCashFlowRowId] = useState<
+    string | null
+  >(null);
+  /** Storage-resolved driver avatar URLs for Cash Flow (Finance Cash / LedgerTab parity). */
+  const [cashFlowDriverProfileUrls, setCashFlowDriverProfileUrls] = useState<
+    Record<string, string>
+  >({});
   const [, setOrgTrips] = useState<TripRow[]>([]);
   const [showReportModal, setShowReportModal] = useState(false);
   /** Bumps SharedLedgerContent to open PDF/Excel (Shared tab) from header download. */
@@ -429,6 +459,10 @@ export default function ClientDetailScreen({
             clientsRes.error ? [] : (clientsRes.clients ?? []),
           );
           const allTx = txRes.error ? [] : (txRes.transactions ?? []);
+          setOrganizationClients(
+            clientsRes.error ? [] : (clientsRes.clients ?? []),
+          );
+          setAllOrgTransactions(allTx);
           // Include trips by client_id/name OR by any client transaction (so DUE shows even if trip.client_id is wrong)
           const tripIdsFromClientTx = new Set(
             allTx
@@ -521,6 +555,43 @@ export default function ClientDetailScreen({
     client ? [client] : [],
     suppliers,
   );
+
+  const { disputesByTripId } = useDisputeMapQuery(
+    currentOrganization?.id ?? null,
+  );
+
+  /** Fetch signed driver avatar URLs for ledger rows (same as LedgerTab / Finance cash). */
+  useEffect(() => {
+    const collectDriverIds = (rows: LedgerRow[]) => {
+      const out: string[] = [];
+      const seen = new Set<string>();
+      for (const row of rows) {
+        if (row.contact_type !== "driver" || !row.contact_id) continue;
+        const id = String(row.contact_id).trim();
+        if (!id || seen.has(id)) continue;
+        if (cashFlowDriverProfileUrls[id]) continue;
+        seen.add(id);
+        out.push(id);
+      }
+      return out;
+    };
+    const driverIds = [
+      ...new Set([
+        ...collectDriverIds(allOrgTransactions),
+        ...collectDriverIds(transactions),
+      ]),
+    ];
+    if (driverIds.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      const fetched = await getProfileImageBatch(driverIds);
+      if (cancelled || Object.keys(fetched).length === 0) return;
+      setCashFlowDriverProfileUrls((prev) => ({ ...prev, ...fetched }));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [transactions, allOrgTransactions, cashFlowDriverProfileUrls]);
 
   /** Supplier-typed ledger rows often carry the human supplier name when the trip row omits it. */
   const supplierPartyNameByTripId = useMemo(() => {
@@ -751,19 +822,31 @@ export default function ClientDetailScreen({
     }, [load]),
   );
 
-  useEffect(() => {
-    if (client) {
-      setEditOrgName(client.name ?? "");
-      setEditContactPerson(client.contact_person ?? "");
-      setEditPhone(
-        isPlaceholderPhone(client.phone) ? "" : (client.phone ?? ""),
-      );
-      setEditEmail(client.email ?? "");
-      setEditAddress(client.address ?? "");
-      setEditGstin(client.gstin ?? "");
-      setEditPan(client.pan_number ?? "");
-    }
-  }, [client]);
+  const profileWarehousesForCard = useMemo<ProfileWarehouse[]>(
+    () =>
+      profileWarehouses.map((w) => ({
+        id: w.id,
+        name: w.name,
+        address: [w.address, w.city, w.state].filter(Boolean).join(", ") || "—",
+        gstNumber: w.local_gstin,
+        contactPerson: w.contact_name,
+        phone: w.contact_phone,
+      })),
+    [profileWarehouses],
+  );
+
+  const profileContractsForCard = useMemo<ProfileContract[]>(
+    () =>
+      profileContracts.map((c) => ({
+        id: c.id,
+        pickup: c.pickup_area,
+        destination: c.drop_location,
+        price: Number(c.rate ?? 0),
+        pricingType: c.rate_type === "per_ton" ? "per_ton" : "per_trip",
+        notes: c.notes,
+      })),
+    [profileContracts],
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -821,29 +904,129 @@ export default function ClientDetailScreen({
     [trips],
   );
 
-  /** Trip details map for Cash Flow list (same shape as Finance Cash page). */
+  /** Trip details map for Cash Flow list (same shape as Finance Cash page — includes vehicle + rates for expanded card). */
   const clientTripDetailsMap = useMemo(() => {
-    const m: Record<
-      string,
-      {
-        trip_number: string;
-        drop_location?: string;
-        pickup_area?: string;
-        client_name?: string;
-        pickup_date?: string | null;
-      }
-    > = {};
+    const m: LedgerTripDetailsMap = {};
     trips.forEach((t) => {
+      const supId = String(t.supplier_id ?? "").trim();
+      const supRow = supId
+        ? suppliers.find((s) => String(s.id).trim() === supId)
+        : undefined;
       m[t.id] = {
         trip_number: getTripDisplayNumber(t),
         drop_location: t.drop_location ?? undefined,
         pickup_area: t.pickup_area ?? undefined,
         client_name: t.client_name ?? undefined,
         pickup_date: t.pickup_date ?? undefined,
+        vehicle_number:
+          (t as { vehicle_display_number?: string | null }).vehicle_display_number ??
+          undefined,
+        client_price: t.client_price != null ? Number(t.client_price) : null,
+        supplier_rate: t.supplier_rate != null ? Number(t.supplier_rate) : null,
+        driver_commission:
+          t.driver_commission != null ? Number(t.driver_commission) : null,
+        supplier_id: t.supplier_id ?? null,
+        supplier_display_name:
+          (supRow?.name ?? supRow?.company_name ?? "").trim() || undefined,
       };
     });
     return m;
+  }, [trips, suppliers]);
+
+  const tripPartyMapForCash = useMemo((): LedgerTripPartyMap => {
+    const m: LedgerTripPartyMap = {};
+    for (const t of trips) {
+      m[t.id] = {
+        client_id: t.client_id ?? null,
+        supplier_id: t.supplier_id ?? null,
+        driver_id: t.driver_id ?? null,
+      };
+    }
+    return m;
   }, [trips]);
+
+  const getVehicleNumberForTripId = useCallback(
+    (tripId: string | null) => {
+      if (!tripId) return null;
+      const t = trips.find((x) => String(x.id) === String(tripId));
+      const v = (t as { vehicle_display_number?: string | null } | undefined)
+        ?.vehicle_display_number;
+      return (v ?? "").trim() || null;
+    },
+    [trips],
+  );
+
+  const clientByIdForLedger = useMemo(
+    () => new Map(organizationClients.map((c) => [c.id, c])),
+    [organizationClients],
+  );
+
+  const supplierByIdForLedger = useMemo(
+    () => new Map(suppliers.map((s) => [s.id, s])),
+    [suppliers],
+  );
+
+  const driverByIdForCashExpand = useMemo(
+    () => new Map(drivers.map((d) => [d.id, d])),
+    [drivers],
+  );
+
+  const cashFlowTransactionRows = useMemo(() => {
+    const partyParams = {
+      clientById: clientByIdForLedger,
+      supplierById: supplierByIdForLedger,
+      tripPartyMap: tripPartyMapForCash,
+      tripDetailsMap: clientTripDetailsMap,
+    };
+    return transactions.map((r) => ({
+      ...r,
+      party_name: resolveLedgerPartyName(r, partyParams),
+    }));
+  }, [
+    transactions,
+    clientByIdForLedger,
+    supplierByIdForLedger,
+    tripPartyMapForCash,
+    clientTripDetailsMap,
+  ]);
+
+  const expandedCashFlowRowData = useMemo(() => {
+    if (!expandedCashFlowRowId) return null;
+    const row = cashFlowTransactionRows.find(
+      (r) => r.id === expandedCashFlowRowId,
+    );
+    if (!row) return null;
+    return buildFinancialRowDataForLedgerRow(row, {
+      allRows: allOrgTransactions,
+      tripDetailsMap: clientTripDetailsMap,
+      tripPartyMap: tripPartyMapForCash,
+      clientById: clientByIdForLedger,
+      supplierById: supplierByIdForLedger,
+      driverById: driverByIdForCashExpand,
+      getVehicleNumberForTripId,
+      linkedOrgDisplayMap,
+      profileImages: cashFlowDriverProfileUrls,
+      driverProfileImageUrls: cashFlowDriverProfileUrls,
+      disputesByTripId,
+    });
+  }, [
+    expandedCashFlowRowId,
+    cashFlowTransactionRows,
+    allOrgTransactions,
+    clientTripDetailsMap,
+    tripPartyMapForCash,
+    clientByIdForLedger,
+    supplierByIdForLedger,
+    driverByIdForCashExpand,
+    getVehicleNumberForTripId,
+    linkedOrgDisplayMap,
+    cashFlowDriverProfileUrls,
+    disputesByTripId,
+  ]);
+
+  useEffect(() => {
+    if (detailSubTab !== "cash") setExpandedCashFlowRowId(null);
+  }, [detailSubTab]);
 
   const triggerSuccess = useCallback((title = "NODE_SYNCED") => {
     setSuccessTitle(title);
@@ -1393,7 +1576,7 @@ export default function ClientDetailScreen({
         >
           <FontAwesome
             name="chevron-left"
-            size={20}
+            size={18}
             color={Theme.textPrimaryDark}
           />
         </TouchableOpacity>
@@ -1414,7 +1597,7 @@ export default function ClientDetailScreen({
             >
               <FontAwesome
                 name="user-circle-o"
-                size={18}
+                size={16}
                 color={Theme.textPrimaryDark}
               />
             </TouchableOpacity>
@@ -1435,11 +1618,11 @@ export default function ClientDetailScreen({
                 : "Download report"
             }
           >
-            <FontAwesome
-              name="cloud-download"
-              size={18}
-              color={Theme.textOnPrimary}
-            />
+              <FontAwesome
+                name="cloud-download"
+                size={16}
+                color={Theme.textOnPrimary}
+              />
           </TouchableOpacity>
         </View>
       </View>
@@ -2246,7 +2429,14 @@ export default function ClientDetailScreen({
         {detailSubTab === "cash" && (
           <View style={styles.cashSection}>
             <LedgerTransactionListView
-              transactions={transactions}
+              transactions={cashFlowTransactionRows}
+              onRowPress={(id) => {
+                setExpandedCashFlowRowId((prev) => (prev === id ? null : id));
+              }}
+              expandedRowId={expandedCashFlowRowId}
+              expandedRowData={expandedCashFlowRowData}
+              highlightId={expandedCashFlowRowId}
+              expandedDesktopThreeColumn
               tripDetailsMap={clientTripDetailsMap}
               tripOptions={tripOptions.map((t) => ({
                 id: t.id,
@@ -2261,6 +2451,34 @@ export default function ClientDetailScreen({
               showGridFooter={false}
               embedInParentScroll={true}
               driverRows={drivers}
+              driverProfileImageUrls={cashFlowDriverProfileUrls}
+              renderPartyAvatar={(row) => {
+                const name = resolveLedgerPartyName(row, {
+                  clientById: clientByIdForLedger,
+                  supplierById: supplierByIdForLedger,
+                  tripPartyMap: tripPartyMapForCash,
+                  tripDetailsMap: clientTripDetailsMap,
+                });
+                const ctx: LedgerIdentityContext = {
+                  clientById: clientByIdForLedger,
+                  supplierById: supplierByIdForLedger,
+                  driverById: driverByIdForCashExpand,
+                  linkedOrgDisplayMap,
+                  profileImages: cashFlowDriverProfileUrls,
+                  driverProfileImageUrls: cashFlowDriverProfileUrls,
+                  tripPartyMap: tripPartyMapForCash,
+                  partyDisplayName: name,
+                };
+                const identity = resolveLedgerRowPartyIdentity(row, ctx);
+                if (!identity) return null;
+                return (
+                  <EntityIdentityAvatar
+                    identity={identity}
+                    size="md"
+                    showIntegrationBadge
+                  />
+                );
+              }}
             />
           </View>
         )}
@@ -2408,8 +2626,8 @@ export default function ClientDetailScreen({
             entityDisplayId={
               client?.display_id ?? client?.id?.slice(0, 8) ?? null
             }
-            warehouses={profileWarehouses}
-            contracts={profileContracts}
+            warehouses={profileWarehousesForCard}
+            contracts={profileContractsForCard}
             onClose={() => setShowProfileModal(false)}
             onEditPress={() => {
               setShowProfileModal(false);
@@ -2491,67 +2709,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Theme.screenBackground,
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(0,0,0,0.05)",
-    backgroundColor: "rgba(255,255,255,0.6)",
-  },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: Theme.surfaceGray,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerCenter: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 8,
-  },
-  headerTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-    fontStyle: "italic",
-    color: Theme.textPrimaryDark,
-    textTransform: "uppercase",
-    letterSpacing: -0.5,
-  },
-  headerSubtitle: {
-    fontSize: 8,
-    fontWeight: "700",
-    color: Theme.textMuted,
-    letterSpacing: 1.2,
-    marginTop: 2,
-  },
-  headerRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  downloadBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: Theme.darkBackground,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  profileBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: Theme.surfaceGray,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  header: edc.header,
+  backBtn: edc.backBtn,
+  headerCenter: edc.headerCenter,
+  headerTitle: edc.headerTitle,
+  headerSubtitle: edc.headerSubtitle,
+  headerRight: edc.headerRight,
+  downloadBtn: edc.downloadBtn,
+  profileBtn: edc.profileBtn,
   fabWrap: {
     position: "absolute",
     right: Layout.fabRightOffset,
@@ -2839,7 +3004,7 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 10,
+    ...edc.scrollContent,
   },
   scorecard: ehs.scorecard,
   scorecardWebDesktop: ehs.scorecardWebDesktop,
@@ -2955,51 +3120,13 @@ const styles = StyleSheet.create({
   profilePreviewToggleSub: ecc.toggleSub,
   profilePreviewActionBtn: ecc.actionBtn,
   profilePreviewActionText: ecc.actionText,
-  tabRow: {
-    flexDirection: "row",
-    backgroundColor: Theme.surfaceGray,
-    padding: 4,
-    borderRadius: 16,
-    marginBottom: 8,
-    gap: 4,
-  },
-  tripDatePillWrap: {
-    paddingHorizontal: 4,
-    marginBottom: 6,
-    marginTop: -4,
-  },
-  tabItem: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 40,
-  },
-  tabItemActive: {
-    backgroundColor: Theme.screenBackground,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  tabItemText: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: Theme.textMuted,
-    letterSpacing: 0.4,
-  },
-  tabItemTextActive: {
-    color: Theme.textPrimaryDark,
-  },
-  tableCard: {
-    backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 32,
-    overflow: "hidden",
-  },
+  tabRow: edc.tabRow,
+  tripDatePillWrap: edc.tripDatePillWrap,
+  tabItem: edc.tabItem,
+  tabItemActive: edc.tabItemActive,
+  tabItemText: edc.tabItemText,
+  tabItemTextActive: edc.tabItemTextActive,
+  tableCard: edc.tableCard,
   tableCardWebDesktop: {
     borderRadius: 12,
     borderColor: Theme.borderMedium,
@@ -3007,29 +3134,14 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surface,
     marginHorizontal: 0,
   },
-  tableHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    backgroundColor: Theme.surfaceLight,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
-  },
+  tableHeader: edc.tableHeader,
   tableHeaderWebDesktop: {
     paddingVertical: 8,
     paddingHorizontal: 8,
     backgroundColor: Theme.surface,
     borderBottomColor: Theme.borderMedium,
   },
-  th: {
-    fontSize: 9,
-    fontWeight: "600",
-    fontStyle: "normal",
-    color: Theme.textMuted,
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
-  },
+  th: edc.th,
   thWebDesktop: {
     fontSize: 11,
     letterSpacing: 0.08,
@@ -3078,19 +3190,8 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  headerAmountCol: {
-    width: 80,
-    minWidth: 72,
-    flexShrink: 0,
-    alignItems: "flex-end",
-  },
-  amountCol: {
-    width: 80,
-    minWidth: 72,
-    flexShrink: 0,
-    alignItems: "flex-end",
-    justifyContent: "center",
-  },
+  headerAmountCol: edc.headerAmountCol,
+  amountCol: edc.amountCol,
   amountColWebDesktop: {
     flexGrow: 0,
     flexShrink: 0,
@@ -3102,17 +3203,10 @@ const styles = StyleSheet.create({
     borderLeftColor: Theme.borderLight,
     paddingLeft: 5,
   },
-  thMission: { flex: 1, minWidth: 0 },
-  thSales: { width: 80, textAlign: "right" as const },
-  thRight: { width: 72, textAlign: "right" as const },
-  tableRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
-  },
+  thMission: edc.thMission,
+  thSales: { textAlign: "right" as const },
+  thRight: { textAlign: "right" as const },
+  tableRow: edc.tableRow,
   tableRowWebDesktop: {
     paddingVertical: 7,
     paddingHorizontal: 8,
@@ -3120,20 +3214,9 @@ const styles = StyleSheet.create({
     minHeight: 46,
     backgroundColor: Theme.surface,
   },
-  td: {
-    fontSize: 9,
-    fontWeight: "600",
-    fontStyle: "italic",
-    color: Theme.textPrimaryDark,
-  },
-  tdMission: { flex: 1, minWidth: 0 },
-  tdMissionId: {
-    fontSize: 11,
-    fontWeight: "600",
-    fontStyle: "italic",
-    color: Theme.textPrimaryDark,
-    textTransform: "uppercase",
-  },
+  td: edc.td,
+  tdMission: edc.thMission,
+  tdMissionId: edc.tdMissionId,
   tdMissionIdWebDesktop: {
     fontSize: 10,
     fontWeight: "500",
@@ -3148,13 +3231,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.3,
   },
-  tdRoute: {
-    fontSize: 10,
-    fontWeight: "400",
-    fontStyle: "italic",
-    color: Theme.textMuted,
-    marginTop: 4,
-  },
+  tdRoute: edc.tdRoute,
   tdRouteWebDesktop: {
     fontSize: 8,
     fontWeight: "400",
@@ -3193,17 +3270,12 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Theme.textMuted,
   },
-  tdSales: { width: 80, textAlign: "right" as const },
-  tdRight: { width: 72, textAlign: "right" as const },
+  tdSales: { textAlign: "right" as const },
+  tdRight: { textAlign: "right" as const },
   tdGreen: { color: Theme.darkGreen },
   tdRed: { color: Theme.teslaRed },
-  emptyRow: { paddingVertical: 24, alignItems: "center" },
-  emptyRowText: {
-    fontSize: 11,
-    fontWeight: "600",
-    fontStyle: "italic",
-    color: Theme.textMuted,
-  },
+  emptyRow: edc.emptyRow,
+  emptyRowText: edc.emptyRowText,
   cashSection: { marginBottom: 24 },
   cashCard: {
     flexDirection: "row",

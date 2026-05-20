@@ -1,3 +1,4 @@
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
@@ -9,7 +10,6 @@ import type {
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useCallback, useState } from "react";
 import {
-    ActivityIndicator,
     Modal,
     Platform,
     Pressable,
@@ -19,6 +19,7 @@ import {
     TextInput,
     View,
 } from "react-native";
+import { useLayoutInsets } from "@/lib/layoutInsets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export interface InvoicePreviewPanelProps {
@@ -47,6 +48,7 @@ export function InvoicePreviewPanel({
   isStandalone = false,
 }: InvoicePreviewPanelProps) {
   const insets = useSafeAreaInsets();
+  const layout = useLayoutInsets();
   const tabBarScrollProps = useTabBarAwareScrollProps();
 
   const [paymentTerms, setPaymentTerms] = useState("Net 30");
@@ -698,7 +700,7 @@ export function InvoicePreviewPanel({
           styles.footer,
           {
             paddingBottom: isStandalone
-              ? Layout.demoTabBarScrollBottomInset + 12
+              ? layout.scrollBottomPadding(12)
               : insets.bottom + 16,
           },
         ]}
@@ -712,7 +714,7 @@ export function InvoicePreviewPanel({
           disabled={isFinalizing || selectedTrips.length === 0}
         >
           {isFinalizing ? (
-            <ActivityIndicator color={Theme.buttonPrimaryText} size="small" />
+            <LoadingIndicator color={Theme.buttonPrimaryText} size="small" />
           ) : (
             <>
               <FontAwesome

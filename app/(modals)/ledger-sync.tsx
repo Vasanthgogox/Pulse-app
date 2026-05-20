@@ -2,6 +2,7 @@
  * Full-page Ledger Sync — add or edit a ledger entry (double-entry aligned).
  * Reuses AddTransactionModal in fullPage mode; data flow per docs/CORE_ACCOUNTING_MODEL.md.
  */
+import { AppLoadingSplash } from "@/components/AppLoadingSplash";
 import type { PartyOption, TripOption, VehicleOption } from "@/components/AddTransactionModal";
 import {
   AddTransactionModal,
@@ -29,7 +30,7 @@ import {
 import { buildLedgerSyncDescriptionLine } from "@/features/finance/ledger/ledgerEntryModel";
 import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntries";
 import { getSuppliersByOrganization, type SupplierRow } from "@/features/suppliers";
-import { getTripDisplayNumber, getTripsByOrganization, getTripsWhereOrgIsClient, getTripsWhereOrgIsSupplier, type TripRow } from "@/features/trips";
+import { getTripDisplayNumber, getTripsByOrganization, getTripsWhereOrgIsClient, getTripsWhereOrgIsSupplier, type TripRow } from "@/features/trips/services/trips.service";
 import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import { getVehiclesByOrganization } from "@/features/vehicles";
 import { updateSalaryRequestStatus } from "@/services/salaryRequestsService";
@@ -45,6 +46,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -1028,10 +1030,10 @@ export default function LedgerSyncScreen() {
           <TouchableOpacity onPress={handleClose} style={styles.backBtn} hitSlop={8}>
             <FontAwesome name="chevron-left" size={18} color={Theme.textPrimaryDark} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{t("ledgerSync")}</Text>
+          <Text style={styles.headerTitle}>Ledger</Text>
         </View>
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={Theme.primary} />
+        <View style={[styles.centered, { flex: 1 }]}>
+          <AppLoadingSplash variant="preparing" style={{ flex: 1 }} />
         </View>
       </View>
     );
@@ -1046,17 +1048,6 @@ export default function LedgerSyncScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={handleClose} style={styles.backBtn} hitSlop={8} accessibilityLabel={t("back")}>
-          <FontAwesome name="chevron-left" size={18} color={Theme.textPrimaryDark} />
-        </TouchableOpacity>
-        <View style={styles.headerTitleWrap}>
-          <Text style={styles.headerTitle}>{entryContextLabel ? t("addEntry") : t("ledgerSync")}</Text>
-          {entryContextLabel ? (
-            <Text style={styles.headerSubtitle} numberOfLines={1}>{entryContextLabel}</Text>
-          ) : null}
-        </View>
-      </View>
       <AddTransactionModal
         visible
         fullPage
@@ -1087,6 +1078,13 @@ export default function LedgerSyncScreen() {
           params.entityType === "CLIENT" || params.entityType === "SUPPLIER" || params.entityType === "DRIVER"
             ? (resolvedModalPartyName ?? undefined)
             : undefined
+        }
+        lockedEntityType={
+          params.entityType === "CLIENT" ||
+          params.entityType === "SUPPLIER" ||
+          params.entityType === "DRIVER"
+            ? params.entityType
+            : null
         }
         lockedVehicleId={isVehicleEntity ? (params.entityId ?? null) : null}
         lockedVehicleNumber={isVehicleEntity ? lockedVehicleNumber : null}
@@ -1132,7 +1130,15 @@ export default function LedgerSyncScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Theme.surface,
+    minHeight: 0,
+    backgroundColor: "#FBFBFB",
+    ...Platform.select({
+      web: {
+        width: "100%",
+        alignSelf: "stretch",
+        minHeight: "100vh",
+      } as object,
+    }),
   },
   header: {
     flexDirection: "row",

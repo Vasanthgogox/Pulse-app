@@ -71,7 +71,10 @@ export function DriverChatProvider({
   conversationsRef.current = conversations;
   const loadConversationsRef = useRef<() => Promise<TripConversation[]>>(async () => []);
   const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastFocusLoadAtRef = useRef<number>(0);
   const [isLoading, setIsLoading] = useState(false);
+  const markReadTimerRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const pendingMarkReadRef = useRef<Set<string>>(new Set());
 
   // Resolve driver record IDs from current user
   useEffect(() => {
@@ -121,8 +124,12 @@ export function DriverChatProvider({
   }, [driverIds]);
   loadConversationsRef.current = loadConversations;
 
+  // 30s cooldown on focus load — Realtime handles live updates in between
   useEffect(() => {
     if (!isActive) return;
+    const now = Date.now();
+    if (now - lastFocusLoadAtRef.current < 30_000) return;
+    lastFocusLoadAtRef.current = now;
     void loadConversations();
   }, [isActive, loadConversations]);
 
@@ -136,6 +143,8 @@ export function DriverChatProvider({
   useEffect(() => {
     return () => {
       if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current);
+      if (batchFlushRef.current) clearTimeout(batchFlushRef.current);
+      msgQueueRef.current = [];
     };
   }, []);
 
@@ -199,6 +208,56 @@ export function DriverChatProvider({
   }, [conversations]);
   const orgIdsKey = conversationOrgIds.join(",");
 
+  const isActiveRef = useRef(isActive);
+  isActiveRef.current = isActive;
+
+  // Batch queue: collapses rapid realtime INSERTs into one setState per 100ms window.
+  const msgQueueRef = useRef<Partial<TripMessageRow>[]>([]);
+  const batchFlushRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const scheduleBatchFlush = useCallback(() => {
+    if (batchFlushRef.current) return;
+    batchFlushRef.current = setTimeout(() => {
+      batchFlushRef.current = null;
+      const messages = msgQueueRef.current.splice(0);
+      if (messages.length === 0) return;
+
+      const byCid = new Map<string, Partial<TripMessageRow>[]>();
+      for (const row of messages) {
+        if (!row.conversation_id) continue;
+        const b = byCid.get(row.conversation_id) ?? [];
+        b.push(row);
+        byCid.set(row.conversation_id, b);
+      }
+
+      // Unknown conversations (arrived while list was loading): trigger one refresh.
+      let needsRefresh = false;
+      const knownIds = new Set(conversationsRef.current.map((c) => c.id));
+      for (const cid of byCid.keys()) {
+        if (!knownIds.has(cid)) { needsRefresh = true; break; }
+      }
+
+      setConversations((prev) =>
+        prev.map((conv) => {
+          const batch = byCid.get(conv.id);
+          if (!batch) return conv;
+          const last = batch[batch.length - 1];
+          return {
+            ...conv,
+            messages: [...conv.messages, ...(batch as TripMessageRow[])],
+            last_message_at: last.created_at ?? conv.last_message_at,
+            last_message_preview:
+              typeof last.content === "string" && last.content.trim().length > 0
+                ? last.content.slice(0, 120)
+                : conv.last_message_preview,
+          };
+        })
+      );
+
+      if (needsRefresh) queueRefreshConversations();
+    }, 100);
+  }, [queueRefreshConversations]);
+
   useEffect(() => {
     if (!isActive || !uid || !orgIdsKey) return;
     const orgIds = orgIdsKey.split(",").filter(Boolean);
@@ -215,35 +274,17 @@ export function DriverChatProvider({
         ],
         (payload) => {
           const row = payload.new as Partial<TripMessageRow> | null;
-          const conversationId = row?.conversation_id;
-          if (!row || !conversationId) return;
-          if (row.sender_user_id === uid) return;
-
-          let found = false;
-          setConversations((prev) =>
-            prev.map((conv) => {
-              if (conv.id !== conversationId) return conv;
-              found = true;
-              const exists = row.id ? conv.messages.some((m) => m.id === row.id) : false;
-              return {
-                ...conv,
-                messages: exists ? conv.messages : [...conv.messages, row as TripMessageRow],
-                unread_dispatcher_count: (conv.unread_dispatcher_count ?? 0) + 1,
-                last_message_at: row.created_at ?? conv.last_message_at,
-                last_message_preview:
-                  typeof row.content === "string" && row.content.trim().length > 0
-                    ? row.content.slice(0, 120)
-                    : conv.last_message_preview,
-              };
-            })
-          );
-
-          if (!found) queueRefreshConversations();
+          if (!row?.conversation_id) return;
+          // Own echo: optimistic insert already handled.
+          if (row.sender_user_id && row.sender_user_id === uid) return;
+          // Push to queue; flush will coalesce bursts into one setState.
+          msgQueueRef.current.push(row);
+          scheduleBatchFlush();
         }
       )
     );
     return () => unsubs.forEach((u) => u());
-  }, [isActive, uid, orgIdsKey, queueRefreshConversations]);
+  }, [isActive, uid, orgIdsKey, queueRefreshConversations, scheduleBatchFlush]);
 
   const sendMessage = useCallback(
     async (conversationId: string, organizationId: string, content: string) => {
@@ -314,17 +355,35 @@ export function DriverChatProvider({
     [uid, profile]
   );
 
+  const flushPendingMarkRead = useCallback(() => {
+    markReadTimerRef.current.forEach((timer) => clearTimeout(timer));
+    markReadTimerRef.current.clear();
+    const pending = Array.from(pendingMarkReadRef.current);
+    pendingMarkReadRef.current.clear();
+    for (const id of pending) {
+      void chatService.markConversationRead(id).catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => () => { flushPendingMarkRead(); }, [flushPendingMarkRead]);
+
   const markAsRead = useCallback(async (conversationId: string) => {
     setConversations((prev) =>
       prev.map((conv) =>
         conv.id === conversationId ? { ...conv, unread_dispatcher_count: 0 } : conv
       )
     );
-    try {
-      await chatService.markConversationRead(conversationId);
-    } catch {
-      // non-critical
-    }
+    pendingMarkReadRef.current.add(conversationId);
+    const existing = markReadTimerRef.current.get(conversationId);
+    if (existing) clearTimeout(existing);
+    markReadTimerRef.current.set(
+      conversationId,
+      setTimeout(() => {
+        markReadTimerRef.current.delete(conversationId);
+        pendingMarkReadRef.current.delete(conversationId);
+        void chatService.markConversationRead(conversationId).catch(() => {});
+      }, 2000),
+    );
   }, []);
 
   const getTotalUnreadCount = useCallback(

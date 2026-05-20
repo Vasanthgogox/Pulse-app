@@ -1,3 +1,4 @@
+import { AppLoadingSplash } from "@/components/AppLoadingSplash";
 import { EntityRow } from "@/components/EntityRow";
 import { FAB } from "@/components/FAB";
 import { ListScreenLayout } from "@/components/ListScreenLayout";
@@ -5,13 +6,13 @@ import { SummaryCard } from "@/components/SummaryCard";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { getIndentDisplayNumber } from "@/features/indents";
+import { getIndentDisplayNumber } from "@/features/indents/services/indents.service";
 import {
     canAccessIndents,
     getCapabilitiesFromProfile,
 } from "@/lib/capabilities";
 import { formatINR } from "@/lib/format";
-import { useIndentsQuery } from "@/lib/queries";
+import { useIndentsQuery } from "@/lib/queries/useIndentsQuery";
 import { useRefreshWithFeedback } from "@/lib/useRefreshWithFeedback";
 import { useRouter } from "expo-router";
 import { Package } from "lucide-react-native";
@@ -84,11 +85,13 @@ export default function IndentsScreen() {
     );
   }
 
+  if (loading && indents.length === 0) {
+    return <AppLoadingSplash variant="preparing" />;
+  }
+
   const emptyComponent = (
     <View style={styles.emptyWrap}>
-      <Text style={styles.empty}>
-        {loading ? "Loading…" : "No indents yet."}
-      </Text>
+      <Text style={styles.empty}>No indents yet.</Text>
     </View>
   );
 

@@ -1,10 +1,11 @@
+import { routeStackScreenOptions } from '@/lib/routeStackOptions';
 import { Stack } from 'expo-router';
 
 export default function ModalsLayout() {
   return (
     <Stack
       screenOptions={{
-        headerShown: false,
+        ...routeStackScreenOptions,
         presentation: 'modal',
       }}
     >
@@ -30,7 +31,7 @@ export default function ModalsLayout() {
       />
       <Stack.Screen
         name="ledger-sync"
-        options={{ presentation: 'fullScreenModal', title: 'Ledger Sync' }}
+        options={{ presentation: 'fullScreenModal', title: 'Ledger' }}
       />
       <Stack.Screen name="language-settings" />
       <Stack.Screen name="sms-otp-parsing" />

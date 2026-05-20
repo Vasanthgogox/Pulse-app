@@ -6,6 +6,7 @@
  * Step 4: Choose avatar
  * Step 5: Success, go to app
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { ALL_PRESET_AVATARS, getAvatarUriForSeed } from '@/constants/DriverLevels';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -14,6 +15,7 @@ import { checkExistingUserByPhone, setPendingOAuthMetadata } from '@/features/au
 import { validateEmail } from '@/lib/emailValidation';
 import { isPhoneValid, validatePhone } from '@/lib/phoneValidation';
 import { formatMobileNumber } from '@/lib/format';
+import { showAppAlert } from '@/lib/appAlert';
 import { supabase } from '@/lib/supabase';
 import { useSafeBack } from '@/lib/useSafeBack';
 import { VALIDATION, validatePassword } from '@/lib/validation';
@@ -24,7 +26,6 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
     Alert,
     Image,
     KeyboardAvoidingView,
@@ -182,6 +183,8 @@ export default function DriverSignUpScreen() {
   const { signIn, signUp, signInWithGoogle } = useAuth();
   const isOnline = useIsOnline();
   const scrollRef = useRef<ScrollView>(null);
+  /** Per-page vertical scroll (horizontal pager does not scroll vertically). */
+  const pageVerticalScrollRefs = useRef<Array<ScrollView | null>>([]);
 
   const [step, setStep] = useState(0);
   const [phone, setPhone] = useState('');
@@ -218,21 +221,43 @@ export default function DriverSignUpScreen() {
   } | null>(null);
   const phoneCheckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const otpInputRef = useRef<TextInput>(null);
-  const fieldYRef = useRef({ callsign: 0, email: 0, password: 0, confirmPassword: 0 });
+  /** Step index 2: approximate Y from top of scroll content for keyboard scroll. */
+  const PROFILE_FIELD_SCROLL_Y = { callsign: 0, email: 112, password: 224, confirmPassword: 336 } as const;
   const isDesktop = width >= 1024;
   const pageWidth = isDesktop ? Math.min(560, width - 120) : width;
+
+  const pageBody = (pageIndex: number, content: React.ReactNode) => (
+    <View key={pageIndex} style={[styles.page, { width: pageWidth }]}>
+      <ScrollView
+        ref={(el) => {
+          pageVerticalScrollRefs.current[pageIndex] = el;
+        }}
+        style={styles.pageInnerScroll}
+        contentContainerStyle={[
+          styles.pageInnerScrollContent,
+          { paddingBottom: insets.bottom + 88 },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator
+        nestedScrollEnabled
+      >
+        <View style={styles.pageContent}>{content}</View>
+      </ScrollView>
+    </View>
+  );
 
   /** Extra scroll offset so focused field stays above keyboard. Use larger offset on iOS when focusing password so the field stays above the "Strong Password" / autofill bar. */
   const SCROLL_OFFSET_DEFAULT = 100;
   const SCROLL_OFFSET_PASSWORD_IOS = 220;
 
-  const scrollToField = (name: keyof typeof fieldYRef.current) => {
+  const scrollToField = (name: keyof typeof PROFILE_FIELD_SCROLL_Y) => {
     const isPasswordOnIos = name === 'password' && Platform.OS === 'ios';
     const offset = isPasswordOnIos ? SCROLL_OFFSET_PASSWORD_IOS : SCROLL_OFFSET_DEFAULT;
     setTimeout(() => {
-      const y = fieldYRef.current[name];
-      scrollRef.current?.scrollTo({
-        x: step * pageWidth,
+      const inner = pageVerticalScrollRefs.current[2];
+      const y = PROFILE_FIELD_SCROLL_Y[name];
+      inner?.scrollTo({
         y: Math.max(0, y - offset),
         animated: true,
       });
@@ -283,39 +308,38 @@ export default function DriverSignUpScreen() {
 
   const validatePhoneStep = async () => {
     if (!phone.trim()) {
-      Alert.alert('Required', 'Enter your 10-digit mobile number.');
+      showAppAlert('Required', 'Enter your 10-digit mobile number.');
       return;
     }
     const err = getPhoneInlineError(phone);
     if (err) {
-      Alert.alert('Invalid', err);
+      showAppAlert('Invalid', err);
       return;
     }
     if (!isOnline) {
-      Alert.alert('No internet', 'Connect to the internet to continue.');
+      showAppAlert('No internet', 'Connect to the internet to continue.');
       return;
     }
     setLoading(true);
     const existing = await checkExistingUserByPhone(fullPhoneForApi);
     setLoading(false);
     if (existing.error) {
-      Alert.alert('Check failed', existing.error.message);
+      showAppAlert('Check failed', existing.error.message);
       return;
     }
     if (existing.exists && existing.email) {
-      Alert.alert(
-        'Account already exists',
-        existing.masked_email
-          ? `Sign in with ${existing.masked_email}. We've filled your email—enter your password.`
-          : 'An account with this phone already exists. Sign in below—we\'ve filled your email.',
-        [
-          {
-            text: 'OK',
-            onPress: () =>
-              router.replace(`/sign-in?email=${encodeURIComponent(existing.email!)}`),
-          },
-        ]
-      );
+      const dupBody = existing.masked_email
+        ? `Sign in with ${existing.masked_email}. We've filled your email—enter your password.`
+        : "An account with this phone already exists. Sign in below—we've filled your email.";
+      const signInPath = `/sign-in?email=${encodeURIComponent(existing.email!)}`;
+      if (Platform.OS === 'web') {
+        window.alert(`Account already exists\n\n${dupBody}`);
+        router.replace(signInPath);
+      } else {
+        Alert.alert('Account already exists', dupBody, [
+          { text: 'OK', onPress: () => router.replace(signInPath) },
+        ]);
+      }
       return;
     }
     goToPage(1);
@@ -323,7 +347,7 @@ export default function DriverSignUpScreen() {
 
   const handleGoogleDriverSignIn = async () => {
     if (!isOnline) {
-      Alert.alert("No internet", "Connect to the internet to continue.");
+      showAppAlert('No internet', 'Connect to the internet to continue.');
       return;
     }
     setLoading(true);
@@ -338,11 +362,11 @@ export default function DriverSignUpScreen() {
       router.replace("/");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Google sign in failed";
-      Alert.alert(
-        "Error",
-        msg.includes("Cannot reach server")
-          ? "Cannot reach server. Check your connection."
-          : msg
+      showAppAlert(
+        'Error',
+        msg.includes('Cannot reach server')
+          ? 'Cannot reach server. Check your connection.'
+          : msg,
       );
     } finally {
       setLoading(false);
@@ -368,33 +392,33 @@ export default function DriverSignUpScreen() {
   const confirmRegistry = () => {
     const name = callsign.trim();
     if (name.length === 0) {
-      Alert.alert('Required', 'Enter your full name.');
+      showAppAlert('Required', 'Enter your full name.');
       return;
     }
     if (name.length < NAME_MIN_LENGTH) {
-      Alert.alert('Invalid', `Full name must be at least ${NAME_MIN_LENGTH} characters.`);
+      showAppAlert('Invalid', `Full name must be at least ${NAME_MIN_LENGTH} characters.`);
       return;
     }
     if (name.length > NAME_MAX_LENGTH) {
-      Alert.alert('Invalid', `Full name must be at most ${NAME_MAX_LENGTH} characters.`);
+      showAppAlert('Invalid', `Full name must be at most ${NAME_MAX_LENGTH} characters.`);
       return;
     }
     if (!email.trim()) {
-      Alert.alert('Required', 'Enter your email.');
+      showAppAlert('Required', 'Enter your email.');
       return;
     }
     const emailErr = validateEmail(email);
     if (emailErr) {
-      Alert.alert('Invalid', emailErr);
+      showAppAlert('Invalid', emailErr);
       return;
     }
     const pwdErr = validatePassword(password);
     if (pwdErr) {
-      Alert.alert('Invalid', pwdErr);
+      showAppAlert('Invalid', pwdErr);
       return;
     }
     if (password !== confirmPassword) {
-      Alert.alert('Invalid', 'Passwords do not match.');
+      showAppAlert('Invalid', 'Passwords do not match.');
       return;
     }
     goToPage(3);
@@ -402,11 +426,11 @@ export default function DriverSignUpScreen() {
 
   const establishLink = async () => {
     if (!isOnline) {
-      Alert.alert('No internet', 'Connect to the internet to complete sign up.');
+      showAppAlert('No internet', 'Connect to the internet to complete sign up.');
       return;
     }
     if (!fullPhoneForApi) {
-      Alert.alert('Invalid', 'Enter a valid phone number to continue.');
+      showAppAlert('Invalid', 'Enter a valid phone number to continue.');
       return;
     }
     setLoading(true);
@@ -433,7 +457,7 @@ export default function DriverSignUpScreen() {
       if (signedInUser?.id) {
         const uploadResult = await uploadDriverDocuments(signedInUser.id);
         if (uploadResult.error) {
-          Alert.alert(
+          showAppAlert(
             'Documents saved partially',
             uploadResult.error.message ||
               'Your account is created, but one or more documents could not be uploaded. You can re-upload them from profile documents.',
@@ -444,7 +468,10 @@ export default function DriverSignUpScreen() {
       goToPage(7);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Sign up failed';
-      Alert.alert('Error', msg.includes('Cannot reach server') ? 'Cannot reach server. Check your connection.' : msg);
+      showAppAlert(
+        'Error',
+        msg.includes('Cannot reach server') ? 'Cannot reach server. Check your connection.' : msg,
+      );
     } finally {
       setLoading(false);
     }
@@ -486,13 +513,13 @@ export default function DriverSignUpScreen() {
       if (method === 'gallery') {
         const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!perm.granted) {
-          Alert.alert('Permission required', 'Photo library access is needed to upload this document.');
+          showAppAlert('Permission required', 'Photo library access is needed to upload this document.');
           return;
         }
       } else {
         const perm = await ImagePicker.requestCameraPermissionsAsync();
         if (!perm.granted) {
-          Alert.alert('Permission required', 'Camera access is needed to capture this document.');
+          showAppAlert('Permission required', 'Camera access is needed to capture this document.');
           return;
         }
       }
@@ -534,7 +561,7 @@ export default function DriverSignUpScreen() {
       } = await supabase().auth.getUser();
 
       if (!currentUser?.id) {
-        Alert.alert('Selected', `${doc.toUpperCase()} selected. It will upload when you tap Create account.`);
+        showAppAlert('Selected', `${doc.toUpperCase()} selected. It will upload when you tap Create account.`);
         return;
       }
 
@@ -546,7 +573,7 @@ export default function DriverSignUpScreen() {
       };
       const immediateUpload = await uploadSingleDriverDocument(currentUser.id, doc, immediateDoc);
       if (immediateUpload.error || !immediateUpload.path) {
-        Alert.alert('Selected', `${doc.toUpperCase()} selected. Upload will retry on Create account.`);
+        showAppAlert('Selected', `${doc.toUpperCase()} selected. Upload will retry on Create account.`);
         return;
       }
 
@@ -554,12 +581,12 @@ export default function DriverSignUpScreen() {
       setUploadedDocPaths(nextUploaded);
       const syncResult = await syncDriverDocumentMetadata(currentUser.id, { [doc]: immediateUpload.path });
       if (syncResult.error) {
-        Alert.alert('Uploaded with warning', `${doc.toUpperCase()} uploaded, but metadata sync failed.`);
+        showAppAlert('Uploaded with warning', `${doc.toUpperCase()} uploaded, but metadata sync failed.`);
         return;
       }
-      Alert.alert('Uploaded', `${doc.toUpperCase()} uploaded successfully.`);
+      showAppAlert('Uploaded', `${doc.toUpperCase()} uploaded successfully.`);
     } catch (e) {
-      Alert.alert('Upload failed', e instanceof Error ? e.message : 'Unable to pick document');
+      showAppAlert('Upload failed', e instanceof Error ? e.message : 'Unable to pick document');
     }
   };
 
@@ -661,7 +688,7 @@ export default function DriverSignUpScreen() {
   return (
     <KeyboardAvoidingView
       style={[styles.container, { paddingTop: insets.top }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+      behavior={Platform.OS === 'web' ? undefined : 'padding'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 20 : 0}
     >
       <TouchableOpacity
@@ -687,8 +714,8 @@ export default function DriverSignUpScreen() {
         keyboardDismissMode="on-drag"
       >
         {/* Step 1: Welcome – India phone only */}
-        <View style={[styles.page, { width: pageWidth }]}>
-          <View style={styles.pageContent}>
+        {pageBody(0, (
+          <>
             <Text style={[styles.mainTitle, styles.mainTitleWelcome]}>{STEP_CONTENT[0].title}</Text>
             <Text style={styles.subTitle}>{STEP_CONTENT[0].subtitle}</Text>
             <View style={styles.inputGroup}>
@@ -747,12 +774,12 @@ export default function DriverSignUpScreen() {
               <FontAwesome name="google" size={18} color={LIGHT.text} />
               <Text style={styles.googleBtnText}>Continue with Google</Text>
             </TouchableOpacity>
-          </View>
-        </View>
+          </>
+        ))}
 
         {/* Step 2: OTP entry */}
-        <View style={[styles.page, { width: pageWidth }]}>
-          <View style={styles.pageContent}>
+        {pageBody(1, (
+          <>
             <Text style={styles.mainTitle}>{STEP_CONTENT[1].title}</Text>
             <Text style={styles.subTitle}>
               We sent a code to {phone.trim().length === 10 ? `+91 ${phone.replace(/(\d{5})(\d{5})/, '$1 $2')}` : 'your number'}. Enter the code in that message.
@@ -799,20 +826,17 @@ export default function DriverSignUpScreen() {
             >
               <Text style={styles.tryAgainText}>Didn&apos;t get it? Try again</Text>
             </TouchableOpacity>
-          </View>
-        </View>
+          </>
+        ))}
 
         {/* Step 3: Your details */}
-        <View style={[styles.page, { width: pageWidth }]}>
-          <View style={styles.pageContent}>
+        {pageBody(2, (
+          <>
             <Text style={styles.mainTitle}>{STEP_CONTENT[2].title}</Text>
             <Text style={styles.subTitle}>{STEP_CONTENT[2].subtitle}</Text>
             <View style={styles.inputGroup}>
               <Text style={styles.fieldLabel}>Full name</Text>
-              <View
-                style={styles.inputWrap}
-                onLayout={(e) => { fieldYRef.current.callsign = e.nativeEvent.layout.y; }}
-              >
+              <View style={styles.inputWrap}>
                 <TextInput
                   style={styles.input}
                   placeholder="Your name"
@@ -833,10 +857,7 @@ export default function DriverSignUpScreen() {
             </View>
             <View style={styles.inputGroup}>
               <Text style={styles.fieldLabel}>Email</Text>
-              <View
-                style={styles.inputWrap}
-                onLayout={(e) => { fieldYRef.current.email = e.nativeEvent.layout.y; }}
-              >
+              <View style={styles.inputWrap}>
                 <TextInput
                   style={styles.input}
                   placeholder="you@example.com"
@@ -858,10 +879,7 @@ export default function DriverSignUpScreen() {
             </View>
             <View style={styles.inputGroup}>
               <Text style={styles.fieldLabel}>Password</Text>
-              <View
-                style={[styles.inputWrap, styles.passwordRow]}
-                onLayout={(e) => { fieldYRef.current.password = e.nativeEvent.layout.y; }}
-              >
+              <View style={[styles.inputWrap, styles.passwordRow]}>
                 <TextInput
                   style={styles.inputPassword}
                   placeholder="At least 6 characters"
@@ -895,10 +913,7 @@ export default function DriverSignUpScreen() {
             </View>
             <View style={styles.inputGroup}>
               <Text style={styles.fieldLabel}>Confirm password</Text>
-              <View
-                style={[styles.inputWrap, styles.passwordRow]}
-                onLayout={(e) => { fieldYRef.current.confirmPassword = e.nativeEvent.layout.y; }}
-              >
+              <View style={[styles.inputWrap, styles.passwordRow]}>
                 <TextInput
                   style={styles.inputPassword}
                   placeholder="Re-enter your password"
@@ -938,12 +953,12 @@ export default function DriverSignUpScreen() {
             >
               <Text style={styles.primaryBtnText}>Next</Text>
             </TouchableOpacity>
-          </View>
-        </View>
+          </>
+        ))}
 
         {/* Step 4: Driving license */}
-        <View style={[styles.page, { width: pageWidth }]}>
-          <View style={styles.pageContent}>
+        {pageBody(3, (
+          <>
             <Text style={styles.mainTitle}>{STEP_CONTENT[3].title}</Text>
             <Text style={styles.subTitle}>{STEP_CONTENT[3].subtitle}</Text>
             <View style={styles.docActionsWrap}>
@@ -997,12 +1012,12 @@ export default function DriverSignUpScreen() {
                 <Text style={styles.tryAgainText}>Skip for now</Text>
               </TouchableOpacity>
             ) : null}
-          </View>
-        </View>
+          </>
+        ))}
 
         {/* Step 5: Aadhaar */}
-        <View style={[styles.page, { width: pageWidth }]}>
-          <View style={styles.pageContent}>
+        {pageBody(4, (
+          <>
             <Text style={styles.mainTitle}>{STEP_CONTENT[4].title}</Text>
             <Text style={styles.subTitle}>{STEP_CONTENT[4].subtitle}</Text>
             <View style={styles.docActionsWrap}>
@@ -1056,12 +1071,12 @@ export default function DriverSignUpScreen() {
                 <Text style={styles.tryAgainText}>Skip for now</Text>
               </TouchableOpacity>
             ) : null}
-          </View>
-        </View>
+          </>
+        ))}
 
         {/* Step 6: PAN */}
-        <View style={[styles.page, { width: pageWidth }]}>
-          <View style={styles.pageContent}>
+        {pageBody(5, (
+          <>
             <Text style={styles.mainTitle}>{STEP_CONTENT[5].title}</Text>
             <Text style={styles.subTitle}>{STEP_CONTENT[5].subtitle}</Text>
             <View style={styles.docActionsWrap}>
@@ -1115,12 +1130,12 @@ export default function DriverSignUpScreen() {
                 <Text style={styles.tryAgainText}>Skip for now</Text>
               </TouchableOpacity>
             ) : null}
-          </View>
-        </View>
+          </>
+        ))}
 
         {/* Step 7: Avatar */}
-        <View style={[styles.page, { width: pageWidth }]}>
-          <View style={styles.pageContent}>
+        {pageBody(6, (
+          <>
             <Text style={styles.mainTitle}>{STEP_CONTENT[6].title}</Text>
             <Text style={styles.subTitle}>{STEP_CONTENT[6].subtitle}</Text>
             <View style={styles.avatarPreviewWrap}>
@@ -1146,17 +1161,17 @@ export default function DriverSignUpScreen() {
               activeOpacity={0.8}
             >
               {loading ? (
-                <ActivityIndicator color={Theme.textOnPrimary} />
+                <LoadingIndicator color={Theme.textOnPrimary} />
               ) : (
                 <Text style={styles.primaryBtnText}>Create account</Text>
               )}
             </TouchableOpacity>
-          </View>
-        </View>
+          </>
+        ))}
 
         {/* Step 8: Success */}
-        <View style={[styles.page, { width: pageWidth }]}>
-          <View style={styles.pageContent}>
+        {pageBody(7, (
+          <>
             <View style={styles.crownWrap}>
               <FontAwesome name="trophy" size={48} color={LIGHT.accent} />
             </View>
@@ -1165,8 +1180,8 @@ export default function DriverSignUpScreen() {
             <TouchableOpacity style={styles.primaryBtn} onPress={initializeHub} activeOpacity={0.8}>
               <Text style={styles.primaryBtnText}>Go to app</Text>
             </TouchableOpacity>
-          </View>
-        </View>
+          </>
+        ))}
       </ScrollView>
 
       <Modal
@@ -1261,6 +1276,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 24,
     justifyContent: 'flex-start',
+  },
+  pageInnerScroll: {
+    flex: 1,
+  },
+  pageInnerScrollContent: {
+    flexGrow: 1,
   },
   pageContent: {
     maxWidth: 360,

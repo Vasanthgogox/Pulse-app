@@ -1,4 +1,5 @@
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { getFleetAvatarUriForOrg } from '@/lib/fleetAvatar';
 import {
   buildDriverTripNumberMap,
@@ -7,7 +8,11 @@ import {
 import { DriverInviteCard } from '@/components/driver/DriverInviteCard';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
-import { tripEarningsForDriver } from '@/lib/driverUtils';
+import {
+  buildOfferText,
+  isCompletedStatus,
+  tripEarningsForDriver,
+} from '@/lib/driverUtils';
 import { phonePeMetaDate } from '@/lib/driverGpayTransactions';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
@@ -18,7 +23,6 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   AppState,
   Image,
@@ -178,7 +182,9 @@ export default function DriverRequestsScreen() {
       if (!driver) continue;
       const driverTrips = allTrips.filter((t) => t.driver_id === driver.id);
       const driverLedger = allLedger.filter((e) => e.driver_id === driver.id);
-      const completed = driverTrips.filter((t) => isCompleted(t.status));
+      const completed = driverTrips.filter((t) =>
+        isCompletedStatus(String(t.status ?? '')),
+      );
       const totalEarned = Math.round(
         completed.reduce((sum, t) => sum + tripEarningsForDriver(t), 0)
       );
@@ -906,7 +912,7 @@ export default function DriverRequestsScreen() {
 
       {loading ? (
         <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={colors.emerald} />
+          <LoadingIndicator size="large" color={colors.emerald} />
         </View>
       ) : (
         <ScrollView
@@ -1217,7 +1223,7 @@ export default function DriverRequestsScreen() {
                         activeOpacity={1}
                       >
                         {isLeaving ? (
-                          <ActivityIndicator size="small" color={colors.textMuted} />
+                          <LoadingIndicator size="small" color={colors.textMuted} />
                         ) : (
                           <>
                             <FontAwesome

@@ -1,11 +1,11 @@
 /**
  * Suppliers service — Supabase only (mobile). Same DB as Q-unified-base.
  */
-import { supabase } from '@/lib/supabase';
 import { DEFAULT_PAGE_SIZE, type PageOpts } from '@/lib/pagination';
 import { syncDomainRows } from '@/lib/cache/domainSync';
 import { mergeDeltaRows } from '@/lib/cache/mergeDelta';
 import type { DeltaResponse } from '@/lib/cache/deltaTypes';
+import { supabase } from '@/lib/supabase';
 
 export interface SupplierRow {
   id: string;

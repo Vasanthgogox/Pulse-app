@@ -2,6 +2,7 @@
  * Trip detail — Finance tab: Revenue/Due summary, Net P&L, optional adjustments, commit ledger, and ledger entries for this trip.
  * Single read: trip; commit uses finance (one write). Fetches transactions for this trip to show entries. Theme only.
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
@@ -13,7 +14,6 @@ import { formatINR } from "@/lib/format";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    ActivityIndicator,
     Alert,
     Platform,
     ScrollView,
@@ -359,7 +359,7 @@ export function TripFinanceBlock({
           activeOpacity={0.8}
         >
           {committing ? (
-            <ActivityIndicator size="small" color={Theme.textPrimaryDark} />
+            <LoadingIndicator size="small" color={Theme.textPrimaryDark} />
           ) : (
             <Text style={styles.commitBtnText}>COMMIT</Text>
           )}
@@ -371,7 +371,7 @@ export function TripFinanceBlock({
         <Text style={styles.entriesTitle}>LEDGER ENTRIES</Text>
         {entriesLoading ? (
           <View style={styles.entriesLoading}>
-            <ActivityIndicator size="small" color={Theme.textMuted} />
+            <LoadingIndicator size="small" color={Theme.textMuted} />
             <Text style={styles.entriesLoadingText}>Loading…</Text>
           </View>
         ) : tripTransactions.length === 0 ? (

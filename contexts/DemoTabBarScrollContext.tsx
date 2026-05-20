@@ -1,6 +1,7 @@
 /**
  * Scroll-driven visibility for the demo tab bar (hide while scrolling, show after idle).
- * Web uses debounced onScroll; native uses drag / momentum end events.
+ * Native: hide on drag begin, show after drag/momentum end.
+ * Mobile web: direction-based hide (down) / show (up) via ScrollView onScroll — no window scroll listener.
  */
 import React, {
   createContext,
@@ -10,18 +11,40 @@ import React, {
   useMemo,
   useRef,
 } from "react";
-import { Platform } from "react-native";
+import {
+  Platform,
+  useWindowDimensions,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from "react-native";
 import Animated, {
+  Easing,
+  Extrapolation,
+  interpolate,
   type SharedValue,
   useAnimatedStyle,
   useSharedValue,
+  withSpring,
   withTiming,
 } from "react-native-reanimated";
 
-const HIDE_MS = 200;
-const SHOW_MS = 200;
-const WEB_IDLE_MS = 380;
+/** Glide off-screen — ease-in so it accelerates away naturally. */
+const HIDE_TIMING = {
+  duration: 360,
+  easing: Easing.inOut(Easing.cubic),
+} as const;
+/** Glide back — light spring for a premium settle (not bouncy). */
+const SHOW_SPRING = {
+  damping: 26,
+  stiffness: 300,
+  mass: 0.72,
+} as const;
 const SHOW_DELAY_MS = 0;
+const WEB_IDLE_MS = 380;
+/** Ignore hide until user has scrolled past top bounce. */
+const WEB_HIDE_MIN_OFFSET_Y = 50;
+/** Min delta (px) per scroll tick to count as up/down. */
+const WEB_SCROLL_DIRECTION_DELTA = 8;
 
 type ScrollControls = {
   onScrollBeginDrag: () => void;
@@ -51,15 +74,25 @@ function setScrollInProgress(next: boolean) {
   scrollProgressListeners.forEach((listener) => listener());
 }
 
+function isMobileWebAutoHide(width: number): boolean {
+  return Platform.OS === "web" && width < 1024;
+}
+
 export function DemoTabBarScrollProvider({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const { width } = useWindowDimensions();
   const progress = useSharedValue(1);
   const scrollEndTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  const autoHideEnabledRef = useRef(
+    Platform.OS !== "web" || isMobileWebAutoHide(width),
+  );
+  autoHideEnabledRef.current =
+    Platform.OS !== "web" || isMobileWebAutoHide(width);
 
   const clearSchedule = useCallback(() => {
     if (scrollEndTimeoutRef.current) {
@@ -69,17 +102,19 @@ export function DemoTabBarScrollProvider({
   }, []);
 
   const onScrollBeginDrag = useCallback(() => {
+    if (!autoHideEnabledRef.current) return;
     clearSchedule();
     setScrollInProgress(true);
     emitScrollHideStart();
-    progress.value = withTiming(0, { duration: HIDE_MS });
+    progress.value = withTiming(0, HIDE_TIMING);
   }, [clearSchedule, progress]);
 
   const scheduleShow = useCallback(() => {
+    if (!autoHideEnabledRef.current) return;
     clearSchedule();
     scrollEndTimeoutRef.current = setTimeout(() => {
       setScrollInProgress(false);
-      progress.value = withTiming(1, { duration: SHOW_MS });
+      progress.value = withSpring(1, SHOW_SPRING);
       scrollEndTimeoutRef.current = null;
     }, SHOW_DELAY_MS);
   }, [clearSchedule, progress]);
@@ -93,30 +128,11 @@ export function DemoTabBarScrollProvider({
   }, [scheduleShow]);
 
   const resetBarVisible = useCallback(() => {
+    if (!autoHideEnabledRef.current) return;
     clearSchedule();
     setScrollInProgress(false);
-    progress.value = withTiming(1, { duration: SHOW_MS });
+    progress.value = withSpring(1, SHOW_SPRING);
   }, [clearSchedule, progress]);
-
-  useEffect(() => {
-    if (Platform.OS !== "web" || typeof window === "undefined") return;
-    let webIdleTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const onWindowScroll = () => {
-      onScrollBeginDrag();
-      if (webIdleTimer) clearTimeout(webIdleTimer);
-      webIdleTimer = setTimeout(() => {
-        onScrollEnd();
-        webIdleTimer = null;
-      }, WEB_IDLE_MS);
-    };
-
-    window.addEventListener("scroll", onWindowScroll, { passive: true });
-    return () => {
-      window.removeEventListener("scroll", onWindowScroll);
-      if (webIdleTimer) clearTimeout(webIdleTimer);
-    };
-  }, [onScrollBeginDrag, onScrollEnd]);
 
   useEffect(() => () => clearSchedule(), [clearSchedule]);
 
@@ -180,7 +196,8 @@ export function useDemoTabBarScrollInProgress(): boolean {
   );
 }
 
-const OFF_TRANSLATE = 120;
+/** Full slide distance (dock + safe area). Slightly over-travel avoids edge peek. */
+const OFF_TRANSLATE = 128;
 
 export function DemoTabBarAutoHideShell({
   children,
@@ -192,11 +209,25 @@ export function DemoTabBarAutoHideShell({
   const ctx = useContext(ProgressCtx);
   if (!ctx) return <>{children}</>;
   const { progress } = ctx;
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: (1 - progress.value) * OFF_TRANSLATE },
-    ],
-  }));
+  const animatedStyle = useAnimatedStyle(() => {
+    const p = progress.value;
+    return {
+      opacity: interpolate(p, [0, 0.4, 1], [0, 0.92, 1], Extrapolation.CLAMP),
+      transform: [
+        {
+          translateY: interpolate(
+            p,
+            [0, 1],
+            [OFF_TRANSLATE, 0],
+            Extrapolation.CLAMP,
+          ),
+        },
+        {
+          scale: interpolate(p, [0, 1], [0.94, 1], Extrapolation.CLAMP),
+        },
+      ],
+    };
+  });
   return (
     <Animated.View style={[style, animatedStyle]} pointerEvents="box-none">
       {children}
@@ -209,10 +240,13 @@ export function useTabBarAwareScrollProps(): {
   onScrollBeginDrag?: () => void;
   onScrollEndDrag?: () => void;
   onMomentumScrollEnd?: () => void;
-  onScroll?: () => void;
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
   scrollEventThrottle?: number;
 } {
   const ctx = useDemoTabBarScrollOptional();
+  const { width } = useWindowDimensions();
+  const mobileWebAutoHide = isMobileWebAutoHide(width);
+  const lastOffsetYRef = useRef(0);
   const webIdleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(
@@ -225,24 +259,35 @@ export function useTabBarAwareScrollProps(): {
   return useMemo(() => {
     if (!ctx) return {};
 
-    if (Platform.OS === "web") {
+    if (Platform.OS !== "web") {
       return {
-        onScroll: () => {
-          ctx.onScrollBeginDrag();
-          if (webIdleRef.current) clearTimeout(webIdleRef.current);
-          webIdleRef.current = setTimeout(() => {
-            ctx.onScrollEnd();
-            webIdleRef.current = null;
-          }, WEB_IDLE_MS);
-        },
-        scrollEventThrottle: 16,
+        onScrollBeginDrag: ctx.onScrollBeginDrag,
+        onScrollEndDrag: ctx.onScrollEnd,
+        onMomentumScrollEnd: ctx.onMomentumScrollEnd,
       };
     }
 
+    if (!mobileWebAutoHide) return {};
+
     return {
-      onScrollBeginDrag: ctx.onScrollBeginDrag,
-      onScrollEndDrag: ctx.onScrollEnd,
-      onMomentumScrollEnd: ctx.onMomentumScrollEnd,
+      onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+        const y = event.nativeEvent.contentOffset.y;
+        const dy = y - lastOffsetYRef.current;
+        lastOffsetYRef.current = y;
+
+        if (dy > WEB_SCROLL_DIRECTION_DELTA && y > WEB_HIDE_MIN_OFFSET_Y) {
+          ctx.onScrollBeginDrag();
+        } else if (dy < -WEB_SCROLL_DIRECTION_DELTA) {
+          ctx.resetBarVisible();
+        }
+
+        if (webIdleRef.current) clearTimeout(webIdleRef.current);
+        webIdleRef.current = setTimeout(() => {
+          ctx.onScrollEnd();
+          webIdleRef.current = null;
+        }, WEB_IDLE_MS);
+      },
+      scrollEventThrottle: 16,
     };
-  }, [ctx]);
+  }, [ctx, mobileWebAutoHide]);
 }

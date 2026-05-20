@@ -12,13 +12,13 @@
  *   createDispute (sharedLedgerService)
  *   setClientFeedEntryStatus (local AsyncStorage)
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from "@/constants/Theme";
 import { createLedgerEntry } from "@/features/finance/services/finance.service";
 import { createDispute } from "@/services/sharedLedgerService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   Modal,
   Platform,
@@ -409,7 +409,7 @@ export function ClientFeedEntryDetailModal({
                 ]}
               >
                 {busy ? (
-                  <ActivityIndicator color={Theme.textOnDark} />
+                  <LoadingIndicator color={Theme.textOnDark} />
                 ) : (
                   <>
                     <FontAwesome name="plus" size={12} color={Theme.textOnDark} />

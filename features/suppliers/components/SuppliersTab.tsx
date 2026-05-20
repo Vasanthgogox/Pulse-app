@@ -8,7 +8,7 @@ import Theme from "@/constants/Theme";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import type { EntityListFilter } from "@/features/finance/components/TreasurySummaryCard";
 import { aggregateSuppliers, type FinancialRowData, type TripPartyMap } from "@/features/finance/aggregation";
-import type { TripRow } from "@/features/trips";
+import type { TripRow } from "@/features/trips/services/trips.service";
 import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
 import { useSuppliersQuery } from "@/lib/queries/useSuppliersQuery";
 import { useTripsQuery } from "@/lib/queries/useTripsQuery";
@@ -414,7 +414,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    minHeight: 62,
+    minHeight: 58,
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderBottomWidth: 1,
@@ -428,7 +428,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   tableEntityName: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "600",
     fontStyle: "italic",
     color: Theme.textPrimaryDark,
@@ -437,14 +437,14 @@ const styles = StyleSheet.create({
   },
   tableEntitySub: {
     marginTop: 4,
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "500",
     color: Theme.textMuted,
   },
   tripsPill: {
     alignSelf: "center",
     minWidth: 28,
-    height: 28,
+    height: 26,
     paddingHorizontal: 8,
     borderRadius: 8,
     backgroundColor: Theme.surfaceGray,
@@ -454,12 +454,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   tripsPillText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "600",
     color: Theme.textMuted,
   },
   tableDueValue: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "600",
     fontStyle: "italic",
     textAlign: "right",
@@ -467,7 +467,7 @@ const styles = StyleSheet.create({
   tableDueUnpaid: { color: Theme.teslaRed },
   tableDueSettled: { color: Theme.darkGreen },
   tablePaidLabel: {
-    fontSize: 8,
+    fontSize: 7,
     fontWeight: "500",
     color: Theme.textMuted,
     letterSpacing: 0.6,

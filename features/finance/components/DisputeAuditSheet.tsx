@@ -2,6 +2,7 @@
  * Dispute audit sheet — O(n) symmetric difference of internal vs shared ledger entries.
  * Shows list of disputed items; user can select one and raise dispute.
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
@@ -10,7 +11,7 @@ import {
   StyleSheet,
   Modal,
   ScrollView,
-  ActivityIndicator,
+  
   Alert,
   TextInput,
   KeyboardAvoidingView,
@@ -264,7 +265,7 @@ export function DisputeAuditSheet({
 
         {loading ? (
           <View style={styles.loadingWrap}>
-            <ActivityIndicator size="large" color={Theme.primary} />
+            <LoadingIndicator size="large" color={Theme.primary} />
             <Text style={styles.loadingText}>Loading transactions…</Text>
           </View>
         ) : (
@@ -350,7 +351,7 @@ export function DisputeAuditSheet({
                   disabled={submitting || !canRaiseDispute}
                 >
                   {submitting ? (
-                    <ActivityIndicator size="small" color={Theme.textOnDark} />
+                    <LoadingIndicator size="small" color={Theme.textOnDark} />
                   ) : (
                     <Text style={styles.submitBtnText}>Raise dispute</Text>
                   )}

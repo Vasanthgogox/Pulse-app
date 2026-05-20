@@ -20,6 +20,10 @@ export interface DiscoverOrg {
   mutual_connections_count?: number | null;
   rating?: number | null;
   average_rating?: number | null;
+  trip_count?: number | null;
+  lane_overlap_count?: number | null;
+  recommendation_score?: number | null;
+  is_in_user_trip_city?: boolean | null;
   connection_status: 'none' | 'pending' | 'approved' | 'rejected' | string;
 }
 

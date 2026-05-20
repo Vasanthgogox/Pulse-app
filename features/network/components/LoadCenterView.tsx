@@ -2,73 +2,75 @@
  * Load Center — reference UI: Hire Partners | Find Work | Awarded.
  * Header "Load Center" / "Find or Hire Work", three sub-tabs, cards, modals.
  */
+import { ContentErrorState } from '@/components/ContentErrorState';
 import { LoadCardRouteRow } from "@/components/LoadCardRouteRow";
-import { FinanceFAB } from "@/components/FinanceFAB";
+import { LoadCardSpecsRow } from "@/components/LoadCardSpecsRow";
+import {
+  LoadCenterHubMobileIndentCard,
+  LoadCenterHubMobileListCanvas,
+} from "@/features/network/components/LoadCenterHubMobileIndentCard";
+import {
+  LOADS_HUB_PAGE_BG,
+  LoadCenterHubMobileShell,
+} from "@/features/network/components/LoadCenterHubMobileShell";
 import { SemanticAddIcon } from "@/components/SemanticAddIcon";
 import { getAvatarUriForSeed } from "@/constants/DriverLevels";
 import Layout from "@/constants/Layout";
+import { useLayoutInsets } from "@/lib/layoutInsets";
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { searchExistingDriversByPhone } from "@/features/drivers/services/drivers.service";
-import { upsertTripSubcontract } from "@/features/finance/services/tripSubcontracts.service";
 import {
     BidReceivedHammer,
-    createDirectQuote,
     getIndentDisplayNumber,
-    updateDirectQuoteAssignment,
-    updateDirectQuoteStatus,
-    updateIndent,
     type DirectQuoteRow,
     type IndentRow,
 } from "@/features/indents";
-import { acceptAwardedQuote } from "@/features/indents/services/accept-awarded-quote.service";
 import { shareDraftIndent } from "@/features/indents/services/indents.service";
 import { indentCanBroadcastToPulseNetwork } from "@/features/network/utils/indentBroadcastEligibility.util";
 import {
-    assignAggregateTripDriverByPhone,
-    generateTripOtp,
-    getDriverAvailabilityByPhoneGlobal,
-    humanizeTripIdInRpcError,
-    regenerateTripOtp,
-    setInitialTripForDetail,
-    updateTripSupplier,
-} from "@/features/trips";
+    formatIndentCardDate,
+    giveLoadStatusPillStyles,
+    shouldHideGetLoadStatePill,
+    STATUS_TABS,
+    statusMatchesFilter,
+    type LoadSubTab,
+    type StatusFilterTab,
+} from "@/features/network/utils/loadCenter.model";
+import { useAwardQuote } from "@/features/network/hooks/useAwardQuote";
+import { useLoadCenterFilters } from "@/features/network/hooks/useLoadCenterFilters";
+import { useStaffHandshake } from "@/features/network/hooks/useStaffHandshake";
+import { useSuccessToast } from "@/features/network/hooks/useSuccessToast";
+import { useTripDeployment } from "@/features/network/hooks/useTripDeployment";
+import { AwardModal } from "@/features/network/components/AwardModal";
+import { BidModal } from "@/features/network/components/BidModal";
+import { StaffHandshakeModal } from "@/features/network/components/StaffHandshakeModal";
 import {
     assignmentShellColors,
     assignmentShellStyles,
 } from "@/features/trips/styles/assignmentShellShared";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
-import { formatINR, formatMobileNumber } from "@/lib/format";
-import { validatePhone } from "@/lib/phoneValidation";
+import { formatINR } from "@/lib/format";
 import {
     useIndentOfferCountsQuery,
     useDriversQuery,
-    useIndentDirectQuotesQuery,
     useIndentsQuery,
     useInvalidateIndents,
-    useInvalidateTrips,
     useMarketIndentsQuery,
     useMyDirectQuotesQuery,
     useSuppliersQuery,
     useTripsQuery,
     useVehiclesQuery,
 } from "@/lib/queries";
-import { queryKeys } from "@/lib/queryKeys";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { FlashList } from "@shopify/flash-list";
 import { useQueryClient } from "@tanstack/react-query";
-import * as Clipboard from "expo-clipboard";
 import * as Linking from "expo-linking";
-import { useRouter } from "expo-router";
 import {
     Building2,
-    ListChecks,
     Package,
     Share2,
-    Truck,
     Users,
-    X,
     Zap,
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -78,15 +80,12 @@ import {
     Animated,
     Easing,
     Image,
-    KeyboardAvoidingView,
     Modal,
     Platform,
-    Pressable,
     RefreshControl,
     ScrollView,
     Share,
     StyleSheet,
-    Switch,
     Text,
     TextInput,
     TouchableOpacity,
@@ -94,107 +93,6 @@ import {
     View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-type LoadSubTab = "GIVE_LOAD" | "GET_LOAD" | "AWARDED";
-
-/** Status filter tabs: Open | Quoted | Awarded | Done. Maps to indent status values. */
-type StatusFilterTab = "OPEN" | "QUOTED" | "AWARDED" | "DONE";
-
-const STATUS_TABS: {
-  id: StatusFilterTab;
-  label: string;
-  statuses: string[];
-}[] = [
-  {
-    id: "OPEN",
-    label: "Open",
-    statuses: ["open", "pending", "broadcast", "draft"],
-  },
-  { id: "QUOTED", label: "Quoted", statuses: ["quoted"] },
-  { id: "AWARDED", label: "Awarded", statuses: ["awarded"] },
-  {
-    id: "DONE",
-    label: "Done",
-    statuses: ["completed", "cancelled", "closed", "expired"],
-  },
-];
-
-function statusMatchesFilter(status: string, filter: StatusFilterTab): boolean {
-  const s = status.toLowerCase();
-  const tab = STATUS_TABS.find((t) => t.id === filter);
-  return tab?.statuses.includes(s) ?? false;
-}
-
-/** Hide GET LOAD row state pill when the active status chip already matches (see GET LOAD cards). */
-function shouldHideGetLoadStatePill(
-  filter: StatusFilterTab,
-  stateLabel: string,
-  quoteAccepted: boolean,
-): boolean {
-  if (filter === "OPEN" && stateLabel === "OPEN") return true;
-  if (filter === "QUOTED" && stateLabel === "QUOTED") return true;
-  if (filter === "AWARDED" && quoteAccepted) return true;
-  return false;
-}
-
-/** Status pill colors for Hire Partner cards (Tesla palette, no indigo). */
-function giveLoadStatusPillStyles(status: string): {
-  pill: object;
-  text: object;
-} {
-  const s = (status || "").toLowerCase();
-  if (s === "awarded") {
-    return {
-      pill: {
-        backgroundColor: Theme.positive,
-        borderWidth: 1,
-        borderColor: Theme.darkGreen,
-      },
-      text: { color: Theme.textOnPrimary },
-    };
-  }
-  if (["completed", "closed", "cancelled", "expired"].includes(s)) {
-    return {
-      pill: {
-        backgroundColor: Theme.surfaceGray,
-        borderWidth: 1,
-        borderColor: Theme.borderMedium,
-      },
-      text: { color: Theme.textSecondary },
-    };
-  }
-  if (s === "quoted") {
-    return {
-      pill: {
-        backgroundColor: Theme.screenBackground,
-        borderWidth: 1,
-        borderColor: Theme.textPrimaryDark,
-      },
-      text: { color: Theme.textPrimaryDark },
-    };
-  }
-  return {
-    pill: {
-      backgroundColor: Theme.tripHubUnassignedPillBg,
-      borderWidth: 1,
-      borderColor: Theme.textPrimaryDark,
-    },
-    text: { color: Theme.textPrimaryDark },
-  };
-}
-
-function formatIndentCardDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  try {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return "—";
-    return d
-      .toLocaleDateString("en-IN", { day: "numeric", month: "short" })
-      .toUpperCase();
-  } catch {
-    return "—";
-  }
-}
 
 interface LoadCenterViewProps {
   /** Top padding (e.g. from parent sub-tab row + safe area). */
@@ -219,8 +117,8 @@ export function LoadCenterView({
   onShareToNetwork,
 }: LoadCenterViewProps) {
   const insets = useSafeAreaInsets();
+  const layout = useLayoutInsets();
   const { width } = useWindowDimensions();
-  const router = useRouter();
   const { currentOrganization } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
 
@@ -236,67 +134,8 @@ export function LoadCenterView({
     Record<string, string>
   >({});
   const [showPostModal, setShowPostModal] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
-  const [successMsg, setSuccessMsg] = useState("");
-  const [quoteAmount, setQuoteAmount] = useState<string>("");
-  const [submittingQuote, setSubmittingQuote] = useState(false);
-  const [assigningTripId, setAssigningTripId] = useState<string | null>(null);
-  const [loadAction, setLoadAction] = useState<
-    | {
-        type: "AWARD";
-        load: IndentRow;
-      }
-    | {
-        type: "BID";
-        load: IndentRow;
-      }
-    | {
-        type: "ASSIGN";
-        load: IndentRow;
-      }
-    | null
-  >(null);
-  const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
-  const [awarding, setAwarding] = useState(false);
-  const [assignDriverId, setAssignDriverId] = useState<string | null>(null);
-  const [assignVehicleId, setAssignVehicleId] = useState<
-    string | null | undefined
-  >(undefined);
-  const [assignVehicleRegistration, setAssignVehicleRegistration] =
-    useState("");
-  const [useAdHocDriver, setUseAdHocDriver] = useState(false);
-  const [aggregateDriverTrackingName, setAggregateDriverTrackingName] =
-    useState("");
-  const aggregateDriverNameManualRef = useRef(false);
-  const [aggregateDriverPhone, setAggregateDriverPhone] = useState("");
-  const [aggregatePhoneName, setAggregatePhoneName] = useState<string | null>(
-    null,
-  );
-  const [aggregatePhoneNotFound, setAggregatePhoneNotFound] = useState(false);
-  const [aggregatePhoneInTrip, setAggregatePhoneInTrip] = useState(false);
-  const aggregatePartnerRateInputRef = useRef<TextInput | null>(null);
-  const aggregateAdvancePaidInputRef = useRef<TextInput | null>(null);
-  const aggregateDriverNameInputRef = useRef<TextInput | null>(null);
-  const aggregateDriverPhoneInputRef = useRef<TextInput | null>(null);
-  const aggregateVehicleInputRef = useRef<TextInput | null>(null);
-  const aggregatePhoneLookupTimeoutRef = useRef<number | null>(null);
-  /** Prevents double-submit on Staff Handshake (parallel creates → unique trip_number 409). */
-  const staffHandshakeDeployLockRef = useRef(false);
-  const [subcontractSupplierId, setSubcontractSupplierId] = useState<
-    string | null
-  >(null);
-  const [subcontractRate, setSubcontractRate] = useState<string>("");
-  const [aggregateAdvancePaid, setAggregateAdvancePaid] = useState<string>("");
-  const [deployOtpCode, setDeployOtpCode] = useState<string | null>(null);
-  const [deployOtpExpiresAt, setDeployOtpExpiresAt] = useState<string | null>(
-    null,
-  );
-  const [deployTripIdForOtp, setDeployTripIdForOtp] = useState<string | null>(
-    null,
-  );
-  /** Staff Handshake: mirror Add Trip — assign driver/vehicle on trip detail when on. */
-  const [staffHandshakeAssignLater, setStaffHandshakeAssignLater] =
-    useState(false);
+  const { showSuccess, successMsg, trigger: triggerSuccess } = useSuccessToast();
+  const [bidLoad, setBidLoad] = useState<IndentRow | null>(null);
   const [localBidHistoryByIndentId, setLocalBidHistoryByIndentId] = useState<
     Record<string, { amount: number; updatedAt: string }[]>
   >({});
@@ -317,7 +156,6 @@ export function LoadCenterView({
   const { data: drivers = [] } = useDriversQuery(orgId);
   const { data: vehicles = [] } = useVehiclesQuery(orgId);
   const { data: suppliers = [] } = useSuppliersQuery(orgId);
-  const invalidateTrips = useInvalidateTrips();
   const invalidateIndents = useInvalidateIndents();
   const queryClient = useQueryClient();
 
@@ -335,6 +173,9 @@ export function LoadCenterView({
 
   const useGridLayout = width >= 1024;
   const isMobileView = width < 820;
+  /** Narrow / grid cards: stack bid meta + actions so CTAs stay aligned and tappable. */
+  const compactIndentFooter = width < 520;
+  const stackIndentCardFooter = compactIndentFooter || useGridLayout;
 
   useEffect(() => {
     if (!highlightedIndentId || useGridLayout) return;
@@ -348,41 +189,59 @@ export function LoadCenterView({
     return () => clearTimeout(t);
   }, [highlightedIndentId, useGridLayout]);
 
-  /** O(myQuotes.length): map indent_id -> quote for Find Work "Quote Sent" / "Update quote" and modal prefill. */
-  const myQuoteByIndentId = useMemo(() => {
-    const m = new Map<string, DirectQuoteRow>();
-    for (const q of myQuotes) m.set(q.indent_id, q);
-    return m;
-  }, [myQuotes]);
-  const activeBidQuote = useMemo(() => {
-    if (loadAction?.type !== "BID") return null;
-    return myQuoteByIndentId.get(loadAction.load.id) ?? null;
-  }, [loadAction, myQuoteByIndentId]);
-  const activeBidQuoteUpdatedAt = useMemo(() => {
-    if (!activeBidQuote?.updated_at) return null;
-    const parsed = new Date(activeBidQuote.updated_at);
-    if (Number.isNaN(parsed.getTime())) return null;
-    return parsed.toLocaleString("en-IN", {
-      day: "numeric",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  }, [activeBidQuote?.updated_at]);
-  const activeBidHistory = useMemo(() => {
-    if (loadAction?.type !== "BID") return [];
-    const indentId = loadAction.load.id;
-    const localHistory = localBidHistoryByIndentId[indentId] ?? [];
-    return localHistory
-      .filter((entry) => Number.isFinite(Number(entry.amount)))
-      .sort(
-        (a, b) =>
-          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-      );
-  }, [loadAction, localBidHistoryByIndentId]);
+  // ── Filter pipeline ─────────────────────────────────────────────────────────
+  // hirePartnerLoads is needed before giveLoadIds so we compute it first.
+  const hirePartnerLoadsForIds = useMemo(
+    () => indents.filter((i) => i.organization_id === orgId),
+    [indents, orgId],
+  );
+  const giveLoadIds = useMemo(
+    () =>
+      hirePartnerLoadsForIds
+        .filter((i) => {
+          const s = (i.status || "").toLowerCase();
+          return s !== "awarded" && s !== "completed" && s !== "cancelled";
+        })
+        .map((l) => l.id),
+    [hirePartnerLoadsForIds],
+  );
+  const { data: quoteCounts = {}, refetch: refetchQuoteCounts } =
+    useIndentOfferCountsQuery(orgId, giveLoadIds);
+
+  const filters = useLoadCenterFilters({
+    orgId,
+    indents,
+    marketIndents,
+    myQuotes,
+    trips,
+    quoteCounts,
+    loadSubTab,
+    statusFilterTab,
+    searchQuery,
+  });
+
+  const {
+    myQuoteByIndentId,
+    indentIdsWithTrip,
+    hirePartnerLoads,
+    awardedLoads,
+    findWorkLoads,
+    filteredHirePartnerLoads,
+    filteredFindWorkList,
+    filteredClaimedLoads,
+    filteredClaimedDoneLoads,
+    statusTabCounts,
+  } = filters;
+
+  // ── Award Quote hook ────────────────────────────────────────────────────────
+  const awardModal = useAwardQuote({ orgId, queryClient, invalidateIndents, onSuccess: triggerSuccess });
+
+  // ── Staff Handshake hook ────────────────────────────────────────────────────
+  const handshake = useStaffHandshake({ orgId, myQuotes, onSuccess: triggerSuccess });
 
   const visiblePartnersForHandshake = useMemo(() => {
     const base = suppliers;
+    const subcontractSupplierId = handshake.state.subcontractSupplierId;
     // Never hide the currently selected partner (keeps existing selection stable).
     if (
       subcontractSupplierId &&
@@ -392,322 +251,27 @@ export function LoadCenterView({
       if (selected) return [selected, ...base];
     }
     return base;
-  }, [
-    suppliers,
-    subcontractSupplierId,
-  ]);
+  }, [suppliers, handshake.state.subcontractSupplierId]);
 
-  const awardModalIndentId =
-    loadAction?.type === "AWARD" ? loadAction.load.id : null;
-  const {
-    data: awardModalQuotes = [],
-    isLoading: awardModalQuotesLoading,
-    refetch: refetchAwardModalQuotes,
-  } = useIndentDirectQuotesQuery(awardModalIndentId);
+  // ── Trip Deployment hook ────────────────────────────────────────────────────
+  const tripDeployment = useTripDeployment({
+    orgId,
+    myQuoteByIndentId: filters.myQuoteByIndentId,
+    onSuccess: triggerSuccess,
+  });
 
-  useEffect(() => {
-    if (loadAction?.type === "AWARD" && awardModalIndentId) {
-      refetchAwardModalQuotes();
-    }
-  }, [loadAction?.type, awardModalIndentId, refetchAwardModalQuotes]);
-
-  /** Sorted for Offer Hub: pending by amount (lowest first), then rejected, then accepted. */
-  const sortedOfferHubQuotes = useMemo(() => {
-    const list = [...awardModalQuotes];
-    return list.sort((a, b) => {
-      const sa = (a.status || "").toLowerCase();
-      const sb = (b.status || "").toLowerCase();
-      if (sa === "pending" && sb === "pending") {
-        return Number(a.amount ?? 0) - Number(b.amount ?? 0);
-      }
-      if (sa === "pending") return -1;
-      if (sb === "pending") return 1;
-      if (sa === "rejected" && sb === "accepted") return -1;
-      if (sa === "accepted" && sb === "rejected") return 1;
-      return 0;
-    });
-  }, [awardModalQuotes]);
-
-  const pendingOfferCount = useMemo(
-    () =>
-      awardModalQuotes.filter(
-        (q) => (q.status || "").toLowerCase() === "pending",
-      ).length,
-    [awardModalQuotes],
+  const filteredFindWorkAvatarKey = useMemo(
+    () => filteredFindWorkList.map((load) => load.id).join("|"),
+    [filteredFindWorkList],
   );
-  const lowestPendingAmount = useMemo(() => {
-    const pending = awardModalQuotes.filter(
-      (q) => (q.status || "").toLowerCase() === "pending",
-    );
-    if (pending.length === 0) return null;
-    return Math.min(...pending.map((q) => Number(q.amount ?? 0)));
-  }, [awardModalQuotes]);
-
-  useEffect(() => {
-    const trimmed = aggregateDriverPhone.trim();
-    if (aggregatePhoneLookupTimeoutRef.current)
-      clearTimeout(aggregatePhoneLookupTimeoutRef.current);
-    aggregatePhoneLookupTimeoutRef.current = setTimeout(() => {
-      aggregatePhoneLookupTimeoutRef.current = null;
-      const digits = trimmed.replace(/\D/g, "");
-      const last10 = digits.slice(-10);
-      if (last10.length < 10) {
-        setAggregatePhoneName(null);
-        setAggregatePhoneNotFound(false);
-        setAggregatePhoneInTrip(false);
-        return;
-      }
-
-      searchExistingDriversByPhone(last10).then(async ({ matches }) => {
-        const direct = matches[0]?.full_name ?? null;
-        let foundName = direct;
-
-        if (!foundName) {
-          // Some deployments store phone as +91XXXXXXXXXX; try that too.
-          const { matches: matchesWithCode } =
-            await searchExistingDriversByPhone(`+91${last10}`);
-          foundName = matchesWithCode[0]?.full_name ?? null;
-        }
-
-        setAggregatePhoneName(foundName);
-        if (foundName && !aggregateDriverNameManualRef.current) {
-          // Autofill from phone lookup unless user manually edited the field.
-          setAggregateDriverTrackingName(foundName);
-        }
-        setAggregatePhoneNotFound(!foundName);
-        if (!orgId) {
-          setAggregatePhoneInTrip(false);
-          return;
-        }
-        const { result } = await getDriverAvailabilityByPhoneGlobal(last10, {
-          anyOpenTripBlocks: true,
-          requireAuthoritativeRpc: true,
-        });
-        setAggregatePhoneInTrip(result.isBusy);
-      });
-    }, 400);
-    return () => {
-      if (aggregatePhoneLookupTimeoutRef.current)
-        clearTimeout(aggregatePhoneLookupTimeoutRef.current);
-    };
-  }, [aggregateDriverPhone, orgId]);
-
-  /** Indent ids that already have a trip (owner or supplier). Exclude these from Claimed so we don't show "ASSIGN STAFF & DEPLOY" again after deploy. */
-  const indentIdsWithTrip = useMemo(() => {
-    const list = trips ?? [];
-    const ids: string[] = [];
-    for (const t of list) {
-      const id = (t as { indent_id?: string | null }).indent_id;
-      if (id) ids.push(id);
-    }
-    return new Set(ids);
-  }, [trips]);
-
-  /** All indents from my org (for Hire Partner — filter by status tab). */
-  const hirePartnerLoads = useMemo(
-    () => indents.filter((i) => i.organization_id === orgId),
-    [indents, orgId],
-  );
-  const giveLoadIds = useMemo(
-    () =>
-      hirePartnerLoads
-        .filter((i) => {
-          const s = (i.status || "").toLowerCase();
-          return s !== "awarded" && s !== "completed" && s !== "cancelled";
-        })
-        .map((l) => l.id),
-    [hirePartnerLoads],
-  );
-  const { data: quoteCounts = {}, refetch: refetchQuoteCounts } =
-    useIndentOfferCountsQuery(orgId, giveLoadIds);
-
-  /** Indent ids where my org's quote is accepted (awarded to me). Used to exclude from Find Work and build Claimed list. */
-  const awardedToMeIndentIds = useMemo(
-    () =>
-      new Set(
-        myQuotes
-          .filter((q) => (q.status || "").toLowerCase() === "accepted")
-          .map((q) => q.indent_id),
-      ),
-    [myQuotes],
-  );
-
-  const awardedLoads = useMemo(
-    () =>
-      marketIndents.filter(
-        (i) =>
-          awardedToMeIndentIds.has(i.id) &&
-          (i.status || "").toLowerCase() !== "completed" &&
-          !indentIdsWithTrip.has(i.id),
-      ),
-    [marketIndents, awardedToMeIndentIds, indentIdsWithTrip],
-  );
-
-  /**
-   * Find Work "Done": terminal loads that I interacted with (quoted), excluding any
-   * load awarded to me (those belong in Claimed → Done). We later union this with
-   * Claimed → Done when rendering Find Work → Done, so users can view all done
-   * outcomes from one place without changing award/deploy flow.
-   */
-  const findWorkDoneLoads = useMemo(() => {
-    return marketIndents.filter((i) => {
-      const status = (i.status || "").toLowerCase();
-      if (!statusMatchesFilter(status, "DONE")) return false;
-      const target = (i.circulation_target || "").toLowerCase();
-      const isTargeted = target === "integrated_supplier" || target === "both";
-      if (!isTargeted) return false;
-      if (awardedToMeIndentIds.has(i.id)) return false;
-      return myQuoteByIndentId.has(i.id);
-    });
-  }, [marketIndents, awardedToMeIndentIds, myQuoteByIndentId]);
-
-  /** Claimed "Done": loads awarded to me that are completed or have a trip. */
-  const awardedLoadsDone = useMemo(
-    () =>
-      marketIndents.filter(
-        (i) =>
-          awardedToMeIndentIds.has(i.id) &&
-          (statusMatchesFilter(i.status || "", "DONE") ||
-            indentIdsWithTrip.has(i.id)),
-      ),
-    [marketIndents, awardedToMeIndentIds, indentIdsWithTrip],
-  );
-
-  /**
-   * Find Work → Done should also include Claimed → Done (awarded-to-me + done/trip),
-   * so users can see final outcomes in the Find Work DONE tab too.
-   */
-  const findWorkDoneUnionLoads = useMemo(() => {
-    const byId = new Map<string, IndentRow>();
-    for (const l of findWorkDoneLoads) byId.set(l.id, l);
-    for (const l of awardedLoadsDone ?? []) byId.set(l.id, l);
-    return Array.from(byId.values());
-  }, [findWorkDoneLoads, awardedLoadsDone]);
-
-  const getLoads = useMemo(
-    () =>
-      marketIndents.filter((i) => {
-        const status = (i.status || "").toLowerCase();
-        if (
-          status === "awarded" ||
-          status === "completed" ||
-          status === "cancelled"
-        )
-          return false;
-        const target = (i.circulation_target || "").toLowerCase();
-        return target === "integrated_supplier" || target === "both";
-      }),
-    [marketIndents],
-  );
-
-  /** Find Work list: open loads targeted to me, excluding any load already awarded to me (so we never show "Update quote" for awarded loads). */
-  const findWorkLoads = useMemo(
-    () => getLoads.filter((load) => !awardedToMeIndentIds.has(load.id)),
-    [getLoads, awardedToMeIndentIds],
-  );
-
-  /** Check if a load matches the search query (route, ID, client, creator org). */
-  const loadMatchesSearch = useCallback(
-    (load: IndentRow, q: string): boolean => {
-      const trimmed = q.trim().toLowerCase();
-      if (!trimmed) return true;
-      const route =
-        `${(load.pickup_area || "").toLowerCase()} ${(load.drop_location || "").toLowerCase()}`.trim();
-      const indentId = (getIndentDisplayNumber(load) || "").toLowerCase();
-      const tripId = (load.trip_number || "").toLowerCase();
-      const client = (load.client_name || "").toLowerCase();
-      const creator = (
-        (load as { creator_organization_name?: string })
-          .creator_organization_name || ""
-      ).toLowerCase();
-      return (
-        route.includes(trimmed) ||
-        indentId.includes(trimmed) ||
-        tripId.includes(trimmed) ||
-        client.includes(trimmed) ||
-        creator.includes(trimmed)
-      );
-    },
-    [],
-  );
-
-  /** Status-filtered lists for each role tab, then search-filtered. */
-  const filteredHirePartnerLoads = useMemo(() => {
-    const statusFiltered = hirePartnerLoads.filter((load) => {
-      const status = (load.status || "").toLowerCase();
-      if (statusFilterTab === "QUOTED") {
-        const hasBids = (quoteCounts[load.id] ?? 0) > 0;
-        const isQuotedStatus = statusMatchesFilter(status, "QUOTED");
-        const isNotTerminal =
-          !statusMatchesFilter(status, "AWARDED") &&
-          !statusMatchesFilter(status, "DONE");
-        return (isQuotedStatus || hasBids) && isNotTerminal;
-      }
-      if (statusFilterTab === "OPEN") {
-        // Hire Partner: once a load has any bids (or becomes "quoted"), it should
-        // move out of Created and into Quoted.
-        const hasBids = (quoteCounts[load.id] ?? 0) > 0;
-        const isQuotedStatus = statusMatchesFilter(status, "QUOTED");
-        if (hasBids || isQuotedStatus) return false;
-        return statusMatchesFilter(status, "OPEN");
-      }
-      return statusMatchesFilter(status, statusFilterTab);
-    });
-    return statusFiltered.filter((load) =>
-      loadMatchesSearch(load, searchQuery),
-    );
-  }, [
-    hirePartnerLoads,
-    statusFilterTab,
-    quoteCounts,
-    searchQuery,
-    loadMatchesSearch,
-  ]);
-  const filteredFindWorkLoads = useMemo(() => {
-    const statusFiltered = (() => {
-      if (statusFilterTab === "OPEN") {
-        // Find Work: Open should only show loads I haven't quoted yet.
-        return findWorkLoads.filter((load) => !myQuoteByIndentId.has(load.id));
-      }
-      if (statusFilterTab === "QUOTED") {
-        // Find Work: Quoted means I have sent a quote (pending/rejected/etc).
-        return findWorkLoads.filter((load) => myQuoteByIndentId.has(load.id));
-      }
-      if (statusFilterTab === "AWARDED") {
-        // Find Work: Awarded mirrors Claimed (awarded to me, ready to deploy).
-        return awardedLoads;
-      }
-      return [];
-    })();
-
-    return statusFiltered.filter((load) =>
-      loadMatchesSearch(load, searchQuery),
-    );
-  }, [
-    findWorkLoads,
-    statusFilterTab,
-    searchQuery,
-    loadMatchesSearch,
-    myQuoteByIndentId,
-    awardedLoads,
-  ]);
-
-  const filteredFindWorkDoneLoads = useMemo(() => {
-    return findWorkDoneUnionLoads.filter((load) =>
-      loadMatchesSearch(load, searchQuery),
-    );
-  }, [findWorkDoneUnionLoads, searchQuery, loadMatchesSearch]);
-
-  const filteredFindWorkList =
-    statusFilterTab === "DONE"
-      ? filteredFindWorkDoneLoads
-      : filteredFindWorkLoads;
 
   useEffect(() => {
     let cancelled = false;
     const loadCardAvatars = async () => {
       if (filteredFindWorkList.length === 0) {
-        setLoadAvatarByIndentId({});
+        setLoadAvatarByIndentId((prev) =>
+          Object.keys(prev).length === 0 ? prev : {},
+        );
         return;
       }
       const pairs = await Promise.all(
@@ -746,84 +310,31 @@ export function LoadCenterView({
       pairs.forEach(([indentId, uri]) => {
         if (uri) next[indentId] = uri;
       });
-      setLoadAvatarByIndentId(next);
+      setLoadAvatarByIndentId((prev) => {
+        const prevKeys = Object.keys(prev);
+        const nextKeys = Object.keys(next);
+        if (
+          prevKeys.length === nextKeys.length &&
+          nextKeys.every((k) => prev[k] === next[k])
+        ) {
+          return prev;
+        }
+        return next;
+      });
     };
     loadCardAvatars();
     return () => {
       cancelled = true;
     };
-  }, [filteredFindWorkList]);
+  }, [filteredFindWorkAvatarKey, filteredFindWorkList]);
 
-  const filteredClaimedLoads = useMemo(() => {
-    return awardedLoads.filter((load) => loadMatchesSearch(load, searchQuery));
-  }, [awardedLoads, searchQuery, loadMatchesSearch]);
-  const filteredClaimedDoneLoads = useMemo(() => {
-    return awardedLoadsDone.filter((load) =>
-      loadMatchesSearch(load, searchQuery),
-    );
-  }, [awardedLoadsDone, searchQuery, loadMatchesSearch]);
-  const displayedClaimedLoads =
-    statusFilterTab === "DONE" ? filteredClaimedDoneLoads : filteredClaimedLoads;
-
-  /** Counts per status tab for the current role tab (Hire Partner / Find Work / Claimed). */
-  const statusTabCounts = useMemo(() => {
-    const getCount = (filter: StatusFilterTab) => {
-      if (loadSubTab === "GIVE_LOAD") {
-        return hirePartnerLoads.filter((load) => {
-          const status = (load.status || "").toLowerCase();
-          if (filter === "QUOTED") {
-            const hasBids = (quoteCounts[load.id] ?? 0) > 0;
-            const isQuotedStatus = statusMatchesFilter(status, "QUOTED");
-            const isNotTerminal =
-              !statusMatchesFilter(status, "AWARDED") &&
-              !statusMatchesFilter(status, "DONE");
-            return (isQuotedStatus || hasBids) && isNotTerminal;
-          }
-          if (filter === "OPEN") {
-            const hasBids = (quoteCounts[load.id] ?? 0) > 0;
-            const isQuotedStatus = statusMatchesFilter(status, "QUOTED");
-            if (hasBids || isQuotedStatus) return false;
-            return statusMatchesFilter(status, "OPEN");
-          }
-          return statusMatchesFilter(status, filter);
-        }).length;
-      }
-      if (loadSubTab === "GET_LOAD") {
-        if (filter === "DONE") return findWorkDoneUnionLoads.length;
-        if (filter === "AWARDED") return awardedLoads.length;
-        if (filter === "QUOTED") {
-          return findWorkLoads.filter((load) => myQuoteByIndentId.has(load.id))
-            .length;
-        }
-        if (filter === "OPEN") {
-          return findWorkLoads.filter((load) => !myQuoteByIndentId.has(load.id))
-            .length;
-        }
-        return 0;
-      }
-      if (loadSubTab === "AWARDED") {
-        if (filter === "AWARDED") return awardedLoads.length;
-        if (filter === "DONE") return awardedLoadsDone.length;
-        return 0;
-      }
-      return 0;
-    };
-    return {
-      OPEN: getCount("OPEN"),
-      QUOTED: getCount("QUOTED"),
-      AWARDED: getCount("AWARDED"),
-      DONE: getCount("DONE"),
-    };
-  }, [
-    loadSubTab,
-    hirePartnerLoads,
-    findWorkLoads,
-    findWorkDoneUnionLoads,
-    awardedLoads,
-    awardedLoadsDone,
-    quoteCounts,
-    myQuoteByIndentId,
-  ]);
+  const displayedClaimedLoads = useMemo(
+    () =>
+      statusFilterTab === "DONE"
+        ? filteredClaimedDoneLoads
+        : filteredClaimedLoads,
+    [statusFilterTab, filteredClaimedDoneLoads, filteredClaimedLoads],
+  );
 
   useEffect(() => {
     // Keep status filter valid per role tab to avoid confusing empty views.
@@ -847,11 +358,6 @@ export function LoadCenterView({
     }
   }, [loadSubTab, statusFilterTab, refetchQuoteCounts]);
 
-  const triggerSuccess = (msg: string) => {
-    setSuccessMsg(msg);
-    setShowSuccess(true);
-    setTimeout(() => setShowSuccess(false), 1500);
-  };
 
   const handleBroadcastDraft = async (load: IndentRow) => {
     if (!orgId) return;
@@ -899,652 +405,150 @@ export function LoadCenterView({
     }
   };
 
-  const handleAwardQuote = async () => {
-    if (!orgId || loadAction?.type !== "AWARD" || !selectedQuoteId) return;
-    const load = loadAction.load;
-    const currentStatus = (load.status || "").toLowerCase();
-    if (currentStatus === "awarded" || currentStatus === "completed") {
-      Alert.alert(
-        "Already awarded",
-        "This load has already been awarded. Closing.",
-      );
-      setLoadAction(null);
-      setSelectedQuoteId(null);
-      invalidateIndents(orgId);
-      return;
-    }
-    if (currentStatus === "cancelled" || currentStatus === "closed") {
-      Alert.alert(
-        "Load unavailable",
-        "This load has been cancelled or closed.",
-      );
-      setLoadAction(null);
-      setSelectedQuoteId(null);
-      invalidateIndents(orgId);
-      return;
-    }
-    const pendingQuotes = awardModalQuotes.filter(
-      (q) => (q.status || "").toLowerCase() === "pending",
-    );
-    const winner = pendingQuotes.find((q) => q.id === selectedQuoteId);
-    if (!winner) {
-      Alert.alert(
-        "Invalid selection",
-        "Please select a pending offer to award.",
-      );
-      return;
-    }
-    try {
-      setAwarding(true);
-      const { error: acceptErr } = await updateDirectQuoteStatus(
-        winner.id,
-        "accepted",
-      );
-      if (acceptErr) {
-        Alert.alert("Could not award", acceptErr.message);
-        return;
-      }
-      for (const q of pendingQuotes) {
-        if (q.id !== winner.id) {
-          const { error: rejectErr } = await updateDirectQuoteStatus(
-            q.id,
-            "rejected",
-          );
-          if (rejectErr) {
-            Alert.alert(
-              "Award partially failed",
-              "One or more quotes could not be updated. Winner was set.",
-            );
-            queryClient.invalidateQueries({
-              queryKey: ["indents", load.id, "direct-quotes"],
-            });
-            invalidateIndents(orgId);
-            break;
-          }
-        }
-      }
-      const { error: indentErr } = await updateIndent(load.id, {
-        status: "awarded",
-      });
-      if (indentErr) {
-        const friendlyMessage =
-          indentErr.message &&
-          (indentErr.message.includes("check constraint") ||
-            indentErr.message.includes("indents_status_check"))
-            ? "Indent status could not be updated. Please refresh the app and try again."
-            : indentErr.message;
-        Alert.alert(
-          "Award saved but indent status could not be updated",
-          friendlyMessage,
-        );
-        queryClient.invalidateQueries({
-          queryKey: ["indents", load.id, "direct-quotes"],
-        });
-      }
-      setSelectedQuoteId(null);
-      setLoadAction(null);
-      invalidateIndents(orgId);
-      triggerSuccess(
-        "Load awarded — supplier can assign and deploy from Claimed.",
-      );
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Unknown error.";
-      Alert.alert("Could not award", msg);
-      if (loadAction?.type === "AWARD" && loadAction.load?.id) {
-        queryClient.invalidateQueries({
-          queryKey: ["indents", loadAction.load.id, "direct-quotes"],
-        });
-      }
-      invalidateIndents(orgId);
-    } finally {
-      setAwarding(false);
-    }
-  };
-
-  const handleFinalAssignment = async (load: IndentRow) => {
-    if (assigningTripId === load.id) return;
-    if (!orgId) {
-      Alert.alert(
-        "Cannot start trip",
-        "Your organization context is missing. Please try again.",
-      );
-      return;
-    }
-
-    const acceptedQuote = myQuotes.find(
-      (q) =>
-        (q.status || "").toLowerCase() === "accepted" &&
-        q.indent_id === load.id,
-    );
-
-    if (!acceptedQuote) {
-      Alert.alert(
-        "Cannot start trip",
-        "No accepted quote found for this load. Please ensure the load is awarded to you.",
-      );
-      return;
-    }
-
-    try {
-      setAssigningTripId(load.id);
-      const { error, trip } = await acceptAwardedQuote(acceptedQuote.id);
-      if (error || !trip) {
-        Alert.alert(
-          "Could not create trip",
-          error?.message ??
-            "Unknown error while creating trip from awarded quote.",
-        );
-        return;
-      }
-
-      // Mark indent completed so it leaves Claimed list (O(1)). Ignore status-update failure; trip is source of truth.
-      const { error: completedErr } = await updateIndent(load.id, {
-        status: "completed",
-      });
-      if (completedErr) {
-        // Constraint or RLS may block; still invalidate so list refetches.
-      }
-
-      setLoadAction(null);
-      triggerSuccess("Trip Initialized");
-      if (orgId) {
-        invalidateTrips(orgId);
-        invalidateIndents(orgId);
-      }
-      const isShipper = load.organization_id === orgId;
-      if (isShipper) router.push("/(tabs)/trips" as import("expo-router").Href);
-    } catch (e) {
-      const msg =
-        e instanceof Error ? e.message : "Unknown error while creating trip.";
-      Alert.alert("Could not create trip", msg);
-    } finally {
-      setAssigningTripId(null);
-    }
-  };
-
-  const handleDeployRoster = async (load: IndentRow) => {
-    if (assigningTripId === load.id) return;
-    if (!orgId) {
-      Alert.alert(
-        "Cannot deploy",
-        "Your organization context is missing. Please try again.",
-      );
-      return;
-    }
-    const status = (load.status || "").toLowerCase();
-    if (status === "cancelled" || status === "closed") {
-      Alert.alert(
-        "Load unavailable",
-        "This load has been cancelled or closed.",
-      );
-      setLoadAction(null);
-      return;
-    }
-    const acceptedQuote = myQuotes.find(
-      (q) =>
-        (q.status || "").toLowerCase() === "accepted" &&
-        q.indent_id === load.id,
-    );
-    if (!acceptedQuote) {
-      Alert.alert("Cannot deploy", "No accepted quote found for this load.");
-      return;
-    }
-    if (!assignDriverId || typeof assignVehicleId !== "string") {
-      Alert.alert(
-        "Select driver and vehicle",
-        "Please select a driver and a vehicle from your org to assign trip.",
-      );
-      return;
-    }
-    if (staffHandshakeDeployLockRef.current) {
-      return;
-    }
-    staffHandshakeDeployLockRef.current = true;
-    try {
-      setAssigningTripId(load.id);
-      const { error: assignErr } = await updateDirectQuoteAssignment(
-        acceptedQuote.id,
-        assignDriverId,
-        assignVehicleId,
-      );
-      if (assignErr) {
-        Alert.alert("Could not assign", assignErr.message);
-        return;
-      }
-      const { error: tripErr, trip } = await acceptAwardedQuote(
-        acceptedQuote.id,
-      );
-      if (tripErr || !trip) {
-        Alert.alert(
-          "Could not create trip",
-          tripErr?.message ?? "Unknown error.",
-        );
-        return;
-      }
-      await updateIndent(load.id, { status: "completed" });
-      setLoadAction(null);
-      setAssignDriverId(null);
-      setAssignVehicleId(undefined);
-      setAssignVehicleRegistration("");
-      setUseAdHocDriver(false);
-      triggerSuccess("Voyage authorized — trip created.");
-      invalidateTrips(orgId);
-      invalidateIndents(orgId);
-      const isShipper = load.organization_id === orgId;
-      if (isShipper) {
-        router.push("/(tabs)/trips" as import("expo-router").Href);
-      } else if (trip?.id) {
-        setInitialTripForDetail(trip);
-        router.push(
-          `/trip/${trip.id}?entryContext=supplier` as import("expo-router").Href,
-        );
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Unknown error.";
-      Alert.alert("Could not deploy", msg);
-    } finally {
-      staffHandshakeDeployLockRef.current = false;
-      setAssigningTripId(null);
-    }
-  };
-
-  const handleDeployAdHoc = async (load: IndentRow) => {
-    if (assigningTripId === load.id) return;
-    if (!orgId) {
-      Alert.alert(
-        "Cannot deploy",
-        "Your organization context is missing. Please try again.",
-      );
-      return;
-    }
-    const status = (load.status || "").toLowerCase();
-    if (status === "cancelled" || status === "closed") {
-      Alert.alert(
-        "Load unavailable",
-        "This load has been cancelled or closed.",
-      );
-      setLoadAction(null);
-      return;
-    }
-    const acceptedQuote = myQuotes.find(
-      (q) =>
-        (q.status || "").toLowerCase() === "accepted" &&
-        q.indent_id === load.id,
-    );
-    if (!acceptedQuote) {
-      Alert.alert("Cannot deploy", "No accepted quote found for this load.");
-      return;
-    }
-    const handshakeSubSupplierId = (subcontractSupplierId ?? "").trim();
-    const handshakeSubRateRaw = subcontractRate.trim();
-    const handshakeSubRateNum = Number(handshakeSubRateRaw);
-    if (!handshakeSubSupplierId) {
-      Alert.alert(
-        "Partner required",
-        "Select the associated partner (sub-supplier) for this trip.",
-      );
-      return;
-    }
-    if (
-      handshakeSubRateRaw === "" ||
-      !Number.isFinite(handshakeSubRateNum) ||
-      handshakeSubRateNum < 0
-    ) {
-      Alert.alert(
-        "Partner rate required",
-        "Enter the rate you will pay this partner (₹).",
-      );
-      return;
-    }
-    /** Trip detail will hold driver / vehicle / OTP; never persist ad-hoc fields when deferring. */
-    const deferHandshakeAssignment = staffHandshakeAssignLater;
-    const nameTrimmed = deferHandshakeAssignment
-      ? ""
-      : aggregateDriverTrackingName.trim();
-    const phoneTrimmed = deferHandshakeAssignment
-      ? ""
-      : aggregateDriverPhone.trim();
-    const regTrimmed = deferHandshakeAssignment
-      ? ""
-      : assignVehicleRegistration.trim();
-    if (!deferHandshakeAssignment && nameTrimmed.length === 0) {
-      Alert.alert(
-        "Driver name required",
-        "Enter driver name (tracking) to continue.",
-      );
-      return;
-    }
-    if (!deferHandshakeAssignment && phoneTrimmed.length === 0) {
-      Alert.alert(
-        "Driver phone required",
-        "Enter driver phone (tracking) to continue.",
-      );
-      return;
-    }
-    if (!deferHandshakeAssignment && regTrimmed.length === 0) {
-      Alert.alert(
-        "Vehicle number required",
-        "Enter vehicle number to continue.",
-      );
-      return;
-    }
-    const phoneErr = phoneTrimmed ? validatePhone(phoneTrimmed) : null;
-    if (!deferHandshakeAssignment && phoneErr) {
-      Alert.alert("Invalid driver phone", phoneErr);
-      return;
-    }
-    if (staffHandshakeDeployLockRef.current) {
-      return;
-    }
-    staffHandshakeDeployLockRef.current = true;
-    try {
-      setAssigningTripId(load.id);
-      const vehicleIdForQuote = deferHandshakeAssignment
-        ? null
-        : typeof assignVehicleId === "string"
-          ? assignVehicleId
-          : null;
-      const { error: assignErr } = await updateDirectQuoteAssignment(
-        acceptedQuote.id,
-        null,
-        vehicleIdForQuote,
-      );
-      if (assignErr) {
-        Alert.alert("Could not assign", assignErr.message);
-        return;
-      }
-      const regNum = deferHandshakeAssignment ? "" : regTrimmed;
-      const { error: tripErr, trip } = await acceptAwardedQuote(
-        acceptedQuote.id,
-        {
-          vehicle_display_number: regNum || undefined,
-        },
-      );
-      if (tripErr || !trip) {
-        Alert.alert(
-          "Could not create trip",
-          tripErr?.message ?? "Unknown error.",
-        );
-        return;
-      }
-      const subSupplierId = handshakeSubSupplierId;
-      const subRateNum = handshakeSubRateNum;
-      const shouldSaveSubcontract =
-        subSupplierId !== "" &&
-        handshakeSubRateRaw !== "" &&
-        Number.isFinite(subRateNum) &&
-        subRateNum >= 0;
-
-      const saveSubcontract = async () => {
-        if (!shouldSaveSubcontract) return;
-        const isTripOwner = trip.organization_id === orgId;
-
-        if (isTripOwner) {
-          const { error: supplierUpdateErr } = await updateTripSupplier(
-            trip.id,
-            {
-              supplier_id: subSupplierId,
-              supplier_rate: subRateNum,
-            },
-          );
-          if (supplierUpdateErr) {
-            Alert.alert(
-              "Trip created",
-              `Partner was saved, but trip supplier link could not be updated. ${supplierUpdateErr.message}`,
-            );
-          }
-        }
-
-        const { error: subErr } = await upsertTripSubcontract({
-          viewerOrgId: orgId,
-          tripId: trip.id,
-          supplierId: subSupplierId,
-          rate: subRateNum,
-        });
-        if (subErr)
-          Alert.alert(
-            "Trip created",
-            `Partner could not be saved. ${subErr.message}`,
-          );
-        queryClient.invalidateQueries({
-          queryKey: ["q", "trips", "subcontracts", orgId],
-        });
-      };
-
-      // Driver + OTP are optional: require phone only for OTP generation (not for trip creation).
-      if (deferHandshakeAssignment || !phoneTrimmed || phoneErr) {
-        await saveSubcontract();
-        await updateIndent(load.id, { status: "completed" });
-        invalidateTrips(orgId);
-        invalidateIndents(orgId);
-        setLoadAction(null);
-        setAssigningTripId(null);
-        triggerSuccess(
-          deferHandshakeAssignment
-            ? "Trip created — add driver and vehicle on trip detail when ready."
-            : "Trip created (OTP not generated)",
-        );
-        // Do not treat this as an error. OTP can be generated later from Trip Detail
-        // after providing a driver phone number.
-        return;
-      }
-      const { error: availabilityError, result: availability } =
-        await getDriverAvailabilityByPhoneGlobal(phoneTrimmed, {
-          excludeTripId: trip.id,
-          anyOpenTripBlocks: true,
-          requireAuthoritativeRpc: true,
-        });
-      if (availabilityError) {
-        throw availabilityError;
-      }
-      if (availability.isBusy) {
-        await saveSubcontract();
-        await updateIndent(load.id, { status: "completed" });
-        invalidateTrips(orgId);
-        invalidateIndents(orgId);
-        setLoadAction(null);
-        setAssigningTripId(null);
-        Alert.alert(
-          "Trip created",
-          `Driver is already assigned to ${availability.ongoingTripLabel ?? "another ongoing trip"}.\n\nComplete or unassign that trip before assigning this one.`,
-        );
-        setInitialTripForDetail(trip);
-        router.push(
-          `/trip/${trip.id}?entryContext=supplier` as import("expo-router").Href,
-        );
-        return;
-      }
-
-      const { error: assignAggErr } = await assignAggregateTripDriverByPhone(
-        trip.id,
-        orgId,
-        phoneTrimmed,
-        regNum || null,
-      );
-      if (assignAggErr) {
-        await saveSubcontract();
-        await updateIndent(load.id, { status: "completed" });
-        invalidateTrips(orgId);
-        invalidateIndents(orgId);
-        setLoadAction(null);
-        setAssigningTripId(null);
-        Alert.alert(
-          "Trip created",
-          `Driver could not be assigned. ${humanizeTripIdInRpcError(assignAggErr.message, trip)}\n\nAssign driver from trip detail to generate OTP.`,
-        );
-        setInitialTripForDetail(trip);
-        router.push(
-          `/trip/${trip.id}?entryContext=supplier` as import("expo-router").Href,
-        );
-        return;
-      }
-
-      const {
-        error: otpErr,
-        code,
-        expires_at,
-      } = await generateTripOtp(trip.id);
-      if (otpErr || !code) {
-        await saveSubcontract();
-        await updateIndent(load.id, { status: "completed" });
-        invalidateTrips(orgId);
-        invalidateIndents(orgId);
-        setLoadAction(null);
-        setAssigningTripId(null);
-        Alert.alert(
-          "Trip created",
-          "OTP could not be generated. Get OTP from the trip detail screen.",
-        );
-        setInitialTripForDetail(trip);
-        router.push(
-          `/trip/${trip.id}?entryContext=supplier` as import("expo-router").Href,
-        );
-        return;
-      }
-
-      setDeployOtpCode(code);
-      setDeployOtpExpiresAt(expires_at ?? null);
-      setDeployTripIdForOtp(trip.id);
-
-      await saveSubcontract();
-
-      await updateIndent(load.id, { status: "completed" });
-      invalidateTrips(orgId);
-      invalidateIndents(orgId);
-      triggerSuccess("OTP generated");
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Unknown error.";
-      Alert.alert("Could not deploy", msg);
-    } finally {
-      staffHandshakeDeployLockRef.current = false;
-      setAssigningTripId(null);
-    }
-  };
 
   const activeDrivers = useMemo(
     () => drivers.filter((d) => !d.left_at),
     [drivers],
   );
-  const activeTripStatusSet = useMemo(
-    () =>
-      new Set([
-        "completed",
-        "cancelled",
-        "closed",
-        "expired",
-      ]),
-    [],
-  );
-  const driverBusyTripLabelById = useMemo(() => {
-    const byDriverId = new Map<string, string>();
-    for (const t of trips ?? []) {
-      const driverId = (t as { driver_id?: string | null }).driver_id;
-      if (!driverId || byDriverId.has(driverId)) continue;
-      const status = String((t as { status?: string | null }).status ?? "").toLowerCase();
-      if (activeTripStatusSet.has(status)) continue;
-      const label =
-        String((t as { display_trip_id?: string | null }).display_trip_id ?? "").trim() ||
-        String((t as { trip_number?: string | null }).trip_number ?? "").trim() ||
-        String((t as { driver_display_trip_id?: string | null }).driver_display_trip_id ?? "").trim() ||
-        "another ongoing trip";
-      byDriverId.set(driverId, label);
-    }
-    return byDriverId;
-  }, [trips, activeTripStatusSet]);
-  const selectedDriverBusyTripLabel = useMemo(() => {
-    if (!assignDriverId) return null;
-    return driverBusyTripLabelById.get(assignDriverId) ?? null;
-  }, [assignDriverId, driverBusyTripLabelById]);
-  const rosterReady =
-    !useAdHocDriver &&
-    !!assignDriverId &&
-    typeof assignVehicleId === "string" &&
-    !selectedDriverBusyTripLabel;
-  const adHocReady = useAdHocDriver;
-  const aggregateHasDriverName = aggregateDriverTrackingName.trim().length > 0;
-  const aggregateHasDriverPhone = aggregateDriverPhone.trim().length > 0;
-  const aggregateHasVehicleText = assignVehicleRegistration.trim().length > 0;
-  const aggregateTrackingFlowReady =
-    aggregateHasDriverName && aggregateHasDriverPhone && aggregateHasVehicleText;
-  /** Aggregate Staff Handshake: partner + rate are always required before deploy. */
-  const aggregatePartnerHandshakeComplete = useMemo(() => {
-    const sid = (subcontractSupplierId ?? "").trim();
-    const rateRaw = subcontractRate.trim();
-    const rateNum = Number(rateRaw);
-    return (
-      sid.length > 0 &&
-      rateRaw.length > 0 &&
-      Number.isFinite(rateNum) &&
-      rateNum >= 0
-    );
-  }, [subcontractSupplierId, subcontractRate]);
-
-  /** Staff Handshake: dismiss OTP preview, or close modal. */
-  const handleStaffHandshakeBack = useCallback(() => {
-    if (deployOtpCode) {
-      setDeployOtpCode(null);
-      setDeployOtpExpiresAt(null);
-      setDeployTripIdForOtp(null);
-      return;
-    }
-    setLoadAction(null);
-    setDeployOtpCode(null);
-    setDeployOtpExpiresAt(null);
-    setDeployTripIdForOtp(null);
-    setStaffHandshakeAssignLater(false);
-  }, [deployOtpCode]);
 
   /** Keep add-load FAB above the global chat FAB, tab bar, and safe area. */
-  const hirePartnerFabBottom =
-    Layout.demoTabBarScrollBottomInset +
-    insets.bottom +
-    Layout.tabBarBottomPaddingMin +
-    Layout.fabStackOffset;
+  const hirePartnerFabBottom = layout.fabBottom({
+    stackOffset: Layout.fabStackOffset,
+  });
   const paddingBottom = useMemo(() => {
-    const base = 24 + Layout.demoTabBarScrollBottomInset + insets.bottom + 24;
-    if (loadSubTab !== "GIVE_LOAD") return base;
+    const base = layout.scrollBottomPadding(36);
+    if (isMobileView || loadSubTab !== "GIVE_LOAD") return base;
     return hirePartnerFabBottom + Layout.fabSize + Layout.fabBottomOffset;
-  }, [hirePartnerFabBottom, insets.bottom, loadSubTab]);
+  }, [hirePartnerFabBottom, isMobileView, layout, loadSubTab]);
   const statusTabsForRole = useMemo(() => {
     if (!isClaimedTab) return STATUS_TABS;
     return STATUS_TABS.filter((t) => t.id === "AWARDED" || t.id === "DONE");
   }, [isClaimedTab]);
 
-  /** Vehicle / weight / load: one header row, one detail row (lighter type). */
-  const renderLoadCardSpecsColumns = useCallback(
-    (vehicleDetail: string, weightDetail: string, loadTypeDetail: string) => (
-      <View style={styles.loadCardSpecsGrid}>
-        <View style={styles.loadCardSpecsLabelsRow}>
-          <View style={styles.loadCardSpecCell}>
-            <Text style={styles.loadCardSpecLabel}>Vehicle</Text>
-          </View>
-          <View style={[styles.loadCardSpecCell, styles.loadCardSpecDivider]}>
-            <Text style={styles.loadCardSpecLabel}>Weight</Text>
-          </View>
-          <View style={[styles.loadCardSpecCell, styles.loadCardSpecDivider]}>
-            <Text style={styles.loadCardSpecLabel}>Load</Text>
-          </View>
-        </View>
-        <View style={styles.loadCardSpecsValuesRow}>
-          <View style={styles.loadCardSpecCell}>
-            <Text style={styles.loadCardSpecValue} numberOfLines={2}>
-              {vehicleDetail}
-            </Text>
-          </View>
-          <View style={[styles.loadCardSpecCell, styles.loadCardSpecDivider]}>
-            <Text style={styles.loadCardSpecValue} numberOfLines={2}>
-              {weightDetail}
-            </Text>
-          </View>
-          <View style={[styles.loadCardSpecCell, styles.loadCardSpecDivider]}>
-            <Text style={styles.loadCardSpecValue} numberOfLines={2}>
-              {loadTypeDetail}
-            </Text>
-          </View>
-        </View>
-      </View>
-    ),
-    [],
+  const mobileStatusTabs = useMemo(
+    () =>
+      statusTabsForRole.map((tab) => ({
+        id: tab.id,
+        label:
+          loadSubTab === "GIVE_LOAD" && tab.id === "OPEN" ? "Created" : tab.label,
+        count: statusTabCounts[tab.id],
+      })),
+    [statusTabsForRole, loadSubTab, statusTabCounts],
+  );
+
+  const renderGiveLoadMobileCard = useCallback(
+    (load: IndentRow) => {
+      const status = (load.status || "").toLowerCase();
+      const bidCount = quoteCounts[load.id] ?? 0;
+      const terminalForQuotePill =
+        status === "awarded" || statusMatchesFilter(status, "DONE");
+      const displayStatus =
+        !terminalForQuotePill && bidCount > 0 ? "quoted" : status;
+      const vehicleDetail = (load.vehicle_type || "—").toUpperCase();
+      const loadTypeDetail = (load.load_type || "General").toUpperCase();
+      const clientName = (load.client_name || "—").trim() || "—";
+      return (
+        <LoadCenterHubMobileIndentCard
+          key={load.id}
+          indent={load}
+          titleName={clientName}
+          statusLabel={displayStatus}
+          origin={load.pickup_area || "—"}
+          dest={load.drop_location || "—"}
+          pickupIso={load.pickup_date}
+          leftFooterLabel={vehicleDetail}
+          rightFooterLabel={
+            bidCount > 0
+              ? `${bidCount} bid${bidCount === 1 ? "" : "s"}`
+              : loadTypeDetail
+          }
+          onPress={() => onIndentPress(load)}
+        />
+      );
+    },
+    [onIndentPress, quoteCounts],
+  );
+
+  const renderGetLoadMobileCard = useCallback(
+    (load: IndentRow) => {
+      const existingQuote = myQuoteByIndentId.get(load.id);
+      const quoteStatus = (existingQuote?.status ?? "").toLowerCase();
+      const isPending = quoteStatus === "pending";
+      const isRejected = quoteStatus === "rejected";
+      const isAccepted = quoteStatus === "accepted";
+      const vehicleDetail = (load.vehicle_type || "—").toUpperCase();
+      const loadTypeDetail = (load.load_type || "—").toUpperCase();
+      const clientLabel = (
+        load.creator_organization_name ||
+        load.client_name ||
+        "Partner"
+      ).trim();
+      const statusLabel = isAccepted
+        ? "awarded"
+        : isRejected
+          ? "declined"
+          : isPending
+            ? "quoted"
+            : "open";
+      const rightFooter = isPending
+        ? `Quote ${formatINR(Number(existingQuote?.amount ?? 0))}`
+        : isAccepted
+          ? "Awarded"
+          : loadTypeDetail;
+      return (
+        <LoadCenterHubMobileIndentCard
+          key={load.id}
+          indent={load}
+          titleName={clientLabel}
+          statusLabel={statusLabel}
+          origin={load.pickup_area || "—"}
+          dest={load.drop_location || "—"}
+          pickupIso={load.pickup_date}
+          leftFooterLabel={vehicleDetail}
+          rightFooterLabel={rightFooter}
+          avatarUrl={loadAvatarByIndentId[load.id]}
+          onPress={() => onIndentPress(load)}
+        />
+      );
+    },
+    [loadAvatarByIndentId, myQuoteByIndentId, onIndentPress],
+  );
+
+  const renderClaimedMobileCard = useCallback(
+    (load: IndentRow, isDone: boolean) => {
+      const acceptedQuote = myQuotes.find(
+        (q) =>
+          (q.status || "").toLowerCase() === "accepted" &&
+          q.indent_id === load.id,
+      );
+      const supplierRate =
+        acceptedQuote?.amount != null
+          ? Number(acceptedQuote.amount)
+          : Number(load.client_price || 0);
+      const clientLabel = (
+        load.creator_organization_name ||
+        load.client_name ||
+        "Claimed load"
+      ).trim();
+      return (
+        <LoadCenterHubMobileIndentCard
+          key={load.id}
+          indent={load}
+          titleName={clientLabel}
+          statusLabel={isDone ? "completed" : "claimed"}
+          origin={load.pickup_area || "—"}
+          dest={load.drop_location || "—"}
+          pickupIso={load.pickup_date}
+          leftFooterLabel={(load.vehicle_type || "—").toUpperCase()}
+          rightFooterLabel={
+            isDone ? "On books" : formatINR(supplierRate)
+          }
+          avatarUrl={loadAvatarByIndentId[load.id]}
+          onPress={() => onIndentPress(load)}
+        />
+      );
+    },
+    [loadAvatarByIndentId, myQuotes, onIndentPress],
   );
 
   const renderClaimedLoadCard = (
@@ -1600,11 +604,11 @@ export function LoadCenterView({
           compact={stretchInGrid}
         />
         <View style={styles.loadCardSpecsPanel}>
-          {renderLoadCardSpecsColumns(
-            vehicleDetail,
-            weightDetail,
-            loadTypeDetail,
-          )}
+          <LoadCardSpecsRow
+            vehicle={vehicleDetail}
+            weight={weightDetail}
+            loadType={loadTypeDetail}
+          />
           <View style={styles.loadCardQuoteHint}>
             <Text style={styles.loadCardQuoteHintText}>
               Agreed rate {formatINR(supplierRate)}
@@ -1615,9 +619,15 @@ export function LoadCenterView({
           style={[
             styles.loadCardFooter,
             stretchInGrid && styles.loadCardFooterGrid,
+            stackIndentCardFooter && styles.loadCardFooterCompact,
           ]}
         >
-          <View style={styles.loadCardMeta}>
+          <View
+            style={[
+              styles.loadCardMeta,
+              stackIndentCardFooter && styles.loadCardMetaCompact,
+            ]}
+          >
             <View style={styles.bidMetaWrap}>
               <View
                 style={[
@@ -1638,47 +648,49 @@ export function LoadCenterView({
               </Text>
             </View>
           </View>
-          <View style={styles.loadCardActions}>
-            <TouchableOpacity
-              style={styles.shareIndentIconBtn}
-              onPress={() => handleShareIndent(load)}
-              activeOpacity={0.88}
-              accessibilityLabel="Share load"
+          <View
+            style={[
+              styles.loadCardActions,
+              stackIndentCardFooter && styles.loadCardActionsCompact,
+            ]}
+          >
+            <View
+              style={[
+                styles.loadCardActionCluster,
+                stackIndentCardFooter && styles.loadCardActionClusterStacked,
+              ]}
             >
-              <Share2 size={18} color={Theme.textMuted} strokeWidth={2.2} />
-            </TouchableOpacity>
-            {isDone ? (
               <TouchableOpacity
-                style={styles.reviewBidsBtn}
-                onPress={() => onIndentPress(load)}
-                activeOpacity={0.9}
+                style={styles.shareIndentIconBtn}
+                onPress={() => handleShareIndent(load)}
+                activeOpacity={0.88}
+                accessibilityLabel="Share load"
               >
-                <Text style={styles.reviewBidsBtnText}>View detail</Text>
+                <Share2 size={18} color={Theme.textMuted} strokeWidth={2.2} />
               </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={styles.reviewBidsBtn}
-                onPress={() => {
-                  setAssignDriverId(null);
-                  setAssignVehicleId(undefined);
-                  setAssignVehicleRegistration("");
-                  setUseAdHocDriver(false);
-                  setDeployOtpCode(null);
-                  setDeployOtpExpiresAt(null);
-                  setDeployTripIdForOtp(null);
-                  setStaffHandshakeAssignLater(false);
-                  setLoadAction({ type: "ASSIGN", load });
-                }}
-                activeOpacity={0.9}
-                disabled={assigningTripId === load.id}
-              >
-                <Text style={styles.reviewBidsBtnText}>
-                  {assigningTripId === load.id
-                    ? "Authorizing…"
-                    : "Assign & deploy"}
-                </Text>
-              </TouchableOpacity>
-            )}
+              {isDone ? (
+                <TouchableOpacity
+                  style={styles.reviewBidsBtn}
+                  onPress={() => onIndentPress(load)}
+                  activeOpacity={0.9}
+                >
+                  <Text style={styles.reviewBidsBtnText}>View detail</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.reviewBidsBtn}
+                  onPress={() => handshake.open(load)}
+                  activeOpacity={0.9}
+                  disabled={tripDeployment.assigningTripId === load.id}
+                >
+                  <Text style={styles.reviewBidsBtnText}>
+                    {tripDeployment.assigningTripId === load.id
+                      ? "Authorizing…"
+                      : "Assign & deploy"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         </View>
       </TouchableOpacity>
@@ -1686,8 +698,43 @@ export function LoadCenterView({
   };
 
   return (
-    <View style={[styles.container, { paddingTop: contentTopPadding }]}>
-      {/* Dark header: sub-tabs + status filters — reference UI */}
+    <View
+      style={[
+        styles.container,
+        isMobileView && styles.containerMobileHub,
+        { paddingTop: contentTopPadding },
+      ]}
+    >
+      {isMobileView ? (
+        <LoadCenterHubMobileShell
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          mainTabs={[
+            {
+              key: "GIVE_LOAD",
+              label: "Give load",
+              count: hirePartnerLoads.length,
+            },
+            {
+              key: "GET_LOAD",
+              label: "Get load",
+              count: findWorkLoads.length,
+            },
+            {
+              key: "AWARDED",
+              label: "Claimed",
+              count: awardedLoads.length,
+            },
+          ]}
+          activeMainTab={loadSubTab}
+          onMainTabChange={setLoadSubTab}
+          statusTabs={mobileStatusTabs}
+          activeStatusTab={statusFilterTab}
+          onStatusTabChange={(id) => setStatusFilterTab(id as StatusFilterTab)}
+          showStatusTabs={!isClaimedTab}
+          onCreateIndentPress={onCreateIndentPress}
+        />
+      ) : (
       <View
         style={[
           styles.loadDarkHeader,
@@ -1939,12 +986,14 @@ export function LoadCenterView({
           </View>
         ) : null}
       </View>
+      )}
 
       {/* Content area: rounded top, light bg — reference overlap */}
       <View
         style={[
           styles.loadContentWrap,
           isClaimedTab && styles.loadContentWrapClaimed,
+          isMobileView && styles.loadContentWrapMobileHub,
         ]}
       >
         <ScrollView
@@ -1952,6 +1001,7 @@ export function LoadCenterView({
           contentContainerStyle={[
             styles.scrollContent,
             isClaimedTab && styles.scrollContentClaimed,
+            isMobileView && styles.scrollContentMobileHub,
             { paddingBottom },
           ]}
           showsVerticalScrollIndicator={false}
@@ -2004,6 +1054,12 @@ export function LoadCenterView({
                           : "Awarded loads will appear here."}
                   </Text>
                 </View>
+              ) : isMobileView ? (
+                <LoadCenterHubMobileListCanvas>
+                  {filteredHirePartnerLoads.map((load) =>
+                    renderGiveLoadMobileCard(load),
+                  )}
+                </LoadCenterHubMobileListCanvas>
               ) : (
                 <View style={useGridLayout ? styles.gridList : undefined}>
                   <View style={styles.loadSectionHeaderBlock}>
@@ -2122,11 +1178,11 @@ export function LoadCenterView({
                             {getIndentDisplayNumber(load)}
                           </Text>
                           <View style={styles.loadCardSpecsPanel}>
-                            {renderLoadCardSpecsColumns(
-                              vehicleDetail,
-                              weightDetail,
-                              loadTypeDetail,
-                            )}
+                            <LoadCardSpecsRow
+                              vehicle={vehicleDetail}
+                              weight={weightDetail}
+                              loadType={loadTypeDetail}
+                            />
                             {(isAwaitingSupplierDeploy ||
                               status === "awarded") &&
                             awardedAmount != null ? (
@@ -2141,9 +1197,16 @@ export function LoadCenterView({
                             style={[
                               styles.loadCardFooter,
                               useGridLayout && styles.loadCardFooterGrid,
+                              stackIndentCardFooter && styles.loadCardFooterCompact,
                             ]}
                           >
-                            <View style={styles.loadCardMeta}>
+                            <View
+                              style={[
+                                styles.loadCardMeta,
+                                stackIndentCardFooter &&
+                                  styles.loadCardMetaCompact,
+                              ]}
+                            >
                               {isDone ? (
                                 <View style={styles.bidMetaWrap}>
                                   <View
@@ -2212,70 +1275,88 @@ export function LoadCenterView({
                                       />
                                     )}
                                   </View>
-                                  <Text style={styles.loadCardMetaText}>
+                                  <Text
+                                    style={styles.loadCardMetaText}
+                                    numberOfLines={1}
+                                  >
                                     {bidCount} bids received
                                   </Text>
                                 </View>
                               )}
                             </View>
-                            <View style={styles.loadCardActions}>
-                              <TouchableOpacity
-                                style={styles.shareIndentIconBtn}
-                                onPress={() =>
-                                  isDone || isAwardedPendingTrip
-                                    ? onIndentPress(load)
-                                    : handleShareIndent(load)
-                                }
-                                activeOpacity={0.88}
-                                accessibilityLabel={
-                                  isDone || isAwardedPendingTrip
-                                    ? "View detail"
-                                    : "Share indent"
-                                }
+                            <View
+                              style={[
+                                styles.loadCardActions,
+                                stackIndentCardFooter &&
+                                  styles.loadCardActionsCompact,
+                              ]}
+                            >
+                              <View
+                                style={[
+                                  styles.loadCardActionCluster,
+                                  stackIndentCardFooter &&
+                                    styles.loadCardActionClusterStacked,
+                                ]}
                               >
-                                <Share2
-                                  size={18}
-                                  color={Theme.textMuted}
-                                  strokeWidth={2.2}
-                                />
-                              </TouchableOpacity>
-                              {showPulseToNetwork && onShareToNetwork ? (
                                 <TouchableOpacity
-                                  style={styles.broadcastNetworkBtn}
-                                  onPress={() => onShareToNetwork(load)}
-                                  activeOpacity={0.85}
-                                  accessibilityLabel="Broadcast indent to Pulse network as story"
+                                  style={styles.shareIndentIconBtn}
+                                  onPress={() =>
+                                    isDone || isAwardedPendingTrip
+                                      ? onIndentPress(load)
+                                      : handleShareIndent(load)
+                                  }
+                                  activeOpacity={0.88}
+                                  accessibilityLabel={
+                                    isDone || isAwardedPendingTrip
+                                      ? "View detail"
+                                      : "Share indent"
+                                  }
                                 >
-                                  <Zap size={13} color="#fff" fill="#fff" />
-                                  <Text style={styles.broadcastNetworkBtnText}>
-                                    Pulse
-                                  </Text>
+                                  <Share2
+                                    size={18}
+                                    color={Theme.textMuted}
+                                    strokeWidth={2.2}
+                                  />
                                 </TouchableOpacity>
-                              ) : null}
-                              {isDone ? null : isAwaitingSupplierDeploy ? (
-                                <View style={styles.deployPendingWrap}>
-                                  <Text style={styles.deployPendingText}>
-                                    Pending
-                                  </Text>
-                                </View>
-                              ) : (
-                                <TouchableOpacity
-                                  style={styles.reviewBidsBtn}
-                                  onPress={() => {
-                                    if (isDraft) {
-                                      handleBroadcastDraft(load);
-                                      return;
-                                    }
-                                    setSelectedQuoteId(null);
-                                    setLoadAction({ type: "AWARD", load });
-                                  }}
-                                  activeOpacity={0.9}
-                                >
-                                  <Text style={styles.reviewBidsBtnText}>
-                                    {isDraft ? "Broadcast" : "Review Hub"}
-                                  </Text>
-                                </TouchableOpacity>
-                              )}
+                                {showPulseToNetwork && onShareToNetwork ? (
+                                  <TouchableOpacity
+                                    style={styles.broadcastNetworkBtn}
+                                    onPress={() => onShareToNetwork(load)}
+                                    activeOpacity={0.85}
+                                    accessibilityLabel="Broadcast indent to Pulse network as story"
+                                  >
+                                    <Zap size={13} color="#fff" fill="#fff" />
+                                    <Text
+                                      style={styles.broadcastNetworkBtnText}
+                                    >
+                                      Pulse
+                                    </Text>
+                                  </TouchableOpacity>
+                                ) : null}
+                                {isDone ? null : isAwaitingSupplierDeploy ? (
+                                  <View style={styles.deployPendingWrap}>
+                                    <Text style={styles.deployPendingText}>
+                                      Pending
+                                    </Text>
+                                  </View>
+                                ) : (
+                                  <TouchableOpacity
+                                    style={styles.reviewBidsBtn}
+                                    onPress={() => {
+                                      if (isDraft) {
+                                        handleBroadcastDraft(load);
+                                        return;
+                                      }
+                                      awardModal.open(load);
+                                    }}
+                                    activeOpacity={0.9}
+                                  >
+                                    <Text style={styles.reviewBidsBtnText}>
+                                      {isDraft ? "Broadcast" : "Review Hub"}
+                                    </Text>
+                                  </TouchableOpacity>
+                                )}
+                              </View>
                             </View>
                           </View>
                         </TouchableOpacity>
@@ -2294,33 +1375,12 @@ export function LoadCenterView({
                 <Text style={styles.loadingText}>Loading…</Text>
               </View>
             ) : marketError ? (
-              <View style={styles.emptyWrap}>
-                <FontAwesome
-                  name="exclamation-circle"
-                  size={40}
-                  color={Theme.textMuted}
-                />
-                <Text style={styles.emptyTitle}>Get Load</Text>
-                <Text style={styles.emptySub}>
-                  Unable to load loads. Check your connection or try again.
-                </Text>
-                <TouchableOpacity
-                  style={[
-                    styles.quoteBtn,
-                    { marginTop: 16, alignSelf: "center" },
-                  ]}
-                  onPress={() => refetchMarketIndents()}
-                  activeOpacity={0.9}
-                >
-                  <FontAwesome
-                    name="refresh"
-                    size={14}
-                    color={Theme.teslaRed}
-                    style={{ marginRight: 8 }}
-                  />
-                  <Text style={styles.quoteBtnText}>Retry</Text>
-                </TouchableOpacity>
-              </View>
+              <ContentErrorState
+                variant="loads"
+                layout="embedded"
+                onRetry={() => void refetchMarketIndents()}
+                retrying={marketRefetching}
+              />
             ) : filteredFindWorkList.length === 0 ? (
               <View style={styles.emptyWrap}>
                 <View style={styles.emptyIconWrapMuted}>
@@ -2336,6 +1396,12 @@ export function LoadCenterView({
                   an integrated supplier to see loads from shippers.
                 </Text>
               </View>
+            ) : isMobileView ? (
+              <LoadCenterHubMobileListCanvas>
+                {filteredFindWorkList.map((load) =>
+                  renderGetLoadMobileCard(load),
+                )}
+              </LoadCenterHubMobileListCanvas>
             ) : (
               <View style={useGridLayout ? styles.gridList : undefined}>
                 <View style={styles.loadSectionRow}>
@@ -2365,10 +1431,7 @@ export function LoadCenterView({
                       : "—";
                   const loadTypeDetail = load.load_type || "—";
                   const openBidModal = () => {
-                    setQuoteAmount(
-                      existingQuote ? String(existingQuote.amount) : "",
-                    );
-                    setLoadAction({ type: "BID", load });
+                    setBidLoad(load);
                   };
                   const clientLabel = (
                     load.creator_organization_name ||
@@ -2530,11 +1593,11 @@ export function LoadCenterView({
                           {getIndentDisplayNumber(load)}
                         </Text>
                         <View style={styles.loadCardSpecsPanel}>
-                          {renderLoadCardSpecsColumns(
-                            vehicleDetail,
-                            weightDetail,
-                            loadTypeDetail,
-                          )}
+                          <LoadCardSpecsRow
+                            vehicle={vehicleDetail}
+                            weight={weightDetail}
+                            loadType={loadTypeDetail}
+                          />
                           <View style={styles.loadCardQuoteHint}>
                             <Text style={styles.loadCardQuoteHintText}>
                               Target{" "}
@@ -2552,9 +1615,15 @@ export function LoadCenterView({
                           style={[
                             styles.loadCardFooter,
                             useGridLayout && styles.loadCardFooterGrid,
+                            stackIndentCardFooter && styles.loadCardFooterCompact,
                           ]}
                         >
-                          <View style={styles.loadCardMeta}>
+                          <View
+                            style={[
+                              styles.loadCardMeta,
+                              stackIndentCardFooter && styles.loadCardMetaCompact,
+                            ]}
+                          >
                             <View style={styles.bidMetaWrap}>
                               <View
                                 style={[
@@ -2582,34 +1651,48 @@ export function LoadCenterView({
                               </Text>
                             </View>
                           </View>
-                          <View style={styles.loadCardActions}>
-                            <TouchableOpacity
-                              style={styles.shareIndentIconBtn}
-                              onPress={() => handleShareIndent(load)}
-                              activeOpacity={0.88}
-                              accessibilityLabel="Share load"
+                          <View
+                            style={[
+                              styles.loadCardActions,
+                              stackIndentCardFooter &&
+                                styles.loadCardActionsCompact,
+                            ]}
+                          >
+                            <View
+                              style={[
+                                styles.loadCardActionCluster,
+                                stackIndentCardFooter &&
+                                  styles.loadCardActionClusterStacked,
+                              ]}
                             >
-                              <Share2
-                                size={18}
-                                color={Theme.textMuted}
-                                strokeWidth={2.2}
-                              />
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              style={styles.reviewBidsBtn}
-                              onPress={
-                                isAccepted
-                                  ? isDoneOutcome
-                                    ? () => onIndentPress(load)
-                                    : () => setLoadSubTab("AWARDED")
-                                  : openBidModal
-                              }
-                              activeOpacity={0.9}
-                            >
-                              <Text style={styles.reviewBidsBtnText}>
-                                {ctaLabel}
-                              </Text>
-                            </TouchableOpacity>
+                              <TouchableOpacity
+                                style={styles.shareIndentIconBtn}
+                                onPress={() => handleShareIndent(load)}
+                                activeOpacity={0.88}
+                                accessibilityLabel="Share load"
+                              >
+                                <Share2
+                                  size={18}
+                                  color={Theme.textMuted}
+                                  strokeWidth={2.2}
+                                />
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={styles.reviewBidsBtn}
+                                onPress={
+                                  isAccepted
+                                    ? isDoneOutcome
+                                      ? () => onIndentPress(load)
+                                      : () => setLoadSubTab("AWARDED")
+                                    : openBidModal
+                                }
+                                activeOpacity={0.9}
+                              >
+                                <Text style={styles.reviewBidsBtnText}>
+                                  {ctaLabel}
+                                </Text>
+                              </TouchableOpacity>
+                            </View>
                           </View>
                         </View>
                       </TouchableOpacity>
@@ -2638,6 +1721,12 @@ export function LoadCenterView({
                     : "Claimed loads will appear here."}
                 </Text>
               </View>
+            ) : isMobileView ? (
+              <LoadCenterHubMobileListCanvas>
+                {filteredClaimedLoads.map((load) =>
+                  renderClaimedMobileCard(load, false),
+                )}
+              </LoadCenterHubMobileListCanvas>
             ) : (
               <View style={styles.securedSection}>
                 <View style={styles.loadSectionRow}>
@@ -2700,39 +1789,31 @@ export function LoadCenterView({
               </View>
             ))}
         </ScrollView>
-        {loadSubTab === "GIVE_LOAD" ? (
+        {loadSubTab === "GIVE_LOAD" && !isMobileView ? (
           <View
             style={[
               styles.hirePartnerFabWrap,
               { bottom: hirePartnerFabBottom, pointerEvents: "box-none" },
             ]}
           >
-            {isMobileView ? (
-              <FinanceFAB
-                onPress={onCreateIndentPress}
-                accessibilityLabel="Broadcast New Indent"
-                icon="package"
+            <TouchableOpacity
+              style={styles.hirePartnerFab}
+              onPress={onCreateIndentPress}
+              activeOpacity={0.9}
+              accessibilityLabel="Broadcast New Indent"
+            >
+              <SemanticAddIcon
+                IconComponent={Package}
+                iconSize={20}
+                iconColor={Theme.textOnPrimary}
+                badgeSize={18}
+                badgeIconSize={13}
+                badgeBackgroundColor="#FFFFFF"
+                badgeIconColor={Theme.darkBackground}
+                badgeOffsetX={-7}
+                badgeOffsetY={-6}
               />
-            ) : (
-              <TouchableOpacity
-                style={styles.hirePartnerFab}
-                onPress={onCreateIndentPress}
-                activeOpacity={0.9}
-                accessibilityLabel="Broadcast New Indent"
-              >
-                <SemanticAddIcon
-                  IconComponent={Package}
-                  iconSize={20}
-                  iconColor={Theme.textOnPrimary}
-                  badgeSize={18}
-                  badgeIconSize={13}
-                  badgeBackgroundColor="#FFFFFF"
-                  badgeIconColor={Theme.darkBackground}
-                  badgeOffsetX={-7}
-                  badgeOffsetY={-6}
-                />
-              </TouchableOpacity>
-            )}
+            </TouchableOpacity>
           </View>
         ) : null}
       </View>
@@ -2803,1594 +1884,71 @@ export function LoadCenterView({
       </Modal>
 
       {/* Offer Hub modal — list quotes, select one, Award */}
-      <Modal
-        visible={loadAction?.type === "AWARD"}
-        transparent
-        animationType="slide"
-        onRequestClose={() => {
-          setLoadAction(null);
-          setSelectedQuoteId(null);
-        }}
-      >
-        <TouchableOpacity
-          style={styles.modalBackdrop}
-          activeOpacity={1}
-          onPress={() => {
-            setLoadAction(null);
-            setSelectedQuoteId(null);
-          }}
-        >
-          <View
-            style={[styles.modalSheet, { paddingBottom: 24 + insets.bottom }]}
-          >
-            <View style={styles.modalHandle} />
-            <View style={styles.reviewHubModalHeader}>
-              <TouchableOpacity
-                onPress={() => {
-                  setLoadAction(null);
-                  setSelectedQuoteId(null);
-                }}
-                hitSlop={12}
-                style={styles.reviewHubModalBack}
-              >
-                <X size={22} color={Theme.textPrimaryDark} strokeWidth={2.5} />
-              </TouchableOpacity>
-              <View style={styles.modalHeaderTitleWrap}>
-                <Text style={[styles.modalTitle, styles.modalTitleCenter]}>
-                  Review Hub
-                </Text>
-                {loadAction?.type === "AWARD" ? (
-                  <Text style={styles.modalSubtitle}>
-                    Audit indent {getIndentDisplayNumber(loadAction.load)}
-                  </Text>
-                ) : null}
-              </View>
-              <View style={styles.reviewHubModalHeaderSpacer} />
-            </View>
-            {loadAction?.type === "AWARD" ? (
-              <View style={styles.reviewHubHero}>
-                <View
-                  style={[styles.reviewHubHeroGlow, { pointerEvents: "none" }]}
-                />
-                <Text style={styles.reviewHubHeroKicker}>Target route</Text>
-                <Text style={styles.reviewHubHeroRoute} numberOfLines={3}>
-                  {(loadAction.load.pickup_area || "—").toUpperCase()} →{" "}
-                  {(loadAction.load.drop_location || "—").toUpperCase()}
-                </Text>
-                <View style={styles.reviewHubHeroMeta}>
-                  <View style={styles.reviewHubHeroMetaCol}>
-                    <Text style={styles.reviewHubHeroStatLabel}>Offers</Text>
-                    <Text style={styles.reviewHubHeroStatValue} numberOfLines={1}>
-                      {awardModalQuotesLoading
-                        ? "—"
-                        : String(awardModalQuotes.length)}
-                    </Text>
-                  </View>
-                  {lowestPendingAmount != null && pendingOfferCount > 0 ? (
-                    <View style={styles.reviewHubHeroMetaColEnd}>
-                      <Text style={styles.reviewHubHeroStatLabel}>
-                        Lowest bid
-                      </Text>
-                      <Text
-                        style={[
-                          styles.reviewHubHeroStatValue,
-                          styles.reviewHubHeroStatValueEnd,
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {formatINR(lowestPendingAmount)}
-                      </Text>
-                    </View>
-                  ) : (
-                    <View style={styles.reviewHubHeroMetaColEnd}>
-                      <Text style={styles.reviewHubHeroStatLabel}>Pending</Text>
-                      <Text
-                        style={[
-                          styles.reviewHubHeroStatValue,
-                          styles.reviewHubHeroStatValueEnd,
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {String(pendingOfferCount)}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-            ) : null}
-            {awardModalQuotesLoading ? (
-              <View style={styles.bidEmptyWrap}>
-                <ActivityIndicator size="small" color={Theme.primary} />
-                <Text style={styles.bidEmptyText}>Loading offers…</Text>
-              </View>
-            ) : awardModalQuotes.length === 0 ? (
-              <View style={styles.bidEmptyWrap}>
-                <FontAwesome
-                  name="inbox"
-                  size={32}
-                  color={Theme.textMuted}
-                  style={{ marginBottom: 12 }}
-                />
-                <Text style={styles.bidEmptyText}>No offers yet</Text>
-                <Text style={styles.bidEmptySubtext}>
-                  Share this load to get offers from your network.
-                </Text>
-              </View>
-            ) : (
-              <>
-                <View style={styles.quoteHeaderRowDark}>
-                  <Text style={styles.quoteHeaderNameDark}>Bidder</Text>
-                  <Text style={styles.quoteHeaderAmountDark}>Amount</Text>
-                  <Text style={styles.quoteHeaderStatusDark}>Status</Text>
-                </View>
-                <ScrollView
-                  style={{ maxHeight: 280 }}
-                  showsVerticalScrollIndicator
-                >
-                  {sortedOfferHubQuotes.map((q: DirectQuoteRow) => {
-                    const isPending =
-                      (q.status || "").toLowerCase() === "pending";
-                    const isSelected = selectedQuoteId === q.id;
-                    return (
-                      <TouchableOpacity
-                        key={q.id}
-                        style={[
-                          styles.quoteRow,
-                          isSelected && styles.quoteRowSelected,
-                          !isPending && styles.quoteRowDisabled,
-                        ]}
-                        onPress={() =>
-                          isPending &&
-                          setSelectedQuoteId(isSelected ? null : q.id)
-                        }
-                        activeOpacity={0.8}
-                        disabled={!isPending}
-                      >
-                        <Text style={styles.quoteRowName} numberOfLines={1}>
-                          {q.bidder_organization_name ?? "—"}
-                        </Text>
-                        <Text style={styles.quoteRowAmount}>
-                          {formatINR(Number(q.amount ?? 0))}
-                        </Text>
-                        <Text style={styles.quoteRowStatus}>
-                          {(q.status || "").toUpperCase()}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-                {pendingOfferCount === 0 && (
-                  <Text style={styles.bidEmptySubtext}>
-                    No pending offers to award.
-                  </Text>
-                )}
-                {pendingOfferCount > 0 && (
-                  <Text style={styles.bidEmptySubtext}>
-                    Tap an offer to select, then Award selected.
-                  </Text>
-                )}
-              </>
-            )}
-            {loadAction?.type === "AWARD" && (
-              <>
-                <TouchableOpacity
-                  style={[styles.modalSubmit, { marginTop: 16 }]}
-                  onPress={handleAwardQuote}
-                  activeOpacity={0.9}
-                  disabled={
-                    awarding ||
-                    !selectedQuoteId ||
-                    !awardModalQuotes.some(
-                      (q) =>
-                        q.id === selectedQuoteId &&
-                        (q.status || "").toLowerCase() === "pending",
-                    )
-                  }
-                >
-                  <Text style={styles.modalSubmitText}>
-                    {awarding ? "Awarding…" : "Award selected"}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.viewIndentBtn}
-                  onPress={() => {
-                    setLoadAction(null);
-                    setSelectedQuoteId(null);
-                    onIndentPress(loadAction.load);
-                  }}
-                  activeOpacity={0.9}
-                >
-                  <Text style={styles.viewIndentBtnText}>View Indent</Text>
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
-        </TouchableOpacity>
-      </Modal>
+      <AwardModal
+        visible={awardModal.isOpen}
+        award={awardModal}
+        onViewIndent={onIndentPress}
+        insets={insets}
+      />
 
       {/* Submit Registry Bid modal (reference) */}
-      <Modal
-        visible={loadAction?.type === "BID"}
-        animationType="slide"
-        presentationStyle="fullScreen"
-        onRequestClose={() => {
-          setLoadAction(null);
-          setQuoteAmount("");
+      <BidModal
+        visible={bidLoad !== null}
+        load={bidLoad}
+        orgId={orgId}
+        myQuoteByIndentId={myQuoteByIndentId}
+        onClose={() => setBidLoad(null)}
+        onSuccess={triggerSuccess}
+        localBidHistoryByIndentId={localBidHistoryByIndentId}
+        onUpdateLocalBidHistory={(indentId, entry) => {
+          setLocalBidHistoryByIndentId((prev) => {
+            const prior = prev[indentId] ?? [];
+            const alreadyExists = prior.some(
+              (row) =>
+                Number(row.amount) === Number(entry.amount) &&
+                row.updatedAt === entry.updatedAt,
+            );
+            if (alreadyExists) return prev;
+            return {
+              ...prev,
+              [indentId]: [entry, ...prior].slice(0, 10),
+            };
+          });
         }}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          style={styles.bidModalPage}
-        >
-          <View
-            style={[
-              styles.modalSheet,
-              styles.bidModalSheetFull,
-              {
-                paddingTop: insets.top + 12,
-                paddingBottom: 24 + insets.bottom,
-              },
-            ]}
-          >
-            <View style={styles.modalHandle} />
-            <View style={styles.reviewHubModalHeader}>
-              <TouchableOpacity
-                onPress={() => {
-                  setLoadAction(null);
-                  setQuoteAmount("");
-                }}
-                hitSlop={12}
-                style={styles.reviewHubModalBack}
-              >
-                <X size={22} color={Theme.textPrimaryDark} strokeWidth={2.5} />
-              </TouchableOpacity>
-              <View style={styles.modalHeaderTitleWrap}>
-                <Text style={[styles.modalTitle, styles.modalTitleCenter]}>
-                  Bid hub
-                </Text>
-                <Text style={styles.modalSubtitle}>Submit quotation</Text>
-              </View>
-              <View style={styles.reviewHubModalHeaderSpacer} />
-            </View>
-            <ScrollView
-              style={styles.bidModalScroll}
-              contentContainerStyle={styles.bidModalScrollContent}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
-              {loadAction?.type === "BID" ? (
-                <View style={styles.bidIndentDetailSection}>
-                  <View style={styles.bidHubHero}>
-                    <View
-                      style={[styles.bidHubHeroGlow, { pointerEvents: "none" }]}
-                    />
-                    <Text style={styles.bidHubHeroKicker}>
-                      You are bidding on
-                    </Text>
-                    <Text style={styles.bidHubHeroRoute} numberOfLines={4}>
-                      {(loadAction.load.pickup_area || "—").trim()} →{" "}
-                      {(loadAction.load.drop_location || "—").trim()}
-                    </Text>
-                    <View style={styles.bidHubHeroChips}>
-                      {loadAction.load.load_type ? (
-                        <View style={styles.bidHubChip}>
-                          <Text style={styles.bidHubChipText} numberOfLines={1}>
-                            {String(loadAction.load.load_type).toUpperCase()}
-                          </Text>
-                        </View>
-                      ) : null}
-                      {loadAction.load.vehicle_type ? (
-                        <View style={styles.bidHubChip}>
-                          <Text style={styles.bidHubChipText} numberOfLines={1}>
-                            {loadAction.load.vehicle_type}
-                          </Text>
-                        </View>
-                      ) : null}
-                    </View>
-                    <View style={[styles.reviewHubHeroMeta, { marginTop: 14 }]}>
-                      <View style={styles.reviewHubHeroMetaCol}>
-                        <Text style={styles.reviewHubHeroStatLabel}>
-                          Indent
-                        </Text>
-                        <Text
-                          style={styles.reviewHubHeroStatValue}
-                          numberOfLines={1}
-                        >
-                          {getIndentDisplayNumber(loadAction.load)}
-                        </Text>
-                      </View>
-                      <View style={styles.reviewHubHeroMetaColEnd}>
-                        <Text style={styles.reviewHubHeroStatLabel}>
-                          Target
-                        </Text>
-                        <Text
-                          style={[
-                            styles.reviewHubHeroStatValue,
-                            styles.reviewHubHeroStatValueEnd,
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {formatINR(
-                            Number(
-                              loadAction.load.supplier_target ??
-                                loadAction.load.client_price ??
-                                0,
-                            ),
-                          )}
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-                </View>
-              ) : null}
-              <View style={styles.bidInputBlock}>
-                <Text style={styles.bidSectionTitle}>Financial proposal</Text>
-                <Text style={styles.quoteLabel}>Your price (₹)</Text>
-                <TextInput
-                  style={styles.quoteInput}
-                  keyboardType="numeric"
-                  placeholder={
-                    loadAction?.type === "BID" && loadAction.load
-                      ? (() => {
-                          const target =
-                            loadAction.load.supplier_target ??
-                            loadAction.load.client_price;
-                          return target != null && Number(target) > 0
-                            ? `Target rate: ${formatINR(Number(target))}`
-                            : "Target price (₹)";
-                        })()
-                      : "Target price (₹)"
-                  }
-                  placeholderTextColor={Theme.textMuted}
-                  value={quoteAmount}
-                  onChangeText={(raw) =>
-                    setQuoteAmount(raw.replace(/[^\d]/g, ""))
-                  }
-                />
-                {activeBidQuote ? (
-                  <View style={styles.previousBidWrap}>
-                    <Text style={styles.previousBidLabel}>Previous bid</Text>
-                    <Text style={styles.previousBidValue}>
-                      {formatINR(Number(activeBidQuote.amount ?? 0))}
-                    </Text>
-                    {activeBidQuoteUpdatedAt ? (
-                      <Text style={styles.previousBidMeta}>
-                        Last updated: {activeBidQuoteUpdatedAt}
-                      </Text>
-                    ) : null}
-                    {activeBidHistory.length > 0 ? (
-                      <View style={styles.previousBidHistoryWrap}>
-                        <Text style={styles.previousBidHistoryTitle}>
-                          Earlier updates
-                        </Text>
-                        {activeBidHistory.map((entry, idx) => {
-                          const dt = new Date(entry.updatedAt);
-                          const readable = Number.isNaN(dt.getTime())
-                            ? "Unknown time"
-                            : dt.toLocaleString("en-IN", {
-                                day: "numeric",
-                                month: "short",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              });
-                          return (
-                            <View
-                              key={`${entry.updatedAt}-${entry.amount}-${idx}`}
-                              style={styles.previousBidHistoryRow}
-                            >
-                              <Text style={styles.previousBidHistoryAmount}>
-                                {formatINR(Number(entry.amount ?? 0))}
-                              </Text>
-                              <Text style={styles.previousBidHistoryDate}>
-                                {readable}
-                              </Text>
-                            </View>
-                          );
-                        })}
-                      </View>
-                    ) : null}
-                  </View>
-                ) : null}
-              </View>
-              <TouchableOpacity
-                style={styles.modalSubmit}
-                onPress={async () => {
-                  if (!orgId || loadAction?.type !== "BID") {
-                    return;
-                  }
-                  const value = Number(
-                    String(quoteAmount).replace(/,/g, "").trim(),
-                  );
-                  if (!Number.isFinite(value) || value <= 0) {
-                    Alert.alert(
-                      "Invalid amount",
-                      "Please enter a valid quote amount.",
-                    );
-                    return;
-                  }
-                  const load = loadAction.load;
-                  const hadExistingQuote = !!myQuoteByIndentId.get(load.id);
-                  const existingQuoteBeforeSave = myQuoteByIndentId.get(
-                    load.id,
-                  );
-                  try {
-                    setSubmittingQuote(true);
-                    const { error } = await createDirectQuote(
-                      load.id,
-                      orgId,
-                      value,
-                      null,
-                      null,
-                      null,
-                    );
-                    setSubmittingQuote(false);
-                    if (error) {
-                      Alert.alert("Could not publish offer", error.message);
-                      refetchMarketIndents();
-                      return;
-                    }
-                    invalidateIndents(orgId);
-                    await Promise.allSettled([
-                      queryClient.invalidateQueries({
-                        queryKey: [
-                          ...queryKeys.indents.all(orgId),
-                          "my-direct-quotes",
-                        ],
-                      }),
-                      queryClient.invalidateQueries({
-                        queryKey: ["indents", load.id, "direct-quotes"],
-                      }),
-                      queryClient.invalidateQueries({
-                        queryKey: ["indents", "quote-counts"],
-                      }),
-                      refetchMyQuotes(),
-                      refetchMarketIndents(),
-                    ]);
-                    triggerSuccess(
-                      hadExistingQuote ? "Quote updated" : "Offer Published",
-                    );
-                    if (existingQuoteBeforeSave) {
-                      setLocalBidHistoryByIndentId((prev) => {
-                        const indentId = load.id;
-                        const prior = prev[indentId] ?? [];
-                        const nextEntry = {
-                          amount: Number(existingQuoteBeforeSave.amount ?? 0),
-                          updatedAt:
-                            existingQuoteBeforeSave.updated_at ??
-                            new Date().toISOString(),
-                        };
-                        const alreadyExists = prior.some(
-                          (row) =>
-                            Number(row.amount) === Number(nextEntry.amount) &&
-                            row.updatedAt === nextEntry.updatedAt,
-                        );
-                        if (alreadyExists) return prev;
-                        return {
-                          ...prev,
-                          [indentId]: [nextEntry, ...prior].slice(0, 10),
-                        };
-                      });
-                    }
-                    setLoadAction(null);
-                  } catch (e) {
-                    setSubmittingQuote(false);
-                    const msg =
-                      e instanceof Error
-                        ? e.message
-                        : "Unknown error while publishing offer.";
-                    Alert.alert("Could not publish offer", msg);
-                    refetchMarketIndents();
-                  }
-                }}
-                activeOpacity={0.9}
-                disabled={submittingQuote}
-              >
-                <Text style={styles.modalSubmitText}>
-                  {submittingQuote ? "Submitting…" : "Submit bid"}
-                </Text>
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+        queryClient={queryClient}
+        invalidateIndents={invalidateIndents}
+        refetchMyQuotes={refetchMyQuotes}
+        refetchMarketIndents={refetchMarketIndents}
+        insets={insets}
+      />
 
-      {/* Staff Handshake modal: Roster (driver + vehicle from org) or Ad hoc driver (OTP claim). Triggered from Claimed tab (ASSIGN STAFF & DEPLOY). O(n): drivers/vehicles loaded once per org. Web shell matches TripAssignmentBlock centered modal. */}
-      <Modal
-        visible={loadAction?.type === "ASSIGN"}
-        animationType={Platform.OS === "web" ? "fade" : "slide"}
-        presentationStyle={
-          Platform.OS === "web" ? "overFullScreen" : "fullScreen"
-        }
-        transparent={Platform.OS === "web"}
-        onRequestClose={handleStaffHandshakeBack}
-      >
-        <View
-          style={
-            Platform.OS === "web"
-              ? assignmentShellStyles.webModalBackdrop
-              : [styles.assignModalPage, { paddingTop: insets.top }]
-          }
-        >
-          <View
-            style={
-              Platform.OS === "web"
-                ? [
-                    assignmentShellStyles.webModalCardWhite,
-                    { paddingTop: insets.top },
-                    isCompactModalLayout && styles.assignWebModalCardCompact,
-                    !useAdHocDriver && {
-                      height: "auto",
-                      maxHeight: 620,
-                      minHeight: 420,
-                    },
-                  ]
-                : styles.handshakeNativeInner
-            }
-          >
-            <View style={assignmentShellStyles.modalHero}>
-              <View style={assignmentShellStyles.modalHeroText}>
-                <Text
-                  style={[
-                    assignmentShellStyles.modalTitle,
-                    { fontStyle: "italic", fontWeight: "900" },
-                  ]}
-                >
-                  Supply & Allocation
-                </Text>
-                <Text style={assignmentShellStyles.modalSubtitle}>
-                  Network node selection — roster deploy or OTP for the driver.
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => {
-                  setLoadAction(null);
-                  setDeployOtpCode(null);
-                  setDeployOtpExpiresAt(null);
-                  setDeployTripIdForOtp(null);
-                  setStaffHandshakeAssignLater(false);
-                }}
-                hitSlop={12}
-                style={assignmentShellStyles.modalCloseBtn}
-                accessibilityLabel="Close"
-              >
-                <FontAwesome
-                  name="times"
-                  size={18}
-                  color={assignmentShellColors.subtitle}
-                />
-              </TouchableOpacity>
-            </View>
-            {loadAction?.type === "ASSIGN" && (
-            <View
-              style={[styles.assignModalBody, assignmentShellStyles.modalBodyFlex]}
-            >
-              <ScrollView
-                style={styles.assignModalScroll}
-                contentContainerStyle={[
-                  assignmentShellStyles.bodyScrollContent,
-                  {
-                    paddingHorizontal: isCompactModalLayout ? 12 : 20,
-                    paddingTop: isCompactModalLayout ? 12 : 20,
-                    paddingBottom: !deployOtpCode
-                      ? 110 + insets.bottom
-                      : 24 + insets.bottom,
-                  },
-                ]}
-                keyboardShouldPersistTaps="handled"
-              >
-                {/* OTP result (ad hoc flow completed) */}
-                {deployOtpCode ? (
-                  <>
-                    <Text style={styles.modalHint}>
-                      Share this code with the driver to claim the trip.
-                    </Text>
-                    <View style={styles.otpCard}>
-                      <Text style={styles.otpCode}>{deployOtpCode}</Text>
-                      {deployOtpExpiresAt ? (
-                        <Text style={styles.otpExpiry}>
-                          Expires{" "}
-                          {new Date(deployOtpExpiresAt).toLocaleString()}
-                        </Text>
-                      ) : null}
-                      <View style={styles.otpActions}>
-                        <TouchableOpacity
-                          style={styles.otpBtn}
-                          onPress={() => {
-                            Clipboard.setStringAsync(deployOtpCode).then(() =>
-                              triggerSuccess("Copied"),
-                            );
-                          }}
-                        >
-                          <Text style={styles.otpBtnText}>Copy</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.otpBtn}
-                          onPress={() => {
-                            Share.share({
-                              message: `Claim this trip with code: ${deployOtpCode}`,
-                              title: "Trip claim code",
-                            }).catch(() => {});
-                          }}
-                        >
-                          <Text style={styles.otpBtnText}>Share</Text>
-                        </TouchableOpacity>
-                        {deployTripIdForOtp ? (
-                          <TouchableOpacity
-                            style={styles.otpBtn}
-                            onPress={async () => {
-                              const { code, expires_at } =
-                                await regenerateTripOtp(deployTripIdForOtp);
-                              if (code) {
-                                setDeployOtpCode(code);
-                                setDeployOtpExpiresAt(expires_at ?? null);
-                                triggerSuccess("OTP regenerated");
-                              }
-                            }}
-                          >
-                            <Text style={styles.otpBtnText}>Regenerate</Text>
-                          </TouchableOpacity>
-                        ) : null}
-                      </View>
-                    </View>
-                    <TouchableOpacity
-                      style={[styles.modalSubmit, styles.handshakeBtnModal]}
-                      onPress={() => {
-                        setLoadAction(null);
-                        setDeployOtpCode(null);
-                        setDeployOtpExpiresAt(null);
-                        setDeployTripIdForOtp(null);
-                        setStaffHandshakeAssignLater(false);
-                        const isShipper =
-                          loadAction?.type === "ASSIGN" &&
-                          loadAction.load.organization_id === orgId;
-                        if (isShipper)
-                          router.push(
-                            "/(tabs)/trips" as import("expo-router").Href,
-                          );
-                      }}
-                      activeOpacity={0.9}
-                    >
-                      <Text style={styles.modalSubmitText}>
-                        {loadAction?.type === "ASSIGN" &&
-                        loadAction.load.organization_id === orgId
-                          ? "Go to Trips"
-                          : "Done"}
-                      </Text>
-                    </TouchableOpacity>
-                  </>
-                ) : (
-                  <>
-                    <View style={styles.handshakeSegmentSection}>
-                      <View style={styles.handshakeSegmentPill}>
-                        <TouchableOpacity
-                          style={[
-                            styles.handshakeSegBtn,
-                            !useAdHocDriver && styles.handshakeSegBtnActive,
-                          ]}
-                          onPress={() => {
-                            setUseAdHocDriver(false);
-                            setAssignVehicleRegistration("");
-                            setAggregateDriverPhone("");
-                            setAggregateDriverTrackingName("");
-                            setSubcontractSupplierId(null);
-                            setSubcontractRate("");
-                            setAggregateAdvancePaid("");
-                            aggregateDriverNameManualRef.current = false;
-                            setAggregateDriverTrackingName("");
-                            setAggregatePhoneName(null);
-                            setAggregatePhoneNotFound(false);
-                            setAggregatePhoneInTrip(false);
-                          }}
-                          activeOpacity={0.88}
-                        >
-                          <Truck
-                            size={14}
-                            color={!useAdHocDriver ? "#ffffff" : "#94a3b8"}
-                          />
-                          <Text
-                            style={[
-                              styles.handshakeSegBtnText,
-                              !useAdHocDriver && styles.handshakeSegBtnTextActive,
-                            ]}
-                          >
-                            Asset
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[
-                            styles.handshakeSegBtn,
-                            useAdHocDriver && styles.handshakeSegBtnActive,
-                          ]}
-                          onPress={() => {
-                            setUseAdHocDriver(true);
-                            setAssignDriverId(null);
-                            setAssignVehicleId(undefined);
-                            setAssignVehicleRegistration("");
-                            setAggregateDriverPhone("");
-                            setAggregateDriverTrackingName("");
-                            setSubcontractSupplierId(null);
-                            setSubcontractRate("");
-                            setAggregateAdvancePaid("");
-                            aggregateDriverNameManualRef.current = false;
-                            setAggregateDriverTrackingName("");
-                            setAggregatePhoneName(null);
-                            setAggregatePhoneNotFound(false);
-                            setAggregatePhoneInTrip(false);
-                          }}
-                          activeOpacity={0.88}
-                        >
-                          <Building2
-                            size={14}
-                            color={useAdHocDriver ? "#ffffff" : "#94a3b8"}
-                          />
-                          <Text
-                            style={[
-                              styles.handshakeSegBtnText,
-                              useAdHocDriver && styles.handshakeSegBtnTextActive,
-                            ]}
-                          >
-                            Aggregate
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-
-                    <View
-                      style={[
-                        styles.handshakeAssignLaterOuter,
-                        isCompactModalLayout && styles.handshakeAssignLaterOuterCompact,
-                      ]}
-                    >
-                      <View style={styles.handshakeAssignLaterLeft}>
-                        <View style={styles.handshakeAssignLaterIconWrap}>
-                          <ListChecks size={18} color="#64748b" />
-                        </View>
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <Text style={styles.handshakeAssignLaterTitle}>
-                            Assign later
-                          </Text>
-                          <Text style={styles.handshakeAssignLaterSub}>
-                            {useAdHocDriver
-                              ? "(vehicle & driver phone from trip detail)"
-                              : "(vehicle & driver from trip detail)"}
-                          </Text>
-                        </View>
-                      </View>
-                      <Switch
-                        value={staffHandshakeAssignLater}
-                        onValueChange={(v) => {
-                          setStaffHandshakeAssignLater(v);
-                          if (v) {
-                            setAssignDriverId(null);
-                            setAssignVehicleId(undefined);
-                            setAggregateDriverPhone("");
-                            aggregateDriverNameManualRef.current = false;
-                            setAggregateDriverTrackingName("");
-                            setAssignVehicleRegistration("");
-                          }
-                        }}
-                        trackColor={{
-                          false: "#e2e8f0",
-                          true: "#0f172a",
-                        }}
-                        thumbColor="#ffffff"
-                      />
-                    </View>
-
-                    {!useAdHocDriver ? (
-                      (staffHandshakeAssignLater ? (
-                        <Text style={styles.modalHint}>
-                          Assign vehicle and driver on the trip screen before the
-                          trip starts.
-                        </Text>
-                      ) : (
-                        <>
-                    {(() => {
-                      const selectedDriver = activeDrivers.find(
-                        (d) => String(d.id) === assignDriverId,
-                      );
-                      const selectedVehicle =
-                        typeof assignVehicleId === "string"
-                          ? vehicles.find(
-                              (v) => String(v.id) === assignVehicleId,
-                            )
-                          : null;
-                      return (
-                        <>
-                          <View
-                            style={[
-                              styles.assignSelectionGrid,
-                              width >= 980 && styles.assignSelectionGridDesktop,
-                            ]}
-                          >
-                            <View style={styles.assignPickerCard}>
-                              <View style={styles.assignPickerHeader}>
-                                <Text style={styles.assignPickerTitle}>
-                                  Select Driver
-                                </Text>
-                                <View style={styles.assignPickerBadge}>
-                                  <Text style={styles.assignPickerBadgeText}>
-                                    {activeDrivers.length} Total
-                                  </Text>
-                                </View>
-                              </View>
-                              {activeDrivers.map((d) => {
-                                const busyTripLabel =
-                                  driverBusyTripLabelById.get(String(d.id)) ?? null;
-                                const isBusy = !!busyTripLabel;
-                                const isSelected = assignDriverId === String(d.id);
-                                return (
-                                <TouchableOpacity
-                                  key={d.id}
-                                  style={[
-                                    styles.assignEntityRow,
-                                    isSelected && styles.assignEntityRowActive,
-                                    isBusy && styles.assignEntityRowDisabled,
-                                  ]}
-                                  onPress={() => {
-                                    if (isBusy) return;
-                                    setAssignDriverId(String(d.id));
-                                  }}
-                                  activeOpacity={0.85}
-                                  disabled={isBusy}
-                                >
-                                  <View style={styles.assignEntityIconWrap}>
-                                    <FontAwesome
-                                      name="user"
-                                      size={16}
-                                      color={
-                                        isSelected
-                                          ? Theme.textOnPrimary
-                                          : Theme.textMuted
-                                      }
-                                    />
-                                  </View>
-                                  <View style={styles.assignEntityTextCol}>
-                                    <Text style={styles.assignEntityTitle}>
-                                      {d.name ?? d.phone ?? "—"}
-                                    </Text>
-                                    <Text style={styles.assignEntitySubtitle}>
-                                      {isBusy
-                                        ? `Already in ${busyTripLabel}`
-                                        : d.phone
-                                        ? `Phone: ${d.phone}`
-                                        : "Available"}
-                                    </Text>
-                                  </View>
-                                  <FontAwesome
-                                    name={
-                                      isSelected
-                                        ? "check-circle"
-                                        : isBusy
-                                        ? "exclamation-circle"
-                                        : "chevron-right"
-                                    }
-                                    size={15}
-                                    color={
-                                      isSelected
-                                        ? Theme.primary
-                                        : isBusy
-                                        ? Theme.warning
-                                        : Theme.textMuted
-                                    }
-                                  />
-                                </TouchableOpacity>
-                              )})}
-                              {activeDrivers.length === 0 ? (
-                                <View style={styles.assignEmptyState}>
-                                  <Text style={styles.assignEmptyText}>
-                                    No asset drivers were found in your
-                                    organization. Add a salaried driver to
-                                    continue with Asset-based assignment, or use
-                                    the Aggregate flow from the previous step.
-                                  </Text>
-                                  <TouchableOpacity
-                                    style={styles.assignEmptyActionBtn}
-                                    onPress={() => {
-                                      setLoadAction(null);
-                                      setDeployOtpCode(null);
-                                      setDeployOtpExpiresAt(null);
-                                      setDeployTripIdForOtp(null);
-                                      setStaffHandshakeAssignLater(false);
-                                      setTimeout(
-                                        () => {
-                                          router.push(
-                                            "/(modals)/add-driver" as import("expo-router").Href,
-                                          );
-                                        },
-                                        Platform.OS === "ios" ? 100 : 0,
-                                      );
-                                    }}
-                                    activeOpacity={0.9}
-                                  >
-                                    <FontAwesome
-                                      name="plus"
-                                      size={12}
-                                      color={Theme.textOnPrimary}
-                                    />
-                                    <Text
-                                      style={styles.assignEmptyActionBtnText}
-                                    >
-                                      Add Driver
-                                    </Text>
-                                  </TouchableOpacity>
-                                </View>
-                              ) : null}
-                            </View>
-
-                            <View style={styles.assignPickerCard}>
-                              <View style={styles.assignPickerHeader}>
-                                <Text style={styles.assignPickerTitle}>
-                                  Select Vehicle
-                                </Text>
-                                <View style={styles.assignPickerBadge}>
-                                  <Text style={styles.assignPickerBadgeText}>
-                                    {vehicles.length} Total
-                                  </Text>
-                                </View>
-                              </View>
-                              {vehicles.map((v) => (
-                                <TouchableOpacity
-                                  key={v.id}
-                                  style={[
-                                    styles.assignEntityRow,
-                                    assignVehicleId === String(v.id) &&
-                                      styles.assignEntityRowActive,
-                                  ]}
-                                  onPress={() =>
-                                    setAssignVehicleId(String(v.id))
-                                  }
-                                  activeOpacity={0.85}
-                                >
-                                  <View style={styles.assignEntityIconWrap}>
-                                    <FontAwesome
-                                      name="truck"
-                                      size={16}
-                                      color={
-                                        assignVehicleId === String(v.id)
-                                          ? Theme.textOnPrimary
-                                          : Theme.textMuted
-                                      }
-                                    />
-                                  </View>
-                                  <View style={styles.assignEntityTextCol}>
-                                    <Text style={styles.assignEntityTitle}>
-                                      {v.vehicle_number}
-                                    </Text>
-                                    <Text style={styles.assignEntitySubtitle}>
-                                      {v.vehicle_type
-                                        ? `${v.vehicle_type}${
-                                            v.vehicle_body_type
-                                              ? ` · ${v.vehicle_body_type}`
-                                              : ""
-                                          }`
-                                        : "Fleet vehicle"}
-                                    </Text>
-                                  </View>
-                                  <FontAwesome
-                                    name={
-                                      assignVehicleId === String(v.id)
-                                        ? "check-circle"
-                                        : "chevron-right"
-                                    }
-                                    size={15}
-                                    color={
-                                      assignVehicleId === String(v.id)
-                                        ? Theme.primary
-                                        : Theme.textMuted
-                                    }
-                                  />
-                                </TouchableOpacity>
-                              ))}
-                              {vehicles.length === 0 ? (
-                                <View style={styles.assignEmptyState}>
-                                  <Text style={styles.assignEmptyText}>
-                                    No vehicles were found in your fleet. Add an
-                                    own vehicle to continue with Asset-based
-                                    assignment.
-                                  </Text>
-                                  <TouchableOpacity
-                                    style={styles.assignEmptyActionBtn}
-                                    onPress={() => {
-                                      setLoadAction(null);
-                                      setDeployOtpCode(null);
-                                      setDeployOtpExpiresAt(null);
-                                      setDeployTripIdForOtp(null);
-                                      setStaffHandshakeAssignLater(false);
-                                      setTimeout(
-                                        () => {
-                                          router.push(
-                                            "/(modals)/add-vehicle" as import("expo-router").Href,
-                                          );
-                                        },
-                                        Platform.OS === "ios" ? 100 : 0,
-                                      );
-                                    }}
-                                    activeOpacity={0.9}
-                                  >
-                                    <FontAwesome
-                                      name="plus"
-                                      size={12}
-                                      color={Theme.textOnPrimary}
-                                    />
-                                    <Text
-                                      style={styles.assignEmptyActionBtnText}
-                                    >
-                                      Add Vehicle
-                                    </Text>
-                                  </TouchableOpacity>
-                                </View>
-                              ) : null}
-                            </View>
-                          </View>
-
-                          <View style={styles.assignSummaryBar}>
-                            <View style={styles.assignSummaryRow}>
-                              <View style={styles.assignSummaryBlock}>
-                                <Text style={styles.assignSummaryLabel}>
-                                  Selected Driver
-                                </Text>
-                                <Text style={styles.assignSummaryValue}>
-                                  {selectedDriver?.name ??
-                                    selectedDriver?.phone ??
-                                    "Not selected"}
-                                </Text>
-                              </View>
-                              <View style={styles.assignSummaryDivider} />
-                              <View style={styles.assignSummaryBlock}>
-                                <Text style={styles.assignSummaryLabel}>
-                                  Selected Vehicle
-                                </Text>
-                                <Text style={styles.assignSummaryValue}>
-                                  {selectedVehicle?.vehicle_number ??
-                                    "Not selected"}
-                                </Text>
-                              </View>
-                            </View>
-                            {selectedDriverBusyTripLabel ? (
-                              <Text style={styles.assignSummaryWarningText}>
-                                Selected driver is already in {selectedDriverBusyTripLabel}. Choose an available driver to deploy.
-                              </Text>
-                            ) : null}
-                          </View>
-                        </>
-                      );
-                    })()}
-                        </>
-                      ))
-                    ) : (
-                      (() => {
-                        const selectedPartner = subcontractSupplierId
-                          ? suppliers.find((s) => s.id === subcontractSupplierId)
-                          : null;
-                        const inlinePartners = visiblePartnersForHandshake;
-                        const canWideAlign =
-                          Platform.OS === "web" ? width >= 1200 : width >= 900;
-
-                        const partnerPane = (
-                          <View
-                            style={[
-                              styles.aggregatePaneCard,
-                              canWideAlign && styles.aggregatePaneWide,
-                            ]}
-                          >
-                            <View style={styles.aggregatePaneHeaderRow}>
-                              <Text style={styles.aggregatePaneTitle}>
-                                Transport partner *
-                              </Text>
-                              <TouchableOpacity
-                                style={styles.partnerAddBtn}
-                                onPress={() => {
-                                  setLoadAction(null);
-                                  setDeployOtpCode(null);
-                                  setDeployOtpExpiresAt(null);
-                                  setDeployTripIdForOtp(null);
-                                  setStaffHandshakeAssignLater(false);
-                                  setTimeout(
-                                    () => {
-                                      router.push(
-                                        "/(modals)/add-supplier" as import("expo-router").Href,
-                                      );
-                                    },
-                                    Platform.OS === "ios" ? 100 : 0,
-                                  );
-                                }}
-                                activeOpacity={0.9}
-                              >
-                                <FontAwesome
-                                  name="plus-circle"
-                                  size={12}
-                                  color={Theme.textPrimaryDark}
-                                />
-                                <Text style={styles.partnerAddBtnText}>
-                                  Add Partner
-                                </Text>
-                              </TouchableOpacity>
-                            </View>
-                            {inlinePartners.length > 0 ? (
-                              <View style={styles.aggregatePartnerList}>
-                                {inlinePartners.map((p) => {
-                                  const partnerName =
-                                    p.company_name ||
-                                    p.name ||
-                                    p.contact_person ||
-                                    "—";
-                                  const partnerSub = [p.phone, p.email]
-                                    .filter(Boolean)
-                                    .join(" · ");
-                                  const isSelected = subcontractSupplierId === p.id;
-                                  return (
-                                    <TouchableOpacity
-                                      key={p.id}
-                                      style={[
-                                        styles.aggregatePartnerCard,
-                                        isSelected && styles.aggregatePartnerCardSelected,
-                                      ]}
-                                      onPress={() =>
-                                        setSubcontractSupplierId(
-                                          isSelected ? null : p.id,
-                                        )
-                                      }
-                                      activeOpacity={0.85}
-                                    >
-                                      <View style={styles.aggregatePartnerAvatar}>
-                                        <Text
-                                          style={styles.aggregatePartnerAvatarText}
-                                        >
-                                          {partnerName.slice(0, 2).toUpperCase()}
-                                        </Text>
-                                      </View>
-                                      <View style={{ flex: 1, minWidth: 0 }}>
-                                        <Text
-                                          style={styles.aggregatePartnerName}
-                                          numberOfLines={1}
-                                        >
-                                          {partnerName}
-                                        </Text>
-                                        {partnerSub ? (
-                                          <Text
-                                            style={styles.aggregatePartnerSub}
-                                            numberOfLines={1}
-                                          >
-                                            {partnerSub}
-                                          </Text>
-                                        ) : null}
-                                      </View>
-                                      <FontAwesome
-                                        name={
-                                          isSelected ? "check-circle" : "circle-thin"
-                                        }
-                                        size={22}
-                                        color={
-                                          isSelected ? Theme.primary : Theme.borderInput
-                                        }
-                                      />
-                                    </TouchableOpacity>
-                                  );
-                                })}
-                              </View>
-                            ) : (
-                              <View style={styles.aggregateViewMoreBtn}>
-                                <Text style={styles.aggregateViewMoreText}>
-                                  No partners yet. Add or select partner
-                                </Text>
-                              </View>
-                            )}
-                          </View>
-                        );
-
-                        const rateAndTrackingPane = (
-                          <View
-                            style={[
-                              styles.aggregatePaneCard,
-                              canWideAlign && styles.aggregatePaneWide,
-                            ]}
-                          >
-                            <View
-                              style={[
-                                styles.aggregateGridRow,
-                                canWideAlign && styles.aggregateGridRowWide,
-                              ]}
-                            >
-                              <View style={styles.aggregateGridCol}>
-                                <Text style={styles.tripAssignRowLabel}>
-                                  Partner rate (₹) *
-                                </Text>
-                                <TextInput
-                                  style={[
-                                    styles.assignVehicleInput,
-                                    assignmentShellStyles.inputWell,
-                                  ]}
-                                  placeholder="0"
-                                  placeholderTextColor={Theme.textMuted}
-                                  value={subcontractRate}
-                                  onChangeText={setSubcontractRate}
-                                  ref={aggregatePartnerRateInputRef}
-                                  keyboardType="decimal-pad"
-                                  returnKeyType="next"
-                                  onSubmitEditing={() =>
-                                    aggregateAdvancePaidInputRef.current?.focus()
-                                  }
-                                />
-                              </View>
-                              <View style={styles.aggregateGridCol}>
-                                <Text style={styles.tripAssignRowLabel}>
-                                  Advance paid (₹)
-                                </Text>
-                                <TextInput
-                                  style={[
-                                    styles.assignVehicleInput,
-                                    assignmentShellStyles.inputWell,
-                                  ]}
-                                  placeholder="Optional"
-                                  placeholderTextColor={Theme.textMuted}
-                                  value={aggregateAdvancePaid}
-                                  onChangeText={setAggregateAdvancePaid}
-                                  ref={aggregateAdvancePaidInputRef}
-                                  keyboardType="decimal-pad"
-                                  returnKeyType={
-                                    staffHandshakeAssignLater ? "done" : "next"
-                                  }
-                                  onSubmitEditing={() => {
-                                    if (!staffHandshakeAssignLater) {
-                                      aggregateDriverNameInputRef.current?.focus();
-                                    }
-                                  }}
-                                />
-                              </View>
-                            </View>
-
-                            {!staffHandshakeAssignLater ? (
-                              <>
-                                <Text style={styles.tripAssignRowLabel}>
-                                  Driver Name (Tracking) *
-                                </Text>
-                                <TextInput
-                                  style={[
-                                    styles.assignVehicleInput,
-                                    assignmentShellStyles.inputWell,
-                                  ]}
-                                  placeholder="e.g. Suresh Kumar"
-                                  placeholderTextColor={Theme.textMuted}
-                                  value={aggregateDriverTrackingName}
-                                  onChangeText={(value) => {
-                                    aggregateDriverNameManualRef.current = true;
-                                    setAggregateDriverTrackingName(value);
-                                  }}
-                                  ref={aggregateDriverNameInputRef}
-                                  autoCorrect={false}
-                                  autoCapitalize="words"
-                                  returnKeyType="next"
-                                  onSubmitEditing={() =>
-                                    aggregateDriverPhoneInputRef.current?.focus()
-                                  }
-                                />
-                                <View
-                                  style={[
-                                    styles.aggregateGridRow,
-                                    canWideAlign && styles.aggregateGridRowWide,
-                                  ]}
-                                >
-                                  <View style={styles.aggregateGridCol}>
-                                    <Text
-                                      style={[
-                                        styles.tripAssignRowLabel,
-                                        styles.aggregateInlineFieldLabel,
-                                      ]}
-                                    >
-                                      Driver Phone (Tracking) *
-                                    </Text>
-                                    <View
-                                      style={[
-                                        styles.aggregatePhoneInputWrap,
-                                        assignmentShellStyles.inputWell,
-                                      ]}
-                                    >
-                                      <Text style={styles.aggregatePhonePrefix}>
-                                        🇮🇳 +91
-                                      </Text>
-                                      <TextInput
-                                        style={styles.aggregatePhoneInput}
-                                        placeholder="98765 43210"
-                                        placeholderTextColor={Theme.textMuted}
-                                        value={aggregateDriverPhone}
-                                        onChangeText={(t) =>
-                                          setAggregateDriverPhone(
-                                            formatMobileNumber(t),
-                                          )
-                                        }
-                                        ref={aggregateDriverPhoneInputRef}
-                                        keyboardType="phone-pad"
-                                        autoComplete="tel"
-                                        returnKeyType="next"
-                                        onSubmitEditing={() =>
-                                          aggregateVehicleInputRef.current?.focus()
-                                        }
-                                      />
-                                    </View>
-                                  </View>
-                                  <View style={styles.aggregateGridCol}>
-                                    <Text
-                                      style={[
-                                        styles.tripAssignRowLabel,
-                                        styles.aggregateInlineFieldLabel,
-                                      ]}
-                                    >
-                                      Vehicle Number *
-                                    </Text>
-                                    <TextInput
-                                      style={[
-                                        styles.assignVehicleInput,
-                                        assignmentShellStyles.inputWell,
-                                      ]}
-                                      placeholder="e.g. TN 67 GH 7652"
-                                      placeholderTextColor={Theme.textMuted}
-                                      value={assignVehicleRegistration}
-                                      onChangeText={setAssignVehicleRegistration}
-                                      ref={aggregateVehicleInputRef}
-                                      editable
-                                      returnKeyType="done"
-                                    />
-                                  </View>
-                                </View>
-                                {aggregatePhoneName ? (
-                                  <Text style={styles.phoneModalFound}>
-                                    Found: {aggregatePhoneName}
-                                  </Text>
-                                ) : aggregatePhoneNotFound ? (
-                                  <Text style={styles.phoneModalNotFound}>
-                                    No driver found for this number
-                                  </Text>
-                                ) : null}
-                                {aggregatePhoneName && aggregatePhoneInTrip ? (
-                                  <Text style={styles.phoneModalInTrip}>
-                                    Driver is in trip
-                                  </Text>
-                                ) : null}
-                              </>
-                            ) : null}
-                          </View>
-                        );
-
-                        return (
-                          <>
-                            {staffHandshakeAssignLater ? (
-                              <Text style={styles.modalHint}>
-                                Add vehicle number and driver phone on the trip
-                                screen before the trip starts.
-                              </Text>
-                            ) : null}
-                            <View
-                              style={assignmentShellStyles.tripAssignSurfaceCard}
-                            >
-                              <View style={styles.tripAssignCardHeader}>
-                                <Text style={styles.tripAssignCardHeaderTitle}>
-                                  Current Node
-                                </Text>
-                                <View
-                                  style={[
-                                    styles.tripAssignSourceBadge,
-                                    styles.tripAssignBadgeUnassigned,
-                                  ]}
-                                >
-                                  <Text
-                                    style={[
-                                      styles.tripAssignSourceBadgeText,
-                                      styles.tripAssignSourceBadgeTextUnassigned,
-                                    ]}
-                                  >
-                                    Unassigned
-                                  </Text>
-                                </View>
-                              </View>
-                              <Text style={styles.tripAssignPartnerHint}>
-                                Associated partner (required). Select your
-                                sub-supplier for this trip and enter the rate you
-                                will pay.
-                              </Text>
-                              <ScrollView
-                                style={[
-                                  styles.currentNodeInnerScroll,
-                                  !canWideAlign && styles.currentNodeInnerScrollMobile,
-                                  isCompactModalLayout && styles.currentNodeInnerScrollCompact,
-                                ]}
-                                contentContainerStyle={[
-                                  styles.currentNodeInnerScrollContent,
-                                  styles.aggregateSplit,
-                                  canWideAlign && styles.aggregateSplitWide,
-                                ]}
-                                nestedScrollEnabled
-                                keyboardShouldPersistTaps="handled"
-                                showsVerticalScrollIndicator={!canWideAlign}
-                              >
-                                {canWideAlign ? (
-                                  <>
-                                    {partnerPane}
-                                    {rateAndTrackingPane}
-                                  </>
-                                ) : (
-                                  <View style={styles.aggregateMobileStack}>
-                                    {partnerPane}
-                                    {rateAndTrackingPane}
-                                  </View>
-                                )}
-                              </ScrollView>
-                            </View>
-                          </>
-                        );
-                      })()
-                  )}
-                  </>
-                )}
-              </ScrollView>
-              {!deployOtpCode ? (
-                <View
-                  style={[
-                    assignmentShellStyles.modalFooterBar,
-                    { paddingBottom: Math.max(16, insets.bottom + 8) },
-                  ]}
-                >
-                  {loadAction?.type === "ASSIGN" &&
-                  assigningTripId === loadAction.load.id ? (
-                    <View style={styles.loadingWrap}>
-                      <ActivityIndicator size="small" color={Theme.primary} />
-                      <Text style={styles.loadingText}>Creating trip…</Text>
-                    </View>
-                  ) : loadAction?.type === "ASSIGN" &&
-                    !useAdHocDriver &&
-                    staffHandshakeAssignLater ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      disabled={assigningTripId === loadAction.load.id}
-                      style={({ pressed }) => [
-                        styles.handshakePrimaryCta,
-                        pressed && { opacity: 0.9 },
-                        Platform.OS === "web" &&
-                          ({ cursor: "pointer" } as const),
-                      ]}
-                      onPress={() => {
-                        if (loadAction?.type === "ASSIGN") {
-                          void handleFinalAssignment(loadAction.load);
-                        }
-                      }}
-                    >
-                      <FontAwesome
-                        name="bolt"
-                        size={18}
-                        color={Theme.textOnPrimary}
-                        style={{ marginRight: 8 }}
-                      />
-                      <Text style={styles.handshakePrimaryCtaText}>
-                        Authorize & deploy voyage
-                      </Text>
-                    </Pressable>
-                  ) : loadAction?.type === "ASSIGN" &&
-                    !useAdHocDriver &&
-                    !staffHandshakeAssignLater &&
-                    rosterReady ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      disabled={assigningTripId === loadAction.load.id}
-                      style={({ pressed }) => [
-                        styles.handshakePrimaryCta,
-                        pressed && { opacity: 0.9 },
-                        Platform.OS === "web" &&
-                          ({ cursor: "pointer" } as const),
-                      ]}
-                      onPress={() => {
-                        if (loadAction?.type === "ASSIGN") {
-                          void handleDeployRoster(loadAction.load);
-                        }
-                      }}
-                    >
-                      <FontAwesome
-                        name="bolt"
-                        size={18}
-                        color={Theme.textOnPrimary}
-                        style={{ marginRight: 8 }}
-                      />
-                      <Text style={styles.handshakePrimaryCtaText}>
-                        Authorize & deploy voyage
-                      </Text>
-                    </Pressable>
-                  ) : loadAction?.type === "ASSIGN" &&
-                    useAdHocDriver &&
-                    !staffHandshakeAssignLater ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      disabled={
-                        assigningTripId === loadAction.load.id ||
-                        !aggregatePartnerHandshakeComplete ||
-                        !aggregateTrackingFlowReady ||
-                        (aggregateDriverPhone.trim().length > 0 &&
-                          aggregatePhoneInTrip)
-                      }
-                      style={({ pressed }) => [
-                        styles.handshakePrimaryCta,
-                        pressed && { opacity: 0.9 },
-                        Platform.OS === "web" &&
-                          ({ cursor: "pointer" } as const),
-                      ]}
-                      onPress={() => {
-                        if (loadAction?.type === "ASSIGN") {
-                          void handleDeployAdHoc(loadAction.load);
-                        }
-                      }}
-                    >
-                      <FontAwesome
-                        name="share-alt"
-                        size={18}
-                        color={Theme.textOnPrimary}
-                        style={{ marginRight: 8 }}
-                      />
-                      <Text style={styles.handshakePrimaryCtaText}>
-                        {aggregateDriverPhone.trim().length > 0 &&
-                        aggregatePhoneInTrip
-                          ? "Driver on trip"
-                          : "Deploy & get OTP"}
-                      </Text>
-                    </Pressable>
-                  ) : loadAction?.type === "ASSIGN" &&
-                    useAdHocDriver &&
-                    staffHandshakeAssignLater ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      disabled={
-                        assigningTripId === loadAction.load.id ||
-                        !aggregatePartnerHandshakeComplete
-                      }
-                      style={({ pressed }) => [
-                        styles.handshakePrimaryCta,
-                        pressed && { opacity: 0.9 },
-                        Platform.OS === "web" &&
-                          ({ cursor: "pointer" } as const),
-                      ]}
-                      onPress={() => {
-                        if (loadAction?.type === "ASSIGN") {
-                          void handleDeployAdHoc(loadAction.load);
-                        }
-                      }}
-                    >
-                      <FontAwesome
-                        name="share-alt"
-                        size={18}
-                        color={Theme.textOnPrimary}
-                        style={{ marginRight: 8 }}
-                      />
-                      <Text style={styles.handshakePrimaryCtaText}>
-                        Create trip & assign later
-                      </Text>
-                    </Pressable>
-                  ) : (
-                    <Text style={[styles.modalHint, { marginBottom: 0 }]}>
-                      {!useAdHocDriver
-                        ? "Select a driver and a vehicle from your org to continue."
-                        : "Enter driver name, driver phone, and vehicle number, or use Assign later."}
-                    </Text>
-                  )}
-                </View>
-              ) : null}
-            </View>
-          )}
-          </View>
-        </View>
-      </Modal>
+      {/* Staff Handshake modal */}
+      <StaffHandshakeModal
+        visible={handshake.state.isOpen}
+        handshake={handshake}
+        activeDrivers={activeDrivers}
+        vehicles={vehicles}
+        suppliers={suppliers}
+        visiblePartnersForHandshake={visiblePartnersForHandshake}
+        orgId={orgId}
+        width={width}
+        isCompactModalLayout={isCompactModalLayout}
+        insets={insets}
+        onSuccess={triggerSuccess}
+      />
 
     </View>
   );
 }
 
-/** Reference: route text red #F44336 */
-const LOAD_ROUTE_RED = "#F44336";
 /** Reference: content bg #f4f5f7 */
 const LOAD_CONTENT_BG = "#f4f5f7";
-/** Reference: broadcast area #eef1f6 */
-const LOAD_BROADCAST_BG = "#eef1f6";
-/** Reference: broadcast icon/label #829ab1 */
-const LOAD_BROADCAST_MUTED = "#829ab1";
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Theme.darkBackground },
+  containerMobileHub: {
+    backgroundColor: LOADS_HUB_PAGE_BG,
+  },
   loadDarkHeader: {
     backgroundColor: Theme.screenBackground,
     paddingHorizontal: Layout.screenPaddingHorizontal,
@@ -4656,10 +2214,20 @@ const styles = StyleSheet.create({
   loadContentWrapClaimed: {
     marginTop: 0,
   },
+  loadContentWrapMobileHub: {
+    backgroundColor: LOADS_HUB_PAGE_BG,
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    marginTop: 0,
+  },
   scroll: { flex: 1 },
   scrollContent: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 12,
+  },
+  scrollContentMobileHub: {
+    paddingHorizontal: 0,
+    paddingTop: 8,
   },
   loadSectionRow: {
     flexDirection: "row",
@@ -4801,7 +2369,7 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
   },
   reviewHubHeroStatValueEnd: {
-    textAlign: "right" as const,
+    textAlign: "right",
     alignSelf: "stretch",
   },
   reviewHubHeroStatLabel: {
@@ -4947,7 +2515,7 @@ const styles = StyleSheet.create({
   loadingWrap: { paddingVertical: 32, alignItems: "center", gap: 12 },
   loadingText: { fontSize: 10, fontWeight: "700", color: Theme.textMuted },
   loadCard: {
-    position: "relative" as const,
+    position: "relative",
     backgroundColor: Theme.cardWhite,
     borderWidth: 1,
     borderColor: Theme.borderLight,
@@ -4975,7 +2543,7 @@ const styles = StyleSheet.create({
   loadCardHeroRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
+    alignItems: "center",
     marginBottom: 10,
     zIndex: 1,
   },
@@ -5060,14 +2628,15 @@ const styles = StyleSheet.create({
   loadCardSpecDivider: {
     borderLeftWidth: 1,
     borderLeftColor: Theme.borderMedium,
-    paddingLeft: 10,
-    marginLeft: 4,
+    paddingLeft: 12,
+    marginLeft: 0,
   },
   bidMetaWrap: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
     minWidth: 0,
   },
   bidIconCircle: {
@@ -5095,15 +2664,19 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
   broadcastNetworkBtn: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 5,
     backgroundColor: "#6366f1",
-    borderRadius: 10,
+    borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    minHeight: 44,
+    paddingVertical: 0,
+    flexShrink: 0,
     shadowColor: "#6366f1",
     shadowOpacity: 0.35,
     shadowRadius: 6,
@@ -5140,11 +2713,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    flexWrap: "nowrap",
+    gap: 10,
     marginTop: 4,
     paddingTop: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
     zIndex: 1,
+  },
+  loadCardFooterCompact: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    flexWrap: "wrap",
+    rowGap: 10,
+    columnGap: 0,
   },
   loadCardMeta: {
     flex: 1,
@@ -5153,6 +2735,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
+  loadCardMetaCompact: {
+    flexGrow: 0,
+    flexShrink: 1,
+    alignSelf: "stretch",
+  },
   loadCardMetaText: {
     fontSize: 10,
     fontWeight: "800",
@@ -5160,13 +2747,39 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.6,
     flex: 1,
+    minWidth: 0,
   },
   loadCardActions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginLeft: 8,
+    justifyContent: "flex-end",
+    marginLeft: 10,
     flexShrink: 0,
+    flexGrow: 0,
+    minWidth: 0,
+  },
+  loadCardActionsCompact: {
+    marginLeft: 0,
+    alignSelf: "stretch",
+    justifyContent: "flex-end",
+    width: "100%",
+    maxWidth: "100%",
+  },
+  loadCardActionCluster: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    flexWrap: "nowrap",
+    gap: 8,
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  loadCardActionClusterStacked: {
+    flexWrap: "wrap",
+    rowGap: 8,
+    flexShrink: 1,
+    maxWidth: "100%",
+    alignSelf: "flex-end",
   },
   shareIndentBtn: {
     flexDirection: "row",
@@ -5196,12 +2809,13 @@ const styles = StyleSheet.create({
   },
   reviewBidsBtn: {
     backgroundColor: TESLA_BLACK,
-    paddingHorizontal: 22,
+    paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 16,
     minHeight: 44,
     justifyContent: "center",
     alignItems: "center",
+    flexShrink: 0,
   },
   reviewBidsBtnText: {
     fontSize: 10,
@@ -5212,7 +2826,7 @@ const styles = StyleSheet.create({
   },
   deployPendingWrap: {
     paddingHorizontal: 12,
-    minHeight: 30,
+    minHeight: 44,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -5308,18 +2922,21 @@ const styles = StyleSheet.create({
   loadCardSpecsLabelsRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
+    justifyContent: "flex-start",
+    gap: 0,
   },
   loadCardSpecsValuesRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 8,
+    justifyContent: "flex-start",
+    gap: 0,
   },
   loadCardSpecCell: {
     flex: 1,
     minWidth: 0,
+  },
+  loadCardSpecCellRight: {
+    alignItems: "flex-end",
   },
   loadCardSpecLabel: {
     fontSize: 8,
@@ -5337,6 +2954,14 @@ const styles = StyleSheet.create({
       android: { includeFontPadding: false as const },
       default: {},
     }),
+  },
+  loadCardSpecLabelRight: {
+    textAlign: "right",
+    alignSelf: "stretch",
+  },
+  loadCardSpecValueRight: {
+    textAlign: "right",
+    alignSelf: "stretch",
   },
   quoteBtn: {
     flexDirection: "row",
@@ -5690,7 +3315,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-      } as const,
+      } as any,
       default: {
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 4 },
@@ -5713,7 +3338,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.05)",
-      } as const,
+      } as any,
     }),
   },
   handshakeSegBtnText: {
@@ -5740,7 +3365,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         boxShadow: "0 1px 2px rgba(15,23,42,0.06)",
-      } as const,
+      } as any,
       default: {
         shadowColor: "#0f172a",
         shadowOffset: { width: 0, height: 1 },
@@ -5796,7 +3421,7 @@ const styles = StyleSheet.create({
       web: {
         boxShadow: "0 12px 24px rgba(15,23,42,0.2)",
         cursor: "pointer",
-      } as const,
+      } as any,
       default: {
         shadowColor: "#0f172a",
         shadowOffset: { width: 0, height: 8 },
@@ -5818,8 +3443,10 @@ const styles = StyleSheet.create({
     width: "98%",
     maxWidth: 760,
     borderRadius: 14,
-    height: "92vh",
-    maxHeight: "92vh",
+    ...Platform.select({
+      web: { height: "92vh", maxHeight: "92vh" } as any,
+      default: { maxHeight: "92%" },
+    }),
   },
   handshakeNativeInner: {
     flex: 1,
@@ -6386,7 +4013,7 @@ const styles = StyleSheet.create({
       web: {
         maxWidth: 760,
         boxShadow: "0 10px 24px rgba(15,23,42,0.16)",
-      } as const,
+      } as any,
     }),
   },
   subcontractPickerTitle: {

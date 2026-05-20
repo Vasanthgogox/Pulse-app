@@ -1,6 +1,7 @@
 /**
  * POD Reconciliation Screen — adapted from cashflow PodReconciliation.tsx.
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -13,7 +14,6 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-    ActivityIndicator,
     Alert,
     FlatList,
     Modal,
@@ -29,6 +29,7 @@ import {
     type TextStyle,
     type ViewStyle,
 } from "react-native";
+import { useLayoutInsets } from "@/lib/layoutInsets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LogIncomingPodsScreen } from "../log-pods/LogIncomingPodsScreen";
 import { PodValidationView } from "./components/PodValidationView";
@@ -56,6 +57,7 @@ function canAccessPodManagement(
 
 export function PodReconciliationScreen() {
   const insets = useSafeAreaInsets();
+  const layout = useLayoutInsets();
   const { t: tr } = useLanguage();
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
@@ -953,7 +955,7 @@ export function PodReconciliationScreen() {
             <View style={styles.mainColumn}>
               <View style={styles.contentArea}>
                 {isLoading && !isRefetching ? (
-                  <ActivityIndicator
+                  <LoadingIndicator
                     size="large"
                     color={Theme.primary}
                     style={{ marginTop: 40 }}
@@ -993,10 +995,7 @@ export function PodReconciliationScreen() {
                 contentContainerStyle={[
                   styles.tableModeScrollContent,
                   {
-                    paddingBottom: Math.max(
-                      16,
-                      insets.bottom + Layout.demoTabBarScrollBottomInset + 12,
-                    ),
+                    paddingBottom: Math.max(16, layout.scrollBottomPadding(12)),
                   },
                 ]}
               >
@@ -1214,9 +1213,7 @@ export function PodReconciliationScreen() {
                       {
                         paddingBottom: Math.max(
                           40,
-                          insets.bottom +
-                            Layout.demoTabBarScrollBottomInset +
-                            12,
+                          layout.scrollBottomPadding(12),
                         ),
                       },
                     ]}

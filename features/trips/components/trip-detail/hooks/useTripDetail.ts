@@ -46,19 +46,22 @@ import type { DisputeRow } from "@/services/sharedLedgerService";
 import {
     acceptPartnerView,
     createDispute,
-    getDisputesForPartner,
-    getDisputesReceived,
     getSharedLedgerEntriesForPartner,
     resolveDispute,
     resolveDisputeTableOnly,
 } from "@/services/sharedLedgerService";
+import {
+    useOpenDisputesQuery,
+    useDisputesReceivedQuery,
+} from "@/lib/queries";
 import * as tripDocumentsService from "@/services/tripDocumentsService";
 import { useQueryClient } from "@tanstack/react-query";
+import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import type * as ExpoLocationTypes from "expo-location";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert } from "react-native";
-import { useRealtimeTrip } from "../../../hooks/useRealtimeTrips";
+import { useRealtimeDriverLocations, useRealtimeTrip } from "../../../hooks/useRealtimeTrips";
 import {
     clearInitialTripForDetail,
     getInitialTripForDetail,
@@ -223,18 +226,41 @@ export function useTripDetail({
   } | null>(null);
 
   // ── Disputes ──────────────────────────────────────────────────────────────
-  const [tripDispute, setTripDispute] = useState<DisputeRow | null>(null);
-  const [tripDisputeDirection, setTripDisputeDirection] = useState<
-    "RAISED_BY_US" | "RECEIVED" | null
-  >(null);
-  const [tripDisputeByType, setTripDisputeByType] = useState<
-    Partial<
-      Record<
-        "client" | "supplier",
-        { dispute: DisputeRow; direction: "RAISED_BY_US" | "RECEIVED" }
-      >
-    >
-  >({});
+  const qc = useQueryClient();
+  const orgId = currentOrganization?.id ?? null;
+  const { data: openDisputes } = useOpenDisputesQuery(orgId);
+  const { data: receivedDisputes } = useDisputesReceivedQuery(orgId);
+
+  const tripDisputeByType = useMemo(() => {
+    const tId = trip?.id ?? null;
+    const clientOrg = clientPartyRes?.orgId ?? null;
+    const supplierOrg = supplierPartyRes?.orgId ?? null;
+    if (!tId || (!clientOrg && !supplierOrg)) return {};
+    const matchByTrip = (d: DisputeRow) =>
+      String(d.transaction_id ?? "").toLowerCase() === String(tId).toLowerCase();
+    const receivedByOrg = new Map<string, DisputeRow>();
+    for (const d of receivedDisputes ?? []) {
+      if (!matchByTrip(d) || d.status !== "OPEN") continue;
+      if (d.raised_by_org_id) receivedByOrg.set(d.raised_by_org_id, d);
+    }
+    const byType: Partial<Record<"client" | "supplier", { dispute: DisputeRow; direction: "RAISED_BY_US" | "RECEIVED" }>> = {};
+    const pickForSide = (side: "client" | "supplier", partnerOrg: string | null) => {
+      if (!partnerOrg) return;
+      const raisedOpen = (openDisputes ?? []).find(
+        (d) => matchByTrip(d) && d.status === "OPEN" && d.partner_org_id === partnerOrg,
+      );
+      if (raisedOpen) { byType[side] = { dispute: raisedOpen, direction: "RAISED_BY_US" }; return; }
+      const receivedOpen = receivedByOrg.get(partnerOrg);
+      if (receivedOpen) byType[side] = { dispute: receivedOpen, direction: "RECEIVED" };
+    };
+    pickForSide("client", clientOrg);
+    pickForSide("supplier", supplierOrg);
+    return byType;
+  }, [openDisputes, receivedDisputes, trip?.id, clientPartyRes?.orgId, supplierPartyRes?.orgId]);
+
+  const primary = tripDisputeByType.supplier ?? tripDisputeByType.client ?? null;
+  const tripDispute = primary?.dispute ?? null;
+  const tripDisputeDirection = primary?.direction ?? null;
   const [reconcileActionLoading, setReconcileActionLoading] = useState(false);
   const [reconcileLoadingByType, setReconcileLoadingByType] = useState<
     Partial<Record<"client" | "supplier", boolean>>
@@ -710,18 +736,6 @@ export function useTripDetail({
     [vehiclePreviewDocs, vehiclePreviewIndex],
   );
 
-  // ── Realtime ──────────────────────────────────────────────────────────────
-  const handleRealtimeTripUpdate = useCallback(() => {
-    isRefreshingRef.current = true;
-    load();
-    loadAssignmentAudit();
-    setFinanceRefreshKey((k) => k + 1);
-    refetchTransactionsRef.current();
-  }, []);
-
-  // Subscribe immediately using route tripId so realtime starts even before trip row is loaded.
-  useRealtimeTrip(tripId ?? null, handleRealtimeTripUpdate);
-
   // ── Data loaders ──────────────────────────────────────────────────────────
   const load = useCallback(() => {
     if (!tripId) {
@@ -800,6 +814,32 @@ export function useTripDetail({
       else setAssignmentAuditRows([]);
     });
   }, [tripId]);
+
+  // ── Realtime (UPDATE merges row from WAL — no getTripById refetch) ───────────
+  const handleRealtimeTripUpdate = useCallback(
+    (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
+      if (
+        payload.eventType === "UPDATE" &&
+        payload.new &&
+        typeof payload.new === "object" &&
+        (payload.new as { id?: string }).id === tripId
+      ) {
+        setTrip((prev) => {
+          if (!prev || prev.id !== tripId) return prev;
+          return { ...prev, ...(payload.new as Partial<TripRow>) } as TripRow;
+        });
+        return;
+      }
+      isRefreshingRef.current = true;
+      load();
+      loadAssignmentAudit();
+      setFinanceRefreshKey((k) => k + 1);
+      refetchTransactionsRef.current();
+    },
+    [tripId, load, loadAssignmentAudit],
+  );
+
+  useRealtimeTrip(tripId ?? null, handleRealtimeTripUpdate);
 
   /** Resolve audit row IDs to labels (web + shared timeline). Native screen had this inline; hook must own it for `.web.tsx`. */
   useEffect(() => {
@@ -1186,7 +1226,15 @@ export function useTripDetail({
     const hasDriverAssigned = !!trip?.driver_id;
     const hasVehicleAssigned =
       !!trip?.vehicle_id || !!String(trip?.vehicle_display_number ?? "").trim();
-    if (!trip?.id || !isAggregateTrip(trip) || !hasDriverAssigned || !hasVehicleAssigned) {
+    const isAggregateTripFlag = isAggregateTrip(trip);
+    // Load OTP when:
+    //   A) aggregate trip with driver + vehicle assigned (original path), OR
+    //   B) any trip where the assigned driver row has no user_id yet (unlinked
+    //      tracking-only driver) — dispatcher needs the code to share with the driver.
+    const needsOtp =
+      (isAggregateTripFlag && hasDriverAssigned && hasVehicleAssigned) ||
+      (!isAggregateTripFlag && hasDriverAssigned && !driverLinked);
+    if (!trip?.id || !needsOtp) {
       setTripOtp(null);
       return;
     }
@@ -1194,7 +1242,7 @@ export function useTripDetail({
       if (error) setTripOtp(null);
       else setTripOtp({ code: code ?? null, expires_at: expires_at ?? null });
     });
-  }, [trip?.id, trip?.supplier_id, trip?.driver_id, trip?.vehicle_id, trip?.vehicle_display_number]);
+  }, [trip?.id, trip?.supplier_id, trip?.driver_id, trip?.vehicle_id, trip?.vehicle_display_number, driverLinked]);
 
   const loadTripDocuments = useCallback(() => {
     if (!tripId) return;
@@ -1210,6 +1258,7 @@ export function useTripDetail({
     if (!trip?.id) return;
     const driverId = effectiveDriverIdForLocation;
     setDriverLocationLoading(true);
+    console.log('[tracking] fetchDriverLocation start', { tripId: trip.id, driverId });
     try {
       const [latestRes, historyByTrip] = await Promise.all([
         driverLocationService.getLatestDriverLocationForTripOrDriver(trip.id, driverId),
@@ -1221,7 +1270,8 @@ export function useTripDetail({
           await driverLocationService.getDriverLocationHistoryByDriverId(driverId);
         if (!historyByDriver.error) effectivePoints = historyByDriver.points;
       }
-      setDriverLocation(latestRes.error ? null : (latestRes.location ?? null));
+      const latest = latestRes.error ? null : (latestRes.location ?? null);
+      setDriverLocation(latest);
       setTripLocationPoints(
         effectivePoints.map((p) => ({
           latitude: p.latitude,
@@ -1229,8 +1279,24 @@ export function useTripDetail({
           recorded_at: p.recorded_at,
         })),
       );
-    } catch {
-      // silently ignore
+      const last3 = effectivePoints.slice(-3);
+      console.log('[tracking] fetchDriverLocation done', {
+        tripId: trip.id,
+        hasLatest: !!latest,
+        latestAt: latest?.recorded_at ?? null,
+        totalPoints: effectivePoints.length,
+        last3: last3.map((p) => ({ lat: p.latitude, lon: p.longitude, at: p.recorded_at })),
+      });
+      console.log(
+        '[tracking] driver_locations lat/lon from DB (all points for this fetch)',
+        effectivePoints.map((p) => ({
+          latitude: p.latitude,
+          longitude: p.longitude,
+          recorded_at: p.recorded_at,
+        })),
+      );
+    } catch (err) {
+      console.warn('[tracking] fetchDriverLocation error', { tripId: trip.id, err });
     } finally {
       setDriverLocationLoading(false);
     }
@@ -1260,65 +1326,10 @@ export function useTripDetail({
   }, [load, loadAssignmentAudit, loadAdjustments, loadTripDocuments, loadTripOtp]);
 
   // ── Reconciliation actions ────────────────────────────────────────────────
-  const refreshTripDispute = useCallback(async () => {
-    const orgId = currentOrganization?.id ?? null;
-    const tId = trip?.id ?? null;
-    const clientOrg = clientPartyRes?.orgId ?? null;
-    const supplierOrg = supplierPartyRes?.orgId ?? null;
-    if (!orgId || !tId || (!clientOrg && !supplierOrg)) {
-      setTripDispute(null);
-      setTripDisputeDirection(null);
-      setTripDisputeByType({});
-      return;
-    }
-    try {
-      const [received, clientRaised, supplierRaised] = await Promise.all([
-        getDisputesReceived(orgId),
-        clientOrg
-          ? getDisputesForPartner(orgId, clientOrg)
-          : Promise.resolve({ disputes: [] as DisputeRow[] }),
-        supplierOrg
-          ? getDisputesForPartner(orgId, supplierOrg)
-          : Promise.resolve({ disputes: [] as DisputeRow[] }),
-      ]);
-      const matchByTrip = (d: DisputeRow) =>
-        String(d.transaction_id ?? "").toLowerCase() === String(tId).toLowerCase();
-      const receivedByOrg = new Map<string, DisputeRow>();
-      for (const d of received.disputes ?? []) {
-        if (!matchByTrip(d) || d.status !== "OPEN") continue;
-        if (d.raised_by_org_id) receivedByOrg.set(d.raised_by_org_id, d);
-      }
-      const byType: Partial<
-        Record<"client" | "supplier", { dispute: DisputeRow; direction: "RAISED_BY_US" | "RECEIVED" }>
-      > = {};
-      const pickForSide = (
-        side: "client" | "supplier",
-        partnerOrg: string | null,
-        raised: { disputes: DisputeRow[] | undefined },
-      ) => {
-        if (!partnerOrg) return;
-        const raisedOpen = (raised.disputes ?? []).filter(
-          (d) => matchByTrip(d) && d.status === "OPEN",
-        )[0];
-        if (raisedOpen) {
-          byType[side] = { dispute: raisedOpen, direction: "RAISED_BY_US" };
-          return;
-        }
-        const receivedOpen = receivedByOrg.get(partnerOrg);
-        if (receivedOpen) byType[side] = { dispute: receivedOpen, direction: "RECEIVED" };
-      };
-      pickForSide("client", clientOrg, clientRaised);
-      pickForSide("supplier", supplierOrg, supplierRaised);
-      setTripDisputeByType(byType);
-      const primary = byType.supplier ?? byType.client ?? null;
-      setTripDispute(primary?.dispute ?? null);
-      setTripDisputeDirection(primary?.direction ?? null);
-    } catch {
-      setTripDispute(null);
-      setTripDisputeDirection(null);
-      setTripDisputeByType({});
-    }
-  }, [currentOrganization?.id, trip?.id, clientPartyRes?.orgId, supplierPartyRes?.orgId]);
+  const refreshTripDispute = useCallback(() => {
+    if (!orgId) return;
+    void qc.invalidateQueries({ queryKey: queryKeys.disputes.all(orgId) });
+  }, [orgId, qc]);
 
   type PartyType = "client" | "supplier";
 
@@ -1914,16 +1925,14 @@ export function useTripDetail({
     loadTripDocuments();
   }, [selectedDoc, docPreviewStoragePath, tripId, loadTripDocuments]);
 
-  // OTP for aggregate trips
+  // OTP for aggregate trips and non-aggregate trips with unlinked (tracking-only) drivers
   useEffect(() => {
-    if (trip?.id && isAggregateTrip(trip)) {
-      // Keep OTP visible for aggregate trips even after assignment,
-      // so dispatch can share/verify immediately.
+    if (trip?.id && (isAggregateTrip(trip) || (!!trip.driver_id && !driverLinked))) {
       loadTripOtp();
     } else {
       setTripOtp(null);
     }
-  }, [trip?.id, trip?.supplier_id, loadTripOtp]);
+  }, [trip?.id, trip?.supplier_id, trip?.driver_id, driverLinked, loadTripOtp]);
 
   // Driver location load/polling (shared across web + native detail screens).
   useEffect(() => {
@@ -1941,6 +1950,20 @@ export function useTripDetail({
     if (!trip?.id || !effectiveDriverIdForLocation) return;
     void fetchDriverLocationFromDb();
   }, [trip?.updated_at, trip?.status_revision, trip?.status, effectiveDriverIdForLocation, fetchDriverLocationFromDb, trip?.id]);
+
+  /** Refetch when driver_locations rows arrive (read-only; does not change driver DB ping cadence). */
+  useRealtimeDriverLocations(trip?.id ?? null, effectiveDriverIdForLocation, () => {
+    void fetchDriverLocationFromDb();
+  });
+
+  /** Fallback poll while trip is active (Realtime covers the common case). */
+  useEffect(() => {
+    if (!trip?.id || tripCompleted) return;
+    const id = globalThis.setInterval(() => {
+      void fetchDriverLocationFromDb();
+    }, 60_000);
+    return () => globalThis.clearInterval(id);
+  }, [trip?.id, tripCompleted, fetchDriverLocationFromDb]);
 
   // Counterparty entries
   useEffect(() => {
@@ -2008,11 +2031,15 @@ export function useTripDetail({
       setTripRatings([]);
       return;
     }
+    let isActive = true;
     getRatingsForTrip(trip.id).then(({ error, ratings }) => {
-      if (error) return;
+      if (!isActive || error) return;
       const driverRatings = (ratings ?? []).filter((r) => r.rated_type === "driver");
       setTripRatings(driverRatings);
     });
+    return () => {
+      isActive = false;
+    };
   }, [trip?.id, tripCompleted]);
 
   // Driver location reverse geocoding
@@ -2021,22 +2048,29 @@ export function useTripDetail({
       setDriverLocationAddress(null);
       return;
     }
+    let isActive = true;
     safeReverseGeocode(driverLocation.latitude, driverLocation.longitude).then(
       (results) => {
+        if (!isActive) return;
         const addr = results[0];
         if (!addr) return;
         const parts = [addr.street, addr.city, addr.region].filter(Boolean);
         setDriverLocationAddress(parts.join(", "));
       },
     );
+    return () => {
+      isActive = false;
+    };
   }, [driverLocation?.latitude, driverLocation?.longitude]);
 
   // Past location geocoding
   useEffect(() => {
     const past = tripLocationPoints.slice(-2).reverse();
     setPastLocationAddresses([null, null]);
+    let isActive = true;
     past.forEach((pt, i) => {
       safeReverseGeocode(pt.latitude, pt.longitude).then((results) => {
+        if (!isActive) return;
         const addr = results[0];
         if (!addr) return;
         const parts = [addr.street, addr.city].filter(Boolean);
@@ -2047,6 +2081,9 @@ export function useTripDetail({
         });
       });
     });
+    return () => {
+      isActive = false;
+    };
   }, [tripLocationPoints]);
 
   return {

@@ -31,6 +31,7 @@ import {
     type ViewStyle,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useLayoutInsets } from "@/lib/layoutInsets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 function canAccessInvoicing(
@@ -48,6 +49,7 @@ function canAccessInvoicing(
 
 export function InvoicingExecuteScreen() {
   const insets = useSafeAreaInsets();
+  const layout = useLayoutInsets();
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
   const { profile } = useAuth();
@@ -80,8 +82,7 @@ export function InvoicingExecuteScreen() {
   const INVOICING_DESKTOP_MIN = 1024;
   const isLargeScreen = width >= INVOICING_DESKTOP_MIN;
   const allowed = canAccessInvoicing(profile);
-  const mobileBottomPad =
-    insets.bottom + Layout.demoTabBarScrollBottomInset + 16;
+  const mobileBottomPad = layout.scrollBottomPadding(16);
 
   const formatCurrencySimple = (amount: number) => {
     if (amount >= 10000000) return `₹${(amount / 10000000).toFixed(2)} Cr`;
@@ -883,8 +884,7 @@ export function InvoicingExecuteScreen() {
           style={[
             styles.footer,
             {
-              paddingBottom:
-                insets.bottom + Layout.demoTabBarScrollBottomInset + 8,
+              paddingBottom: layout.scrollBottomPadding(8),
             },
           ]}
         >
@@ -1078,8 +1078,8 @@ function TripListContent({
         contentContainerStyle={{
           padding: 16,
           paddingBottom: isDesktopTripTable
-            ? Layout.demoTabBarScrollBottomInset + 24
-            : (mobileBottomPad ?? Layout.demoTabBarScrollBottomInset + 24) + 84,
+            ? layout.scrollBottomPadding(24)
+            : mobileBottomPad + 84,
         }}
         ListEmptyComponent={
           <View style={styles.empty}>

@@ -1,31 +1,39 @@
 /**
  * Demo layout: 3 tabs (FISCAL | TRIPS | NETWORK) + floating bottom dock (web + native).
- * Ops Agent via floating icon. Dock hides while scrolling; resets when idle or tab changes.
+ * Ops Agent via floating icon. Dock hides on scroll (native + mobile web); fixed to viewport on mobile web.
  */
 import React, { useEffect } from 'react';
 import { Tabs, useRouter } from 'expo-router';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { View, StyleSheet, Platform, useWindowDimensions, ActivityIndicator } from 'react-native';
+import { AppLoadingSplash } from '@/components/AppLoadingSplash';
+import { View, StyleSheet, Platform, useWindowDimensions } from 'react-native';
 import { DemoTabBar, type DemoTabId } from '@/components/demo';
 import {
   DemoTabBarAutoHideShell,
   DemoTabBarScrollProvider,
   useDemoTabBarScroll,
 } from '@/contexts/DemoTabBarScrollContext';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { saveLastTabRoute } from '@/lib/lastRoute';
+import { useLayoutInsets } from '@/lib/layoutInsets';
+import { preloadPulseLoadsRoute, preloadTabScreen } from '@/lib/preloadRoutes';
+import type { PreloadableTab } from '@/lib/preloadRoutes';
 import { ROUTES } from '@/lib/routes';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
+import { ProfileMenuDrawerProvider, useProfileMenuDrawer } from '@/contexts/ProfileMenuDrawerContext';
 
-function DemoCustomTabBar(props: BottomTabBarProps) {
+function DemoCustomTabBar(
+  props: BottomTabBarProps & { onOpenProfileDrawer: () => void },
+) {
   const router = useRouter();
   const { resetBarVisible } = useDemoTabBarScroll();
+  const { onOpenProfileDrawer } = props;
   const { state, navigation } = props;
-  const insets = useSafeAreaInsets();
+  const layout = useLayoutInsets();
   const { width } = useWindowDimensions();
   const isDesktopWeb = Platform.OS === 'web' && width >= 1024;
+  const isMobileWeb = Platform.OS === 'web' && !isDesktopWeb;
   const routeName = state.routes[state.index]?.name;
   const activeTab: DemoTabId =
     routeName === 'finance' ? 'finance'
@@ -36,14 +44,18 @@ function DemoCustomTabBar(props: BottomTabBarProps) {
 
   const onTabChange = (tab: DemoTabId) => {
     if (tab === 'loadCenter') {
+      preloadPulseLoadsRoute();
       router.push(ROUTES.PULSE_LOADS);
       return;
+    }
+    if (tab === 'trips' || tab === 'network' || tab === 'finance') {
+      preloadTabScreen(tab as PreloadableTab);
     }
     navigation.navigate(tab);
   };
 
   const onProfilePress = () => {
-    router.push('/(tabs)/profile');
+    onOpenProfileDrawer();
   };
 
   useEffect(() => {
@@ -73,16 +85,15 @@ function DemoCustomTabBar(props: BottomTabBarProps) {
       zIndex: 100,
       width: '100%' as const,
     },
-    // Mobile web: dock overlays the scene so when it auto-hides (translate) no grey strip
-    // remains in document flow; main scroll area fills to the viewport bottom.
+    // Mobile web: fixed to visual viewport (not 100vh flex box) so dock isn't clipped by Chrome UI.
     !isDesktopWeb && Platform.OS === 'web' && {
-      position: 'absolute' as const,
+      position: 'fixed' as const,
       left: 0,
       right: 0,
       bottom: 0,
-      zIndex: 100,
+      zIndex: 1000,
     },
-    !isDesktopWeb && {
+    !isDesktopWeb && Platform.OS !== 'web' && {
       position: 'absolute' as const,
       left: 0,
       right: 0,
@@ -90,32 +101,31 @@ function DemoCustomTabBar(props: BottomTabBarProps) {
       zIndex: 100,
       elevation: 100,
       backgroundColor: 'transparent',
-      paddingBottom: insets.bottom > 0 ? 0 : 4,
+      paddingBottom: layout.bottom > 0 ? 0 : 4,
     },
+    !isDesktopWeb &&
+      Platform.OS === 'web' && {
+        backgroundColor: 'transparent',
+        paddingBottom: 0,
+      },
   ];
 
+  const tabBar = (
+    <DemoTabBar
+      activeTab={activeTab}
+      onTabChange={onTabChange}
+      onProfilePress={onProfilePress}
+      onNotificationsPress={() => router.push("/notifications")}
+    />
+  );
+
+  // Desktop web: top nav only. Mobile web + native: fixed/absolute shell with scroll auto-hide.
   if (isDesktopWeb) {
-    return (
-      <View style={shellStyle}>
-        <DemoTabBar
-          activeTab={activeTab}
-          onTabChange={onTabChange}
-          onProfilePress={onProfilePress}
-          onNotificationsPress={() => router.push("/notifications")}
-        />
-      </View>
-    );
+    return <View style={shellStyle}>{tabBar}</View>;
   }
 
   return (
-    <DemoTabBarAutoHideShell style={shellStyle}>
-      <DemoTabBar
-        activeTab={activeTab}
-        onTabChange={onTabChange}
-        onProfilePress={onProfilePress}
-        onNotificationsPress={() => router.push("/notifications")}
-      />
-    </DemoTabBarAutoHideShell>
+    <DemoTabBarAutoHideShell style={shellStyle}>{tabBar}</DemoTabBarAutoHideShell>
   );
 }
 
@@ -144,33 +154,52 @@ export default function TabLayout() {
 
   if (loading || !user || !profile || !roleVerified || profile.role === 'driver') {
     return (
-      <View style={styles.gate}>
-        <ActivityIndicator size="large" color={Theme.primary} />
-      </View>
+      <AppLoadingSplash
+        variant={loading ? 'session' : 'verify'}
+        style={styles.gate}
+      />
     );
   }
 
   return (
-    <DemoTabBarScrollProvider>
-      <Tabs
-        backBehavior="history"
-        tabBar={(props) => <DemoCustomTabBar {...props} />}
-        screenOptions={{
-          headerShown: false,
-          tabBarShowLabel: false,
-          tabBarStyle: { display: 'none' },
-          sceneStyle: isDesktopWeb ? { paddingTop: Layout.desktopTopNavOffset } : undefined,
-        }}
-      >
-        <Tabs.Screen name="index" options={{ title: 'Home' }} />
-        <Tabs.Screen name="ops-agent" options={{ href: null }} />
-        <Tabs.Screen name="finance" options={{ title: 'Fiscal' }} />
-        <Tabs.Screen name="trips" options={{ title: 'Trips' }} />
-        <Tabs.Screen name="network" options={{ title: 'Network' }} />
-        <Tabs.Screen name="indents" options={{ href: null }} />
-        <Tabs.Screen name="resources" options={{ href: null }} />
-      </Tabs>
-    </DemoTabBarScrollProvider>
+    <ProfileMenuDrawerProvider>
+      <DemoTabBarScrollProvider>
+        <TabsWithProfileDrawer isDesktopWeb={isDesktopWeb} />
+      </DemoTabBarScrollProvider>
+    </ProfileMenuDrawerProvider>
+  );
+}
+
+function TabsWithProfileDrawer({ isDesktopWeb }: { isDesktopWeb: boolean }) {
+  const { open: openProfileDrawer } = useProfileMenuDrawer();
+
+  return (
+    <Tabs
+      backBehavior="history"
+      tabBar={(props) => (
+        <DemoCustomTabBar {...props} onOpenProfileDrawer={openProfileDrawer} />
+      )}
+      screenOptions={{
+        headerShown: false,
+        tabBarShowLabel: false,
+        tabBarStyle: { display: 'none' },
+        sceneStyle: {
+          flex: 1,
+          backgroundColor: Theme.screenBackground,
+          ...(isDesktopWeb
+            ? { paddingTop: Layout.desktopTopNavOffset }
+            : null),
+        },
+      }}
+    >
+      <Tabs.Screen name="index" options={{ title: 'Home' }} />
+      <Tabs.Screen name="ops-agent" options={{ href: null }} />
+      <Tabs.Screen name="finance" options={{ title: 'Fiscal' }} />
+      <Tabs.Screen name="trips" options={{ title: 'Trips' }} />
+      <Tabs.Screen name="network" options={{ title: 'Home' }} />
+      <Tabs.Screen name="indents" options={{ href: null }} />
+      <Tabs.Screen name="resources" options={{ href: null }} />
+    </Tabs>
   );
 }
 

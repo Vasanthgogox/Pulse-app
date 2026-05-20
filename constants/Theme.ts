@@ -127,6 +127,14 @@ export const Theme = {
   /** Partner column label on dark mirror cells (shared ledger hub). */
   ledgerPartnerLabelOnDark: "#A5B4FC",
 
+  /** Create Trip: dark party / price selection rows on light section shells */
+  tripSelectionSurface: "#121212",
+  tripSelectionSurfaceActive: "#191919",
+  tripSelectionBorder: "rgba(248,250,252,0.14)",
+  tripSelectionBorderActive: "rgba(248,250,252,0.45)",
+  tripSelectionInsetBg: "rgba(255,255,255,0.09)",
+  tripSelectionInsetBorder: "rgba(255,255,255,0.18)",
+
   /** Finance table: integrated party icon (link) — green = synced */
   integratedIcon: "#15803D",
   /** Finance table: non-integrated party icon (unlink) — red = not linked */
@@ -169,6 +177,30 @@ export const Theme = {
   tripHubUnassignedPillBg: "rgba(15, 23, 42, 0.06)",
   /** Treasury/Fiscal bottom nav active pill background (light indigo) */
   fiscalTabActiveBg: "#e8eaf6",
+
+  /** Pulse loader + mobile tab bar accent (indigo) */
+  pulseIndigo: "#4F46E5",
+  pulseIndigoRing: "rgba(79, 70, 229, 0.22)",
+  pulseIndigoWash: "rgba(99, 102, 241, 0.12)",
+  /** Mobile footer active pill + icon ring */
+  pulseTabActiveBg: "rgba(79, 70, 229, 0.10)",
+  pulseTabActiveBorder: "rgba(79, 70, 229, 0.28)",
+  /** Slack-style dark cluster track + glass sliding thumb (Finance / Trips / Loads). */
+  pulseTabClusterTrackTop: "#232633",
+  pulseTabClusterTrackBottom: "#12141C",
+  pulseTabClusterTrackBg: "#181A24",
+  pulseTabClusterTrackBorder: "rgba(255,255,255,0.09)",
+  pulseTabClusterTrackInnerGlow: "rgba(255,255,255,0.05)",
+  pulseTabClusterThumbTop: "rgba(255,255,255,0.34)",
+  pulseTabClusterThumbMid: "rgba(255,255,255,0.16)",
+  pulseTabClusterThumbBottom: "rgba(255,255,255,0.07)",
+  pulseTabClusterThumbAccent: "rgba(99,102,241,0.14)",
+  pulseTabClusterThumbBorder: "rgba(255,255,255,0.32)",
+  pulseTabClusterThumbSpecular: "rgba(255,255,255,0.45)",
+  pulseTabClusterIconActive: "#FFFFFF",
+  pulseTabClusterIconInactive: "rgba(255,255,255,0.38)",
+  pulseTabClusterLabelActive: "#FFFFFF",
+  pulseTabClusterLabelInactive: "rgba(255,255,255,0.40)",
 
   /** Demo tab bar: bar background, top border, pill and FAB (use Layout for radii/shadows) */
   tabBarBg: "#ffffff",
@@ -259,15 +291,80 @@ export const Theme = {
   feedbackModalBadgeRing: "#F59E0B",
 
   // ---- Network UI grading (clean neutrals + semantic accents) ----
-  networkPageBackground: "#F8FAFC",
+  /** Network hub page canvas — muted grey so white cards read clearly. */
+  networkPageBackground: "#F1F3F6",
   networkCardBackground: "#FFFFFF",
   networkCardBorder: "#E2E8F0",
+  /** Elevated list rows on white hub sections. */
+  networkHubListCardBackground: "#FFFFFF",
+  networkHubListCardBorder: "#E5E7EB",
+  networkHubListCardShadow: "#0F172A",
+  networkHubListCardAvatarBg: "#F8FAFC",
+  networkHubListCardAvatarBorder: "#E5E7EB",
+  networkHubListCardMetricsBg: "#F9FAFB",
+  networkHubListCardMetricsBorder: "#E5E7EB",
+  networkHubListCardActionBg: "#FFFFFF",
+  networkHubListCardRatingStar: "#F59E0B",
+  networkHubListCardRatingBg: "#F8FAFC",
+  networkHubListCardRatingBorder: "#E2E8F0",
+  networkHubListCardRatingText: "#475569",
+  networkHubListCardOnlineDot: "#10B981",
+  networkHubListCardConnectedBg: "#ECFDF5",
+  networkHubListCardConnectedBorder: "#A7F3D0",
+  networkHubListCardConnectedText: "#047857",
+  networkHubListCardPrimaryTintBg: "#F5F6FF",
+  networkHubListCardPrimaryTintBorder: "#C7D2FE",
   networkSectionLabel: "#64748B",
   networkClientTintBg: "rgba(26,35,126,0.10)",
   networkSupplierTintBg: "rgba(21,128,61,0.10)",
   networkDriverTintBg: "rgba(180,83,9,0.12)",
   networkMessageTintBg: "rgba(26,35,126,0.08)",
   networkMessageTintBorder: "rgba(26,35,126,0.20)",
+  /** Frosted glass surfaces (Load Marketplace quick cards). */
+  networkGlassSurface: "rgba(255,255,255,0.78)",
+  networkGlassSurfacePressed: "rgba(255,255,255,0.62)",
+  networkGlassBorder: "rgba(255,255,255,0.95)",
+  networkGlassBorderOuter: "rgba(15,23,42,0.05)",
+  networkGlassInset: "rgba(255,255,255,0.62)",
+  networkGlassSpecular: "rgba(255,255,255,0.72)",
+  networkGlassSupplyTint: "rgba(99,102,241,0.10)",
+  networkGlassSupplyGradient: "rgba(99,102,241,0.16)",
+  networkGlassSupplyAccent: "#5B5BD6",
+  networkGlassSupplyIconBg: "rgba(99,102,241,0.12)",
+  networkGlassDemandTint: "rgba(16,185,129,0.09)",
+  networkGlassDemandGradient: "rgba(16,185,129,0.14)",
+  networkGlassDemandAccent: "#0D9B6E",
+  networkGlassDemandIconBg: "rgba(16,185,129,0.12)",
+  networkGlassHeadPill: "rgba(255,255,255,0.55)",
+  /** Solid-fill hub role badges — glass gradient + rim (connections list). */
+  networkBadgeClientBg: "#E4E8F4",
+  networkBadgeClientGradientTop: "#F5F6FC",
+  networkBadgeClientText: "#2E3A8C",
+  networkBadgeClientBorder: "rgba(255,255,255,0.85)",
+  networkBadgeSupplierBg: "#D8F5E4",
+  networkBadgeSupplierGradientTop: "#F0FDF6",
+  networkBadgeSupplierText: "#166534",
+  networkBadgeSupplierBorder: "rgba(255,255,255,0.88)",
+  networkBadgeDriverBg: "#FFE9D0",
+  networkBadgeDriverGradientTop: "#FFF8F1",
+  networkBadgeDriverText: "#B45309",
+  networkBadgeDriverBorder: "rgba(255,255,255,0.88)",
+  networkBadgeIntegratedBg: "#1E293B",
+  networkBadgeIntegratedGradientTop: "#334155",
+  networkBadgeIntegratedText: "#F8FAFC",
+  networkBadgeIntegratedBorder: "rgba(255,255,255,0.22)",
+  networkBadgeIntegratedHighlight: "rgba(255,255,255,0.38)",
+  /** Glass hub action buttons (Connected / Connect / Pending). */
+  networkGlassBtnConnectedBg: "#ECFDF5",
+  networkGlassBtnConnectedGradientTop: "#FFFFFF",
+  networkGlassBtnConnectedBorder: "rgba(255,255,255,0.92)",
+  networkGlassBtnConnectedText: "#64748B",
+  networkGlassBtnPrimaryBg: "#EEF0FF",
+  networkGlassBtnPrimaryGradientTop: "#FAFBFF",
+  networkGlassBtnPrimaryBorder: "rgba(255,255,255,0.92)",
+  networkGlassBtnNeutralBg: "rgba(255,255,255,0.78)",
+  networkGlassBtnNeutralGradientTop: "#FFFFFF",
+  networkGlassBtnNeutralBorder: "rgba(255,255,255,0.9)",
 
   // ---- Finance unified-base parity cards ----
   financeHeroBg: "#1D1D1F",

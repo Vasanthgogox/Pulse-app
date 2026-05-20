@@ -12,7 +12,7 @@ import type {
 import type { IndentRow } from "@/features/indents/services/indents.service";
 import { SuppliersTab } from "@/features/suppliers/components/SuppliersTab";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
-import type { TripRow } from "@/features/trips";
+import type { TripRow } from "@/features/trips/services/trips.service";
 import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
 import type { GarrageViewTab } from "@/features/vehicles/components/GarrageTab";
 import { GarrageTab } from "@/features/vehicles/components/GarrageTab";
@@ -35,6 +35,8 @@ export interface FinanceTabBodyProps {
   /** Ledger tab */
   ledgerLoading: boolean;
   ledgerTransactions: LedgerRow[] | null;
+  /** Period-filtered ledger rows — use for entity tab aggregation (aligns with date-filtered trips). */
+  ledgerForEntityAggregation?: LedgerRow[] | null;
   filteredLedgerForDisplay: LedgerRow[];
   ledgerRefreshKey: number;
   onLedgerRowSelect: (data: FinancialRowData) => void;
@@ -108,6 +110,7 @@ export function FinanceTabBody({
   organizationId: orgId,
   ledgerLoading,
   ledgerTransactions,
+  ledgerForEntityAggregation,
   filteredLedgerForDisplay,
   ledgerRefreshKey,
   onLedgerRowSelect,
@@ -208,6 +211,9 @@ export function FinanceTabBody({
     );
   }
 
+  const entityAggregationLedger =
+    ledgerForEntityAggregation ?? ledgerTransactions ?? undefined;
+
   if (financeSubTab === "customers") {
     return (
       <CustomersTab
@@ -216,7 +222,7 @@ export function FinanceTabBody({
         trips={tripRows}
         tripsWhereOrgIsSupplier={tripsWhereOrgIsSupplier}
         indents={indentsForFinance}
-        transactions={ledgerTransactions ?? undefined}
+        transactions={entityAggregationLedger}
         parentLoading={entitiesLoading}
         onTotals={onTabTotals}
         onRowSelect={onEntityRowSelect}
@@ -247,7 +253,7 @@ export function FinanceTabBody({
         suppliers={supplierRows}
         trips={tripRows}
         tripsWhereOrgIsClient={tripsWhereOrgIsClient}
-        transactions={ledgerTransactions ?? undefined}
+        transactions={entityAggregationLedger}
         parentLoading={entitiesLoading}
         onTotals={onTabTotals}
         onRowSelect={onEntityRowSelect}

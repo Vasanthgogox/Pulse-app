@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import {
   View,
   Text,
@@ -6,7 +7,7 @@ import {
   StyleSheet,
   Modal,
   ScrollView,
-  ActivityIndicator,
+  
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
@@ -146,7 +147,7 @@ export function LoadBoardModal({
         >
           {loading ? (
             <View style={styles.loadingWrap}>
-              <ActivityIndicator size="small" color={Theme.teslaRed} />
+              <LoadingIndicator size="small" color={Theme.teslaRed} />
               <Text style={styles.loadingText}>Loading…</Text>
             </View>
           ) : showNetworkExpansionEmpty ? (

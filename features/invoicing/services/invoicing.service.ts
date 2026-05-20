@@ -335,7 +335,7 @@ export async function executeInvoiceCreation(
 
     if (candidateError) throw candidateError;
 
-    const rows = (candidates ?? []) as TripRecord[];
+    const rows = (candidates ?? []) as unknown as TripRecord[];
     const nonInvoiceable = rows.filter((row) => {
       const podStatus = str((row as { pod_status?: string | null }).pod_status).toLowerCase();
       const inv1 = str((row as { invoice_status_1?: string | null }).invoice_status_1).toLowerCase();

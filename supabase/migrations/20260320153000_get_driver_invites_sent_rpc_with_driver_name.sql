@@ -1,5 +1,9 @@
 -- Returns pending driver invites sent by an org including the invitee's driver display name.
 -- This avoids client-side RLS issues when the client can't read auth.users/profile fields.
+--
+-- invitee_name is populated in 20260320154530; this file sorts earlier, so ensure the column exists.
+ALTER TABLE public.driver_invites
+ADD COLUMN IF NOT EXISTS invitee_name text;
 
 CREATE OR REPLACE FUNCTION public.get_driver_invites_sent(p_org_id uuid)
 RETURNS TABLE (

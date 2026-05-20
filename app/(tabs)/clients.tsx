@@ -3,8 +3,9 @@ import { useRouter } from 'expo-router';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { getCapabilitiesFromProfile, canAccessClients } from '@/lib/capabilities';
-import { useClientsQuery } from '@/lib/queries';
+import { useClientsQuery } from '@/lib/queries/useClientsQuery';
 import { useRefreshWithFeedback } from '@/lib/useRefreshWithFeedback';
+import { AppLoadingSplash } from '@/components/AppLoadingSplash';
 import { ListScreenLayout } from '@/components/ListScreenLayout';
 import { SummaryCard } from '@/components/SummaryCard';
 import { EntityRow } from '@/components/EntityRow';
@@ -48,11 +49,13 @@ export default function ClientsScreen() {
     );
   }
 
+  if (loading && clients.length === 0) {
+    return <AppLoadingSplash variant="preparing" />;
+  }
+
   const emptyComponent = (
     <View style={styles.emptyWrap}>
-      <Text style={styles.empty}>
-        {loading ? 'Loading…' : 'No customers yet.'}
-      </Text>
+      <Text style={styles.empty}>No customers yet.</Text>
     </View>
   );
 

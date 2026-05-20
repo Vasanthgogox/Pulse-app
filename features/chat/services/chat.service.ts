@@ -1,28 +1,33 @@
-import { createRating } from "@/features/ratings/services/ratings.service";
 import type { RatedType, RatingRow } from "@/features/ratings/types";
-import { notifyTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
 import { supabase } from "@/lib/supabase";
 import type {
-    ConversationPartyType,
-    DocumentShareMetadata,
-    MessageSenderRole,
-    MessageType,
-    NetworkConversation,
-    NetworkConversationRow,
-    NetworkMessageRow,
-    NetworkPartner,
-    TripConversation,
-    TripConversationRow,
-    TripMessageRow,
+  ChatTripFlow,
+  ConversationPartyType,
+  DocumentShareMetadata,
+  MessageSenderRole,
+  MessageType,
+  NetworkConversation,
+  NetworkConversationRow,
+  NetworkMessageRow,
+  NetworkPartner,
+  TripConversation,
+  TripConversationRow,
+  TripMessageRow,
 } from "../types/chat.types";
 import { parseFeedbackRequestMetadata } from "../utils/feedbackRequestMeta";
 import {
   extractTagsFromRatingComment,
   findTripRatingMatchingFeedbackMeta,
-} from "../utils/mergeTripFeedbackMessages";
+} from "../utils/mergeTripFeedbackMessages.util";
 import { syncDomainRows } from "@/lib/cache/domainSync";
 import { mergeDeltaRows } from "@/lib/cache/mergeDelta";
 import type { DeltaResponse } from "@/lib/cache/deltaTypes";
+import type { ChatLanes } from "../utils/laneMultiplexer.util";
+import {
+  buildChatLanesFromConversations,
+  mergeMessagesByContextIntoLanes,
+  normalizeServerLanes,
+} from "../utils/laneMultiplexer.util";
 
 export interface TripForCompose {
   id: string;
@@ -41,6 +46,8 @@ export interface TripForCompose {
   driver_display_name: string | null;
   client_linked_organization_id: string | null;
   supplier_linked_organization_id: string | null;
+  /** From `trips.indent_id` — set only for marketplace/indent-backed trips. */
+  indent_id?: string | null;
 }
 
 export async function getTripsForCompose(
@@ -75,6 +82,7 @@ export async function getTripsForCompose(
       (row.driver_display_name as string | null | undefined) ?? null,
     client_linked_organization_id: null,
     supplier_linked_organization_id: null,
+    indent_id: (row.indent_id as string | null | undefined) ?? null,
   }));
 
   const clientIds = Array.from(
@@ -134,23 +142,34 @@ export async function getTripsForCompose(
   }));
 }
 
+function isGenericPartyName(name: unknown): boolean {
+  const n = String(name ?? "").trim().toLowerCase();
+  return n === "" || n === "supplier" || n === "client" || n === "driver";
+}
+
 async function resolveGenericPartyNamesForTrips(
   conversations: TripConversation[],
 ): Promise<TripConversation[]> {
+  // Only fetch names for conversations whose party_name is a generic placeholder.
+  // Skips the two DB calls entirely when all names are already resolved (common after setup).
   const unresolvedClientIds = Array.from(
     new Set(
       conversations
-        .filter((c) => c.party_type === "client" && c.client_id)
+        .filter((c) => c.party_type === "client" && c.client_id && isGenericPartyName(c.party_name))
         .map((c) => c.client_id as string),
     ),
   );
   const unresolvedSupplierIds = Array.from(
     new Set(
       conversations
-        .filter((c) => c.party_type === "supplier" && c.supplier_id)
+        .filter((c) => c.party_type === "supplier" && c.supplier_id && isGenericPartyName(c.party_name))
         .map((c) => c.supplier_id as string),
     ),
   );
+
+  if (unresolvedClientIds.length === 0 && unresolvedSupplierIds.length === 0) {
+    return conversations;
+  }
 
   const [clientsResp, suppliersResp] = await Promise.all([
     unresolvedClientIds.length
@@ -211,20 +230,76 @@ async function resolveGenericPartyNamesForTrips(
   });
 }
 
+/**
+ * Fills `indent_creator_organization_name` when bootstrap omits it (supplier mirror trip).
+ * Uses SECURITY DEFINER RPC — plain `trips` select would not see the shipper row under RLS.
+ */
+async function enrichIndentCreatorOrganizationNamesForViewer(
+  viewerOrganizationId: string,
+  conversations: TripConversation[],
+): Promise<TripConversation[]> {
+  const viewer = viewerOrganizationId.trim();
+  if (!viewer || conversations.length === 0) return conversations;
+
+  const tripNumbersNeeding = new Set<string>();
+  for (const c of conversations) {
+    if ((c.indent_creator_organization_name ?? "").trim()) continue;
+    const tn = (c.trip_number ?? "").trim();
+    if (tn) tripNumbersNeeding.add(tn);
+  }
+  if (tripNumbersNeeding.size === 0) return conversations;
+
+  const tripNumberList = [...tripNumbersNeeding];
+  const { data, error } = await supabase().rpc("indent_creator_org_names_for_viewer", {
+    p_viewer_org: viewer,
+    p_trip_numbers: tripNumberList,
+  });
+  if (error || !Array.isArray(data) || data.length === 0) {
+    return conversations;
+  }
+
+  const labelByTripNumber = new Map<string, string>();
+  for (const row of data as { trip_number?: string; creator_org_name?: string }[]) {
+    const tn = String(row.trip_number ?? "").trim();
+    const nm = String(row.creator_org_name ?? "").trim();
+    if (tn && nm && !labelByTripNumber.has(tn)) labelByTripNumber.set(tn, nm);
+  }
+  if (labelByTripNumber.size === 0) return conversations;
+
+  return conversations.map((c) => {
+    if ((c.indent_creator_organization_name ?? "").trim()) return c;
+    const tn = (c.trip_number ?? "").trim();
+    const label = labelByTripNumber.get(tn);
+    if (!label) return c;
+    return { ...c, indent_creator_organization_name: label };
+  });
+}
+
 const TRIP_EMBED_FIELDS_FULL =
-  "trip_number, display_trip_id, status, pickup_area, drop_location, driver_id, supplier_id, created_at";
+  "organization_id, trip_number, display_trip_id, status, pickup_area, drop_location, driver_id, supplier_id, created_at";
 const TRIP_EMBED_FIELDS_LEGACY =
-  "trip_number, status, pickup_area, drop_location, driver_id, supplier_id, created_at";
+  "organization_id, trip_number, status, pickup_area, drop_location, driver_id, supplier_id, created_at";
 
 const TRIP_MESSAGES_EMBED = `trip_messages ( id, conversation_id, content, sender_role, sender_name, sender_user_id, created_at, is_read, message_type, metadata )`;
 /** Newest N rows per conversation embed. Keep low — bulk loads (13+ convos × limit) can spike CPU/RAM. */
 const TRIP_MESSAGES_EMBED_RECENT = 20;
+
+/** Page size for on-demand trip thread history (WhatsApp-style window; bootstrap RPC uses same cap). */
+export const TRIP_CHAT_HISTORY_PAGE = 20;
 
 function tripConversationSelect(tripEmbedFields: string): string {
   return `
       *,
       trips!inner ( ${tripEmbedFields} ),
       ${TRIP_MESSAGES_EMBED}
+    `;
+}
+
+/** Conversation row + trip join only (no embedded `trip_messages`). */
+function tripConversationMetaSelect(tripEmbedFields: string): string {
+  return `
+      *,
+      trips!inner ( ${tripEmbedFields} )
     `;
 }
 
@@ -317,6 +392,7 @@ async function getConversationsByOrganizationLight(
       trip_driver_id: (trips?.driver_id as string | null) ?? null,
       trip_supplier_id: (trips?.supplier_id as string | null) ?? null,
       trip_created_at: (trips?.created_at as string | null) ?? null,
+      trip_organization_id: (trips?.organization_id as string | null | undefined) ?? null,
       pickup_area: (trips?.pickup_area as string | undefined) ?? "",
       drop_location: (trips?.drop_location as string | undefined) ?? "",
       messages: ((row.trip_messages ?? []) as TripMessageRow[]).sort(
@@ -326,7 +402,8 @@ async function getConversationsByOrganizationLight(
     };
   }) as unknown as TripConversation[];
 
-  return resolveGenericPartyNamesForTrips(conversations);
+  const resolved = await resolveGenericPartyNamesForTrips(conversations);
+  return enrichIndentCreatorOrganizationNamesForViewer(organizationId, resolved);
 }
 
 export async function getConversationsByOrganization(
@@ -335,32 +412,38 @@ export async function getConversationsByOrganization(
   return getConversationsByOrganizationLight(organizationId);
 }
 
-/** Fetches one trip thread by id (for deep links when the list has not loaded it yet). RLS must allow read. */
+/**
+ * Fetches one trip thread by id (deep links, unknown-conversation recovery).
+ * Default: **no** embedded `trip_messages` — hydrate bodies via {@link fetchConversationHistory} on thread open.
+ */
 export async function getTripConversationById(
   conversationId: string,
+  opts?: { includeRecentMessages?: boolean },
 ): Promise<TripConversation | null> {
-  let res = await supabase()
-    .from("trip_conversations")
-    .select(tripConversationSelect(TRIP_EMBED_FIELDS_FULL))
-    .eq("id", conversationId)
-    .order("created_at", { ascending: false, referencedTable: "trip_messages" })
-    .limit(TRIP_MESSAGES_EMBED_RECENT, { referencedTable: "trip_messages" })
-    .maybeSingle();
+  const includeRecent = opts?.includeRecentMessages === true;
+
+  function buildQuery(tripEmbed: typeof TRIP_EMBED_FIELDS_FULL | typeof TRIP_EMBED_FIELDS_LEGACY) {
+    const sel = includeRecent ? tripConversationSelect(tripEmbed) : tripConversationMetaSelect(tripEmbed);
+    let q = supabase().from("trip_conversations").select(sel).eq("id", conversationId);
+    if (includeRecent) {
+      q = q
+        .order("created_at", { ascending: false, referencedTable: "trip_messages" })
+        .limit(TRIP_MESSAGES_EMBED_RECENT, { referencedTable: "trip_messages" });
+    }
+    return q.maybeSingle();
+  }
+
+  let res = await buildQuery(TRIP_EMBED_FIELDS_FULL);
 
   if (res.error && isMissingTripsDisplayTripIdError(res.error)) {
-    res = await supabase()
-      .from("trip_conversations")
-      .select(tripConversationSelect(TRIP_EMBED_FIELDS_LEGACY))
-      .eq("id", conversationId)
-      .order("created_at", { ascending: false, referencedTable: "trip_messages" })
-      .limit(TRIP_MESSAGES_EMBED_RECENT, { referencedTable: "trip_messages" })
-      .maybeSingle();
+    res = await buildQuery(TRIP_EMBED_FIELDS_LEGACY);
   }
 
   if (res.error || !res.data) return null;
 
   const row = res.data as unknown as {
     trips?: {
+      organization_id?: string | null;
       trip_number?: string;
       display_trip_id?: string | null;
       status?: string | null;
@@ -381,6 +464,7 @@ export async function getTripConversationById(
     trip_driver_id: row.trips?.driver_id ?? null,
     trip_supplier_id: row.trips?.supplier_id ?? null,
     trip_created_at: row.trips?.created_at ?? null,
+    trip_organization_id: row.trips?.organization_id ?? null,
     pickup_area: String(row.trips?.pickup_area ?? ""),
     drop_location: String(row.trips?.drop_location ?? ""),
     messages: ((row.trip_messages ?? []) as TripMessageRow[]).sort(
@@ -390,7 +474,12 @@ export async function getTripConversationById(
   } as TripConversation;
 
   const [resolved] = await resolveGenericPartyNamesForTrips([base]);
-  return resolved ?? null;
+  const scope = String(resolved?.organization_id ?? "").trim();
+  if (!scope || !resolved) return resolved ?? null;
+  const [enriched] = await enrichIndentCreatorOrganizationNamesForViewer(scope, [
+    resolved,
+  ]);
+  return enriched ?? null;
 }
 
 export async function getOrCreateConversation(params: {
@@ -529,14 +618,52 @@ export async function markConversationRead(
 
 export async function getMessagesByConversation(
   conversationId: string,
+  opts?: { before?: string; limit?: number; partyType?: string | null },
 ): Promise<TripMessageRow[]> {
-  const { data, error } = await supabase()
+  const limit = Math.min(
+    Math.max(opts?.limit ?? TRIP_CHAT_HISTORY_PAGE, 1),
+    100,
+  );
+  const partyType =
+    opts?.partyType != null && String(opts.partyType).trim() !== ""
+      ? String(opts.partyType).trim()
+      : null;
+
+  const { data: rpcData, error: rpcError } = await supabase().rpc(
+    "windowed_trip_message_history",
+    {
+      p_conversation_id: conversationId,
+      p_before:          opts?.before ?? null,
+      p_limit:           limit,
+      p_party_type:      partyType,
+    },
+  );
+
+  if (!rpcError && Array.isArray(rpcData)) {
+    return [...rpcData].reverse() as TripMessageRow[];
+  }
+
+  const missingRpc =
+    rpcError &&
+    (String(rpcError.code ?? "") === "42883" ||
+      String(rpcError.code ?? "") === "PGRST202" ||
+      String(rpcError.message ?? "")
+        .toLowerCase()
+        .includes("windowed_trip_message_history"));
+  if (rpcError && !missingRpc) throw rpcError;
+
+  let query = supabase()
     .from("trip_messages")
-    .select("id,conversation_id,organization_id,sender_user_id,sender_role,sender_name,content,message_type,metadata,is_read,read_at,created_at")
+    .select("id,conversation_id,organization_id,sender_user_id,sender_role,sender_name,content,message_type,metadata,is_read,read_at,created_at,sender_avatar_seed,is_delivered,delivered_at")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: false })
-    .limit(100);
+    .limit(limit);
 
+  if (opts?.before) {
+    query = query.lt("created_at", opts.before);
+  }
+
+  const { data, error } = await query;
   if (error) throw error;
   return (data ?? []).reverse();
 }
@@ -730,7 +857,6 @@ export async function persistTripFeedbackMessageMetadataIfRated(params: {
 }): Promise<void> {
   const { tripId, messages, ratings } = params;
   if (!ratings.length) return;
-  let wrote = false;
   for (const m of messages) {
     if (m.message_type !== "feedback_request") continue;
     const meta = parseFeedbackRequestMetadata(m);
@@ -747,13 +873,12 @@ export async function persistTripFeedbackMessageMetadataIfRated(params: {
       submitted_score: match.score,
       submitted_tags: extractTagsFromRatingComment(match.comment),
     };
-    const { error } = await supabase()
+    await supabase()
       .from("trip_messages")
       .update({ metadata: nextMeta })
       .eq("id", m.id);
-    if (!error) wrote = true;
   }
-  if (wrote) notifyTripChatMessagesChanged();
+  // Chat uses bootstrap + Zustand + Realtime — do not fan out a global refetch hook here.
 }
 
 /**
@@ -816,7 +941,8 @@ export async function seedTripConversationFeedbackPromptIfMissing(params: {
 }
 
 /**
- * Persists `ratings` row (org → rated party) and merges submit state into the chat message metadata.
+ * Atomic in-chat debrief: `confirm_trip_feedback` patches `trip_messages.metadata` (rating)
+ * — no new rows; rating is returned on the next windowed bootstrap read.
  */
 export async function submitTripChatFeedback(params: {
   ratingOrganizationId: string;
@@ -824,61 +950,87 @@ export async function submitTripChatFeedback(params: {
   message: TripMessageRow;
   score: number;
   tags: string[];
-}): Promise<{ error: Error | null }> {
-  const { ratingOrganizationId, tripId, message, score, tags } = params;
+}): Promise<{ error: Error | null; submittedAt: string | null }> {
+  const { message, score } = params;
   const meta = parseFeedbackRequestMetadata(message);
   if (!meta) {
-    return { error: new Error("Invalid feedback message") };
+    return { error: new Error("Invalid feedback message"), submittedAt: null };
   }
   if (meta.submitted_at) {
-    return { error: new Error("Feedback already submitted") };
+    return { error: new Error("Feedback already submitted"), submittedAt: null };
   }
 
-  const ratedType = meta.rated_party_type as RatedType;
-  const comment = JSON.stringify({
-    source: "trip_chat_feedback",
-    tags,
+  // Single atomic RPC: updates `trip_messages.metadata` (rating) via `confirm_trip_feedback`.
+  const { data, error } = await supabase().rpc("confirm_trip_feedback", {
+    p_msg_id:  message.id,
+    p_rating:  Math.min(5, Math.max(1, score)),
   });
 
-  const { error: ratingErr } = await createRating(ratingOrganizationId, {
-    trip_id: tripId,
-    rater_type: "organization",
-    rater_id: ratingOrganizationId,
-    rated_type: ratedType,
-    rated_id: meta.rated_id,
-    score,
-    comment,
+  if (error) return { error: new Error(error.message), submittedAt: null };
+
+  const result = data as { ok?: boolean; error?: string; submitted_at?: string } | null;
+  const errKey = typeof result?.error === "string" ? result.error.trim() : "";
+  if (errKey && errKey !== "already_submitted") {
+    return { error: new Error(errKey), submittedAt: null };
+  }
+
+  const submittedAt =
+    typeof result?.submitted_at === "string" && result.submitted_at.trim()
+      ? result.submitted_at.trim()
+      : null;
+  // Bootstrap & Patch: Zustand + Realtime own UI — no list-wide refetch notifier.
+  return { error: null, submittedAt };
+}
+
+/**
+ * Atomic feedback submission — calls submit_atomic_feedback RPC.
+ * Returns the canonical metadata payload so the caller can patch the store
+ * without waiting for a DB re-fetch.  The frontend patches the store first
+ * (optimistic), then calls this to get the server-confirmed values.
+ */
+export async function submitAtomicFeedback(params: {
+  organizationId: string;
+  tripId:         string;
+  message:        TripMessageRow;
+  score:          number;
+  tags:           string[];
+  comment?:       string;
+}): Promise<{
+  submittedAt:    string;
+  submittedScore: number;
+  submittedTags:  string[];
+  alreadySubmitted: boolean;
+}> {
+  const meta = parseFeedbackRequestMetadata(params.message);
+  if (!meta) throw new Error("Invalid feedback message");
+
+  const { data, error } = await supabase().rpc('submit_atomic_feedback', {
+    p_organization_id: params.organizationId,
+    p_trip_id:         params.tripId,
+    p_message_id:      params.message.id,
+    p_rated_type:      meta.rated_party_type as RatedType,
+    p_rated_id:        meta.rated_id,
+    p_score:           Math.min(5, Math.max(1, params.score)),
+    p_tags:            params.tags,
+    p_comment:         params.comment ?? null,
   });
-  if (ratingErr != null) return { error: ratingErr };
 
-  const { data: existing, error: readErr } = await supabase()
-    .from("trip_messages")
-    .select("metadata")
-    .eq("id", message.id)
-    .maybeSingle();
+  if (error) throw new Error(error.message);
 
-  if (readErr) return { error: new Error(readErr.message) };
-
-  const base =
-    existing?.metadata != null && typeof existing.metadata === "object"
-      ? (existing.metadata as Record<string, unknown>)
-      : {};
-  const nextMeta = {
-    ...base,
-    submitted_at: new Date().toISOString(),
-    submitted_score: score,
-    submitted_tags: tags,
+  const result = data as {
+    ok: boolean;
+    already_submitted: boolean;
+    submitted_at:    string;
+    submitted_score: number;
+    submitted_tags:  string[];
   };
 
-  const { error: updErr } = await supabase()
-    .from("trip_messages")
-    .update({ metadata: nextMeta })
-    .eq("id", message.id);
-
-  if (updErr) return { error: new Error(updErr.message) };
-
-  notifyTripChatMessagesChanged();
-  return { error: null };
+  return {
+    submittedAt:      result.submitted_at,
+    submittedScore:   result.submitted_score,
+    submittedTags:    Array.isArray(result.submitted_tags) ? result.submitted_tags : [],
+    alreadySubmitted: Boolean(result.already_submitted),
+  };
 }
 
 export async function markNetworkConversationRead(
@@ -1133,4 +1285,497 @@ export async function getShareableDocumentsForTrip(params: {
   }
 
   return results;
+}
+
+// ── WhatsApp-architecture bootstrap & status change ───────────────────────────
+
+/**
+ * Parse a raw JSONB conversation row (as returned by get_initial_chat_state)
+ * into a typed TripConversation.  Mirrors the field mapping in
+ * getConversationsByOrganization without the PostgREST embed wrapping.
+ */
+function normalizeInitialStateRow(row: Record<string, unknown>): TripConversation {
+  const tfs = row.trip_feedback_status;
+  const trip_feedback_status =
+    tfs === 'pending' || tfs === 'rated' || tfs === 'none' ? tfs : ('none' as const);
+  const indentRaw =
+    row.indent_id != null && String(row.indent_id).trim() !== ""
+      ? String(row.indent_id)
+      : null;
+  const ctRaw = row.conversation_type;
+  const ctStr = typeof ctRaw === "string" ? ctRaw.trim() : "";
+  const conversation_type: ChatTripFlow =
+    ctStr === "private_trip" || ctStr === "integrated_group"
+      ? ctStr
+      : indentRaw
+        ? "integrated_group"
+        : "private_trip";
+  return {
+    id:                      String(row.id ?? ''),
+    organization_id:         String(row.organization_id ?? ''),
+    trip_id:                 String(row.trip_id ?? ''),
+    party_type:              (row.party_type as ConversationPartyType) ?? 'client',
+    party_name:              String(row.party_name ?? ''),
+    client_id:               (row.client_id   as string | null) ?? null,
+    supplier_id:             (row.supplier_id as string | null) ?? null,
+    driver_id:               (row.driver_id   as string | null) ?? null,
+    last_message_at:         (row.last_message_at as string | null) ?? null,
+    last_message_preview:    (row.last_message_preview as string | null) ?? null,
+    unread_dispatcher_count: Number(row.unread_dispatcher_count ?? 0),
+    created_at:              String(row.created_at ?? ''),
+    updated_at:              String(row.updated_at ?? ''),
+    trip_number:             String(row.trip_number ?? ''),
+    display_trip_id:         (row.display_trip_id  as string | null) ?? null,
+    trip_status:             (row.trip_status       as string | null) ?? null,
+    trip_driver_id:          (row.trip_driver_id    as string | null) ?? null,
+    trip_supplier_id:        (row.trip_supplier_id  as string | null) ?? null,
+    trip_created_at:         (row.trip_created_at   as string | null) ?? null,
+    trip_source:
+      row.trip_source != null && String(row.trip_source).trim() !== ""
+        ? String(row.trip_source)
+        : null,
+    trip_organization_id:
+      row.trip_organization_id != null && String(row.trip_organization_id).trim() !== ""
+        ? String(row.trip_organization_id)
+        : null,
+    trip_organization_name:
+      row.trip_organization_name != null && String(row.trip_organization_name).trim() !== ""
+        ? String(row.trip_organization_name)
+        : null,
+    indent_creator_organization_name:
+      row.indent_creator_organization_name != null &&
+      String(row.indent_creator_organization_name).trim() !== ""
+        ? String(row.indent_creator_organization_name)
+        : null,
+    indent_id: indentRaw,
+    indent_status:
+      row.indent_status != null && String(row.indent_status).trim() !== ""
+        ? String(row.indent_status)
+        : null,
+    conversation_type,
+    pickup_area:             String(row.pickup_area   ?? ''),
+    drop_location:           String(row.drop_location ?? ''),
+    trip_feedback_status,
+    messages:                (row.messages as TripMessageRow[]) ?? [],
+  };
+}
+
+/**
+ * Single-RPC bootstrap: fetches all non-cancelled trip conversations + last
+ * N messages per conversation.  After this call the app uses only Realtime.
+ */
+export async function getInitialChatState(
+  organizationId: string,
+  messageLimit = 20,
+): Promise<TripConversation[]> {
+  const { data, error } = await supabase().rpc('get_initial_chat_state', {
+    p_organization_id: organizationId,
+    p_message_limit:   messageLimit,
+  });
+  if (error) throw error;
+
+  const rows = (Array.isArray(data) ? data : []) as Array<Record<string, unknown>>;
+  const conversations = rows.map(normalizeInitialStateRow);
+
+  // Resolve generic party names ("client" / "supplier" placeholders)
+  // — reuses the same lookup already used by getConversationsByOrganization.
+  const resolved = await resolveGenericPartyNamesForTrips(conversations);
+  return enrichIndentCreatorOrganizationNamesForViewer(organizationId, resolved);
+}
+
+/**
+ * "Bootstrap & Patch" entry point — the one DB call the chat feature makes.
+ * Calls get_b2b_chat_bootstrap (50 messages per conversation) and returns all
+ * non-cancelled trip conversations with full trip metadata embedded.
+ * After this call the app relies exclusively on Realtime for all state updates.
+ */
+export async function getB2BChatBootstrap(
+  organizationId: string,
+): Promise<TripConversation[]> {
+  const { data, error } = await supabase().rpc('get_b2b_chat_bootstrap', {
+    p_organization_id: organizationId,
+    p_message_limit:   TRIP_CHAT_HISTORY_PAGE,
+  });
+  if (error) throw error;
+
+  const rows = (Array.isArray(data) ? data : []) as Array<Record<string, unknown>>;
+  const conversations = rows.map(normalizeInitialStateRow);
+  const resolved = await resolveGenericPartyNamesForTrips(conversations);
+  return enrichIndentCreatorOrganizationNamesForViewer(organizationId, resolved);
+}
+
+/**
+ * Unified bootstrap — calls get_unified_b2b_bootstrap which adds visibility_tags
+ * per message for multi-party routing.  Falls back to get_b2b_chat_bootstrap
+ * automatically when the migration has not been applied yet (PGRST202 / 42883).
+ *
+ * This is the ONLY DB call the chat store is allowed to make after app start.
+ * All subsequent state arrives via Realtime.
+ */
+export async function getUnifiedB2BChatBootstrap(
+  organizationId: string,
+): Promise<TripConversation[]> {
+  const { data, error } = await supabase().rpc('get_unified_b2b_bootstrap', {
+    p_organization_id: organizationId,
+    p_message_limit:   TRIP_CHAT_HISTORY_PAGE,
+  });
+
+  // Graceful fallback: if the unified RPC doesn't exist yet, use the previous one.
+  if (error) {
+    const code = String(error.code ?? '');
+    const msg  = String(error.message ?? '').toLowerCase();
+    const isMissing =
+      code === '42883' ||
+      code === 'PGRST202' ||
+      msg.includes('get_unified_b2b_bootstrap') ||
+      msg.includes('does not exist');
+    if (isMissing) return getB2BChatBootstrap(organizationId);
+    throw error;
+  }
+
+  const raw = data as unknown;
+  const rows = Array.isArray(raw)
+    ? (raw as Array<Record<string, unknown>>)
+    : raw != null && typeof raw === "object" && Array.isArray((raw as Record<string, unknown>).conversations)
+      ? ((raw as Record<string, unknown>).conversations as Array<Record<string, unknown>>)
+      : [];
+  const conversations = rows.map(normalizeInitialStateRow);
+  const resolved = await resolveGenericPartyNamesForTrips(conversations);
+  return enrichIndentCreatorOrganizationNamesForViewer(organizationId, resolved);
+}
+
+function distinctTripCount(conversations: TripConversation[]): number {
+  return new Set(conversations.map((c) => String(c.trip_id ?? "").trim()).filter(Boolean)).size;
+}
+
+/** DB without `p_include_message_bodies` on bootstrap RPCs — retry without the flag. */
+function bootstrapMessageBodiesFlagUnsupported(err: unknown): boolean {
+  const e = err as { message?: string; code?: string } | null;
+  if (!e) return false;
+  const c = String(e.code ?? "");
+  const m = String(e.message ?? "").toLowerCase();
+  if (c === "42883" || c === "PGRST202") return true;
+  if (m.includes("p_include_message_bodies")) return true;
+  return false;
+}
+
+/**
+ * Multi-lane bootstrap: `get_multi_lane_bootstrap` → conversations + lane maps.
+ * Falls back to {@link getUnifiedB2BChatBootstrap} + client-side {@link buildChatLanesFromConversations}.
+ *
+ * Optional `tripLimit` / `tripOffset` map to `p_trip_limit` / `p_trip_offset` when the DB migration is applied.
+ * Optional `hubTripBucket` (`active` | `history` | `all`) scopes trips by lifecycle for hub HISTORY vs ACTIVE lists.
+ */
+export async function fetchChatBootstrapPayload(
+  organizationId: string,
+  opts?: {
+    tripLimit?: number | null;
+    tripOffset?: number;
+    hubTripBucket?: "active" | "history" | "all";
+  },
+): Promise<{
+  conversations: TripConversation[];
+  lanes: ChatLanes;
+  hasMoreTrips: boolean;
+}> {
+  const tripLimit = opts?.tripLimit ?? null;
+  const tripOffset = opts?.tripOffset ?? 0;
+  const hubTripBucket = opts?.hubTripBucket ?? "active";
+
+  let emitBodiesParam = true;
+
+  const buildRpcArgs = (
+    includeHubBucket: boolean,
+    includeMessageBodies: boolean,
+  ): Record<string, unknown> => {
+    const a: Record<string, unknown> = {
+      p_organization_id: organizationId,
+      p_message_limit: TRIP_CHAT_HISTORY_PAGE,
+    };
+    if (emitBodiesParam) {
+      a.p_include_message_bodies = includeMessageBodies;
+    }
+    if (includeHubBucket) {
+      a.p_hub_trip_bucket = hubTripBucket;
+    }
+    if (tripLimit != null) {
+      a.p_trip_limit = tripLimit;
+      a.p_trip_offset = tripOffset;
+    }
+    return a;
+  };
+
+  let includeHubBucket = true;
+  const includeMessageBodies = false;
+  let { data, error } = await supabase().rpc(
+    "get_multi_lane_bootstrap",
+    buildRpcArgs(includeHubBucket, includeMessageBodies),
+  );
+
+  if (error && emitBodiesParam && bootstrapMessageBodiesFlagUnsupported(error)) {
+    emitBodiesParam = false;
+    ({ data, error } = await supabase().rpc(
+      "get_multi_lane_bootstrap",
+      buildRpcArgs(includeHubBucket, includeMessageBodies),
+    ));
+  }
+
+  const msg0 = String(error?.message ?? "").toLowerCase();
+  const code0 = String(error?.code ?? "");
+  if (
+    error &&
+    includeHubBucket &&
+    (code0 === "42883" ||
+      code0 === "PGRST202" ||
+      msg0.includes("p_hub_trip_bucket") ||
+      (msg0.includes("get_multi_lane_bootstrap") && msg0.includes("does not exist")))
+  ) {
+    includeHubBucket = false;
+    ({ data, error } = await supabase().rpc(
+      "get_multi_lane_bootstrap",
+      buildRpcArgs(false, includeMessageBodies),
+    ));
+  }
+
+  let usedTripWindowRpc = tripLimit != null;
+  const msg = String(error?.message ?? "").toLowerCase();
+  const overloadMissing =
+    tripLimit != null &&
+    (String(error?.code ?? "") === "42883" ||
+      String(error?.code ?? "") === "PGRST202" ||
+      msg.includes("get_multi_lane_bootstrap") ||
+      msg.includes("does not exist"));
+
+  if (overloadMissing) {
+    usedTripWindowRpc = false;
+    const minimal: Record<string, unknown> = {
+      p_organization_id: organizationId,
+      p_message_limit: TRIP_CHAT_HISTORY_PAGE,
+    };
+    if (emitBodiesParam) minimal.p_include_message_bodies = includeMessageBodies;
+    ({ data, error } = await supabase().rpc("get_multi_lane_bootstrap", minimal));
+  }
+
+  if (!error && data != null && typeof data === "object" && !Array.isArray(data)) {
+    const payload = data as Record<string, unknown>;
+    const rawConvs = payload.conversations;
+    const rows = (Array.isArray(rawConvs) ? rawConvs : []) as Array<Record<string, unknown>>;
+    let conversations = rows.map(normalizeInitialStateRow);
+    conversations = await resolveGenericPartyNamesForTrips(conversations);
+    conversations = await enrichIndentCreatorOrganizationNamesForViewer(
+      organizationId,
+      conversations,
+    );
+    const baseLanes =
+      normalizeServerLanes(payload.lanes as Record<string, unknown> | undefined) ??
+      buildChatLanesFromConversations(conversations);
+    const lanes = mergeMessagesByContextIntoLanes(
+      baseLanes,
+      payload.messages_by_context ?? payload.messagesByContext,
+    );
+    const n = distinctTripCount(conversations);
+    const hasMoreTrips = Boolean(usedTripWindowRpc && tripLimit != null && n >= tripLimit);
+    return { conversations, lanes, hasMoreTrips };
+  }
+
+  const code = String(error?.code ?? "");
+  const errMsg = String(error?.message ?? "").toLowerCase();
+  const missing =
+    code === "42883" ||
+    code === "PGRST202" ||
+    errMsg.includes("get_multi_lane_bootstrap") ||
+    errMsg.includes("does not exist");
+
+  if (!missing && error) throw error;
+
+  const conversations = await getUnifiedB2BChatBootstrap(organizationId);
+  return {
+    conversations,
+    lanes: mergeMessagesByContextIntoLanes(
+      buildChatLanesFromConversations(conversations),
+      null,
+    ),
+    hasMoreTrips: false,
+  };
+}
+
+/**
+ * On-demand history: same query plan as {@link getMessagesByConversation}.
+ * Prefer passing `{ before: oldestMessageIso }` to page older rows; omit `before`
+ * for the newest page (e.g. empty store backfill). Avoids `select *` and avoids
+ * returning the wrong end of the timeline (oldest-only bug).
+ */
+export async function fetchConversationHistory(
+  conversationId: string,
+  opts?: { before?: string; limit?: number; partyType?: string | null },
+): Promise<TripMessageRow[]> {
+  return getMessagesByConversation(conversationId, {
+    before: opts?.before,
+    limit: opts?.limit ?? TRIP_CHAT_HISTORY_PAGE,
+    partyType: opts?.partyType ?? null,
+  });
+}
+
+// ── processB2BEvent ───────────────────────────────────────────────────────────
+
+export interface ProcessB2BEventPayload {
+  content:          string;
+  newStatus?:       string | null;
+  driverId?:        string | null;
+  vehicleId?:       string | null;
+  userId?:          string | null;
+  userName?:        string;
+  conversationId?:  string | null;
+  extraMeta?:       Record<string, unknown>;
+}
+
+export interface ProcessB2BEventResult {
+  ok:          boolean;
+  messageIds:  string[];
+  tripState:   import('../types/chat.types').B2BTripState;
+  prevStatus:  string;
+  newStatus:   string;
+  eventType:   string;
+}
+
+/**
+ * Single atomic DB hit: updates trips state + inserts a message with the full
+ * trip-state snapshot embedded in metadata.  The Realtime INSERT delivers the
+ * snapshot to all subscribers; the store extracts it and updates TripMeta
+ * in-memory without a follow-up fetch.
+ *
+ * Event routing (when conversationId is null):
+ *   ledger / ledger_event  → client + supplier conversations only
+ *   tracking               → driver conversation only
+ *   status_change / system → all conversations (broadcast)
+ */
+export async function processB2BEvent(params: {
+  organizationId: string;
+  tripId:         string;
+  eventType:      string;
+  payload:        ProcessB2BEventPayload;
+}): Promise<ProcessB2BEventResult> {
+  const rpcPayload: Record<string, unknown> = {
+    content:   params.payload.content,
+    user_name: params.payload.userName ?? 'System',
+  };
+  if (params.payload.newStatus    != null) rpcPayload.new_status       = params.payload.newStatus;
+  if (params.payload.driverId     != null) rpcPayload.driver_id        = params.payload.driverId;
+  if (params.payload.vehicleId    != null) rpcPayload.vehicle_id       = params.payload.vehicleId;
+  if (params.payload.userId       != null) rpcPayload.user_id          = params.payload.userId;
+  if (params.payload.conversationId != null) rpcPayload.conversation_id = params.payload.conversationId;
+  if (params.payload.extraMeta)   rpcPayload.extra_meta  = params.payload.extraMeta;
+
+  const { data, error } = await supabase().rpc('process_b2b_event', {
+    p_organization_id: params.organizationId,
+    p_trip_id:         params.tripId,
+    p_event_type:      params.eventType,
+    p_payload:         rpcPayload,
+  });
+  if (error) throw error;
+
+  const r = data as {
+    ok:          boolean;
+    message_ids: string[];
+    trip_state:  import('../types/chat.types').B2BTripState;
+    prev_status: string;
+    new_status:  string;
+    event_type:  string;
+  };
+  return {
+    ok:         r.ok,
+    messageIds: r.message_ids,
+    tripState:  r.trip_state,
+    prevStatus: r.prev_status,
+    newStatus:  r.new_status,
+    eventType:  r.event_type,
+  };
+}
+
+// ── submitBusinessEvent ───────────────────────────────────────────────────────
+
+export interface SubmitBusinessEventParams {
+  organizationId:   string;
+  tripId:           string;
+  eventType:        string;
+  content:          string;
+  metadata?:        Record<string, unknown>;
+  newTripStatus?:   string | null;
+  userId?:          string | null;
+  userName?:        string;
+  conversationId?:  string | null;
+}
+
+export interface SubmitBusinessEventResult {
+  ok:          boolean;
+  messageIds:  string[];
+  updatedAt:   string;
+  prevStatus:  string;
+  newStatus:   string;
+  eventType:   string;
+}
+
+/**
+ * Unified atomic event writer — validates org access, optionally updates
+ * trips.status, and inserts one message per conversation (or just the targeted
+ * conversation when conversationId is provided).  Returns enriched metadata
+ * so the caller can patch the store without a follow-up fetch.
+ */
+export async function submitBusinessEvent(
+  params: SubmitBusinessEventParams,
+): Promise<SubmitBusinessEventResult> {
+  const { data, error } = await supabase().rpc('submit_business_event', {
+    p_organization_id: params.organizationId,
+    p_trip_id:         params.tripId,
+    p_event_type:      params.eventType,
+    p_content:         params.content,
+    p_metadata:        params.metadata ?? {},
+    p_new_trip_status: params.newTripStatus ?? null,
+    p_user_id:         params.userId ?? null,
+    p_user_name:       params.userName ?? 'System',
+    p_conversation_id: params.conversationId ?? null,
+  });
+  if (error) throw error;
+
+  const result = data as {
+    ok:          boolean;
+    message_ids: string[];
+    updated_at:  string;
+    prev_status: string;
+    new_status:  string;
+    event_type:  string;
+  };
+  return {
+    ok:         result.ok,
+    messageIds: result.message_ids,
+    updatedAt:  result.updated_at,
+    prevStatus: result.prev_status,
+    newStatus:  result.new_status,
+    eventType:  result.event_type,
+  };
+}
+
+/**
+ * Atomic status change: updates trip.status + inserts a status_change system
+ * message in every conversation for the trip.  The Realtime INSERT propagates
+ * the system message to all active listeners; the caller's optimistic update
+ * ensures immediate local reflection.
+ */
+export async function changeTripStatus(params: {
+  tripId:         string;
+  organizationId: string;
+  newStatus:      string;
+  userId:         string | null;
+  userName:       string;
+}): Promise<{ previousStatus: string; changedAt: string }> {
+  const { data, error } = await supabase().rpc('change_trip_status_with_notification', {
+    p_trip_id:         params.tripId,
+    p_organization_id: params.organizationId,
+    p_new_status:      params.newStatus,
+    p_user_id:         params.userId,
+    p_user_name:       params.userName,
+  });
+  if (error) throw error;
+  const result = data as { ok: boolean; previous_status: string; changed_at: string };
+  return { previousStatus: result.previous_status, changedAt: result.changed_at };
 }

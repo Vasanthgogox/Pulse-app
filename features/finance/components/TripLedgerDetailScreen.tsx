@@ -3,6 +3,7 @@
  * Transaction Ledger (TRIP ID / SALES / PAID / DUE), Contact, Tax & Compliance,
  * Telemetry History, and FAB. Uses TreasuryDetailLayout for alignment with app.
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { TreasuryDetailLayout } from "./TreasuryDetailLayout";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -13,7 +14,7 @@ import {
   getTripById,
   getTripDisplayNumber,
   type TripRow,
-} from "@/features/trips";
+} from "@/features/trips/services/trips.service";
 import { getVehicleById } from "@/features/vehicles/services/vehicles.service";
 import { getClientById } from "@/features/clients/services/clients.service";
 import { getSupplierById } from "@/features/suppliers/services/suppliers.service";
@@ -22,7 +23,6 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   StyleSheet,
   Text,
@@ -554,7 +554,7 @@ export function TripLedgerDetailScreen({
         onProfileClick={() => router.push("/(tabs)/profile")}
       >
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color={Theme.primary} />
+          <LoadingIndicator size="large" color={Theme.primary} />
         </View>
       </TreasuryDetailLayout>
     );
@@ -775,7 +775,7 @@ export function TripLedgerDetailScreen({
           <View style={styles.compareSection}>
             {partnerLoading ? (
               <View style={styles.compareLoadingHero}>
-                <ActivityIndicator size="small" color={Theme.textOnDark} />
+                <LoadingIndicator size="small" color={Theme.textOnDark} />
                 <Text style={styles.compareLoadingHeroText}>Syncing partner ledger…</Text>
               </View>
             ) : !partnerIntegrated ? (

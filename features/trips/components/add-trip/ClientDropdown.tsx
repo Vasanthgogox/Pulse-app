@@ -2,7 +2,8 @@
  * Add Trip — client dropdown + optional free-text field.
  * Uses Theme by default; pass themeOverrides (e.g. from Ops Agent REF) to match dark UI.
  */
-import { Text, TextInput, TouchableOpacity, View, StyleSheet, ActivityIndicator } from 'react-native';
+import { LoadingIndicator } from "@/components/LoadingIndicator";
+import { Text, TextInput, TouchableOpacity, View, StyleSheet} from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Theme from '@/constants/Theme';
 import type { ClientRow } from '@/features/clients/services/clients.service';
@@ -74,7 +75,7 @@ export function ClientDropdown({
       <Text style={labelStyle}>Client *</Text>
       {loading ? (
         <View style={styles.loaderRow}>
-          <ActivityIndicator size="small" color={T.loaderColor} />
+          <LoadingIndicator size="small" color={T.loaderColor} />
         </View>
       ) : clients.length > 0 ? (
         <>

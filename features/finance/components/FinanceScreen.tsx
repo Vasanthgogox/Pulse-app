@@ -1,3 +1,4 @@
+import { AppLoadingSplash } from "@/components/AppLoadingSplash";
 import type {
     DriverPaymentType,
     PartyOption,
@@ -10,7 +11,7 @@ import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { AIInsightsPanel } from "@/features/ai";
+import { AIInsightsPanel } from "@/features/ai/components/AIInsightsPanel";
 import type {
     ClientRow,
     UpdateClientData,
@@ -32,7 +33,7 @@ import type {
     UpdateSupplierData,
 } from "@/features/suppliers/services/suppliers.service";
 import { updateSupplier } from "@/features/suppliers/services/suppliers.service";
-import { getTripDisplayNumber, type TripRow } from "@/features/trips";
+import { getTripDisplayNumber, type TripRow } from "@/features/trips/services/trips.service";
 import {
     buildUniqueLinkedOrgIdMap,
     isIntegratedClientRow,
@@ -59,12 +60,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    ActivityIndicator,
     Platform,
     Text,
     View,
     useWindowDimensions,
 } from "react-native";
+import { useLayoutInsets } from "@/lib/layoutInsets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFinanceAddEntityHandlers } from "../hooks/useFinanceAddEntityHandlers";
 import { useFinanceEntities } from "../hooks/useFinanceEntities";
@@ -143,6 +144,7 @@ function createReportRow({
 
 export function FinanceScreen() {
   const insets = useSafeAreaInsets();
+  const layout = useLayoutInsets();
   const screenTopPad =
     Platform.OS === "web" ? 0 : insets.top + Layout.headerPaddingBelowInset;
   const { width: screenWidth } = useWindowDimensions();
@@ -176,9 +178,11 @@ export function FinanceScreen() {
     canAccess,
     refreshKey: entitiesRefreshKey,
   });
+  // tripRows from useTripsQuery already includes cross-org supplier trips (get_trips_for_org returns both).
+  // Do NOT concat tripsWhereOrgIsSupplier again — that's a derived subset of tripRows, not additional data.
   const allTripsForLedger = useMemo(
-    () => [...entities.tripRows, ...entities.tripsWhereOrgIsSupplier],
-    [entities.tripRows, entities.tripsWhereOrgIsSupplier],
+    () => entities.tripRows,
+    [entities.tripRows],
   );
 
   const ledger = useFinanceLedger({
@@ -230,6 +234,7 @@ export function FinanceScreen() {
     setCashDirectionFilter,
     searchQuery,
     setSearchQuery,
+    filteredLedger,
     filteredLedgerForDisplay,
     ledgerTotalsData,
     ledgerCategoryCounts,
@@ -590,7 +595,6 @@ export function FinanceScreen() {
       ledgerTransactions ?? [],
       tripsWhereOrgIsClient,
       tripPartyMap,
-      indentsForFinance,
       tripFinanceAdjustmentsByTripId,
     );
     const offersForAggregation: Record<string, DriverOfferForAggregation> = {};
@@ -676,13 +680,23 @@ export function FinanceScreen() {
         secondaryValue: formatCompactRupee(ledgerTotalsData.totalOut),
       },
       customers: {
-        value: formatCompactRupee(customersAgg.totals.totalReceived),
+        value: formatCompactRupee(
+          customersAgg.rows.reduce(
+            (sum, row) => sum + Number(row.received ?? 0),
+            0,
+          ),
+        ),
         count: activeCustomersCount,
         secondaryLabel: "Outstanding",
         secondaryValue: formatCompactRupee(customersOutstanding),
       },
       suppliers: {
-        value: formatCompactRupee(suppliersAgg.totals.totalPaid),
+        value: formatCompactRupee(
+          suppliersAgg.rows.reduce(
+            (sum, row) => sum + Number(row.paid ?? 0),
+            0,
+          ),
+        ),
         count: activeSuppliersCount,
         secondaryLabel: "Outstanding",
         secondaryValue: formatCompactRupee(suppliersOutstanding),
@@ -694,7 +708,12 @@ export function FinanceScreen() {
         secondaryValue: formatCompactRupee(garageExpense),
       },
       drivers: {
-        value: formatCompactRupee(driversAgg.totals.totalPaid),
+        value: formatCompactRupee(
+          driversAgg.rows.reduce(
+            (sum, row) => sum + Number(row.paid ?? 0),
+            0,
+          ),
+        ),
         count: activeDriversCount,
         secondaryLabel: "Pending",
         secondaryValue: formatCompactRupee(driverPending),
@@ -1390,14 +1409,12 @@ export function FinanceScreen() {
 
   const orgId = currentOrganization?.id ?? null;
 
-  if (isOrgLoading) {
-    return (
-      <View style={[styles.container, { paddingTop: screenTopPad }]}>
-        <View style={[styles.centered, { flex: 1, paddingTop: 24 }]}>
-          <ActivityIndicator size="large" color={Theme.primary} />
-        </View>
-      </View>
-    );
+  const financeDataLoading =
+    isOrgLoading ||
+    (entitiesLoading && ledgerLoading && ledgerTransactions === null);
+
+  if (financeDataLoading) {
+    return <AppLoadingSplash variant="preparing" />;
   }
 
   if (!orgId) {
@@ -1424,8 +1441,6 @@ export function FinanceScreen() {
       testID="finance-tab-screen"
     >
       <FinanceSummarySection
-        title={t("treasury")}
-        subtitle={t("fiscalMatrix")}
         activeTab={financeSubTab}
         onTabPress={handleTabPress}
         screenWidth={screenWidth}
@@ -1525,6 +1540,7 @@ export function FinanceScreen() {
               organizationId={orgId}
               ledgerLoading={ledgerLoading}
               ledgerTransactions={ledgerTransactions}
+              ledgerForEntityAggregation={filteredLedger}
               filteredLedgerForDisplay={filteredLedgerForDisplay}
               ledgerRefreshKey={ledgerRefreshKey}
               onAddTransactionPress={() =>
@@ -1565,9 +1581,7 @@ export function FinanceScreen() {
               }
               refreshing={refreshing}
               onRefresh={handleRefresh}
-              bottomInset={
-                24 + insets.bottom + Layout.demoTabBarScrollBottomInset + 40
-              }
+              bottomInset={layout.scrollBottomPadding(64)}
               profileImages={profileImages}
               linkedOrgDisplayMap={linkedOrgDisplayMap}
               tripFinanceAdjustmentsByTripId={tripFinanceAdjustmentsByTripId}
@@ -1607,11 +1621,7 @@ export function FinanceScreen() {
             style={[
               styles.fabAbsoluteWrap,
               {
-                bottom:
-                  Layout.demoTabBarScrollBottomInset +
-                  insets.bottom +
-                  Layout.tabBarBottomPaddingMin +
-                  Layout.fabStackOffset,
+                bottom: layout.fabBottom({ stackOffset: Layout.fabStackOffset }),
               },
             ]}
           >

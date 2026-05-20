@@ -1,0 +1,239 @@
+import {
+  DEFAULT_USER_2D_AVATAR_SEED,
+  getUser2DAvatarUriForSeed,
+} from '@/constants/UserAvatars';
+import { getLinkedOrgProfilesBatch } from '@/features/clients/services/clients.service';
+import type { InboundPartnerDisplay, InboundProtocolInviteItem } from '@/lib/globalSync/inboundProtocol.types';
+import { getSignedAvatarUrl } from '@/lib/avatarUpload';
+import { normalizePhoneForInviteeLookup } from '@/lib/phoneLookup';
+import type { ConnectionRequestRow } from '@/services/connectionRequestsService';
+import { REGISTRY_PAGE_SIZE } from '@/lib/globalSync/registryFeed.constants';
+
+export function connectionRequestTypeLabel(row: ConnectionRequestRow): string {
+  const reqClient = Boolean(row.request_shipper_client);
+  const reqSupplier = Boolean(row.request_carrier_supplier);
+  if (reqClient && reqSupplier) return 'CLIENT+SUPPLIER';
+  if (reqClient) return 'CLIENT';
+  if (reqSupplier) return 'SUPPLIER';
+  return 'PARTY';
+}
+
+export function partnerOrgIdForRequest(
+  row: ConnectionRequestRow,
+  direction: 'received' | 'sent',
+): string {
+  return direction === 'received'
+    ? row.from_organization_id
+    : row.to_organization_id;
+}
+
+/** Prefer org display name from the request row / partner profile (not contact-only). */
+export function displayNameForRequest(
+  row: ConnectionRequestRow,
+  direction: 'received' | 'sent',
+  partnerDisplay: Record<string, InboundPartnerDisplay>,
+): string {
+  const partnerId = partnerOrgIdForRequest(row, direction);
+  const profile = partnerDisplay[partnerId];
+  const rowOrgName =
+    direction === 'received'
+      ? (row.from_org_name ?? '').trim()
+      : (row.to_org_name ?? '').trim();
+  const profileOrg = (profile?.organizationName ?? '').trim();
+  const contact = (profile?.contactPerson ?? '').trim();
+  if (rowOrgName.length > 0) return rowOrgName;
+  if (profileOrg.length > 0) return profileOrg;
+  if (contact.length > 0) return contact;
+  return 'Network user';
+}
+
+export function subtitleForRequest(
+  row: ConnectionRequestRow,
+  direction: 'received' | 'sent',
+  partnerDisplay: Record<string, InboundPartnerDisplay>,
+  displayName: string,
+): string | undefined {
+  const partnerId = partnerOrgIdForRequest(row, direction);
+  const profile = partnerDisplay[partnerId];
+  const phone = (profile?.phone ?? '').trim();
+  if (phone.length > 0) return phone;
+  const contact = (profile?.contactPerson ?? '').trim();
+  if (contact.length > 0 && contact !== displayName) return contact;
+  return undefined;
+}
+
+/** Strip trailing org-id suffix (e.g. "Fleet Logistics 589355" → "fleet logistics"). */
+export function normalizeInviteOrgDisplayName(name: string): string {
+  let n = name.trim().toLowerCase();
+  n = n.replace(/\s+[0-9a-f]{6}$/i, '');
+  return n.replace(/\s+/g, ' ').trim();
+}
+
+export function inviteItemDedupeKey(
+  item: InboundProtocolInviteItem,
+  partnerDisplay: Record<string, InboundPartnerDisplay>,
+): string {
+  const ownerId =
+    item.partnerOwnerId ?? partnerDisplay[item.partnerOrgId]?.ownerId;
+  if (ownerId) return `owner:${ownerId}`;
+
+  const phone = normalizePhoneForInviteeLookup(
+    partnerDisplay[item.partnerOrgId]?.phone ?? '',
+  );
+  if (phone.length >= 10) return `phone:${phone}`;
+
+  const nameKey = normalizeInviteOrgDisplayName(item.name);
+  if (nameKey.length > 0) return `name:${nameKey}`;
+
+  return `org:${item.partnerOrgId}`;
+}
+
+export function collectPartnerOrgIds(
+  received: ConnectionRequestRow[],
+  sent: ConnectionRequestRow[],
+  pendingOnly = true,
+): string[] {
+  const ids = new Set<string>();
+  for (const row of received) {
+    if (pendingOnly && row.status !== 'pending') continue;
+    const id = partnerOrgIdForRequest(row, 'received');
+    if (id) ids.add(id);
+  }
+  for (const row of sent) {
+    if (pendingOnly && row.status !== 'pending') continue;
+    const id = partnerOrgIdForRequest(row, 'sent');
+    if (id) ids.add(id);
+  }
+  return Array.from(ids);
+}
+
+export function partnerOwnerIdByOrgFromDisplay(
+  partnerDisplay: Record<string, InboundPartnerDisplay>,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [orgId, profile] of Object.entries(partnerDisplay)) {
+    const ownerId = (profile.ownerId ?? '').trim();
+    if (ownerId) out[orgId] = ownerId;
+  }
+  return out;
+}
+
+export async function resolvePartnerAvatarUris(
+  profiles: Record<string, InboundPartnerDisplay>,
+): Promise<Record<string, string | null>> {
+  const entries = await Promise.all(
+    Object.entries(profiles).map(async ([orgId, profile]) => {
+      const raw = (profile.avatarUrl ?? '').trim();
+      if (raw.startsWith('http')) {
+        return [orgId, raw] as const;
+      }
+      if (raw.length > 0) {
+        const signed = await getSignedAvatarUrl(raw);
+        if (signed) return [orgId, signed] as const;
+      }
+      const seed = (profile.avatarSeed ?? '').trim();
+      if (seed.length > 0) {
+        return [orgId, getUser2DAvatarUriForSeed(seed)] as const;
+      }
+      return [orgId, getUser2DAvatarUriForSeed(DEFAULT_USER_2D_AVATAR_SEED)] as const;
+    }),
+  );
+  return Object.fromEntries(entries);
+}
+
+export async function fetchInboundProtocolSnapshot(
+  _orgId: string,
+  received: ConnectionRequestRow[],
+  sent: ConnectionRequestRow[],
+): Promise<{
+  partnerDisplayByOrgId: Record<string, InboundPartnerDisplay>;
+  partnerAvatarUriByOrgId: Record<string, string | null>;
+  partnerOwnerIdByOrgId: Record<string, string>;
+}> {
+  const partnerOrgIds = collectPartnerOrgIds(received, sent, true);
+  const partnerDisplayByOrgId = await getLinkedOrgProfilesBatch(partnerOrgIds);
+  const partnerOwnerIdByOrgId = partnerOwnerIdByOrgFromDisplay(partnerDisplayByOrgId);
+  const partnerAvatarUriByOrgId = await resolvePartnerAvatarUris(partnerDisplayByOrgId);
+  return { partnerDisplayByOrgId, partnerAvatarUriByOrgId, partnerOwnerIdByOrgId };
+}
+
+/**
+ * Collapse multiple pending invites to the same contact into one card.
+ * Keys: partner owner (RPC), normalized phone, then normalized org name.
+ */
+export function dedupePendingInviteItemsByContact(
+  items: InboundProtocolInviteItem[],
+  partnerDisplay: Record<string, InboundPartnerDisplay>,
+): InboundProtocolInviteItem[] {
+  const groups = new Map<string, InboundProtocolInviteItem[]>();
+  for (const item of items) {
+    const key = inviteItemDedupeKey(item, partnerDisplay);
+    const list = groups.get(key) ?? [];
+    list.push(item);
+    groups.set(key, list);
+  }
+
+  const merged: InboundProtocolInviteItem[] = [];
+  for (const group of groups.values()) {
+    if (group.length === 1) {
+      merged.push(group[0]);
+      continue;
+    }
+
+    const sorted = [...group].sort((a, b) =>
+      String(b.createdAt).localeCompare(String(a.createdAt)),
+    );
+    const primary = sorted[0];
+    const linkedRequestIds = sorted.map((it) => it.id);
+    const types = [...new Set(sorted.map((it) => it.type))];
+    const type = types.length > 1 ? types.join(' · ') : primary.type;
+    const ownerId =
+      primary.partnerOwnerId ??
+      partnerDisplay[primary.partnerOrgId]?.ownerId;
+
+    merged.push({
+      ...primary,
+      partnerOwnerId: ownerId ?? primary.partnerOwnerId,
+      type,
+      subtitle:
+        primary.subtitle ??
+        `${sorted.length} pending invites to the same contact`,
+      linkedRequestIds,
+    });
+  }
+
+  return merged.sort((a, b) =>
+    String(b.createdAt).localeCompare(String(a.createdAt)),
+  );
+}
+
+export function mapPendingInviteItems(
+  rows: ConnectionRequestRow[],
+  direction: 'received' | 'sent',
+  partnerDisplay: Record<string, InboundPartnerDisplay>,
+  partnerAvatarUri: Record<string, string | null>,
+  partnerOwnerIdByOrgId: Record<string, string>,
+  limit = REGISTRY_PAGE_SIZE,
+): InboundProtocolInviteItem[] {
+  const mapped = rows
+    .filter((r) => r.status === 'pending')
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+    .map((row) => {
+      const partnerOrgId = partnerOrgIdForRequest(row, direction);
+      const name = displayNameForRequest(row, direction, partnerDisplay);
+      const ownerFromProfile = partnerDisplay[partnerOrgId]?.ownerId;
+      return {
+        id: row.id,
+        name,
+        subtitle: subtitleForRequest(row, direction, partnerDisplay, name),
+        type: connectionRequestTypeLabel(row),
+        partnerOrgId,
+        partnerOwnerId:
+          partnerOwnerIdByOrgId[partnerOrgId] ?? ownerFromProfile,
+        avatarUri: partnerAvatarUri[partnerOrgId] ?? null,
+        createdAt: row.created_at,
+      };
+    });
+
+  return dedupePendingInviteItemsByContact(mapped, partnerDisplay).slice(0, limit);
+}

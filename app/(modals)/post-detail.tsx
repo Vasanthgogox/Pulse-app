@@ -2,21 +2,23 @@
  * Post detail modal — shows full post with bids list.
  * Load owner sees bids and can accept/reject. Others can bid from here too.
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
+import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from '@/constants/Theme';
+import { getLinkedOrgProfilesBatch } from '@/features/clients/services/clients.service';
 import { BidSheet } from '@/features/network/components/BidSheet';
+import { useNetworkFeedQuery, useAfterPostDeleted } from '@/lib/queries/usePostsQuery';
 import {
-  useNetworkFeedQuery,
   useBidsForPostQuery,
   useAcceptBidMutation,
   useRejectBidMutation,
-  useAfterPostDeleted,
-} from '@/lib/queries';
+} from '@/lib/queries/useBidsQuery';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { deactivatePost, isPostVisibleForOrg, type PostRow } from '@/features/network/services/posts.service';
 import { type BidRow } from '@/features/network/services/bids.service';
 import { formatINR } from '@/lib/format';
 import { confirmDialog } from '@/lib/confirmDialog';
-import { getInitials } from '@/lib/stringUtils';
+import type { LinkedOrgDisplay } from '@/lib/useLinkedOrgProfileMap';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   ArrowLeft,
@@ -32,7 +34,6 @@ import {
 } from 'lucide-react-native';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Pressable,
   ScrollView,
@@ -64,24 +65,31 @@ function timeAgo(dateStr: string): string {
 function BidCard({
   bid,
   isOwner,
+  branding,
   onAccept,
   onReject,
 }: {
   bid: BidRow;
   isOwner: boolean;
+  branding?: LinkedOrgDisplay | null;
   onAccept: (id: string) => void;
   onReject: (id: string) => void;
 }) {
-  const color = orgColor(bid.bidder_organization_id);
   const isPending = bid.status === 'pending';
   const isAccepted = bid.status === 'accepted';
+  const orgName = bid.bidder_org_name ?? 'Unknown';
 
   return (
     <View style={[styles.bidCard, isAccepted && styles.bidCardAccepted]}>
-      <View style={[styles.bidAvatar, { backgroundColor: color + '20' }]}>
-        <Text style={[styles.bidAvatarText, { color }]}>
-          {getInitials(bid.bidder_org_name ?? '??')}
-        </Text>
+      <View style={styles.bidAvatar}>
+        <PartyAvatar
+          name={orgName}
+          initialsColorSeed={bid.bidder_organization_id}
+          avatarUrl={branding?.avatarUrl}
+          avatarSeed={branding?.avatarSeed}
+          entityType="supplier"
+          size={44}
+        />
       </View>
       <View style={styles.bidInfo}>
         <Text style={styles.bidOrgName}>{(bid.bidder_org_name ?? 'Unknown').toUpperCase()}</Text>
@@ -141,6 +149,37 @@ export default function PostDetailScreen() {
   const isOwner = post?.organization_id === orgId;
   const isLoad = post?.type === 'LOAD';
   const color = post ? orgColor(post.organization_id) : Theme.primary;
+  const bids = bidsQ.data ?? [];
+  const [bidderBrandingByOrgId, setBidderBrandingByOrgId] = useState<
+    Record<string, LinkedOrgDisplay>
+  >({});
+
+  React.useEffect(() => {
+    const ids = [
+      ...new Set(
+        bids.map((b) => b.bidder_organization_id).filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    if (ids.length === 0) {
+      setBidderBrandingByOrgId({});
+      return;
+    }
+    let cancelled = false;
+    void getLinkedOrgProfilesBatch(ids).then((profiles) => {
+      if (cancelled) return;
+      const next: Record<string, LinkedOrgDisplay> = {};
+      for (const [oid, profile] of Object.entries(profiles)) {
+        next[oid] = {
+          avatarUrl: (profile.avatarUrl ?? "").trim() || undefined,
+          avatarSeed: (profile.avatarSeed ?? "").trim() || undefined,
+        };
+      }
+      setBidderBrandingByOrgId(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [bids]);
 
   const handleAccept = (bidId: string) => {
     Alert.alert('Accept Bid', 'Accept this bid? The bidder will be notified.', [
@@ -196,12 +235,10 @@ export default function PostDetailScreen() {
             <ArrowLeft size={20} color={Theme.textPrimary} />
           </Pressable>
         </View>
-        <ActivityIndicator color={Theme.primary} style={{ marginTop: 60 }} />
+        <LoadingIndicator color={Theme.primary} style={{ marginTop: 60 }} />
       </View>
     );
   }
-
-  const bids = bidsQ.data ?? [];
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -239,9 +276,14 @@ export default function PostDetailScreen() {
         <View style={[styles.postCard, { borderTopColor: color }]}>
           {/* Org info */}
           <View style={styles.postHeader}>
-            <View style={[styles.postAvatar, { backgroundColor: color + '20' }]}>
-              <Text style={[styles.postAvatarText, { color }]}>{getInitials(post.org_name)}</Text>
-            </View>
+            <PartyAvatar
+              name={post.org_name}
+              initialsColorSeed={post.organization_id}
+              avatarSeed={post.org_avatar_seed}
+              entityType="supplier"
+              size={44}
+              style={styles.postAvatar}
+            />
             <View style={styles.postMeta}>
               <Text style={styles.postOrgName}>{post.org_name.toUpperCase()}</Text>
               <View style={styles.postMetaRow}>
@@ -315,7 +357,7 @@ export default function PostDetailScreen() {
               <Text style={styles.bidsSectionTitle}>
                 {isOwner ? 'BIDS RECEIVED' : 'BIDS'} ({bids.length})
               </Text>
-              {bidsQ.isLoading && <ActivityIndicator size={12} color={Theme.primary} />}
+              {bidsQ.isLoading && <LoadingIndicator size={12} color={Theme.primary} />}
             </View>
 
             {bids.length === 0 && !bidsQ.isLoading && (
@@ -333,6 +375,7 @@ export default function PostDetailScreen() {
                 key={bid.id}
                 bid={bid}
                 isOwner={isOwner}
+                branding={bidderBrandingByOrgId[bid.bidder_organization_id]}
                 onAccept={handleAccept}
                 onReject={handleReject}
               />
