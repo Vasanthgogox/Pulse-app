@@ -1,1 +1,1 @@
-export { default } from '@/components/RouteLoadingScreen';
+export { ChromeBelowTopNavLoadingScreen as default } from '@/components/chromeLoadingScreens';

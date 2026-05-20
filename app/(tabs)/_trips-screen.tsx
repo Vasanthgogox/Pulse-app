@@ -2,7 +2,7 @@
  * Trips Control — demo2 trips tab. Active | History, trip cards, Add Trip.
  * Private Book = driver/vehicle assigned by you; Shared Ledger = assigned by another user.
  */
-import { AppLoadingSplash } from "@/components/AppLoadingSplash";
+import { SceneLoadingSplash } from "@/components/chromeLoadingScreens";
 import { HubListPaginationBar } from "@/components/hub/HubListPaginationBar";
 import type { HubGridPageSize } from "@/components/hub/hubGridCardLayout";
 import { HUB_GRID_DEFAULT_PAGE_SIZE } from "@/components/hub/hubGridCardLayout";
@@ -1498,7 +1498,7 @@ export default function TripsScreen() {
   }
 
   if (loading && trips.length === 0) {
-    return <AppLoadingSplash variant="preparing" message={tr("loading")} />;
+    return <SceneLoadingSplash variant="preparing" message={tr("loading")} />;
   }
 
   return (

@@ -1,6 +1,5 @@
-import { AppLoadingSplash } from '@/components/AppLoadingSplash';
+import { SceneLoadingSplash } from '@/components/chromeLoadingScreens';
 import { lazy, Suspense, useRef, type ComponentType } from 'react';
-import { StyleSheet } from 'react-native';
 
 type LazyRouteScreenProps = {
   loader: () => Promise<{ default: ComponentType<object> }>;
@@ -18,16 +17,10 @@ export function LazyRouteScreen({ loader, message }: LazyRouteScreenProps) {
   return (
     <Suspense
       fallback={
-        <AppLoadingSplash variant="preparing" message={message} style={styles.fallback} />
+        <SceneLoadingSplash variant="preparing" message={message} />
       }
     >
       <Screen />
     </Suspense>
   );
 }
-
-const styles = StyleSheet.create({
-  fallback: {
-    flex: 1,
-  },
-});

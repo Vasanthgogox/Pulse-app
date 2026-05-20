@@ -1,4 +1,4 @@
-import { AppLoadingSplash } from "@/components/AppLoadingSplash";
+import { SceneLoadingSplash } from "@/components/chromeLoadingScreens";
 import type {
     DriverPaymentType,
     PartyOption,
@@ -185,18 +185,6 @@ export function FinanceScreen() {
     [entities.tripRows],
   );
 
-  // Org-owned trips only for customer billing. allTripsForLedger includes supplier-view trips
-  // from get_trips_for_org (trips owned by partner orgs where we are the carrier). Those must
-  // not feed aggregateCustomers — Client Detail only counts trips this org owns where the entity
-  // is the client, and the two screens must use the same scope.
-  const tripsForCustomerAgg = useMemo(
-    () => {
-      const oid = currentOrganization?.id;
-      if (!oid) return [];
-      return allTripsForLedger.filter((t) => t.organization_id === oid);
-    },
-    [allTripsForLedger, currentOrganization?.id],
-  );
 
   const ledger = useFinanceLedger({
     organizationId: currentOrganization?.id ?? null,
@@ -596,7 +584,7 @@ export function FinanceScreen() {
   const desktopCardMetrics = useMemo(() => {
     const customersAgg = aggregateCustomers(
       clientRows,
-      tripsForCustomerAgg,
+      allTripsForLedger,
       ledgerTransactions ?? [],
       tripPartyMap,
       indentsForFinance,
@@ -787,7 +775,7 @@ export function FinanceScreen() {
     if (financeSubTab === "customers") {
       const { rows } = aggregateCustomers(
         clientRows,
-        tripsForCustomerAgg,
+        allTripsForLedger,
         ledgerRows,
         tripPartyMap,
         indentsForFinance,
@@ -817,7 +805,7 @@ export function FinanceScreen() {
       });
       const linkedClientIdByOrgId = buildUniqueLinkedOrgIdMap(clientRows);
       const latestTripDateByClientId: Record<string, string> = {};
-      tripsForCustomerAgg.forEach((trip) => {
+      allTripsForLedger.forEach((trip) => {
         const nameKey = (trip.client_name || "").trim().toLowerCase();
         let clientId =
           trip.client_id ?? (nameKey ? clientIdByNameKey[nameKey] : undefined);
@@ -1425,7 +1413,7 @@ export function FinanceScreen() {
     (entitiesLoading && ledgerLoading && ledgerTransactions === null);
 
   if (financeDataLoading) {
-    return <AppLoadingSplash variant="preparing" />;
+    return <SceneLoadingSplash variant="preparing" />;
   }
 
   if (!orgId) {

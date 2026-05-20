@@ -49,7 +49,6 @@ import {
 import { adjustedRevenue } from "@/features/trips/services/tripAdjustments";
 import {
     getTripDisplayNumber,
-    getTripsByOrganization,
     type TripRow,
 } from "@/features/trips/services/trips.service";
 import {
@@ -73,6 +72,8 @@ import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjust
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queryKeys";
+import { STALE } from "@/lib/queryClient";
+import { supabase } from "@/lib/supabase";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -397,41 +398,75 @@ export default function ClientDetailScreen({
       setLoading(true);
     setError(null);
     const orgId = currentOrganization.id;
-    // Use TanStack Query cache for org-level entities (warm from Trips/Finance tabs or rehydrated from storage).
-    const cachedTrips = queryClient.getQueryData<TripRow[]>(queryKeys.trips.all(orgId));
-    const cachedClients = queryClient.getQueryData<ClientRow[]>(queryKeys.clients.list(orgId));
-    const cachedTransactions = queryClient.getQueryData<LedgerRow[]>(queryKeys.transactions.all(orgId));
-    const cachedSuppliers = queryClient.getQueryData<SupplierRow[]>(queryKeys.suppliers.list(orgId));
-    const cachedDrivers = queryClient.getQueryData<DriverRow[]>(queryKeys.drivers.list(orgId));
 
     Promise.all([
-      // Bundle: client row + ratings + warehouses + contracts in 1 RPC
       getClientDetailBundle(orgId, clientId),
-      // Org-level: read from cache or fall back to DB
-      cachedTrips !== undefined
-        ? Promise.resolve({ error: null, trips: cachedTrips })
-        : getTripsByOrganization(orgId),
-      cachedClients !== undefined
-        ? Promise.resolve({ error: null, clients: cachedClients })
-        : getClientsByOrganization(orgId),
-      cachedTransactions !== undefined
-        ? Promise.resolve({ error: null, transactions: cachedTransactions })
-        : getTransactionsByOrganization(orgId),
-      cachedSuppliers !== undefined
-        ? Promise.resolve({ error: null, suppliers: cachedSuppliers })
-        : getSuppliersByOrganization(orgId),
-      cachedDrivers !== undefined
-        ? Promise.resolve({ error: null, drivers: cachedDrivers })
-        : getDriversByOrganization(orgId),
+      queryClient
+        .ensureQueryData({
+          queryKey: queryKeys.trips.all(orgId),
+          queryFn: async () => {
+            const { data, error } = await supabase().rpc("get_trips_for_org", {
+              p_org_id: orgId,
+            });
+            if (error) throw new Error(error.message);
+            return (data ?? []) as TripRow[];
+          },
+          staleTime: STALE.realtime,
+        })
+        .catch(() => [] as TripRow[]),
+      queryClient
+        .ensureQueryData({
+          queryKey: queryKeys.clients.all(orgId),
+          queryFn: async () => {
+            const res = await getClientsByOrganization(orgId);
+            if (res.error) throw res.error;
+            return res.clients;
+          },
+          staleTime: STALE.moderate,
+        })
+        .catch(() => [] as ClientRow[]),
+      queryClient
+        .ensureQueryData({
+          queryKey: queryKeys.transactions.all(orgId),
+          queryFn: async () => {
+            const res = await getTransactionsByOrganization(orgId);
+            if (res.error) throw res.error;
+            return res.transactions;
+          },
+          staleTime: STALE.realtime,
+        })
+        .catch(() => [] as LedgerRow[]),
+      queryClient
+        .ensureQueryData({
+          queryKey: queryKeys.suppliers.all(orgId),
+          queryFn: async () => {
+            const res = await getSuppliersByOrganization(orgId);
+            if (res.error) throw res.error;
+            return res.suppliers;
+          },
+          staleTime: STALE.moderate,
+        })
+        .catch(() => [] as SupplierRow[]),
+      queryClient
+        .ensureQueryData({
+          queryKey: queryKeys.drivers.all(orgId),
+          queryFn: async () => {
+            const res = await getDriversByOrganization(orgId);
+            if (res.error) throw res.error;
+            return res.drivers;
+          },
+          staleTime: STALE.slow,
+        })
+        .catch(() => [] as DriverRow[]),
     ])
       .then(
         ([
           bundleRes,
-          tripsRes,
-          clientsRes,
-          txRes,
-          suppliersRes,
-          driversRes,
+          allTrips,
+          allClients,
+          allTx,
+          allSuppliers,
+          allDrivers,
         ]) => {
           if (bundleRes.error) {
             setError(bundleRes.error.message);
@@ -442,8 +477,6 @@ export default function ClientDetailScreen({
           }
           setProfileWarehouses(bundleRes.warehouses ?? []);
           setProfileContracts(bundleRes.contracts ?? []);
-          // get_trips_for_org already merges owner + supplier trips
-          const allTrips = tripsRes.error ? [] : (tripsRes.trips ?? []);
           setOrgTrips(allTrips);
           const clientDisplayName = (
             bundleRes.client?.name ||
@@ -455,13 +488,8 @@ export default function ClientDetailScreen({
           const normId = (id: string | null | undefined) =>
             id == null ? "" : String(id).trim().toLowerCase();
           const linkedOrgId = bundleRes.client?.linked_organization_id ?? null;
-          const linkedClientIdByOrgId = buildUniqueLinkedOrgIdMap(
-            clientsRes.error ? [] : (clientsRes.clients ?? []),
-          );
-          const allTx = txRes.error ? [] : (txRes.transactions ?? []);
-          setOrganizationClients(
-            clientsRes.error ? [] : (clientsRes.clients ?? []),
-          );
+          const linkedClientIdByOrgId = buildUniqueLinkedOrgIdMap(allClients);
+          setOrganizationClients(allClients);
           setAllOrgTransactions(allTx);
           // Include trips by client_id/name OR by any client transaction (so DUE shows even if trip.client_id is wrong)
           const tripIdsFromClientTx = new Set(
@@ -474,7 +502,7 @@ export default function ClientDetailScreen({
               )
               .map((tx) => normId(tx.trip_id)),
           );
-          const forClient = allTrips.filter((t) => {
+          const forClient = allTrips.filter((t: TripRow) => {
             const matchesDirect =
               t.client_id === clientId ||
               (clientDisplayName !== "" &&
@@ -491,10 +519,8 @@ export default function ClientDetailScreen({
             return matchesDirect || matchesTx || matchesLinkedOrg;
           });
           setTrips(forClient);
-          setSuppliers(
-            suppliersRes.error ? [] : (suppliersRes.suppliers ?? []),
-          );
-          setDrivers(driversRes.error ? [] : (driversRes.drivers ?? []));
+          setSuppliers(allSuppliers);
+          setDrivers(allDrivers);
           setClientRatingAvg(
             bundleRes.error ? null : averageScore(bundleRes.ratings ?? []),
           );

@@ -4,7 +4,7 @@
  */
 import { HomePageHeader } from "@/components/HomePageHeader";
 import { InboundProtocolPanel } from "@/components/InboundProtocolPanel";
-import { AppLoadingSplash } from "@/components/AppLoadingSplash";
+import { SceneLoadingSplash } from "@/components/chromeLoadingScreens";
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { EntityAvatar } from "@/components/EntityAvatar";
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
@@ -442,7 +442,7 @@ function NetworkScreenInner() {
 
   if (!orgId) {
     if (orgLoading) {
-      return <AppLoadingSplash variant="preparing" />;
+      return <SceneLoadingSplash variant="preparing" />;
     }
     if (organizationError) {
       return (
