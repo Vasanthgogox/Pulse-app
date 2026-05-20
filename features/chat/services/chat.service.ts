@@ -1125,25 +1125,9 @@ export async function getConversationsByDriverIds(
       };
     });
 
-  const primary = await supabase()
-    .from("trip_conversations")
-    .select(
-      `
-      *,
-      trips!inner ( trip_number, driver_display_trip_id, pickup_area, drop_location ),
-      trip_messages ( id, conversation_id, content, sender_role, sender_name, sender_user_id, created_at, is_read, message_type, metadata )
-    `,
-    )
-    .in("driver_id", driverIds)
-    .order("last_message_at", { ascending: false, nullsFirst: false })
-    .order("created_at", { ascending: false, referencedTable: "trip_messages" })
-    .limit(TRIP_MESSAGES_EMBED_RECENT, { referencedTable: "trip_messages" });
-
-  if (!primary.error) {
-    return mapRows((primary.data ?? []) as DriverChatConversationRow[], new Map(), new Map());
-  }
-
-  // Fallback for environments where embedded select can fail (e.g. RLS recursion / PostgREST 500).
+  // Fetch conversations and messages in separate parallel queries.
+  // Embedding trip_messages via PostgREST generates a LATERAL subquery per conversation row
+  // which causes statement timeouts when a driver has many trips.
   const { data: convRows, error: convErr } = await supabase()
     .from("trip_conversations")
     .select("id,organization_id,trip_id,party_type,party_name,client_id,supplier_id,driver_id,last_message_at,last_message_preview,unread_dispatcher_count,created_at,updated_at")
