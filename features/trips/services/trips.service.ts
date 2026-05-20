@@ -1471,7 +1471,7 @@ export async function updateTripAssignment(
     const hadPrev =
       (options.driverIdPrev != null && options.driverIdPrev !== "") ||
       (options.vehicleIdPrev != null && options.vehicleIdPrev !== "");
-    const { error: auditError } = await insertTripAssignmentAudit({
+    const { error: auditError, row: auditRow } = await insertTripAssignmentAudit({
       trip_id: tripId,
       event_type: hadPrev ? "reassignment" : "assignment",
       driver_id_prev: options.driverIdPrev ?? null,
@@ -1485,6 +1485,20 @@ export async function updateTripAssignment(
         "[trips] Assignment change log not recorded:",
         auditError.message,
       );
+    }
+    if (auditRow) {
+      const { postAssignmentUpdateAfterTripSave } = await import(
+        "@/features/chat/services/chatAssignmentBridge.service"
+      );
+      void postAssignmentUpdateAfterTripSave({
+        trip: updatedTrip,
+        updateData: data,
+        auditRow,
+      }).catch((e) => {
+        if (__DEV__) {
+          console.warn("[trips] Assignment chat broadcast failed:", e);
+        }
+      });
     }
   }
 

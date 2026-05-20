@@ -42,11 +42,11 @@ export interface InsertTripAssignmentAuditParams {
  */
 export async function insertTripAssignmentAudit(
   params: InsertTripAssignmentAuditParams
-): Promise<{ error: Error | null }> {
-  if (tripAssignmentAuditTableUnavailable) return { error: null };
+): Promise<{ error: Error | null; row: TripAssignmentAuditRow | null }> {
+  if (tripAssignmentAuditTableUnavailable) return { error: null, row: null };
 
   try {
-    const { error } = await supabase()
+    const { data, error } = await supabase()
       .from('trip_assignment_audit')
       .insert({
         trip_id: params.trip_id,
@@ -56,18 +56,22 @@ export async function insertTripAssignmentAudit(
         vehicle_id_prev: params.vehicle_id_prev ?? null,
         vehicle_id_new: params.vehicle_id_new ?? null,
         changed_by: params.changed_by ?? null,
-      } as Record<string, unknown>);
+      } as Record<string, unknown>)
+      .select(
+        "id, trip_id, event_type, driver_id_prev, driver_id_new, vehicle_id_prev, vehicle_id_new, changed_at, changed_by",
+      )
+      .single();
 
     if (error) {
       if (isTripAssignmentAuditTableMissing(error)) {
         tripAssignmentAuditTableUnavailable = true;
-        return { error: null };
+        return { error: null, row: null };
       }
-      return { error: new Error(error.message) };
+      return { error: new Error(error.message), row: null };
     }
-    return { error: null };
+    return { error: null, row: (data ?? null) as TripAssignmentAuditRow | null };
   } catch (e) {
-    return { error: e instanceof Error ? e : new Error(String(e)) };
+    return { error: e instanceof Error ? e : new Error(String(e)), row: null };
   }
 }
 

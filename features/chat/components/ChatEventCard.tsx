@@ -154,6 +154,8 @@ function inferStatusFromContent(content: string): keyof typeof STATUS_ICON_MAP {
   if (c.includes("completed")) return "completed";
   if (c.includes("cancelled")) return "cancelled";
   if (c.includes("assigned")) return "assigned";
+  if (c.includes("changed") || c.includes("reassigned") || c.includes("unassigned"))
+    return "assigned";
   return "default";
 }
 

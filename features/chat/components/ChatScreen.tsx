@@ -45,6 +45,8 @@ import {
   type TripEntry,
 } from "@/features/chat/store/useChatStore";
 import { setActiveTripMessageConversationId } from "@/features/chat/realtime/activeTripMessageScope";
+import { useAssignmentAuditNameMaps } from "@/features/chat/hooks/useAssignmentAuditNameMaps";
+import { mergeAssignmentAuditIntoTripMessages } from "@/features/chat/utils/assignmentAuditChatMessages.util";
 import { buildTripMessageListLayoutMeta } from "@/features/chat/utils/chatMessageListLayout";
 import { applyContractualHubPartyIsolation } from "@/features/chat/utils/contractHubPartyIsolation.util";
 import { dedupeTripStatusBroadcastsForLane } from "@/features/chat/utils/dedupeTripStatusBroadcastForLane.util";
@@ -63,6 +65,7 @@ import {
   getTripDisplayNumber,
   type TripRow,
 } from "@/features/trips/services/trips.service";
+import { useTripAssignmentAuditHistoryQuery } from "@/lib/queries/useTripsQuery";
 import { isAggregateTrip } from "@/lib/driverUtils";
 import type { ActiveTripSummary } from "@/lib/globalSync/types";
 import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
@@ -5439,9 +5442,27 @@ function TripConversationDetailLoaded({
     return () => { cancelled = true; };
   }, [tripEligibleForFeedback, liveConv.trip_id, liveConv.id]);
 
+  const tripCompose = useMemo(
+    () => composeTrips.find((t) => t.id === liveConv.trip_id) ?? null,
+    [composeTrips, liveConv.trip_id],
+  );
+
+  const { data: assignmentAuditRows = [] } = useTripAssignmentAuditHistoryQuery(
+    liveConv.trip_id,
+  );
+  const assignmentAuditMaps = useAssignmentAuditNameMaps(
+    liveConv.trip_organization_id ?? liveConv.organization_id ?? currentOrgId,
+    assignmentAuditRows,
+    {
+      driver_display_name:
+        tripCompose?.driver_display_name ?? liveTripEntry?.driverDisplayName ?? null,
+      vehicle_display_number: liveTripEntry?.vehicleDisplayNumber ?? null,
+    },
+  );
+
   const displayMessages = useMemo(
-    () =>
-      dedupeFeedbackRequestMessages(
+    () => {
+      const base = dedupeFeedbackRequestMessages(
         dedupeTripStatusBroadcastsForLane(
           mergeTripChatMessagesWithFeedbackRatings(
             liveConv.trip_id,
@@ -5450,8 +5471,32 @@ function TripConversationDetailLoaded({
           ),
           liveConv.id,
         ),
-      ).filter((m) => String(m.conversation_id ?? "") === liveConv.id),
-    [liveConv.trip_id, liveConv.id, liveConv.messages, tripRatings],
+      ).filter((m) => String(m.conversation_id ?? "") === liveConv.id);
+      return mergeAssignmentAuditIntoTripMessages(
+        base,
+        assignmentAuditRows,
+        liveConv.id,
+        liveConv.organization_id,
+        assignmentAuditMaps,
+        {
+          driver_display_name:
+            tripCompose?.driver_display_name ?? liveTripEntry?.driverDisplayName ?? null,
+          vehicle_display_number: liveTripEntry?.vehicleDisplayNumber ?? null,
+        },
+      );
+    },
+    [
+      liveConv.trip_id,
+      liveConv.id,
+      liveConv.messages,
+      liveConv.organization_id,
+      tripRatings,
+      assignmentAuditRows,
+      assignmentAuditMaps,
+      tripCompose?.driver_display_name,
+      liveTripEntry?.driverDisplayName,
+      liveTripEntry?.vehicleDisplayNumber,
+    ],
   );
 
   const scrollToEndCooldownRef = useRef(0);
@@ -5482,11 +5527,6 @@ function TripConversationDetailLoaded({
     acc[partyType] = sameTripConversations.find((conv) => conv.party_type === partyType) ?? null;
     return acc;
   }, {} as Record<ConversationPartyType, TripConversation | null>);
-
-  const tripCompose = useMemo(
-    () => composeTrips.find((t) => t.id === liveConv.trip_id) ?? null,
-    [composeTrips, liveConv.trip_id],
-  );
 
   const clientId =
     partyConversationMap.client?.client_id ?? tripCompose?.client_id ?? null;
@@ -5828,6 +5868,9 @@ function TripConversationDetailLoaded({
           isMobile={!isDesktop}
         />
       );
+    }
+    if (m.message_type === "assignment_update") {
+      return <ChatSystemEventCard message={m} isMobile={!isDesktop} />;
     }
     if (
       m.message_type === "system" ||

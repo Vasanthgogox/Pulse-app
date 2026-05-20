@@ -125,7 +125,27 @@ export function useTripStatusMutation(orgId: string | null) {
       if (orgId) qc.invalidateQueries({ queryKey: queryKeys.trips.finite(orgId) });
       if (orgId) qc.invalidateQueries({ queryKey: queryKeys.trips.all(orgId) });
       qc.invalidateQueries({ queryKey: queryKeys.trips.assignmentAuditRoot });
+      qc.invalidateQueries({
+        queryKey: ["q", "trips", "assignment-audit-history", tripId],
+      });
     },
+  });
+}
+
+/** Full assignment/reassignment history for one trip (Pulse chat timeline). */
+export function useTripAssignmentAuditHistoryQuery(tripId: string | null) {
+  return useQuery({
+    queryKey: ["q", "trips", "assignment-audit-history", tripId ?? ""],
+    queryFn: async () => {
+      const { getTripAssignmentAuditHistory } = await import(
+        "@/features/trips/services/trip-assignment-audit.service"
+      );
+      const res = await getTripAssignmentAuditHistory(tripId!, 30);
+      if (res.error) throw res.error;
+      return res.rows;
+    },
+    enabled: Boolean(tripId?.trim()),
+    staleTime: 60_000,
   });
 }
 
@@ -155,5 +175,6 @@ export function useInvalidateTrips() {
     qc.invalidateQueries({ queryKey: queryKeys.trips.finite(orgId) });
     qc.invalidateQueries({ queryKey: ['q', 'trips', orgId, 'infinite'] });
     qc.invalidateQueries({ queryKey: queryKeys.trips.assignmentAuditRoot });
+    qc.invalidateQueries({ queryKey: ["q", "trips", "assignment-audit-history"] });
   };
 }

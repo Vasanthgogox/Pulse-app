@@ -25,6 +25,7 @@ export function estimateTripMessageRowHeight(
     case "system":
     case "update":
     case "system_log":
+    case "assignment_update":
       return 128;
     case "location_log":
       return 248;
