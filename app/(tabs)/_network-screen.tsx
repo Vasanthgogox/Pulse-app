@@ -28,6 +28,11 @@ import {
 } from "@/features/network/constants/networkHubGrid";
 import { NetworkLoadsQuickCards } from "@/features/network/components/NetworkLoadsQuickCards";
 import { NetworkProfileMetricTile } from "@/features/network/components/NetworkProfileMetricTile";
+import {
+  NetworkProfileGlassPanel,
+  NetworkProfileModalChrome,
+} from "@/features/network/components/NetworkProfileGlassShell";
+import { LinearGradient } from "expo-linear-gradient";
 import { ContentErrorState } from "@/components/ContentErrorState";
 import { NetworkTabErrorBoundary } from "@/components/network/NetworkTabErrorBoundary";
 import { StoryReel } from "@/features/network/components/StoryReel";
@@ -1050,35 +1055,59 @@ function NetworkScreenInner() {
         onClose={() => setMutualModalTarget(null)}
         onOpenProfile={handleOpenMutualProfile}
       />
+      {selectedProfileNode ? (
       <Modal
-        visible={Boolean(selectedProfileNode)}
+        visible
         transparent
         animationType="fade"
         onRequestClose={() => setSelectedProfileNode(null)}
       >
         <View style={styles.profileModalBackdrop}>
           <Pressable style={styles.profileModalBackdropTouch} onPress={() => setSelectedProfileNode(null)} />
-          {selectedProfileNode ? (
             <View style={[styles.profileModalCard, isMobileLayout && styles.profileModalCardMobile]}>
-              <View style={styles.profileModalHead}>
-                <Text style={[styles.profileModalKicker, FinanceTxnTypography.columnTitle, styles.profileModalKickerOnDark]}>
-                  Network profile
-                </Text>
-                <Pressable
-                  onPress={() => setSelectedProfileNode(null)}
-                  style={({ pressed }) => [styles.profileModalClose, pressed && { opacity: 0.72 }]}
-                  hitSlop={8}
+              <NetworkProfileModalChrome>
+                <View style={styles.profileModalHead}>
+                  <LinearGradient
+                    colors={["rgba(15, 23, 42, 0.94)", "rgba(30, 41, 59, 0.9)"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={StyleSheet.absoluteFill}
+                  />
+                  <LinearGradient
+                    colors={["rgba(255,255,255,0.14)", "rgba(255,255,255,0)"]}
+                    start={{ x: 0.5, y: 0 }}
+                    end={{ x: 0.5, y: 0.55 }}
+                    style={styles.profileModalHeadSpecular}
+                    pointerEvents="none"
+                  />
+                  <Text
+                    style={[
+                      styles.profileModalKicker,
+                      FinanceTxnTypography.columnTitle,
+                      styles.profileModalKickerOnDark,
+                    ]}
+                  >
+                    Network profile
+                  </Text>
+                  <Pressable
+                    onPress={() => setSelectedProfileNode(null)}
+                    style={({ pressed }) => [
+                      styles.profileModalClose,
+                      pressed && { opacity: 0.72 },
+                    ]}
+                    hitSlop={8}
+                  >
+                    <X size={14} color={Theme.textOnPrimary} strokeWidth={2.4} />
+                  </Pressable>
+                </View>
+                <ScrollView
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={styles.profileModalScroll}
                 >
-                  <X size={14} color={Theme.textPrimaryDark} strokeWidth={2.6} />
-                </Pressable>
-              </View>
-              <ScrollView
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.profileModalScroll}
-              >
-                <View style={[styles.profileIdentityCardModern, styles.profileIdentityCardModal]}>
-                  <View style={styles.profileHero}>
+                  <View style={styles.profileIdentityCardModal}>
+                    <NetworkProfileGlassPanel style={styles.profileHeroGlass}>
+                      <View style={styles.profileHero}>
                     <View style={styles.profileAvatarRing}>
                       <EntityAvatar
                         name={selectedProfileNode.name}
@@ -1108,7 +1137,8 @@ function NetworkScreenInner() {
                         {selectedProfileNode.location}
                       </Text>
                     </View>
-                  </View>
+                      </View>
+                    </NetworkProfileGlassPanel>
 
                   <View style={styles.profileStatusRow}>
                     <NetworkProfileMetricTile
@@ -1224,19 +1254,36 @@ function NetworkScreenInner() {
                       </>
                     ) : null}
                     <Pressable
-                      style={({ pressed }) => [styles.profileSecondaryBtn, pressed && { opacity: 0.88 }]}
+                      style={({ pressed }) => [
+                        styles.profileSecondaryBtn,
+                        pressed && { opacity: 0.9 },
+                      ]}
                       onPress={() => void handleOpenDirectMessage()}
                     >
+                      <LinearGradient
+                        colors={["rgba(15, 23, 42, 0.96)", "rgba(26, 35, 126, 0.92)"]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={StyleSheet.absoluteFill}
+                      />
+                      <LinearGradient
+                        colors={["rgba(255,255,255,0.12)", "rgba(255,255,255,0)"]}
+                        start={{ x: 0.5, y: 0 }}
+                        end={{ x: 0.5, y: 0.5 }}
+                        style={styles.profileCtaSpecular}
+                        pointerEvents="none"
+                      />
                       <Mail size={14} color={Theme.textOnPrimary} strokeWidth={2.2} />
                       <Text style={styles.profileSecondaryBtnText}>Direct message</Text>
                     </Pressable>
                   </View>
                 </View>
-              </ScrollView>
+                </ScrollView>
+              </NetworkProfileModalChrome>
             </View>
-          ) : null}
         </View>
       </Modal>
+      ) : null}
     </View>
   );
 }
@@ -1532,7 +1579,7 @@ const styles = StyleSheet.create({
   },
   profileModalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(15,23,42,0.58)",
+    backgroundColor: "rgba(15, 23, 42, 0.42)",
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 16,
@@ -1545,29 +1592,43 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 420,
     maxHeight: "88%",
-    borderRadius: 18,
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: Theme.networkCardBorder,
-    backgroundColor: Theme.networkCardBackground,
+    borderColor: Theme.networkGlassBorder,
+    backgroundColor: "#F4F6FB",
     overflow: "hidden",
-    shadowColor: Theme.shadow,
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 6,
+    alignSelf: "center",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.16,
+    shadowRadius: 32,
+    shadowOffset: { width: 0, height: 16 },
+    elevation: 10,
+    ...Platform.select({
+      web: {
+        boxShadow:
+          "0 24px 64px rgba(15, 23, 42, 0.18), 0 0 0 0.5px rgba(255, 255, 255, 0.65) inset",
+      },
+      default: {},
+    }),
   },
   profileModalCardMobile: {
     maxHeight: "92%",
     maxWidth: "100%",
-    borderRadius: 16,
+    borderRadius: 20,
   },
   profileModalHead: {
-    minHeight: 44,
-    paddingHorizontal: 14,
+    minHeight: 48,
+    paddingHorizontal: 16,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: Theme.textPrimaryDark,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(255, 255, 255, 0.12)",
+    overflow: "hidden",
+    zIndex: 2,
+  },
+  profileModalHeadSpecular: {
+    ...StyleSheet.absoluteFillObject,
   },
   profileModalKicker: {
     fontSize: 9,
@@ -1575,29 +1636,35 @@ const styles = StyleSheet.create({
     color: Theme.textOnPrimary,
     letterSpacing: 1.2,
     textTransform: "uppercase",
+    zIndex: 1,
   },
   profileModalKickerOnDark: {
     color: Theme.textOnPrimary,
   },
   profileModalClose: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: "rgba(255, 255, 255, 0.16)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.28)",
+    zIndex: 1,
   },
   profileModalScroll: {
-    padding: 12,
-    paddingBottom: 18,
+    padding: 14,
+    paddingBottom: 20,
     gap: 10,
     alignItems: "stretch",
+    flexGrow: 0,
   },
   profileIdentityCardModal: {
-    borderRadius: 16,
-    padding: 16,
-    gap: 12,
-    shadowOpacity: 0.03,
+    gap: 10,
+    width: "100%",
+  },
+  profileHeroGlass: {
+    width: "100%",
   },
   profileHero: {
     width: "100%",
@@ -1606,32 +1673,34 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   profileAvatarRing: {
-    padding: 3,
-    borderRadius: 24,
-    backgroundColor: Theme.surface,
+    padding: 4,
+    borderRadius: 22,
+    backgroundColor: Theme.networkGlassSurface,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.networkGlassBorder,
     ...Platform.select({
       ios: {
-        shadowColor: Theme.primary,
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.14,
-        shadowRadius: 10,
+        shadowColor: "#6366F1",
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.12,
+        shadowRadius: 14,
       },
       android: { elevation: 4 },
+      web: {
+        boxShadow: "0 8px 24px rgba(99, 102, 241, 0.12)",
+      },
       default: {},
     }),
   },
   profileNameHero: {
     flex: 1,
     minWidth: 0,
-    fontSize: 14,
-    fontWeight: "600",
-    fontStyle: "italic",
+    fontSize: 15,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
     textAlign: "center",
     textTransform: "uppercase",
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
   profileLocationHero: {
     flex: 1,
@@ -1741,18 +1810,12 @@ const styles = StyleSheet.create({
   },
   profileIdentityCardModern: {
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.screenBackground,
+    borderWidth: 0,
+    backgroundColor: "transparent",
     padding: 14,
     alignItems: "center",
     gap: 8,
     width: "100%",
-    shadowColor: Theme.shadow,
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
   },
   profileAvatarLgModern: {
     width: 76,
@@ -2000,30 +2063,39 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
   profileSecondaryBtn: {
-    minHeight: 42,
-    borderRadius: 14,
-    backgroundColor: Theme.textPrimaryDark,
+    minHeight: 44,
+    borderRadius: 16,
+    overflow: "hidden",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.2)",
     ...Platform.select({
       ios: {
-        shadowColor: "#0F172A",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 8,
+        shadowColor: Theme.primary,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.22,
+        shadowRadius: 12,
       },
-      android: { elevation: 4 },
+      android: { elevation: 5 },
+      web: {
+        boxShadow: "0 8px 24px rgba(26, 35, 126, 0.28)",
+      },
       default: {},
     }),
+  },
+  profileCtaSpecular: {
+    ...StyleSheet.absoluteFillObject,
   },
   profileSecondaryBtnText: {
     fontSize: 11,
     fontWeight: "700",
     color: Theme.textOnPrimary,
     textTransform: "uppercase",
-    letterSpacing: 0.8,
+    letterSpacing: 0.9,
+    zIndex: 1,
   },
   profileRolePicker: {
     borderRadius: 12,

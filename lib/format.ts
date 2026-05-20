@@ -10,6 +10,25 @@ export function formatINR(value: number): string {
   return formatted.replace(/₹(?=\d)/g, '₹ ');
 }
 
+/** Compact INR for tight UI chips (e.g. ₹1.2L, ₹50K). */
+export function formatINRChip(value: number): string {
+  const n = Math.abs(Number(value));
+  if (!Number.isFinite(n) || n === 0) return "₹0";
+  if (n >= 1_00_00_000) {
+    const cr = n / 1_00_00_000;
+    return `₹${cr >= 10 ? Math.round(cr) : cr.toFixed(1)}Cr`;
+  }
+  if (n >= 1_00_000) {
+    const L = n / 1_00_000;
+    return `₹${L >= 10 ? Math.round(L) : L.toFixed(1)}L`;
+  }
+  if (n >= 1_000) {
+    const K = n / 1_000;
+    return `₹${K >= 100 ? Math.round(K) : K.toFixed(K >= 10 ? 0 : 1)}K`;
+  }
+  return formatINR(n).replace(/\s/g, "");
+}
+
 /** Short date for ledger e.g. "26 FEB". */
 export function formatLedgerDate(dateStr: string): string {
   const d = new Date(dateStr);
