@@ -13,6 +13,7 @@ import {
 } from "@/features/trips/services/tripAdjustments";
 import { tripNonSupplierOutflowTotal } from "@/features/trips/utils/tripManifestFreightCost";
 import { isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
+import { compareTripsByScheduleDesc } from "@/lib/dateRangePresets";
 import {
     isAggregateTrip,
     shouldShowAggregateTripKindPill,
@@ -1145,7 +1146,7 @@ export function TripsHubTableView({
           tripHubRevenue(a, currentOrganizationId, adjA)
         );
       }
-      return (b.created_at || "").localeCompare(a.created_at || "");
+      return compareTripsByScheduleDesc(a, b);
     });
     return sorted;
   }, [

@@ -49,6 +49,12 @@ import type { TripHubPartyMeta } from "@/features/trips/utils/tripHubPartyMeta";
 import { buildTripHubPartyMetaByTripId } from "@/features/trips/utils/tripHubPartyMeta";
 import { tripNonSupplierOutflowTotal } from "@/features/trips/utils/tripManifestFreightCost";
 import { canAccessTrips, getCapabilitiesFromProfile } from "@/lib/capabilities";
+import {
+  compareTripsByScheduleAsc,
+  compareTripsByScheduleDesc,
+  tripDayMatchesHubDateFilter,
+  type TripHubDateFilter,
+} from "@/lib/dateRangePresets";
 import { shouldShowAggregateTripKindPill } from "@/lib/driverUtils";
 import { formatLedgerDate } from "@/lib/format";
 import { useClientsQuery } from "@/lib/queries/useClientsQuery";
@@ -101,14 +107,7 @@ type SortBy =
   | "client_asc"
   | "client_desc";
 type PaymentFilter = "all" | "pending" | "partial" | "paid";
-type DateFilter =
-  | "all"
-  | "today"
-  | "yesterday"
-  | "tomorrow"
-  | "this_week"
-  | "this_month"
-  | "custom";
+type DateFilter = TripHubDateFilter;
 type ToolbarDateFilter = Exclude<DateFilter, "tomorrow">;
 
 type TripsListLayout = "cards" | "table";
@@ -159,91 +158,6 @@ function TripsMmtUnderlineTab({
       ) : null}
     </TouchableOpacity>
   );
-}
-
-/** Anchor instant for hub date presets: scheduled pickup → movement → completion → row created. */
-function tripHubDateFilterAnchorMs(t: TripRow): number | null {
-  const raw =
-    (t.pickup_date && String(t.pickup_date).trim()) ||
-    (t.started_at && String(t.started_at).trim()) ||
-    (t.completed_at && String(t.completed_at).trim()) ||
-    (t.created_at && String(t.created_at).trim()) ||
-    "";
-  if (!raw) return null;
-  const ymd = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (ymd) {
-    const y = Number(ymd[1]);
-    const mo = Number(ymd[2]) - 1;
-    const d = Number(ymd[3]);
-    const ms = new Date(y, mo, d, 12, 0, 0, 0).getTime();
-    return Number.isFinite(ms) ? ms : null;
-  }
-  const ms = new Date(raw).getTime();
-  return Number.isFinite(ms) ? ms : null;
-}
-
-function tripHubLocalDayStartMs(d: Date): number {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-}
-
-function tripMatchesHubDatePreset(
-  t: TripRow,
-  preset: DateFilter,
-  nowBase: Date,
-  customFromMs: number | null,
-  customToMs: number | null,
-): boolean {
-  if (preset === "all") return true;
-  const anchor = tripHubDateFilterAnchorMs(t);
-  if (anchor == null) return false;
-
-  const tripDayStart = tripHubLocalDayStartMs(new Date(anchor));
-
-  const todayStart = tripHubLocalDayStartMs(nowBase);
-  const todayEnd = todayStart + 24 * 60 * 60 * 1000;
-  const yesterdayStart = todayStart - 24 * 60 * 60 * 1000;
-  const tomorrowStart = todayEnd;
-  const tomorrowEnd = tomorrowStart + 24 * 60 * 60 * 1000;
-
-  const sod = new Date(
-    nowBase.getFullYear(),
-    nowBase.getMonth(),
-    nowBase.getDate(),
-  );
-  const dow = sod.getDay();
-  const weekStartDate = new Date(sod);
-  weekStartDate.setDate(sod.getDate() - dow);
-  const startOfWeek = weekStartDate.getTime();
-  const nextWeekStart = startOfWeek + 7 * 24 * 60 * 60 * 1000;
-
-  const monthStart = new Date(
-    nowBase.getFullYear(),
-    nowBase.getMonth(),
-    1,
-  ).getTime();
-  const nextMonthStart = new Date(
-    nowBase.getFullYear(),
-    nowBase.getMonth() + 1,
-    1,
-  ).getTime();
-
-  switch (preset) {
-    case "today":
-      return tripDayStart >= todayStart && tripDayStart < todayEnd;
-    case "yesterday":
-      return tripDayStart >= yesterdayStart && tripDayStart < todayStart;
-    case "tomorrow":
-      return tripDayStart >= tomorrowStart && tripDayStart < tomorrowEnd;
-    case "this_week":
-      return tripDayStart >= startOfWeek && tripDayStart < nextWeekStart;
-    case "this_month":
-      return tripDayStart >= monthStart && tripDayStart < nextMonthStart;
-    case "custom":
-      if (customFromMs == null || customToMs == null) return true;
-      return anchor >= customFromMs && anchor < customToMs;
-    default:
-      return true;
-  }
 }
 
 /** Aligns list + Intake / In motion hub counts with All / Asset / Aggregate (same pill logic as hub cards). */
@@ -577,23 +491,33 @@ export default function TripsScreen() {
     return new Set<string>();
   }, [tripIdsWithDocumentsRaw]);
 
-  const tripsForHubMetricCounts = useMemo(
-    () =>
-      tripsByStatus.filter((t) =>
-        tripMatchesSupplyFilter(
-          t,
-          supplyFilter,
-          tripKindPillMetaByTripId.get(t.id),
-          currentOrganization?.id,
-        ),
+  const tripsForHubMetricCounts = useMemo(() => {
+    let list = tripsByStatus.filter((t) =>
+      tripMatchesSupplyFilter(
+        t,
+        supplyFilter,
+        tripKindPillMetaByTripId.get(t.id),
+        currentOrganization?.id,
       ),
-    [
-      tripsByStatus,
-      supplyFilter,
-      tripKindPillMetaByTripId,
-      currentOrganization?.id,
-    ],
-  );
+    );
+    if (dateRangeFilter !== "all") {
+      list = list.filter((t) =>
+        tripDayMatchesHubDateFilter(t, dateRangeFilter, {
+          customFrom: customDateFrom,
+          customTo: customDateTo,
+        }),
+      );
+    }
+    return list;
+  }, [
+    tripsByStatus,
+    supplyFilter,
+    tripKindPillMetaByTripId,
+    currentOrganization?.id,
+    dateRangeFilter,
+    customDateFrom,
+    customDateTo,
+  ]);
 
   const metricCounts = useMemo(() => {
     const counts = countTripsByMetric(
@@ -685,25 +609,11 @@ export default function TripsScreen() {
     }
 
     if (dateRangeFilter !== "all") {
-      const nowBase = new Date();
-      let customFromMs: number | null = null;
-      let customToMs: number | null = null;
-      if (dateRangeFilter === "custom" && customDateFrom && customDateTo) {
-        const [fy, fm, fd] = customDateFrom.split("-").map(Number);
-        const [ty, tm, td] = customDateTo.split("-").map(Number);
-        customFromMs = new Date(fy, fm - 1, fd).getTime();
-        customToMs =
-          new Date(ty, tm - 1, td).getTime() + 24 * 60 * 60 * 1000;
-      }
-
       list = list.filter((t) =>
-        tripMatchesHubDatePreset(
-          t,
-          dateRangeFilter,
-          nowBase,
-          customFromMs,
-          customToMs,
-        ),
+        tripDayMatchesHubDateFilter(t, dateRangeFilter, {
+          customFrom: customDateFrom,
+          customTo: customDateTo,
+        }),
       );
     }
 
@@ -733,15 +643,9 @@ export default function TripsScreen() {
     sorted.sort((a, b) => {
       switch (sortBy) {
         case "date_desc":
-          return (
-            new Date(b.pickup_date || b.created_at).getTime() -
-            new Date(a.pickup_date || a.created_at).getTime()
-          );
+          return compareTripsByScheduleDesc(a, b);
         case "date_asc":
-          return (
-            new Date(a.pickup_date || a.created_at).getTime() -
-            new Date(b.pickup_date || b.created_at).getTime()
-          );
+          return compareTripsByScheduleAsc(a, b);
         case "revenue_desc":
         case "revenue_asc": {
           const orgSort = currentOrganization?.id ?? null;
