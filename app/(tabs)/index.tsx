@@ -1,9 +1,6 @@
 import { Redirect } from "expo-router";
 
-/**
- * Tabs root should always land on a primary list tab.
- * Keep Ops Agent on its own hidden route to avoid accidental fallback.
- */
+/** Tabs root redirects to the primary trips tab. */
 export default function TabsIndexRedirect() {
   return <Redirect href="/(tabs)/trips" />;
 }

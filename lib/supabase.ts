@@ -186,7 +186,7 @@ export function hasSupabaseConfig(): boolean {
   return Boolean(supabaseUrl && supabaseAnonKey);
 }
 
-/** Base URL for the Supabase project (same as used by the client). Use for building Edge Function URLs, e.g. ops-agent-chat. */
+/** Base URL for the Supabase project (same as used by the client). Use for building Edge Function URLs. */
 export function getSupabaseBaseUrl(): string | undefined {
   return supabaseUrl ?? undefined;
 }

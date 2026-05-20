@@ -333,8 +333,6 @@
   "filterByCategory": "FILTER BY CATEGORY",
   "customersLabel": "Customers",
   "suppliersLabel": "Suppliers",
-  "opsAgent": "Ops Agent",
-  "askAnything": "Ask anything",
   "switchToLightMode": "Switch to light mode",
   "switchToDarkMode": "Switch to dark mode",
   "createClient": "Create client",

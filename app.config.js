@@ -48,10 +48,6 @@ let supabaseAnonKey =
   envVars.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
   envVars.VITE_SUPABASE_ANON_KEY ||
   '';
-let geminiApiKey =
-  localVars.EXPO_PUBLIC_GEMINI_API_KEY ||
-  envVars.EXPO_PUBLIC_GEMINI_API_KEY ||
-  '';
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.warn(
@@ -67,10 +63,6 @@ if (!supabaseUrl || !supabaseAnonKey) {
     // no-op
   }
 }
-
-// Security: do not embed Gemini key in production builds (EAS). Use proxy only; key stays server-side.
-const isProductionBuild = process.env.EAS_BUILD === 'true';
-const safeGeminiApiKey = isProductionBuild ? undefined : (geminiApiKey || undefined);
 
 const config = require('./app.json');
 
@@ -107,8 +99,6 @@ module.exports = {
     extra: {
       supabaseUrl,
       supabaseAnonKey,
-      geminiApiKey: safeGeminiApiKey,
-      opsAgentProxyUrl: process.env.EXPO_PUBLIC_OPS_AGENT_PROXY_URL || undefined,
       // Use app/+not-found.tsx — built-in Unmatched.js crashes when async-loaded (StyleSheet undefined).
       router: {
         notFound: false,
@@ -118,7 +108,6 @@ module.exports = {
     android: {
       ...config.expo?.android,
       permissions: ['android.permission.INTERNET'],
-      // Resize window when keyboard opens so Ops chat input and content stay visible (fixes "only keyboard shown" on Android)
       softwareKeyboardLayoutMode: 'resize',
     },
     plugins: [

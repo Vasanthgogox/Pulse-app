@@ -1,6 +1,6 @@
 /**
  * Demo layout: 3 tabs (FISCAL | TRIPS | NETWORK) + floating bottom dock (web + native).
- * Ops Agent via floating icon. Dock hides on scroll (native + mobile web); fixed to viewport on mobile web.
+ * Dock hides on scroll (native + mobile web); fixed to viewport on mobile web.
  */
 import React, { useEffect } from 'react';
 import { Tabs, useRouter } from 'expo-router';
@@ -69,11 +69,6 @@ function DemoCustomTabBar(
     if (tabRoute) saveLastTabRoute(tabRoute);
     resetBarVisible();
   }, [routeName, resetBarVisible]);
-
-  // Ops Agent is full-screen with back button — no bottom nav
-  if (routeName === 'ops-agent') {
-    return null;
-  }
 
   const shellStyle = [
     styles.tabBarWrap,
@@ -193,7 +188,6 @@ function TabsWithProfileDrawer({ isDesktopWeb }: { isDesktopWeb: boolean }) {
       }}
     >
       <Tabs.Screen name="index" options={{ title: 'Home' }} />
-      <Tabs.Screen name="ops-agent" options={{ href: null }} />
       <Tabs.Screen name="finance" options={{ title: 'Fiscal' }} />
       <Tabs.Screen name="trips" options={{ title: 'Trips' }} />
       <Tabs.Screen name="network" options={{ title: 'Home' }} />
