@@ -222,13 +222,52 @@ export async function getMyBidForPost(
 
 /**
  * Pending Pulse bids on LOAD posts the owner org published from those indents.
- * Merged with direct_quotes in Load Center "bids received" (posts.source_indent_id).
+ * @deprecated Prefer getIndentOfferCountsForOwnerIndents — do not sum with direct_quotes (double-counts Pulse bids).
  */
 export async function getStoryBidCountsForOwnerIndents(
   ownerOrgId: string,
   indentIds: string[],
 ): Promise<{ error: Error | null; counts: Record<string, number> }> {
+  const res = await getIndentOfferCountsForOwnerIndents(ownerOrgId, indentIds);
+  return res;
+}
+
+/**
+ * Unique pending offers per indent for Give Load badges.
+ * Pulse story bids upsert direct_quotes for the same bidder — count distinct bidder orgs only.
+ */
+export async function getIndentOfferCountsForOwnerIndents(
+  ownerOrgId: string,
+  indentIds: string[],
+): Promise<{ error: Error | null; counts: Record<string, number> }> {
   if (indentIds.length === 0) return { error: null, counts: {} };
+
+  const biddersByIndent = new Map<string, Set<string>>();
+  const trackBidder = (indentId: string, bidderOrgId: string) => {
+    if (!indentId || !bidderOrgId) return;
+    let set = biddersByIndent.get(indentId);
+    if (!set) {
+      set = new Set();
+      biddersByIndent.set(indentId, set);
+    }
+    set.add(bidderOrgId);
+  };
+
+  const { data: quotes, error: qErr } = await supabase()
+    .from('direct_quotes')
+    .select('indent_id, bidder_organization_id, status')
+    .in('indent_id', indentIds);
+
+  if (qErr) return { error: new Error(qErr.message), counts: {} };
+
+  for (const row of quotes ?? []) {
+    const status = String((row as { status?: string }).status ?? '').toLowerCase();
+    if (status && status !== 'pending') continue;
+    trackBidder(
+      (row as { indent_id: string }).indent_id,
+      (row as { bidder_organization_id: string }).bidder_organization_id,
+    );
+  }
 
   const { data: posts, error: pErr } = await supabase()
     .from('posts')
@@ -239,26 +278,30 @@ export async function getStoryBidCountsForOwnerIndents(
 
   if (pErr) return { error: new Error(pErr.message), counts: {} };
 
-  const rows = (posts ?? []) as { id: string; source_indent_id: string | null }[];
-  const postIds = rows.map((r) => r.id);
-  const indentByPost = new Map(rows.map((r) => [r.id, r.source_indent_id ?? '']));
+  const postRows = (posts ?? []) as { id: string; source_indent_id: string | null }[];
+  const postIds = postRows.map((r) => r.id);
+  const indentByPost = new Map(postRows.map((r) => [r.id, r.source_indent_id ?? '']));
 
-  if (postIds.length === 0) return { error: null, counts: {} };
+  if (postIds.length > 0) {
+    const { data: bids, error: bErr } = await supabase()
+      .from('bids')
+      .select('post_id, bidder_organization_id')
+      .in('post_id', postIds)
+      .eq('status', 'pending');
 
-  const { data: bids, error: bErr } = await supabase()
-    .from('bids')
-    .select('post_id')
-    .in('post_id', postIds)
-    .eq('status', 'pending');
+    if (bErr) return { error: new Error(bErr.message), counts: {} };
 
-  if (bErr) return { error: new Error(bErr.message), counts: {} };
+    for (const row of bids ?? []) {
+      const pid = (row as { post_id: string }).post_id;
+      const iid = indentByPost.get(pid);
+      if (!iid) continue;
+      trackBidder(iid, (row as { bidder_organization_id: string }).bidder_organization_id);
+    }
+  }
 
   const counts: Record<string, number> = {};
-  for (const row of bids ?? []) {
-    const pid = (row as { post_id: string }).post_id;
-    const iid = indentByPost.get(pid);
-    if (!iid) continue;
-    counts[iid] = (counts[iid] ?? 0) + 1;
+  for (const [indentId, bidders] of biddersByIndent) {
+    counts[indentId] = bidders.size;
   }
   return { error: null, counts };
 }
