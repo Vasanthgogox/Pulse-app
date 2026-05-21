@@ -28,6 +28,7 @@ import {
     useInvalidateIndents,
     useMyDirectQuotesQuery,
 } from "@/lib/queries/useIndentsQuery";
+import { useInvalidatePosts } from "@/lib/queries/usePostsQuery";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
@@ -141,6 +142,7 @@ export function IndentDetailScreen({
   const orgId = currentOrganization?.id ?? null;
   const queryClient = useQueryClient();
   const invalidateIndents = useInvalidateIndents();
+  const invalidatePosts = useInvalidatePosts(orgId);
   const [indent, setIndent] = useState<IndentRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -299,7 +301,10 @@ export function IndentDetailScreen({
         );
       }
       setSelectedQuoteId(null);
-      if (orgId) invalidateIndents(orgId);
+      if (orgId) {
+        invalidateIndents(orgId);
+        invalidatePosts();
+      }
       queryClient.invalidateQueries({
         queryKey: ["indents", indentId, "direct-quotes"],
       });
@@ -322,6 +327,7 @@ export function IndentDetailScreen({
     quotes,
     orgId,
     invalidateIndents,
+    invalidatePosts,
     queryClient,
     load,
     refetchQuotes,

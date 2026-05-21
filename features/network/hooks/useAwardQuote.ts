@@ -10,6 +10,7 @@ import {
   type IndentRow,
 } from "@/features/indents";
 import { useIndentDirectQuotesQuery, useInvalidateIndents } from "@/lib/queries";
+import { useInvalidatePosts } from "@/lib/queries/usePostsQuery";
 import { type QueryClient } from "@tanstack/react-query";
 import { Alert } from "react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -42,6 +43,7 @@ export function useAwardQuote({
   invalidateIndents,
   onSuccess,
 }: UseAwardQuoteParams): AwardQuoteResult {
+  const invalidatePosts = useInvalidatePosts(orgId);
   const [currentLoad, setCurrentLoad] = useState<IndentRow | null>(null);
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
   const [awarding, setAwarding] = useState(false);
@@ -191,6 +193,7 @@ export function useAwardQuote({
       setSelectedQuoteId(null);
       setCurrentLoad(null);
       invalidateIndents(orgId);
+      invalidatePosts();
       onSuccess("Load awarded — supplier can assign and deploy from Claimed.");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error.";
@@ -211,6 +214,7 @@ export function useAwardQuote({
     awardModalQuotes,
     queryClient,
     invalidateIndents,
+    invalidatePosts,
     onSuccess,
   ]);
 
