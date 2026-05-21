@@ -3,6 +3,10 @@
  * Service-layer validation: single pass over inputs before insert.
  */
 import { getClientById } from "@/features/clients/services/clients.service";
+import {
+  deactivatePostsForIndent,
+  isIndentTerminalForStory,
+} from "@/features/network/services/indentStoryPosts.service";
 import { syncDomainRows } from "@/lib/cache/domainSync";
 import { mergeDeltaRows } from "@/lib/cache/mergeDelta";
 import type { DeltaResponse } from "@/lib/cache/deltaTypes";
@@ -740,6 +744,20 @@ export async function updateIndent(
     .maybeSingle();
 
   if (error) return { error: new Error(error.message), indent: null };
+
+  if (
+    updates.status !== undefined &&
+    isIndentTerminalForStory(updates.status)
+  ) {
+    const { error: storyErr } = await deactivatePostsForIndent(indentId);
+    if (storyErr && __DEV__) {
+      console.warn(
+        '[indents] updateIndent: deactivate linked stories failed:',
+        storyErr.message,
+      );
+    }
+  }
+
   return { error: null, indent: (data ?? null) as IndentRow | null };
 }
 
@@ -850,5 +868,14 @@ export async function cancelIndent(
     .eq("id", indentId);
 
   if (error) return { error: new Error(error.message) };
+
+  const { error: storyErr } = await deactivatePostsForIndent(indentId);
+  if (storyErr && __DEV__) {
+    console.warn(
+      "[indents] cancelIndent: deactivate linked stories failed:",
+      storyErr.message,
+    );
+  }
+
   return { error: null };
 }

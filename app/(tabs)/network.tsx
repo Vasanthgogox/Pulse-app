@@ -1,11 +1,13 @@
-import { LazyRouteScreen } from '@/components/LazyRouteScreen';
+import { lazy, Suspense } from 'react';
+import { SceneLoadingSplash } from '@/components/chromeLoadingScreens';
 
-/** Thin route — Suspense splash while Metro bundles _network-screen. */
+const NetworkScreen = lazy(() => import('./_network-screen'));
+
+/** Thin route — module-level lazy so Suspense never re-fires on tab remount. */
 export default function NetworkTab() {
   return (
-    <LazyRouteScreen
-      loader={() => import('./_network-screen')}
-      message="Loading network…"
-    />
+    <Suspense fallback={<SceneLoadingSplash variant="preparing" message="Loading network…" />}>
+      <NetworkScreen />
+    </Suspense>
   );
 }

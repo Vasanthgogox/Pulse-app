@@ -17,6 +17,9 @@ import {
 } from "@/contexts/DemoTabBarScrollContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { preloadFinanceWarmup } from "@/lib/preloadFinanceWarmup";
+import { preloadTabScreen } from "@/lib/preloadRoutes";
+import { useQueryClient } from "@tanstack/react-query";
 import { useIntegratedChat } from "@/features/chat/contexts/IntegratedChatContext";
 import { useTripChat } from "@/features/chat/contexts/TripChatContext";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
@@ -436,12 +439,15 @@ function MobileFooterSlackCluster({
 function AnimatedNavPill({
   active,
   onPress,
+  onHoverInExtra,
   icon,
   title,
   subtitle,
 }: {
   active: boolean;
   onPress?: () => void;
+  /** Web: prefetch lazy tab chunk / finance queries before click. */
+  onHoverInExtra?: () => void;
   icon: React.ComponentProps<typeof FontAwesome5>["name"];
   title: string;
   subtitle?: string;
@@ -488,6 +494,7 @@ function AnimatedNavPill({
       onPress={onPress}
       onHoverIn={() => {
         if (!active) hoverProgress.value = withSpring(1, springCfg);
+        onHoverInExtra?.();
       }}
       onHoverOut={() => {
         if (!active) hoverProgress.value = withSpring(0, springCfg);
@@ -540,6 +547,16 @@ export function DemoTabBar({
   const pathname = usePathname();
   const { profile } = useAuth();
   const { currentOrganization } = useOrganization();
+  const queryClient = useQueryClient();
+  const orgId = currentOrganization?.id ?? null;
+  const warmTabOnHover = (tab: DemoTabId) => {
+    if (tab === "finance" || tab === "trips" || tab === "network") {
+      preloadTabScreen(tab);
+      if (tab === "finance" && orgId) {
+        preloadFinanceWarmup(queryClient, orgId);
+      }
+    }
+  };
   const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
   /** Operation shelf row ids the user has opened in the Alert Registry (session-only; badge excludes them). */
   const [seenRegistryOperationIds, setSeenRegistryOperationIds] = useState<
@@ -557,7 +574,6 @@ export function DemoTabBar({
   const mobileNetworkAnchorRef = useRef<View | null>(null);
   /** Worklet-readable: sub-dock must fully hide when false (don’t let bar visibility opacity show it on other tabs). */
   const networkDockOpenSV = useSharedValue(false);
-  const orgId = currentOrganization?.id ?? null;
   const {
     notificationCount: registryNotificationCount,
     refreshRegistry,
@@ -977,6 +993,7 @@ export function DemoTabBar({
                 key={`${item.id}-${item.title}`}
                 active={item.active}
                 onPress={() => onTabChange(item.id)}
+                onHoverInExtra={() => warmTabOnHover(item.id)}
                 icon={item.icon}
                 title={item.title}
                 subtitle={item.subtitle}

@@ -1408,9 +1408,9 @@ export function FinanceScreen() {
 
   const orgId = currentOrganization?.id ?? null;
 
+  /** Show UI when org is ready and ledger is cached or fetched; entity lists can hydrate after. */
   const financeDataLoading =
-    isOrgLoading ||
-    (entitiesLoading && ledgerLoading && ledgerTransactions === null);
+    isOrgLoading || (ledgerTransactions === null && ledgerLoading);
 
   if (financeDataLoading) {
     return <SceneLoadingSplash variant="preparing" />;
