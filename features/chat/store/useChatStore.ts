@@ -879,9 +879,53 @@ function convFromEntry(
   };
 }
 
-/** Compute totalUnread from parties map. */
+/** Sum unread across all party lanes (internal / DB parity). */
 function sumUnread(parties: Partial<Record<ConversationPartyType, PartyConv>>): number {
   return Object.values(parties).reduce((s, p) => s + (p?.unreadCount ?? 0), 0);
+}
+
+/**
+ * Hub list + FAB preview lanes. private_trip defaults to driver, but surfaces lanes
+ * that hold unread (e.g. client ledger toasts) so badges match visible rows.
+ */
+export function partyLanesForHubEntry(
+  entry: Pick<TripEntry, "parties" | "chatFlow">,
+): [ConversationPartyType, PartyConv][] {
+  const rows = Object.entries(entry.parties).filter(
+    ([, p]) => p != null,
+  ) as [ConversationPartyType, PartyConv][];
+  if (entry.chatFlow !== "private_trip") return rows;
+
+  const unreadLanes = rows.filter(([, p]) => (p?.unreadCount ?? 0) > 0);
+  if (unreadLanes.length > 0) return unreadLanes;
+
+  const driverLane = rows.filter(([pt]) => pt === "driver");
+  if (driverLane.length > 0) return driverLane;
+
+  const clientLane = rows.filter(([pt]) => pt === "client");
+  if (clientLane.length > 0) return clientLane;
+
+  return rows;
+}
+
+/** FAB / tab badge total — only lanes the hub actually lists. */
+export function sumHubVisibleUnread(entry: Pick<TripEntry, "parties" | "chatFlow">): number {
+  return partyLanesForHubEntry(entry).reduce((s, [, p]) => s + (p?.unreadCount ?? 0), 0);
+}
+
+function inboundMessageCountsAsHubUnread(row: Partial<TripMessageRow>): boolean {
+  const role = String(row.sender_role ?? "");
+  if (role === "dispatcher" || role === "system") return false;
+  const mt = String(row.message_type ?? "");
+  if (
+    mt === "ledger_event" ||
+    mt === "ledger" ||
+    mt === "payment" ||
+    mt === "ledger_update"
+  ) {
+    return false;
+  }
+  return true;
 }
 
 /** Apply delivery/read patch to one message in a trip entry (pure). */
@@ -1019,7 +1063,7 @@ function mergeHistoryRowsIntoTripEntry(
       ? false
       : (entry.skipEventStreamHydration ?? true),
   };
-  next.totalUnread = sumUnread(next.parties);
+  next.totalUnread = sumHubVisibleUnread(next);
   if (event_stream.length > 0) {
     const last = event_stream[event_stream.length - 1];
     next.lastEventAt = last.created_at;
@@ -1137,7 +1181,7 @@ function ingestBootstrapConversations(
   }
 
   for (const entry of Object.values(trips)) {
-    entry.totalUnread = sumUnread(entry.parties);
+    entry.totalUnread = sumHubVisibleUnread(entry);
 
     if (entry.event_stream.length > 0) {
       const last             = entry.event_stream[entry.event_stream.length - 1];
@@ -1563,12 +1607,15 @@ export const useChatStore = create<ChatState>()(
         updated = applyFeedbackLaneStatusOnIncomingRow(updated, partyType, row);
       } else {
         const party = entry.parties[partyType];
-        if (party) {
+        if (party && inboundMessageCountsAsHubUnread(row)) {
           updated.parties = {
             ...entry.parties,
             [partyType]: { ...party, unreadCount: party.unreadCount + 1 },
           };
-          updated.totalUnread = entry.totalUnread + 1;
+          updated.totalUnread = sumHubVisibleUnread({
+            ...entry,
+            parties: updated.parties,
+          });
         }
       }
 
@@ -1671,7 +1718,7 @@ export const useChatStore = create<ChatState>()(
           [tripId]: {
             ...entry,
             parties:     updatedParties,
-            totalUnread: sumUnread(updatedParties),
+            totalUnread: sumHubVisibleUnread({ ...entry, parties: updatedParties }),
           },
         },
       });
@@ -2127,7 +2174,7 @@ export const useChatStore = create<ChatState>()(
       let next: TripEntry = {
         ...entry,
         parties,
-        totalUnread: sumUnread(parties),
+        totalUnread: sumHubVisibleUnread({ ...entry, parties }),
       };
 
       const lmAt =
@@ -2207,7 +2254,7 @@ export const useChatStore = create<ChatState>()(
         indent_id:         entry.indentId ?? conv.indent_id,
       });
 
-      entry.totalUnread = sumUnread(entry.parties);
+      entry.totalUnread = sumHubVisibleUnread(entry);
 
       const last = entry.event_stream[entry.event_stream.length - 1];
       if (last) {

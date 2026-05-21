@@ -26,6 +26,8 @@ import {
   useChatStore,
   tripEntryToMeta,
   previewText,
+  partyLanesForHubEntry,
+  sumHubVisibleUnread,
   type TripEntry,
   type PartyConv,
 } from './useChatStore';
@@ -44,12 +46,6 @@ import { dedupeTripStatusBroadcastsForLane } from '../utils/dedupeTripStatusBroa
 let _snapshotCache: TripConversation[] | null = null;
 let _tripsSnapshot: Record<string, TripEntry> | null = null;
 
-function partyLanesForTripEntry(entry: TripEntry): [ConversationPartyType, PartyConv][] {
-  const rows = Object.entries(entry.parties) as [ConversationPartyType, PartyConv][];
-  if (entry.chatFlow === "private_trip") return rows.filter(([pt]) => pt === "driver");
-  return rows;
-}
-
 function _buildSnapshot(): TripConversation[] {
   const { trips } = useChatStore.getState();
   if (trips === _tripsSnapshot && _snapshotCache !== null) return _snapshotCache;
@@ -57,7 +53,7 @@ function _buildSnapshot(): TripConversation[] {
 
   const result: TripConversation[] = [];
   for (const entry of Object.values(trips)) {
-    for (const [pt, party] of partyLanesForTripEntry(entry)) {
+    for (const [pt, party] of partyLanesForHubEntry(entry)) {
       result.push(_convFromEntry(entry, pt, party));
     }
   }
@@ -363,7 +359,9 @@ export function useConversationsByTrip(tripId: string | null): TripConversation[
       const s     = useChatStore.getState();
       const entry = s.trips[tripId];
       if (!entry) return prevRef.current.length === 0 ? prevRef.current : (prevRef.current = []);
-      const next = partyLanesForTripEntry(entry).map(([pt, party]) => _convFromEntry(entry, pt, party));
+      const next = partyLanesForHubEntry(entry).map(([pt, party]) =>
+        _convFromEntry(entry, pt, party),
+      );
       const prev = prevRef.current;
       if (next.length === prev.length && next.every((c, i) => c.id === prev[i]?.id)) return prev;
       prevRef.current = next;
@@ -420,8 +418,10 @@ export function useTotalUnreadCount(): number {
   return useSyncExternalStore(
     _subscribe,
     () => {
-      const next = Object.values(useChatStore.getState().trips)
-        .reduce((s, entry) => s + entry.totalUnread, 0);
+      const next = Object.values(useChatStore.getState().trips).reduce(
+        (s, entry) => s + sumHubVisibleUnread(entry),
+        0,
+      );
       if (next === prevRef.current) return prevRef.current;
       prevRef.current = next;
       return next;
