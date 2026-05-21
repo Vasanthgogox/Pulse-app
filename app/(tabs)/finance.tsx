@@ -1,15 +1,17 @@
-import { LazyRouteScreen } from '@/components/LazyRouteScreen';
+import { lazy, Suspense } from 'react';
+import { SceneLoadingSplash } from '@/components/chromeLoadingScreens';
 
-/** Thin route — Suspense splash while Metro bundles FinanceScreen. */
+const FinanceScreen = lazy(() =>
+  import('@/features/finance/components/FinanceScreen').then((m) => ({
+    default: m.FinanceScreen,
+  }))
+);
+
+/** Thin route — module-level lazy so Suspense never re-fires on tab remount. */
 export default function FinanceTab() {
   return (
-    <LazyRouteScreen
-      loader={() =>
-        import('@/features/finance/components/FinanceScreen').then((m) => ({
-          default: m.FinanceScreen,
-        }))
-      }
-      message="Loading fiscal…"
-    />
+    <Suspense fallback={<SceneLoadingSplash variant="preparing" message="Loading fiscal…" />}>
+      <FinanceScreen />
+    </Suspense>
   );
 }
