@@ -402,7 +402,7 @@ async function mergeQuotedIndentsForSupplier(
   const { data: myQuotes, error: quoteErr } = await supabase()
     .from("direct_quotes")
     .select("indent_id")
-    .eq("supplier_organization_id", orgId);
+    .eq("bidder_organization_id", orgId);
   if (quoteErr || !myQuotes?.length) return baseIndents;
 
   const quotedIndentIds = Array.from(
