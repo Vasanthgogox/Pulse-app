@@ -98,7 +98,7 @@ app/(tabs)/trips.tsx
 - RLS enforced at DB level — no `service_role` key in app
 - Fetch wrapper: 25s timeout, 1 retry on network error
 - Env vars loaded via `app.config.js` from `.env` (see `.env.example`)
-- Edge Functions: `supabase/functions/ops-agent-chat/` (Gemini AI), `supabase/functions/check-user-by-phone/`
+- Edge Functions: `supabase/functions/check-user-by-phone/` (and others as deployed; no ops-agent-chat)
 - 212 migrations in `supabase/migrations/` — always add incremental files, never edit existing ones
 
 **Required env vars** (all `EXPO_PUBLIC_` prefix except local DB strings):

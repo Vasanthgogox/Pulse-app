@@ -48,7 +48,7 @@ export default function SignIn() {
     password_reset?: string | string[];
   }>();
   const isOnline = useIsOnline();
-  const { user, signIn, signInWithGoogle } = useAuth();
+  const { user, signIn, signInWithGoogle, restoreError, clearRestoreError } = useAuth();
   const [webViewportWidth, setWebViewportWidth] = useState<number>(() => {
     if (Platform.OS !== 'web') return 0;
     if (typeof window === 'undefined') return 1280;
@@ -127,6 +127,7 @@ export default function SignIn() {
 
   const handleSignIn = async () => {
     setSignInError(null);
+    clearRestoreError();
     setWaitingForAuthState(false);
     if (!isOnline) {
       setSignInError('Connect to the internet to sign in.');
@@ -167,6 +168,7 @@ export default function SignIn() {
 
   const handleGoogleSignIn = async () => {
     setSignInError(null);
+    clearRestoreError();
     setWaitingForAuthState(false);
     if (!isOnline) {
       setSignInError("Connect to the internet to sign in.");
@@ -254,7 +256,11 @@ export default function SignIn() {
         {passwordResetBanner ? (
           <Text style={styles.successBanner}>Password updated. Sign in with your new password.</Text>
         ) : null}
-        {signInError ? <Text style={styles.errorText}>{signInError}</Text> : null}
+        {signInError || restoreError ? (
+          <Text style={styles.errorText}>
+            {signInError ?? restoreError?.message ?? 'Could not restore your session. Sign in again.'}
+          </Text>
+        ) : null}
 
         <View style={styles.rowBetween}>
           <TouchableOpacity

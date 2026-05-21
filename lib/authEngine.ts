@@ -201,9 +201,15 @@ export function logAuth(
     if (devLogBuffer.length > DEV_LOG_BUFFER_MAX) {
       devLogBuffer = devLogBuffer.slice(-DEV_LOG_BUFFER_MAX);
     }
+    return;
   }
-  // Production: forward to Sentry/Datadog when wired up
-  // logger[severity](payload);
+
+  // Production: error/warn only — structured signal until Sentry/Datadog is wired.
+  if (severity === "error") {
+    console.error("[AuthGuard]", payload);
+  } else if (severity === "warn") {
+    console.warn("[AuthGuard]", payload);
+  }
 }
 
 export function logAuthError(
@@ -213,6 +219,19 @@ export function logAuthError(
 ) {
   const message = err instanceof Error ? err.message : String(err);
   logAuth(event, { error: message, ...extra }, "error");
+}
+
+/** Map unknown failures to a typed AuthError for UI and monitoring. */
+export function authErrorFromUnknown(
+  err: unknown,
+  code: AuthErrorCode = "UNKNOWN",
+): AuthError {
+  if (err instanceof AuthError) return err;
+  if (err instanceof TimeoutError) {
+    return new AuthError("NETWORK_TIMEOUT", err.message, err);
+  }
+  const message = err instanceof Error ? err.message : String(err);
+  return new AuthError(code, message || code, err);
 }
 
 // ---------------------------------------------------------------------------

@@ -27,6 +27,7 @@ import {
   freezeInDev,
   isCircuitBreakerTripped,
   isForceExpiredSessionEnabled,
+  authErrorFromUnknown,
   logAuth,
   logAuthError,
   mergeAuthProfiles,
@@ -65,6 +66,9 @@ interface AuthContextType {
   loading: boolean;
   /** @deprecated Use `status === "expired"` */
   sessionExpired: boolean;
+  /** Set when cold-start session restore fails; cleared on sign-in / refresh / sign-out. */
+  restoreError: AuthError | null;
+  clearRestoreError: () => void;
   refreshSession: () => Promise<void>;
   signIn: (email: string, password: string, keepSignedIn?: boolean) => Promise<{ error: Error | null }>;
   signInWithGoogle: (keepSignedIn?: boolean) => Promise<{ error: Error | null }>;
@@ -110,6 +114,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [roleVerified, setRoleVerified] = useState(false);
   const [status, setStatus] = useState<AuthStatus>("restoring");
+  const [restoreError, setRestoreError] = useState<AuthError | null>(null);
+
+  const clearRestoreError = useCallback(() => setRestoreError(null), []);
 
   const signOutRequestedRef = useRef(false);
   const authAttemptRef = useRef(0);
@@ -261,99 +268,96 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Proceed with restore even if first-launch clear fails
       }
 
-      authService
-        .getSession()
-        .then(async (session) => {
+      try {
+        const session = await authService.getSession();
+        if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
+        if (session) {
+          const keep = await getKeepSignedIn();
           if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
-          try {
-            if (session) {
-              const keep = await getKeepSignedIn();
-              if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
-              if (!keep) {
-                signOutRequestedRef.current = true;
-                await authService.signOut();
+          if (!keep) {
+            signOutRequestedRef.current = true;
+            await authService.signOut();
+            if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
+            setUser(null);
+            setProfile(null);
+            setRoleVerified(false);
+            setStatus("unauthenticated");
+            logAuth("restore_signed_out_keep_off", { uid: session.user.uid });
+          } else {
+            let nextUser = session.user;
+            let nextProfile = session.profile;
+            let verifiedDbProfile: authService.AuthProfile | null = null;
+            try {
+              const refreshed = await withTimeout(
+                authService.refreshSession(),
+                AUTH_TIMEOUT_MS,
+              );
+              if (mounted && isCurrentAuthAttempt(initAttemptId) && refreshed) {
+                nextUser = refreshed.user;
+                nextProfile = refreshed.profile;
+                verifiedDbProfile = await getVerifiedDbProfile(refreshed.user.uid);
                 if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
-                setUser(null);
-                setProfile(null);
-                setRoleVerified(false);
-                setStatus("unauthenticated");
-                logAuth("restore_signed_out_keep_off", { uid: session.user.uid });
-              } else {
-                let nextUser = session.user;
-                let nextProfile = session.profile;
-                let verifiedDbProfile: authService.AuthProfile | null = null;
-                try {
-                  const refreshed = await withTimeout(
-                    authService.refreshSession(),
-                    AUTH_TIMEOUT_MS,
-                  );
-                  if (mounted && isCurrentAuthAttempt(initAttemptId) && refreshed) {
-                    nextUser = refreshed.user;
-                    nextProfile = refreshed.profile;
-                    verifiedDbProfile = await getVerifiedDbProfile(refreshed.user.uid);
-                    if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
-                    if (verifiedDbProfile) {
-                      nextProfile = mergeAuthProfiles(refreshed.profile, verifiedDbProfile);
-                      setRoleVerified(true);
-                    } else {
-                      setRoleVerified(false);
-                    }
-                  } else if (mounted && isCurrentAuthAttempt(initAttemptId)) {
-                    verifiedDbProfile = await getVerifiedDbProfile(session.user.uid);
-                    if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
-                    if (verifiedDbProfile) {
-                      nextProfile = mergeAuthProfiles(session.profile, verifiedDbProfile);
-                      setRoleVerified(true);
-                    } else {
-                      setRoleVerified(false);
-                    }
-                  }
-                } catch (e) {
-                  if (mounted && isCurrentAuthAttempt(initAttemptId)) {
-                    setRoleVerified(false);
-                    if (e instanceof TimeoutError) {
-                      logAuthError("restore_refresh_timeout", e);
-                    }
-                  }
-                }
-                if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
-                if (!verifiedDbProfile) {
-                  setUser(nextUser);
-                  setProfile(freezeInDev(authProfileToUserProfile(nextProfile)));
+                if (verifiedDbProfile) {
+                  nextProfile = mergeAuthProfiles(refreshed.profile, verifiedDbProfile);
+                  setRoleVerified(true);
+                } else {
                   setRoleVerified(false);
-                  setStatus("authenticated");
-                  logAuth("restore_profile_degraded", { uid: nextUser.uid }, "warn");
-                  return;
                 }
-                const finalProfile = freezeInDev(authProfileToUserProfile(nextProfile));
-                setUser(nextUser);
-                setProfile(finalProfile);
-                setStatus("authenticated");
-                resetCircuitBreaker();
-                logAuth("restore_completed", {
-                  uid: nextUser.uid,
-                  role: nextProfile.role,
-                });
+              } else if (mounted && isCurrentAuthAttempt(initAttemptId)) {
+                verifiedDbProfile = await getVerifiedDbProfile(session.user.uid);
+                if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
+                if (verifiedDbProfile) {
+                  nextProfile = mergeAuthProfiles(session.profile, verifiedDbProfile);
+                  setRoleVerified(true);
+                } else {
+                  setRoleVerified(false);
+                }
               }
-            } else {
-              // No stored session — unauthenticated, not "expired" (nothing expired).
-              clearAuthState(false);
-              logAuth("restore_no_session");
+            } catch (e) {
+              if (mounted && isCurrentAuthAttempt(initAttemptId)) {
+                setRoleVerified(false);
+                if (e instanceof TimeoutError) {
+                  logAuthError("restore_refresh_timeout", e);
+                }
+              }
             }
-          } finally {
-            if (mounted && isCurrentAuthAttempt(initAttemptId)) {
-              setStatus((prev) => (prev === "restoring" ? "unauthenticated" : prev));
-              setupAuthSubscription();
+            if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
+            setRestoreError(null);
+            if (!verifiedDbProfile) {
+              setUser(nextUser);
+              setProfile(freezeInDev(authProfileToUserProfile(nextProfile)));
+              setRoleVerified(false);
+              setStatus("authenticated");
+              logAuth("restore_profile_degraded", { uid: nextUser.uid }, "warn");
+              return;
             }
+            const finalProfile = freezeInDev(authProfileToUserProfile(nextProfile));
+            setUser(nextUser);
+            setProfile(finalProfile);
+            setStatus("authenticated");
+            resetCircuitBreaker();
+            logAuth("restore_completed", {
+              uid: nextUser.uid,
+              role: nextProfile.role,
+            });
           }
-        })
-        .catch(() => {
-          if (mounted && isCurrentAuthAttempt(initAttemptId)) {
-            clearAuthState(false);
-            logAuth("restore_error");
-          }
+        } else {
+          setRestoreError(null);
+          clearAuthState(false);
+          logAuth("restore_no_session");
+        }
+      } catch (err) {
+        if (mounted && isCurrentAuthAttempt(initAttemptId)) {
+          logAuthError("restore_error", err);
+          setRestoreError(authErrorFromUnknown(err));
+          clearAuthState(false);
+        }
+      } finally {
+        if (mounted && isCurrentAuthAttempt(initAttemptId)) {
+          setStatus((prev) => (prev === "restoring" ? "unauthenticated" : prev));
           setupAuthSubscription();
-        });
+        }
+      }
     })();
 
     return () => {
@@ -401,6 +405,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const signInAttemptId = beginAuthAttempt();
     const result = await authService.signInWithPassword(email, password);
     if (!result.error) {
+      setRestoreError(null);
       setStatus("authenticated");
       resetCircuitBreaker();
       await setKeepSignedIn(keepSignedIn);
@@ -414,6 +419,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const signInAttemptId = beginAuthAttempt();
     const result = await authService.signInWithGoogle();
     if (!result.error) {
+      setRestoreError(null);
       setStatus("authenticated");
       resetCircuitBreaker();
       await setKeepSignedIn(keepSignedIn);
@@ -456,6 +462,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       skipOrgCreation,
     });
     if (!result.error) {
+      setRestoreError(null);
       await refreshSessionInternal();
     }
     return wrapActionResult(result);
@@ -486,6 +493,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfile(finalProfile);
         setRoleVerified(true);
         setStatus("authenticated");
+        setRestoreError(null);
         resetCircuitBreaker();
         logAuth("refresh_completed", {
           uid: session.user.uid,
@@ -499,6 +507,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logAuthError("refresh_session_timeout", e);
       }
       if (isCurrentAuthAttempt(refreshAttemptId)) {
+        setRestoreError(authErrorFromUnknown(e));
         clearAuthState(true);
       }
     }
@@ -527,6 +536,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       logAuthError("sign_out_error", e);
     }
+    setRestoreError(null);
     clearAuthState(false);
   }, [clearAuthState]);
 
@@ -541,6 +551,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         status,
         loading: status === "restoring",
         sessionExpired: status === "expired",
+        restoreError,
+        clearRestoreError,
         refreshSession,
         signIn,
         signInWithGoogle,

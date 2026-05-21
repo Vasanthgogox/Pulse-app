@@ -8,7 +8,7 @@
 **Q** is a multi-tenant logistics SaaS platform for Indian freight operations. Dispatchers manage trips, clients, suppliers, drivers, vehicles, and finances. Drivers get a separate app for trip control, chat, documents, and wallet. Includes a marketplace (load board/indents) and social network layer.
 
 - **Domain:** Logistics / freight dispatch / fleet management
-- **Stack:** React Native 0.81 + Expo SDK 54 + Expo Router 6 (file-based routing) · TypeScript 5.9 · TanStack Query v5 · Supabase (Postgres + Auth + Realtime + Storage) · Gemini AI (ops agent)
+- **Stack:** React Native 0.81 + Expo SDK 54 + Expo Router 6 (file-based routing) · TypeScript 5.9 · TanStack Query v5 · Supabase (Postgres + Auth + Realtime + Storage) · Gemini (POD OCR / document chat, client-side)
 - **Targets:** iOS, Android, Web (single codebase)
 
 ---
@@ -80,7 +80,6 @@ Screen → useXQuery (lib/queries/) → XService (features/domain/services/) →
 | `features/finance/services/finance.service.ts` | `getDoubleEntryFromLedgerRow`, `getProfileImageBatch`, ledger aggregation |
 | `features/drivers/services/drivers.service.ts` | Driver CRUD, invite, phone lookup |
 | `features/invoicing/services/invoicing.service.ts` | Invoice generation, PDF export |
-| `features/ops-agent/services/opsAgent.service.ts` | Gemini AI chat, vision, structured extraction (69 KB) |
 | `features/network/services/` | Posts, bids, follows (social layer) |
 
 ### Query Hooks (lib/queries/)
@@ -310,7 +309,6 @@ services/ (top-level)
 
 ## 9. RISKS & COMPLEX AREAS
 
-- **`features/ops-agent/services/opsAgent.service.ts` (69 KB)** — Gemini AI integration; handles vision, structured extraction, chat history. Complex prompt engineering and multi-modal logic.
 - **`features/finance/hooks/useFinanceLedger.ts` (341 lines)** — Aggregates ledger + trips + drivers + filtering + sorting in a single hook. Dense client-side data processing.
 - **`features/trips/services/trips.service.ts` (67 KB)** — Largest service; handles cross-org trips (org-as-client, org-as-supplier), visibility rules, and complex join queries.
 - **`contexts/AuthContext.tsx` (462 lines)** — Multi-path session restore (SecureStore/AsyncStorage/server), "keep signed in" logic, role verification, session expiry handling. Race conditions possible on cold start.
@@ -337,6 +335,6 @@ services/ (top-level)
 
 **DB schema (key tables):** `trips` (full lifecycle, cross-org support), `transactions` (double-entry ledger), `profiles` (extends auth.users), `organizations`+`org_members`, `drivers/clients/suppliers/vehicles` (per-org entities), `indents` (marketplace), `network_posts/bids/follows` (social), `chat_messages` (realtime), `trip_documents/pod_documents` (storage).
 
-**Complex areas:** `opsAgent.service.ts` (69 KB Gemini AI), `trips.service.ts` (67 KB with cross-org visibility), `useFinanceLedger.ts` (client-side ledger aggregation), `AuthContext.tsx` (multi-path session restore). Platform-specific map and PDF implementations use `.native.tsx`/`.web.tsx` file splits.
+**Complex areas:** `trips.service.ts` (67 KB with cross-org visibility), `useFinanceLedger.ts` (client-side ledger aggregation), `AuthContext.tsx` (multi-path session restore). Platform-specific map and PDF implementations use `.native.tsx`/`.web.tsx` file splits.
 
 **Change guide:** New API call → `features/[domain]/services/`. New screen → `app/[path].tsx` + `lib/routes.ts`. New query → `lib/queries/use[X]Query.ts` + `lib/queryKeys.ts`. Shared UI → `components/`. Feature UI → `features/[domain]/components/`. Access rule → `lib/capabilities.ts`. DB change → `migrations/` + `npm run db:push`.
