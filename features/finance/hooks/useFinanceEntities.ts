@@ -9,7 +9,6 @@ import { type DriverOffer, type DriverRow } from "@/features/drivers/services/dr
 import type { IndentRow } from "@/features/indents/services/indents.service";
 import { type SupplierRow } from "@/features/suppliers/services/suppliers.service";
 import { getTripDisplayNumber, type TripRow } from "@/features/trips/services/trips.service";
-import { getAvailablePeriodOptions } from "@/features/vehicles/pnl";
 import { type VehicleRow } from "@/features/vehicles/services/vehicles.service";
 import { formatLedgerDate } from "@/lib/format";
 import type { ConnectionRequestRow } from "@/services/connectionRequestsService";
@@ -35,6 +34,8 @@ export interface UseFinanceEntitiesArgs {
   canAccess: boolean;
   /** No longer triggers refetch; kept for API compatibility. Cache handles staleness. */
   refreshKey?: number;
+  /** Loads vehicles/pnl period helpers only when the garage tab needs them. */
+  includeGaragePeriodOptions?: boolean;
 }
 
 export interface UseFinanceEntitiesResult {
@@ -64,6 +65,7 @@ export interface UseFinanceEntitiesResult {
 export function useFinanceEntities({
   organizationId,
   canAccess,
+  includeGaragePeriodOptions = false,
 }: UseFinanceEntitiesArgs): UseFinanceEntitiesResult {
   const orgId = canAccess ? organizationId : null;
 
@@ -188,10 +190,23 @@ export function useFinanceEntities({
     [supplierRows]
   );
 
-  const garagePeriodOptions = useMemo(
-    () => getAvailablePeriodOptions(tripRows),
-    [tripRows]
-  );
+  const [garagePeriodOptions, setGaragePeriodOptions] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!includeGaragePeriodOptions || tripRows.length === 0) {
+      setGaragePeriodOptions([]);
+      return;
+    }
+    let cancelled = false;
+    void import("@/features/vehicles/pnl").then(({ getAvailablePeriodOptions }) => {
+      if (!cancelled) {
+        setGaragePeriodOptions(getAvailablePeriodOptions(tripRows));
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [includeGaragePeriodOptions, tripRows]);
 
   return {
     clients,

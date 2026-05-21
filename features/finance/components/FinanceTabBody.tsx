@@ -1,18 +1,14 @@
 /**
- * Lazy router for finance sub-tab bodies — only the active tab chunk loads.
+ * Sub-tab bodies: cash is eager (default path); other tabs lazy-load on first visit.
  */
-import { SceneLoadingSplash } from "@/components/chromeLoadingScreens";
+import { LazySuspenseNullFallback } from "@/components/LazySuspenseFallback";
+import { FinanceCashTab } from "./finance-tabs/FinanceCashTab";
 import { lazy, Suspense, type ComponentType } from "react";
 import type { FinanceTabBodyProps } from "./FinanceTabBody.types";
 import type { FinanceSubTab } from "../types";
 
 export type { FinanceTabBodyProps } from "./FinanceTabBody.types";
 
-const FinanceCashTab = lazy(() =>
-  import("./finance-tabs/FinanceCashTab").then((m) => ({
-    default: m.FinanceCashTab,
-  })),
-);
 const FinanceCustomersTab = lazy(() =>
   import("./finance-tabs/FinanceCustomersTab").then((m) => ({
     default: m.FinanceCustomersTab,
@@ -34,11 +30,9 @@ const FinanceDriversTab = lazy(() =>
   })),
 );
 
-const TAB_COMPONENTS: Record<
-  FinanceSubTab,
-  ComponentType<FinanceTabBodyProps>
+const LAZY_TAB_COMPONENTS: Partial<
+  Record<FinanceSubTab, ComponentType<FinanceTabBodyProps>>
 > = {
-  cash: FinanceCashTab,
   customers: FinanceCustomersTab,
   suppliers: FinanceSuppliersTab,
   garage: FinanceGarageTab,
@@ -46,13 +40,15 @@ const TAB_COMPONENTS: Record<
 };
 
 export function FinanceTabBody(props: FinanceTabBodyProps) {
-  const TabPanel = TAB_COMPONENTS[props.financeSubTab];
+  if (props.financeSubTab === "cash") {
+    return <FinanceCashTab {...props} />;
+  }
+
+  const TabPanel = LAZY_TAB_COMPONENTS[props.financeSubTab];
+  if (!TabPanel) return null;
+
   return (
-    <Suspense
-      fallback={
-        <SceneLoadingSplash variant="preparing" message="Loading tab…" />
-      }
-    >
+    <Suspense fallback={<LazySuspenseNullFallback />}>
       <TabPanel {...props} />
     </Suspense>
   );

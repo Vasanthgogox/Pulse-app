@@ -18,7 +18,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { LedgerReportModal } from "@/features/finance/components/LedgerReportModal";
+import { TripsLedgerExportModalGate } from "@/features/trips/components/TripsLedgerExportModalGate";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import {
     TripsHubBentoMetrics,
@@ -2095,7 +2095,8 @@ export default function TripsScreen() {
           />
         </View>
       ) : null}
-      <LedgerReportModal
+      <TripsLedgerExportModalGate
+        active={tripLedgerExportOpen}
         visible={tripLedgerExportOpen}
         onClose={() => setTripLedgerExportOpen(false)}
         transactions={[]}

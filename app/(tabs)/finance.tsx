@@ -1,16 +1,16 @@
-import { lazy, Suspense } from 'react';
-import { SceneLoadingSplash } from '@/components/chromeLoadingScreens';
+import { LazySuspenseNullFallback } from "@/components/LazySuspenseFallback";
+import { lazy, Suspense } from "react";
 
 const FinanceScreen = lazy(() =>
-  import('@/features/finance/components/FinanceScreen').then((m) => ({
+  import("@/features/finance/components/FinanceScreen").then((m) => ({
     default: m.FinanceScreen,
-  }))
+  })),
 );
 
-/** Thin route — module-level lazy so Suspense never re-fires on tab remount. */
+/** Tab chrome is already visible — avoid a second full-screen splash. */
 export default function FinanceTab() {
   return (
-    <Suspense fallback={<SceneLoadingSplash variant="preparing" message="Loading fiscal…" />}>
+    <Suspense fallback={<LazySuspenseNullFallback />}>
       <FinanceScreen />
     </Suspense>
   );

@@ -1,6 +1,13 @@
-import { IndentDetailScreen } from "@/features/indents";
+import { LazySuspenseInlineFallback } from "@/components/LazySuspenseFallback";
 import { useSafeBack } from "@/lib/useSafeBack";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { lazy, Suspense } from "react";
+
+const IndentDetailScreen = lazy(() =>
+  import("@/features/indents/components/IndentDetailScreen").then((m) => ({
+    default: m.IndentDetailScreen,
+  })),
+);
 
 export default function IndentDetailRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -9,14 +16,16 @@ export default function IndentDetailRoute() {
   const indentId = typeof id === "string" ? id : (id?.[0] ?? "");
 
   return (
-    <IndentDetailScreen
-      indentId={indentId}
-      onBack={safeBack}
-      onEditPress={(indent) =>
-        router.push(
-          `/create-indent?draftId=${encodeURIComponent(indent.id)}` as import("expo-router").Href,
-        )
-      }
-    />
+    <Suspense fallback={<LazySuspenseInlineFallback message="Loading indent…" />}>
+      <IndentDetailScreen
+        indentId={indentId}
+        onBack={safeBack}
+        onEditPress={(indent) =>
+          router.push(
+            `/create-indent?draftId=${encodeURIComponent(indent.id)}` as import("expo-router").Href,
+          )
+        }
+      />
+    </Suspense>
   );
 }

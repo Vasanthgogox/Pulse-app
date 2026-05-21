@@ -1,85 +1,27 @@
+import { LazySuspenseNullFallback } from "@/components/LazySuspenseFallback";
+import { lazy, Suspense } from "react";
+import { Platform, useWindowDimensions } from "react-native";
 import type { FinanceTabBodyProps } from "../FinanceTabBody.types";
-import { FinanceKanbanTab } from "../FinanceKanbanTab";
-import { styles } from "../FinanceScreen.styles";
-import { LedgerTab } from "../LedgerTab";
-import { Platform, Text, View, useWindowDimensions } from "react-native";
+import { FinanceCashLedgerPanel } from "./FinanceCashLedgerPanel";
 
-export function FinanceCashTab({
-  organizationId: orgId,
-  ledgerLoading,
-  ledgerTransactions,
-  filteredLedgerForDisplay,
-  ledgerRefreshKey,
-  onLedgerRowSelect,
-  getVehicleNumberForTripId,
-  tripOptions: trips,
-  tripDetailsMap,
-  onLedgerMissionChange,
-  onAddTransactionPress,
-  clientRows,
-  supplierRows,
-  driverRows,
-  tripPartyMap,
-  profileImages,
-  linkedOrgDisplayMap,
-  onTripSelect,
-}: FinanceTabBodyProps) {
+const FinanceCashKanbanPanel = lazy(() =>
+  import("./FinanceCashKanbanPanel").then((m) => ({
+    default: m.FinanceCashKanbanPanel,
+  })),
+);
+
+/** Cash tab: ledger eager on phone/tablet; kanban lazy on web desktop only. */
+export function FinanceCashTab(props: FinanceTabBodyProps) {
   const { width: windowWidth } = useWindowDimensions();
   const isWebLargeScreen = Platform.OS === "web" && windowWidth >= 1024;
 
-  if (isWebLargeScreen) {
-    return (
-      <View style={styles.tableBodyWrap}>
-        {ledgerLoading && ledgerTransactions === null ? (
-          <Text style={styles.ledgerLoading}>Loading…</Text>
-        ) : (
-          <FinanceKanbanTab
-            transactions={filteredLedgerForDisplay}
-            getVehicleNumberForTripId={getVehicleNumberForTripId}
-            tripDetailsMap={tripDetailsMap}
-            clientRows={clientRows}
-            supplierRows={supplierRows}
-            driverRows={driverRows}
-            tripPartyMap={tripPartyMap}
-            linkedOrgDisplayMap={linkedOrgDisplayMap}
-            onRowSelect={(row) => {
-              if (row.trip_id) onTripSelect(row.trip_id);
-            }}
-            profileImages={profileImages}
-          />
-        )}
-      </View>
-    );
+  if (!isWebLargeScreen) {
+    return <FinanceCashLedgerPanel {...props} />;
   }
 
   return (
-    <View style={styles.tableBodyWrap}>
-      {ledgerLoading && ledgerTransactions === null ? (
-        <Text style={styles.ledgerLoading}>Loading…</Text>
-      ) : (
-        <LedgerTab
-          organizationId={orgId}
-          refreshKey={ledgerRefreshKey}
-          transactions={
-            ledgerTransactions !== null ? filteredLedgerForDisplay : undefined
-          }
-          viewMode="transaction"
-          showFiscalSubTabs={false}
-          onRowSelect={onLedgerRowSelect}
-          onEntitySelect={() => {}}
-          getVehicleNumberForTripId={getVehicleNumberForTripId}
-          tripOptions={trips}
-          tripDetailsMap={tripDetailsMap}
-          onMissionChange={onLedgerMissionChange}
-          onAddTransactionPress={onAddTransactionPress}
-          clientRows={clientRows}
-          supplierRows={supplierRows}
-          driverRows={driverRows}
-          driverProfileImageUrls={profileImages}
-          tripPartyMap={tripPartyMap}
-          linkedOrgDisplayMap={linkedOrgDisplayMap}
-        />
-      )}
-    </View>
+    <Suspense fallback={<LazySuspenseNullFallback />}>
+      <FinanceCashKanbanPanel {...props} />
+    </Suspense>
   );
 }

@@ -13,9 +13,8 @@
  */
 import type { AuthUser } from "@/features/auth/services/auth.service";
 import * as authService from "@/features/auth/services/auth.service";
-import { isFirstLaunchDone, setFirstLaunchDone } from "@/lib/firstLaunch";
+import { clearStaleAuthOnFirstLaunch } from "@/lib/firstLaunch";
 import { getKeepSignedIn, setKeepSignedIn } from "@/lib/keepSignedInPreference";
-import { supabase } from "@/lib/supabase";
 import { clearAllRealtimeChannels } from "@/lib/realtimeRegistry";
 import {
   type AuthStatus,
@@ -122,6 +121,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const authAttemptRef = useRef(0);
   const listenerSeqRef = useRef(0);
   const unsubscribeRef = useRef<(() => void) | undefined>(undefined);
+  /** True while cold-start restore runs — ignore spurious SDK sign-out events. */
+  const restoringRef = useRef(true);
 
   // ---- sequence guards ----
 
@@ -205,10 +206,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
+    restoringRef.current = true;
 
     // Dev toggle: skip restore and jump straight to expired
     if (isForceExpiredSessionEnabled()) {
       logAuth("dev_force_expired_session", {}, "warn");
+      restoringRef.current = false;
       clearAuthState(true);
       return;
     }
@@ -239,6 +242,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 role: merged.role,
               });
             } else {
+              if (restoringRef.current) {
+                logAuth("auth_state_signed_out_ignored_during_restore");
+                return;
+              }
               const wasRequested = signOutRequestedRef.current;
               signOutRequestedRef.current = false;
               clearAuthState(!wasRequested);
@@ -247,6 +254,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           } catch (err) {
             if (!mounted || !isCurrentListenerSeq(seqId)) return;
             logAuthError("auth_state_callback_error", err);
+            if (restoringRef.current) {
+              logAuth("auth_state_callback_error_ignored_during_restore");
+              return;
+            }
             await forceSignOutOnAuthFailure("auth_state_callback_error");
           }
         });
@@ -255,15 +266,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
+    // Subscribe before restore so token-refresh races during getUser() are recovered.
+    setupAuthSubscription();
+
     (async () => {
       const initAttemptId = beginAuthAttempt();
       try {
-        const firstLaunchDone = await isFirstLaunchDone();
+        await clearStaleAuthOnFirstLaunch();
         if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
-        if (!firstLaunchDone) {
-          await supabase().auth.signOut({ scope: "local" });
-          await setFirstLaunchDone();
-        }
       } catch {
         // Proceed with restore even if first-launch clear fails
       }
@@ -287,6 +297,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             let nextUser = session.user;
             let nextProfile = session.profile;
             let verifiedDbProfile: authService.AuthProfile | null = null;
+            // Hydrate from persisted session immediately so HMR/reload never flashes sign-in
+            // while the network refresh runs.
+            setUser(nextUser);
+            setProfile(freezeInDev(authProfileToUserProfile(nextProfile)));
+            setStatus("authenticated");
             try {
               const refreshed = await withTimeout(
                 authService.refreshSession(),
@@ -353,15 +368,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           clearAuthState(false);
         }
       } finally {
+        restoringRef.current = false;
         if (mounted && isCurrentAuthAttempt(initAttemptId)) {
           setStatus((prev) => (prev === "restoring" ? "unauthenticated" : prev));
-          setupAuthSubscription();
         }
       }
     })();
 
     return () => {
       mounted = false;
+      restoringRef.current = false;
       unsubscribeRef.current?.();
       unsubscribeRef.current = undefined;
     };

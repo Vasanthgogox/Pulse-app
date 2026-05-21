@@ -1,8 +1,7 @@
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
-import {
-  CounterpartyProfileSystemCard,
-  type ProfileContract,
-  type ProfileWarehouse,
+import type {
+  ProfileContract,
+  ProfileWarehouse,
 } from "@/components/CounterpartyProfileSystemCard";
 import { DatePresetPillBar } from "@/components/DatePresetPillBar";
 import { DateRangePickerModal } from "@/components/DateRangePickerModal";
@@ -20,12 +19,9 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { getDriversByOrganization, type DriverRow } from "@/features/drivers";
 import {
-    getTransactionsByOrganization,
-    LedgerReportModal,
-    SharedLedgerContent,
-    type LedgerRow,
-} from "@/features/finance";
-import { LedgerTransactionListView } from "@/features/finance/components/LedgerTransactionListView";
+  getTransactionsByOrganization,
+  type LedgerRow,
+} from "@/features/finance/services/finance.service";
 import {
   buildFinancialRowDataForLedgerRow,
   resolveLedgerPartyName,
@@ -78,7 +74,29 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { LazySuspenseNullFallback } from "@/components/LazySuspenseFallback";
+
+const SharedLedgerContent = lazy(() =>
+  import("@/features/finance/components/SharedLedgerContent").then((m) => ({
+    default: m.SharedLedgerContent,
+  })),
+);
+const LedgerReportModal = lazy(() =>
+  import("@/features/finance/components/LedgerReportModal").then((m) => ({
+    default: m.LedgerReportModal,
+  })),
+);
+const LedgerTransactionListView = lazy(() =>
+  import("@/features/finance/components/LedgerTransactionListView").then((m) => ({
+    default: m.LedgerTransactionListView,
+  })),
+);
+const CounterpartyProfileSystemCard = lazy(() =>
+  import("@/components/CounterpartyProfileSystemCard").then((m) => ({
+    default: m.CounterpartyProfileSystemCard,
+  })),
+);
 import {
     Alert,
     Animated,
@@ -2454,6 +2472,7 @@ export default function ClientDetailScreen({
         {/* Tab: Cash Flow — same card layout as Finance Cash page, only transactions relevant to this client */}
         {detailSubTab === "cash" && (
           <View style={styles.cashSection}>
+            <Suspense fallback={<LazySuspenseNullFallback />}>
             <LedgerTransactionListView
               transactions={cashFlowTransactionRows}
               onRowPress={(id) => {
@@ -2506,6 +2525,7 @@ export default function ClientDetailScreen({
                 );
               }}
             />
+            </Suspense>
           </View>
         )}
 
@@ -2517,6 +2537,7 @@ export default function ClientDetailScreen({
               Platform.OS === "web" && styles.sharedSectionWeb,
             ]}
           >
+            <Suspense fallback={<LazySuspenseNullFallback />}>
             <SharedLedgerContent
               entity={{
                 id: client.id,
@@ -2554,6 +2575,7 @@ export default function ClientDetailScreen({
                   .catch(() => {});
               }}
             />
+            </Suspense>
           </View>
         )}
       </ScrollView>
@@ -2614,15 +2636,19 @@ export default function ClientDetailScreen({
         }}
       />
 
-      <LedgerReportModal
-        visible={showReportModal}
-        onClose={() => setShowReportModal(false)}
-        transactions={reportTransactions}
-        title={
-          clientName ? `${t("ledgerFor")}${clientName}` : t("ledgerReport")
-        }
-        customReport={tripTableReport}
-      />
+      {showReportModal ? (
+        <Suspense fallback={null}>
+          <LedgerReportModal
+            visible={showReportModal}
+            onClose={() => setShowReportModal(false)}
+            transactions={reportTransactions}
+            title={
+              clientName ? `${t("ledgerFor")}${clientName}` : t("ledgerReport")
+            }
+            customReport={tripTableReport}
+          />
+        </Suspense>
+      ) : null}
       <Modal
         visible={showProfileModal}
         animationType="slide"
@@ -2632,6 +2658,7 @@ export default function ClientDetailScreen({
         <View
           style={[styles.profileModalWrap, { paddingBottom: insets.bottom }]}
         >
+          <Suspense fallback={<LazySuspenseNullFallback />}>
           <CounterpartyProfileSystemCard
             visible={showProfileModal}
             type="client"
@@ -2664,6 +2691,7 @@ export default function ClientDetailScreen({
               });
             }}
           />
+          </Suspense>
           <View style={styles.profileModalFooter}>
             {!client?.linked_organization_id && isInApp && !isLinked && (
               <TouchableOpacity

@@ -1,4 +1,4 @@
-import { CenteredLoadingView } from "@/components/CenteredLoadingView";
+import { LazySuspenseInlineFallback } from "@/components/LazySuspenseFallback";
 import type { TripDetailScreenProps } from "@/features/trips/components/trip-detail/TripDetailScreen.types";
 import { useSafeBack } from "@/lib/useSafeBack";
 import { useLocalSearchParams } from "expo-router";
@@ -42,7 +42,7 @@ export default function TripDetailRoute() {
   };
 
   return (
-    <Suspense fallback={<CenteredLoadingView variant="preparing" message="Loading trip…" />}>
+    <Suspense fallback={<LazySuspenseInlineFallback message="Loading trip…" />}>
       <TripDetailScreen {...screenProps} />
     </Suspense>
   );

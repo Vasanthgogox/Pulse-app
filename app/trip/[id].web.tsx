@@ -1,3 +1,4 @@
+import { LazySuspenseInlineFallback } from '@/components/LazySuspenseFallback';
 import { CenteredLoadingView } from '@/components/CenteredLoadingView';
 import { useAuth } from '@/contexts/AuthContext';
 import type { TripDetailScreenProps } from '@/features/trips/components/trip-detail/TripDetailScreen.types';
@@ -64,7 +65,7 @@ export default function TripDetailRoute() {
   };
 
   return (
-    <Suspense fallback={<CenteredLoadingView variant="preparing" message="Loading trip…" />}>
+    <Suspense fallback={<LazySuspenseInlineFallback message="Loading trip…" />}>
       <TripDetailScreen {...screenProps} />
     </Suspense>
   );

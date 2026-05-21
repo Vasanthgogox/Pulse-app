@@ -6,6 +6,7 @@ import { LazyRouteScreen } from '@/components/LazyRouteScreen';
 export default function ClientDetailRoute() {
   return (
     <LazyRouteScreen
+      fallback="inline"
       loader={() =>
         import('@/features/clients/components/ClientDetailRoute').then((m) => ({
           default: m.default,
