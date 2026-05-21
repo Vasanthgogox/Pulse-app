@@ -4,8 +4,9 @@
  */
 import { syncTransactionsWithCache } from '@/features/finance/services/finance.service';
 import type { TripRow } from '@/features/trips/services/trips.service';
+import { preloadTabScreen } from '@/lib/preloadTabChunks';
 import { queryKeys } from '@/lib/queryKeys';
-import { preloadTabScreen } from '@/lib/preloadRoutes';
+export { scheduleIdleWork } from '@/lib/scheduleIdleWork';
 import { supabase } from '@/lib/supabase';
 import type { QueryClient } from '@tanstack/react-query';
 
@@ -49,13 +50,4 @@ export function preloadFinanceWarmup(
 ): void {
   preloadFinanceRouteChunk();
   prefetchFinanceQueries(queryClient, orgId);
-}
-
-/** Run work after first paint without blocking interaction. */
-export function scheduleIdleWork(fn: () => void, timeoutMs = 2500): void {
-  if (typeof requestIdleCallback === 'function') {
-    requestIdleCallback(fn, { timeout: timeoutMs });
-    return;
-  }
-  setTimeout(fn, Math.min(timeoutMs, 1500));
 }

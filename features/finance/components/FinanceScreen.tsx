@@ -7,11 +7,9 @@ import type {
 import { DateRangePickerModal } from "@/components/DateRangePickerModal";
 import { FinanceFAB } from "@/components/FinanceFAB";
 import { Layout } from "@/constants/Layout";
-import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { AIInsightsPanel } from "@/features/ai/components/AIInsightsPanel";
 import type {
     ClientRow,
     UpdateClientData,
@@ -79,13 +77,12 @@ import {
 import type { FinanceSubTab } from "../types";
 import type { TripEntryContext } from "./EntityDetailOverlay";
 import { EntityListCategoryModal } from "./EntityListCategoryModal";
-import { FinanceModals } from "./FinanceModals";
+import { FinanceAIInsights } from "./FinanceAIInsights";
+import { FinanceModalsGate } from "./FinanceModalsGate";
+import { FinancePartyRegistrationPortal } from "./FinancePartyRegistrationPortal";
 import { styles } from "./FinanceScreen.styles";
 import { FinanceSummarySection } from "./FinanceSummarySection";
-import {
-  PartyRegistrationPortal,
-  type PartyRegistrationKind,
-} from "./PartyRegistrationPortal";
+import type { PartyRegistrationKind } from "./PartyRegistrationPortal";
 import { FinanceTabBody } from "./FinanceTabBody";
 import type { FinancialRowData } from "./FinancialRow";
 import type { EntityListFilter } from "./TreasurySummaryCard";
@@ -1364,6 +1361,34 @@ export function FinanceScreen() {
     [router],
   );
 
+  const financeModalsActive = useMemo(
+    () =>
+      showTransactionModal ||
+      showAddClientModal ||
+      showAddVehicleModal ||
+      showAddDriverModal ||
+      showAddSupplierModal ||
+      showEditClientModal ||
+      showEditSupplierModal ||
+      selectedEntity != null ||
+      showReportModal ||
+      showSharedLedgerModal ||
+      garageTripIdForPnL != null,
+    [
+      showTransactionModal,
+      showAddClientModal,
+      showAddVehicleModal,
+      showAddDriverModal,
+      showAddSupplierModal,
+      showEditClientModal,
+      showEditSupplierModal,
+      selectedEntity,
+      showReportModal,
+      showSharedLedgerModal,
+      garageTripIdForPnL,
+    ],
+  );
+
   const handleLedgerMissionChange = useCallback(
     async (entryId: string, tripId: string) => {
       const orgId = currentOrganization?.id;
@@ -1572,10 +1597,8 @@ export function FinanceScreen() {
               onGarageViewTabChange={setGarageViewTab}
               onTripSelect={(tripId) => router.push(`/trip/${tripId}` as const)}
               topContent={
-                currentOrganization?.id ? (
-                  <View style={styles.aiInsightsWrap}>
-                    <AIInsightsPanel organizationId={currentOrganization.id} />
-                  </View>
+                financeSubTab === "cash" && currentOrganization?.id ? (
+                  <FinanceAIInsights organizationId={currentOrganization.id} />
                 ) : null
               }
               refreshing={refreshing}
@@ -1664,7 +1687,8 @@ export function FinanceScreen() {
         }}
       />
 
-      <PartyRegistrationPortal
+      <FinancePartyRegistrationPortal
+        active={partyPortalOpen}
         visible={partyPortalOpen}
         initialKind={partyPortalKind}
         onClose={() => setPartyPortalOpen(false)}
@@ -1681,7 +1705,8 @@ export function FinanceScreen() {
         onInviteDriver={handleAddDriverInviteComplete}
       />
 
-      <FinanceModals
+      <FinanceModalsGate
+        active={financeModalsActive}
         showTransactionModal={showTransactionModal}
         onCloseTransactionModal={() => {
           setShowTransactionModal(false);
