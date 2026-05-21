@@ -379,9 +379,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
       } catch {
-        // Fall through to force sign out
+        // Fall through to session check
       }
-      await forceSignOutOnAuthFailure("zombie_recovery_failed");
+      // Profile lookup failed — could be a transient network issue, not an expired session.
+      // Genuinely expired sessions are handled by the onAuthStateChange subscription
+      // (Supabase fires SIGNED_OUT when auto-refresh fails server-side).
+      // Only force sign-out here when the local session token is also gone, meaning
+      // the app already has no credentials to restore on reload.
+      try {
+        const stored = await authService.getSession();
+        if (stored) {
+          logAuth("zombie_recovery_deferred_session_present", { uid: user.uid }, "warn");
+          return;
+        }
+      } catch {
+        // Cannot read storage — be conservative and do not sign out.
+        logAuth("zombie_recovery_storage_error", { uid: user.uid }, "warn");
+        return;
+      }
+      await forceSignOutOnAuthFailure("zombie_recovery_failed_no_session");
     }, 10_000);
     return () => clearTimeout(timer);
   }, [status, user, roleVerified, getVerifiedDbProfile, forceSignOutOnAuthFailure]);
@@ -492,13 +508,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           role: merged.role,
         });
       } else {
-        clearAuthState(true);
+        // refreshSession returned null — network failure or genuinely expired session.
+        // Check local storage before deciding to sign out: if a token is still stored,
+        // this is a transient failure (slow network, backend hiccup). The
+        // onAuthStateChange subscription handles genuine expiry via the SIGNED_OUT event.
+        const stored = await authService.getSession();
+        if (!isCurrentAuthAttempt(refreshAttemptId)) return;
+        if (stored) {
+          setUser(stored.user);
+          setProfile(freezeInDev(authProfileToUserProfile(stored.profile)));
+          setRoleVerified(false);
+          setStatus("authenticated");
+          logAuth("refresh_degraded_session_preserved", { uid: stored.user.uid }, "warn");
+        } else {
+          clearAuthState(true);
+        }
       }
     } catch (e) {
       if (e instanceof TimeoutError) {
         logAuthError("refresh_session_timeout", e);
+      } else {
+        logAuthError("refresh_session_error", e);
       }
-      if (isCurrentAuthAttempt(refreshAttemptId)) {
+      if (!isCurrentAuthAttempt(refreshAttemptId)) return;
+      // Timeout / unexpected error: never sign out if a token is still in storage.
+      // The stored session may be perfectly valid — the network call just failed.
+      const stored = await authService.getSession();
+      if (!isCurrentAuthAttempt(refreshAttemptId)) return;
+      if (stored) {
+        setUser(stored.user);
+        setProfile(freezeInDev(authProfileToUserProfile(stored.profile)));
+        setRoleVerified(false);
+        setStatus("authenticated");
+        logAuth("refresh_timeout_degraded_session_preserved", { uid: stored.user.uid }, "warn");
+      } else {
         clearAuthState(true);
       }
     }

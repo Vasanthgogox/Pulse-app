@@ -7,7 +7,13 @@ import { DemoTabBar, type DemoTabId } from '@/components/demo';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { routeStackScreenOptions } from '@/lib/routeStackOptions';
-import { preloadPulseLoadsRoute } from '@/lib/preloadRoutes';
+import { preloadFinanceWarmup } from '@/lib/preloadFinanceWarmup';
+import {
+  preloadPulseLoadsRoute,
+  preloadTabScreen,
+  scheduleDispatcherTabPreloads,
+} from '@/lib/preloadRoutes';
+import type { PreloadableTab } from '@/lib/preloadRoutes';
 import { pathnameHasRootTopNav } from '@/lib/rootChromeRoutes';
 import { ROUTES } from '@/lib/routes';
 import {
@@ -42,6 +48,7 @@ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client
 import { useFonts } from 'expo-font';
 import { Stack, usePathname, useRouter, type ErrorBoundaryProps } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
 import { AppBootGate } from '@/components/AppBootGate';
 import { AppLoadingSplash } from '@/components/AppLoadingSplash';
@@ -57,7 +64,7 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { LanguageProvider, tGlobal } from '@/contexts/LanguageContext';
 import { NetworkProvider } from '@/contexts/NetworkContext';
-import { OrganizationProvider } from '@/contexts/OrganizationContext';
+import { OrganizationProvider, useOptionalOrganization } from '@/contexts/OrganizationContext';
 import { KeyboardAccessoryProvider } from '@/contexts/KeyboardAccessoryContext';
 import { WalletProvider } from '@/contexts/WalletContext';
 import { TripChatProvider } from '@/features/chat/contexts/TripChatContext';
@@ -386,6 +393,9 @@ function RootLayoutNav() {
 function RootOverlayTabBar() {
   const pathname = usePathname();
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const org = useOptionalOrganization();
+  const orgId = org?.currentOrganization?.id ?? null;
   const { resetBarVisible } = useDemoTabBarScroll();
   const layoutWidth = useWebLayoutWidth();
 
@@ -394,6 +404,11 @@ function RootOverlayTabBar() {
   useEffect(() => {
     if (showOnRootScreens) resetBarVisible();
   }, [pathname, resetBarVisible, showOnRootScreens]);
+
+  useEffect(() => {
+    if (!showOnRootScreens) return;
+    scheduleDispatcherTabPreloads(undefined, { queryClient, orgId });
+  }, [showOnRootScreens, orgId, queryClient]);
 
   if (!showOnRootScreens) return null;
 
@@ -425,6 +440,12 @@ function RootOverlayTabBar() {
       activeTab={activeTab}
       onTabChange={(tab) => {
         if (tab === 'loadCenter') preloadPulseLoadsRoute();
+        else if (tab === 'finance' || tab === 'trips' || tab === 'network') {
+          preloadTabScreen(tab as PreloadableTab);
+          if (tab === 'finance' && orgId) {
+            preloadFinanceWarmup(queryClient, orgId);
+          }
+        }
         router.push(
           (tab === 'finance'
             ? ROUTES.TABS.FINANCE

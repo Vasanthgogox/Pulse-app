@@ -13,20 +13,30 @@ import {
   DemoTabBarScrollProvider,
   useDemoTabBarScroll,
 } from '@/contexts/DemoTabBarScrollContext';
-import { saveLastTabRoute } from '@/lib/lastRoute';
+import { getLastTabRoute, saveLastTabRoute } from '@/lib/lastRoute';
 import { useLayoutInsets } from '@/lib/layoutInsets';
-import { preloadPulseLoadsRoute, preloadTabScreen } from '@/lib/preloadRoutes';
+import { preloadFinanceWarmup } from '@/lib/preloadFinanceWarmup';
+import {
+  preloadPulseLoadsRoute,
+  preloadTabScreen,
+  scheduleDispatcherTabPreloads,
+} from '@/lib/preloadRoutes';
 import type { PreloadableTab } from '@/lib/preloadRoutes';
 import { ROUTES } from '@/lib/routes';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
+import { useOrganization } from '@/contexts/OrganizationContext';
+import { useQueryClient } from '@tanstack/react-query';
 import { ProfileMenuDrawerProvider, useProfileMenuDrawer } from '@/contexts/ProfileMenuDrawerContext';
 
 function DemoCustomTabBar(
   props: BottomTabBarProps & { onOpenProfileDrawer: () => void },
 ) {
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const { currentOrganization } = useOrganization();
+  const orgId = currentOrganization?.id ?? null;
   const { resetBarVisible } = useDemoTabBarScroll();
   const { onOpenProfileDrawer } = props;
   const { state, navigation } = props;
@@ -50,6 +60,9 @@ function DemoCustomTabBar(
     }
     if (tab === 'trips' || tab === 'network' || tab === 'finance') {
       preloadTabScreen(tab as PreloadableTab);
+      if (tab === 'finance' && orgId) {
+        preloadFinanceWarmup(queryClient, orgId);
+      }
     }
     navigation.navigate(tab);
   };
@@ -128,9 +141,19 @@ export const unstable_settings = { initialRouteName: 'trips' };
 
 export default function TabLayout() {
   const { user, profile, roleVerified, loading } = useAuth();
+  const { currentOrganization } = useOrganization();
+  const queryClient = useQueryClient();
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isDesktopWeb = Platform.OS === 'web' && width >= 1024;
+  const orgId = currentOrganization?.id ?? null;
+
+  useEffect(() => {
+    if (loading || !orgId) return;
+    void getLastTabRoute().then((route) => {
+      scheduleDispatcherTabPreloads(route, { queryClient, orgId });
+    });
+  }, [loading, orgId, queryClient]);
 
   useEffect(() => {
     if (loading) return;

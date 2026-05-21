@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useIsOnline } from '@/contexts/NetworkContext';
 import { getLastTabRoute } from '@/lib/lastRoute';
+import { preloadTabForRoute } from '@/lib/preloadRoutes';
 import { DEFAULT_DRIVER_ROUTE } from '@/lib/routes';
 import { useIsFocused } from '@react-navigation/native';
 import { usePathname, useRouter } from 'expo-router';
@@ -66,6 +67,7 @@ export default function Index() {
     // Restore the last visited tab so cold-start lands where the user left off,
     // rather than always defaulting to the Cash/Finance tab.
     getLastTabRoute().then((route) => {
+      preloadTabForRoute(route);
       logRouteDecision('redirect_dispatcher_last_tab', {
         uid: user.uid,
         pathname,
