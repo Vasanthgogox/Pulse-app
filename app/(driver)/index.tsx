@@ -77,7 +77,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import Constants from "expo-constants";
 import * as ExpoLocation from "expo-location";
-import { watchPositionAsync } from "expo-location";
+import { startForegroundPositionWatch } from "@/lib/safeForegroundPositionWatch";
 import { useRouter } from "expo-router";
 import {
   useCallback,
@@ -113,6 +113,10 @@ import Reanimated, {
     useSharedValue,
     withTiming,
 } from "react-native-reanimated";
+import {
+  effectiveKeyboardInset,
+  useKeyboardVisible,
+} from "@/hooks/useKeyboardVisible";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 /** Default map region when driver location is not yet available (India center). */
@@ -491,6 +495,14 @@ export default function DriverRadarScreen() {
   const [otpValue, setOtpValue] = useState("");
   const [otpSubmitting, setOtpSubmitting] = useState(false);
   const [otpError, setOtpError] = useState<string | null>(null);
+  const { keyboardVisible, keyboardHeight } = useKeyboardVisible();
+  const otpKeyboardInset = useMemo(
+    () =>
+      otpClaimTripId
+        ? effectiveKeyboardInset(keyboardVisible, keyboardHeight)
+        : 0,
+    [otpClaimTripId, keyboardVisible, keyboardHeight],
+  );
   const previousTripsRef = useRef<Map<string, string>>(new Map());
   const searchPulseAnim = useRef(new Animated.Value(0)).current;
   const [locationLabel, setLocationLabel] = useState<string | null>(null);
@@ -1119,6 +1131,7 @@ export default function DriverRadarScreen() {
         styles.centerCardConstraint,
         styles.otpClaimCard,
         { backgroundColor: colors.surface, borderColor: colors.border },
+        otpKeyboardInset > 0 && { paddingBottom: otpKeyboardInset },
       ]}
     >
       <Text style={[styles.otpClaimTitle, { color: colors.text }]}>
@@ -1989,8 +2002,10 @@ export default function DriverRadarScreen() {
     String(acceptedTripId ?? "").toLowerCase() ===
       String(effectiveFirstIncoming.id).toLowerCase(),
   );
+  /** Static sizing hides OTP behind the keyboard; use scrollable sheet while entering OTP. */
   const shouldUseStaticMapSheetCard = Boolean(
-    showNewAssignmentCard || activeMission || isAcceptedIncomingFlow || otpClaimTripId,
+    (showNewAssignmentCard || activeMission || isAcceptedIncomingFlow) &&
+      !otpClaimTripId,
   );
   useEffect(() => {
     if (!showNewAssignmentCard) return;
@@ -2159,6 +2174,16 @@ export default function DriverRadarScreen() {
     },
     [snapSheetToIndex, shouldShowMap, clearNotifyOnlyAfterMission],
   );
+
+  useEffect(() => {
+    if (!otpClaimTripId || !shouldShowMap) return;
+    snapSheetToIndex(2);
+  }, [otpClaimTripId, shouldShowMap, snapSheetToIndex]);
+
+  useEffect(() => {
+    if (!otpClaimTripId || !shouldShowMap || otpKeyboardInset <= 0) return;
+    snapSheetToIndex(2);
+  }, [otpClaimTripId, shouldShowMap, otpKeyboardInset, snapSheetToIndex]);
 
   // Clear OTP claim UI only on explicit cancel or after a successful claim feedback timeout.
   // We removed the auto-clear useEffect to prevent race conditions during backend lag.
@@ -3164,95 +3189,51 @@ export default function DriverRadarScreen() {
       }
     };
 
-    // Web: expo-location's watchPositionAsync unsubscribes via
-    // LocationEventEmitter.removeSubscription, but on web LocationEventEmitter is the new
-    // expo-modules-core EventEmitter — no removeSubscription — so unmount throws.
-    // navigator.geolocation avoids that teardown path.
-    if (Platform.OS === "web") {
-      let cancelled = false;
-      const watchState = { id: null as number | null };
-
-      void (async () => {
-        try {
-          const expoLocation = await getExpoLocation();
-          if (!expoLocation || cancelled) return;
-          let { status } = await expoLocation.getForegroundPermissionsAsync();
-          if (status !== "granted") {
-            const req = await expoLocation.requestForegroundPermissionsAsync();
-            status = req.status;
-          }
-          if (status !== "granted" || cancelled) return;
-          if (typeof navigator === "undefined" || !navigator.geolocation) return;
-
-          locationWatchRef.current?.remove?.();
-          watchState.id = navigator.geolocation.watchPosition(
-            (position) => {
-              if (cancelled) return;
-              applyFollowPosition(
-                position.coords.latitude,
-                position.coords.longitude,
-              );
-            },
-            () => {},
-            {
-              enableHighAccuracy: true,
-              maximumAge: 0,
-              timeout: 15000,
-            },
-          );
-          locationWatchRef.current = {
-            remove: () => {
-              if (watchState.id != null) {
-                navigator.geolocation.clearWatch(watchState.id);
-                watchState.id = null;
-              }
-            },
-          };
-        } catch (e) {
-          if (__DEV__) console.warn('[location] web watchPosition setup failed', e instanceof Error ? e.message : e);
-        }
-      })();
-
-      return () => {
-        cancelled = true;
-        locationWatchRef.current?.remove?.();
-        locationWatchRef.current = null;
-      };
-    }
-
     let cancelled = false;
 
-    (async () => {
+    void (async () => {
       try {
-        const { status } = await ExpoLocation.getForegroundPermissionsAsync();
-        if (status !== "granted") return;
+        const expoLocation =
+          Platform.OS === "web" ? await getExpoLocation() : ExpoLocation;
+        if (!expoLocation || cancelled) return;
+        let { status } = await expoLocation.getForegroundPermissionsAsync();
+        if (status !== "granted") {
+          const req = await expoLocation.requestForegroundPermissionsAsync();
+          status = req.status;
+        }
+        if (status !== "granted" || cancelled) return;
 
-        // Ensure only one watcher exists.
         locationWatchRef.current?.remove?.();
-        locationWatchRef.current = await watchPositionAsync(
+        const watch = await startForegroundPositionWatch(
           {
             accuracy: ExpoLocation.Accuracy.Balanced,
             distanceInterval: 20,
             timeInterval: 5000,
           },
-          (
-            pos: Awaited<
-              ReturnType<typeof ExpoLocation.getCurrentPositionAsync>
-            >,
-          ) => {
+          (pos) => {
             if (cancelled) return;
             applyFollowPosition(pos.coords.latitude, pos.coords.longitude);
           },
         );
+        if (cancelled) {
+          watch?.remove();
+          return;
+        }
+        if (watch) locationWatchRef.current = watch;
 
-        const snap = await ExpoLocation.getCurrentPositionAsync({
+        const snap = await expoLocation.getCurrentPositionAsync({
           accuracy: ExpoLocation.Accuracy.High,
         });
         if (!cancelled) {
           applyFollowPosition(snap.coords.latitude, snap.coords.longitude);
         }
       } catch (e) {
-        if (__DEV__) console.warn('[location] native watchPosition setup failed', e instanceof Error ? e.message : e);
+        if (__DEV__) {
+          console.warn(
+            "[location] follow watch setup failed",
+            e instanceof Error ? e.message : e,
+          );
+        }
       }
     })();
 
@@ -4510,6 +4491,15 @@ export default function DriverRadarScreen() {
             edgeToEdge={mapSheet}
             variant={mapSheet ? "page" : "card"}
             assignedByLine={assignerLineForJobCard}
+            OtpInputComponent={mapSheet ? OtpInputComponent : undefined}
+            onOtpFocus={
+              mapSheet
+                ? () => {
+                    snapSheetToIndex(2);
+                  }
+                : undefined
+            }
+            otpKeyboardInset={mapSheet ? otpKeyboardInset : 0}
           />
           </>
         ) : showNotifyOnlyAssignmentsHint ? (
@@ -4748,8 +4738,16 @@ export default function DriverRadarScreen() {
         <GestureHandlerRootView style={styles.olaDriverRoot}>
           <KeyboardAvoidingView
             style={styles.olaDriverKeyboardAvoid}
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
-            keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 12 : 0}
+            behavior={
+              Platform.OS === "ios"
+                ? "padding"
+                : Platform.OS === "android"
+                  ? "padding"
+                  : undefined
+            }
+            keyboardVerticalOffset={
+              Platform.OS === "ios" ? insets.top + 12 : 0
+            }
           >
             {/* Common Header for Map Mode */}
             {(showNewAssignmentCard ||
@@ -4826,7 +4824,7 @@ export default function DriverRadarScreen() {
               enableOverDrag={!shouldUseStaticMapSheetCard}
               enableDynamicSizing={shouldUseStaticMapSheetCard}
               ref={bottomSheetRef}
-              keyboardBehavior="interactive"
+              keyboardBehavior={otpClaimTripId ? "extend" : "interactive"}
               keyboardBlurBehavior="restore"
               android_keyboardInputMode="adjustResize"
               onChange={(index) => {
@@ -4914,7 +4912,9 @@ export default function DriverRadarScreen() {
                   contentContainerStyle={[
                     styles.olaSheetContent,
                     {
-                      paddingBottom: insets.bottom,
+                      paddingBottom:
+                        insets.bottom +
+                        (otpClaimTripId ? otpKeyboardInset : 0),
                       paddingHorizontal: Layout.screenPaddingHorizontal,
                     },
                   ]}

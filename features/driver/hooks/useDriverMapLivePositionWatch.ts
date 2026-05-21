@@ -1,5 +1,6 @@
 import type { LocationObject } from "expo-location";
 import { useEffect, useRef } from "react";
+import { startForegroundPositionWatch } from "@/lib/safeForegroundPositionWatch";
 
 export type DriverMapLiveFixArgs = {
   latitude: number;
@@ -24,7 +25,7 @@ export function useDriverMapLivePositionWatch(opts: {
     if (!enabled) return;
 
     let cancelled = false;
-    const subHolder: { cur: { remove: () => void } | null } = { cur: null };
+    let watchHandle: { remove: () => void } | null = null;
 
     void (async () => {
       try {
@@ -32,7 +33,7 @@ export function useDriverMapLivePositionWatch(opts: {
         const { status } = await Location.getForegroundPermissionsAsync();
         if (cancelled || status !== "granted") return;
 
-        subHolder.cur = await Location.watchPositionAsync(
+        watchHandle = await startForegroundPositionWatch(
           {
             accuracy: Location.Accuracy.Balanced,
             timeInterval: 3000,
@@ -49,8 +50,8 @@ export function useDriverMapLivePositionWatch(opts: {
           },
         );
         if (cancelled) {
-          subHolder.cur.remove();
-          subHolder.cur = null;
+          watchHandle?.remove();
+          watchHandle = null;
         }
       } catch {
         // Map still updates from adaptive ping ticks.
@@ -59,7 +60,8 @@ export function useDriverMapLivePositionWatch(opts: {
 
     return () => {
       cancelled = true;
-      subHolder.cur?.remove();
+      watchHandle?.remove();
+      watchHandle = null;
     };
   }, [enabled]);
 }

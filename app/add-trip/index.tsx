@@ -7,7 +7,13 @@ import { useAuth } from '@/contexts/AuthContext';
 import { createLedgerEntry } from '@/features/finance/services/finance.service';
 import { AddTripModal } from '@/features/trips/components/add-trip';
 import type { AddTripFormData } from '@/features/trips/components/add-trip';
-import { assignTripDriverByPhone, createTrip, createTripWithOtp } from '@/features/trips/services/trips.service';
+import {
+  assignTripDriverByPhone,
+  createTrip,
+  createTripWithOtp,
+  type TripOtpInfo,
+} from '@/features/trips/services/trips.service';
+import { getTripOtpForDisplay } from '@/features/trips/services/tripOtp.service';
 import type { AddTripCompleteResult } from '@/features/trips/components/add-trip/types';
 import { useInvalidateTrips } from '@/lib/queries/useTripsQuery';
 import { useRouter } from 'expo-router';
@@ -68,6 +74,7 @@ export default function AddTripPage() {
         ? advancePaidRaw
         : 0;
     const isAggregate = options?.supplySource === 'aggregate' && !!data.supplier_id;
+    const assignDriverByPhone = !!options?.driverPhone?.trim();
     if (isAggregate) {
       const { error, trip, otp } = await createTripWithOtp(orgId, userId, {
         pickup_area: data.pickup_area,
@@ -92,7 +99,7 @@ export default function AddTripPage() {
         owner_user_id: profile?.uid ?? userId,
         created_by_user_id: profile?.uid ?? userId,
         trip_payout_mode: 'market',
-      });
+      }, { skipOtpGeneration: assignDriverByPhone });
       if (error) throw error;
       const advancePaidAgg = normalizedAdvancePaid;
       const supplierIdAgg = data.supplier_id ?? null;
@@ -110,11 +117,12 @@ export default function AddTripPage() {
           console.warn('[add-trip] Trip created but advance ledger entry failed:', ledgerErr.message);
         }
       }
-      if (trip && options?.driverPhone?.trim()) {
-        const { error: assignErr } = await assignTripDriverByPhone(
+      let resolvedOtp: TripOtpInfo | null = otp;
+      if (trip && assignDriverByPhone) {
+        const { error: assignErr, otp: assignOtp } = await assignTripDriverByPhone(
           trip.id,
           orgId,
-          options.driverPhone.trim(),
+          options.driverPhone!.trim(),
           {
             trackingOnly: true,
             changedBy: userId,
@@ -122,12 +130,19 @@ export default function AddTripPage() {
             vehicleIdPrev: null,
           },
         );
-        if (assignErr) console.warn('Trip created but driver assign by phone failed:', assignErr.message);
+        if (assignErr) {
+          console.warn('Trip created but driver assign by phone failed:', assignErr.message);
+        } else if (assignOtp) {
+          resolvedOtp = assignOtp;
+        } else {
+          const { code, expires_at } = await getTripOtpForDisplay(trip.id);
+          if (code && expires_at) resolvedOtp = { code, expires_at };
+        }
       }
       if (trip) {
         await refreshTripsAfterCreate(orgId);
       }
-      if (trip && otp && options?.driverPhone?.trim()) return { trip, otp };
+      if (trip && resolvedOtp && assignDriverByPhone) return { trip, otp: resolvedOtp };
       if (trip) {
         return {
           trip,

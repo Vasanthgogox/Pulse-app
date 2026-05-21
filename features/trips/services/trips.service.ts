@@ -1345,6 +1345,7 @@ export async function createTripWithOtp(
   orgId: string,
   userId: string,
   data: CreateTripData,
+  options?: { skipOtpGeneration?: boolean },
 ): Promise<{
   error: Error | null;
   trip: TripRow | null;
@@ -1360,7 +1361,13 @@ export async function createTripWithOtp(
   const isAggregate = !!data.supplier_id;
   const hasAssignment =
     !!data.driver_id || !!data.vehicle_id || !!data.vehicle_display_number;
-  if (!isAggregate || !hasAssignment) return { error: null, trip, otp: null };
+  if (
+    options?.skipOtpGeneration ||
+    !isAggregate ||
+    !hasAssignment
+  ) {
+    return { error: null, trip, otp: null };
+  }
 
   const { generateTripOtp } =
     await import("@/features/trips/services/tripOtp.service");
@@ -1540,10 +1547,14 @@ export async function assignTripDriverByPhone(
   orgId: string,
   phone: string,
   options?: UpdateTripAssignmentOptions,
-): Promise<{ error: Error | null; trip: TripRow | null }> {
+): Promise<{
+  error: Error | null;
+  trip: TripRow | null;
+  otp: TripOtpInfo | null;
+}> {
   const normalized = (phone ?? "").trim().replace(/\s+/g, "");
   if (!normalized) {
-    return { error: new Error("Phone is required"), trip: null };
+    return { error: new Error("Phone is required"), trip: null, otp: null };
   }
   const { error: availabilityError, result: availability } =
     await getDriverAvailabilityByPhoneGlobal(normalized, {
@@ -1551,13 +1562,16 @@ export async function assignTripDriverByPhone(
       anyOpenTripBlocks: true,
       requireAuthoritativeRpc: true,
     });
-  if (availabilityError) return { error: availabilityError, trip: null };
+  if (availabilityError) {
+    return { error: availabilityError, trip: null, otp: null };
+  }
   if (availability.isBusy) {
     return {
       error: new Error(
         `Driver is already assigned to ${availability.ongoingTripLabel ?? "another ongoing trip"}. Complete or unassign that trip first.`,
       ),
       trip: null,
+      otp: null,
     };
   }
 
@@ -1576,35 +1590,39 @@ export async function assignTripDriverByPhone(
     return {
       error: driverError ?? new Error("Could not resolve driver"),
       trip: null,
+      otp: null,
     };
   const assignment = await updateTripAssignment(
     tripId,
     { driver_id: driver.id },
     options,
   );
-  if (assignment.error || !assignment.trip) return assignment;
+  if (assignment.error || !assignment.trip) {
+    return { ...assignment, otp: null };
+  }
 
   // Driver app lists phone-preassigned trips via get_pending_otp_trips (join on valid trip_otps).
-  // Post-create assignTripDriverByPhone (add-trip) previously skipped OTP generation, so the trip
-  // was invisible until reassignment triggered regenerateTripOtp from TripAssignmentBlock.
   const supplierId =
     assignment.trip.supplier_id != null
       ? String(assignment.trip.supplier_id).trim()
       : "";
   const needsTripOtp =
     supplierId.length > 0 || driver.user_id == null;
+  let otp: TripOtpInfo | null = null;
   if (needsTripOtp) {
     const { generateTripOtp } = await import("./tripOtp.service");
-    const { error: otpErr } = await generateTripOtp(tripId);
+    const { error: otpErr, code, expires_at } = await generateTripOtp(tripId);
     if (otpErr && __DEV__) {
       console.warn(
         "[trips] assignTripDriverByPhone: ensure OTP failed:",
         otpErr.message,
       );
+    } else if (code && expires_at) {
+      otp = { code, expires_at };
     }
   }
 
-  return assignment;
+  return { error: null, trip: assignment.trip, otp };
 }
 
 /**

@@ -189,9 +189,6 @@ export function AddTripFormFields({
     inputStyle,
     isDenseForm && styles.iconInputDense,
   ];
-  const moneyInputStyle = isDenseForm
-    ? fieldInputStyle
-    : [styles.input, inputStyle, styles.inputMatchSelectionCard];
   const renderValidationChecklist = () => {
     if (validationIssues.length === 0) return null;
     return (
@@ -2032,12 +2029,12 @@ export function AddTripFormFields({
                     <View style={styles.clientCommercialsHeaderBand}>
                       <View style={[styles.gridRow, styles.gridRowWide]}>
                         <View style={styles.gridCol}>
-                          <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
+                          <Text style={[...fieldLabelStyle, styles.sectionLabelTight]}>
                             Partner rate (₹) *
                           </Text>
                         </View>
                         <View style={styles.gridCol}>
-                          <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
+                          <Text style={[...fieldLabelStyle, styles.sectionLabelTight]}>
                             Advance paid (₹)
                           </Text>
                         </View>
@@ -2045,63 +2042,105 @@ export function AddTripFormFields({
                     </View>
                     <View style={[styles.gridRow, styles.gridRowWide]}>
                       <View style={styles.gridCol}>
-                        <TextInput
+                        <View
                           style={[
-                            ...moneyInputStyle,
+                            styles.priceWrapShell,
                             styles.aggregateRateInputFlush,
-                            outlineErr("partnerRate"),
+                            isDenseForm && styles.priceWrapShellDense,
                             state.supplierId &&
                               !invalid("partnerRate") &&
-                              styles.inputMatchSelectionCardSelected,
+                              styles.priceWrapShellSelected,
+                            invalid("partnerRate") && styles.priceWrapShellError,
                           ]}
-                          placeholder="0"
-                          placeholderTextColor={Theme.placeholder}
-                          value={state.supplierRate}
-                          onChangeText={(t) =>
-                            onPadValueChange(setters.setSupplierRate, t)
-                          }
-                          ref={supplierRateInputRef}
-                          keyboardType="decimal-pad"
-                          inputAccessoryViewID={kbAccessoryId}
-                          onFocus={() => {
-                            focusPadField(
-                              () => focusNextField(advancePaidInputRef),
-                              state.supplierRate,
-                            );
-                          }}
-                          blurOnSubmit={false}
-                        />
+                        >
+                          <IndianRupee
+                            size={isDenseForm ? ADD_TRIP_FORM.moneyIconSize : 16}
+                            color={
+                              state.supplierId && !invalid("partnerRate")
+                                ? Theme.iconPrimary
+                                : Theme.iconMuted
+                            }
+                            style={styles.priceRupeeIcon}
+                          />
+                          <TextInput
+                            style={[
+                              styles.priceInput,
+                              isDenseForm && styles.priceInputDense,
+                              isCompactMobile &&
+                                Platform.OS === "web" &&
+                                styles.mobileWebNoZoomInput,
+                            ]}
+                            placeholder="0"
+                            placeholderTextColor={Theme.placeholder}
+                            value={state.supplierRate}
+                            onChangeText={(t) =>
+                              onPadValueChange(setters.setSupplierRate, t)
+                            }
+                            ref={supplierRateInputRef}
+                            keyboardType="decimal-pad"
+                            autoCorrect={false}
+                            inputAccessoryViewID={kbAccessoryId}
+                            onFocus={() => {
+                              focusPadField(
+                                () => focusNextField(advancePaidInputRef),
+                                state.supplierRate,
+                              );
+                            }}
+                            blurOnSubmit={false}
+                          />
+                        </View>
                       </View>
                       <View style={styles.gridCol}>
-                        <TextInput
+                        <View
                           style={[
-                            ...moneyInputStyle,
+                            styles.priceWrapShell,
                             styles.aggregateRateInputFlush,
-                            outlineErr("advancePaid"),
+                            isDenseForm && styles.priceWrapShellDense,
                             state.supplierId &&
                               !invalid("advancePaid") &&
-                              styles.inputMatchSelectionCardSelected,
+                              styles.priceWrapShellSelected,
+                            invalid("advancePaid") && styles.priceWrapShellError,
                           ]}
-                          placeholder="Optional"
-                          placeholderTextColor={Theme.placeholder}
-                          value={state.advancePaid}
-                          onChangeText={(t) =>
-                            onPadValueChange(setters.setAdvancePaid, t)
-                          }
-                          ref={advancePaidInputRef}
-                          keyboardType="decimal-pad"
-                          inputAccessoryViewID={kbAccessoryId}
-                          onFocus={() => {
-                            focusPadField(() => {
-                              if (state.assignLater) {
-                                finishPadFieldEntry();
-                              } else {
-                                focusNextField(aggregateDriverNameInputRef);
-                              }
-                            }, state.advancePaid);
-                          }}
-                          blurOnSubmit={false}
-                        />
+                        >
+                          <IndianRupee
+                            size={isDenseForm ? ADD_TRIP_FORM.moneyIconSize : 16}
+                            color={
+                              state.supplierId && !invalid("advancePaid")
+                                ? Theme.iconPrimary
+                                : Theme.iconMuted
+                            }
+                            style={styles.priceRupeeIcon}
+                          />
+                          <TextInput
+                            style={[
+                              styles.priceInput,
+                              isDenseForm && styles.priceInputDense,
+                              isCompactMobile &&
+                                Platform.OS === "web" &&
+                                styles.mobileWebNoZoomInput,
+                            ]}
+                            placeholder="Optional"
+                            placeholderTextColor={Theme.placeholder}
+                            value={state.advancePaid}
+                            onChangeText={(t) =>
+                              onPadValueChange(setters.setAdvancePaid, t)
+                            }
+                            ref={advancePaidInputRef}
+                            keyboardType="decimal-pad"
+                            autoCorrect={false}
+                            inputAccessoryViewID={kbAccessoryId}
+                            onFocus={() => {
+                              focusPadField(() => {
+                                if (state.assignLater) {
+                                  finishPadFieldEntry();
+                                } else {
+                                  focusNextField(aggregateDriverNameInputRef);
+                                }
+                              }, state.advancePaid);
+                            }}
+                            blurOnSubmit={false}
+                          />
+                        </View>
                       </View>
                     </View>
                   </>
@@ -2113,67 +2152,109 @@ export function AddTripFormFields({
                   ]}
                 >
                   <View style={styles.gridCol}>
-                    <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
+                    <Text style={[...fieldLabelStyle, styles.sectionLabelTight]}>
                       Partner rate (₹) *
                     </Text>
-                    <TextInput
+                    <View
                       style={[
-                        ...moneyInputStyle,
-                        outlineErr("partnerRate"),
+                        styles.priceWrapShell,
+                        isDenseForm && styles.priceWrapShellDense,
                         state.supplierId &&
                           !invalid("partnerRate") &&
-                          styles.inputMatchSelectionCardSelected,
+                          styles.priceWrapShellSelected,
+                        invalid("partnerRate") && styles.priceWrapShellError,
                       ]}
-                      placeholder="0"
-                      placeholderTextColor={Theme.placeholder}
-                      value={state.supplierRate}
-                      onChangeText={(t) =>
-                        onPadValueChange(setters.setSupplierRate, t)
-                      }
-                      ref={supplierRateInputRef}
-                      keyboardType="decimal-pad"
-                      inputAccessoryViewID={kbAccessoryId}
-                      onFocus={() => {
-                        focusPadField(
-                          () => focusNextField(advancePaidInputRef),
-                          state.supplierRate,
-                        );
-                      }}
-                      blurOnSubmit={false}
-                    />
+                    >
+                      <IndianRupee
+                        size={isDenseForm ? ADD_TRIP_FORM.moneyIconSize : 16}
+                        color={
+                          state.supplierId && !invalid("partnerRate")
+                            ? Theme.iconPrimary
+                            : Theme.iconMuted
+                        }
+                        style={styles.priceRupeeIcon}
+                      />
+                      <TextInput
+                        style={[
+                          styles.priceInput,
+                          isDenseForm && styles.priceInputDense,
+                          isCompactMobile &&
+                            Platform.OS === "web" &&
+                            styles.mobileWebNoZoomInput,
+                        ]}
+                        placeholder="0"
+                        placeholderTextColor={Theme.placeholder}
+                        value={state.supplierRate}
+                        onChangeText={(t) =>
+                          onPadValueChange(setters.setSupplierRate, t)
+                        }
+                        ref={supplierRateInputRef}
+                        keyboardType="decimal-pad"
+                        autoCorrect={false}
+                        inputAccessoryViewID={kbAccessoryId}
+                        onFocus={() => {
+                          focusPadField(
+                            () => focusNextField(advancePaidInputRef),
+                            state.supplierRate,
+                          );
+                        }}
+                        blurOnSubmit={false}
+                      />
+                    </View>
                   </View>
                   <View style={styles.gridCol}>
-                    <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
+                    <Text style={[...fieldLabelStyle, styles.sectionLabelTight]}>
                       Advance paid (₹)
                     </Text>
-                    <TextInput
+                    <View
                       style={[
-                        ...moneyInputStyle,
-                        outlineErr("advancePaid"),
+                        styles.priceWrapShell,
+                        isDenseForm && styles.priceWrapShellDense,
                         state.supplierId &&
                           !invalid("advancePaid") &&
-                          styles.inputMatchSelectionCardSelected,
+                          styles.priceWrapShellSelected,
+                        invalid("advancePaid") && styles.priceWrapShellError,
                       ]}
-                      placeholder="Optional"
-                      placeholderTextColor={Theme.placeholder}
-                      value={state.advancePaid}
-                      onChangeText={(t) =>
-                        onPadValueChange(setters.setAdvancePaid, t)
-                      }
-                      ref={advancePaidInputRef}
-                      keyboardType="decimal-pad"
-                      inputAccessoryViewID={kbAccessoryId}
-                      onFocus={() => {
-                        focusPadField(() => {
-                          if (state.assignLater) {
-                            finishPadFieldEntry();
-                          } else {
-                            focusNextField(aggregateDriverNameInputRef);
-                          }
-                        }, state.advancePaid);
-                      }}
-                      blurOnSubmit={false}
-                    />
+                    >
+                      <IndianRupee
+                        size={isDenseForm ? ADD_TRIP_FORM.moneyIconSize : 16}
+                        color={
+                          state.supplierId && !invalid("advancePaid")
+                            ? Theme.iconPrimary
+                            : Theme.iconMuted
+                        }
+                        style={styles.priceRupeeIcon}
+                      />
+                      <TextInput
+                        style={[
+                          styles.priceInput,
+                          isDenseForm && styles.priceInputDense,
+                          isCompactMobile &&
+                            Platform.OS === "web" &&
+                            styles.mobileWebNoZoomInput,
+                        ]}
+                        placeholder="Optional"
+                        placeholderTextColor={Theme.placeholder}
+                        value={state.advancePaid}
+                        onChangeText={(t) =>
+                          onPadValueChange(setters.setAdvancePaid, t)
+                        }
+                        ref={advancePaidInputRef}
+                        keyboardType="decimal-pad"
+                        autoCorrect={false}
+                        inputAccessoryViewID={kbAccessoryId}
+                        onFocus={() => {
+                          focusPadField(() => {
+                            if (state.assignLater) {
+                              finishPadFieldEntry();
+                            } else {
+                              focusNextField(aggregateDriverNameInputRef);
+                            }
+                          }, state.advancePaid);
+                        }}
+                        blurOnSubmit={false}
+                      />
+                    </View>
                   </View>
                 </View>
                 )}
