@@ -3,8 +3,18 @@
 -- ops.capture_db_health_snapshot was missing SET search_path — vulnerable to
 -- search_path injection if an attacker can create objects in a schema that
 -- appears before ops in the default path.
+-- Skipped on projects without the ops monitoring schema (e.g. Pulse).
 -- =============================================================================
 
+DO $migrate$
+BEGIN
+  IF to_regnamespace('ops') IS NULL
+     OR to_regprocedure('ops.capture_db_health_snapshot()') IS NULL THEN
+    RAISE NOTICE 'Skipping ops.capture_db_health_snapshot search_path fix: ops schema/function not present';
+    RETURN;
+  END IF;
+
+  EXECUTE $func$
 CREATE OR REPLACE FUNCTION ops.capture_db_health_snapshot()
  RETURNS void
  LANGUAGE plpgsql
@@ -70,3 +80,5 @@ begin
   );
 end;
 $function$;
+  $func$;
+END $migrate$;
