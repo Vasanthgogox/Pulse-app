@@ -532,6 +532,18 @@ export function getIndentDisplayNumber(row: IndentRow): string {
   return row.display_indent_id ?? row.indent_number ?? "—";
 }
 
+/** Supplier-facing target rate (not load-giver client sales price). */
+export function resolveSupplierTargetDisplayRate(
+  supplierTarget: number | null | undefined,
+  clientPrice?: number | null | undefined,
+  fallback?: number | null | undefined,
+): number | null {
+  const rate = supplierTarget ?? clientPrice ?? fallback ?? null;
+  if (rate == null || !Number.isFinite(Number(rate))) return null;
+  const n = Number(rate);
+  return n > 0 ? n : null;
+}
+
 /**
  * Create a new indent (RLS enforces org membership).
  * Resolves client_name from clients when client_id is set and client_name is empty.

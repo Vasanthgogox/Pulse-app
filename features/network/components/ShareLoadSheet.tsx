@@ -4,7 +4,7 @@
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from '@/constants/Theme';
-import { type IndentRow } from '@/features/indents';
+import { resolveSupplierTargetDisplayRate, type IndentRow } from '@/features/indents';
 import { createPost } from '@/features/network/services/posts.service';
 import { formatINR } from '@/lib/format';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
@@ -64,6 +64,10 @@ interface ShareLoadSheetProps {
 
 function LoadPreviewCard({ indent }: { indent: IndentRow }) {
   const weight = indent.weight != null ? (indent.weight / 1000).toFixed(1) : null;
+  const targetRate = resolveSupplierTargetDisplayRate(
+    indent.supplier_target,
+    indent.client_price,
+  );
 
   return (
     <View style={styles.previewCard}>
@@ -106,9 +110,9 @@ function LoadPreviewCard({ indent }: { indent: IndentRow }) {
             <Text style={styles.chipText}>{indent.load_type}</Text>
           </View>
         ) : null}
-        {indent.client_price ? (
+        {targetRate != null ? (
           <View style={[styles.chip, styles.rateChip]}>
-            <Text style={styles.rateChipText}>{formatINR(indent.client_price)}</Text>
+            <Text style={styles.rateChipText}>{formatINR(targetRate)}</Text>
           </View>
         ) : null}
       </View>
@@ -260,7 +264,9 @@ export function ShareLoadSheet({
       loadDate: indent.pickup_date ?? undefined,
       vehicleType: indent.vehicle_type ?? undefined,
       weightTonnes: weight,
-      rateOffer: indent.client_price ?? undefined,
+      rateOffer:
+        resolveSupplierTargetDisplayRate(indent.supplier_target, indent.client_price) ??
+        undefined,
       material: indent.load_type ?? undefined,
       expiresAt,
       sourceIndentId: indent.id,

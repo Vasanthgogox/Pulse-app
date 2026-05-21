@@ -13,6 +13,10 @@ import {
   type PostRow,
 } from "@/features/network/services/posts.service";
 import { type StoryViewRow } from "@/features/network/services/story-views.service";
+import {
+  getVisibleIndentById,
+  resolveSupplierTargetDisplayRate,
+} from "@/features/indents/services/indents.service";
 import { formatINR } from "@/lib/format";
 import { useNetworkFeedQuery, useAfterPostDeleted, useInvalidatePosts } from "@/lib/queries/usePostsQuery";
 import { useMyBidQuery } from "@/lib/queries/useBidsQuery";
@@ -38,6 +42,7 @@ import {
   X,
   Truck,
 } from "lucide-react-native";
+import { useQuery } from "@tanstack/react-query";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
@@ -327,6 +332,24 @@ export default function StoryDetailScreen() {
   useEffect(() => { setCurrent(initialStoryIndex); progress.setValue(0); }, [initialStoryIndex, progress]);
 
   const post = storyList[current];
+  const linkedIndentQ = useQuery({
+    queryKey: ["q", "indents", "story-target", myOrgId, post?.source_indent_id],
+    queryFn: async () => {
+      const { indent, error } = await getVisibleIndentById(
+        myOrgId,
+        post!.source_indent_id!,
+      );
+      if (error) throw error;
+      return indent;
+    },
+    enabled: Boolean(myOrgId && post?.source_indent_id && post.type === "LOAD"),
+    staleTime: 60_000,
+  });
+  const loadTargetRate = resolveSupplierTargetDisplayRate(
+    linkedIndentQ.data?.supplier_target,
+    linkedIndentQ.data?.client_price,
+    post?.rate_offer,
+  );
   const color = post ? seedColor(post.organization_id) : PALETTE[0];
   const isLoad = post?.type === "LOAD";
   const isVehicle = post?.type === "VEHICLE_AVAILABILITY";
@@ -570,13 +593,13 @@ export default function StoryDetailScreen() {
           </View>
         ) : null}
 
-        {isLoad && (post.vehicle_type != null || post.weight_tonnes != null || post.rate_offer != null) ? (
+        {isLoad && (post.vehicle_type != null || post.weight_tonnes != null || loadTargetRate != null) ? (
           <View style={[styles.metaRow, isDesktopPreview && styles.metaRowDesktop]}>
             {post.vehicle_type ? <View style={styles.metaChip}><Truck size={10} color={MUTED} /><Text style={styles.metaChipText}>{post.vehicle_type}</Text></View> : null}
             {post.weight_tonnes != null ? <View style={styles.metaChip}><Text style={styles.metaChipText}>{post.weight_tonnes}T</Text></View> : null}
-            {post.rate_offer != null ? (
+            {loadTargetRate != null ? (
               <View style={[styles.metaChip, styles.metaChipEmphasis, { borderColor: color + "55" }]}>
-                <Text style={[styles.metaChipText, { color }]}>{formatINR(post.rate_offer)}</Text>
+                <Text style={[styles.metaChipText, { color }]}>{formatINR(loadTargetRate)}</Text>
               </View>
             ) : null}
           </View>

@@ -8,7 +8,11 @@ import Layout from "@/constants/Layout";
 import { useAuth } from "@/contexts/AuthContext";
 import { BroadcastPickIndentCard } from "@/features/network/components/BroadcastPickIndentCard";
 import { createPost, type PostType } from "@/features/network/services/posts.service";
-import { createIndent, getIndentDisplayNumber } from "@/features/indents/services/indents.service";
+import {
+  createIndent,
+  getIndentDisplayNumber,
+  resolveSupplierTargetDisplayRate,
+} from "@/features/indents/services/indents.service";
 import { indentCanBroadcastToPulseNetwork } from "@/features/network/utils/indentBroadcastEligibility.util";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useInvalidatePosts } from "@/lib/queries/usePostsQuery";
@@ -195,7 +199,9 @@ export default function CreatePostScreen() {
         loadDate: indent.pickup_date ?? undefined,
         vehicleType: indent.vehicle_type ?? undefined,
         weightTonnes: w,
-        rateOffer: indent.client_price ?? undefined,
+        rateOffer:
+          resolveSupplierTargetDisplayRate(indent.supplier_target, indent.client_price) ??
+          undefined,
         material: indent.load_type ?? undefined,
         expiresAt,
         sourceIndentId: selectedIndentId,
