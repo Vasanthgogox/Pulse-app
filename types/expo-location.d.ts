@@ -1,4 +1,17 @@
 declare module 'expo-location' {
+  export interface LocationObject {
+    coords: {
+      latitude: number;
+      longitude: number;
+      altitude?: number | null;
+      accuracy?: number | null;
+      altitudeAccuracy?: number | null;
+      heading?: number | null;
+      speed?: number | null;
+    };
+    timestamp: number;
+  }
+
   export interface LocationGeocodedAddress {
     name?: string | null;
     street?: string | null;
