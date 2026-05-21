@@ -126,6 +126,14 @@ export async function submitPulseBidWithDirectQuote(input: {
       msg =
         'This story is not linked to an indent. Ask the publisher to broadcast from a load indent, or quote from Get Load.';
     }
+    if (msg.includes('INDENT_NOT_OPEN_FOR_BIDS')) {
+      msg =
+        'This load has already been awarded or closed. Bidding is no longer available on this story.';
+    }
+    if (msg.includes('Post is not active')) {
+      msg =
+        'This story is no longer active. The load may have been awarded or expired.';
+    }
     return { error: new Error(msg), bidId: null, alreadyBid: false };
   }
 
