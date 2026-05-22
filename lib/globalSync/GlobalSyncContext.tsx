@@ -18,7 +18,9 @@
 
 import React, { createContext, useCallback, useContext, useEffect, type ReactNode } from 'react';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
+import { useQueryClient } from '@tanstack/react-query';
 import { useOptionalOrganization } from '@/contexts/OrganizationContext';
+import { queryKeys } from '@/lib/queryKeys';
 import { subscribeSharedPostgresChanges } from '@/lib/realtimeRegistry';
 import { useGlobalSyncStore } from './useGlobalSyncStore';
 
@@ -42,6 +44,7 @@ export function useGlobalSync(): GlobalSyncContextValue {
 export function GlobalSyncProvider({ children }: { children: ReactNode }) {
   const orgCtx = useOptionalOrganization();
   const orgId = orgCtx?.currentOrganization?.id ?? null;
+  const queryClient = useQueryClient();
 
   // ── Bootstrap on org change ───────────────────────────────────────────────
   useEffect(() => {
@@ -134,6 +137,13 @@ export function GlobalSyncProvider({ children }: { children: ReactNode }) {
 
         if (table === 'connection_requests') {
           void useGlobalSyncStore.getState().refreshInboundProtocol(orgId);
+          // When an invite is approved the DB trigger creates/updates supplier + client
+          // rows for both orgs. Invalidate those caches so both sides see the change
+          // without waiting for the next full bootstrap.
+          if (eventType === 'UPDATE' && row.status === 'approved') {
+            queryClient.invalidateQueries({ queryKey: queryKeys.suppliers.all(orgId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.clients.all(orgId) });
+          }
           return;
         }
 
