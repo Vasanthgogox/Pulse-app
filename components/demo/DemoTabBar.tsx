@@ -20,6 +20,7 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import { preloadFinanceWarmup } from "@/lib/preloadFinanceWarmup";
 import { preloadTabScreen } from "@/lib/preloadRoutes";
 import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/queryKeys";
 import { useIntegratedChat } from "@/features/chat/contexts/IntegratedChatContext";
 import { useTripChat } from "@/features/chat/contexts/TripChatContext";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
@@ -742,6 +743,10 @@ export function DemoTabBar({
       patchInviteAfterAction(item.id, item.linkedRequestIds);
       const res = await approveConnectionRequest(item.id, orgId);
       error = res.error;
+      if (!error) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.suppliers.all(orgId) });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.clients.all(orgId) });
+      }
     } else if (action === "reject") {
       patchInviteAfterAction(item.id, item.linkedRequestIds);
       const res = await rejectConnectionRequest(item.id, orgId);
