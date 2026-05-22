@@ -6,6 +6,7 @@
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { TripFeedbackModal } from '@/components/TripFeedbackModal';
+import { FinanceTxnTypography } from '@/constants/FinanceTxnTypography';
 import Theme from '@/constants/Theme';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import {
@@ -1227,13 +1228,7 @@ export function TripRatingsBlock({
         <View style={styles.regCardDecor} />
         <View style={styles.regCardTop}>
           <View style={styles.regCardLeft}>
-            <PartyAvatar
-              uri={avatarUri}
-              name={partyName}
-              size={34}
-              containerStyle={styles.regInitialMark}
-              initialTextStyle={{ color: Theme.textOnPrimary }}
-            />
+            <PartyAvatar uri={avatarUri} name={partyName} size={36} />
             <View style={styles.regCardLeftText}>
               <Text style={styles.regKicker} numberOfLines={1}>
                 {roleKicker.toUpperCase()} NODE
@@ -1246,9 +1241,9 @@ export function TripRatingsBlock({
                   <Text style={styles.regTagPillText}>{tag}</Text>
                 </View>
                 <View style={styles.regGlobalAvgCluster}>
-                  <Text style={styles.regMetricEyebrowMuted}>GLOBAL AVG</Text>
+                  <Text style={styles.regMetricEyebrowMuted}>Global avg</Text>
                   <View style={styles.regGlobalPill}>
-                    <FontAwesome name="star" size={9} color={Theme.feedbackModalStarActive} />
+                    <FontAwesome name="star" size={8} color={Theme.feedbackModalStarActive} />
                     <Text style={styles.regGlobalPillText}>
                       {globalScore != null ? globalScore.toFixed(1) : '—'}
                     </Text>
@@ -1258,15 +1253,17 @@ export function TripRatingsBlock({
             </View>
           </View>
           <View style={styles.regCardRight}>
-            <Text style={styles.regMetricEyebrowMuted}>THIS TRIP</Text>
+            <Text style={styles.regMetricEyebrowMuted}>This trip</Text>
             <View style={styles.regScoreRow}>
               <Text style={styles.regTripBig}>
                 {tripScore != null ? tripScore.toFixed(1) : '—'}
               </Text>
-              <View style={styles.regScoreStarCol}>
-                <FontAwesome name="star" size={14} color={Theme.textPrimaryDark} />
-                <Text style={styles.regScoreWord}>SCORE</Text>
-              </View>
+              <FontAwesome
+                name="star"
+                size={11}
+                color={Theme.feedbackModalStarActive}
+                style={styles.regTripStarIcon}
+              />
             </View>
             <Text style={[styles.regPerfLbl, { color: perfColor }]} numberOfLines={1}>
               {perfLabel}
@@ -1309,7 +1306,7 @@ export function TripRatingsBlock({
                 >
                   <FontAwesome
                     name={filled ? 'star' : 'star-o'}
-                    size={15}
+                    size={13}
                     color={filled ? Theme.feedbackModalStarActive : Theme.borderMedium}
                   />
                 </TouchableOpacity>
@@ -2492,20 +2489,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   regSectionTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    fontStyle: 'italic',
-    color: Theme.textPrimaryDark,
-    letterSpacing: -0.3,
+    ...FinanceTxnTypography.partyTitle,
+    fontSize: 14,
+    fontStyle: 'normal',
+    fontWeight: '600',
+    letterSpacing: 0.2,
     textTransform: 'uppercase',
   },
   regSectionSub: {
-    marginTop: 4,
-    fontSize: 8,
-    fontWeight: '800',
-    color: Theme.textMuted,
-    letterSpacing: 2,
-    textTransform: 'uppercase',
+    marginTop: 3,
+    ...FinanceTxnTypography.columnTitle,
   },
   regMsgIconWrap: {
     width: 44,
@@ -2517,164 +2510,143 @@ const styles = StyleSheet.create({
   },
   regStack: { gap: 10 },
   regCard: {
-    borderRadius: 22,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
-    padding: 14,
+    padding: 12,
     overflow: 'hidden',
   },
   regCardDecor: {
     position: 'absolute',
-    right: -32,
-    top: -32,
-    width: 112,
-    height: 112,
+    right: -28,
+    top: -28,
+    width: 88,
+    height: 88,
     borderBottomLeftRadius: 999,
     backgroundColor: Theme.surfaceGray,
-    opacity: 0.55,
+    opacity: 0.35,
   },
   regCardTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+    zIndex: 1,
+  },
+  regCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    flex: 1,
+    minWidth: 0,
+  },
+  regCardLeftText: { flex: 1, minWidth: 0, gap: 3, paddingTop: 1 },
+  regKicker: {
+    ...FinanceTxnTypography.chipLabel,
+    lineHeight: 11,
+  },
+  regPartyName: {
+    ...FinanceTxnTypography.partyTitle,
+    fontStyle: 'normal',
+    fontWeight: '600',
+    lineHeight: 15,
+  },
+  regTagRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 4,
+  },
+  regTagPill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: Theme.surface,
+  },
+  regTagPillText: {
+    ...FinanceTxnTypography.chipLabel,
+    color: Theme.primary,
+    fontWeight: '600',
+  },
+  regGlobalPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    backgroundColor: Theme.surfaceGray,
+  },
+  regGlobalAvgCluster: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  regMetricEyebrowMuted: {
+    ...FinanceTxnTypography.fieldLabel,
+    fontSize: 8,
+    lineHeight: 11,
+  },
+  regGlobalPillText: {
+    ...FinanceTxnTypography.fieldValue,
+    fontStyle: 'normal',
+    fontWeight: '500',
+    fontSize: 9,
+    lineHeight: 12,
+  },
+  regCardRight: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    flexShrink: 0,
+    minWidth: 64,
+    gap: 2,
+    paddingTop: 1,
+  },
+  regScoreRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
+  },
+  regTripBig: {
+    ...FinanceTxnTypography.amount,
+    fontSize: 14,
+    fontWeight: '600',
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.2,
+    lineHeight: 16,
+  },
+  regTripStarIcon: {
+    marginBottom: 1,
+  },
+  regPerfLbl: {
+    ...FinanceTxnTypography.chipLabel,
+    fontWeight: '500',
+    marginTop: 2,
+    textAlign: 'right',
+  },
+  regCardFoot: {
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
     zIndex: 1,
   },
-  regCardLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    flex: 1,
-    minWidth: 0,
-  },
-  regInitialMark: {
-    width: 34,
-    height: 34,
-    borderRadius: 13,
-    backgroundColor: Theme.textPrimaryDark,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: Theme.screenBackground,
-    ...Platform.select({
-      web: { boxShadow: '0 10px 30px rgba(15,23,42,0.12)' },
-      default: {},
-    }),
-  },
-  regInitialText: {
-    fontSize: 14,
-    fontWeight: '900',
-    fontStyle: 'italic',
-    color: Theme.textOnPrimary,
-  },
-  regCardLeftText: { flex: 1, minWidth: 0, gap: 2 },
-  regKicker: {
-    fontSize: 7,
-    fontWeight: '900',
-    color: Theme.textMuted,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-  },
-  regPartyName: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: Theme.textPrimaryDark,
-    marginTop: 2,
-  },
-  regTagRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 5,
-    marginTop: 5,
-  },
-  regTagPill: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: Theme.primary,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    backgroundColor: Theme.surface,
-  },
-  regTagPillText: {
-    fontSize: 6.5,
-    fontWeight: '900',
-    color: Theme.primary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
-  regGlobalPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    backgroundColor: Theme.surfaceGray,
-  },
-  regGlobalAvgCluster: {
-    alignItems: 'flex-start',
-    gap: 3,
-  },
-  regMetricEyebrowMuted: {
-    fontSize: 6,
-    fontWeight: '900',
-    color: Theme.textMuted,
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-  },
-  regGlobalPillText: {
-    fontSize: 8,
-    fontWeight: '900',
-    color: Theme.textSecondary,
-  },
-  regCardRight: {
-    alignItems: 'flex-end',
-    flexShrink: 0,
-    minWidth: 72,
-    gap: 3,
-  },
-  regScoreRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  regTripBig: {
-    fontSize: 22,
-    fontWeight: '900',
-    fontStyle: 'italic',
-    color: Theme.textPrimaryDark,
-    letterSpacing: -0.6,
-  },
-  regScoreStarCol: { alignItems: 'center', gap: 1 },
-  regScoreWord: {
-    fontSize: 6,
-    fontWeight: '900',
-    color: Theme.textMuted,
-    letterSpacing: 0.5,
-  },
-  regPerfLbl: {
-    marginTop: 3,
-    fontSize: 6.5,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-  },
-  regCardFoot: {
-    marginTop: 12,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: Theme.borderLight,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: 10,
-    zIndex: 1,
-  },
   regStarsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
+    flex: 1,
+    minWidth: 0,
   },
   regStarHit: {
     paddingVertical: 4,
@@ -2683,19 +2655,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   regFeedbackSection: {
-    marginTop: 10,
-    paddingTop: 10,
+    marginTop: 8,
+    paddingTop: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
-    gap: 6,
+    gap: 5,
     zIndex: 1,
   },
   regFeedbackHeading: {
-    fontSize: 7,
-    fontWeight: '900',
-    color: Theme.textMuted,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
+    ...FinanceTxnTypography.fieldLabel,
+    fontSize: 8,
+    lineHeight: 11,
   },
   regFeedbackTags: {
     flexDirection: 'row',
@@ -2711,26 +2681,25 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
   },
   regFeedbackTagText: {
-    fontSize: 8,
-    fontWeight: '800',
+    ...FinanceTxnTypography.chipLabel,
     color: Theme.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.2,
   },
   regFeedbackNote: {
-    fontSize: 11,
-    lineHeight: 15,
-    fontWeight: '600',
-    color: Theme.textPrimaryDark,
-    fontStyle: 'italic',
+    ...FinanceTxnTypography.fieldValue,
+    fontSize: 10,
+    lineHeight: 14,
   },
-  regAuditTap: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  regAuditTap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flexShrink: 0,
+  },
   regAuditTxt: {
-    fontSize: 8,
-    fontWeight: '900',
+    ...FinanceTxnTypography.buttonLabel,
+    fontSize: 9,
+    fontWeight: '600',
     color: Theme.primary,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
   },
   regAuditTxtDis: { color: Theme.textMuted },
   wsPrimaryCta: {
