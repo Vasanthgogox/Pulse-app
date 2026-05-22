@@ -21,7 +21,7 @@ import {
 import { validateFullName, validatePassword } from '@/lib/validation';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Alert,
   FlatList,
@@ -159,6 +159,8 @@ export default function SignUp() {
   const isOnline = useIsOnline();
   const { signUp, signInWithGoogle } = useAuth();
   const scrollRef = useRef<ScrollView>(null);
+  /** Per-page vertical scroll (horizontal pager does not scroll vertically). */
+  const pageVerticalScrollRefs = useRef<Array<ScrollView | null>>([]);
   const isDesktop = width >= 1024;
   const pageWidth = isDesktop ? Math.min(560, width - 120) : width;
 
@@ -457,10 +459,33 @@ export default function SignUp() {
 
   const backLabel = step === 0 ? 'Back' : step === 5 ? '' : 'Previous';
 
+  const pageScrollBottomPad = insets.bottom + 72;
+
+  const pageBody = (pageIndex: number, content: ReactNode) => (
+    <View style={[styles.page, { width: pageWidth }]}>
+      <ScrollView
+        ref={(el) => {
+          pageVerticalScrollRefs.current[pageIndex] = el;
+        }}
+        style={styles.pageScroll}
+        contentContainerStyle={[
+          styles.pageInner,
+          { paddingBottom: pageScrollBottomPad },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator
+        nestedScrollEnabled
+      >
+        {content}
+      </ScrollView>
+    </View>
+  );
+
   return (
     <KeyboardAvoidingView
       style={[styles.container, { paddingTop: insets.top }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+      behavior={Platform.OS === 'web' ? undefined : 'padding'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 20 : 0}
     >
       {/* Top bar */}
@@ -504,8 +529,8 @@ export default function SignUp() {
             keyboardShouldPersistTaps="handled"
           >
             {/* ── Page 0: Phone ───────────────────────────────────────────── */}
-            <View style={[styles.page, { width: pageWidth }]}>
-              <View style={styles.pageInner}>
+            {pageBody(0, (
+              <>
                 <Text style={[styles.pageTitle, styles.pageTitleWelcome]}>Welcome aboard for business</Text>
                 <Text style={styles.pageSub}>Enter your Indian mobile number to get started.</Text>
 
@@ -565,12 +590,12 @@ export default function SignUp() {
                     <Text style={styles.altLink}>Sign in</Text>
                   </TouchableOpacity>
                 </View>
-              </View>
-            </View>
+              </>
+            ))}
 
             {/* ── Page 1: OTP ─────────────────────────────────────────────── */}
-            <View style={[styles.page, { width: pageWidth }]}>
-              <View style={styles.pageInner}>
+            {pageBody(1, (
+              <>
                 <View style={styles.otpIconWrap}>
                   <FontAwesome name="mobile" size={36} color={C.accent} />
                 </View>
@@ -604,12 +629,12 @@ export default function SignUp() {
                   <FontAwesome name="info-circle" size={12} color={C.muted} />
                   <Text style={styles.mockBadgeText}>Demo mode — any 6-digit code is accepted</Text>
                 </View>
-              </View>
-            </View>
+              </>
+            ))}
 
             {/* ── Page 2: Org check ───────────────────────────────────────── */}
-            <View style={[styles.page, { width: pageWidth }]}>
-              <View style={styles.pageInner}>
+            {pageBody(2, (
+              <>
                 <Text style={styles.pageTitle}>Your organization</Text>
                 <Text style={styles.pageSub}>Enter your company name. We'll check if it already exists on Pulse.</Text>
 
@@ -655,16 +680,24 @@ export default function SignUp() {
                     {orgCheck?.taken ? 'Continue to create account' : 'Continue'}
                   </Text>
                 </TouchableOpacity>
-              </View>
-            </View>
+              </>
+            ))}
 
             {/* ── Page 3: Company details (new org) ───────────────────────── */}
             <View style={[styles.page, { width: pageWidth }]}>
               <ScrollView
-                style={{ flex: 1 }}
-                showsVerticalScrollIndicator={false}
+                ref={(el) => {
+                  pageVerticalScrollRefs.current[3] = el;
+                }}
+                style={styles.pageScroll}
+                showsVerticalScrollIndicator
                 keyboardShouldPersistTaps="handled"
-                contentContainerStyle={styles.pageInner}
+                keyboardDismissMode="on-drag"
+                nestedScrollEnabled
+                contentContainerStyle={[
+                  styles.pageInner,
+                  { paddingBottom: pageScrollBottomPad },
+                ]}
               >
                 <Text style={styles.pageTitle}>Company details</Text>
                 <Text style={styles.pageSub}>Tell us about <Text style={styles.orgNameHighlight}>{orgName}</Text></Text>
@@ -812,8 +845,8 @@ export default function SignUp() {
             </View>
 
             {/* ── Page 4: Account ──────────────────────────────────────────── */}
-            <View style={[styles.page, { width: pageWidth }]}>
-              <View style={styles.pageInner}>
+            {pageBody(4, (
+              <>
                 <Text style={styles.pageTitle}>Create account</Text>
                 {orgJoinMode ? (
                   <View style={styles.joinNoticeBanner}>
@@ -911,12 +944,12 @@ export default function SignUp() {
                     </>
                   )}
                 </TouchableOpacity>
-              </View>
-            </View>
+              </>
+            ))}
 
             {/* ── Page 5: Success ──────────────────────────────────────────── */}
-            <View style={[styles.page, { width: pageWidth }]}>
-              <View style={[styles.pageInner, styles.successInner]}>
+            {pageBody(5, (
+              <View style={styles.successInner}>
                 <View style={styles.successIcon}>
                   <FontAwesome name="check" size={32} color="#fff" />
                 </View>
@@ -954,7 +987,7 @@ export default function SignUp() {
                   <Text style={styles.altLink}>Already have an account? Sign in</Text>
                 </TouchableOpacity>
               </View>
-            </View>
+            ))}
           </ScrollView>
 
           {/* Step dots */}
@@ -1005,7 +1038,8 @@ const styles = StyleSheet.create({
   scroller: { flex: 1 },
   scrollerContent: { flexGrow: 1 },
   page: { flex: 1, paddingHorizontal: 24, paddingTop: 16 },
-  pageInner: { maxWidth: 360, alignSelf: 'center', width: '100%', paddingBottom: 24 },
+  pageScroll: { flex: 1 },
+  pageInner: { flexGrow: 1, maxWidth: 360, alignSelf: 'center', width: '100%' },
 
   pageTitle: { fontSize: 26, fontWeight: '800', color: C.text, marginBottom: 8, letterSpacing: -0.4 },
   /** Slightly smaller so the full line fits in `pageInner` without scaling or clipping. */
