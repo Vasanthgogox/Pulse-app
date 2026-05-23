@@ -6,6 +6,7 @@ import {
   checkExistingUserByPhone,
   checkOrganizationNameTaken,
   setPendingOAuthMetadata,
+  resendVerificationEmail,
   type OperatingModel,
 } from '@/features/auth';
 import { validateEmail } from '@/lib/emailValidation';
@@ -43,6 +44,8 @@ type Zone = 'NORTH' | 'SOUTH' | 'EAST' | 'WEST' | 'NORTHEAST';
 type IndiaLocation = { city: string; state: string; zone: Zone };
 type BusinessType = 'SOLE_PROPRIETOR' | 'PARTNERSHIP' | 'PVT_LTD' | 'LLP' | 'OPC' | 'OTHER';
 type EmployeeCount = '1-10' | '11-50' | '51-200' | '201-500' | '500+';
+type FleetSize = '1-5' | '6-15' | '16-30' | '31-50' | '50+';
+type MonthlyVolume = '<50' | '50-200' | '200-500' | '500-1000' | '1000+';
 
 const ALL_LOCATIONS = INDIA_LOCATIONS as IndiaLocation[];
 const ITEM_HEIGHT = 58;
@@ -68,6 +71,14 @@ const BUSINESS_TYPES: { value: BusinessType; label: string }[] = [
 ];
 
 const EMPLOYEE_COUNTS: EmployeeCount[] = ['1-10', '11-50', '51-200', '201-500', '500+'];
+const FLEET_SIZES: FleetSize[] = ['1-5', '6-15', '16-30', '31-50', '50+'];
+const MONTHLY_VOLUMES: { value: MonthlyVolume; label: string }[] = [
+  { value: '<50', label: 'Under 50' },
+  { value: '50-200', label: '50–200' },
+  { value: '200-500', label: '200–500' },
+  { value: '500-1000', label: '500–1,000' },
+  { value: '1000+', label: '1,000+' },
+];
 
 // ─── Design tokens ─────────────────────────────────────────────────────────────
 
@@ -192,6 +203,8 @@ export default function SignUp() {
   const [businessType, setBusinessType] = useState<BusinessType | null>(null);
   const [employeeCount, setEmployeeCount] = useState<EmployeeCount | null>(null);
   const [operatingModel, setOperatingModel] = useState<OperatingModel>('HYBRID');
+  const [fleetSize, setFleetSize] = useState<FleetSize | null>(null);
+  const [monthlyVolume, setMonthlyVolume] = useState<MonthlyVolume | null>(null);
   const [addressLine, setAddressLine] = useState('');
   const [selectedLocation, setSelectedLocation] = useState<IndiaLocation | null>(null);
   const [cityPickerOpen, setCityPickerOpen] = useState(false);
@@ -205,6 +218,11 @@ export default function SignUp() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+
+  // ── Step 5: Email verification ────────────────────────────────────────────
+  const [emailVerificationRequired, setEmailVerificationRequired] = useState(false);
+  const [resendingSecs, setResendingSecs] = useState(0);
+  const resendEmailTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const phoneInlineError = (() => {
@@ -342,6 +360,10 @@ export default function SignUp() {
 
   const continueCompanyDetails = () => {
     if (!businessType) return Alert.alert('Required', 'Select your business structure.');
+    if ((operatingModel === 'ASSET_BASED' || operatingModel === 'HYBRID') && !fleetSize)
+      return Alert.alert('Required', 'Select your fleet size.');
+    if ((operatingModel === 'NON_ASSET' || operatingModel === 'HYBRID') && !monthlyVolume)
+      return Alert.alert('Required', 'Select your monthly shipment volume.');
     if (!employeeCount) return Alert.alert('Required', 'Select your employee count.');
     if (!selectedLocation) return Alert.alert('Required', 'Please select your city.');
     goToPage(4);
@@ -370,7 +392,7 @@ export default function SignUp() {
       if (dup.taken) { setLoading(false); return Alert.alert('Taken', 'This company name was just registered. Please choose another.'); }
     }
 
-    const { error } = await signUp(
+    const result = await signUp(
       email.trim(),
       password,
       fullName.trim(),
@@ -387,7 +409,8 @@ export default function SignUp() {
       orgJoinMode ? true : undefined,
     );
     setLoading(false);
-    if (error) return Alert.alert('Error', error.message);
+    if (result.error) return Alert.alert('Error', result.error.message);
+    if (result.emailVerificationRequired) setEmailVerificationRequired(true);
     goToPage(5);
   };
 
@@ -702,6 +725,29 @@ export default function SignUp() {
                 <Text style={styles.pageTitle}>Company details</Text>
                 <Text style={styles.pageSub}>Tell us about <Text style={styles.orgNameHighlight}>{orgName}</Text></Text>
 
+                {/* Operating model — first so the form can react */}
+                <View style={styles.fieldGroup}>
+                  <Text style={styles.label}>How do you operate? <Text style={styles.req}>*</Text></Text>
+                  <View style={styles.modelRow}>
+                    {OPERATING_MODELS.map(({ value, label, sub }) => (
+                      <TouchableOpacity
+                        key={value}
+                        style={[styles.modelCard, operatingModel === value && styles.modelCardActive]}
+                        onPress={() => {
+                          setOperatingModel(value);
+                          setFleetSize(null);
+                          setMonthlyVolume(null);
+                        }}
+                      >
+                        <Text style={[styles.modelLabel, operatingModel === value && styles.modelLabelActive]}>
+                          {label}
+                        </Text>
+                        <Text style={styles.modelSub}>{sub}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
                 {/* Business structure */}
                 <View style={styles.fieldGroup}>
                   <Text style={styles.label}>Business structure <Text style={styles.req}>*</Text></Text>
@@ -720,6 +766,51 @@ export default function SignUp() {
                   </View>
                 </View>
 
+                {/* Fleet size — ASSET_BASED and HYBRID only */}
+                {(operatingModel === 'ASSET_BASED' || operatingModel === 'HYBRID') ? (
+                  <View style={styles.fieldGroup}>
+                    <Text style={styles.label}>
+                      {operatingModel === 'HYBRID' ? 'Own fleet size (trucks)' : 'Fleet size (trucks)'}
+                      {' '}<Text style={styles.req}>*</Text>
+                    </Text>
+                    <View style={styles.chipWrap}>
+                      {FLEET_SIZES.map((size) => (
+                        <TouchableOpacity
+                          key={size}
+                          style={[styles.chip, fleetSize === size && styles.chipActive]}
+                          onPress={() => setFleetSize(size)}
+                        >
+                          <Text style={[styles.chipText, fleetSize === size && styles.chipTextActive]}>
+                            {size}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                ) : null}
+
+                {/* Monthly shipment volume — NON_ASSET and HYBRID only */}
+                {(operatingModel === 'NON_ASSET' || operatingModel === 'HYBRID') ? (
+                  <View style={styles.fieldGroup}>
+                    <Text style={styles.label}>
+                      Shipments arranged per month <Text style={styles.req}>*</Text>
+                    </Text>
+                    <View style={styles.chipWrap}>
+                      {MONTHLY_VOLUMES.map(({ value, label }) => (
+                        <TouchableOpacity
+                          key={value}
+                          style={[styles.chip, monthlyVolume === value && styles.chipActive]}
+                          onPress={() => setMonthlyVolume(value)}
+                        >
+                          <Text style={[styles.chipText, monthlyVolume === value && styles.chipTextActive]}>
+                            {label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                ) : null}
+
                 {/* Employee count */}
                 <View style={styles.fieldGroup}>
                   <Text style={styles.label}>Number of employees <Text style={styles.req}>*</Text></Text>
@@ -733,25 +824,6 @@ export default function SignUp() {
                         <Text style={[styles.chipText, employeeCount === count && styles.chipTextActive]}>
                           {count}
                         </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-
-                {/* Operating model */}
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.label}>Operating model</Text>
-                  <View style={styles.modelRow}>
-                    {OPERATING_MODELS.map(({ value, label, sub }) => (
-                      <TouchableOpacity
-                        key={value}
-                        style={[styles.modelCard, operatingModel === value && styles.modelCardActive]}
-                        onPress={() => setOperatingModel(value)}
-                      >
-                        <Text style={[styles.modelLabel, operatingModel === value && styles.modelLabelActive]}>
-                          {label}
-                        </Text>
-                        <Text style={styles.modelSub}>{sub}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -947,45 +1019,81 @@ export default function SignUp() {
               </>
             ))}
 
-            {/* ── Page 5: Success ──────────────────────────────────────────── */}
+            {/* ── Page 5: Success / Email verification ─────────────────── */}
             {pageBody(5, (
               <View style={styles.successInner}>
                 <View style={styles.successIcon}>
-                  <FontAwesome name="check" size={32} color="#fff" />
+                  <FontAwesome name={emailVerificationRequired ? 'envelope' : 'check'} size={32} color="#fff" />
                 </View>
-                <Text style={styles.successTitle}>
-                  {orgJoinMode ? 'Account created!' : "You're in!"}
-                </Text>
-                {orgJoinMode ? (
+                {emailVerificationRequired ? (
                   <>
+                    <Text style={styles.successTitle}>Check your email</Text>
                     <Text style={styles.successSub}>
-                      Your account is ready. To join{' '}
-                      <Text style={{ fontWeight: '700' }}>{orgName}</Text>, ask their admin
-                      to invite you from the Pulse Team Management screen.
+                      We sent a verification link to{' '}
+                      <Text style={{ fontWeight: '700' }}>{email}</Text>.{'\n'}
+                      Click the link to activate your account.
                     </Text>
-                    <View style={styles.inviteHintCard}>
-                      <FontAwesome name="users" size={16} color={C.accent} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.inviteHintTitle}>How to get invited</Text>
-                        <Text style={styles.inviteHintSub}>
-                          Ask the {orgName} admin to open{' '}
-                          <Text style={{ fontStyle: 'italic' }}>Profile → Team → Invite Member</Text>
-                          {' '}and search for your phone number <Text style={{ fontWeight: '700' }}>+91 {phone}</Text>.
-                        </Text>
-                      </View>
-                    </View>
+                    <TouchableOpacity
+                      style={[styles.primaryBtn, resendingSecs > 0 && { opacity: 0.5 }]}
+                      disabled={resendingSecs > 0}
+                      onPress={async () => {
+                        const { error: resendErr } = await resendVerificationEmail(email.trim());
+                        if (resendErr) { Alert.alert('Error', resendErr.message); return; }
+                        setResendingSecs(60);
+                        const t = setInterval(() => {
+                          setResendingSecs(s => {
+                            if (s <= 1) { clearInterval(t); return 0; }
+                            return s - 1;
+                          });
+                        }, 1000);
+                        resendEmailTimerRef.current = t;
+                      }}
+                    >
+                      <Text style={styles.primaryBtnText}>
+                        {resendingSecs > 0 ? `Resend in ${resendingSecs}s` : 'Resend verification email'}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.altRow} onPress={() => router.replace(ROUTES.SIGN_IN)}>
+                      <Text style={styles.altLink}>Already verified? Sign in</Text>
+                    </TouchableOpacity>
                   </>
                 ) : (
-                  <Text style={styles.successSub}>
-                    Your workspace <Text style={{ fontWeight: '700' }}>{orgName}</Text> is ready. Start managing your fleet.
-                  </Text>
+                  <>
+                    <Text style={styles.successTitle}>
+                      {orgJoinMode ? 'Account created!' : "You're in!"}
+                    </Text>
+                    {orgJoinMode ? (
+                      <>
+                        <Text style={styles.successSub}>
+                          Your account is ready. To join{' '}
+                          <Text style={{ fontWeight: '700' }}>{orgName}</Text>, ask their admin
+                          to invite you from the Pulse Team Management screen.
+                        </Text>
+                        <View style={styles.inviteHintCard}>
+                          <FontAwesome name="users" size={16} color={C.accent} />
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.inviteHintTitle}>How to get invited</Text>
+                            <Text style={styles.inviteHintSub}>
+                              Ask the {orgName} admin to open{' '}
+                              <Text style={{ fontStyle: 'italic' }}>Profile → Team → Invite Member</Text>
+                              {' '}and search for your phone number <Text style={{ fontWeight: '700' }}>+91 {phone}</Text>.
+                            </Text>
+                          </View>
+                        </View>
+                      </>
+                    ) : (
+                      <Text style={styles.successSub}>
+                        Your workspace <Text style={{ fontWeight: '700' }}>{orgName}</Text> is ready. Start managing your fleet.
+                      </Text>
+                    )}
+                    <TouchableOpacity style={styles.primaryBtn} onPress={() => router.replace('/')}>
+                      <Text style={styles.primaryBtnText}>Go to app</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.altRow} onPress={() => router.replace(ROUTES.SIGN_IN)}>
+                      <Text style={styles.altLink}>Already have an account? Sign in</Text>
+                    </TouchableOpacity>
+                  </>
                 )}
-                <TouchableOpacity style={styles.primaryBtn} onPress={() => router.replace('/')}>
-                  <Text style={styles.primaryBtnText}>Go to app</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.altRow} onPress={() => router.replace(ROUTES.SIGN_IN)}>
-                  <Text style={styles.altLink}>Already have an account? Sign in</Text>
-                </TouchableOpacity>
               </View>
             ))}
           </ScrollView>
