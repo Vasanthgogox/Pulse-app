@@ -63,6 +63,8 @@ export interface DriverRow {
   /** Optional linked profile avatar fields when joined via RPC/view. */
   avatar_url?: string | null;
   avatar_seed?: string | null;
+  /** Joined organization name — populated by getLinkedDriversForCurrentUser. */
+  organizations?: { name: string } | null;
 }
 
 /**
@@ -335,7 +337,7 @@ export async function getLinkedDriversForCurrentUser(
 ): Promise<{ error: Error | null; drivers: DriverRow[] }> {
   const { data, error } = await supabase()
     .from("drivers")
-    .select(DRIVER_COLUMNS)
+    .select(`${DRIVER_COLUMNS}, organizations(name)`)
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
     .limit(20);

@@ -1059,26 +1059,22 @@ export default function DriverWalletScreen() {
     ],
   }));
 
-  /** Salary request: only show connected fleets (accepted invite). Use org name from invite when available, else "Fleet". */
+  /** Salary request: all connected fleets. Org name resolved from invite → DB org name → fallback. */
   const salaryRequestOrgOptions = useMemo(() => {
     const accepted = invites.filter((i) => (i.status || '').toLowerCase() === 'accepted');
-    return linkedDrivers
-      .filter((d) => accepted.some((i) => String(i.from_organization_id || '') === String(d.organization_id || '')))
-      .map((d) => {
-        const inv = accepted.find(
-          (i) => String(i.from_organization_id || '') === String(d.organization_id || '')
-        );
-        const rawName =
-          (inv && (inv as { from_org_name?: string | null; fromOrgName?: string | null }).from_org_name) ||
-          (inv && (inv as { from_org_name?: string | null; fromOrgName?: string | null }).fromOrgName) ||
-          null;
-        const name = (rawName && String(rawName).trim()) ? String(rawName).trim() : null;
-        return {
-          driverId: d.id,
-          orgId: d.organization_id,
-          orgName: name || 'Fleet',
-        };
-      });
+    return linkedDrivers.map((d) => {
+      const inv = accepted.find(
+        (i) => String(i.from_organization_id || '') === String(d.organization_id || '')
+      );
+      const inviteName =
+        (inv as { from_org_name?: string | null } | undefined)?.from_org_name?.trim() || null;
+      const dbOrgName = (d.organizations as { name?: string } | null | undefined)?.name?.trim() || null;
+      return {
+        driverId: d.id,
+        orgId: d.organization_id,
+        orgName: inviteName ?? dbOrgName ?? 'Fleet',
+      };
+    });
   }, [linkedDrivers, invites]);
 
   const fleetCards = useMemo(() => {
