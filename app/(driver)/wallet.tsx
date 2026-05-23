@@ -130,6 +130,16 @@ const AMBER_50 = 'rgba(245,158,11,0.12)';   /* pending badge bg */
 const AMBER_600 = '#d97706';     /* pending badge text */
 const EMERALD_50 = 'rgba(4,120,87,0.14)'; /* received badge bg */
 
+function formatPaymentModeLabel(mode: string | null | undefined): string {
+  const raw = (mode ?? '').trim();
+  if (!raw || raw === '—') return '—';
+  return raw
+    .toLowerCase()
+    .split(/\s+/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
 export default function DriverWalletScreen() {
   usePreventScreenCapture();
   const insets = useSafeAreaInsets();
@@ -2097,14 +2107,40 @@ export default function DriverWalletScreen() {
                                 </View>
                               </View>
 
-                              <View style={styles.tripsRouteRow}>
-                                <Text style={[styles.tripsRouteCity, { color: colors.text }]} numberOfLines={1}>
-                                  {item.from}
-                                </Text>
-                                <FontAwesome name="long-arrow-right" size={10} color={colors.emerald} style={styles.tripsRouteArrow} />
-                                <Text style={[styles.tripsRouteCity, { color: colors.text }]} numberOfLines={1}>
-                                  {item.to}
-                                </Text>
+                              <View
+                                style={[
+                                  styles.tripsRouteCard,
+                                  {
+                                    borderColor: isDark ? colors.borderSubtle : 'rgba(226,232,240,0.9)',
+                                    backgroundColor: isDark ? colors.surfaceElevated : 'rgba(248,250,252,0.65)',
+                                  },
+                                ]}
+                              >
+                                <View style={styles.tripsRouteSide}>
+                                  <Text style={[styles.tripsRouteLabel, { color: colors.textMuted }]}>Origin</Text>
+                                  <Text style={[styles.tripsRouteValue, { color: colors.text }]} numberOfLines={2}>
+                                    {item.from}
+                                  </Text>
+                                </View>
+                                <View style={styles.tripsRouteMiddle}>
+                                  <View style={[styles.tripsRouteDot, { backgroundColor: colors.emerald }]} />
+                                  <View
+                                    style={[
+                                      styles.tripsRouteLine,
+                                      { backgroundColor: isDark ? colors.borderSubtle : 'rgba(148,163,184,0.45)' },
+                                    ]}
+                                  />
+                                  <View style={[styles.tripsRouteDot, { backgroundColor: colors.textMuted }]} />
+                                </View>
+                                <View style={[styles.tripsRouteSide, styles.tripsRouteSideRight]}>
+                                  <Text style={[styles.tripsRouteLabel, { color: colors.textMuted }]}>Destination</Text>
+                                  <Text
+                                    style={[styles.tripsRouteValue, styles.tripsRouteValueRight, { color: colors.text }]}
+                                    numberOfLines={2}
+                                  >
+                                    {item.to}
+                                  </Text>
+                                </View>
                               </View>
 
                               <View
@@ -2116,15 +2152,17 @@ export default function DriverWalletScreen() {
                                 <Text
                                   style={[
                                     styles.tripsStatusPill,
-                                    isActionRequired
-                                      ? styles.tripsStatusWarning
-                                      : isPending
-                                        ? styles.tripsStatusInfo
-                                        : styles.tripsStatusSuccess,
+                                    hasFleetPending
+                                      ? styles.tripsStatusFleet
+                                      : isActionRequired
+                                        ? styles.tripsStatusWarning
+                                        : isPending
+                                          ? styles.tripsStatusInfo
+                                          : styles.tripsStatusSuccess,
                                   ]}
                                   numberOfLines={1}
                                 >
-                                  {item.subStatus || item.status}
+                                  {hasFleetPending ? 'Awaiting your confirmation' : item.subStatus || item.status}
                                 </Text>
                                 <FontAwesome
                                   name="chevron-down"
@@ -2133,40 +2171,89 @@ export default function DriverWalletScreen() {
                                   style={isExpanded ? styles.tripsChevronExpanded : undefined}
                                 />
                               </View>
-                              {__DEV__ && hasFleetPending ? (
-                                <Text style={[styles.tripsDebugSyncToken, { color: colors.emerald }]}>
-                                  SYNC TOKEN: FOUND
-                                </Text>
-                              ) : null}
                             </TouchableOpacity>
 
                             {hasFleetPending && !isSettled ? (
-                              <View style={styles.tripActionWrap}>
+                              <View
+                                style={[
+                                  styles.tripVerifyPanel,
+                                  {
+                                    borderTopColor: isDark ? colors.borderSubtle : '#f1f5f9',
+                                    backgroundColor: isDark ? 'rgba(4,120,87,0.07)' : 'rgba(248,250,252,0.92)',
+                                  },
+                                ]}
+                              >
+                                <View style={styles.tripVerifyHeader}>
+                                  <View
+                                    style={[
+                                      styles.tripVerifyIconWrap,
+                                      { backgroundColor: isDark ? 'rgba(4,120,87,0.18)' : colors.emeraldMuted },
+                                    ]}
+                                  >
+                                    <FontAwesome name="shield" size={10} color={colors.emerald} />
+                                  </View>
+                                  <View style={styles.tripVerifyHeaderText}>
+                                    <Text style={[styles.tripVerifyTitle, { color: colors.text }]}>
+                                      Confirm fleet payment
+                                    </Text>
+                                    <Text style={[styles.tripVerifySubtitle, { color: colors.textMuted }]} numberOfLines={2}>
+                                      {providerShort} marked ₹{item.amount.toLocaleString('en-IN')} via{' '}
+                                      {formatPaymentModeLabel(pendingMode)}
+                                    </Text>
+                                  </View>
+                                </View>
+
                                 <View
                                   style={[
-                                    styles.tripActionHint,
+                                    styles.tripVerifyMetaGrid,
                                     {
-                                      backgroundColor: colors.emeraldMuted,
-                                      borderColor: colors.emeraldBorderSoft,
+                                      borderColor: isDark ? colors.borderSubtle : 'rgba(226,232,240,0.9)',
+                                      backgroundColor: isDark ? 'rgba(15,23,42,0.35)' : colors.surface,
                                     },
                                   ]}
                                 >
-                                  <Text style={[styles.tripActionHintText, { color: colors.emerald }]}>
-                                    Fleet update: {pendingMode} · UTR {pendingUtr}
-                                  </Text>
+                                  <View style={styles.tripVerifyMetaCell}>
+                                    <Text style={[styles.tripVerifyMetaLabel, { color: colors.textMuted }]}>Mode</Text>
+                                    <Text style={[styles.tripVerifyMetaValue, { color: colors.text }]} numberOfLines={1}>
+                                      {formatPaymentModeLabel(pendingMode)}
+                                    </Text>
+                                  </View>
+                                  <View
+                                    style={[
+                                      styles.tripVerifyMetaDivider,
+                                      { backgroundColor: isDark ? colors.borderSubtle : '#e2e8f0' },
+                                    ]}
+                                  />
+                                  <View style={styles.tripVerifyMetaCell}>
+                                    <Text style={[styles.tripVerifyMetaLabel, { color: colors.textMuted }]}>UTR</Text>
+                                    <Text style={[styles.tripVerifyMetaValue, { color: colors.text }]} numberOfLines={1}>
+                                      {pendingUtr}
+                                    </Text>
+                                  </View>
                                 </View>
+
+                                <Text style={[styles.tripVerifyTimestamp, { color: colors.textMuted }]}>
+                                  Marked {pendingCapturedAt}
+                                </Text>
+
                                 <TouchableOpacity
-                                  style={[styles.tripVerifyBtn, { backgroundColor: colors.emerald }]}
+                                  style={[
+                                    styles.tripVerifyBtn,
+                                    {
+                                      backgroundColor: colors.emerald,
+                                      shadowColor: isDark ? '#000' : 'rgba(4,120,87,0.28)',
+                                    },
+                                  ]}
                                   onPress={() => confirmMarkAsPaid(item.trip, item.amount, fleetPendingLedger)}
                                   disabled={markPaidLoadingTripId === item.trip.id}
-                                  activeOpacity={0.9}
+                                  activeOpacity={0.88}
                                 >
                                   {markPaidLoadingTripId === item.trip.id ? (
                                     <LoadingIndicator size="small" color={Theme.textOnPrimary} />
                                   ) : (
                                     <>
-                                      <FontAwesome name="check-circle" size={13} color={Theme.textOnPrimary} />
-                                      <Text style={styles.tripVerifyBtnText}>Verify & update payment</Text>
+                                      <FontAwesome name="check" size={11} color={Theme.textOnPrimary} />
+                                      <Text style={styles.tripVerifyBtnText}>Verify payment</Text>
                                     </>
                                   )}
                                 </TouchableOpacity>
@@ -3484,26 +3571,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: -0.3,
   },
-  tripsRouteRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    minWidth: 0,
-    marginBottom: 8,
-  },
-  tripsRouteCity: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: -0.15,
-    textTransform: 'uppercase',
-    lineHeight: 14,
-  },
-  tripsRouteArrow: {
-    flexShrink: 0,
-    marginTop: 1,
-  },
   tripsCardFooter: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -3546,6 +3613,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#a7f3d0',
   },
+  tripsStatusFleet: {
+    backgroundColor: 'rgba(4,120,87,0.08)',
+    color: Theme.driverEmerald,
+    borderWidth: 1,
+    borderColor: 'rgba(4,120,87,0.16)',
+    textTransform: 'none',
+    fontSize: 9,
+    fontWeight: '500',
+    letterSpacing: -0.05,
+  },
   salaryRequestStatusPending: {
     backgroundColor: AMBER_50,
     color: AMBER_600,
@@ -3567,20 +3644,82 @@ const styles = StyleSheet.create({
   tripsChevronExpanded: {
     transform: [{ rotate: '180deg' }],
   },
-  tripsDebugSyncToken: {
+  tripVerifyPanel: {
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 8,
+  },
+  tripVerifyHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  tripVerifyIconWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  tripVerifyHeaderText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
+  },
+  tripVerifyTitle: {
+    fontSize: 11,
+    fontWeight: '500',
+    letterSpacing: -0.1,
+  },
+  tripVerifySubtitle: {
+    fontSize: 10,
+    fontWeight: '400',
+    lineHeight: 14,
+  },
+  tripVerifyMetaGrid: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  tripVerifyMetaCell: {
+    flex: 1,
+    minWidth: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    gap: 1,
+  },
+  tripVerifyMetaDivider: {
+    width: StyleSheet.hairlineWidth,
+  },
+  tripVerifyMetaLabel: {
     fontSize: 8,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-    marginTop: 4,
-    textAlign: 'right',
+    fontWeight: '500',
+    letterSpacing: 0.2,
+  },
+  tripVerifyMetaValue: {
+    fontSize: 10,
+    fontWeight: '400',
+    letterSpacing: -0.05,
+  },
+  tripVerifyTimestamp: {
+    fontSize: 9,
+    fontWeight: '400',
+    marginTop: -2,
   },
   tripsRouteCard: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 8,
+    gap: 6,
   },
   tripsRouteSide: {
     flex: 1,
@@ -3593,59 +3732,54 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 1.2,
-    marginBottom: 3,
+    letterSpacing: 1,
+    marginBottom: 2,
   },
   tripsRouteValue: {
     fontSize: 11,
     fontWeight: '700',
+    lineHeight: 14,
+    letterSpacing: -0.15,
+  },
+  tripsRouteValueRight: {
+    textAlign: 'right',
   },
   tripsRouteMiddle: {
     alignItems: 'center',
-    width: 44,
+    justifyContent: 'center',
+    width: 18,
+    flexShrink: 0,
+    alignSelf: 'stretch',
+    paddingVertical: 4,
   },
   tripsRouteDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
   },
   tripsRouteLine: {
-    width: 1,
-    height: 22,
+    width: StyleSheet.hairlineWidth,
+    flex: 1,
+    minHeight: 14,
     marginVertical: 2,
   },
-  tripActionWrap: {
-    marginTop: 0,
-    paddingHorizontal: 12,
-    paddingBottom: 10,
-    gap: 8,
-  },
-  tripActionHint: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  tripActionHintText: {
-    fontSize: 9,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
   tripVerifyBtn: {
-    minHeight: 38,
+    minHeight: 34,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
     gap: 6,
     paddingHorizontal: 12,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 1,
   },
   tripVerifyBtnText: {
-    fontSize: 9,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+    fontSize: 11,
+    fontWeight: '500',
+    letterSpacing: -0.05,
     color: Theme.textOnPrimary,
   },
   tripsExpanded: {
