@@ -24,8 +24,6 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { LinearGradient } from "expo-linear-gradient";
 import { type Href, useRouter } from "expo-router";
 import {
-  ArrowDownToLine,
-  Banknote,
   Calendar,
   CheckCircle2,
   ChevronDown,
@@ -33,14 +31,11 @@ import {
   ChevronUp,
   Clock,
   FileImage,
-  Info,
   MessageSquare,
   Navigation,
   Route,
   Share2,
   ShieldCheck,
-  Sparkles,
-  Wallet,
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
@@ -70,9 +65,6 @@ import {
   formatDistance,
   formatDurationForTrip,
   formatTripHistoryDate,
-  getEarning,
-  getEarningAmount,
-  getGrossRevenue,
   getTripProgressTitle,
   isCompleted,
   isInTransitStatus,
@@ -81,6 +73,7 @@ import {
   toEtaInterval,
 } from "@/features/driver/tripHistory/tripHistoryDetail.util";
 import { tripHistoryDetailStyles as styles } from "@/features/driver/tripHistory/tripHistoryDetail.styles";
+import { TripDetailSettlementPanel } from "@/features/driver/components/TripDetailSettlementPanel";
 
 function TimelinePulseIcon({
   expanded,
@@ -141,33 +134,46 @@ export function DriverTripHistoryDetailScreen({ tripId }: DriverTripHistoryDetai
   const [podPreviewLoading, setPodPreviewLoading] = useState(false);
   const [podPreviewError, setPodPreviewError] = useState(false);
 
-  const loadTrip = useCallback(async () => {
-    setLoading(true);
+  const loadTrip = useCallback(async (isMounted: () => boolean) => {
+    if (isMounted()) setLoading(true);
     const res = await tripsService.getTripById(tripId);
+    if (!isMounted()) return;
     setTrip(res.trip ?? null);
     setLoading(false);
   }, [tripId]);
 
   useEffect(() => {
-    void loadTrip();
+    let mounted = true;
+    void loadTrip(() => mounted);
+    return () => {
+      mounted = false;
+    };
   }, [loadTrip]);
 
   useEffect(() => {
     const uid = profile?.uid;
     if (!uid) return;
+    let mounted = true;
     void driversService.getLinkedDriversForCurrentUser(uid).then((res) => {
+      if (!mounted) return;
       const d = res.drivers?.[0] ?? null;
       setDriver(d);
       if (!d?.id) return;
       void driversService.getDriverInvitesReceived().then((inv) => {
-        if (!inv.error) setInvites(inv.invites);
+        if (!mounted || inv.error) return;
+        setInvites(inv.invites);
       });
     });
+    return () => {
+      mounted = false;
+    };
   }, [profile?.uid]);
 
   useEffect(() => {
     if (!tripId) return;
+    let mounted = true;
     void getLatestAssignmentAuditByTripIds([tripId]).then(({ byTripId }) => {
+      if (!mounted) return;
       const map: Record<string, string> = {};
       byTripId.forEach((value, key) => {
         const actorId = String(value.changed_by ?? "").trim();
@@ -175,6 +181,9 @@ export function DriverTripHistoryDetailScreen({ tripId }: DriverTripHistoryDetai
       });
       setAssignmentActorByTripId(map);
     });
+    return () => {
+      mounted = false;
+    };
   }, [tripId]);
 
   useEffect(() => {
@@ -871,198 +880,7 @@ export function DriverTripHistoryDetailScreen({ tripId }: DriverTripHistoryDetai
               ) : null}
 
               {detailTab === "settlement" ? (
-                <View style={{ marginBottom: 12 }}>
-                  <View style={styles.tdSettlementGlow}>
-                    <View
-                      style={[
-                        styles.tdNetCard,
-                        {
-                          backgroundColor: colors.surface,
-                          borderColor: colors.border,
-                        },
-                      ]}
-                    >
-                      <View style={styles.tdNetBlur} pointerEvents="none" />
-                      <View style={styles.tdNetHeader}>
-                        <View style={styles.tdNetWalletIcon}>
-                          <Wallet size={18} color={colors.emerald} />
-                        </View>
-                        <Text style={[styles.tdNetKicker, { color: colors.textMuted }]}>
-                          Net Payout
-                        </Text>
-                        <View style={styles.tdNetAmountRow}>
-                          {getEarning(selectedTrip) === "SALARY" ? null : (
-                            <Text style={[styles.tdNetRupee, { color: colors.textMuted }]}>
-                              ₹
-                            </Text>
-                          )}
-                          <Text
-                            style={[styles.tdNetAmount, { color: colors.text }]}
-                            numberOfLines={1}
-                            adjustsFontSizeToFit
-                          >
-                            {getEarning(selectedTrip) === "SALARY"
-                              ? "SALARY"
-                              : Math.round(getEarningAmount(selectedTrip)).toLocaleString()}
-                          </Text>
-                        </View>
-                        <View style={[styles.tdNetSuccessPill, { backgroundColor: `${colors.emerald}22` }]}>
-                          <CheckCircle2 size={12} color={colors.emerald} />
-                          <Text style={[styles.tdNetSuccessText, { color: colors.emerald }]}>
-                            Settlement Success
-                          </Text>
-                        </View>
-                      </View>
-                      <View style={styles.tdNetMiniGrid}>
-                        <View style={[styles.tdNetMiniCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
-                          <Text style={[styles.tdNetMiniK, { color: colors.textMuted }]}>
-                            Gross total
-                          </Text>
-                          <Text style={[styles.tdNetMiniV, { color: colors.text }]}>
-                            {getGrossRevenue(selectedTrip) === "SALARY"
-                              ? "SALARY"
-                              : `₹${Number(getGrossRevenue(selectedTrip)).toLocaleString()}`}
-                          </Text>
-                        </View>
-                        <View style={[styles.tdNetMiniCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
-                          <Text style={[styles.tdNetMiniK, { color: colors.textMuted }]}>
-                            Deductions
-                          </Text>
-                          <Text style={[styles.tdNetMiniV, { color: Theme.negative }]}>
-                            -₹0
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-                  </View>
-
-                  <View style={styles.tdEarningsHeader}>
-                    <Text style={[styles.tdEarningsHeaderTitle, { color: colors.textMuted }]}>
-                      Earnings detail
-                    </Text>
-                    <Info size={14} color={colors.textMuted} />
-                  </View>
-
-                  <View
-                    style={[
-                      styles.tdBreakdownCard,
-                      {
-                        backgroundColor: colors.surface,
-                        borderColor: colors.border,
-                      },
-                    ]}
-                  >
-                    <View style={styles.tdBreakRow}>
-                      <View style={styles.tdBreakLeft}>
-                        <View style={[styles.tdBreakIcon, { backgroundColor: colors.border }]}>
-                          <Banknote size={15} color={colors.textMuted} />
-                        </View>
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <Text style={[styles.tdBreakTitle, { color: colors.text }]}>
-                            Base fare
-                          </Text>
-                          <Text style={[styles.tdBreakSub, { color: colors.textMuted }]}>
-                            Calculation based on route distance
-                          </Text>
-                        </View>
-                      </View>
-                      <Text style={[styles.tdBreakValue, { color: colors.text }]}>
-                        {getGrossRevenue(selectedTrip) === "SALARY"
-                          ? "SALARY"
-                          : `₹${Number(getGrossRevenue(selectedTrip)).toLocaleString()}`}
-                      </Text>
-                    </View>
-
-                    <View style={[styles.tdBreakRowHighlight, { backgroundColor: `${colors.emerald}18` }]}>
-                      <View style={styles.tdBreakLeft}>
-                        <View style={[styles.tdBreakIcon, { backgroundColor: `${colors.emerald}33` }]}>
-                          <Sparkles size={15} color={colors.emerald} />
-                        </View>
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <View style={styles.tdBreakTitleRow}>
-                            <Text style={[styles.tdBreakTitle, { color: colors.text }]}>
-                              Partner bonus
-                            </Text>
-                            <View style={[styles.tdActiveBadge, { backgroundColor: colors.emerald }]}>
-                              <Text style={styles.tdActiveBadgeText}>Active</Text>
-                            </View>
-                          </View>
-                          <Text style={[styles.tdBreakSub, { color: colors.textMuted }]}>
-                            Precision pilot multiplier applied
-                          </Text>
-                        </View>
-                      </View>
-                      <Text style={[styles.tdBreakValue, { color: colors.emerald }]}>
-                        {getEarning(selectedTrip) === "SALARY"
-                          ? "—"
-                          : `+₹${Math.round(getEarningAmount(selectedTrip)).toLocaleString()}`}
-                      </Text>
-                    </View>
-
-                    <View style={styles.tdBreakRow}>
-                      <View style={styles.tdBreakLeft}>
-                        <View style={[styles.tdBreakIcon, { backgroundColor: `${Theme.negative}22` }]}>
-                          <ShieldCheck size={15} color={Theme.negative} />
-                        </View>
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <Text style={[styles.tdBreakTitle, { color: colors.text }]}>
-                            TDS / Platform
-                          </Text>
-                          <Text style={[styles.tdBreakSub, { color: colors.textMuted }]}>
-                            Standard regulatory overhead
-                          </Text>
-                        </View>
-                      </View>
-                      <Text style={[styles.tdBreakValue, { color: Theme.negative }]}>
-                        -₹0
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.tdSettledBar}>
-                    <View style={styles.tdSettledLeft}>
-                      <View style={styles.tdSettledCalWrap}>
-                        <Calendar size={16} color="#ffffff" />
-                      </View>
-                      <View>
-                        <Text style={styles.tdSettledK}>Settled on</Text>
-                        <Text style={styles.tdSettledV}>
-                          {formatTripHistoryDate(
-                            selectedTrip.pickup_date ?? selectedTrip.created_at,
-                          )}
-                        </Text>
-                      </View>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.tdSettledExport}
-                      activeOpacity={0.85}
-                      accessibilityLabel="Export settlement reference"
-                      onPress={() => {
-                        void Share.share({
-                          message: `Settlement reference #${getDriverTripDisplayNumber(selectedTrip, driverTripNumberById)}`,
-                        }).catch(() => {});
-                      }}
-                    >
-                      <ArrowDownToLine size={16} color="#ffffff" />
-                    </TouchableOpacity>
-                  </View>
-
-                  <TouchableOpacity
-                    style={[
-                      styles.tdQueryBtn,
-                      {
-                        backgroundColor: colors.surface,
-                        borderColor: colors.border,
-                      },
-                    ]}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={[styles.tdQueryBtnText, { color: colors.textMuted }]}>
-                      Raise a query
-                    </Text>
-                    <ChevronRight size={14} color={colors.textMuted} />
-                  </TouchableOpacity>
-                </View>
+                <TripDetailSettlementPanel trip={selectedTrip} />
               ) : null}
             </ScrollView>
 

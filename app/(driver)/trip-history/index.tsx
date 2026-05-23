@@ -492,10 +492,12 @@ export default function DriverTripsScreen() {
   const fetch = useCallback(() => {
     if (!profile?.uid) {
       setLoading(false);
-      return;
+      return () => {};
     }
     if (!isRefreshingRef.current && !initialLoadDoneRef.current) setLoading(true);
+    let cancelled = false;
     driversService.getLinkedDriversForCurrentUser(profile.uid).then((res) => {
+      if (cancelled) return;
       if (res.error && __DEV__) {
         console.warn("[trip-history] getLinkedDriversForCurrentUser:", res.error.message);
       }
@@ -507,6 +509,7 @@ export default function DriverTripsScreen() {
           driversService.getDriverInvitesReceived(),
         ])
           .then(([tRes, invitesRes]) => {
+            if (cancelled) return;
             if (tRes.error && __DEV__) {
               console.warn("[trip-history] getTripsByDriverIds:", tRes.error.message);
             }
@@ -521,6 +524,7 @@ export default function DriverTripsScreen() {
             setRefreshing(false);
           })
           .catch((e) => {
+            if (cancelled) return;
             if (__DEV__) console.warn("[trip-history] trips/invites fetch failed:", e);
             setTrips([]);
             setInvites([]);
@@ -538,15 +542,21 @@ export default function DriverTripsScreen() {
         setRefreshing(false);
       }
     });
+    return () => {
+      cancelled = true;
+    };
   }, [profile?.uid]);
 
   useEffect(() => {
-    fetch();
+    const cancel = fetch();
+    return cancel;
   }, [fetch]);
 
   useFocusEffect(
     useCallback(() => {
-      if (profile?.uid) fetch();
+      if (!profile?.uid) return;
+      const cancel = fetch();
+      return cancel;
     }, [profile?.uid, fetch]),
   );
 
