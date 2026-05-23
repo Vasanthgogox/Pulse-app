@@ -83,9 +83,8 @@ export function NetworkProfileModalChrome({ children }: NetworkProfileModalChrom
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
-      <View style={[styles.orb, styles.orbIndigo]} pointerEvents="none" />
-      <View style={[styles.orb, styles.orbMint]} pointerEvents="none" />
-      <View style={[styles.orb, styles.orbRose]} pointerEvents="none" />
+      <View style={[styles.orb, styles.orbSoft]} pointerEvents="none" />
+      <View style={[styles.orb, styles.orbSoftSecondary]} pointerEvents="none" />
       {children}
     </View>
   );
@@ -101,29 +100,22 @@ const styles = StyleSheet.create({
     position: "absolute",
     borderRadius: 999,
   },
-  orbIndigo: {
-    width: 180,
-    height: 180,
-    top: -48,
-    right: -40,
-    backgroundColor: "rgba(99, 102, 241, 0.14)",
+  orbSoft: {
+    width: 160,
+    height: 160,
+    top: -40,
+    right: -36,
+    backgroundColor: "rgba(15, 23, 42, 0.04)",
   },
-  orbMint: {
-    width: 140,
-    height: 140,
-    bottom: 80,
-    left: -50,
-    backgroundColor: "rgba(16, 185, 129, 0.1)",
-  },
-  orbRose: {
-    width: 100,
-    height: 100,
-    top: 120,
-    left: "38%",
-    backgroundColor: "rgba(244, 63, 94, 0.06)",
+  orbSoftSecondary: {
+    width: 120,
+    height: 120,
+    bottom: 72,
+    left: -44,
+    backgroundColor: "rgba(15, 23, 42, 0.03)",
   },
   shell: {
-    borderRadius: 18,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: Theme.networkGlassBorder,
     overflow: "hidden",
@@ -131,7 +123,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.networkGlassSurface,
   },
   shellCompact: {
-    borderRadius: 16,
+    borderRadius: 10,
   },
   specular: {
     ...StyleSheet.absoluteFillObject,
@@ -147,12 +139,12 @@ const styles = StyleSheet.create({
     opacity: 0.95,
   },
   content: {
-    paddingVertical: 14,
-    paddingHorizontal: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
     zIndex: 1,
   },
   contentCompact: {
-    paddingVertical: 10,
-    paddingHorizontal: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
   },
 });

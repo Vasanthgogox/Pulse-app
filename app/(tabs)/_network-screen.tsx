@@ -6,7 +6,6 @@ import { HomePageHeader } from "@/components/HomePageHeader";
 import { InboundProtocolPanel } from "@/components/InboundProtocolPanel";
 import { SceneLoadingSplash } from "@/components/chromeLoadingScreens";
 import { LoadingIndicator } from "@/components/LoadingIndicator";
-import { EntityAvatar } from "@/components/EntityAvatar";
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -27,11 +26,8 @@ import {
   NETWORK_HUB_SPLIT_COLUMN_GAP_PX,
 } from "@/features/network/constants/networkHubGrid";
 import { NetworkLoadsQuickCards } from "@/features/network/components/NetworkLoadsQuickCards";
-import { NetworkProfileMetricTile } from "@/features/network/components/NetworkProfileMetricTile";
-import {
-  NetworkProfileGlassPanel,
-  NetworkProfileModalChrome,
-} from "@/features/network/components/NetworkProfileGlassShell";
+import { NetworkProfileModalBody } from "@/features/network/components/NetworkProfileModalBody";
+import { NetworkProfileModalChrome } from "@/features/network/components/NetworkProfileGlassShell";
 import { LinearGradient } from "expo-linear-gradient";
 import { ContentErrorState } from "@/components/ContentErrorState";
 import { NetworkTabErrorBoundary } from "@/components/network/NetworkTabErrorBoundary";
@@ -65,11 +61,9 @@ import {
   Building2,
   Compass,
   Mail,
-  MapPin,
   Search,
   User,
   UserPlus,
-  Verified,
   Warehouse,
   X,
 } from "lucide-react-native";
@@ -1062,7 +1056,12 @@ function NetworkScreenInner() {
         animationType="fade"
         onRequestClose={() => setSelectedProfileNode(null)}
       >
-        <View style={styles.profileModalBackdrop}>
+        <View
+          style={[
+            styles.profileModalBackdrop,
+            isMobileLayout && styles.profileModalBackdropMobile,
+          ]}
+        >
           <Pressable style={styles.profileModalBackdropTouch} onPress={() => setSelectedProfileNode(null)} />
             <View style={[styles.profileModalCard, isMobileLayout && styles.profileModalCardMobile]}>
               <NetworkProfileModalChrome>
@@ -1103,107 +1102,26 @@ function NetworkScreenInner() {
                 <ScrollView
                   keyboardShouldPersistTaps="handled"
                   showsVerticalScrollIndicator={false}
-                  contentContainerStyle={styles.profileModalScroll}
+                  contentContainerStyle={[
+                    styles.profileModalScroll,
+                    isMobileLayout && styles.profileModalScrollMobile,
+                    isMobileLayout && {
+                      paddingBottom: 16 + insets.bottom,
+                    },
+                  ]}
                 >
-                  <View style={styles.profileIdentityCardModal}>
-                    <NetworkProfileGlassPanel style={styles.profileHeroGlass}>
-                      <View style={styles.profileHero}>
-                    <View style={styles.profileAvatarRing}>
-                      <EntityAvatar
-                        name={selectedProfileNode.name}
-                        avatarUrl={selectedProfileNode.avatar_url}
-                        avatarSeed={selectedProfileNode.avatar_seed}
-                        entityType={
-                          selectedProfileNode.type === "DRIVER"
-                            ? "driver"
-                            : selectedProfileNode.type === "SUPPLIER"
-                              ? "supplier"
-                              : "client"
-                        }
-                        isIntegrated={selectedProfileNode.is_integrated ?? false}
-                        size={80}
-                        showIntegrationBadge={false}
-                      />
-                    </View>
-                    <View style={styles.profileNameRow}>
-                      <Text style={styles.profileNameHero} numberOfLines={2}>
-                        {selectedProfileNode.name.toUpperCase()}
-                      </Text>
-                      <Verified size={16} color={Theme.primary} strokeWidth={2.4} />
-                    </View>
-                    <View style={styles.profileLocationRow}>
-                      <MapPin size={13} color={Theme.primary} strokeWidth={2.2} />
-                      <Text style={styles.profileLocationHero} numberOfLines={2}>
-                        {selectedProfileNode.location}
-                      </Text>
-                    </View>
-                      </View>
-                    </NetworkProfileGlassPanel>
-
-                  <View style={styles.profileStatusRow}>
-                    <NetworkProfileMetricTile
-                      layout="row"
-                      variant="role"
-                      label="Role"
-                      value={selectedProfileNode.type}
+                  <View
+                    style={[
+                      styles.profileIdentityCardModal,
+                      isMobileLayout && styles.profileIdentityCardModalMobile,
+                    ]}
+                  >
+                    <NetworkProfileModalBody
+                      node={selectedProfileNode}
+                      isMobile={isMobileLayout}
+                      profileStatsLoading={profileStatsLoading}
+                      totalTrips={selectedProfileStats.totalTrips ?? 0}
                     />
-                    <NetworkProfileMetricTile
-                      layout="row"
-                      variant="connection"
-                      label="Connection"
-                      value={selectedProfileNode.status.replace(/_/g, " ")}
-                    />
-                  </View>
-
-                  {selectedProfileNode.phone ? (
-                    <NetworkProfileMetricTile
-                      layout="row"
-                      variant="phone"
-                      label="Phone"
-                      value={selectedProfileNode.phone}
-                      style={styles.profilePhoneTile}
-                    />
-                  ) : null}
-
-                  <View style={styles.profileMetricsGrid}>
-                    <NetworkProfileMetricTile
-                      style={styles.profileMetricGridItem}
-                      variant="rating"
-                      label="Global avg rating"
-                      value={
-                        selectedProfileNode.rating != null
-                          ? selectedProfileNode.rating.toFixed(1)
-                          : "New"
-                      }
-                    />
-                    <NetworkProfileMetricTile
-                      style={styles.profileMetricGridItem}
-                      variant="trips"
-                      label="Trips operated"
-                      value={
-                        profileStatsLoading ? "…" : String(selectedProfileStats.totalTrips ?? 0)
-                      }
-                    />
-                    <NetworkProfileMetricTile
-                      style={styles.profileMetricGridItem}
-                      variant="presence"
-                      label="Network presence"
-                      value={
-                        selectedProfileNode.status === "CONNECTED"
-                          ? "LIVE"
-                          : selectedProfileNode.status
-                      }
-                      valueTone={
-                        selectedProfileNode.status === "CONNECTED" ? "live" : "default"
-                      }
-                    />
-                    <NetworkProfileMetricTile
-                      style={styles.profileMetricGridItem}
-                      variant="mutuals"
-                      label="Mutuals"
-                      value={String(selectedProfileNode.mutuals)}
-                    />
-                  </View>
 
                   <View style={styles.profileCtaStack}>
                     {selectedProfileNode.status !== "CONNECTED" ? (
@@ -1256,23 +1174,10 @@ function NetworkScreenInner() {
                     <Pressable
                       style={({ pressed }) => [
                         styles.profileSecondaryBtn,
-                        pressed && { opacity: 0.9 },
+                        pressed && { opacity: 0.88 },
                       ]}
                       onPress={() => void handleOpenDirectMessage()}
                     >
-                      <LinearGradient
-                        colors={["rgba(15, 23, 42, 0.96)", "rgba(26, 35, 126, 0.92)"]}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={StyleSheet.absoluteFill}
-                      />
-                      <LinearGradient
-                        colors={["rgba(255,255,255,0.12)", "rgba(255,255,255,0)"]}
-                        start={{ x: 0.5, y: 0 }}
-                        end={{ x: 0.5, y: 0.5 }}
-                        style={styles.profileCtaSpecular}
-                        pointerEvents="none"
-                      />
                       <Mail size={14} color={Theme.textOnPrimary} strokeWidth={2.2} />
                       <Text style={styles.profileSecondaryBtnText}>Direct message</Text>
                     </Pressable>
@@ -1585,6 +1490,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 24,
   },
+  profileModalBackdropMobile: {
+    justifyContent: "flex-end",
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+  },
   profileModalBackdropTouch: {
     ...StyleSheet.absoluteFillObject,
   },
@@ -1612,13 +1522,17 @@ const styles = StyleSheet.create({
     }),
   },
   profileModalCardMobile: {
-    maxHeight: "92%",
+    maxHeight: "94%",
+    width: "100%",
     maxWidth: "100%",
     borderRadius: 20,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    alignSelf: "stretch",
   },
   profileModalHead: {
-    minHeight: 48,
-    paddingHorizontal: 16,
+    minHeight: 40,
+    paddingHorizontal: 12,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -1631,20 +1545,17 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   profileModalKicker: {
-    fontSize: 9,
-    fontWeight: "800",
+    ...FinanceTxnTypography.columnTitle,
     color: Theme.textOnPrimary,
-    letterSpacing: 1.2,
-    textTransform: "uppercase",
     zIndex: 1,
   },
   profileModalKickerOnDark: {
     color: Theme.textOnPrimary,
   },
   profileModalClose: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(255, 255, 255, 0.16)",
@@ -1653,88 +1564,23 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   profileModalScroll: {
-    padding: 14,
-    paddingBottom: 20,
-    gap: 10,
+    padding: 10,
+    paddingBottom: 14,
+    gap: 8,
     alignItems: "stretch",
     flexGrow: 0,
+  },
+  profileModalScrollMobile: {
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    gap: 0,
+  },
+  profileIdentityCardModalMobile: {
+    gap: 8,
   },
   profileIdentityCardModal: {
-    gap: 10,
-    width: "100%",
-  },
-  profileHeroGlass: {
-    width: "100%",
-  },
-  profileHero: {
-    width: "100%",
-    alignItems: "center",
-    gap: 8,
-    paddingBottom: 4,
-  },
-  profileAvatarRing: {
-    padding: 4,
-    borderRadius: 22,
-    backgroundColor: Theme.networkGlassSurface,
-    borderWidth: 1,
-    borderColor: Theme.networkGlassBorder,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#6366F1",
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.12,
-        shadowRadius: 14,
-      },
-      android: { elevation: 4 },
-      web: {
-        boxShadow: "0 8px 24px rgba(99, 102, 241, 0.12)",
-      },
-      default: {},
-    }),
-  },
-  profileNameHero: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 15,
-    fontWeight: "700",
-    color: Theme.textPrimaryDark,
-    textAlign: "center",
-    textTransform: "uppercase",
-    letterSpacing: 0.2,
-  },
-  profileLocationHero: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 9,
-    fontWeight: "500",
-    color: Theme.textSecondary,
-    textAlign: "center",
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-    lineHeight: 13,
-  },
-  profileStatusRow: {
-    flexDirection: "row",
-    alignItems: "stretch",
     gap: 8,
     width: "100%",
-  },
-  profileMetricsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    width: "100%",
-  },
-  profileMetricGridItem: {
-    flexGrow: 1,
-    flexBasis: "47%",
-    maxWidth: "48%",
-  },
-  profilePhoneTile: {
-    width: "100%",
-    flexGrow: 0,
-    flexBasis: "auto",
-    maxWidth: "100%",
   },
   profileOverviewCardModal: {
     borderRadius: 16,
@@ -2044,11 +1890,11 @@ const styles = StyleSheet.create({
   },
   profileCtaStack: {
     width: "100%",
-    gap: 8,
+    gap: 6,
   },
   profilePrimaryBtn: {
-    minHeight: 36,
-    borderRadius: 12,
+    minHeight: 32,
+    borderRadius: 10,
     backgroundColor: Theme.primary,
     flexDirection: "row",
     alignItems: "center",
@@ -2056,45 +1902,34 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   profilePrimaryBtnText: {
-    fontSize: 9,
-    fontWeight: "800",
+    ...FinanceTxnTypography.buttonLabel,
     color: Theme.textOnPrimary,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
   },
   profileSecondaryBtn: {
-    minHeight: 44,
-    borderRadius: 16,
-    overflow: "hidden",
+    minHeight: 36,
+    borderRadius: 10,
+    backgroundColor: Theme.textPrimaryDark,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.2)",
     ...Platform.select({
       ios: {
-        shadowColor: Theme.primary,
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.22,
-        shadowRadius: 12,
+        shadowColor: "#0F172A",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.12,
+        shadowRadius: 8,
       },
-      android: { elevation: 5 },
+      android: { elevation: 3 },
       web: {
-        boxShadow: "0 8px 24px rgba(26, 35, 126, 0.28)",
+        boxShadow: "0 4px 14px rgba(15, 23, 42, 0.18)",
       },
       default: {},
     }),
   },
-  profileCtaSpecular: {
-    ...StyleSheet.absoluteFillObject,
-  },
   profileSecondaryBtnText: {
-    fontSize: 11,
-    fontWeight: "700",
+    ...FinanceTxnTypography.buttonLabel,
     color: Theme.textOnPrimary,
-    textTransform: "uppercase",
-    letterSpacing: 0.9,
     zIndex: 1,
   },
   profileRolePicker: {

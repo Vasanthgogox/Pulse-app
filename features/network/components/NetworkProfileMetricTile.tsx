@@ -1,6 +1,7 @@
 /**
- * Profile modal metric cell — frosted glass + tinted icon chips.
+ * Profile modal metric cell — typography aligned with FinanceTxnTypography.
  */
+import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import Theme from "@/constants/Theme";
 import {
   NetworkProfileGlassPanel,
@@ -15,7 +16,7 @@ export type NetworkProfileMetricTileProps = {
   variant: NetworkProfileDepthIconVariant;
   label: string;
   value: string;
-  layout?: "tile" | "row";
+  layout?: "tile" | "row" | "stat";
   valueTone?: "default" | "live";
   style?: StyleProp<ViewStyle>;
 };
@@ -28,20 +29,23 @@ export function NetworkProfileMetricTile({
   valueTone = "default",
   style,
 }: NetworkProfileMetricTileProps) {
-  const icon = <NetworkProfileDepthIcon variant={variant} size={layout === "row" ? "sm" : "md"} />;
+  const iconSize = layout === "tile" ? "md" : "sm";
+  const icon = <NetworkProfileDepthIcon variant={variant} size={iconSize} bare />;
 
-  if (layout === "row") {
+  if (layout === "row" || layout === "stat") {
     return (
       <NetworkProfileGlassPanel compact style={[styles.rowTileOuter, style]}>
         <View style={styles.rowTile}>
-          {icon}
+          <View style={styles.iconSlot}>{icon}</View>
           <View style={styles.rowTextCol}>
             <Text style={styles.rowLabel} numberOfLines={1}>
               {label}
             </Text>
             <Text
               style={[styles.rowValue, valueTone === "live" && styles.valueLive]}
-              numberOfLines={1}
+              numberOfLines={layout === "stat" ? 2 : 1}
+              adjustsFontSizeToFit={layout === "stat"}
+              minimumFontScale={0.85}
             >
               {value}
             </Text>
@@ -54,16 +58,20 @@ export function NetworkProfileMetricTile({
   return (
     <NetworkProfileGlassPanel compact style={[styles.tileOuter, style]}>
       <View style={styles.tile}>
-        <View style={styles.tileIconRow}>{icon}</View>
-        <Text style={styles.tileLabel} numberOfLines={2}>
-          {label}
-        </Text>
-        <Text
-          style={[styles.tileValue, valueTone === "live" && styles.valueLive]}
-          numberOfLines={1}
-        >
-          {value}
-        </Text>
+        <View style={styles.iconSlot}>{icon}</View>
+        <View style={styles.tileTextCol}>
+          <Text style={styles.tileLabel} numberOfLines={2}>
+            {label}
+          </Text>
+          <Text
+            style={[styles.tileValue, valueTone === "live" && styles.valueLive]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.85}
+          >
+            {value}
+          </Text>
+        </View>
       </View>
     </NetworkProfileGlassPanel>
   );
@@ -75,28 +83,29 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   tile: {
+    flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingVertical: 2,
+    gap: 8,
+    paddingVertical: 0,
   },
-  tileIconRow: {
-    marginBottom: 2,
+  iconSlot: {
+    flexShrink: 0,
+  },
+  tileTextCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
   },
   tileLabel: {
-    fontSize: 9,
-    fontWeight: "600",
-    color: Theme.textMuted,
-    letterSpacing: 0.9,
-    textAlign: "center",
-    textTransform: "uppercase",
-    lineHeight: 12,
+    ...FinanceTxnTypography.fieldLabel,
+    lineHeight: 11,
   },
   tileValue: {
-    fontSize: 16,
-    fontWeight: "700",
+    ...FinanceTxnTypography.amount,
+    fontWeight: "500",
     color: Theme.textPrimaryDark,
-    textAlign: "center",
-    letterSpacing: -0.3,
+    letterSpacing: -0.15,
+    lineHeight: 14,
   },
   rowTileOuter: {
     flex: 1,
@@ -105,31 +114,28 @@ const styles = StyleSheet.create({
   rowTile: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingVertical: 2,
+    gap: 8,
+    paddingVertical: 0,
   },
   rowTextCol: {
     flex: 1,
     minWidth: 0,
-    gap: 3,
+    gap: 2,
   },
   rowLabel: {
-    fontSize: 9,
-    fontWeight: "600",
-    color: Theme.textMuted,
-    letterSpacing: 0.75,
-    textTransform: "uppercase",
+    ...FinanceTxnTypography.fieldLabel,
+    lineHeight: 11,
   },
   rowValue: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: Theme.textPrimaryDark,
+    ...FinanceTxnTypography.fieldValue,
     textTransform: "uppercase",
-    letterSpacing: 0.15,
+    fontWeight: "500",
+    fontStyle: "normal",
+    lineHeight: 12,
   },
   valueLive: {
-    color: Theme.positive,
-    fontWeight: "600",
+    ...FinanceTxnTypography.fieldValue,
     fontStyle: "italic",
+    fontWeight: "500",
   },
 });

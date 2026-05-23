@@ -87,16 +87,14 @@ function EmptyProtocolState() {
 
 function InviteAvatar({ item }: { item: InboundProtocolInviteItem }) {
   return (
-    <View style={styles.inviteAvatar}>
-      <PartyAvatar
-        name={item.name}
-        initialsColorSeed={item.partnerOrgId}
-        avatarUrl={item.avatarUri}
-        entityType="client"
-        size={40}
-        borderStyle={styles.inviteAvatarImage}
-      />
-    </View>
+    <PartyAvatar
+      name={item.name}
+      initialsColorSeed={item.partnerOrgId}
+      avatarUrl={item.avatarUri}
+      entityType="client"
+      size={44}
+      style={styles.inviteAvatarOnly}
+    />
   );
 }
 
@@ -120,7 +118,7 @@ function InviteCard({
     (item.linkedRequestIds?.includes(busyId ?? "") ?? false);
 
   return (
-    <View style={styles.inviteCard}>
+    <View style={[styles.inviteCard, tab === "sent" && styles.inviteCardSent]}>
       <View style={styles.inviteCardTop}>
         <InviteAvatar item={item} />
         <View style={styles.inviteTextCol}>
@@ -136,6 +134,20 @@ function InviteCard({
             {item.type}
           </Text>
         </View>
+        {tab === "sent" ? (
+          <TouchableOpacity
+            style={[styles.inviteGhostBtn, styles.inviteRecallBtnInline]}
+            onPress={() => onCancel(item)}
+            disabled={busy}
+            activeOpacity={0.88}
+          >
+            {busy ? (
+              <ActivityIndicator size="small" color={Theme.textSecondary} />
+            ) : (
+              <Text style={styles.inviteGhostBtnText}>Recall</Text>
+            )}
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       {tab === "received" ? (
@@ -161,20 +173,7 @@ function InviteCard({
             <Text style={styles.inviteGhostBtnText}>Ignore</Text>
           </TouchableOpacity>
         </View>
-      ) : (
-        <TouchableOpacity
-          style={[styles.inviteGhostBtn, styles.inviteRecallBtn]}
-          onPress={() => onCancel(item)}
-          disabled={busy}
-          activeOpacity={0.88}
-        >
-          {busy ? (
-            <ActivityIndicator size="small" color={Theme.textSecondary} />
-          ) : (
-            <Text style={styles.inviteGhostBtnText}>Recall</Text>
-          )}
-        </TouchableOpacity>
-      )}
+      ) : null}
     </View>
   );
 }
@@ -509,33 +508,17 @@ const styles = StyleSheet.create({
       },
     }),
   },
+  inviteCardSent: {
+    gap: 0,
+  },
   inviteCardTop: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
     width: "100%",
   },
-  inviteAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: "#0F172A",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: Theme.cardWhite,
+  inviteAvatarOnly: {
     flexShrink: 0,
-    overflow: "hidden",
-  },
-  inviteAvatarImage: {
-    width: "100%",
-    height: "100%",
-  },
-  inviteAvatarText: {
-    fontSize: 13,
-    fontWeight: "600",
-    fontStyle: "italic",
-    color: Theme.textOnDark,
   },
   inviteTextCol: {
     flex: 1,
@@ -595,9 +578,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     minHeight: 36,
   },
-  inviteRecallBtn: {
-    flex: undefined,
-    width: "100%",
+  inviteRecallBtnInline: {
+    flex: 0,
+    flexShrink: 0,
+    alignSelf: "center",
+    minWidth: 72,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    minHeight: 32,
   },
   inviteGhostBtnText: {
     fontSize: 8,
