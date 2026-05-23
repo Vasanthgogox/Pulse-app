@@ -1,9 +1,11 @@
 import { useCallback, useState } from "react";
+import { cancelDriverInvite } from "@/features/drivers/services/drivers.service";
 import type { InboundProtocolInviteItem } from "@/lib/globalSync/inboundProtocol.types";
 import { useInboundProtocolInvites } from "@/lib/globalSync/useInboundProtocolInvites";
 import {
   useConnectionRequestsReceivedQuery,
   useConnectionRequestsSentQuery,
+  useDriverInvitesSentQuery,
 } from "@/lib/queries/useNetworkQueries";
 import {
   approveConnectionRequest,
@@ -16,6 +18,7 @@ export function useInboundProtocolInviteActions(orgId: string | null) {
   const [inviteActionId, setInviteActionId] = useState<string | null>(null);
   const receivedQ = useConnectionRequestsReceivedQuery(orgId);
   const sentQ = useConnectionRequestsSentQuery(orgId);
+  const driverInvitesSentQ = useDriverInvitesSentQuery(orgId);
   const { patchAfterAction, refreshInboundProtocol } =
     useInboundProtocolInvites(orgId);
 
@@ -34,6 +37,9 @@ export function useInboundProtocolInviteActions(orgId: string | null) {
       } else if (action === "reject") {
         patchAfterAction(item.id, item.linkedRequestIds);
         const res = await rejectConnectionRequest(item.id, orgId);
+        error = res.error;
+      } else if (action === "cancel" && item.kind === "driver") {
+        const res = await cancelDriverInvite(item.id);
         error = res.error;
       } else if (item.partnerOwnerId) {
         const res = await cancelPendingConnectionRequestsForPartnerOwner(
@@ -64,7 +70,11 @@ export function useInboundProtocolInviteActions(orgId: string | null) {
       if (error) {
         await refreshInboundProtocol();
       }
-      await Promise.all([receivedQ.refetch(), sentQ.refetch()]);
+      await Promise.all([
+        receivedQ.refetch(),
+        sentQ.refetch(),
+        driverInvitesSentQ.refetch(),
+      ]);
     },
     [
       orgId,
@@ -72,6 +82,7 @@ export function useInboundProtocolInviteActions(orgId: string | null) {
       refreshInboundProtocol,
       receivedQ,
       sentQ,
+      driverInvitesSentQ,
     ],
   );
 

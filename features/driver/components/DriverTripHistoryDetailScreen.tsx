@@ -19,7 +19,9 @@ import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
 import { getOptimalRoute } from "@/services/routingService";
 import * as tripDocumentsService from "@/services/tripDocumentsService";
 import * as driversService from "@/services/driversService";
+import * as salaryRequestsService from "@/services/salaryRequestsService";
 import * as tripsService from "@/services/tripsService";
+import { tripEarningsForDriver } from "@/lib/driverUtils";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { LinearGradient } from "expo-linear-gradient";
 import { type Href, useRouter } from "expo-router";
@@ -39,6 +41,7 @@ import {
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
+  Alert,
   Image,
   Linking,
   Modal,
@@ -134,6 +137,11 @@ export function DriverTripHistoryDetailScreen({ tripId }: DriverTripHistoryDetai
   const [podPreviewLoading, setPodPreviewLoading] = useState(false);
   const [podPreviewError, setPodPreviewError] = useState(false);
 
+  // Fleet attribution state
+  const [linkedDriversFull, setLinkedDriversFull] = useState<driversService.DriverRow[]>([]);
+  const [attrSalaryRequests, setAttrSalaryRequests] = useState<salaryRequestsService.SalaryRequestRow[]>([]);
+  const [attributeLoading, setAttributeLoading] = useState(false);
+
   const loadTrip = useCallback(async (isMounted: () => boolean) => {
     if (isMounted()) setLoading(true);
     const res = await tripsService.getTripById(tripId);
@@ -158,11 +166,19 @@ export function DriverTripHistoryDetailScreen({ tripId }: DriverTripHistoryDetai
       if (!mounted) return;
       const d = res.drivers?.[0] ?? null;
       setDriver(d);
+      // Keep ALL rows (including left_at) so former-employer trips classify as fleet trips.
+      const allRows = res.drivers ?? [];
+      setLinkedDriversFull(allRows);
       if (!d?.id) return;
       void driversService.getDriverInvitesReceived().then((inv) => {
         if (!mounted || inv.error) return;
         setInvites(inv.invites);
       });
+      const activeRows = allRows.filter((r) => !r.left_at);
+      if (activeRows.length > 0) {
+        void salaryRequestsService.getSalaryRequestsByDriverIds(activeRows.map((r) => r.id))
+          .then((sRes) => { if (mounted) setAttrSalaryRequests(sRes.requests ?? []); });
+      }
     });
     return () => {
       mounted = false;
@@ -318,6 +334,83 @@ export function DriverTripHistoryDetailScreen({ tripId }: DriverTripHistoryDetai
   }
 
   const selectedTrip = trip;
+
+  // Fleet attribution derivations
+  const historyEmployerOrgIdSet = useMemo(() => {
+    const set = new Set<string>();
+    linkedDriversFull.forEach((d) => {
+      if (
+        (d.payable_amount != null && d.payable_amount > 0) ||
+        (d.commission_percent != null && d.commission_percent > 0) ||
+        (d.commission_per_km != null && d.commission_per_km > 0)
+      ) {
+        const orgId = String(d.organization_id ?? "");
+        if (orgId) set.add(orgId);
+      }
+    });
+    return set;
+  }, [linkedDriversFull]);
+
+  const historyCurrentEmployer = useMemo(() => {
+    // Prefer active employer row; fall back to any employer row for classification.
+    const d =
+      linkedDriversFull.find((row) => !row.left_at && historyEmployerOrgIdSet.has(String(row.organization_id ?? ""))) ??
+      linkedDriversFull.find((row) => historyEmployerOrgIdSet.has(String(row.organization_id ?? "")));
+    if (!d) return null;
+    const orgName =
+      invites.find((i) => String(i.from_organization_id ?? "") === String(d.organization_id ?? ""))?.from_org_name?.trim() ||
+      "Employer";
+    return { orgId: String(d.organization_id ?? ""), driverRowId: d.id, orgName };
+  }, [linkedDriversFull, historyEmployerOrgIdSet, invites]);
+
+  const isTripHistoryFleet = historyCurrentEmployer
+    ? historyEmployerOrgIdSet.has(String(selectedTrip?.organization_id ?? ""))
+    : false;
+
+  const isTripHistoryAttributed = useMemo(() => {
+    if (!historyCurrentEmployer || !selectedTrip) return false;
+    return attrSalaryRequests.some(
+      (r) =>
+        r.request_type === "trip_based" &&
+        String(r.organization_id ?? "") === historyCurrentEmployer.orgId &&
+        (r.trip_ids ?? []).includes(selectedTrip.id),
+    );
+  }, [attrSalaryRequests, historyCurrentEmployer, selectedTrip]);
+
+  const handleHistoryAttributeTrip = useCallback(async () => {
+    if (!historyCurrentEmployer || !selectedTrip) return;
+    setAttributeLoading(true);
+    try {
+      const earnings = Math.round(tripEarningsForDriver(selectedTrip));
+      if (earnings <= 0) {
+        Alert.alert("No earnings", "Could not calculate trip earnings.");
+        return;
+      }
+      const tripDate = selectedTrip.pickup_date ?? selectedTrip.started_at ?? selectedTrip.created_at ?? "";
+      const tripDateStr = tripDate
+        ? new Date(tripDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+        : "";
+      const tripRef = getDriverTripDisplayNumber(selectedTrip, driverTripNumberById);
+      const attrNote = [`Fleet trip · ${tripRef}`, tripDateStr, `₹${earnings.toLocaleString("en-IN")}`]
+        .filter(Boolean).join(" · ");
+      const { error } = await salaryRequestsService.createSalaryRequest(
+        historyCurrentEmployer.driverRowId,
+        historyCurrentEmployer.orgId,
+        "trip_based",
+        earnings,
+        { tripIds: [selectedTrip.id], note: attrNote, createdBy: profile?.uid ?? null },
+      );
+      if (error) {
+        Alert.alert("Error", error.message);
+      } else {
+        Alert.alert("Trip attributed", `Sent to ${historyCurrentEmployer.orgName} for review.`);
+        void salaryRequestsService.getSalaryRequestsByDriverIds(linkedDriversFull.map((d) => d.id))
+          .then((sRes) => setAttrSalaryRequests(sRes.requests ?? []));
+      }
+    } finally {
+      setAttributeLoading(false);
+    }
+  }, [historyCurrentEmployer, selectedTrip, driverTripNumberById, linkedDriversFull, profile?.uid]);
 
   return (
     <View
@@ -880,7 +973,36 @@ export function DriverTripHistoryDetailScreen({ tripId }: DriverTripHistoryDetai
               ) : null}
 
               {detailTab === "settlement" ? (
-                <TripDetailSettlementPanel trip={selectedTrip} />
+                <>
+                  <TripDetailSettlementPanel trip={selectedTrip} />
+                  {!isTripHistoryFleet && historyCurrentEmployer ? (
+                    <View style={[histAttrStyles.wrap, { borderTopColor: colors.border }]}>
+                      <Text style={[histAttrStyles.label, { color: colors.textMuted }]}>
+                        Fleet attribution
+                      </Text>
+                      {isTripHistoryAttributed ? (
+                        <View style={histAttrStyles.doneBadge}>
+                          <FontAwesome name="check-circle" size={14} color="#d97706" />
+                          <Text style={histAttrStyles.doneBadgeText}>
+                            Sent to {historyCurrentEmployer.orgName} for review
+                          </Text>
+                        </View>
+                      ) : (
+                        <TouchableOpacity
+                          style={histAttrStyles.btn}
+                          onPress={() => void handleHistoryAttributeTrip()}
+                          disabled={attributeLoading}
+                          activeOpacity={0.8}
+                        >
+                          <FontAwesome name="building" size={13} color="#d97706" />
+                          <Text style={histAttrStyles.btnText}>
+                            {attributeLoading ? "Attributing…" : `Attribute to ${historyCurrentEmployer.orgName}`}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  ) : null}
+                </>
               ) : null}
             </ScrollView>
 
@@ -984,4 +1106,54 @@ export function DriverTripHistoryDetailScreen({ tripId }: DriverTripHistoryDetai
     </View>
   );
 }
+
+const histAttrStyles = StyleSheet.create({
+  wrap: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 8,
+  },
+  label: {
+    fontSize: 11,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  btn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#d97706",
+    backgroundColor: "#fffbeb",
+    alignSelf: "flex-start",
+  },
+  btnText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#d97706",
+  },
+  doneBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#fde68a",
+    backgroundColor: "#fef3c7",
+    alignSelf: "flex-start",
+  },
+  doneBadgeText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#b45309",
+  },
+});
 

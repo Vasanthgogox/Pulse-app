@@ -17,6 +17,8 @@ export interface LocationEventCardProps {
   message: TripMessageRow;
   location: SystemLogLocationData;
   isMobile?: boolean;
+  /** When > 1, shows a consolidated "N location updates" header instead of individual ping. */
+  consolidatedCount?: number;
 }
 
 /**
@@ -26,7 +28,9 @@ export function LocationEventCard({
   message,
   location,
   isMobile = false,
+  consolidatedCount,
 }: LocationEventCardProps) {
+  const isConsolidated = typeof consolidatedCount === 'number' && consolidatedCount > 1;
   const mapPixelW = isMobile ? 340 : MAP_W;
   const mapPixelH = isMobile ? 132 : MAP_H;
   const mapUrl = useMemo(
@@ -72,10 +76,12 @@ export function LocationEventCard({
         </View>
         <View style={s.headerText}>
           <Text style={[s.title, isMobile && s.titleMobile]} numberOfLines={3}>
-            {message.content?.trim() ? message.content : "Location ping"}
+            {isConsolidated
+              ? `${consolidatedCount} location updates`
+              : (message.content?.trim() ? message.content : "Location ping")}
           </Text>
           <Text style={[s.metaLine, isMobile && s.metaLineMobile]} numberOfLines={2}>
-            Live location · GPS
+            {isConsolidated ? "Driver location trail · tap to open map" : "Live location · GPS"}
           </Text>
           <Text style={[s.time, isMobile && s.timeMobile]}>{displayTime}</Text>
         </View>
@@ -112,12 +118,13 @@ export function LocationEventCard({
         <Text style={s.mapTapHint}>View on map</Text>
       </Pressable>
 
-      <Text style={[s.coords, isMobile && s.coordsMobile]} numberOfLines={1}>
-        {coordsLabel}
-      </Text>
       {label ? (
         <Text style={[s.address, isMobile && s.addressMobile]} numberOfLines={3}>
           {label}
+        </Text>
+      ) : !isConsolidated ? (
+        <Text style={[s.coords, isMobile && s.coordsMobile]} numberOfLines={1}>
+          {coordsLabel}
         </Text>
       ) : null}
     </View>

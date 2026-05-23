@@ -28,7 +28,7 @@ import type { InboundProtocolInviteItem } from "@/lib/globalSync/inboundProtocol
 import { useAlertRegistryNotifications } from "@/lib/globalSync/useAlertRegistryNotifications";
 import { useOperationsShelfItems } from "@/lib/globalSync/useOperationsDerived";
 import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
-import { useInboundProtocolInvites } from "@/lib/globalSync/useInboundProtocolInvites";
+import { useProtocolInvitesWithDriverSent } from "@/lib/hooks/useProtocolInvitesWithDriverSent";
 import { setMobileNetworkDockExpanded } from "@/lib/mobileDockState";
 import { ROUTES } from "@/lib/routes";
 import {
@@ -596,7 +596,7 @@ export function DemoTabBar({
     pendingCount: pendingInvites,
     refreshInboundProtocol,
     patchAfterAction: patchInviteAfterAction,
-  } = useInboundProtocolInvites(orgId);
+  } = useProtocolInvitesWithDriverSent(orgId);
   const activeLoadCount = useMemo(() => {
     const terminalStatuses = new Set(["completed", "cancelled"]);
     const awardedToMeIds = new Set(

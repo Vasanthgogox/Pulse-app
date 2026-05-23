@@ -35,6 +35,7 @@ import { hasSupabaseConfig, SUPABASE_CONFIG_MISSING_MESSAGE } from '@/lib/supaba
 import {
   installWebDeployRecoveryListener,
   isStaleWebChunkError,
+  isStaleNativeBundleError,
   recoverStaleWebDeploy,
 } from '@/lib/webDeployRecovery';
 import {
@@ -108,6 +109,7 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   }
 
   const staleDeploy = isStaleWebChunkError(error);
+  const staleNativeBundle = isStaleNativeBundleError(error);
   const configMissing = isConfigMissingError(error);
   const network = isNetworkError(error);
   const variant = configMissing
@@ -144,6 +146,8 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
             ? undefined
             : staleDeploy
               ? undefined
+              : staleNativeBundle
+                ? 'The dev bundle is out of date. Stop all Metro servers, run npm run start:clean, reopen Expo Go, and try again.'
               : network
                 ? undefined
                 : error.message

@@ -281,7 +281,7 @@ export function TripDetailSettlementPanel({ trip }: TripDetailSettlementPanelPro
                 <FontAwesome name="check" size={12} color={Theme.textOnPrimary} />
                 <Text style={panelStyles.actionPrimaryText}>
                   {settlementView.hasPaymentShortfall
-                    ? `Accept ₹${settlementView.amount.toLocaleString("en-IN")} & write off ₹${settlementView.writeOffAmount.toLocaleString("en-IN")}`
+                    ? `Accept ₹${settlementView.amount.toLocaleString("en-IN")} and write off ₹${settlementView.writeOffAmount.toLocaleString("en-IN")}`
                     : "Verify payment"}
                 </Text>
               </>

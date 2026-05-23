@@ -1,3 +1,4 @@
+import { DriverBrandMark } from "@/components/driver/DriverBrandMark";
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Layout from "@/constants/Layout";
@@ -20,18 +21,20 @@ import {
     buildDriverTripNumberMap,
     getDriverTripDisplayNumber,
 } from "@/lib/driverTripSequence";
-import { isAggregateTrip } from "@/lib/driverUtils";
+import { isAggregateTrip, tripEarningsForDriver } from "@/lib/driverUtils";
 import { formatINR } from "@/lib/format";
 import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
 import { useSafeBack } from "@/lib/useSafeBack";
 import * as driversService from "@/services/driversService";
+import * as salaryRequestsService from "@/services/salaryRequestsService";
 import { getOptimalRoute } from "@/services/routingService";
 import * as tripDocumentsService from "@/services/tripDocumentsService";
 import * as tripsService from "@/services/tripsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { type Href, useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+    Alert,
     Image,
     Linking,
     Modal,
@@ -161,6 +164,9 @@ export default function DriverControlScreen() {
   } | null>(null);
   const [linkedDriverIds, setLinkedDriverIds] = useState<string[]>([]);
   const [linkedDriversLoaded, setLinkedDriversLoaded] = useState(false);
+  const [linkedDriversFull, setLinkedDriversFull] = useState<driversService.DriverRow[]>([]);
+  const [attributeSalaryRequests, setAttributeSalaryRequests] = useState<salaryRequestsService.SalaryRequestRow[]>([]);
+  const [attributeLoading, setAttributeLoading] = useState(false);
 
   const [viewingPodUrl, setViewingPodUrl] = useState<string | null>(null);
   const [viewingPodLoading, setViewingPodLoading] = useState(false);
@@ -171,6 +177,7 @@ export default function DriverControlScreen() {
     driversService.getLinkedDriversForCurrentUser(profile.uid).then((res) => {
       const drivers = (res.drivers ?? []).filter((d) => !d.left_at);
       setLinkedDriverIds(drivers.map((d) => d.id));
+      setLinkedDriversFull(drivers);
       setLinkedDriversLoaded(true);
       if (drivers.length === 0) return;
       tripsService.getTripsByDriverIds(drivers.map((d) => d.id)).then((tRes) => {
@@ -180,6 +187,9 @@ export default function DriverControlScreen() {
           tripsService.isTripCompleted(t),
         ).length;
         setCompletedTripsCount(count);
+      });
+      void salaryRequestsService.getSalaryRequestsByDriverIds(drivers.map((d) => d.id)).then((sRes) => {
+        setAttributeSalaryRequests(sRes.requests ?? []);
       });
     });
   }, [profile?.uid]);
@@ -314,9 +324,7 @@ export default function DriverControlScreen() {
               </View>
             </TouchableOpacity>
             <View style={styles.headerTextWrap}>
-              <Text style={[styles.brand, { color: colors.textMuted }]}>
-                Q PILOT
-              </Text>
+              <DriverBrandMark color={colors.textMuted} />
               <Text
                 style={[styles.welcomeTitle, { color: colors.text }]}
                 numberOfLines={1}
@@ -391,6 +399,81 @@ export default function DriverControlScreen() {
               ? 20
               : 0;
 
+  // Employer-based attribution
+  // left_at NOT filtered: a trip assigned by a former employer is still a fleet trip.
+  const employerOrgIdSet = useMemo(() => {
+    const set = new Set<string>();
+    linkedDriversFull.forEach((d) => {
+      if (
+        (d.payable_amount != null && d.payable_amount > 0) ||
+        (d.commission_percent != null && d.commission_percent > 0) ||
+        (d.commission_per_km != null && d.commission_per_km > 0)
+      ) {
+        const orgId = String(d.organization_id ?? '');
+        if (orgId) set.add(orgId);
+      }
+    });
+    return set;
+  }, [linkedDriversFull]);
+
+  const controlCurrentEmployer = useMemo(() => {
+    const d = linkedDriversFull.find(
+      (row) => !row.left_at && employerOrgIdSet.has(String(row.organization_id ?? '')),
+    );
+    if (!d) return null;
+    return { orgId: String(d.organization_id ?? ''), driverRowId: d.id };
+  }, [linkedDriversFull, employerOrgIdSet]);
+
+  const isControlTripFleet = controlCurrentEmployer
+    ? employerOrgIdSet.has(String(trip.organization_id ?? ''))
+    : false;
+
+  const isControlTripAttributed = useMemo(() => {
+    if (!controlCurrentEmployer) return false;
+    const eid = controlCurrentEmployer.orgId;
+    return attributeSalaryRequests.some(
+      (r) =>
+        r.request_type === 'trip_based' &&
+        String(r.organization_id ?? '') === eid &&
+        (r.trip_ids ?? []).includes(trip.id),
+    );
+  }, [attributeSalaryRequests, controlCurrentEmployer, trip.id]);
+
+  const handleAttributeControlTrip = useCallback(async () => {
+    if (!controlCurrentEmployer || !trip) return;
+    setAttributeLoading(true);
+    try {
+      const earnings = Math.round(tripEarningsForDriver(trip));
+      if (earnings <= 0) {
+        Alert.alert('No earnings', 'Trip earnings could not be calculated.');
+        return;
+      }
+      const tripDate = trip.pickup_date ?? trip.started_at ?? trip.created_at ?? '';
+      const tripDateStr = tripDate
+        ? new Date(tripDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+        : '';
+      const tripRef = getDriverTripDisplayNumber(trip, driverTripNumberById);
+      const attrNote = [`Fleet trip · ${tripRef}`, tripDateStr, `₹${earnings.toLocaleString('en-IN')}`]
+        .filter(Boolean).join(' · ');
+      const { error } = await salaryRequestsService.createSalaryRequest(
+        controlCurrentEmployer.driverRowId,
+        controlCurrentEmployer.orgId,
+        'trip_based',
+        earnings,
+        { tripIds: [trip.id], note: attrNote, createdBy: profile?.uid ?? null },
+      );
+      if (error) {
+        Alert.alert('Error', error.message);
+      } else {
+        Alert.alert('Trip attributed', 'Sent to your employer for review.');
+        void salaryRequestsService.getSalaryRequestsByDriverIds(linkedDriversFull.map((d) => d.id))
+          .then((sRes) => setAttributeSalaryRequests(sRes.requests ?? []));
+      }
+    } finally {
+      setAttributeLoading(false);
+    }
+  }, [controlCurrentEmployer, trip, driverTripNumberById, linkedDriversFull, profile?.uid]);
+
   return (
     <View
       style={[
@@ -429,9 +512,7 @@ export default function DriverControlScreen() {
             </View>
           </TouchableOpacity>
           <View style={styles.headerTextWrap}>
-            <Text style={[styles.brand, { color: colors.textMuted }]}>
-              Q PILOT
-            </Text>
+            <DriverBrandMark color={colors.textMuted} />
             <Text
               style={[styles.welcomeTitle, { color: colors.text }]}
               numberOfLines={1}
@@ -745,6 +826,28 @@ export default function DriverControlScreen() {
                     {formatINR(Math.max(0, Number(commission ?? 0) || 0))}
                   </Text>
                 </View>
+              </View>
+            )}
+            {!isControlTripFleet && !tripIsAggregate && controlCurrentEmployer && (
+              <View style={[styles.cardRow, { borderTopColor: colors.border }]}>
+                {isControlTripAttributed ? (
+                  <View style={[styles.attributedBadge, { backgroundColor: '#fef3c7', borderColor: '#d97706' }]}>
+                    <FontAwesome name="check-circle" size={13} color="#d97706" />
+                    <Text style={[styles.attributedBadgeText, { color: '#d97706' }]}>Sent to employer for review</Text>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.attributeBtn, { borderColor: '#d97706', backgroundColor: '#fffbeb' }]}
+                    onPress={handleAttributeControlTrip}
+                    disabled={attributeLoading}
+                    activeOpacity={0.8}
+                  >
+                    <FontAwesome name="building" size={13} color="#d97706" />
+                    <Text style={[styles.attributeBtnText, { color: '#d97706' }]}>
+                      {attributeLoading ? 'Attributing…' : 'Attribute to employer'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
             )}
             {step === "reached" && (
@@ -2056,5 +2159,33 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 0.3,
     color: Theme.textOnDark,
+  },
+  attributeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignSelf: 'flex-start',
+  },
+  attributeBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  attributedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignSelf: 'flex-start',
+  },
+  attributedBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

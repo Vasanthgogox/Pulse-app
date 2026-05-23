@@ -4,6 +4,7 @@
  * Not to be confused with app/driver/ which is for dispatchers (e.g. /driver/[id] = driver detail).
  */
 import { AppLoadingSplash } from '@/components/AppLoadingSplash';
+import { DriverInviteModalProvider } from '@/contexts/DriverInviteModalContext';
 import { DriverTabBar } from '@/components/driver/DriverTabBar';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -57,6 +58,7 @@ function DriverTabsNavigator() {
       <Tabs.Screen name="settings" options={{ title: 'Settings', href: null }} />
       <Tabs.Screen name="passbook" options={{ title: 'Passbook', href: null }} />
       <Tabs.Screen name="salary-request" options={{ title: 'Salary Request', href: null }} />
+      <Tabs.Screen name="pending-earnings" options={{ title: 'Pending Earnings', href: null }} />
     </Tabs>
   );
 }
@@ -134,7 +136,9 @@ export default function DriverAppLayout() {
     <DriverThemeProvider>
       <DriverAvatarProvider>
         <DriverChatProvider isActive={isDriverChatRouteActive}>
-          <DriverTabsNavigator />
+          <DriverInviteModalProvider>
+            <DriverTabsNavigator />
+          </DriverInviteModalProvider>
         </DriverChatProvider>
       </DriverAvatarProvider>
     </DriverThemeProvider>

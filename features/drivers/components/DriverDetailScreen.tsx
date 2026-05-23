@@ -82,12 +82,22 @@ import {
     getDriverProfileDisplay,
     getDriverSignupMatchStatus,
     getLatestDriverInviteTermsByUser,
+    inviteDriver,
     resetDriverSignupInvite,
     sendDriverSignupMatchInvite,
     updateDriver,
     type DriverRow,
     type DriverSignupMatchStatus,
 } from "../services/drivers.service";
+import {
+  DriverFleetInviteSalaryModal,
+  type DriverFleetInviteSalaryModalMode,
+} from "./DriverFleetInviteSalaryModal";
+import {
+  normalizeDriverInviteCompensation,
+  suggestDriverInviteCompensation,
+  type DriverInviteCompensation,
+} from "../utils/driverInviteCompensation.util";
 
 /** Latest payment date for a trip from ledger. */
 function getLatestPaymentDateForTrip(
@@ -266,6 +276,9 @@ export default function DriverDetailScreen({
   const [error, setError] = useState<string | null>(null);
   const [linking, setLinking] = useState(false);
   const [inviting, setInviting] = useState(false);
+  const [inviteSalaryModalVisible, setInviteSalaryModalVisible] = useState(false);
+  const [inviteSalaryModalMode, setInviteSalaryModalMode] =
+    useState<DriverFleetInviteSalaryModalMode>("fleet_reinvite");
   const [dismissingMatch, setDismissingMatch] = useState(false);
   const [signupMatch, setSignupMatch] =
     useState<DriverSignupMatchStatus | null>(null);
@@ -466,20 +479,19 @@ export default function DriverDetailScreen({
   );
 
   useEffect(() => {
-    if (!signupMatch?.matched_user_id || !currentOrganization?.id) {
+    const linkedUserId =
+      signupMatch?.matched_user_id ?? driver?.user_id ?? null;
+    if (!linkedUserId || !currentOrganization?.id) {
       setMatchInviteStatus(null);
       setHistoricalInviteOffer(null);
       return;
     }
     let cancelled = false;
     Promise.all([
-      getDriverInviteSentStatus(
-        currentOrganization.id,
-        signupMatch.matched_user_id,
-      ),
+      getDriverInviteSentStatus(currentOrganization.id, linkedUserId),
       getLatestDriverInviteTermsByUser(
         currentOrganization.id,
-        signupMatch.matched_user_id,
+        linkedUserId,
       ),
     ]).then(([statusRes, termsRes]) => {
       if (cancelled) return;
@@ -493,7 +505,30 @@ export default function DriverDetailScreen({
     return () => {
       cancelled = true;
     };
-  }, [signupMatch?.matched_user_id, currentOrganization?.id]);
+  }, [
+    signupMatch?.matched_user_id,
+    driver?.user_id,
+    currentOrganization?.id,
+  ]);
+
+  const refreshInviteStatus = useCallback(async () => {
+    const linkedUserId =
+      signupMatch?.matched_user_id ?? driver?.user_id ?? null;
+    if (!linkedUserId || !currentOrganization?.id) return;
+    const [statusRes, termsRes] = await Promise.all([
+      getDriverInviteSentStatus(currentOrganization.id, linkedUserId),
+      getLatestDriverInviteTermsByUser(
+        currentOrganization.id,
+        linkedUserId,
+      ),
+    ]);
+    setMatchInviteStatus(statusRes.status);
+    setHistoricalInviteOffer(termsRes.offer);
+  }, [
+    signupMatch?.matched_user_id,
+    driver?.user_id,
+    currentOrganization?.id,
+  ]);
 
   useEffect(() => {
     let mounted = true;
@@ -899,6 +934,18 @@ export default function DriverDetailScreen({
     leftAtFormatted == null;
   const normalizedMatchInviteStatus = (matchInviteStatus ?? "").toLowerCase();
   const rejectedInviteForMatch = normalizedMatchInviteStatus === "rejected";
+  const pendingFleetInvite = normalizedMatchInviteStatus === "pending";
+  const isDisconnected = leftAtFormatted != null;
+  const isActivelyLinked = Boolean(driver.user_id) && !isDisconnected;
+  const canSendFleetReinvite =
+    isDisconnected &&
+    Boolean(driver.user_id) &&
+    Boolean(driver.phone?.trim()) &&
+    !pendingFleetInvite &&
+    (normalizedMatchInviteStatus === "" ||
+      normalizedMatchInviteStatus === "accepted" ||
+      rejectedInviteForMatch ||
+      normalizedMatchInviteStatus === "declined");
   const canSendMatchedInvite =
     canLink &&
     (signupMatch?.state === "pending_owner_action" ||
@@ -937,102 +984,171 @@ export default function DriverDetailScreen({
     ]);
   };
 
-  const handleSendMatchedInvite = async () => {
-    Alert.alert(
-      t("driverSignupSendInviteTitle"),
-      t("driverSignupSendInviteMessage"),
-      [
-        { text: t("cancel"), style: "cancel" },
-        {
-          text: t("sendInvitation"),
-          onPress: async () => {
-            setInviting(true);
-            const inviteOffer = {
-              payableAmount:
-                driverOffer?.payableAmount ??
-                driver.payable_amount ??
-                historicalInviteOffer?.payableAmount ??
-                null,
-              commissionPercent:
-                driverOffer?.commissionPercent ??
-                driver.commission_percent ??
-                historicalInviteOffer?.commissionPercent ??
-                null,
-              commissionPerKm:
-                driverOffer?.commissionPerKm ??
-                driver.commission_per_km ??
-                historicalInviteOffer?.commissionPerKm ??
-                null,
-            };
-            if (
-              currentOrganization?.id &&
-              (inviteOffer.payableAmount != null ||
-                inviteOffer.commissionPercent != null ||
-                inviteOffer.commissionPerKm != null) &&
-              (driver.payable_amount == null ||
-                driver.commission_percent == null ||
-                driver.commission_per_km == null)
-            ) {
-              await updateDriver(currentOrganization.id, driver.id, {
-                payable_amount: inviteOffer.payableAmount,
-                commission_percent: inviteOffer.commissionPercent,
-                commission_per_km: inviteOffer.commissionPerKm,
-              });
-            }
-            let {
-              error: inviteError,
-              status,
-              already_exists,
-            } = await sendDriverSignupMatchInvite(driver.id, inviteOffer);
-            if (inviteError) {
-              setInviting(false);
-              Alert.alert(t("linkFailed"), inviteError.message);
-              return;
-            }
-            const normalizedStatus = (status ?? "").toLowerCase();
-            if (already_exists && normalizedStatus === "rejected") {
-              const { error: resetErr } = await resetDriverSignupInvite(
-                driver.id,
-              );
-              if (resetErr) {
-                setInviting(false);
-                Alert.alert(
-                  t("invitationAlreadySentTitle") ===
-                    "invitationAlreadySentTitle"
-                    ? "Invitation update needed"
-                    : t("invitationAlreadySentTitle"),
-                  t("invitationRejectedNeedsResetBody") ===
-                    "invitationRejectedNeedsResetBody"
-                    ? "Driver rejected the previous invitation. Please try again in a moment."
-                    : t("invitationRejectedNeedsResetBody"),
-                );
-                load();
-                return;
-              }
-              ({
-                error: inviteError,
-                status,
-                already_exists,
-              } = await sendDriverSignupMatchInvite(driver.id, inviteOffer));
-              if (inviteError) {
-                setInviting(false);
-                Alert.alert(t("linkFailed"), inviteError.message);
-                load();
-                return;
-              }
-            }
-            setInviting(false);
-            Alert.alert(
-              t("invitationSentTitle"),
-              status
-                ? `${t("invitationSentBody")}\n\n${t("status")}: ${status}`
-                : t("invitationSentBody"),
-            );
-            load();
-          },
-        },
-      ],
-    );
+  const handleSendMatchedInvite = () => {
+    setInviteSalaryModalMode("signup_match");
+    setInviteSalaryModalVisible(true);
+  };
+
+  const handleSendFleetReinvite = () => {
+    if (!currentOrganization?.id || !driver.phone?.trim()) return;
+    setInviteSalaryModalMode("fleet_reinvite");
+    setInviteSalaryModalVisible(true);
+  };
+
+  const suggestedInviteCompensation = suggestDriverInviteCompensation(
+    driver,
+    driverOffer,
+    historicalInviteOffer,
+  );
+
+  const persistDriverCompensation = async (
+    compensation: DriverInviteCompensation,
+  ) => {
+    if (!currentOrganization?.id || !driver) return;
+    const normalized = normalizeDriverInviteCompensation(compensation);
+    await updateDriver(currentOrganization.id, driver.id, {
+      payable_amount: normalized.payableAmount,
+      commission_percent: normalized.commissionPercent,
+      commission_per_km: normalized.commissionPerKm,
+    });
+  };
+
+  const handleSubmitInviteWithCompensation = async (
+    compensation: DriverInviteCompensation,
+  ) => {
+    if (!currentOrganization?.id || !driver?.phone?.trim()) return;
+    const normalized = normalizeDriverInviteCompensation(compensation);
+
+    setInviting(true);
+    try {
+      await persistDriverCompensation(normalized);
+
+      if (inviteSalaryModalMode === "fleet_reinvite") {
+        const { error, inviteSent, inviteAlreadyExists, inviteStatus } =
+          await inviteDriver(
+            currentOrganization.id,
+            {
+              name: (driver.name ?? "").trim() || "Driver",
+              phone: driver.phone ?? "",
+              email: driver.email?.trim() || null,
+              payableAmount: normalized.payableAmount,
+              commissionPercent: normalized.commissionPercent,
+              commissionPerKm: normalized.commissionPerKm,
+            },
+            currentOrganization.name ?? undefined,
+            {
+              requireCompensation: true,
+              knownToUserId: driver.user_id,
+            },
+          );
+        if (error) {
+          Alert.alert(t("linkFailed"), error.message);
+          return;
+        }
+        if (!inviteSent && !inviteAlreadyExists) {
+          Alert.alert(
+            t("linkFailed"),
+            "Invitation could not be delivered to the driver app. Confirm the driver is signed in on Pulse and try again.",
+          );
+          return;
+        }
+        const sentOrPending =
+          inviteSent ||
+          inviteAlreadyExists ||
+          (inviteStatus ?? "").toLowerCase() === "pending";
+        if (sentOrPending) {
+          setMatchInviteStatus("pending");
+          setHistoricalInviteOffer({
+            payableAmount: normalized.payableAmount,
+            commissionPercent: normalized.commissionPercent,
+            commissionPerKm: normalized.commissionPerKm,
+          });
+        }
+        if (inviteAlreadyExists && !inviteSent) {
+          Alert.alert(
+            "Invitation pending",
+            `An invitation is already ${(inviteStatus ?? "pending").toUpperCase()} for this driver.`,
+          );
+        } else if (inviteSent) {
+          Alert.alert(
+            t("invitationSentTitle"),
+            "The driver will see this invite in the Pulse app with the pay terms you entered.",
+          );
+        }
+        setInviteSalaryModalVisible(false);
+        await refreshInviteStatus();
+        load();
+        return;
+      }
+
+      let {
+        error: inviteError,
+        status,
+        already_exists,
+      } = await sendDriverSignupMatchInvite(driver.id, {
+        payableAmount: normalized.payableAmount,
+        commissionPercent: normalized.commissionPercent,
+        commissionPerKm: normalized.commissionPerKm,
+      });
+      if (inviteError) {
+        Alert.alert(t("linkFailed"), inviteError.message);
+        return;
+      }
+      const normalizedStatus = (status ?? "").toLowerCase();
+      if (already_exists && normalizedStatus === "rejected") {
+        const { error: resetErr } = await resetDriverSignupInvite(driver.id);
+        if (resetErr) {
+          Alert.alert(
+            t("invitationAlreadySentTitle") === "invitationAlreadySentTitle"
+              ? "Invitation update needed"
+              : t("invitationAlreadySentTitle"),
+            t("invitationRejectedNeedsResetBody") ===
+              "invitationRejectedNeedsResetBody"
+              ? "Driver rejected the previous invitation. Please try again in a moment."
+              : t("invitationRejectedNeedsResetBody"),
+          );
+          load();
+          return;
+        }
+        ({
+          error: inviteError,
+          status,
+          already_exists,
+        } = await sendDriverSignupMatchInvite(driver.id, {
+          payableAmount: normalized.payableAmount,
+          commissionPercent: normalized.commissionPercent,
+          commissionPerKm: normalized.commissionPerKm,
+        }));
+        if (inviteError) {
+          Alert.alert(t("linkFailed"), inviteError.message);
+          load();
+          return;
+        }
+      }
+      const finalStatus = (status ?? "pending").toLowerCase();
+      if (finalStatus === "pending" || finalStatus === "invite_sent") {
+        setMatchInviteStatus("pending");
+        setHistoricalInviteOffer({
+          payableAmount: normalized.payableAmount,
+          commissionPercent: normalized.commissionPercent,
+          commissionPerKm: normalized.commissionPerKm,
+        });
+        setSignupMatch((prev) =>
+          prev
+            ? { ...prev, state: "invite_sent" as const }
+            : prev,
+        );
+      }
+      Alert.alert(
+        t("invitationSentTitle"),
+        "The driver will see this invite in the Pulse app with the pay terms you entered.",
+      );
+      setInviteSalaryModalVisible(false);
+      await refreshInviteStatus();
+      load();
+    } finally {
+      setInviting(false);
+    }
   };
 
   const handleResetInvitation = async () => {
@@ -1055,26 +1171,40 @@ export default function DriverDetailScreen({
   };
 
   const tripsHandled = filteredLedgerRows.length;
-  const isIntegrated = Boolean(driver.user_id);
+  const isIntegrated = isActivelyLinked;
   const isInAppNotIntegrated =
     !isIntegrated &&
     (signupMatch != null || canSendMatchedInvite || inviteAlreadySentForMatch);
-  const isNotInApp = !isIntegrated && !isInAppNotIntegrated;
+  const isNotInApp = !isIntegrated && !isInAppNotIntegrated && !isDisconnected;
   const statusTitle = isIntegrated
     ? "Integrated"
-    : isInAppNotIntegrated
-      ? "In App - Not Integrated"
-      : "Not in app";
+    : pendingFleetInvite
+      ? "Invite pending"
+      : isDisconnected
+        ? "Disconnected"
+        : isInAppNotIntegrated
+          ? "In App - Not Integrated"
+          : "Not in app";
   const ratingValue =
     driverRatingAvg && driverRatingAvg > 0 ? driverRatingAvg : 0;
   const ratingFilledStars = Math.max(0, Math.min(5, Math.round(ratingValue)));
   const profileActionLabel = canSendMatchedInvite
     ? "Send invitation"
-    : inviteAlreadySentForMatch
-      ? "Invitation sent"
-      : isNotInApp
-        ? "Invite to app"
-        : "Integrated";
+    : canSendFleetReinvite
+      ? "Reconnect driver"
+      : pendingFleetInvite
+        ? "Invitation pending"
+        : inviteAlreadySentForMatch
+          ? "Invitation sent"
+          : isNotInApp
+            ? "Invite to app"
+            : isIntegrated
+              ? "Integrated"
+              : isDisconnected
+                ? "Disconnected"
+                : "Integrated";
+  const profileActionEnabled =
+    canSendMatchedInvite || canSendFleetReinvite || isNotInApp;
   const heroDecorAnimatedStyle = isWebDesktop
     ? {
         opacity: heroDecorProgress.interpolate({
@@ -1158,9 +1288,27 @@ export default function DriverDetailScreen({
       refreshing={refreshing}
     >
       {leftAtFormatted != null && (
-        <View style={styles.disconnectedBanner}>
-          <Text style={styles.disconnectedBannerText}>
-            Disconnected from fleet · Left on {leftAtFormatted}
+        <View
+          style={[
+            styles.disconnectedBanner,
+            pendingFleetInvite && styles.disconnectedBannerPending,
+          ]}
+        >
+          <FontAwesome
+            name={pendingFleetInvite ? 'paper-plane' : 'unlink'}
+            size={12}
+            color={pendingFleetInvite ? Theme.primary : Theme.negative}
+            style={styles.disconnectedBannerIcon}
+          />
+          <Text
+            style={[
+              styles.disconnectedBannerText,
+              pendingFleetInvite && styles.disconnectedBannerTextPending,
+            ]}
+          >
+            {pendingFleetInvite
+              ? `Invitation sent · Waiting for ${(driver.name ?? 'driver').trim() || 'driver'} to accept in the Pulse app`
+              : `Disconnected from fleet · Left on ${leftAtFormatted}`}
           </Text>
         </View>
       )}
@@ -1357,7 +1505,7 @@ export default function DriverDetailScreen({
                 </View>
                 <View style={[ecc.dossierBadge, ecc.dossierBadgeMuted]}>
                   <Text style={[ecc.dossierBadgeText, ecc.dossierBadgeTextMuted]}>
-                    {isIntegrated ? "LINKED" : "LOCAL"}
+                    {isActivelyLinked ? "LINKED" : isDisconnected ? "LEFT" : "LOCAL"}
                   </Text>
                 </View>
               </View>
@@ -1391,25 +1539,33 @@ export default function DriverDetailScreen({
               style={[
                 styles.profilePreviewActionBtn,
                 ecc.actionBtnPrimary,
-                !canSendMatchedInvite && !isNotInApp && ecc.actionBtnDisabled,
+                !profileActionEnabled && ecc.actionBtnDisabled,
               ]}
               onPress={() => {
                 if (canSendMatchedInvite) {
                   void handleSendMatchedInvite();
+                } else if (canSendFleetReinvite) {
+                  void handleSendFleetReinvite();
                 } else if (isNotInApp) {
                   handleInviteToApp();
                 }
               }}
               activeOpacity={0.86}
-              disabled={inviting || (!canSendMatchedInvite && !isNotInApp)}
+              disabled={
+                inviting || !profileActionEnabled
+              }
             >
               <FontAwesome
-                name={canSendMatchedInvite ? "send" : "envelope-o"}
+                name={
+                  canSendMatchedInvite || canSendFleetReinvite
+                    ? "send"
+                    : "envelope-o"
+                }
                 size={14}
                 color={Theme.textOnPrimary}
               />
               <Text style={styles.profilePreviewActionText}>
-                {inviting && canSendMatchedInvite
+                {inviting && (canSendMatchedInvite || canSendFleetReinvite)
                   ? "Sending..."
                   : profileActionLabel}
               </Text>
@@ -2084,6 +2240,18 @@ export default function DriverDetailScreen({
             ? `${t("ledgerFor")}${lockedPartyName}`
             : t("ledgerReport")
         }
+      />
+
+      <DriverFleetInviteSalaryModal
+        visible={inviteSalaryModalVisible}
+        mode={inviteSalaryModalMode}
+        driverName={(driver.name ?? "").trim() || t("driver")}
+        initialCompensation={suggestedInviteCompensation}
+        submitting={inviting}
+        onClose={() => {
+          if (!inviting) setInviteSalaryModalVisible(false);
+        }}
+        onSubmit={handleSubmitInviteWithCompensation}
       />
     </DetailPageLayout>
   );
@@ -3288,6 +3456,9 @@ const styles = StyleSheet.create({
     color: Theme.driverGold ?? Theme.primary,
   },
   disconnectedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
     backgroundColor: Theme.negativeMuted ?? Theme.surfaceLight,
     paddingVertical: 12,
     paddingHorizontal: 16,
@@ -3296,10 +3467,23 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderLeftColor: Theme.negative ?? Theme.textMuted,
   },
+  disconnectedBannerPending: {
+    backgroundColor: Theme.pulseIndigoWash,
+    borderLeftColor: Theme.primary,
+  },
+  disconnectedBannerIcon: {
+    marginTop: 1,
+  },
   disconnectedBannerText: {
+    flex: 1,
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: '700',
     color: Theme.textPrimary,
+    lineHeight: 18,
+  },
+  disconnectedBannerTextPending: {
+    color: Theme.textSecondary,
+    fontWeight: '600',
   },
   ratingsList: { marginTop: 8, gap: 12 },
   ratingRow: {
