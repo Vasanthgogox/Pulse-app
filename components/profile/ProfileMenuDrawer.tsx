@@ -70,7 +70,7 @@ function MenuRowItem({ row }: { row: MenuRow }) {
           <Text style={styles.menuRowBadgeText}>{row.badge}</Text>
         </View>
       ) : null}
-      <ChevronRight size={14} color={Theme.textMuted} strokeWidth={2.2} />
+      <ChevronRight size={16} color={Theme.textMuted} strokeWidth={2.2} />
     </Pressable>
   );
 }
@@ -111,7 +111,7 @@ export function ProfileMenuDrawer({ visible, onClose }: ProfileMenuDrawerProps) 
   const { user, profile, signOut } = useAuth();
   const { currentOrganization } = useOrganization();
   const notificationUnread = useGlobalSyncStore((s) => s.notificationUnreadCount);
-  const panelWidth = Math.min(screenWidth * 0.78, 300);
+  const panelWidth = Math.min(screenWidth * 0.84, 340);
   const slideX = useRef(new Animated.Value(-panelWidth)).current;
 
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
@@ -170,19 +170,19 @@ export function ProfileMenuDrawer({ visible, onClose }: ProfileMenuDrawerProps) 
     {
       id: "team",
       label: "Team members",
-      icon: <Users size={15} color={Theme.textSecondary} strokeWidth={2.2} />,
+      icon: <Users size={18} color={Theme.textSecondary} strokeWidth={2.2} />,
       onPress: () => navigate(ROUTES.MODALS.TEAM),
     },
     {
       id: "branding",
       label: "Branding & identity",
-      icon: <Settings size={15} color={Theme.textSecondary} strokeWidth={2.2} />,
+      icon: <Settings size={18} color={Theme.textSecondary} strokeWidth={2.2} />,
       onPress: () => navigate("/branding-settings"),
     },
     {
       id: "role",
       label: "Role & access",
-      icon: <Shield size={15} color={Theme.textSecondary} strokeWidth={2.2} />,
+      icon: <Shield size={18} color={Theme.textSecondary} strokeWidth={2.2} />,
       onPress: () => navigate(ROUTES.TABS.PROFILE),
     },
   ];
@@ -191,13 +191,13 @@ export function ProfileMenuDrawer({ visible, onClose }: ProfileMenuDrawerProps) 
     {
       id: "pod",
       label: "Proof of delivery",
-      icon: <FileText size={15} color={Theme.textSecondary} strokeWidth={2.2} />,
+      icon: <FileText size={18} color={Theme.textSecondary} strokeWidth={2.2} />,
       onPress: () => navigate("/pod-reconciliation"),
     },
     {
       id: "invoice",
       label: "Invoicing",
-      icon: <FileText size={15} color={Theme.textSecondary} strokeWidth={2.2} />,
+      icon: <FileText size={18} color={Theme.textSecondary} strokeWidth={2.2} />,
       onPress: () => navigate("/invoicing-execute"),
     },
   ];
@@ -298,7 +298,7 @@ export function ProfileMenuDrawer({ visible, onClose }: ProfileMenuDrawerProps) 
                     </Text>
                   ) : null}
                 </View>
-                <ChevronRight size={16} color={Theme.textMuted} strokeWidth={2.2} />
+                <ChevronRight size={18} color={Theme.textMuted} strokeWidth={2.2} />
               </View>
             </Pressable>
 
@@ -315,24 +315,24 @@ export function ProfileMenuDrawer({ visible, onClose }: ProfileMenuDrawerProps) 
                     Connect with verified partners on Home
                   </Text>
                 </View>
-                <ChevronRight size={14} color={Theme.textMuted} strokeWidth={2.2} />
+                <ChevronRight size={16} color={Theme.textMuted} strokeWidth={2.2} />
               </Pressable>
             ) : null}
 
             <View style={styles.quickRow}>
               <QuickAction
                 label="My account"
-                icon={<User size={16} color={Theme.primary} strokeWidth={2.2} />}
+                icon={<User size={18} color={Theme.primary} strokeWidth={2.2} />}
                 onPress={() => navigate(ROUTES.TABS.PROFILE)}
               />
               <QuickAction
                 label="Support"
-                icon={<HelpCircle size={16} color={Theme.primary} strokeWidth={2.2} />}
+                icon={<HelpCircle size={18} color={Theme.primary} strokeWidth={2.2} />}
                 onPress={handleSupport}
               />
               <QuickAction
                 label="Alerts"
-                icon={<Bell size={16} color={Theme.primary} strokeWidth={2.2} />}
+                icon={<Bell size={18} color={Theme.primary} strokeWidth={2.2} />}
                 onPress={() => navigate("/notifications")}
                 showDot={notificationUnread > 0}
               />
@@ -374,7 +374,7 @@ export function ProfileMenuDrawer({ visible, onClose }: ProfileMenuDrawerProps) 
                 {signingOut ? (
                   <LoadingIndicator size="small" color={Theme.negative} />
                 ) : (
-                  <LogOut size={15} color={Theme.negative} strokeWidth={2.2} />
+                  <LogOut size={18} color={Theme.negative} strokeWidth={2.2} />
                 )}
                 <Text style={styles.signOutText}>Sign out</Text>
               </Pressable>
@@ -406,106 +406,113 @@ const styles = StyleSheet.create({
   },
   panelScroll: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    gap: 10,
-    paddingBottom: 8,
+    gap: 12,
+    paddingBottom: 10,
   },
   heroCard: {
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#fbbf2440",
+    borderColor: Theme.warningMuted,
     backgroundColor: Theme.screenBackground,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
   },
   heroRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
+    minHeight: 48,
   },
   heroAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
   },
   heroAvatarFallback: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: Theme.surfaceGray,
     alignItems: "center",
     justifyContent: "center",
   },
   heroAvatarInitials: {
-    fontSize: 11,
+    fontSize: 14,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
   },
   heroText: {
     flex: 1,
     minWidth: 0,
-    gap: 1,
+    gap: 3,
+    justifyContent: "center",
   },
   heroGreeting: {
-    fontSize: 13,
-    fontWeight: "800",
+    fontSize: 16,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
     letterSpacing: -0.2,
+    lineHeight: 20,
   },
   heroEmail: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: "500",
     color: Theme.textMuted,
+    lineHeight: 16,
   },
   heroOrg: {
-    fontSize: 8,
+    fontSize: 11,
     fontWeight: "600",
     color: Theme.textSecondary,
-    marginTop: 1,
+    lineHeight: 14,
   },
   promoCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    borderRadius: 12,
+    gap: 10,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.surfaceGray,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    minHeight: 52,
   },
   promoInner: {
     flex: 1,
     minWidth: 0,
-    gap: 2,
+    gap: 3,
+    justifyContent: "center",
   },
   promoTitle: {
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
+    lineHeight: 17,
   },
   promoSub: {
-    fontSize: 8,
+    fontSize: 11,
     fontWeight: "500",
     color: Theme.textMuted,
-    lineHeight: 11,
+    lineHeight: 15,
   },
   quickRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
-    gap: 6,
-    paddingVertical: 4,
+    gap: 8,
+    paddingVertical: 6,
   },
   quickAction: {
     flex: 1,
     alignItems: "center",
-    gap: 5,
+    gap: 6,
     minWidth: 0,
   },
   quickIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: `${Theme.primary}12`,
     alignItems: "center",
     justifyContent: "center",
@@ -523,34 +530,37 @@ const styles = StyleSheet.create({
     borderColor: Theme.screenBackground,
   },
   quickLabel: {
-    fontSize: 8,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
     textAlign: "center",
+    lineHeight: 14,
   },
   sectionCard: {
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
     overflow: "hidden",
   },
   sectionTitle: {
-    fontSize: 8,
-    fontWeight: "800",
+    fontSize: 11,
+    fontWeight: "700",
     color: Theme.textMuted,
-    letterSpacing: 0.8,
+    letterSpacing: 0.6,
     textTransform: "uppercase",
-    paddingHorizontal: 10,
-    paddingTop: 8,
-    paddingBottom: 4,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 6,
+    lineHeight: 14,
   },
   menuRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 9,
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    minHeight: 48,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
   },
@@ -559,15 +569,17 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surfaceGray,
   },
   menuRowIcon: {
-    width: 22,
+    width: 28,
     alignItems: "center",
+    justifyContent: "center",
   },
   menuRowLabel: {
     flex: 1,
     minWidth: 0,
-    fontSize: 10,
+    fontSize: 14,
     fontWeight: "600",
     color: Theme.textPrimaryDark,
+    lineHeight: 18,
   },
   menuRowBadge: {
     paddingHorizontal: 5,
@@ -576,7 +588,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.teslaRed,
   },
   menuRowBadgeText: {
-    fontSize: 7,
+    fontSize: 9,
     fontWeight: "800",
     color: Theme.textOnPrimary,
   },
@@ -584,36 +596,41 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    minHeight: 44,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
   },
   accountMetaLabel: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: "500",
     color: Theme.textMuted,
+    lineHeight: 16,
   },
   accountMetaValue: {
     flex: 1,
-    fontSize: 9,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
     textAlign: "right",
+    lineHeight: 16,
   },
   signOutRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingVertical: 10,
+    gap: 8,
+    paddingVertical: 12,
+    minHeight: 48,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
   },
   signOutText: {
-    fontSize: 10,
+    fontSize: 14,
     fontWeight: "700",
     color: Theme.negative,
+    lineHeight: 18,
   },
 });

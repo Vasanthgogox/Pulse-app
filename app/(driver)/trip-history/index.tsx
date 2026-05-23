@@ -402,7 +402,7 @@ function AnimatedCardArrow({
   }));
   return (
     <Animated.View style={animatedStyle}>
-      <FontAwesome name="arrow-right" size={14} color={color} />
+      <FontAwesome name="arrow-right" size={12} color={color} />
     </Animated.View>
   );
 }
@@ -482,128 +482,12 @@ export default function DriverTripsScreen() {
   const [, setRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
   const initialLoadDoneRef = useRef(false);
-  const [selectedTrip, setSelectedTrip] = useState<tripsService.TripRow | null>(
-    null,
-  );
   const [routeMetricsByTripId, setRouteMetricsByTripId] = useState<
     Record<string, { distance: number; estimated_duration: string }>
   >({});
   const [pressedCardId, setPressedCardId] = useState<string | null>(null);
-  const [detailTab, setDetailTab] = useState<"journey" | "settlement">(
-    "journey",
-  );
-  /** Expanded row index in trip detail timeline (modal). */
-  const [expandedLogIndex, setExpandedLogIndex] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [tripView, setTripView] = useState<"active" | "history">("active");
-
-  /** POD attachments for trip detail modal — same source as dispatcher (trip_documents + storage fallback). */
-  const [detailPodDocuments, setDetailPodDocuments] = useState<
-    tripDocumentsService.TripDocumentRow[]
-  >([]);
-  const [detailPodLoading, setDetailPodLoading] = useState(false);
-  const [detailPodViewUrls, setDetailPodViewUrls] = useState<
-    Record<string, string>
-  >({});
-  const detailPodUrlRequestedRef = useRef<Set<string>>(new Set());
-  const [podPreviewUrl, setPodPreviewUrl] = useState<string | null>(null);
-  const [podPreviewLoading, setPodPreviewLoading] = useState(false);
-  const [podPreviewError, setPodPreviewError] = useState(false);
-
-  useEffect(() => {
-    setExpandedLogIndex(null);
-    setDetailTab("journey");
-  }, [selectedTrip?.id]);
-
-  useEffect(() => {
-    if (!selectedTrip?.id) {
-      setDetailPodDocuments([]);
-      setDetailPodViewUrls({});
-      detailPodUrlRequestedRef.current.clear();
-      setPodPreviewUrl(null);
-      setPodPreviewLoading(false);
-      setPodPreviewError(false);
-      return;
-    }
-    const tid = selectedTrip.id;
-    detailPodUrlRequestedRef.current.clear();
-    setDetailPodViewUrls({});
-    setDetailPodLoading(true);
-    let cancelled = false;
-    tripDocumentsService.getDocumentsByTripId(tid).then(({ documents, error }) => {
-      if (cancelled) return;
-      setDetailPodLoading(false);
-      if (!error) setDetailPodDocuments(documents);
-      else setDetailPodDocuments([]);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedTrip?.id]);
-
-  useEffect(() => {
-    detailPodDocuments.forEach((doc) => {
-      if (detailPodUrlRequestedRef.current.has(doc.id)) return;
-      detailPodUrlRequestedRef.current.add(doc.id);
-      tripDocumentsService.getDocumentViewUrl(doc.storage_path).then((url) => {
-        setDetailPodViewUrls((prev) =>
-          prev[doc.id] ? prev : { ...prev, [doc.id]: url },
-        );
-      });
-    });
-  }, [detailPodDocuments]);
-
-  useEffect(() => {
-    const trip = selectedTrip;
-    if (!trip) return;
-
-    const tripId = String(trip.id ?? "").trim();
-    const hasDistance = trip.distance != null && String(trip.distance).trim() !== "";
-    const hasEta =
-      trip.estimated_duration != null && trip.estimated_duration.trim() !== "";
-    if (!tripId || (hasDistance && hasEta)) return;
-
-    const pickupLat = parseTripCoordinate(trip.pickup_lat);
-    const pickupLon = parseTripCoordinate(trip.pickup_lon);
-    const dropLat = parseTripCoordinate(trip.drop_lat);
-    const dropLon = parseTripCoordinate(trip.drop_lon);
-    const hasCoords =
-      pickupLat != null &&
-      pickupLon != null &&
-      dropLat != null &&
-      dropLon != null;
-    if (!hasCoords) return;
-
-    let cancelled = false;
-    const hydrateRouteMetrics = async () => {
-      const route = await getOptimalRoute(
-        { latitude: pickupLat, longitude: pickupLon },
-        { latitude: dropLat, longitude: dropLon },
-      );
-      if (cancelled || !route) return;
-
-      const distanceKm = Math.max(1, Math.round(route.distance / 1000));
-      const etaInterval = toEtaInterval(route.duration);
-
-      setRouteMetricsByTripId((prev) => ({
-        ...prev,
-        [tripId]: { distance: distanceKm, estimated_duration: etaInterval },
-      }));
-
-      const { trip: updated } = await tripsService.updateTripRouteMetrics(tripId, {
-        distance: hasDistance ? undefined : distanceKm,
-        estimated_duration: hasEta ? undefined : etaInterval,
-      });
-      if (cancelled || !updated) return;
-
-      setTrips((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
-      setSelectedTrip((prev) => (prev?.id === updated.id ? updated : prev));
-    };
-    void hydrateRouteMetrics();
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedTrip]);
 
   const fetch = useCallback(() => {
     if (!profile?.uid) {
@@ -904,47 +788,10 @@ export default function DriverTripsScreen() {
   };
 
 
-  const archiveMissionLog = useMemo(
-    () => (selectedTrip ? buildMissionLog(selectedTrip) : []),
-    [selectedTrip],
-  );
-  const selectedTripPickupParts = useMemo(
-    () => splitLocationPrimarySecondary(selectedTrip?.pickup_area),
-    [selectedTrip?.pickup_area],
-  );
-  const selectedTripDropParts = useMemo(
-    () => splitLocationPrimarySecondary(selectedTrip?.drop_location),
-    [selectedTrip?.drop_location],
-  );
   const driverTripNumberById = useMemo(
     () => buildDriverTripNumberMap(trips),
     [trips],
   );
-  const selectedTripAssigner = useMemo(
-    () =>
-      selectedTrip
-        ? assignerByTripId[String(selectedTrip.id)] ?? "Fleet dispatcher"
-        : "Fleet dispatcher",
-    [selectedTrip, assignerByTripId],
-  );
-  const selectedTripRouteFallback = useMemo(() => {
-    if (!selectedTrip) return null;
-    return routeMetricsByTripId[String(selectedTrip.id)] ?? null;
-  }, [selectedTrip, routeMetricsByTripId]);
-  const selectedTripDistanceDisplay = useMemo(() => {
-    if (!selectedTrip) return "—";
-    return formatDistance(selectedTrip.distance ?? selectedTripRouteFallback?.distance);
-  }, [selectedTrip, selectedTripRouteFallback]);
-  const selectedTripDurationDisplay = useMemo(() => {
-    if (!selectedTrip) return "—";
-    if (selectedTrip.estimated_duration?.trim()) {
-      return formatDurationForTrip(selectedTrip);
-    }
-    if (selectedTripRouteFallback?.estimated_duration) {
-      return formatEstimatedDuration(selectedTripRouteFallback.estimated_duration);
-    }
-    return formatDurationForTrip(selectedTrip);
-  }, [selectedTrip, selectedTripRouteFallback]);
   const filteredTrips = useMemo(() => {
     let list = [...trips];
 
@@ -1006,16 +853,7 @@ export default function DriverTripsScreen() {
           },
         ]}
         onPress={() => {
-          setSelectedTrip(item);
-          void tripsService.getTripById(item.id).then((res) => {
-            if (!res.trip) return;
-            setTrips((prev) =>
-              prev.map((row) => (row.id === res.trip!.id ? res.trip! : row)),
-            );
-            setSelectedTrip((prev) =>
-              prev?.id === res.trip!.id ? res.trip! : prev,
-            );
-          });
+          router.push(`/(driver)/trip-history/${item.id}` as Href);
         }}
         onPressIn={() => setPressedCardId(item.id)}
         onPressOut={() => setPressedCardId(null)}
@@ -1028,7 +866,7 @@ export default function DriverTripsScreen() {
         />
         <AnimatedCardScale pressed={pressedCardId === item.id}>
           <View style={styles.cardWatermark} pointerEvents="none">
-            <MapPinned size={140} color={colors.emerald} strokeWidth={1.2} />
+            <MapPinned size={80} color={colors.emerald} strokeWidth={1.2} />
           </View>
           <View style={styles.cardRefTop}>
             <View style={styles.cardRefTopLeft}>
@@ -1231,7 +1069,7 @@ export default function DriverTripsScreen() {
               },
             ]}
           >
-            <SearchIcon size={20} color={colors.textMuted} strokeWidth={2} />
+            <SearchIcon size={16} color={colors.textMuted} strokeWidth={2} />
             <TextInput
               style={[styles.searchInput, { color: colors.text }]}
               placeholder="Search trip IDs, routes…"
@@ -1429,871 +1267,6 @@ export default function DriverTripsScreen() {
         }
       />
 
-      <Modal
-        visible={!!selectedTrip}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setSelectedTrip(null)}
-      >
-        {selectedTrip && (
-          <View
-            style={[
-              styles.detailWrap,
-              {
-                paddingTop: insets.top,
-                backgroundColor: colors.background,
-              },
-            ]}
-          >
-            <View
-              style={[
-                styles.detailHeaderRef,
-                styles.detailHeaderStyled,
-                {
-                  paddingTop: 12,
-                  paddingBottom: 12,
-                  paddingHorizontal: Layout.screenPaddingHorizontal,
-                  backgroundColor: colors.surface,
-                  borderBottomColor: colors.border,
-                },
-              ]}
-            >
-              <TouchableOpacity
-                onPress={() => setSelectedTrip(null)}
-                style={[
-                  styles.detailBack,
-                  styles.detailBackStyled,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  },
-                ]}
-                hitSlop={{ top: 12, right: 16, bottom: 12, left: 16 }}
-                activeOpacity={0.75}
-                accessibilityLabel="Back"
-              >
-                <FontAwesome
-                  name="chevron-left"
-                  size={22}
-                  color={colors.text}
-                />
-              </TouchableOpacity>
-              <View style={styles.tdHeaderCenter}>
-                <Text
-                  style={[
-                    styles.detailHeaderLabelRef,
-                    { color: colors.textMuted },
-                  ]}
-                >
-                  TRIP HISTORY
-                </Text>
-                <View style={styles.detailHeaderIdRowRef}>
-                  <Text
-                    style={[styles.detailTitleRef, { color: colors.text }]}
-                    numberOfLines={1}
-                  >
-                    {getDriverTripDisplayNumber(selectedTrip, driverTripNumberById)}
-                  </Text>
-                  <View
-                    style={[
-                      styles.tdStatusDot,
-                      {
-                        backgroundColor: colors.emerald,
-                        shadowColor: colors.emerald,
-                      },
-                    ]}
-                  />
-                </View>
-              </View>
-              <View style={styles.detailHeaderActions}>
-                {selectedTrip.driver_id ? (
-                  <TouchableOpacity
-                    style={[
-                      styles.detailBack,
-                      styles.detailBackStyled,
-                      {
-                        backgroundColor: colors.surface,
-                        borderColor: colors.border,
-                      },
-                    ]}
-                    onPress={() => {
-                      const id = encodeURIComponent(String(selectedTrip.id));
-                      setSelectedTrip(null);
-                      setTimeout(() => {
-                        router.push(`/(driver)/chat?tripId=${id}` as Href);
-                      }, 0);
-                    }}
-                    activeOpacity={0.75}
-                    accessibilityLabel="Trip chat"
-                  >
-                    <MessageSquare size={20} color={colors.text} />
-                  </TouchableOpacity>
-                ) : null}
-                <TouchableOpacity
-                  style={[
-                    styles.detailBack,
-                    styles.detailBackStyled,
-                    {
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                    },
-                  ]}
-                  onPress={() => {
-                    void Share.share({
-                      message: `Trip ${getDriverTripDisplayNumber(selectedTrip, driverTripNumberById)}`,
-                    }).catch(() => {});
-                  }}
-                  activeOpacity={0.75}
-                  accessibilityLabel="Share trip"
-                >
-                  <Share2 size={20} color={colors.text} />
-                </TouchableOpacity>
-              </View>
-            </View>
-            <ScrollView
-              style={[
-                styles.detailScrollRef,
-                { backgroundColor: colors.background },
-              ]}
-              contentContainerStyle={[
-                styles.detailContentRef,
-                {
-                  paddingHorizontal: Layout.screenPaddingHorizontal,
-                  paddingBottom: Layout.modalBottomPadding + insets.bottom,
-                  paddingTop: 16,
-                },
-              ]}
-              showsVerticalScrollIndicator={false}
-            >
-              <View style={styles.tdHeroOuter}>
-                <LinearGradient
-                  colors={["#0f172a", "#020617"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.tdHeroCard}
-                >
-                  <View style={styles.tdHeroGlow} pointerEvents="none" />
-                  <Route
-                    size={128}
-                    color="rgba(255,255,255,0.08)"
-                    style={styles.tdHeroWatermark}
-                  />
-                  <View style={styles.tdHeroInner}>
-                    <Text style={styles.tdHeroKicker}>Route Logic History</Text>
-                    <View style={styles.tdHeroRouteRow}>
-                      <View style={styles.tdHeroRouteSide}>
-                        <Text
-                          style={styles.tdHeroCity}
-                          numberOfLines={1}
-                          adjustsFontSizeToFit
-                          minimumFontScale={0.72}
-                        >
-                          {selectedTripPickupParts.primary.toUpperCase()}
-                        </Text>
-                        <Text style={styles.tdHeroState} numberOfLines={1}>
-                          {(selectedTripPickupParts.secondary ?? "Origin").toUpperCase()}
-                        </Text>
-                      </View>
-
-                      <View style={styles.tdHeroRouteConnector}>
-                        <View style={[styles.tdHeroDot, { backgroundColor: Theme.driverEmerald }]} />
-                        <View style={styles.tdHeroConnectorLine} />
-                        <Text style={[styles.tdHeroToLabel, { color: Theme.driverPrimary }]}>TO</Text>
-                        <View style={styles.tdHeroConnectorLine} />
-                        <View style={[styles.tdHeroDot, { backgroundColor: Theme.driverPrimary }]} />
-                      </View>
-
-                      <View style={[styles.tdHeroRouteSide, styles.tdHeroRouteSideRight]}>
-                        <Text
-                          style={[styles.tdHeroCity, styles.tdHeroCityRight]}
-                          numberOfLines={1}
-                          adjustsFontSizeToFit
-                          minimumFontScale={0.72}
-                        >
-                          {selectedTripDropParts.primary.toUpperCase()}
-                        </Text>
-                        <Text style={[styles.tdHeroState, styles.tdHeroStateRight]} numberOfLines={1}>
-                          {(selectedTripDropParts.secondary ?? "Destination").toUpperCase()}
-                        </Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.tdHeroDivider} />
-                    <View style={styles.tdHeroMetaRow}>
-                      <View style={styles.tdHeroMetaItem}>
-                        <View style={styles.tdHeroMetaIconWrap}>
-                          <Navigation size={16} color={Theme.driverPrimary} />
-                        </View>
-                        <View>
-                          <Text style={styles.tdHeroMetaKicker}>Distance</Text>
-                          <Text style={styles.tdHeroMetaValue}>
-                            {selectedTripDistanceDisplay}
-                          </Text>
-                        </View>
-                      </View>
-                      <View style={styles.tdHeroMetaItem}>
-                        <View style={styles.tdHeroMetaIconWrap}>
-                          <Clock size={16} color={Theme.driverPrimary} />
-                        </View>
-                        <View>
-                          <Text style={styles.tdHeroMetaKicker}>Duration</Text>
-                          <Text style={styles.tdHeroMetaValue}>
-                            {selectedTripDurationDisplay}
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-                    <View style={styles.tdHeroAssignerRow}>
-                      <ShieldCheck size={14} color={Theme.driverPrimary} />
-                      <Text style={styles.tdHeroAssignerLabel}>Assigned by</Text>
-                      <Text style={styles.tdHeroAssignerValue} numberOfLines={1}>
-                        {selectedTripAssigner}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={[styles.tdHeroAccentBar, { backgroundColor: colors.emerald }]} />
-                </LinearGradient>
-              </View>
-
-              <View style={[styles.tdTabBar, { backgroundColor: `${colors.border}99` }]}>
-                <TouchableOpacity
-                  style={[
-                    styles.tdTabBtn,
-                    detailTab === "journey" && styles.tdTabBtnActive,
-                  ]}
-                  onPress={() => setDetailTab("journey")}
-                  activeOpacity={0.88}
-                >
-                  <Text
-                    style={[
-                      styles.tdTabLabel,
-                      {
-                        color: detailTab === "journey" ? "#ffffff" : colors.textMuted,
-                      },
-                    ]}
-                  >
-                    Journey Log
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.tdTabBtn,
-                    detailTab === "settlement" && styles.tdTabBtnActive,
-                  ]}
-                  onPress={() => setDetailTab("settlement")}
-                  activeOpacity={0.88}
-                >
-                  <Text
-                    style={[
-                      styles.tdTabLabel,
-                      {
-                        color: detailTab === "settlement" ? "#ffffff" : colors.textMuted,
-                      },
-                    ]}
-                  >
-                    Settlement
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              {detailTab === "journey" ? (
-                <View style={{ marginBottom: 20 }}>
-                  <View style={styles.tdTimelineHeader}>
-                    <View style={styles.tdTimelineHeaderIcon}>
-                      <Calendar size={16} color="#ffffff" />
-                    </View>
-                    <Text style={[styles.tdTimelineHeaderTitle, { color: colors.text }]}>
-                      Trip Timeline
-                    </Text>
-                  </View>
-
-                  {archiveMissionLog.length === 0 ? (
-                    <View
-                      style={[
-                        styles.tdTimelineCard,
-                        {
-                          backgroundColor: colors.surface,
-                          borderColor: colors.border,
-                        },
-                      ]}
-                    >
-                      <Text style={[styles.tdEmptyTimeline, { color: colors.textMuted }]}>
-                        No timeline events for this trip yet.
-                      </Text>
-                    </View>
-                  ) : (
-                    <View
-                      style={[
-                        styles.tdTimelineCard,
-                        {
-                          backgroundColor: colors.surface,
-                          borderColor: colors.border,
-                        },
-                      ]}
-                    >
-                      {archiveMissionLog.map((log, i) => {
-                        const isLast = i === archiveMissionLog.length - 1;
-                        const expanded = expandedLogIndex === i;
-                        return (
-                          <View key={`${log.status}-${i}`} style={styles.tdLogRowWrap}>
-                            {!isLast ? (
-                              <View
-                                style={[styles.tdLogConnector, { backgroundColor: colors.border }]}
-                              />
-                            ) : null}
-                            <TouchableOpacity
-                              activeOpacity={0.85}
-                              style={[
-                                styles.tdLogTouchable,
-                                expanded && {
-                                  backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "#f8fafc",
-                                  borderRadius: 16,
-                                },
-                              ]}
-                              onPress={() =>
-                                setExpandedLogIndex(expanded ? null : i)
-                              }
-                            >
-                              <View style={styles.tdLogMarkerCol}>
-                                <TimelinePulseIcon expanded={expanded}>
-                                  <View
-                                    style={[
-                                      styles.tdLogCircle,
-                                      {
-                                        backgroundColor: colors.emerald,
-                                        borderColor: colors.surface,
-                                      },
-                                    ]}
-                                  >
-                                    <CheckCircle2 size={14} color="#ffffff" />
-                                  </View>
-                                </TimelinePulseIcon>
-                              </View>
-                              <View style={styles.tdLogBody}>
-                                <View style={styles.tdLogHead}>
-                                  <Text style={[styles.tdLogStatus, { color: colors.text }]}>
-                                    {log.status}
-                                  </Text>
-                                  <View style={styles.tdLogHeadRight}>
-                                    <Text style={[styles.tdLogTime, { color: colors.textMuted }]}>
-                                      {log.time}
-                                    </Text>
-                                    {expanded ? (
-                                      <ChevronUp size={16} color={colors.textMuted} />
-                                    ) : (
-                                      <ChevronDown size={16} color={colors.textMuted} />
-                                    )}
-                                  </View>
-                                </View>
-                                <Text
-                                  style={[styles.tdLogLoc, { color: colors.textMuted }]}
-                                  numberOfLines={expanded ? undefined : 2}
-                                >
-                                  {log.loc}
-                                </Text>
-                                {expanded ? (
-                                  <View style={styles.tdLogExpanded}>
-                                    {isInTransitStatus(log.status) ? (
-                                      <View style={styles.tdLogInTransitGrid}>
-                                        <View style={styles.tdLogInTransitCol}>
-                                          <Text style={[styles.tdLogMetaK, { color: colors.textMuted }]}>
-                                            Location
-                                          </Text>
-                                          <Text style={[styles.tdLogMetaV, { color: colors.text }]}>
-                                            {log.loc}
-                                          </Text>
-                                        </View>
-                                        <View style={styles.tdLogInTransitCol}>
-                                          <Text style={[styles.tdLogMetaK, { color: colors.textMuted }]}>
-                                            Timestamp
-                                          </Text>
-                                          <Text style={[styles.tdLogMetaV, { color: colors.text }]}>
-                                            {formatLedgerDateTime(log.atIso)}
-                                          </Text>
-                                        </View>
-                                      </View>
-                                    ) : (
-                                      <>
-                                        <Text style={[styles.tdLogDetailsKicker, { color: colors.textMuted }]}>
-                                          Details
-                                        </Text>
-                                        <View
-                                          style={[
-                                            styles.tdLogDetailsBox,
-                                            {
-                                              backgroundColor: colors.background,
-                                              borderColor: colors.border,
-                                            },
-                                          ]}
-                                        >
-                                          <Text style={[styles.tdLogDetailsText, { color: colors.text }]}>
-                                            {log.details}
-                                          </Text>
-                                        </View>
-                                        <View style={styles.tdLogMetaGrid}>
-                                          <View style={{ flex: 1, minWidth: 0 }}>
-                                            <Text style={[styles.tdLogMetaK, { color: colors.textMuted }]}>
-                                              Timestamp
-                                            </Text>
-                                            <Text style={[styles.tdLogMetaV, { color: colors.textMuted }]}>
-                                              {formatLedgerDateTime(log.atIso)}
-                                            </Text>
-                                          </View>
-                                        </View>
-                                      </>
-                                    )}
-                                  </View>
-                                ) : null}
-                              </View>
-                            </TouchableOpacity>
-                          </View>
-                        );
-                      })}
-                    </View>
-                  )}
-
-                  <View style={styles.tdTimelineHeader}>
-                    <View style={styles.tdTimelineHeaderIcon}>
-                      <FileImage size={16} color="#ffffff" />
-                    </View>
-                    <Text
-                      style={[styles.tdTimelineHeaderTitle, { color: colors.text }]}
-                    >
-                      Proof of delivery
-                    </Text>
-                  </View>
-                  <View
-                    style={[
-                      styles.tdTimelineCard,
-                      {
-                        backgroundColor: colors.surface,
-                        borderColor: colors.border,
-                      },
-                    ]}
-                  >
-                    {detailPodLoading ? (
-                      <LoadingIndicator
-                        style={{ paddingVertical: 22 }}
-                        color={colors.emerald}
-                      />
-                    ) : detailPodDocuments.length >= 1 ? (
-                      detailPodDocuments.map((doc, index) => {
-                        const name =
-                          doc.file_name ||
-                          doc.storage_path.split("/").pop() ||
-                          "POD";
-                        return (
-                          <View
-                            key={doc.id}
-                            style={[
-                              styles.tdPodRow,
-                              index < detailPodDocuments.length - 1
-                                ? { borderBottomColor: colors.border, borderBottomWidth: StyleSheet.hairlineWidth }
-                                : null,
-                            ]}
-                          >
-                            <FileImage
-                              size={18}
-                              color={colors.emerald}
-                              style={{ marginRight: 10 }}
-                            />
-                            <Text
-                              style={[styles.tdPodFileName, { color: colors.text }]}
-                              numberOfLines={1}
-                            >
-                              {name}
-                            </Text>
-                            <TouchableOpacity
-                              onPress={async () => {
-                                setPodPreviewError(false);
-                                const cached = detailPodViewUrls[doc.id];
-                                if (cached) {
-                                  setPodPreviewUrl(cached);
-                                  return;
-                                }
-                                setPodPreviewLoading(true);
-                                setPodPreviewUrl(null);
-                                const url =
-                                  await tripDocumentsService.getDocumentViewUrl(
-                                    doc.storage_path,
-                                  );
-                                setDetailPodViewUrls((prev) => ({
-                                  ...prev,
-                                  [doc.id]: url,
-                                }));
-                                setPodPreviewLoading(false);
-                                setPodPreviewUrl(url);
-                              }}
-                              activeOpacity={0.85}
-                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                            >
-                              <Text
-                                style={{
-                                  color: colors.emerald,
-                                  fontWeight: "800",
-                                  fontSize: 13,
-                                }}
-                              >
-                                View
-                              </Text>
-                            </TouchableOpacity>
-                          </View>
-                        );
-                      })
-                    ) : (
-                      <Text
-                        style={[
-                          styles.tdEmptyTimeline,
-                          { paddingVertical: 14, fontSize: 13 },
-                        ]}
-                      >
-                        No proof of delivery uploaded for this trip.
-                      </Text>
-                    )}
-                  </View>
-
-                  {isCompleted(selectedTrip.status) ? (
-                    <LinearGradient
-                      colors={[Theme.driverEmeraldDark, Theme.driverEmerald]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.tdDeliveredBanner}
-                    >
-                      <View>
-                        <Text style={styles.tdDeliveredKicker}>Status</Text>
-                        <Text style={styles.tdDeliveredTitle}>DELIVERED SUCCESSFULLY</Text>
-                      </View>
-                      <View style={styles.tdDeliveredIconCircle}>
-                        <CheckCircle2 size={24} color="#ffffff" />
-                      </View>
-                    </LinearGradient>
-                  ) : (
-                    <View
-                      style={[
-                        styles.tdProgressBanner,
-                        {
-                          backgroundColor: colors.surface,
-                          borderColor: colors.border,
-                        },
-                      ]}
-                    >
-                      <View>
-                        <Text style={[styles.tdProgressKicker, { color: colors.textMuted }]}>
-                          Status
-                        </Text>
-                        <Text style={[styles.tdProgressTitle, { color: colors.text }]}>
-                          {getTripProgressTitle(selectedTrip)}
-                        </Text>
-                      </View>
-                      <View
-                        style={[
-                          styles.tdDeliveredIconCircle,
-                          { backgroundColor: `${colors.emerald}22` },
-                        ]}
-                      >
-                        <Clock size={22} color={colors.emerald} />
-                      </View>
-                    </View>
-                  )}
-                </View>
-              ) : null}
-
-              {detailTab === "settlement" ? (
-                <View style={{ marginBottom: 20 }}>
-                  <View style={styles.tdSettlementGlow}>
-                    <View
-                      style={[
-                        styles.tdNetCard,
-                        {
-                          backgroundColor: colors.surface,
-                          borderColor: colors.border,
-                        },
-                      ]}
-                    >
-                      <View style={styles.tdNetBlur} pointerEvents="none" />
-                      <View style={styles.tdNetHeader}>
-                        <View style={styles.tdNetWalletIcon}>
-                          <Wallet size={28} color={colors.emerald} />
-                        </View>
-                        <Text style={[styles.tdNetKicker, { color: colors.textMuted }]}>
-                          Net Payout
-                        </Text>
-                        <View style={styles.tdNetAmountRow}>
-                          {getEarning(selectedTrip) === "SALARY" ? null : (
-                            <Text style={[styles.tdNetRupee, { color: colors.textMuted }]}>
-                              ₹
-                            </Text>
-                          )}
-                          <Text
-                            style={[styles.tdNetAmount, { color: colors.text }]}
-                            numberOfLines={1}
-                            adjustsFontSizeToFit
-                          >
-                            {getEarning(selectedTrip) === "SALARY"
-                              ? "SALARY"
-                              : Math.round(getEarningAmount(selectedTrip)).toLocaleString()}
-                          </Text>
-                        </View>
-                        <View style={[styles.tdNetSuccessPill, { backgroundColor: `${colors.emerald}22` }]}>
-                          <CheckCircle2 size={16} color={colors.emerald} />
-                          <Text style={[styles.tdNetSuccessText, { color: colors.emerald }]}>
-                            Settlement Success
-                          </Text>
-                        </View>
-                      </View>
-                      <View style={styles.tdNetMiniGrid}>
-                        <View style={[styles.tdNetMiniCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
-                          <Text style={[styles.tdNetMiniK, { color: colors.textMuted }]}>
-                            Gross total
-                          </Text>
-                          <Text style={[styles.tdNetMiniV, { color: colors.text }]}>
-                            {getGrossRevenue(selectedTrip) === "SALARY"
-                              ? "SALARY"
-                              : `₹${Number(getGrossRevenue(selectedTrip)).toLocaleString()}`}
-                          </Text>
-                        </View>
-                        <View style={[styles.tdNetMiniCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
-                          <Text style={[styles.tdNetMiniK, { color: colors.textMuted }]}>
-                            Deductions
-                          </Text>
-                          <Text style={[styles.tdNetMiniV, { color: Theme.negative }]}>
-                            -₹0
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-                  </View>
-
-                  <View style={styles.tdEarningsHeader}>
-                    <Text style={[styles.tdEarningsHeaderTitle, { color: colors.textMuted }]}>
-                      Earnings detail
-                    </Text>
-                    <Info size={16} color={colors.textMuted} />
-                  </View>
-
-                  <View
-                    style={[
-                      styles.tdBreakdownCard,
-                      {
-                        backgroundColor: colors.surface,
-                        borderColor: colors.border,
-                      },
-                    ]}
-                  >
-                    <View style={styles.tdBreakRow}>
-                      <View style={styles.tdBreakLeft}>
-                        <View style={[styles.tdBreakIcon, { backgroundColor: colors.border }]}>
-                          <Banknote size={20} color={colors.textMuted} />
-                        </View>
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <Text style={[styles.tdBreakTitle, { color: colors.text }]}>
-                            Base fare
-                          </Text>
-                          <Text style={[styles.tdBreakSub, { color: colors.textMuted }]}>
-                            Calculation based on route distance
-                          </Text>
-                        </View>
-                      </View>
-                      <Text style={[styles.tdBreakValue, { color: colors.text }]}>
-                        {getGrossRevenue(selectedTrip) === "SALARY"
-                          ? "SALARY"
-                          : `₹${Number(getGrossRevenue(selectedTrip)).toLocaleString()}`}
-                      </Text>
-                    </View>
-
-                    <View style={[styles.tdBreakRowHighlight, { backgroundColor: `${colors.emerald}18` }]}>
-                      <View style={styles.tdBreakLeft}>
-                        <View style={[styles.tdBreakIcon, { backgroundColor: `${colors.emerald}33` }]}>
-                          <Sparkles size={20} color={colors.emerald} />
-                        </View>
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <View style={styles.tdBreakTitleRow}>
-                            <Text style={[styles.tdBreakTitle, { color: colors.text }]}>
-                              Partner bonus
-                            </Text>
-                            <View style={[styles.tdActiveBadge, { backgroundColor: colors.emerald }]}>
-                              <Text style={styles.tdActiveBadgeText}>Active</Text>
-                            </View>
-                          </View>
-                          <Text style={[styles.tdBreakSub, { color: colors.textMuted }]}>
-                            Precision pilot multiplier applied
-                          </Text>
-                        </View>
-                      </View>
-                      <Text style={[styles.tdBreakValue, { color: colors.emerald }]}>
-                        {getEarning(selectedTrip) === "SALARY"
-                          ? "—"
-                          : `+₹${Math.round(getEarningAmount(selectedTrip)).toLocaleString()}`}
-                      </Text>
-                    </View>
-
-                    <View style={styles.tdBreakRow}>
-                      <View style={styles.tdBreakLeft}>
-                        <View style={[styles.tdBreakIcon, { backgroundColor: `${Theme.negative}22` }]}>
-                          <ShieldCheck size={20} color={Theme.negative} />
-                        </View>
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <Text style={[styles.tdBreakTitle, { color: colors.text }]}>
-                            TDS / Platform
-                          </Text>
-                          <Text style={[styles.tdBreakSub, { color: colors.textMuted }]}>
-                            Standard regulatory overhead
-                          </Text>
-                        </View>
-                      </View>
-                      <Text style={[styles.tdBreakValue, { color: Theme.negative }]}>
-                        -₹0
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.tdSettledBar}>
-                    <View style={styles.tdSettledLeft}>
-                      <View style={styles.tdSettledCalWrap}>
-                        <Calendar size={22} color="#ffffff" />
-                      </View>
-                      <View>
-                        <Text style={styles.tdSettledK}>Settled on</Text>
-                        <Text style={styles.tdSettledV}>
-                          {formatDate(
-                            selectedTrip.pickup_date ?? selectedTrip.created_at,
-                          )}
-                        </Text>
-                      </View>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.tdSettledExport}
-                      activeOpacity={0.85}
-                      accessibilityLabel="Export settlement reference"
-                      onPress={() => {
-                        void Share.share({
-                          message: `Settlement reference #${getDriverTripDisplayNumber(selectedTrip, driverTripNumberById)}`,
-                        }).catch(() => {});
-                      }}
-                    >
-                      <ArrowDownToLine size={20} color="#ffffff" />
-                    </TouchableOpacity>
-                  </View>
-
-                  <TouchableOpacity
-                    style={[
-                      styles.tdQueryBtn,
-                      {
-                        backgroundColor: colors.surface,
-                        borderColor: colors.border,
-                      },
-                    ]}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={[styles.tdQueryBtnText, { color: colors.textMuted }]}>
-                      Raise a query
-                    </Text>
-                    <ChevronRight size={16} color={colors.textMuted} />
-                  </TouchableOpacity>
-                </View>
-              ) : null}
-            </ScrollView>
-
-            <Modal
-              visible={!!podPreviewUrl || podPreviewLoading}
-              transparent
-              animationType="fade"
-              onRequestClose={() => {
-                setPodPreviewUrl(null);
-                setPodPreviewLoading(false);
-                setPodPreviewError(false);
-              }}
-            >
-              <Pressable
-                style={[
-                  styles.podPreviewBackdrop,
-                  { paddingTop: insets.top, paddingBottom: insets.bottom },
-                ]}
-                onPress={() => {
-                  setPodPreviewUrl(null);
-                  setPodPreviewLoading(false);
-                  setPodPreviewError(false);
-                }}
-              >
-                <Pressable style={styles.podPreviewInner} onPress={() => {}}>
-                  <TouchableOpacity
-                    style={[
-                      styles.podPreviewClose,
-                      {
-                        backgroundColor: colors.surface,
-                        borderColor: colors.border,
-                      },
-                    ]}
-                    onPress={() => {
-                      setPodPreviewUrl(null);
-                      setPodPreviewLoading(false);
-                      setPodPreviewError(false);
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <FontAwesome name="times" size={18} color={colors.text} />
-                    <Text style={{ color: colors.text, fontWeight: "700", marginLeft: 8 }}>
-                      Close
-                    </Text>
-                  </TouchableOpacity>
-                  {podPreviewLoading ? (
-                    <View style={styles.podPreviewImageBox}>
-                      <LoadingIndicator size="large" color={colors.emerald} />
-                      <Text style={{ color: colors.textMuted, marginTop: 12 }}>
-                        Loading…
-                      </Text>
-                    </View>
-                  ) : podPreviewUrl ? (
-                    <>
-                      <Image
-                        source={{ uri: podPreviewUrl }}
-                        style={styles.podPreviewImage}
-                        resizeMode="contain"
-                        onError={() => setPodPreviewError(true)}
-                        onLoad={() => setPodPreviewError(false)}
-                      />
-                      {podPreviewError ? (
-                        <View
-                          style={[
-                            styles.podPreviewFallback,
-                            {
-                              backgroundColor: colors.surface,
-                              borderColor: colors.border,
-                            },
-                          ]}
-                        >
-                          <Text style={{ color: colors.textMuted, textAlign: "center" }}>
-                            Preview not available. Open in browser to view.
-                          </Text>
-                          <TouchableOpacity
-                            style={{
-                              marginTop: 14,
-                              backgroundColor: colors.emerald,
-                              paddingVertical: 12,
-                              paddingHorizontal: 20,
-                              borderRadius: 12,
-                              flexDirection: "row",
-                              alignItems: "center",
-                              gap: 8,
-                            }}
-                            onPress={() => void Linking.openURL(podPreviewUrl)}
-                            activeOpacity={0.85}
-                          >
-                            <FontAwesome name="external-link" size={16} color="#fff" />
-                            <Text style={{ color: "#fff", fontWeight: "700" }}>
-                              Open in browser
-                            </Text>
-                          </TouchableOpacity>
-                        </View>
-                      ) : null}
-                    </>
-                  ) : null}
-                </Pressable>
-              </Pressable>
-            </Modal>
-          </View>
-        )}
-      </Modal>
     </View>
   );
 }
@@ -2354,7 +1327,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   creditsSection: {
-    paddingHorizontal: 16,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 16,
     paddingBottom: 16,
     gap: 6,
@@ -2376,97 +1349,112 @@ const styles = StyleSheet.create({
     opacity: 0.82,
   },
   toolbarWrap: {
-    paddingHorizontal: 16,
-    paddingBottom: 8,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingBottom: 6,
   },
   toolbarTopRow: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
+    alignItems: "stretch",
+    gap: 8,
   },
   searchWrap: {
     flex: 1,
-    minHeight: 54,
+    minWidth: 0,
+    height: 44,
     borderWidth: 0,
-    borderRadius: 26,
+    borderRadius: 22,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 18,
-    gap: 10,
+    paddingHorizontal: 12,
+    gap: 8,
   },
   searchInput: {
     flex: 1,
     minWidth: 0,
-    fontSize: 13,
-    fontWeight: "700",
-    paddingVertical: 14,
+    fontSize: 12,
+    fontWeight: "600",
+    paddingVertical: 0,
+    height: "100%",
   },
   segmentOuter: {
-    height: 54,
-    borderRadius: 26,
+    height: 44,
+    width: 188,
+    flexShrink: 0,
+    borderRadius: 22,
     borderWidth: StyleSheet.hairlineWidth,
     padding: 4,
     flexDirection: "row",
     alignItems: "stretch",
-    minWidth: 174,
     gap: 4,
+    overflow: "hidden",
   },
   segmentBtn: {
     flex: 1,
-    borderRadius: 20,
+    minWidth: 0,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 42,
+    paddingHorizontal: 6,
+    zIndex: 0,
   },
   segmentBtnActive: {
     borderWidth: StyleSheet.hairlineWidth,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 3,
+    zIndex: 0,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.06,
+        shadowRadius: 3,
+      },
+      android: { elevation: 1 },
+      default: {},
+    }),
   },
   segmentLabel: {
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.2,
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.8,
     textTransform: "uppercase",
   },
   segmentLabelRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+    gap: 4,
     minWidth: 0,
+    maxWidth: "100%",
   },
   segmentCountBadge: {
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
     borderWidth: 1,
-    paddingHorizontal: 5,
+    paddingHorizontal: 4,
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
   segmentCountBadgeText: {
-    fontSize: 9,
-    fontWeight: "900",
+    fontSize: 8,
+    fontWeight: "800",
     letterSpacing: 0.2,
-    lineHeight: 11,
+    lineHeight: 10,
   },
   toolbarFooter: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 10,
+    marginTop: 8,
+    minHeight: 18,
   },
   resultMeta: {
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 2,
+    fontSize: 8,
+    fontWeight: "700",
+    letterSpacing: 1.2,
     textTransform: "uppercase",
     opacity: 0.75,
-    marginLeft: 6,
+    lineHeight: 12,
   },
   clearBtn: {
     paddingHorizontal: 10,
@@ -2484,30 +1472,31 @@ const styles = StyleSheet.create({
     width: 50,
   },
   listContent: {
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 32,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 8,
+    paddingBottom: 24,
   },
   cardRef: {
     backgroundColor: TRIP_CARD_REF.cardBg,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: TRIP_CARD_REF.border,
-    borderRadius: 28,
-    padding: 28,
-    marginBottom: 22,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 12,
     overflow: "hidden",
     position: "relative",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.06,
-    shadowRadius: 28,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 2,
   },
   cardWatermark: {
     position: "absolute",
-    right: -18,
-    top: "28%",
-    opacity: 0.045,
+    right: -8,
+    top: "22%",
+    opacity: 0.04,
     zIndex: 0,
   },
   cardRefAccentLeft: {
@@ -2522,71 +1511,78 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 24,
+    marginBottom: 12,
+    gap: 8,
   },
   cardRefTopLeft: {
     flex: 1,
     minWidth: 0,
+    gap: 3,
   },
   cardRefId: {
-    fontSize: 8,
-    fontWeight: "900",
+    fontSize: 9,
+    fontWeight: "700",
     color: TRIP_CARD_REF.label,
-    letterSpacing: 2.4,
+    letterSpacing: 1.4,
     textTransform: "uppercase",
-    marginBottom: 8,
+    marginBottom: 5,
+    lineHeight: 12,
   },
   routeRowRef: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 5,
     minWidth: 0,
   },
   routeRefPickup: {
-    fontSize: 15,
-    fontWeight: "900",
+    fontSize: 13,
+    fontWeight: "700",
     color: TRIP_CARD_REF.title,
-    letterSpacing: -0.375,
+    letterSpacing: -0.25,
     textTransform: "uppercase",
-    lineHeight: 18.75,
+    lineHeight: 16,
     flexShrink: 1,
     minWidth: 0,
   },
   routeRefDrop: {
-    fontSize: 15,
-    fontWeight: "900",
+    fontSize: 13,
+    fontWeight: "700",
     color: TRIP_CARD_REF.title,
-    letterSpacing: -0.375,
+    letterSpacing: -0.25,
     textTransform: "uppercase",
-    lineHeight: 18.75,
+    lineHeight: 16,
     flexShrink: 1,
     minWidth: 0,
   },
   routeArrowWrap: {
     marginHorizontal: 0,
+    paddingTop: 1,
   },
   routeCorridorHint: {
-    marginTop: 8,
-    fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 0.8,
+    marginTop: 4,
+    fontSize: 9,
+    fontWeight: "600",
+    letterSpacing: 0.6,
     textTransform: "uppercase",
-    opacity: 0.62,
+    opacity: 0.72,
+    lineHeight: 12,
   },
   cardAssignedByLine: {
-    marginTop: 6,
+    marginTop: 4,
     fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 0.4,
+    fontWeight: "500",
+    letterSpacing: 0.25,
     opacity: 0.9,
+    lineHeight: 13,
   },
   badgeRef: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 12,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 8,
     flexShrink: 0,
-    marginLeft: 12,
+    marginLeft: 0,
     alignSelf: "flex-start",
+    maxWidth: "36%",
   },
   badgeRefCompleted: {
     backgroundColor: TRIP_CARD_REF.badgeCompletedBg,
@@ -2595,50 +1591,57 @@ const styles = StyleSheet.create({
     backgroundColor: TRIP_CARD_REF.emerald,
   },
   badgeRefText: {
-    fontSize: 9,
-    fontWeight: "900",
+    fontSize: 8,
+    fontWeight: "800",
     color: "#ffffff",
     textTransform: "uppercase",
-    letterSpacing: 1.4,
+    letterSpacing: 0.9,
+    lineHeight: 11,
   },
   cardRefBottom: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-end",
-    paddingTop: 24,
-    borderTopWidth: 1,
+    paddingTop: 12,
+    marginTop: 3,
+    borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: TRIP_CARD_REF.divider,
   },
   manifestLabel: {
-    fontSize: 7,
-    fontWeight: "900",
+    fontSize: 8,
+    fontWeight: "700",
     color: TRIP_CARD_REF.label,
-    letterSpacing: 1.75,
+    letterSpacing: 1.2,
     textTransform: "uppercase",
-    marginBottom: 4,
+    marginBottom: 3,
+    lineHeight: 11,
   },
   manifestValue: {
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "700",
     color: TRIP_CARD_REF.body,
     textTransform: "uppercase",
+    lineHeight: 14,
   },
-  yieldWrapRef: { alignItems: "flex-end" },
+  yieldWrapRef: { alignItems: "flex-end", minWidth: 0, flexShrink: 0 },
   yieldLabelRef: {
-    fontSize: 7,
-    fontWeight: "900",
+    fontSize: 8,
+    fontWeight: "700",
     color: TRIP_CARD_REF.label,
-    letterSpacing: 1.75,
+    letterSpacing: 1.2,
     textTransform: "uppercase",
-    marginBottom: 4,
+    marginBottom: 3,
+    lineHeight: 11,
+    textAlign: "right",
   },
   yieldValueRef: {
-    fontSize: 16,
-    fontWeight: "900",
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 16,
   },
   yieldValueRefLarge: {
-    fontSize: 22,
-    letterSpacing: -0.6,
+    fontSize: 16,
+    letterSpacing: -0.35,
   },
   yieldValueCompleted: { color: TRIP_CARD_REF.emeraldYield },
   yieldValueMuted: { color: TRIP_CARD_REF.muted },
@@ -2714,15 +1717,15 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   detailBack: {
-    minWidth: 40,
-    minHeight: 40,
+    minWidth: 36,
+    minHeight: 36,
     justifyContent: "center",
     alignItems: "center",
   },
   detailBackStyled: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     borderWidth: 1,
   },
   detailHeaderActions: {
@@ -2946,17 +1949,18 @@ const styles = StyleSheet.create({
   },
   tdTabBar: {
     flexDirection: "row",
-    padding: 6,
-    borderRadius: 18,
-    gap: 6,
-    marginBottom: 22,
+    padding: 4,
+    borderRadius: 12,
+    gap: 4,
+    marginBottom: 12,
   },
   tdTabBtn: {
     flex: 1,
-    paddingVertical: 14,
+    paddingVertical: 10,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 14,
+    borderRadius: 10,
+    minHeight: 40,
   },
   tdTabBtnActive: {
     backgroundColor: "#0f172a",
@@ -2971,38 +1975,43 @@ const styles = StyleSheet.create({
     }),
   },
   tdTabLabel: {
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 0.6,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.4,
     textTransform: "uppercase",
+    lineHeight: 13,
   },
   tdTimelineHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    marginBottom: 12,
-    paddingHorizontal: 4,
+    gap: 8,
+    marginBottom: 8,
+    paddingHorizontal: 2,
   },
   tdTimelineHeaderIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
+    width: 26,
+    height: 26,
+    borderRadius: 8,
     backgroundColor: "#0f172a",
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
   tdTimelineHeaderTitle: {
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 2,
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 1.2,
     textTransform: "uppercase",
+    lineHeight: 12,
+    flex: 1,
+    minWidth: 0,
   },
   tdTimelineCard: {
-    borderRadius: 36,
+    borderRadius: 14,
     borderWidth: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 18,
-    marginBottom: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    marginBottom: 10,
     overflow: "visible",
     ...Platform.select({
       ios: {
@@ -3015,21 +2024,24 @@ const styles = StyleSheet.create({
     }),
   },
   tdEmptyTimeline: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: "600",
     textAlign: "center",
-    paddingVertical: 20,
+    paddingVertical: 14,
+    lineHeight: 15,
   },
   tdPodRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
+    paddingVertical: 10,
+    minHeight: 44,
   },
   tdPodFileName: {
     flex: 1,
     minWidth: 0,
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "600",
+    lineHeight: 16,
   },
   podPreviewBackdrop: {
     flex: 1,
@@ -3071,12 +2083,12 @@ const styles = StyleSheet.create({
   },
   tdLogRowWrap: {
     position: "relative",
-    paddingBottom: 22,
+    paddingBottom: 12,
   },
   tdLogConnector: {
     position: "absolute",
-    left: 31,
-    top: 44,
+    left: 22,
+    top: 30,
     bottom: 0,
     width: 2,
     zIndex: 0,
@@ -3084,25 +2096,26 @@ const styles = StyleSheet.create({
   tdLogTouchable: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 12,
-    paddingLeft: 12,
-    paddingRight: 12,
-    paddingVertical: 8,
+    gap: 8,
+    paddingLeft: 4,
+    paddingRight: 4,
+    paddingVertical: 6,
     zIndex: 1,
   },
   tdLogMarkerCol: {
-    width: 40,
+    width: 32,
     alignItems: "center",
     justifyContent: "flex-start",
-    paddingTop: 2,
+    paddingTop: 1,
+    flexShrink: 0,
   },
   tdLogCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 3,
+    borderWidth: 2,
     ...Platform.select({
       ios: {
         shadowColor: Theme.driverEmerald,
@@ -3121,31 +2134,36 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 8,
-    marginBottom: 4,
+    gap: 6,
+    marginBottom: 2,
+    minHeight: 22,
   },
   tdLogHeadRight: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 4,
+    flexShrink: 0,
   },
   tdLogStatus: {
-    fontSize: 15,
-    fontWeight: "800",
-    letterSpacing: 0.3,
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.1,
     flexShrink: 1,
+    lineHeight: 16,
   },
   tdLogTime: {
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 9,
+    fontWeight: "700",
+    lineHeight: 12,
   },
   tdLogLoc: {
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "500",
+    lineHeight: 14,
   },
   tdLogExpanded: {
-    marginTop: 12,
-    paddingTop: 12,
+    marginTop: 8,
+    paddingTop: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: "rgba(148,163,184,0.35)",
   },
@@ -3196,9 +2214,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    borderRadius: 28,
-    paddingHorizontal: 22,
-    paddingVertical: 22,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
     marginTop: 4,
   },
   tdDeliveredKicker: {
@@ -3210,16 +2228,17 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   tdDeliveredTitle: {
-    fontSize: 18,
-    fontWeight: "900",
+    fontSize: 14,
+    fontWeight: "800",
     fontStyle: "italic",
     color: "#ffffff",
-    letterSpacing: -0.3,
+    letterSpacing: -0.2,
+    lineHeight: 18,
   },
   tdDeliveredIconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: "rgba(255,255,255,0.2)",
     alignItems: "center",
     justifyContent: "center",
@@ -3228,9 +2247,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    borderRadius: 28,
-    paddingHorizontal: 22,
-    paddingVertical: 22,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
     marginTop: 4,
     borderWidth: 1,
     ...Platform.select({
@@ -3251,42 +2270,43 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   tdProgressTitle: {
-    fontSize: 17,
-    fontWeight: "900",
-    letterSpacing: -0.3,
+    fontSize: 14,
+    fontWeight: "800",
+    letterSpacing: -0.2,
     fontStyle: "italic",
+    lineHeight: 18,
   },
   tdSettlementGlow: {
-    marginBottom: 22,
-    borderRadius: 42,
-    padding: 4,
+    marginBottom: 12,
+    borderRadius: 16,
+    padding: 2,
     overflow: "hidden",
     backgroundColor: "transparent",
   },
   tdNetCard: {
-    borderRadius: 38,
+    borderRadius: 14,
     borderWidth: 1,
-    paddingHorizontal: 28,
-    paddingTop: 26,
-    paddingBottom: 22,
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 12,
     overflow: "hidden",
     ...Platform.select({
       ios: {
         shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.08,
-        shadowRadius: 16,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
       },
-      default: { elevation: 3 },
+      default: { elevation: 2 },
     }),
   },
   tdNetBlur: {
     position: "absolute",
-    top: -48,
-    right: -48,
-    width: 140,
-    height: 140,
-    borderRadius: 70,
+    top: -32,
+    right: -32,
+    width: 90,
+    height: 90,
+    borderRadius: 45,
     backgroundColor: "rgba(16,185,129,0.14)",
     opacity: 1,
   },
@@ -3294,96 +2314,104 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   tdNetWalletIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 18,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 14,
+    marginBottom: 8,
     backgroundColor: "rgba(16,185,129,0.12)",
   },
   tdNetKicker: {
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 4,
-    marginBottom: 10,
+    fontSize: 8,
+    fontWeight: "700",
+    letterSpacing: 2,
+    marginBottom: 6,
     textTransform: "uppercase",
+    lineHeight: 11,
   },
   tdNetAmountRow: {
     flexDirection: "row",
     alignItems: "baseline",
-    gap: 4,
-    marginBottom: 14,
+    gap: 2,
+    marginBottom: 8,
     maxWidth: "100%",
   },
   tdNetRupee: {
-    fontSize: 28,
+    fontSize: 16,
     fontWeight: "700",
-    marginRight: 2,
+    marginRight: 1,
+    lineHeight: 22,
   },
   tdNetAmount: {
-    fontSize: 42,
-    fontWeight: "900",
-    letterSpacing: -2,
+    fontSize: 26,
+    fontWeight: "800",
+    letterSpacing: -1,
     flexShrink: 1,
+    lineHeight: 30,
   },
   tdNetSuccessPill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 999,
   },
   tdNetSuccessText: {
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 2,
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 1,
     textTransform: "uppercase",
+    lineHeight: 12,
   },
   tdNetMiniGrid: {
     flexDirection: "row",
-    gap: 12,
-    marginTop: 26,
+    gap: 8,
+    marginTop: 12,
   },
   tdNetMiniCard: {
     flex: 1,
-    padding: 14,
-    borderRadius: 18,
+    padding: 10,
+    borderRadius: 10,
     borderWidth: 1,
     minWidth: 0,
   },
   tdNetMiniK: {
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 1,
-    marginBottom: 8,
+    fontSize: 7,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    marginBottom: 4,
     textTransform: "uppercase",
+    lineHeight: 10,
   },
   tdNetMiniV: {
-    fontSize: 17,
-    fontWeight: "900",
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 15,
   },
   tdEarningsHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 10,
-    marginBottom: 10,
+    paddingHorizontal: 4,
+    marginBottom: 8,
+    marginTop: 4,
   },
   tdEarningsHeaderTitle: {
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 4,
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 1.2,
     textTransform: "uppercase",
+    lineHeight: 12,
   },
   tdBreakdownCard: {
-    borderRadius: 26,
+    borderRadius: 14,
     borderWidth: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 6,
-    gap: 4,
-    marginBottom: 18,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+    gap: 2,
+    marginBottom: 10,
     ...Platform.select({
       ios: {
         shadowColor: "#000",
@@ -3398,142 +2426,161 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 14,
-    gap: 12,
-    borderRadius: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+    gap: 8,
+    borderRadius: 10,
+    minHeight: 52,
   },
   tdBreakRowHighlight: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 14,
-    gap: 12,
-    borderRadius: 20,
-    marginVertical: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+    gap: 8,
+    borderRadius: 10,
+    marginVertical: 1,
+    minHeight: 52,
   },
   tdBreakLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
+    gap: 8,
     flex: 1,
     minWidth: 0,
   },
   tdBreakIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
   tdBreakTitle: {
-    fontSize: 14,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 16,
   },
   tdBreakTitleRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
     flexWrap: "wrap",
-    marginBottom: 2,
+    marginBottom: 1,
   },
   tdBreakSub: {
-    fontSize: 10,
-    fontWeight: "600",
-    marginTop: 2,
+    fontSize: 9,
+    fontWeight: "500",
+    marginTop: 1,
+    lineHeight: 12,
   },
   tdBreakValue: {
-    fontSize: 14,
-    fontWeight: "900",
+    fontSize: 12,
+    fontWeight: "800",
     flexShrink: 0,
     textAlign: "right",
+    lineHeight: 16,
   },
   tdActiveBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
   },
   tdActiveBadgeText: {
-    fontSize: 8,
-    fontWeight: "900",
-    letterSpacing: 1,
+    fontSize: 7,
+    fontWeight: "800",
+    letterSpacing: 0.6,
     color: "#ffffff",
     textTransform: "uppercase",
+    lineHeight: 10,
   },
   tdSettledBar: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    borderRadius: 26,
-    marginBottom: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 14,
+    marginBottom: 10,
     backgroundColor: "#0f172a",
+    minHeight: 56,
     ...Platform.select({
       ios: {
         shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.18,
-        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.12,
+        shadowRadius: 8,
       },
-      default: { elevation: 6 },
+      default: { elevation: 3 },
     }),
   },
   tdSettledLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
+    gap: 10,
     flex: 1,
     minWidth: 0,
   },
   tdSettledCalWrap: {
-    width: 52,
-    height: 52,
-    borderRadius: 18,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.12)",
+    flexShrink: 0,
   },
   tdSettledK: {
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 3,
+    fontSize: 8,
+    fontWeight: "700",
+    letterSpacing: 1.2,
     color: "rgba(148,163,184,0.95)",
     textTransform: "uppercase",
-    marginBottom: 4,
+    marginBottom: 2,
+    lineHeight: 11,
   },
   tdSettledV: {
-    fontSize: 14,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "700",
     color: "#ffffff",
-    letterSpacing: 0.2,
+    letterSpacing: 0.1,
+    lineHeight: 16,
   },
   tdSettledExport: {
-    padding: 14,
-    borderRadius: 18,
+    padding: 10,
+    borderRadius: 12,
     backgroundColor: "rgba(255,255,255,0.12)",
+    minWidth: 40,
+    minHeight: 40,
+    alignItems: "center",
+    justifyContent: "center",
   },
   tdQueryBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    paddingVertical: 20,
-    borderRadius: 26,
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 14,
     borderWidth: 1,
+    minHeight: 44,
   },
   tdQueryBtnText: {
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 4,
-    textTransform: "uppercase",
-  },
-  detailHeaderLabelRef: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "700",
     letterSpacing: 1.2,
+    textTransform: "uppercase",
+    lineHeight: 12,
+  },
+  detailHeaderLabelRef: {
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 1,
     marginBottom: 2,
+    lineHeight: 11,
+    textTransform: "uppercase",
   },
   detailHeaderIdRowRef: {
     flexDirection: "row",
@@ -3546,10 +2593,11 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   detailTitleRef: {
-    fontSize: 16,
-    fontWeight: "800",
+    fontSize: 14,
+    fontWeight: "700",
     color: DETAIL_REF.headerTitle,
-    letterSpacing: 0.2,
+    letterSpacing: 0.1,
+    lineHeight: 18,
   },
   detailTitleRow: {
     flexDirection: "row",
@@ -3578,8 +2626,8 @@ const styles = StyleSheet.create({
     backgroundColor: DETAIL_REF.pageBg,
   },
   detailContentRef: {
-    paddingTop: 16,
-    paddingBottom: 80,
+    paddingTop: 12,
+    paddingBottom: 72,
   },
   routeCardRef: {
     padding: 32,

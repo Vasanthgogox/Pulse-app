@@ -29,7 +29,9 @@ export function NetworkHubMetricsInlineRow({
           {trips}
         </Text>
       </View>
-      <View style={styles.inlineDivider} />
+      <Text style={styles.inlineDotSep} accessibilityElementsHidden importantForAccessibility="no">
+        ·
+      </Text>
       <View style={styles.inlineItem}>
         <View style={[styles.inlineIconWrap, styles.inlineIconWrapRating]}>
           <Star
@@ -175,8 +177,9 @@ const styles = StyleSheet.create({
   inlineRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 8,
     flexShrink: 0,
+    minHeight: 28,
   },
   inlineItem: {
     flexDirection: "row",
@@ -185,9 +188,9 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   inlineIconWrap: {
-    width: 26,
-    height: 26,
-    borderRadius: 7,
+    width: 24,
+    height: 24,
+    borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -199,17 +202,20 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.networkHubListCardRatingBg,
   },
   inlineValue: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "500",
-    color: Theme.textSecondary,
+    color: Theme.textPrimaryDark,
     letterSpacing: 0,
-    lineHeight: 15,
-    minWidth: 18,
+    lineHeight: 14,
+    minWidth: 16,
+    fontVariant: ["tabular-nums"],
   },
-  inlineDivider: {
-    width: StyleSheet.hairlineWidth,
-    height: 20,
-    backgroundColor: Theme.borderLight,
+  inlineDotSep: {
+    fontSize: 10,
+    fontWeight: "400",
+    color: Theme.textMuted,
+    lineHeight: 14,
+    paddingHorizontal: 2,
     flexShrink: 0,
   },
 });

@@ -3,6 +3,7 @@
  * Expires in 24h. No social updates.
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
+import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import Theme from "@/constants/Theme";
 import Layout from "@/constants/Layout";
 import { useAuth } from "@/contexts/AuthContext";
@@ -159,9 +160,11 @@ export default function CreatePostScreen() {
     (vehicleEntryMode === "idle" ? !!selectedVehicleId : vehicleType.trim().length > 0) &&
     availability.trim().length > 0;
 
-  const pickColumns = windowWidth >= 1100 ? 3 : windowWidth >= 760 ? 2 : 1;
+  const pickColumns =
+    windowWidth >= 1024 ? 4 : windowWidth >= 640 ? 2 : 1;
+  const pickCellWidth =
+    pickColumns === 4 ? "24%" : pickColumns === 3 ? "32%" : pickColumns === 2 ? "49%" : "100%";
   const isDesktop = windowWidth >= 1024;
-  const contentMaxWidth = isDesktop ? 1240 : undefined;
 
   const canSubmit = (canSubmitLoadPick || canSubmitLoadManual || canSubmitVehicle) && !submitting;
 
@@ -298,12 +301,12 @@ export default function CreatePostScreen() {
           style={styles.form}
           contentContainerStyle={[
             styles.formContent,
-            { paddingBottom: insets.bottom + 32, alignItems: "center" },
+            { paddingBottom: insets.bottom + 32 },
           ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={[styles.canvas, contentMaxWidth ? { maxWidth: contentMaxWidth } : null]}>
+          <View style={styles.canvas}>
             <View style={styles.hintBox}>
               <Text style={styles.hintText}>
                 Stories expire in 24 hours. Only load and vehicle availability — no personal or
@@ -421,7 +424,7 @@ export default function CreatePostScreen() {
                       key={load.id}
                       style={[
                         styles.pickGridCell,
-                        { width: pickColumns === 3 ? "32%" : pickColumns === 2 ? "49%" : "100%" },
+                        { width: pickCellWidth },
                       ]}
                     >
                       <BroadcastPickIndentCard
@@ -776,6 +779,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Theme.screenBackground },
   canvas: {
     width: "100%",
+    maxWidth: "100%",
+    alignSelf: "stretch",
     paddingHorizontal: Layout.screenPaddingHorizontal,
     gap: 10,
   },
@@ -800,11 +805,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   headerTitle: {
-    fontSize: 16,
-    fontWeight: "900",
+    ...FinanceTxnTypography.partyTitle,
+    fontSize: 14,
+    fontStyle: "normal",
+    fontWeight: "600",
     color: Theme.textPrimary,
-    letterSpacing: -0.2,
     textTransform: "capitalize",
+    letterSpacing: 0.1,
   },
   publishBtn: {
     backgroundColor: "#6b7280",
@@ -869,7 +876,12 @@ const styles = StyleSheet.create({
   },
   typeBtnTextActive: { color: "#fff" },
   form: { flex: 1 },
-  formContent: { paddingTop: 10, paddingHorizontal: 0 },
+  formContent: {
+    paddingTop: 10,
+    paddingHorizontal: 0,
+    width: "100%",
+    alignItems: "stretch",
+  },
   vehicleModeRow: {
     flexDirection: "row",
     gap: 8,
@@ -905,21 +917,27 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   sectionKicker: {
-    fontSize: 8,
-    fontWeight: "900",
-    color: Theme.textMuted,
-    letterSpacing: 1.2,
-    textTransform: "uppercase",
+    ...FinanceTxnTypography.columnTitle,
     marginBottom: 2,
   },
-  pickSectionTitle: { fontSize: 28, fontWeight: "900", color: Theme.textPrimaryDark, letterSpacing: -0.6 },
-  sectionCount: { color: Theme.textPrimaryDark, fontSize: 22 },
-  sectionSub: {
-    fontSize: 11,
-    color: Theme.textSecondary,
-    lineHeight: 18,
+  pickSectionTitle: {
+    ...FinanceTxnTypography.partyTitle,
+    fontSize: 16,
+    fontStyle: "normal",
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.1,
+  },
+  sectionCount: {
+    fontSize: 14,
     fontWeight: "500",
-    marginTop: 4,
+    color: Theme.textSecondary,
+  },
+  sectionSub: {
+    ...FinanceTxnTypography.routeWhy,
+    fontSize: 10,
+    lineHeight: 15,
+    marginTop: 2,
     marginBottom: 8,
   },
   secondaryLink: { paddingVertical: 4, paddingHorizontal: 2 },
@@ -940,18 +958,25 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     marginBottom: 8,
   },
-  searchInput: { flex: 1, fontSize: 14, fontWeight: "600", color: Theme.textPrimary, padding: 0 },
+  searchInput: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "500",
+    color: Theme.textPrimary,
+    padding: 0,
+  },
   loadListLoading: { paddingVertical: 32, alignItems: "center", gap: 10 },
   loadListLoadingText: { fontSize: 12, color: Theme.textSecondary, fontWeight: "600" },
   pickGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: 8,
+    alignItems: "stretch",
+    gap: 10,
+    width: "100%",
   },
   pickGridCell: {
     minWidth: 0,
+    alignSelf: "stretch",
   },
   idleVehicleGrid: {
     flexDirection: "row",

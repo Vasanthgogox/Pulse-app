@@ -1,0 +1,1169 @@
+/**
+ * Full-screen trip history detail (stack route).
+ */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
+import Layout from "@/constants/Layout";
+import Theme from "@/constants/Theme";
+import { useAuth } from "@/contexts/AuthContext";
+import { useDriverTheme, useDriverThemeColors } from "@/contexts/DriverThemeContext";
+import { getLatestAssignmentAuditByTripIds } from "@/features/trips/services/trip-assignment-audit.service";
+import {
+  buildAssignerDisplayForTrip,
+} from "@/lib/driverAssignerDisplay";
+import {
+  buildDriverTripNumberMap,
+  getDriverTripDisplayNumber,
+} from "@/lib/driverTripSequence";
+import { formatLedgerDateTime } from "@/lib/format";
+import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
+import { getOptimalRoute } from "@/services/routingService";
+import * as tripDocumentsService from "@/services/tripDocumentsService";
+import * as driversService from "@/services/driversService";
+import * as tripsService from "@/services/tripsService";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { LinearGradient } from "expo-linear-gradient";
+import { type Href, useRouter } from "expo-router";
+import {
+  ArrowDownToLine,
+  Banknote,
+  Calendar,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  Clock,
+  FileImage,
+  Info,
+  MessageSquare,
+  Navigation,
+  Route,
+  Share2,
+  ShieldCheck,
+  Sparkles,
+  Wallet,
+} from "lucide-react-native";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  Image,
+  Linking,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import Animated, {
+  cancelAnimation,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  buildMissionLog,
+  formatDistance,
+  formatDurationForTrip,
+  formatTripHistoryDate,
+  getEarning,
+  getEarningAmount,
+  getGrossRevenue,
+  getTripProgressTitle,
+  isCompleted,
+  isInTransitStatus,
+  parseTripCoordinate,
+  splitLocationPrimarySecondary,
+  toEtaInterval,
+} from "@/features/driver/tripHistory/tripHistoryDetail.util";
+import { tripHistoryDetailStyles as styles } from "@/features/driver/tripHistory/tripHistoryDetail.styles";
+
+function TimelinePulseIcon({
+  expanded,
+  children,
+  style,
+}: {
+  expanded: boolean;
+  children: ReactNode;
+  style?: object;
+}) {
+  const scale = useSharedValue(1);
+  useEffect(() => {
+    cancelAnimation(scale);
+    if (expanded) {
+      scale.value = withRepeat(
+        withSequence(withTiming(1.07, { duration: 700 }), withTiming(1, { duration: 700 })),
+        -1,
+        false,
+      );
+    } else {
+      scale.value = withTiming(1, { duration: 220 });
+    }
+  }, [expanded, scale]);
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+  return <Animated.View style={[animatedStyle, style]}>{children}</Animated.View>;
+}
+
+export type DriverTripHistoryDetailScreenProps = {
+  tripId: string;
+};
+
+export function DriverTripHistoryDetailScreen({ tripId }: DriverTripHistoryDetailScreenProps) {
+  const insets = useSafeAreaInsets();
+  const { profile } = useAuth();
+  const colors = useDriverThemeColors();
+  const { theme } = useDriverTheme();
+  const isDark = theme === "dark";
+  const router = useRouter();
+  const [trip, setTrip] = useState<tripsService.TripRow | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [driver, setDriver] = useState<driversService.DriverRow | null>(null);
+  const [invites, setInvites] = useState<
+    Awaited<ReturnType<typeof driversService.getDriverInvitesReceived>>["invites"]
+  >([]);
+  const [assignmentActorByTripId, setAssignmentActorByTripId] = useState<Record<string, string>>({});
+  const [routeMetricsByTripId, setRouteMetricsByTripId] = useState<
+    Record<string, { distance: number; estimated_duration: string }>
+  >({});
+  const [detailTab, setDetailTab] = useState<"journey" | "settlement">("journey");
+  const [expandedLogIndex, setExpandedLogIndex] = useState<number | null>(null);
+  const [detailPodDocuments, setDetailPodDocuments] = useState<tripDocumentsService.TripDocumentRow[]>([]);
+  const [detailPodLoading, setDetailPodLoading] = useState(false);
+  const [detailPodViewUrls, setDetailPodViewUrls] = useState<Record<string, string>>({});
+  const detailPodUrlRequestedRef = useRef<Set<string>>(new Set());
+  const [podPreviewUrl, setPodPreviewUrl] = useState<string | null>(null);
+  const [podPreviewLoading, setPodPreviewLoading] = useState(false);
+  const [podPreviewError, setPodPreviewError] = useState(false);
+
+  const loadTrip = useCallback(async () => {
+    setLoading(true);
+    const res = await tripsService.getTripById(tripId);
+    setTrip(res.trip ?? null);
+    setLoading(false);
+  }, [tripId]);
+
+  useEffect(() => {
+    void loadTrip();
+  }, [loadTrip]);
+
+  useEffect(() => {
+    const uid = profile?.uid;
+    if (!uid) return;
+    void driversService.getLinkedDriversForCurrentUser(uid).then((res) => {
+      const d = res.drivers?.[0] ?? null;
+      setDriver(d);
+      if (!d?.id) return;
+      void driversService.getDriverInvitesReceived().then((inv) => {
+        if (!inv.error) setInvites(inv.invites);
+      });
+    });
+  }, [profile?.uid]);
+
+  useEffect(() => {
+    if (!tripId) return;
+    void getLatestAssignmentAuditByTripIds([tripId]).then(({ byTripId }) => {
+      const map: Record<string, string> = {};
+      byTripId.forEach((value, key) => {
+        const actorId = String(value.changed_by ?? "").trim();
+        if (actorId) map[key] = actorId;
+      });
+      setAssignmentActorByTripId(map);
+    });
+  }, [tripId]);
+
+  useEffect(() => {
+    setExpandedLogIndex(null);
+    setDetailTab("journey");
+  }, [tripId]);
+
+  useEffect(() => {
+    if (!trip?.id) {
+      setDetailPodDocuments([]);
+      setDetailPodViewUrls({});
+      detailPodUrlRequestedRef.current.clear();
+      setPodPreviewUrl(null);
+      setPodPreviewLoading(false);
+      setPodPreviewError(false);
+      return;
+    }
+    const tid = trip.id;
+    detailPodUrlRequestedRef.current.clear();
+    setDetailPodViewUrls({});
+    setDetailPodLoading(true);
+    let cancelled = false;
+    tripDocumentsService.getDocumentsByTripId(tid).then(({ documents, error }) => {
+      if (cancelled) return;
+      setDetailPodLoading(false);
+      if (!error) setDetailPodDocuments(documents);
+      else setDetailPodDocuments([]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [trip?.id]);
+
+  useEffect(() => {
+    detailPodDocuments.forEach((doc) => {
+      if (detailPodUrlRequestedRef.current.has(doc.id)) return;
+      detailPodUrlRequestedRef.current.add(doc.id);
+      tripDocumentsService.getDocumentViewUrl(doc.storage_path).then((url) => {
+        setDetailPodViewUrls((prev) => (prev[doc.id] ? prev : { ...prev, [doc.id]: url }));
+      });
+    });
+  }, [detailPodDocuments]);
+
+  useEffect(() => {
+    if (!trip) return;
+    const tid = String(trip.id ?? "").trim();
+    const hasDistance = trip.distance != null && String(trip.distance).trim() !== "";
+    const hasEta = trip.estimated_duration != null && trip.estimated_duration.trim() !== "";
+    if (!tid || (hasDistance && hasEta)) return;
+    const pickupLat = parseTripCoordinate(trip.pickup_lat);
+    const pickupLon = parseTripCoordinate(trip.pickup_lon);
+    const dropLat = parseTripCoordinate(trip.drop_lat);
+    const dropLon = parseTripCoordinate(trip.drop_lon);
+    if (pickupLat == null || pickupLon == null || dropLat == null || dropLon == null) return;
+    let cancelled = false;
+    void getOptimalRoute(
+      { latitude: pickupLat, longitude: pickupLon },
+      { latitude: dropLat, longitude: dropLon },
+    ).then((route) => {
+      if (cancelled || !route) return;
+      const distanceKm = Math.max(1, Math.round(route.distance / 1000));
+      const etaInterval = toEtaInterval(route.duration);
+      setRouteMetricsByTripId((prev) => ({
+        ...prev,
+        [tid]: { distance: distanceKm, estimated_duration: etaInterval },
+      }));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [trip]);
+
+  const driverTripNumberById = useMemo(
+    () => (trip ? buildDriverTripNumberMap([trip]) : {}),
+    [trip],
+  );
+
+  const assignerDisplay = useMemo(() => {
+    if (!trip) return "Fleet dispatcher";
+    return (
+      buildAssignerDisplayForTrip(trip, invites, driver?.organization_id ?? null, {
+        assignmentActorByTripId,
+        assignerNamesByUserId: {},
+        assignerOrgNameByUserId: {},
+        assignerDisplayByTripId: {},
+        assignerTripOrgNameByTripId: {},
+        organizationNamesById: {},
+      }).assignedByName || "Fleet dispatcher"
+    );
+  }, [trip, invites, driver?.organization_id, assignmentActorByTripId]);
+
+  const archiveMissionLog = useMemo(() => (trip ? buildMissionLog(trip) : []), [trip]);
+  const pickupParts = useMemo(
+    () => splitLocationPrimarySecondary(trip?.pickup_area),
+    [trip?.pickup_area],
+  );
+  const dropParts = useMemo(
+    () => splitLocationPrimarySecondary(trip?.drop_location),
+    [trip?.drop_location],
+  );
+  const routeFallback = useMemo(() => {
+    if (!trip) return null;
+    return routeMetricsByTripId[String(trip.id)] ?? null;
+  }, [trip, routeMetricsByTripId]);
+  const distanceDisplay = useMemo(() => {
+    if (!trip) return "—";
+    return formatDistance(trip.distance ?? routeFallback?.distance);
+  }, [trip, routeFallback]);
+  const durationDisplay = useMemo(() => {
+    if (!trip) return "—";
+    if (trip.estimated_duration?.trim()) return formatDurationForTrip(trip);
+    if (routeFallback?.estimated_duration) {
+      return formatEstimatedDuration(routeFallback.estimated_duration);
+    }
+    return formatDurationForTrip(trip);
+  }, [trip, routeFallback]);
+
+  const onBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace("/(driver)/trip-history");
+  };
+
+  if (loading || !trip) {
+    return (
+      <View style={[styles.detailWrap, { paddingTop: insets.top, backgroundColor: colors.background }]}>
+        <View style={styles.detailLoading}>
+          <LoadingIndicator color={colors.emerald} />
+          <Text style={{ color: colors.textMuted, marginTop: 12 }}>Loading trip…</Text>
+        </View>
+      </View>
+    );
+  }
+
+  const selectedTrip = trip;
+
+  return (
+    <View
+      style={[
+        styles.detailWrap,
+        {
+          paddingTop: insets.top,
+          backgroundColor: colors.background,
+        },
+      ]}
+    >
+            <View
+              style={[
+                styles.detailHeaderRef,
+                styles.detailHeaderStyled,
+                {
+                  paddingTop: 12,
+                  paddingBottom: 12,
+                  paddingHorizontal: Layout.screenPaddingHorizontal,
+                  backgroundColor: colors.surface,
+                  borderBottomColor: colors.border,
+                },
+              ]}
+            >
+              <TouchableOpacity
+                onPress={() => onBack()}
+                style={[
+                  styles.detailBack,
+                  styles.detailBackStyled,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+                hitSlop={{ top: 12, right: 16, bottom: 12, left: 16 }}
+                activeOpacity={0.75}
+                accessibilityLabel="Back"
+              >
+                <FontAwesome
+                  name="chevron-left"
+                  size={18}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+              <View style={styles.tdHeaderCenter}>
+                <Text
+                  style={[
+                    styles.detailHeaderLabelRef,
+                    { color: colors.textMuted },
+                  ]}
+                >
+                  TRIP HISTORY
+                </Text>
+                <View style={styles.detailHeaderIdRowRef}>
+                  <Text
+                    style={[styles.detailTitleRef, { color: colors.text }]}
+                    numberOfLines={1}
+                  >
+                    {getDriverTripDisplayNumber(selectedTrip, driverTripNumberById)}
+                  </Text>
+                  <View
+                    style={[
+                      styles.tdStatusDot,
+                      {
+                        backgroundColor: colors.emerald,
+                        shadowColor: colors.emerald,
+                      },
+                    ]}
+                  />
+                </View>
+              </View>
+              <View style={styles.detailHeaderActions}>
+                {selectedTrip.driver_id ? (
+                  <TouchableOpacity
+                    style={[
+                      styles.detailBack,
+                      styles.detailBackStyled,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                    onPress={() => {
+                      const id = encodeURIComponent(String(selectedTrip.id));
+                      router.push(`/(driver)/chat?tripId=${id}` as Href);
+                    }}
+                    activeOpacity={0.75}
+                    accessibilityLabel="Trip chat"
+                  >
+                    <MessageSquare size={17} color={colors.text} />
+                  </TouchableOpacity>
+                ) : null}
+                <TouchableOpacity
+                  style={[
+                    styles.detailBack,
+                    styles.detailBackStyled,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                  onPress={() => {
+                    void Share.share({
+                      message: `Trip ${getDriverTripDisplayNumber(selectedTrip, driverTripNumberById)}`,
+                    }).catch(() => {});
+                  }}
+                  activeOpacity={0.75}
+                  accessibilityLabel="Share trip"
+                >
+                  <Share2 size={17} color={colors.text} />
+                </TouchableOpacity>
+              </View>
+            </View>
+            <ScrollView
+              style={[
+                styles.detailScrollRef,
+                { backgroundColor: colors.background },
+              ]}
+              contentContainerStyle={[
+                styles.detailContentRef,
+                {
+                  paddingHorizontal: Layout.screenPaddingHorizontal,
+                  paddingBottom: Layout.modalBottomPadding + insets.bottom,
+                  paddingTop: 16,
+                },
+              ]}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.tdHeroOuter}>
+                <LinearGradient
+                  colors={["#0f172a", "#020617"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.tdHeroCard}
+                >
+                  <View style={styles.tdHeroGlow} pointerEvents="none" />
+                  <Route
+                    size={128}
+                    color="rgba(255,255,255,0.08)"
+                    style={styles.tdHeroWatermark}
+                  />
+                  <View style={styles.tdHeroInner}>
+                    <Text style={styles.tdHeroKicker}>Route Logic History</Text>
+                    <View style={styles.tdHeroRouteRow}>
+                      <View style={styles.tdHeroRouteSide}>
+                        <Text
+                          style={styles.tdHeroCity}
+                          numberOfLines={1}
+                          adjustsFontSizeToFit
+                          minimumFontScale={0.72}
+                        >
+                          {pickupParts.primary.toUpperCase()}
+                        </Text>
+                        <Text style={styles.tdHeroState} numberOfLines={1}>
+                          {(pickupParts.secondary ?? "Origin").toUpperCase()}
+                        </Text>
+                      </View>
+
+                      <View style={styles.tdHeroRouteConnector}>
+                        <View style={[styles.tdHeroDot, { backgroundColor: Theme.driverEmerald }]} />
+                        <View style={styles.tdHeroConnectorLine} />
+                        <Text style={[styles.tdHeroToLabel, { color: Theme.driverPrimary }]}>TO</Text>
+                        <View style={styles.tdHeroConnectorLine} />
+                        <View style={[styles.tdHeroDot, { backgroundColor: Theme.driverPrimary }]} />
+                      </View>
+
+                      <View style={[styles.tdHeroRouteSide, styles.tdHeroRouteSideRight]}>
+                        <Text
+                          style={[styles.tdHeroCity, styles.tdHeroCityRight]}
+                          numberOfLines={1}
+                          adjustsFontSizeToFit
+                          minimumFontScale={0.72}
+                        >
+                          {dropParts.primary.toUpperCase()}
+                        </Text>
+                        <Text style={[styles.tdHeroState, styles.tdHeroStateRight]} numberOfLines={1}>
+                          {(dropParts.secondary ?? "Destination").toUpperCase()}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.tdHeroDivider} />
+                    <View style={styles.tdHeroMetaRow}>
+                      <View style={styles.tdHeroMetaItem}>
+                        <View style={styles.tdHeroMetaIconWrap}>
+                          <Navigation size={16} color={Theme.driverPrimary} />
+                        </View>
+                        <View>
+                          <Text style={styles.tdHeroMetaKicker}>Distance</Text>
+                          <Text style={styles.tdHeroMetaValue}>
+                            {distanceDisplay}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.tdHeroMetaItem}>
+                        <View style={styles.tdHeroMetaIconWrap}>
+                          <Clock size={16} color={Theme.driverPrimary} />
+                        </View>
+                        <View>
+                          <Text style={styles.tdHeroMetaKicker}>Duration</Text>
+                          <Text style={styles.tdHeroMetaValue}>
+                            {durationDisplay}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                    <View style={styles.tdHeroAssignerRow}>
+                      <ShieldCheck size={14} color={Theme.driverPrimary} />
+                      <Text style={styles.tdHeroAssignerLabel}>Assigned by</Text>
+                      <Text style={styles.tdHeroAssignerValue} numberOfLines={1}>
+                        {assignerDisplay}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={[styles.tdHeroAccentBar, { backgroundColor: colors.emerald }]} />
+                </LinearGradient>
+              </View>
+
+              <View style={[styles.tdTabBar, { backgroundColor: `${colors.border}99` }]}>
+                <TouchableOpacity
+                  style={[
+                    styles.tdTabBtn,
+                    detailTab === "journey" && styles.tdTabBtnActive,
+                  ]}
+                  onPress={() => setDetailTab("journey")}
+                  activeOpacity={0.88}
+                >
+                  <Text
+                    style={[
+                      styles.tdTabLabel,
+                      {
+                        color: detailTab === "journey" ? "#ffffff" : colors.textMuted,
+                      },
+                    ]}
+                  >
+                    Journey Log
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.tdTabBtn,
+                    detailTab === "settlement" && styles.tdTabBtnActive,
+                  ]}
+                  onPress={() => setDetailTab("settlement")}
+                  activeOpacity={0.88}
+                >
+                  <Text
+                    style={[
+                      styles.tdTabLabel,
+                      {
+                        color: detailTab === "settlement" ? "#ffffff" : colors.textMuted,
+                      },
+                    ]}
+                  >
+                    Settlement
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {detailTab === "journey" ? (
+                <View style={{ marginBottom: 12 }}>
+                  <View style={styles.tdTimelineHeader}>
+                    <View style={styles.tdTimelineHeaderIcon}>
+                      <Calendar size={13} color="#ffffff" />
+                    </View>
+                    <Text style={[styles.tdTimelineHeaderTitle, { color: colors.text }]}>
+                      Trip Timeline
+                    </Text>
+                  </View>
+
+                  {archiveMissionLog.length === 0 ? (
+                    <View
+                      style={[
+                        styles.tdTimelineCard,
+                        {
+                          backgroundColor: colors.surface,
+                          borderColor: colors.border,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.tdEmptyTimeline, { color: colors.textMuted }]}>
+                        No timeline events for this trip yet.
+                      </Text>
+                    </View>
+                  ) : (
+                    <View
+                      style={[
+                        styles.tdTimelineCard,
+                        {
+                          backgroundColor: colors.surface,
+                          borderColor: colors.border,
+                        },
+                      ]}
+                    >
+                      {archiveMissionLog.map((log, i) => {
+                        const isLast = i === archiveMissionLog.length - 1;
+                        const expanded = expandedLogIndex === i;
+                        return (
+                          <View key={`${log.status}-${i}`} style={styles.tdLogRowWrap}>
+                            {!isLast ? (
+                              <View
+                                style={[styles.tdLogConnector, { backgroundColor: colors.border }]}
+                              />
+                            ) : null}
+                            <TouchableOpacity
+                              activeOpacity={0.85}
+                              style={[
+                                styles.tdLogTouchable,
+                                expanded && {
+                                  backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "#f8fafc",
+                                  borderRadius: 10,
+                                },
+                              ]}
+                              onPress={() =>
+                                setExpandedLogIndex(expanded ? null : i)
+                              }
+                            >
+                              <View style={styles.tdLogMarkerCol}>
+                                <TimelinePulseIcon expanded={expanded}>
+                                  <View
+                                    style={[
+                                      styles.tdLogCircle,
+                                      {
+                                        backgroundColor: colors.emerald,
+                                        borderColor: colors.surface,
+                                      },
+                                    ]}
+                                  >
+                                    <CheckCircle2 size={11} color="#ffffff" />
+                                  </View>
+                                </TimelinePulseIcon>
+                              </View>
+                              <View style={styles.tdLogBody}>
+                                <View style={styles.tdLogHead}>
+                                  <Text style={[styles.tdLogStatus, { color: colors.text }]}>
+                                    {log.status}
+                                  </Text>
+                                  <View style={styles.tdLogHeadRight}>
+                                    <Text style={[styles.tdLogTime, { color: colors.textMuted }]}>
+                                      {log.time}
+                                    </Text>
+                                    {expanded ? (
+                                      <ChevronUp size={14} color={colors.textMuted} />
+                                    ) : (
+                                      <ChevronDown size={14} color={colors.textMuted} />
+                                    )}
+                                  </View>
+                                </View>
+                                <Text
+                                  style={[styles.tdLogLoc, { color: colors.textMuted }]}
+                                  numberOfLines={expanded ? undefined : 2}
+                                >
+                                  {log.loc}
+                                </Text>
+                                {expanded ? (
+                                  <View style={styles.tdLogExpanded}>
+                                    {isInTransitStatus(log.status) ? (
+                                      <View style={styles.tdLogInTransitGrid}>
+                                        <View style={styles.tdLogInTransitCol}>
+                                          <Text style={[styles.tdLogMetaK, { color: colors.textMuted }]}>
+                                            Location
+                                          </Text>
+                                          <Text style={[styles.tdLogMetaV, { color: colors.text }]}>
+                                            {log.loc}
+                                          </Text>
+                                        </View>
+                                        <View style={styles.tdLogInTransitCol}>
+                                          <Text style={[styles.tdLogMetaK, { color: colors.textMuted }]}>
+                                            Timestamp
+                                          </Text>
+                                          <Text style={[styles.tdLogMetaV, { color: colors.text }]}>
+                                            {formatLedgerDateTime(log.atIso)}
+                                          </Text>
+                                        </View>
+                                      </View>
+                                    ) : (
+                                      <>
+                                        <Text style={[styles.tdLogDetailsKicker, { color: colors.textMuted }]}>
+                                          Details
+                                        </Text>
+                                        <View
+                                          style={[
+                                            styles.tdLogDetailsBox,
+                                            {
+                                              backgroundColor: colors.background,
+                                              borderColor: colors.border,
+                                            },
+                                          ]}
+                                        >
+                                          <Text style={[styles.tdLogDetailsText, { color: colors.text }]}>
+                                            {log.details}
+                                          </Text>
+                                        </View>
+                                        <View style={styles.tdLogMetaGrid}>
+                                          <View style={{ flex: 1, minWidth: 0 }}>
+                                            <Text style={[styles.tdLogMetaK, { color: colors.textMuted }]}>
+                                              Timestamp
+                                            </Text>
+                                            <Text style={[styles.tdLogMetaV, { color: colors.textMuted }]}>
+                                              {formatLedgerDateTime(log.atIso)}
+                                            </Text>
+                                          </View>
+                                        </View>
+                                      </>
+                                    )}
+                                  </View>
+                                ) : null}
+                              </View>
+                            </TouchableOpacity>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
+
+                  <View style={styles.tdTimelineHeader}>
+                    <View style={styles.tdTimelineHeaderIcon}>
+                      <FileImage size={13} color="#ffffff" />
+                    </View>
+                    <Text
+                      style={[styles.tdTimelineHeaderTitle, { color: colors.text }]}
+                    >
+                      Proof of delivery
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.tdTimelineCard,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                  >
+                    {detailPodLoading ? (
+                      <LoadingIndicator
+                        style={{ paddingVertical: 22 }}
+                        color={colors.emerald}
+                      />
+                    ) : detailPodDocuments.length >= 1 ? (
+                      detailPodDocuments.map((doc, index) => {
+                        const name =
+                          doc.file_name ||
+                          doc.storage_path.split("/").pop() ||
+                          "POD";
+                        return (
+                          <View
+                            key={doc.id}
+                            style={[
+                              styles.tdPodRow,
+                              index < detailPodDocuments.length - 1
+                                ? { borderBottomColor: colors.border, borderBottomWidth: StyleSheet.hairlineWidth }
+                                : null,
+                            ]}
+                          >
+                            <FileImage
+                              size={15}
+                              color={colors.emerald}
+                              style={{ marginRight: 8 }}
+                            />
+                            <Text
+                              style={[styles.tdPodFileName, { color: colors.text }]}
+                              numberOfLines={1}
+                            >
+                              {name}
+                            </Text>
+                            <TouchableOpacity
+                              onPress={async () => {
+                                setPodPreviewError(false);
+                                const cached = detailPodViewUrls[doc.id];
+                                if (cached) {
+                                  setPodPreviewUrl(cached);
+                                  return;
+                                }
+                                setPodPreviewLoading(true);
+                                setPodPreviewUrl(null);
+                                const url =
+                                  await tripDocumentsService.getDocumentViewUrl(
+                                    doc.storage_path,
+                                  );
+                                setDetailPodViewUrls((prev) => ({
+                                  ...prev,
+                                  [doc.id]: url,
+                                }));
+                                setPodPreviewLoading(false);
+                                setPodPreviewUrl(url);
+                              }}
+                              activeOpacity={0.85}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            >
+                              <Text
+                                style={{
+                                  color: colors.emerald,
+                                  fontWeight: "800",
+                                  fontSize: 13,
+                                }}
+                              >
+                                View
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        );
+                      })
+                    ) : (
+                      <Text
+                        style={[
+                          styles.tdEmptyTimeline,
+                          { paddingVertical: 14, fontSize: 13 },
+                        ]}
+                      >
+                        No proof of delivery uploaded for this trip.
+                      </Text>
+                    )}
+                  </View>
+
+                  {isCompleted(selectedTrip.status) ? (
+                    <LinearGradient
+                      colors={[Theme.driverEmeraldDark, Theme.driverEmerald]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.tdDeliveredBanner}
+                    >
+                      <View>
+                        <Text style={styles.tdDeliveredKicker}>Status</Text>
+                        <Text style={styles.tdDeliveredTitle}>DELIVERED SUCCESSFULLY</Text>
+                      </View>
+                      <View style={styles.tdDeliveredIconCircle}>
+                        <CheckCircle2 size={24} color="#ffffff" />
+                      </View>
+                    </LinearGradient>
+                  ) : (
+                    <View
+                      style={[
+                        styles.tdProgressBanner,
+                        {
+                          backgroundColor: colors.surface,
+                          borderColor: colors.border,
+                        },
+                      ]}
+                    >
+                      <View>
+                        <Text style={[styles.tdProgressKicker, { color: colors.textMuted }]}>
+                          Status
+                        </Text>
+                        <Text style={[styles.tdProgressTitle, { color: colors.text }]}>
+                          {getTripProgressTitle(selectedTrip)}
+                        </Text>
+                      </View>
+                      <View
+                        style={[
+                          styles.tdDeliveredIconCircle,
+                          { backgroundColor: `${colors.emerald}22` },
+                        ]}
+                      >
+                        <Clock size={22} color={colors.emerald} />
+                      </View>
+                    </View>
+                  )}
+                </View>
+              ) : null}
+
+              {detailTab === "settlement" ? (
+                <View style={{ marginBottom: 12 }}>
+                  <View style={styles.tdSettlementGlow}>
+                    <View
+                      style={[
+                        styles.tdNetCard,
+                        {
+                          backgroundColor: colors.surface,
+                          borderColor: colors.border,
+                        },
+                      ]}
+                    >
+                      <View style={styles.tdNetBlur} pointerEvents="none" />
+                      <View style={styles.tdNetHeader}>
+                        <View style={styles.tdNetWalletIcon}>
+                          <Wallet size={18} color={colors.emerald} />
+                        </View>
+                        <Text style={[styles.tdNetKicker, { color: colors.textMuted }]}>
+                          Net Payout
+                        </Text>
+                        <View style={styles.tdNetAmountRow}>
+                          {getEarning(selectedTrip) === "SALARY" ? null : (
+                            <Text style={[styles.tdNetRupee, { color: colors.textMuted }]}>
+                              ₹
+                            </Text>
+                          )}
+                          <Text
+                            style={[styles.tdNetAmount, { color: colors.text }]}
+                            numberOfLines={1}
+                            adjustsFontSizeToFit
+                          >
+                            {getEarning(selectedTrip) === "SALARY"
+                              ? "SALARY"
+                              : Math.round(getEarningAmount(selectedTrip)).toLocaleString()}
+                          </Text>
+                        </View>
+                        <View style={[styles.tdNetSuccessPill, { backgroundColor: `${colors.emerald}22` }]}>
+                          <CheckCircle2 size={12} color={colors.emerald} />
+                          <Text style={[styles.tdNetSuccessText, { color: colors.emerald }]}>
+                            Settlement Success
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.tdNetMiniGrid}>
+                        <View style={[styles.tdNetMiniCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                          <Text style={[styles.tdNetMiniK, { color: colors.textMuted }]}>
+                            Gross total
+                          </Text>
+                          <Text style={[styles.tdNetMiniV, { color: colors.text }]}>
+                            {getGrossRevenue(selectedTrip) === "SALARY"
+                              ? "SALARY"
+                              : `₹${Number(getGrossRevenue(selectedTrip)).toLocaleString()}`}
+                          </Text>
+                        </View>
+                        <View style={[styles.tdNetMiniCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                          <Text style={[styles.tdNetMiniK, { color: colors.textMuted }]}>
+                            Deductions
+                          </Text>
+                          <Text style={[styles.tdNetMiniV, { color: Theme.negative }]}>
+                            -₹0
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+
+                  <View style={styles.tdEarningsHeader}>
+                    <Text style={[styles.tdEarningsHeaderTitle, { color: colors.textMuted }]}>
+                      Earnings detail
+                    </Text>
+                    <Info size={14} color={colors.textMuted} />
+                  </View>
+
+                  <View
+                    style={[
+                      styles.tdBreakdownCard,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                  >
+                    <View style={styles.tdBreakRow}>
+                      <View style={styles.tdBreakLeft}>
+                        <View style={[styles.tdBreakIcon, { backgroundColor: colors.border }]}>
+                          <Banknote size={15} color={colors.textMuted} />
+                        </View>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={[styles.tdBreakTitle, { color: colors.text }]}>
+                            Base fare
+                          </Text>
+                          <Text style={[styles.tdBreakSub, { color: colors.textMuted }]}>
+                            Calculation based on route distance
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={[styles.tdBreakValue, { color: colors.text }]}>
+                        {getGrossRevenue(selectedTrip) === "SALARY"
+                          ? "SALARY"
+                          : `₹${Number(getGrossRevenue(selectedTrip)).toLocaleString()}`}
+                      </Text>
+                    </View>
+
+                    <View style={[styles.tdBreakRowHighlight, { backgroundColor: `${colors.emerald}18` }]}>
+                      <View style={styles.tdBreakLeft}>
+                        <View style={[styles.tdBreakIcon, { backgroundColor: `${colors.emerald}33` }]}>
+                          <Sparkles size={15} color={colors.emerald} />
+                        </View>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <View style={styles.tdBreakTitleRow}>
+                            <Text style={[styles.tdBreakTitle, { color: colors.text }]}>
+                              Partner bonus
+                            </Text>
+                            <View style={[styles.tdActiveBadge, { backgroundColor: colors.emerald }]}>
+                              <Text style={styles.tdActiveBadgeText}>Active</Text>
+                            </View>
+                          </View>
+                          <Text style={[styles.tdBreakSub, { color: colors.textMuted }]}>
+                            Precision pilot multiplier applied
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={[styles.tdBreakValue, { color: colors.emerald }]}>
+                        {getEarning(selectedTrip) === "SALARY"
+                          ? "—"
+                          : `+₹${Math.round(getEarningAmount(selectedTrip)).toLocaleString()}`}
+                      </Text>
+                    </View>
+
+                    <View style={styles.tdBreakRow}>
+                      <View style={styles.tdBreakLeft}>
+                        <View style={[styles.tdBreakIcon, { backgroundColor: `${Theme.negative}22` }]}>
+                          <ShieldCheck size={15} color={Theme.negative} />
+                        </View>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={[styles.tdBreakTitle, { color: colors.text }]}>
+                            TDS / Platform
+                          </Text>
+                          <Text style={[styles.tdBreakSub, { color: colors.textMuted }]}>
+                            Standard regulatory overhead
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={[styles.tdBreakValue, { color: Theme.negative }]}>
+                        -₹0
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.tdSettledBar}>
+                    <View style={styles.tdSettledLeft}>
+                      <View style={styles.tdSettledCalWrap}>
+                        <Calendar size={16} color="#ffffff" />
+                      </View>
+                      <View>
+                        <Text style={styles.tdSettledK}>Settled on</Text>
+                        <Text style={styles.tdSettledV}>
+                          {formatTripHistoryDate(
+                            selectedTrip.pickup_date ?? selectedTrip.created_at,
+                          )}
+                        </Text>
+                      </View>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.tdSettledExport}
+                      activeOpacity={0.85}
+                      accessibilityLabel="Export settlement reference"
+                      onPress={() => {
+                        void Share.share({
+                          message: `Settlement reference #${getDriverTripDisplayNumber(selectedTrip, driverTripNumberById)}`,
+                        }).catch(() => {});
+                      }}
+                    >
+                      <ArrowDownToLine size={16} color="#ffffff" />
+                    </TouchableOpacity>
+                  </View>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.tdQueryBtn,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.tdQueryBtnText, { color: colors.textMuted }]}>
+                      Raise a query
+                    </Text>
+                    <ChevronRight size={14} color={colors.textMuted} />
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+            </ScrollView>
+
+            <Modal
+              visible={!!podPreviewUrl || podPreviewLoading}
+              transparent
+              animationType="fade"
+              onRequestClose={() => {
+                setPodPreviewUrl(null);
+                setPodPreviewLoading(false);
+                setPodPreviewError(false);
+              }}
+            >
+              <Pressable
+                style={[
+                  styles.podPreviewBackdrop,
+                  { paddingTop: insets.top, paddingBottom: insets.bottom },
+                ]}
+                onPress={() => {
+                  setPodPreviewUrl(null);
+                  setPodPreviewLoading(false);
+                  setPodPreviewError(false);
+                }}
+              >
+                <Pressable style={styles.podPreviewInner} onPress={() => {}}>
+                  <TouchableOpacity
+                    style={[
+                      styles.podPreviewClose,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                    onPress={() => {
+                      setPodPreviewUrl(null);
+                      setPodPreviewLoading(false);
+                      setPodPreviewError(false);
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <FontAwesome name="times" size={18} color={colors.text} />
+                    <Text style={{ color: colors.text, fontWeight: "700", marginLeft: 8 }}>
+                      Close
+                    </Text>
+                  </TouchableOpacity>
+                  {podPreviewLoading ? (
+                    <View style={styles.podPreviewImageBox}>
+                      <LoadingIndicator size="large" color={colors.emerald} />
+                      <Text style={{ color: colors.textMuted, marginTop: 12 }}>
+                        Loading…
+                      </Text>
+                    </View>
+                  ) : podPreviewUrl ? (
+                    <>
+                      <Image
+                        source={{ uri: podPreviewUrl }}
+                        style={styles.podPreviewImage}
+                        resizeMode="contain"
+                        onError={() => setPodPreviewError(true)}
+                        onLoad={() => setPodPreviewError(false)}
+                      />
+                      {podPreviewError ? (
+                        <View
+                          style={[
+                            styles.podPreviewFallback,
+                            {
+                              backgroundColor: colors.surface,
+                              borderColor: colors.border,
+                            },
+                          ]}
+                        >
+                          <Text style={{ color: colors.textMuted, textAlign: "center" }}>
+                            Preview not available. Open in browser to view.
+                          </Text>
+                          <TouchableOpacity
+                            style={{
+                              marginTop: 14,
+                              backgroundColor: colors.emerald,
+                              paddingVertical: 12,
+                              paddingHorizontal: 20,
+                              borderRadius: 12,
+                              flexDirection: "row",
+                              alignItems: "center",
+                              gap: 8,
+                            }}
+                            onPress={() => void Linking.openURL(podPreviewUrl)}
+                            activeOpacity={0.85}
+                          >
+                            <FontAwesome name="external-link" size={16} color="#fff" />
+                            <Text style={{ color: "#fff", fontWeight: "700" }}>
+                              Open in browser
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : null}
+                    </>
+                  ) : null}
+                </Pressable>
+              </Pressable>
+            </Modal>
+    </View>
+  );
+}
+

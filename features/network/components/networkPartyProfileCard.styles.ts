@@ -4,6 +4,7 @@ import {
   NETWORK_PROFILE_CARD_RADIUS,
   NETWORK_PROFILE_GRID_MUTUAL_SLOT_HEIGHT,
 } from "@/features/network/constants/networkProfileCardLayout";
+import { hubCardSectionDivider } from "@/features/network/components/networkHubListCardChrome";
 import { StyleSheet } from "react-native";
 
 export const NETWORK_PARTY_MUTUAL_FACE_GRID = 24;
@@ -656,13 +657,12 @@ export const networkPartyProfileCardStyles = StyleSheet.create({
   footer: {
     width: "100%",
     flexShrink: 0,
-    paddingTop: 2,
+    paddingTop: 0,
   },
   footerDivider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: Theme.borderLight,
-    width: "100%",
-    marginBottom: 6,
+    ...hubCardSectionDivider,
+    marginTop: 10,
+    marginBottom: 8,
   },
   actionBtn: {
     borderRadius: 18,

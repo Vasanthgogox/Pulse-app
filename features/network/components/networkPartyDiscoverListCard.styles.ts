@@ -139,8 +139,10 @@ export const discoverListCardStyles = StyleSheet.create({
   nativeFooterMetrics: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
     flexShrink: 0,
+    flex: 1,
+    minWidth: 0,
   },
   nativeActionWrap: {
     flexShrink: 0,
