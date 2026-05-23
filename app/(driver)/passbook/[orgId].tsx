@@ -361,6 +361,10 @@ export default function DriverPassbookDetailScreen() {
     amount: number;
     sourceLedger?: driversService.DriverLedgerRow | null;
   } | null>(null);
+  const [settledSuccessState, setSettledSuccessState] = useState<{
+    tripDisplay: string;
+    amount: number;
+  } | null>(null);
 
   const load = useCallback(() => {
     if (!profile?.uid || !orgId) {
@@ -460,6 +464,7 @@ export default function DriverPassbookDetailScreen() {
     for (const e of ledgerEntries) {
       const tid = e.trip_id?.trim() || null;
       if (!tid) continue;
+      if ((receivedByTripId[tid] ?? 0) > 0) continue;
       if (e.type === 'settlement') continue;
       const amt = Number(e.amount) || 0;
       if (amt <= 0) continue;
@@ -470,7 +475,7 @@ export default function DriverPassbookDetailScreen() {
       if (!prev || nextT > prevT) byTrip[tid] = e;
     }
     return byTrip;
-  }, [ledgerEntries, hasFleetPaidPendingToken, isLegacyFleetPendingEvidence]);
+  }, [ledgerEntries, receivedByTripId, hasFleetPaidPendingToken, isLegacyFleetPendingEvidence]);
 
   const totalReceived = Math.round(
     ledgerEntries.reduce((sum, e) => {
@@ -578,7 +583,7 @@ export default function DriverPassbookDetailScreen() {
           minute: '2-digit',
           hour12: true,
         }),
-        fleetPendingLedger: fleetPendingLedger ?? null,
+        fleetPendingLedger: isSettled ? null : (fleetPendingLedger ?? null),
       };
     });
   }, [
@@ -591,6 +596,12 @@ export default function DriverPassbookDetailScreen() {
     driverTripNumberById,
   ]);
 
+  const isFleetMarkedAwaitingVerify = useCallback(
+    (item: (typeof tripJourneyItems)[number]) =>
+      item.status !== 'Settled' && !!item.fleetPendingLedger,
+    [],
+  );
+
   const filteredTripJourneyItems = useMemo(() => {
     const search = journeySearch.trim().toLowerCase();
     return tripJourneyItems.filter((item) => {
@@ -601,15 +612,19 @@ export default function DriverPassbookDetailScreen() {
         item.to.toLowerCase().includes(search) ||
         item.provider.toLowerCase().includes(search);
 
+      const fleetMarked = isFleetMarkedAwaitingVerify(item);
       const matchesFilter =
         journeyFilter === 'all' ||
-        (journeyFilter === 'pending' && (item.status === 'Pending' || item.status === 'Action Required')) ||
-        (journeyFilter === 'fleet_marked' && !!item.fleetPendingLedger) ||
-        (journeyFilter === 'settled' && item.status === 'Settled');
+        (journeyFilter === 'settled' && item.status === 'Settled') ||
+        (journeyFilter === 'fleet_marked' && fleetMarked) ||
+        (journeyFilter === 'pending' &&
+          item.status !== 'Settled' &&
+          !fleetMarked &&
+          (item.status === 'Pending' || item.status === 'Action Required'));
 
       return matchesSearch && matchesFilter;
     });
-  }, [tripJourneyItems, journeySearch, journeyFilter]);
+  }, [tripJourneyItems, journeySearch, journeyFilter, isFleetMarkedAwaitingVerify]);
 
   const pendingTripJourneyItems = useMemo(() => {
     return filteredTripJourneyItems.filter(
@@ -799,8 +814,19 @@ export default function DriverPassbookDetailScreen() {
       }
       if (row) {
         setLedgerEntries((prev) => [row, ...prev]);
+      }
+      load();
+      const tripDisplay = getDriverTripDisplayNumber(trip, driverTripNumberById);
+      const roundedAmount = Math.round(amount);
+      if (sourceLedger) {
+        setSettledSuccessState({ tripDisplay, amount: roundedAmount });
+      } else if (Platform.OS === 'web') {
+        window.alert(`${tripDisplay} · ₹${roundedAmount.toLocaleString('en-IN')} recorded as received.`);
       } else {
-        load();
+        Alert.alert(
+          'Payment recorded',
+          `${tripDisplay} · ₹${roundedAmount.toLocaleString('en-IN')} has been marked as received.`,
+        );
       }
     },
     [driver?.id, profile?.uid, load, driverTripNumberById],
@@ -934,7 +960,7 @@ export default function DriverPassbookDetailScreen() {
           onPress={() => setEarningsMainTab('trips')}
           activeOpacity={0.8}
         >
-          <FontAwesome name="history" size={14} color={earningsMainTab === 'trips' ? colors.emerald : colors.textMuted} />
+          <FontAwesome name="history" size={12} color={earningsMainTab === 'trips' ? colors.emerald : colors.textMuted} />
           <Text style={[styles.mainTabText, earningsMainTab === 'trips' ? { color: colors.emerald } : { color: colors.textMuted }]}>
             Trips
           </Text>
@@ -950,7 +976,7 @@ export default function DriverPassbookDetailScreen() {
           onPress={() => setEarningsMainTab('cash')}
           activeOpacity={0.8}
         >
-          <FontAwesome name="credit-card" size={14} color={earningsMainTab === 'cash' ? colors.emerald : colors.textMuted} />
+          <FontAwesome name="credit-card" size={12} color={earningsMainTab === 'cash' ? colors.emerald : colors.textMuted} />
           <Text style={[styles.mainTabText, earningsMainTab === 'cash' ? { color: colors.emerald } : { color: colors.textMuted }]}>
             Cash
           </Text>
@@ -965,7 +991,8 @@ export default function DriverPassbookDetailScreen() {
         />
 
         {earningsMainTab === 'trips' && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipRow}>
+          <View style={styles.filterChipScrollWrap}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipRow}>
             {[
               { id: 'all', label: 'All' },
               { id: 'pending', label: 'Pending' },
@@ -991,7 +1018,8 @@ export default function DriverPassbookDetailScreen() {
                 </TouchableOpacity>
               );
             })}
-          </ScrollView>
+            </ScrollView>
+          </View>
         )}
 
         {earningsMainTab === 'trips' && journeyFilter === 'pending' && pendingTripJourneyItems.length > 0 && (
@@ -1095,11 +1123,11 @@ export default function DriverPassbookDetailScreen() {
                               ]}
                             >
                               {isActionRequiredPassbook ? (
-                                <FontAwesome name="exclamation-circle" size={18} color="rgb(249,115,22)" />
+                                <FontAwesome name="exclamation-circle" size={16} color="rgb(249,115,22)" />
                               ) : hasFleetPending || isSettledPassbook ? (
                                 <FontAwesome
                                   name="check-circle"
-                                  size={18}
+                                  size={16}
                                   color={Theme.textOnPrimary}
                                 />
                               ) : (
@@ -1656,6 +1684,23 @@ export default function DriverPassbookDetailScreen() {
         void markTripAsPaid(next.trip, next.amount, next.sourceLedger ?? null);
       }}
     />
+    <ThemedConfirmModal
+      variant="positive"
+      visible={!!settledSuccessState}
+      title="Payment settled"
+      message={
+        settledSuccessState
+          ? `${settledSuccessState.tripDisplay} · ₹${settledSuccessState.amount.toLocaleString('en-IN')} has been verified and marked as settled. Your cash balance is updated.`
+          : ''
+      }
+      cancelText="Done"
+      confirmText="View settled"
+      onCancel={() => setSettledSuccessState(null)}
+      onConfirm={() => {
+        setSettledSuccessState(null);
+        setJourneyFilter('settled');
+      }}
+    />
     </>
   );
 }
@@ -1842,59 +1887,79 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   mainTabsWrap: {
-    marginTop: 18,
+    marginTop: 12,
     marginHorizontal: Layout.screenPaddingHorizontal,
     flexDirection: 'row',
-    borderWidth: 1,
-    borderRadius: 28,
-    padding: 8,
-    gap: 6,
-    shadowOffset: { width: 0, height: 18 },
-    shadowOpacity: 0.14,
-    shadowRadius: 30,
-    elevation: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 22,
+    padding: 4,
+    gap: 4,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.04,
+        shadowRadius: 4,
+      },
+      android: { elevation: 0 },
+      default: {},
+    }),
   },
   mainTab: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
-    gap: 8,
-    minHeight: 56,
-    borderRadius: 22,
+    gap: 6,
+    minHeight: 36,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'transparent',
   },
   mainTabActive: {
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.9,
-    shadowRadius: 22,
-    elevation: 6,
+    ...Platform.select({
+      ios: {
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.06,
+        shadowRadius: 3,
+      },
+      android: { elevation: 1 },
+      default: {},
+    }),
   },
   mainTabText: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: '800',
-    letterSpacing: 2,
+    letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
   searchSection: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 14,
-    gap: 12,
+    paddingTop: 10,
+    gap: 10,
+  },
+  filterChipScrollWrap: {
+    minHeight: 34,
+    marginTop: 2,
   },
   filterChipRow: {
-    gap: 10,
-    paddingRight: 24,
+    gap: 8,
+    paddingRight: 4,
+    paddingBottom: 2,
+    alignItems: 'center',
   },
   filterChip: {
-    paddingHorizontal: 18,
-    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: 999,
     borderWidth: 1,
+    flexShrink: 0,
   },
   filterChipText: {
-    fontSize: 8,
-    fontWeight: '500',
+    fontSize: 9,
+    fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 2,
+    letterSpacing: 0.8,
   },
   bulkClaimButton: {
     width: '100%',
@@ -1920,11 +1985,11 @@ const styles = StyleSheet.create({
     paddingTop: 16,
   },
   transactionHistoryTitle: {
-    fontSize: 10,
-    fontWeight: '500',
+    fontSize: 9,
+    fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 2.2,
-    marginBottom: 10,
+    letterSpacing: 1.2,
+    marginBottom: 8,
   },
   walletDialogOverlay: {
     flex: 1,
@@ -2025,11 +2090,11 @@ const styles = StyleSheet.create({
     letterSpacing: 0.1,
   },
   tripsPremiumWrapPassbook: {
-    gap: 28,
+    gap: 16,
     paddingBottom: 12,
   },
   tripsPremiumSectionPassbook: {
-    gap: 12,
+    gap: 8,
   },
   tripsSectionHeaderRowPassbook: {
     flexDirection: 'row',
@@ -2049,36 +2114,36 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   tripsPremiumSectionLabelPassbook: {
-    fontSize: 8,
-    fontWeight: '400',
+    fontSize: 9,
+    fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 2,
+    letterSpacing: 1.2,
     paddingHorizontal: 2,
   },
   tripsTimelineListPassbook: {
-    gap: 18,
+    gap: 12,
   },
   passbookTripCard: {
-    borderWidth: 1,
-    borderRadius: 30,
-    padding: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 16,
+    padding: 12,
     overflow: 'hidden',
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.12,
-    shadowRadius: 24,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 2,
   },
   passbookTripTop: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    gap: 14,
-    marginBottom: 16,
+    gap: 10,
+    marginBottom: 10,
   },
   passbookTripIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 18,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2091,16 +2156,16 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   passbookTripId: {
-    fontSize: 14,
-    fontWeight: '500',
-    letterSpacing: -0.2,
-    marginBottom: 6,
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: -0.25,
+    marginBottom: 3,
   },
   passbookTripMeta: {
     fontSize: 9,
-    fontWeight: '400',
+    fontWeight: '600',
     textTransform: 'uppercase',
-    letterSpacing: 1.4,
+    letterSpacing: 0.6,
   },
   passbookTripSubStatus: {
     fontSize: 10,
@@ -2113,9 +2178,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   passbookTripAmount: {
-    fontSize: 18,
-    fontWeight: '500',
-    letterSpacing: -0.7,
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: -0.35,
   },
   passbookTripStatusPill: {
     fontSize: 8,
@@ -2142,10 +2207,10 @@ const styles = StyleSheet.create({
   passbookRouteCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 22,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   passbookRouteSide: {
     flex: 1,
@@ -2156,14 +2221,14 @@ const styles = StyleSheet.create({
   },
   passbookRouteLabel: {
     fontSize: 8,
-    fontWeight: '400',
+    fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 1.3,
-    marginBottom: 4,
+    letterSpacing: 1.2,
+    marginBottom: 3,
   },
   passbookRouteValue: {
-    fontSize: 12,
-    fontWeight: '400',
+    fontSize: 11,
+    fontWeight: '700',
   },
   passbookRouteMiddle: {
     alignItems: 'center',
@@ -2212,28 +2277,28 @@ const styles = StyleSheet.create({
     color: Theme.textOnPrimary,
   },
   cashPremiumWrap: {
-    gap: 28,
-    paddingBottom: 28,
+    gap: 16,
+    paddingBottom: 24,
   },
   cashPremiumSection: {
-    gap: 14,
+    gap: 8,
   },
   cashPremiumSectionLabel: {
-    fontSize: 8,
-    fontWeight: '400',
+    fontSize: 9,
+    fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 2,
+    letterSpacing: 1.2,
     paddingHorizontal: 2,
   },
   cashPremiumGroup: {
-    borderWidth: 1,
-    borderRadius: 32,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 16,
     overflow: 'hidden',
     shadowColor: 'rgba(15,23,42,0.12)',
-    shadowOffset: { width: 0, height: 18 },
-    shadowOpacity: 0.14,
-    shadowRadius: 34,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 2,
   },
   cashPremiumRow: {
     paddingHorizontal: 6,
@@ -2241,20 +2306,20 @@ const styles = StyleSheet.create({
   cashPremiumRowTouch: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 16,
+    paddingVertical: 12,
     paddingHorizontal: 12,
     justifyContent: 'space-between',
   },
   cashPremiumLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    gap: 10,
     flex: 1,
     minWidth: 0,
   },
   cashPremiumAvatar: {
-    width: 48,
-    height: 48,
+    width: 40,
+    height: 40,
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2295,8 +2360,8 @@ const styles = StyleSheet.create({
   },
   cashPremiumSource: {
     fontSize: 13,
-    fontWeight: '500',
-    letterSpacing: -0.2,
+    fontWeight: '700',
+    letterSpacing: -0.25,
   },
   cashPremiumMethod: {
     fontSize: 9,
@@ -2317,8 +2382,8 @@ const styles = StyleSheet.create({
   },
   cashPremiumAmount: {
     fontSize: 16,
-    fontWeight: '500',
-    letterSpacing: -0.4,
+    fontWeight: '700',
+    letterSpacing: -0.35,
   },
   cashPremiumStatusRow: {
     flexDirection: 'row',

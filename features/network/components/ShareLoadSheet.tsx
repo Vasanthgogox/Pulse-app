@@ -1,24 +1,21 @@
 /**
- * ShareLoadSheet — dark bottom sheet to broadcast an indent to the Q Pulse network.
+ * ShareLoadSheet — light bottom sheet to broadcast an indent to the Q Pulse network.
  * Story broadcast (24h) + optional WhatsApp share with public story-detail URL (bidding page).
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
-import Theme from '@/constants/Theme';
-import { resolveSupplierTargetDisplayRate, type IndentRow } from '@/features/indents';
-import { createPost } from '@/features/network/services/posts.service';
-import { formatINR } from '@/lib/format';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
-import * as Linking from 'expo-linking';
-import * as Sharing from 'expo-sharing';
-import {
-  ArrowRight,
-  CheckCircle2,
-  Package,
-  Truck,
-  X,
-  Zap,
-} from 'lucide-react-native';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { LoadCardRouteRow } from "@/components/LoadCardRouteRow";
+import { LoadCardSpecsRow } from "@/components/LoadCardSpecsRow";
+import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
+import Theme from "@/constants/Theme";
+import { type IndentRow, getIndentDisplayNumber, resolveSupplierTargetDisplayRate } from "@/features/indents";
+import { hubCardSectionDivider } from "@/features/network/components/networkHubListCardChrome";
+import { createPost } from "@/features/network/services/posts.service";
+import { formatINR } from "@/lib/format";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
+import * as Linking from "expo-linking";
+import * as Sharing from "expo-sharing";
+import { CheckCircle2, X, Zap } from "lucide-react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
   Easing,
@@ -32,15 +29,15 @@ import {
   TextInput,
   TouchableWithoutFeedback,
   View,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 function buildPulseStoryPublicUrl(
   postId: string,
   orgId: string,
-  storyType: 'LOAD',
+  storyType: "LOAD",
 ): string {
-  const webBase = process.env.EXPO_PUBLIC_WEB_BASE_URL?.trim().replace(/\/$/, '') || '';
+  const webBase = process.env.EXPO_PUBLIC_WEB_BASE_URL?.trim().replace(/\/$/, "") || "";
   const params = new URLSearchParams({
     postId,
     orgId,
@@ -48,7 +45,7 @@ function buildPulseStoryPublicUrl(
     queue: postId,
   });
   const qs = params.toString();
-  if (webBase !== '') {
+  if (webBase !== "") {
     return `${webBase}/story-detail?${qs}`;
   }
   return Linking.createURL(`/story-detail?${qs}`);
@@ -59,63 +56,39 @@ interface ShareLoadSheetProps {
   indent: IndentRow | null;
   orgId: string;
   onClose: () => void;
-  onSuccess?: (type: 'feed' | 'story') => void;
+  onSuccess?: (type: "feed" | "story") => void;
 }
 
 function LoadPreviewCard({ indent }: { indent: IndentRow }) {
-  const weight = indent.weight != null ? (indent.weight / 1000).toFixed(1) : null;
-  const targetRate = resolveSupplierTargetDisplayRate(
-    indent.supplier_target,
-    indent.client_price,
-  );
+  const weightValue = Number(indent.weight);
+  const weightDetail =
+    Number.isFinite(weightValue) && weightValue > 0 ? `${weightValue} KG` : "—";
 
   return (
     <View style={styles.previewCard}>
-      {/* Route */}
-      <View style={styles.routeRow}>
-        <View style={styles.routePoint}>
-          <View style={[styles.routeDot, { backgroundColor: '#10b981' }]} />
-          <Text style={styles.routeCity} numberOfLines={1}>
-            {(indent.pickup_area || '—').toUpperCase()}
-          </Text>
-        </View>
-        <View style={styles.routeArrowWrap}>
-          <View style={styles.routeLine} />
-          <ArrowRight size={14} color="rgba(255,255,255,0.35)" />
-        </View>
-        <View style={[styles.routePoint, { alignItems: 'flex-end' }]}>
-          <View style={[styles.routeDot, { backgroundColor: '#6366f1' }]} />
-          <Text style={styles.routeCity} numberOfLines={1}>
-            {(indent.drop_location || '—').toUpperCase()}
-          </Text>
-        </View>
+      <LoadCardRouteRow
+        origin={indent.pickup_area || "—"}
+        destination={indent.drop_location || "—"}
+        compact
+        style={styles.previewRoute}
+      />
+      <View style={styles.previewDivider} />
+      <Text style={styles.previewId} numberOfLines={1}>
+        {getIndentDisplayNumber(indent)}
+      </Text>
+      <View style={styles.previewSpecsPanel}>
+        <LoadCardSpecsRow
+          vehicle={indent.vehicle_type || "—"}
+          weight={weightDetail}
+          loadType={indent.load_type || "—"}
+        />
       </View>
-
-      {/* Chips */}
-      <View style={styles.chipRow}>
-        {indent.vehicle_type ? (
-          <View style={styles.chip}>
-            <Truck size={9} color="rgba(255,255,255,0.45)" />
-            <Text style={styles.chipText}>{indent.vehicle_type}</Text>
-          </View>
-        ) : null}
-        {weight ? (
-          <View style={styles.chip}>
-            <Package size={9} color="rgba(255,255,255,0.45)" />
-            <Text style={styles.chipText}>{weight}T</Text>
-          </View>
-        ) : null}
-        {indent.load_type ? (
-          <View style={styles.chip}>
-            <Text style={styles.chipText}>{indent.load_type}</Text>
-          </View>
-        ) : null}
-        {targetRate != null ? (
-          <View style={[styles.chip, styles.rateChip]}>
-            <Text style={styles.rateChipText}>{formatINR(targetRate)}</Text>
-          </View>
-        ) : null}
-      </View>
+      {indent.client_price ? (
+        <View style={styles.rateRow}>
+          <Text style={styles.rateLabel}>Offer</Text>
+          <Text style={styles.rateValue}>{formatINR(indent.client_price)}</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -141,23 +114,23 @@ function SuccessView({
     ]).start();
   }, []);
 
-  const color = '#f59e0b';
-  const storyUrl = buildPulseStoryPublicUrl(postId, orgId, 'LOAD');
+  const storyUrl = buildPulseStoryPublicUrl(postId, orgId, "LOAD");
   const hasWebBase =
-    (process.env.EXPO_PUBLIC_WEB_BASE_URL?.trim().replace(/\/$/, '') || '') !== '';
+    (process.env.EXPO_PUBLIC_WEB_BASE_URL?.trim().replace(/\/$/, "") || "") !== "";
 
   return (
     <Animated.View style={[styles.successView, { opacity, transform: [{ scale }] }]}>
-      <View style={[styles.successIcon, { backgroundColor: color + '18' }]}>
-        <Zap size={36} color={color} strokeWidth={1.5} />
+      <View style={styles.successIcon}>
+        <CheckCircle2 size={32} color={Theme.darkGreen} strokeWidth={2} />
       </View>
-      <Text style={[styles.successTitle, { color }]}>Story live</Text>
+      <Text style={styles.successTitle}>Story live</Text>
       <Text style={styles.successSub}>
         Your load is in the story reel and expires in 24 hours. Partners can bid and message.
       </Text>
       {!hasWebBase ? (
         <Text style={styles.successHintMuted}>
-          Set EXPO_PUBLIC_WEB_BASE_URL for a public https link (e.g. Netlify) when sharing outside the app.
+          Set EXPO_PUBLIC_WEB_BASE_URL for a public https link (e.g. Netlify) when sharing outside
+          the app.
         </Text>
       ) : null}
       <Pressable
@@ -166,7 +139,7 @@ function SuccessView({
         accessibilityRole="button"
         accessibilityLabel="Share story bidding link on WhatsApp"
       >
-        <FontAwesome name="whatsapp" size={20} color="#fff" />
+        <FontAwesome name="whatsapp" size={18} color="#fff" />
         <Text style={styles.waBtnText}>Share link on WhatsApp</Text>
       </Pressable>
       <Text style={styles.waHint}>
@@ -176,7 +149,7 @@ function SuccessView({
         {storyUrl}
       </Text>
       <Text style={styles.routeMini} numberOfLines={1}>
-        {(indent.pickup_area || '—').toUpperCase()} → {(indent.drop_location || '—').toUpperCase()}
+        {(indent.pickup_area || "—").toUpperCase()} → {(indent.drop_location || "—").toUpperCase()}
       </Text>
     </Animated.View>
   );
@@ -190,7 +163,7 @@ export function ShareLoadSheet({
   onSuccess,
 }: ShareLoadSheetProps) {
   const insets = useSafeAreaInsets();
-  const [note, setNote] = useState('');
+  const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -199,7 +172,7 @@ export function ShareLoadSheet({
 
   useEffect(() => {
     if (visible) {
-      setNote('');
+      setNote("");
       setError(null);
       setSuccess(false);
       setSuccessPostId(null);
@@ -222,18 +195,17 @@ export function ShareLoadSheet({
 
   const shareStoryLinkOnWhatsApp = useCallback(async () => {
     if (!indent || !successPostId) return;
-    const storyUrl = buildPulseStoryPublicUrl(successPostId, orgId, 'LOAD');
-    const routeLabel = `${(indent.pickup_area || '—').toUpperCase()} → ${(indent.drop_location || '—').toUpperCase()}`;
+    const storyUrl = buildPulseStoryPublicUrl(successPostId, orgId, "LOAD");
+    const routeLabel = `${(indent.pickup_area || "—").toUpperCase()} → ${(indent.drop_location || "—").toUpperCase()}`;
     const message = `Load broadcast · ${routeLabel}\n\nView & bid:\n${storyUrl}`;
     const encoded = encodeURIComponent(message);
     const waWeb = `https://wa.me/?text=${encoded}`;
     const waNative = `whatsapp://send?text=${encoded}`;
     try {
-      if (Platform.OS === 'web') {
+      if (Platform.OS === "web") {
         await Linking.openURL(waWeb);
         return;
       }
-      // iOS: canOpenURL is false unless whatsapp is in LSApplicationQueriesSchemes — fall back to wa.me.
       const canNative = await Linking.canOpenURL(waNative);
       await Linking.openURL(canNative ? waNative : waWeb);
     } catch {
@@ -257,7 +229,7 @@ export function ShareLoadSheet({
 
     const { error: err, postId: newPostId } = await createPost({
       organizationId: orgId,
-      type: 'LOAD',
+      type: "LOAD",
       content: note.trim() || undefined,
       origin: indent.pickup_area || undefined,
       destination: indent.drop_location || undefined,
@@ -279,13 +251,13 @@ export function ShareLoadSheet({
       return;
     }
     if (!newPostId) {
-      setError('Story posted but could not build share link. Try again.');
+      setError("Story posted but could not build share link. Try again.");
       return;
     }
 
     setSuccessPostId(newPostId);
     setSuccess(true);
-    onSuccess?.('story');
+    onSuccess?.("story");
   };
 
   if (!indent) return null;
@@ -303,32 +275,30 @@ export function ShareLoadSheet({
           <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
 
           <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
-            enabled={Platform.OS !== 'web'}
+            behavior={Platform.OS === "ios" ? "padding" : "padding"}
+            enabled={Platform.OS !== "web"}
             style={styles.kvContainer}
           >
             <Animated.View
               style={[
                 styles.sheet,
-                { paddingBottom: insets.bottom + 20, transform: [{ translateY }] },
+                { paddingBottom: insets.bottom + 16, transform: [{ translateY }] },
               ]}
             >
-              {/* Handle */}
               <View style={styles.handle} />
 
-              {/* Header */}
               <View style={styles.header}>
                 <View style={styles.headerLeft}>
                   <View style={styles.headerIcon}>
-                    <Zap size={16} color="#f59e0b" fill="#f59e0b" />
+                    <Zap size={14} color={Theme.warning} fill={Theme.warning} />
                   </View>
-                  <View>
+                  <View style={styles.headerTextCol}>
                     <Text style={styles.headerTitle}>Broadcast Load</Text>
                     <Text style={styles.headerSub}>Share to your Pulse network</Text>
                   </View>
                 </View>
                 <Pressable onPress={onClose} hitSlop={10} style={styles.closeBtn}>
-                  <X size={18} color="rgba(255,255,255,0.5)" />
+                  <X size={16} color={Theme.textMuted} strokeWidth={2.2} />
                 </Pressable>
               </View>
 
@@ -346,14 +316,13 @@ export function ShareLoadSheet({
                     Broadcasts to the story reel only · 24 hour expiry · No public timeline
                   </Text>
 
-                  {/* Optional note */}
                   <View style={styles.noteSection}>
-                    <Text style={styles.sectionLabel}>ADD A NOTE (OPTIONAL)</Text>
+                    <Text style={styles.sectionLabel}>Add a note (optional)</Text>
                     <View style={styles.noteBox}>
                       <TextInput
                         style={styles.noteInput}
                         placeholder="Add context for your partners..."
-                        placeholderTextColor="rgba(255,255,255,0.25)"
+                        placeholderTextColor={Theme.textMuted}
                         value={note}
                         onChangeText={setNote}
                         multiline
@@ -364,28 +333,22 @@ export function ShareLoadSheet({
                     </View>
                   </View>
 
-                  {error ? (
-                    <Text style={styles.errorText}>{error}</Text>
-                  ) : null}
+                  {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-                  {/* Broadcast button */}
                   <Pressable
                     style={[
                       styles.broadcastBtn,
-                      styles.broadcastBtnStory,
                       loading && styles.broadcastBtnDisabled,
                     ]}
                     onPress={handleBroadcast}
                     disabled={loading}
                   >
                     {loading ? (
-                      <LoadingIndicator color="#0F172A" />
+                      <LoadingIndicator color={Theme.textOnPrimary} />
                     ) : (
                       <>
-                        <Zap size={16} color="#0F172A" fill="#0F172A" />
-                        <Text style={[styles.broadcastBtnText, styles.broadcastBtnTextStory]}>
-                          Broadcast to story (24h)
-                        </Text>
+                        <Zap size={14} color={Theme.textOnPrimary} fill={Theme.textOnPrimary} />
+                        <Text style={styles.broadcastBtnText}>Broadcast to story (24h)</Text>
                       </>
                     )}
                   </Pressable>
@@ -402,241 +365,257 @@ export function ShareLoadSheet({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    justifyContent: 'flex-end',
+    backgroundColor: Theme.driverOverlay,
+    justifyContent: "flex-end",
   },
-  kvContainer: { justifyContent: 'flex-end' },
+  kvContainer: { justifyContent: "flex-end" },
 
   sheet: {
-    backgroundColor: '#0F172A',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    gap: 16,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(99,102,241,0.2)',
+    backgroundColor: Theme.screenBackground,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    gap: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
   },
 
   handle: {
-    width: 38,
+    width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignSelf: 'center',
-    marginBottom: 4,
+    backgroundColor: Theme.borderMedium,
+    alignSelf: "center",
+    marginBottom: 6,
   },
 
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
   },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1, minWidth: 0 },
+  headerTextCol: { flex: 1, minWidth: 0, gap: 2 },
   headerIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: '#f59e0b18',
-    borderWidth: 1,
-    borderColor: '#f59e0b30',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: { fontSize: 18, fontWeight: '900', color: '#fff', letterSpacing: -0.4 },
-  headerSub: { fontSize: 11, color: 'rgba(255,255,255,0.4)', fontWeight: '600', marginTop: 2 },
-  closeBtn: {
-    width: 34,
-    height: 34,
+    width: 32,
+    height: 32,
     borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: Theme.warningMuted,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  headerTitle: {
+    ...FinanceTxnTypography.partyTitle,
+    fontStyle: "normal",
+    fontSize: 12,
+    lineHeight: 15,
+    letterSpacing: 0.1,
+  },
+  headerSub: {
+    ...FinanceTxnTypography.routeWhy,
+    fontSize: 9,
+    lineHeight: 12,
+  },
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
   },
 
-  // Load preview
   previewCard: {
-    backgroundColor: '#1E293B',
-    borderRadius: 18,
-    padding: 16,
-    gap: 12,
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 12,
+    padding: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.07)',
+    borderColor: Theme.borderLight,
+    gap: 0,
   },
-  routeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  routePoint: { flex: 1, gap: 5 },
-  routeDot: { width: 8, height: 8, borderRadius: 4 },
-  routeCity: { fontSize: 15, fontWeight: '900', color: '#fff', letterSpacing: -0.3 },
-  routeArrowWrap: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingBottom: 4 },
-  routeLine: { width: 16, height: 1, backgroundColor: 'rgba(255,255,255,0.15)' },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderRadius: 6,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+  previewRoute: {
+    marginBottom: 0,
   },
-  chipText: { fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.6)' },
-  rateChip: { backgroundColor: '#6366f120', borderColor: '#6366f135' },
-  rateChipText: { fontSize: 10, fontWeight: '800', color: '#a5b4fc' },
+  previewDivider: {
+    ...hubCardSectionDivider,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  previewId: {
+    ...FinanceTxnTypography.tripId,
+    marginBottom: 6,
+    lineHeight: 11,
+  },
+  previewSpecsPanel: {
+    backgroundColor: Theme.surfaceGray,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+  },
+  rateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
+  },
+  rateLabel: {
+    ...FinanceTxnTypography.fieldLabel,
+    fontSize: 8,
+  },
+  rateValue: {
+    ...FinanceTxnTypography.amount,
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.primary,
+  },
 
   storyOnlyHint: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.4)',
-    textAlign: 'center',
-    lineHeight: 15,
-    marginBottom: 4,
-  },
-  // Options
-  optionsSection: { gap: 8 },
-  sectionLabel: {
-    fontSize: 9,
-    fontWeight: '900',
-    color: 'rgba(255,255,255,0.3)',
-    letterSpacing: 1.2,
-    marginBottom: 4,
-  },
-  optionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  optionIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  optionInfo: { flex: 1, gap: 3 },
-  optionTitle: { fontSize: 14, fontWeight: '800', color: '#fff', letterSpacing: -0.2 },
-  optionSub: { fontSize: 11, color: 'rgba(255,255,255,0.4)', fontWeight: '600' },
-  optionCheck: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    ...FinanceTxnTypography.chipLabel,
+    color: Theme.textMuted,
+    textAlign: "center",
+    lineHeight: 12,
+    marginTop: -4,
   },
 
-  // Note
-  noteSection: { gap: 8 },
+  noteSection: { gap: 6 },
+  sectionLabel: {
+    ...FinanceTxnTypography.fieldLabel,
+    fontSize: 8,
+    marginBottom: 0,
+  },
   noteBox: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 12,
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    minHeight: 64,
-    padding: 12,
+    borderColor: Theme.borderLight,
+    minHeight: 56,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
   noteInput: {
-    fontSize: 13,
-    color: '#fff',
-    fontWeight: '500',
-    lineHeight: 20,
-    textAlignVertical: 'top',
+    ...FinanceTxnTypography.fieldValue,
+    fontSize: 10,
+    fontStyle: "normal",
+    color: Theme.textPrimaryDark,
+    lineHeight: 15,
+    textAlignVertical: "top",
   },
 
-  errorText: { fontSize: 12, color: '#f87171', fontWeight: '600', textAlign: 'center' },
+  errorText: {
+    fontSize: 10,
+    color: Theme.teslaRed,
+    fontWeight: "500",
+    textAlign: "center",
+  },
 
-  // Broadcast button
   broadcastBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    backgroundColor: '#6366f1',
-    borderRadius: 16,
-    paddingVertical: 17,
-    shadowColor: '#6366f1',
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-  },
-  broadcastBtnStory: {
-    backgroundColor: '#f59e0b',
-    shadowColor: '#f59e0b',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: Theme.primary,
+    borderRadius: 12,
+    paddingVertical: 12,
+    minHeight: 44,
   },
   broadcastBtnDisabled: { opacity: 0.6 },
-  broadcastBtnText: { fontSize: 15, fontWeight: '900', color: '#fff', letterSpacing: -0.2 },
-  broadcastBtnTextStory: { color: '#0F172A' },
+  broadcastBtnText: {
+    ...FinanceTxnTypography.buttonLabel,
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textOnPrimary,
+    letterSpacing: 0.6,
+  },
 
-  // Success
   successView: {
-    alignItems: 'center',
-    paddingVertical: 32,
-    gap: 12,
+    alignItems: "center",
+    paddingVertical: 20,
+    gap: 10,
   },
   successIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.positiveMuted,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+    marginBottom: 2,
   },
-  successTitle: { fontSize: 24, fontWeight: '900', letterSpacing: -0.5 },
+  successTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.1,
+  },
   successSub: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.5)',
-    textAlign: 'center',
-    lineHeight: 20,
-    paddingHorizontal: 20,
+    ...FinanceTxnTypography.fieldValue,
+    fontSize: 10,
+    fontStyle: "normal",
+    color: Theme.textSecondary,
+    textAlign: "center",
+    lineHeight: 14,
+    paddingHorizontal: 12,
   },
   successHintMuted: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.35)',
-    textAlign: 'center',
-    lineHeight: 16,
-    paddingHorizontal: 16,
+    ...FinanceTxnTypography.chipLabel,
+    color: Theme.textMuted,
+    textAlign: "center",
+    lineHeight: 12,
+    paddingHorizontal: 12,
     marginTop: -4,
   },
   waBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    backgroundColor: '#25D366',
-    borderRadius: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 18,
-    marginTop: 8,
-    width: '100%',
-  },
-  waBtnText: { fontSize: 15, fontWeight: '800', color: '#fff', letterSpacing: -0.2 },
-  waHint: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.38)',
-    textAlign: 'center',
-    lineHeight: 16,
-    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#25D366",
+    borderRadius: 12,
+    paddingVertical: 11,
+    paddingHorizontal: 16,
     marginTop: 4,
+    width: "100%",
+    minHeight: 44,
+  },
+  waBtnText: {
+    ...FinanceTxnTypography.buttonLabel,
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#fff",
+    letterSpacing: 0.4,
+  },
+  waHint: {
+    ...FinanceTxnTypography.chipLabel,
+    color: Theme.textMuted,
+    textAlign: "center",
+    lineHeight: 12,
+    paddingHorizontal: 10,
   },
   linkPreview: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.28)',
-    textAlign: 'center',
-    marginTop: 8,
+    ...FinanceTxnTypography.chipLabel,
+    color: Theme.textMuted,
+    textAlign: "center",
+    marginTop: 4,
     paddingHorizontal: 8,
   },
   routeMini: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.45)',
-    marginTop: 4,
+    ...FinanceTxnTypography.routeWhy,
+    fontSize: 9,
+    marginTop: 2,
   },
 });

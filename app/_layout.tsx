@@ -182,6 +182,23 @@ const styles = StyleSheet.create({
     width: '100%',
     paddingHorizontal: 0,
   },
+  configErrorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    backgroundColor: Theme.screenBackground,
+  },
+  configErrorTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Theme.textPrimaryDark,
+    marginBottom: 12,
+  },
+  configErrorMessage: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: Theme.textSecondary,
+  },
 });
 
 export const unstable_settings = {
@@ -311,12 +328,12 @@ function ConfigErrorScreen() {
   return (
     <View
       style={[
-        errorStyles.container,
+        styles.configErrorContainer,
         { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 },
       ]}
     >
-      <Text style={errorStyles.title}>App not configured</Text>
-      <Text style={errorStyles.message}>
+      <Text style={styles.configErrorTitle}>App not configured</Text>
+      <Text style={styles.configErrorMessage}>
         Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY to .env in the project root, then restart the dev server: npx expo start
       </Text>
     </View>

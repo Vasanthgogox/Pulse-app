@@ -237,10 +237,13 @@ export function NetworkPartyDiscoverListCard({
         </Pressable>
 
         <View style={nativeStyles.footer}>
-          <View style={nativeStyles.footerMetrics}>{metricsTiles}</View>
-          {statusAction ? (
-            <View style={nativeStyles.footerAction}>{statusAction}</View>
-          ) : null}
+          <View style={nativeStyles.sectionDivider} />
+          <View style={nativeStyles.footerBody}>
+            <View style={nativeStyles.footerMetrics}>{metricsTiles}</View>
+            {statusAction ? (
+              <View style={nativeStyles.footerAction}>{statusAction}</View>
+            ) : null}
+          </View>
         </View>
       </View>
     );

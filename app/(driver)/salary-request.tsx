@@ -943,9 +943,9 @@ export default function SalaryRequestScreen() {
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={{
-            paddingTop: Layout.spacingLarge,
+            paddingTop: 12,
             paddingBottom:
-              widgetPage === 1 ? tabBarClearance + 150 : tabBarClearance + 200,
+              widgetPage === 1 ? tabBarClearance + 120 : tabBarClearance + 140,
           }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
@@ -1078,42 +1078,40 @@ export default function SalaryRequestScreen() {
                     </Text>
 
                     <View style={styles.premiumFormGap}>
-                      <View style={styles.formRow}>
-                        <View style={styles.formCol}>
-                          <Text style={[styles.fieldLabelCaps, { color: colors.textMuted }]}>Request type</Text>
-                          <TouchableOpacity
-                            style={[styles.inputShellPremium, { borderColor: colors.borderSubtle, backgroundColor: colors.inputBg }]}
-                            onPress={() => setShowRequestTypeMenu(true)}
-                            activeOpacity={0.85}
-                          >
-                            <Text style={[styles.inputText, { color: colors.text }]}>
-                              {REQUEST_TYPES.find((t) => t.type === salaryRequestType)?.label ?? 'Select'}
-                            </Text>
-                            <ChevronDown size={18} color={colors.textMuted} strokeWidth={2.4} />
-                          </TouchableOpacity>
+                      <View style={styles.formCol}>
+                        <Text style={[styles.fieldLabelCaps, { color: colors.textMuted }]}>Request type</Text>
+                        <TouchableOpacity
+                          style={[styles.inputShellPremium, { borderColor: colors.borderSubtle, backgroundColor: colors.inputBg }]}
+                          onPress={() => setShowRequestTypeMenu(true)}
+                          activeOpacity={0.85}
+                        >
+                          <Text style={[styles.inputText, { color: colors.text }]}>
+                            {REQUEST_TYPES.find((t) => t.type === salaryRequestType)?.label ?? 'Select'}
+                          </Text>
+                          <ChevronDown size={15} color={colors.textMuted} strokeWidth={2.2} />
+                        </TouchableOpacity>
+                      </View>
+                      <View style={styles.formCol}>
+                        <Text style={[styles.fieldLabelCaps, { color: colors.textMuted }]}>Amount</Text>
+                        <View
+                          style={[styles.inputShellPremium, { borderColor: colors.borderSubtle, backgroundColor: colors.inputBg }]}
+                        >
+                          <Text style={[styles.currencyPrefix, { color: colors.textMuted }]}>₹</Text>
+                          <TextInput
+                            style={[styles.amountInput, { color: colors.text }]}
+                            value={salaryRequestAmount}
+                            onChangeText={setSalaryRequestAmount}
+                            placeholder="0.00"
+                            placeholderTextColor={colors.placeholder}
+                            keyboardType="number-pad"
+                            editable={!salaryRequestSubmitting && salaryRequestType !== 'trip_based'}
+                          />
                         </View>
-                        <View style={styles.formCol}>
-                          <Text style={[styles.fieldLabelCaps, { color: colors.textMuted }]}>Amount</Text>
-                          <View
-                            style={[styles.inputShellPremium, { borderColor: colors.borderSubtle, backgroundColor: colors.inputBg }]}
-                          >
-                            <Text style={[styles.currencyPrefix, { color: colors.textMuted }]}>₹</Text>
-                            <TextInput
-                              style={[styles.amountInput, { color: colors.text }]}
-                              value={salaryRequestAmount}
-                              onChangeText={setSalaryRequestAmount}
-                              placeholder="0.00"
-                              placeholderTextColor={colors.placeholder}
-                              keyboardType="number-pad"
-                              editable={!salaryRequestSubmitting && salaryRequestType !== 'trip_based'}
-                            />
-                          </View>
-                          {salaryRequestType === 'trip_based' ? (
-                            <Text style={[styles.hint, { color: colors.textMuted, marginTop: 8 }]}>
-                              Amount is auto-calculated from selected trips.
-                            </Text>
-                          ) : null}
-                        </View>
+                        {salaryRequestType === 'trip_based' ? (
+                          <Text style={[styles.hint, { color: colors.textMuted, marginTop: 6 }]}>
+                            Amount is auto-calculated from selected trips.
+                          </Text>
+                        ) : null}
                       </View>
 
                       {salaryRequestType === 'trip_based' ? (
@@ -1129,7 +1127,7 @@ export default function SalaryRequestScreen() {
                                 ? `Selected: ${selectedSalaryTripIds.length} trip${selectedSalaryTripIds.length === 1 ? '' : 's'}`
                                 : 'Select trips'}
                             </Text>
-                            <ChevronDown size={18} color={colors.textMuted} strokeWidth={2.4} />
+                            <ChevronDown size={15} color={colors.textMuted} strokeWidth={2.2} />
                           </TouchableOpacity>
                           {effectiveSalaryOrg ? (
                             <Text style={[styles.hint, { color: colors.textMuted, marginTop: 8 }]}>
@@ -1152,7 +1150,7 @@ export default function SalaryRequestScreen() {
                           <Text style={[styles.inputText, { color: neededByDate ? colors.text : colors.placeholder }]}>
                             {neededByDate ? neededByDate.toLocaleDateString('en-IN') : 'dd/mm/yyyy'}
                           </Text>
-                          <CalendarDays size={18} color={colors.textMuted} strokeWidth={2.2} />
+                          <CalendarDays size={15} color={colors.textMuted} strokeWidth={2} />
                         </TouchableOpacity>
                         {salaryRequestType === 'trip_based' ? (
                           <Text style={[styles.hint, { color: colors.textMuted, marginTop: 10 }]}>
@@ -1200,7 +1198,7 @@ export default function SalaryRequestScreen() {
                           value={salaryRequestReason}
                           onChangeText={(t) => setSalaryRequestReason(t.slice(0, reasonMax))}
                           multiline
-                          numberOfLines={5}
+                          numberOfLines={4}
                           editable={!salaryRequestSubmitting}
                         />
                       </View>
@@ -1217,26 +1215,26 @@ export default function SalaryRequestScreen() {
                     >
                       <View style={styles.rulesHeaderV2}>
                         <View style={[styles.rulesShieldWrap, { backgroundColor: colors.emeraldMuted }]}>
-                          <ShieldCheck size={20} color={colors.emerald} strokeWidth={2.2} />
+                          <ShieldCheck size={16} color={colors.emerald} strokeWidth={2.2} />
                         </View>
                         <Text style={[styles.rulesTitleV2, { color: colors.text }]}>Submission rules</Text>
                       </View>
 
                       <View style={styles.rulesItemsV2}>
                         <View style={styles.rulesItemV2}>
-                          <FontAwesome name="check-circle" size={18} color={Theme.positive} />
+                          <FontAwesome name="check-circle" size={14} color={Theme.positive} />
                           <Text style={[styles.rulesItemTextV2, { color: colors.textMuted }]}>
                             Advance requests limited to 40% of monthly base salary.
                           </Text>
                         </View>
                         <View style={styles.rulesItemV2}>
-                          <FontAwesome name="check-circle" size={18} color={Theme.positive} />
+                          <FontAwesome name="check-circle" size={14} color={Theme.positive} />
                           <Text style={[styles.rulesItemTextV2, { color: colors.textMuted }]}>
                             Approvals typically processed within 48 business hours.
                           </Text>
                         </View>
                         <View style={styles.rulesItemV2}>
-                          <FontAwesome name="check-circle" size={18} color={Theme.positive} />
+                          <FontAwesome name="check-circle" size={14} color={Theme.positive} />
                           <Text style={[styles.rulesItemTextV2, { color: colors.textMuted }]}>
                             Attachments required for all reimbursement claims.
                           </Text>
@@ -1529,7 +1527,7 @@ export default function SalaryRequestScreen() {
                       {widgetPage === 0 ? 'NEXT' : 'SUBMIT REQUEST'}
                     </Text>
                     {widgetPage === 0 ? (
-                      <ArrowRight size={20} color={Theme.textOnPrimary} strokeWidth={2.6} />
+                      <ArrowRight size={16} color={Theme.textOnPrimary} strokeWidth={2.4} />
                     ) : (
                       <FontAwesome name="send" size={17} color={Theme.textOnPrimary} />
                     )}
@@ -1616,33 +1614,33 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    minHeight: 200,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    minHeight: 160,
   },
   successSendCircleOuter: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     backgroundColor: Theme.textOnPrimary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 22,
+    marginBottom: 14,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.15,
-    shadowRadius: 24,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
+    elevation: 6,
   },
   successHeroEyebrow: {
     color: Theme.textOnPrimary,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 2.2,
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 1.4,
     textTransform: 'uppercase',
     opacity: 0.95,
     textAlign: 'center',
-    marginBottom: 14,
+    marginBottom: 10,
   },
   successAmountRow: {
     flexDirection: 'row',
@@ -1652,27 +1650,27 @@ const styles = StyleSheet.create({
   },
   successRupee: {
     color: Theme.textOnPrimary,
-    fontSize: 28,
-    fontWeight: '600',
-    marginTop: 8,
-    marginRight: 4,
+    fontSize: 22,
+    fontWeight: '700',
+    marginTop: 6,
+    marginRight: 2,
     opacity: 0.95,
   },
   successAmountDigits: {
     color: Theme.textOnPrimary,
-    fontSize: 52,
+    fontSize: 40,
     fontWeight: '800',
-    letterSpacing: -1.5,
+    letterSpacing: -1,
   },
   successSheet: {
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    shadowOffset: { width: 0, height: -12 },
-    shadowOpacity: 0.12,
-    shadowRadius: 28,
-    elevation: 16,
-    maxHeight: '56%',
-    minHeight: 260,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    elevation: 12,
+    maxHeight: '58%',
+    minHeight: 220,
   },
   successSheetHandle: {
     alignSelf: 'center',
@@ -1693,14 +1691,14 @@ const styles = StyleSheet.create({
   successPayeeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    marginBottom: 20,
-    marginTop: 8,
+    gap: 10,
+    marginBottom: 14,
+    marginTop: 6,
   },
   successPayeeIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1709,26 +1707,26 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   successCapsLabel: {
-    fontSize: 10,
+    fontSize: 8,
     fontWeight: '800',
-    letterSpacing: 1.2,
+    letterSpacing: 1,
     textTransform: 'uppercase',
-    marginBottom: 4,
+    marginBottom: 3,
   },
   successPayeeName: {
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: '800',
-    letterSpacing: -0.2,
+    letterSpacing: -0.15,
   },
   successAccordionHead: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   successAccordionHeadLeft: {
     flexDirection: 'row',
@@ -1736,35 +1734,35 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   successAccordionTitle: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '800',
   },
   successDetailCard: {
-    borderRadius: 16,
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    padding: 16,
-    gap: 14,
-    marginBottom: 20,
+    padding: 12,
+    gap: 10,
+    marginBottom: 14,
   },
   successSummaryRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 10,
-    minHeight: 36,
+    gap: 8,
+    minHeight: 30,
   },
   successSummaryRowLast: {
     marginTop: 4,
     alignItems: 'center',
   },
   successSummaryLabel: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
     flexShrink: 0,
     maxWidth: '44%',
   },
   successSummaryValue: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
     flex: 1,
     textAlign: 'right',
@@ -1811,18 +1809,18 @@ const styles = StyleSheet.create({
   },
   successDoneBtn: {
     width: '100%',
-    paddingVertical: 16,
-    borderRadius: 18,
+    paddingVertical: 13,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: MIN_TOUCH,
-    marginBottom: 20,
+    minHeight: 44,
+    marginBottom: 14,
   },
   successDoneBtnText: {
-    fontSize: 17,
+    fontSize: 14,
     fontWeight: '800',
     color: Theme.textOnPrimary,
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
   successFooterTrust: {
     alignItems: 'center',
@@ -1882,20 +1880,19 @@ const styles = StyleSheet.create({
     ...Typography.headerTitle,
   },
   headerTitlePremium: {
-    fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 2.8,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.6,
     textTransform: 'uppercase',
   },
   fleetHeroSection: {
     marginTop: 0,
-    marginBottom: 22,
+    marginBottom: 12,
     alignItems: 'center',
   },
-  /** When fleet chips are shown above, only the blurb remains here — keep vertical rhythm without a second hero. */
   fleetHeroSectionAfterChips: {
-    marginTop: 4,
-    marginBottom: 20,
+    marginTop: 2,
+    marginBottom: 10,
   },
   fleetHeroAlign: {
     alignItems: 'center',
@@ -1904,46 +1901,46 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   fleetHeroAvatarOuter: {
-    width: 82,
-    height: 82,
-    borderRadius: 41,
-    borderWidth: 2,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.2,
-    shadowRadius: 28,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 3,
   },
   fleetHeroAvatarImg: {
     width: '100%',
     height: '100%',
   },
   fleetHeroOrgName: {
-    marginTop: 14,
-    fontSize: 17,
-    fontWeight: '900',
-    letterSpacing: -0.35,
+    marginTop: 8,
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: -0.25,
     textAlign: 'center',
     paddingHorizontal: 12,
     textDecorationLine: 'underline',
     textDecorationStyle: 'solid',
   },
   fleetHeroBlurb: {
-    marginTop: 12,
-    fontSize: 13,
+    marginTop: 8,
+    fontSize: 11,
     fontWeight: '600',
-    lineHeight: 21,
+    lineHeight: 16,
     textAlign: 'center',
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
   },
   fleetHeroBlurbAccent: {
     fontWeight: '900',
   },
   fleetSelectHint: {
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 11,
+    fontWeight: '600',
     textAlign: 'center',
-    letterSpacing: 0.2,
+    letterSpacing: 0.1,
   },
   headerAvatarRing: {
     width: Layout.driverHeaderAvatarSize,
@@ -1990,7 +1987,7 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingHorizontal: 0,
   },
-  hint: { fontSize: 13, fontWeight: '500', lineHeight: 18 },
+  hint: { fontSize: 10, fontWeight: '500', lineHeight: 14 },
   emptyStateWrap: { paddingTop: 24 },
   emptyStateCard: {
     borderRadius: CARD_RADIUS,
@@ -2035,7 +2032,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Theme.textOnPrimary,
   },
-  section: { marginBottom: 14 },
+  section: { marginBottom: 10 },
   sectionLabel: {
     fontSize: 11,
     fontWeight: '700',
@@ -2072,21 +2069,21 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   inputText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     flex: 1,
   },
   currencyPrefix: {
-    fontSize: 16,
-    fontWeight: '900',
-    marginRight: 6,
+    fontSize: 13,
+    fontWeight: '800',
+    marginRight: 4,
   },
   amountInput: {
     flex: 1,
     minWidth: 0,
-    fontSize: 16,
-    fontWeight: '900',
-    paddingVertical: 10,
+    fontSize: 14,
+    fontWeight: '800',
+    paddingVertical: 8,
   },
   multilineShell: {
     borderRadius: 12,
@@ -2095,10 +2092,10 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   reasonInput: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    minHeight: 120,
-    fontSize: 13,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    minHeight: 96,
+    fontSize: 12,
     fontWeight: '500',
     textAlignVertical: 'top',
   },
@@ -2134,23 +2131,18 @@ const styles = StyleSheet.create({
     elevation: CARD_ELEVATION,
   },
   premiumDetailCard: {
-    borderRadius: 28,
-    paddingVertical: 26,
-    paddingHorizontal: 22,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.09,
-    shadowRadius: 24,
-    elevation: 6,
-  },
-  widgetTitle: {
-    fontSize: 14,
-    fontWeight: '900',
-    letterSpacing: 0.3,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 2,
   },
   widgetTitlePremium: {
-    fontSize: 19,
-    fontWeight: '900',
-    letterSpacing: -0.35,
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: -0.2,
   },
   widgetSubtitle: {
     marginTop: 6,
@@ -2159,43 +2151,43 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   widgetSubtitlePremium: {
-    marginTop: 8,
-    fontSize: 12,
-    fontWeight: '700',
-    lineHeight: 17,
+    marginTop: 4,
+    fontSize: 10,
+    fontWeight: '600',
+    lineHeight: 14,
   },
   premiumFormGap: {
-    marginTop: 18,
-    gap: 18,
+    marginTop: 12,
+    gap: 10,
   },
   fieldLabelCaps: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1.8,
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 1.2,
     textTransform: 'uppercase',
-    marginBottom: 10,
+    marginBottom: 6,
   },
   inputShellPremium: {
-    minHeight: 52,
-    borderRadius: 16,
+    minHeight: 44,
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-start',
-    gap: 10,
+    gap: 8,
   },
   multilinePremium: {
-    borderRadius: 16,
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    marginTop: 10,
+    marginTop: 8,
   },
   reviewEyebrow: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 2.6,
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 1.6,
     textTransform: 'uppercase',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   reasonHeaderRow: {
     flexDirection: 'row',
@@ -2205,8 +2197,8 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   reasonCounter: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 10,
+    fontWeight: '600',
   },
   rulesCard: {
     // Flat page layout: legacy rules card chrome removed.
@@ -2219,9 +2211,9 @@ const styles = StyleSheet.create({
     elevation: 0,
   },
   rulesCardV2: {
-    borderRadius: CARD_RADIUS,
-    borderWidth: 1,
-    padding: 16,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 12,
     shadowColor: Theme.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: CARD_SHADOW_OPACITY,
@@ -2231,13 +2223,13 @@ const styles = StyleSheet.create({
   rulesHeaderV2: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    marginBottom: 14,
+    gap: 10,
+    marginBottom: 10,
   },
   rulesShieldWrap: {
-    width: 42,
-    height: 42,
-    borderRadius: 16,
+    width: 34,
+    height: 34,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2250,23 +2242,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   rulesTitleV2: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '800',
-    letterSpacing: 0.1,
+    letterSpacing: -0.1,
   },
   rulesItemsV2: {
-    gap: 14,
+    gap: 10,
   },
   rulesItemV2: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 12,
+    gap: 8,
   },
   rulesItemTextV2: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: '600',
-    lineHeight: 20,
+    lineHeight: 16,
   },
   rulesList: {
     gap: 6,
@@ -2394,45 +2386,45 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   fleetProfilesSection: {
-    marginBottom: Layout.spacingMedium,
+    marginBottom: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.border,
-    paddingBottom: Layout.spacingLarge,
+    paddingBottom: 12,
   },
   fleetProfilesRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'flex-start',
     justifyContent: 'center',
-    gap: 12,
+    gap: 8,
   },
   fleetProfileChip: {
-    width: 104,
+    width: 88,
     alignItems: 'center',
   },
   fleetAvatarRing: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
   fleetAvatar: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
     backgroundColor: 'transparent',
   },
   fleetProfileName: {
-    marginTop: 6,
-    fontSize: 12,
-    fontWeight: '600',
+    marginTop: 4,
+    fontSize: 10,
+    fontWeight: '700',
     textAlign: 'center',
-    lineHeight: 15,
+    lineHeight: 13,
   },
   fleetProfileUnderline: {
     width: 28,
@@ -2550,7 +2542,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
-  monthModalList: { maxHeight: 360 },
+  monthModalList: { maxHeight: 320 },
   neededByCalendarScroll: { maxHeight: 400 },
   monthModalRow: {
     minHeight: 50,
@@ -2561,7 +2553,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  monthModalRowText: { fontSize: 15, fontWeight: '600' },
+  monthModalRowText: { fontSize: 13, fontWeight: '700' },
   yearBlock: { width: 100 },
   tripsModalHeader: {
     paddingHorizontal: 16,
@@ -2582,8 +2574,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   tripSelectText: { flex: 1, minWidth: 0 },
-  tripSelectTitle: { fontSize: 14, fontWeight: '800' },
-  tripSelectSubtitle: { fontSize: 12, fontWeight: '600', marginTop: 2 },
+  tripSelectTitle: { fontSize: 13, fontWeight: '700' },
+  tripSelectSubtitle: { fontSize: 10, fontWeight: '600', marginTop: 2 },
   tripsModalFooter: {
     paddingHorizontal: 16,
     paddingTop: 12,
@@ -2709,22 +2701,22 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   footer: {
-    paddingTop: 10,
+    paddingTop: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   submitBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
-    paddingVertical: 18,
-    borderRadius: 26,
-    minHeight: 56,
+    gap: 8,
+    paddingVertical: 13,
+    borderRadius: 14,
+    minHeight: 48,
     shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
     overflow: 'hidden',
   },
   submitBtnContent: {
@@ -2733,7 +2725,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 10,
   },
-  submitBtnText: { fontSize: 13, fontWeight: '900', letterSpacing: 2 },
+  submitBtnText: { fontSize: 11, fontWeight: '800', letterSpacing: 1.4 },
   draftBtn: {
     marginTop: 10,
     borderRadius: BUTTON_RADIUS,
@@ -2751,12 +2743,12 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
   footerHint: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.25,
+    fontSize: 9,
+    fontWeight: '600',
+    letterSpacing: 0.2,
     textAlign: 'center',
-    marginTop: 14,
-    lineHeight: 16,
+    marginTop: 10,
+    lineHeight: 13,
     paddingHorizontal: 8,
   },
   modalDoneBtn: {

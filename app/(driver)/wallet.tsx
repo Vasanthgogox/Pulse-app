@@ -130,6 +130,16 @@ const AMBER_50 = 'rgba(245,158,11,0.12)';   /* pending badge bg */
 const AMBER_600 = '#d97706';     /* pending badge text */
 const EMERALD_50 = 'rgba(4,120,87,0.14)'; /* received badge bg */
 
+function formatPaymentModeLabel(mode: string | null | undefined): string {
+  const raw = (mode ?? '').trim();
+  if (!raw || raw === '—') return '—';
+  return raw
+    .toLowerCase()
+    .split(/\s+/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
 export default function DriverWalletScreen() {
   usePreventScreenCapture();
   const insets = useSafeAreaInsets();
@@ -169,6 +179,10 @@ export default function DriverWalletScreen() {
     trip: tripsService.TripRow;
     amount: number;
     sourceLedger?: driversService.DriverLedgerRow | null;
+  } | null>(null);
+  const [settledSuccessState, setSettledSuccessState] = useState<{
+    tripDisplay: string;
+    amount: number;
   } | null>(null);
 
   const openWhatsAppReminder = useCallback(async (message: string) => {
@@ -325,7 +339,9 @@ export default function DriverWalletScreen() {
       const e = ledgerEntries[i];
       const tid = e.trip_id?.trim() || null;
       if (!tid) continue;
-      if (e.type === 'settlement') continue; // settlement entries are already "received"
+      // Once driver verified settlement exists, ignore stale fleet-marked ledger rows.
+      if ((receivedByTripId[tid] ?? 0) > 0) continue;
+      if (e.type === 'settlement') continue;
       const amt = Number(e.amount) || 0;
       if (amt <= 0) continue;
       const desc = e.description;
@@ -336,7 +352,7 @@ export default function DriverWalletScreen() {
       if (!prev || nextT > prevT) byTrip[tid] = e;
     }
     return byTrip;
-  }, [ledgerEntries, hasFleetPaidPendingToken, isLegacyFleetPendingEvidence]);
+  }, [ledgerEntries, receivedByTripId, hasFleetPaidPendingToken, isLegacyFleetPendingEvidence]);
 
   // Cash balance:
   // - trip-related cash includes verified settlements.
@@ -1164,10 +1180,16 @@ export default function DriverWalletScreen() {
           minute: '2-digit',
           hour12: true,
         }),
-        fleetPendingLedger: fleetPendingLedger ?? null,
+        fleetPendingLedger: isSettled ? null : (fleetPendingLedger ?? null),
       };
     });
   }, [completedTrips, receivedByTripId, salaryRequestOrgOptions, latestCreditLedgerByTripId, derivePaymentMode, latestFleetPaidPendingLedgerByTripId, driverTripNumberById]);
+
+  const isFleetMarkedAwaitingVerify = useCallback(
+    (item: (typeof tripJourneyItems)[number]) =>
+      item.status !== 'Settled' && !!item.fleetPendingLedger,
+    [],
+  );
 
   const filteredTripJourneyItems = useMemo(() => {
     const search = journeySearch.trim().toLowerCase();
@@ -1179,15 +1201,19 @@ export default function DriverWalletScreen() {
         item.to.toLowerCase().includes(search) ||
         item.provider.toLowerCase().includes(search);
 
+      const fleetMarked = isFleetMarkedAwaitingVerify(item);
       const matchesFilter =
         journeyFilter === 'all' ||
-        (journeyFilter === 'pending' && (item.status === 'Pending' || item.status === 'Action Required')) ||
-        (journeyFilter === 'fleet_marked' && !!item.fleetPendingLedger) ||
-        (journeyFilter === 'settled' && item.status === 'Settled');
+        (journeyFilter === 'settled' && item.status === 'Settled') ||
+        (journeyFilter === 'fleet_marked' && fleetMarked) ||
+        (journeyFilter === 'pending' &&
+          item.status !== 'Settled' &&
+          !fleetMarked &&
+          (item.status === 'Pending' || item.status === 'Action Required'));
 
       return matchesSearch && matchesFilter;
     });
-  }, [tripJourneyItems, journeySearch, journeyFilter]);
+  }, [tripJourneyItems, journeySearch, journeyFilter, isFleetMarkedAwaitingVerify]);
 
   const pendingTripJourneyItems = useMemo(() => {
     return filteredTripJourneyItems.filter((i) => i.status === 'Action Required' || (i.status === 'Pending' && !i.fleetPendingLedger));
@@ -1442,8 +1468,22 @@ export default function DriverWalletScreen() {
       
       if (row) {
         setLedgerEntries(prev => [row!, ...prev]);
+      }
+      setExpandedTripId(null);
+      setExpandedTripReceiptId(null);
+      load();
+
+      const tripDisplay = getDriverTripDisplayNumber(trip, driverTripNumberById);
+      const roundedAmount = Math.round(amount);
+      if (sourceLedger) {
+        setSettledSuccessState({ tripDisplay, amount: roundedAmount });
+      } else if (Platform.OS === 'web') {
+        window.alert(`${tripDisplay} · ₹${roundedAmount.toLocaleString('en-IN')} recorded as received.`);
       } else {
-        load();
+        Alert.alert(
+          'Payment recorded',
+          `${tripDisplay} · ₹${roundedAmount.toLocaleString('en-IN')} has been marked as received.`,
+        );
       }
     },
     [linkedDrivers, profile?.uid, load, driverTripNumberById]
@@ -1587,7 +1627,7 @@ export default function DriverWalletScreen() {
           onPress={() => setMainTab('fleet')}
           activeOpacity={0.92}
         >
-          <FontAwesome name="users" size={14} color={mainTab === 'fleet' ? colors.emerald : colors.textMuted} />
+          <FontAwesome name="users" size={12} color={mainTab === 'fleet' ? colors.emerald : colors.textMuted} />
           <Text style={[styles.mainTabText, mainTab === 'fleet' ? { color: colors.emerald } : { color: colors.textMuted }]}>Fleet</Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -1601,7 +1641,7 @@ export default function DriverWalletScreen() {
           onPress={() => setMainTab('trips')}
           activeOpacity={0.92}
         >
-          <FontAwesome name="history" size={14} color={mainTab === 'trips' ? colors.emerald : colors.textMuted} />
+          <FontAwesome name="history" size={12} color={mainTab === 'trips' ? colors.emerald : colors.textMuted} />
           <Text
             style={[
               styles.mainTabText,
@@ -1623,7 +1663,7 @@ export default function DriverWalletScreen() {
           onPress={() => setMainTab('cash')}
           activeOpacity={0.92}
         >
-          <FontAwesome name="credit-card" size={14} color={mainTab === 'cash' ? colors.emerald : colors.textMuted} />
+          <FontAwesome name="credit-card" size={12} color={mainTab === 'cash' ? colors.emerald : colors.textMuted} />
           <Text style={[styles.mainTabText, mainTab === 'cash' ? { color: colors.emerald } : { color: colors.textMuted }]}>Cash</Text>
         </TouchableOpacity>
       </View>
@@ -1633,6 +1673,8 @@ export default function DriverWalletScreen() {
           <SearchBar
             value={journeySearch}
             onChangeText={setJourneySearch}
+            style={styles.tripsSearchBar}
+            inputProps={{ style: styles.tripsSearchInput }}
             placeholder={
               mainTab === 'trips'
                 ? journeyFilter === 'salary_requested'
@@ -1643,18 +1685,19 @@ export default function DriverWalletScreen() {
           />
 
           {mainTab === 'trips' && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.filterChipRow}
-            >
-              {[
-                { id: 'all', label: 'All' },
-                { id: 'pending', label: 'Pending' },
-                { id: 'salary_requested', label: 'Salary Requested' },
-                { id: 'fleet_marked', label: 'Fleet marked' },
-                { id: 'settled', label: 'Settled' },
-              ].map((chip) => {
+            <View style={styles.filterChipScrollWrap}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.filterChipRow}
+              >
+                {[
+                  { id: 'all', label: 'All' },
+                  { id: 'pending', label: 'Pending' },
+                  { id: 'salary_requested', label: 'Salary req.' },
+                  { id: 'fleet_marked', label: 'Fleet marked' },
+                  { id: 'settled', label: 'Settled' },
+                ].map((chip) => {
                 const active = journeyFilter === chip.id;
                 return (
                   <TouchableOpacity
@@ -1674,7 +1717,8 @@ export default function DriverWalletScreen() {
                   </TouchableOpacity>
                 );
               })}
-            </ScrollView>
+              </ScrollView>
+            </View>
           )}
 
           {mainTab === 'trips' && journeyFilter === 'pending' && pendingTripJourneyItems.length > 0 && (
@@ -1821,7 +1865,7 @@ export default function DriverWalletScreen() {
                       </View>
                       <Text style={[styles.fleetPrimaryButtonText, { color: Theme.textOnPrimary }]}>Inspect fleet center</Text>
                     </View>
-                    <FontAwesome name="chevron-right" size={18} color={Theme.textOnPrimary} style={styles.fleetPrimaryButtonArrow} />
+                    <FontAwesome name="chevron-right" size={14} color={Theme.textOnPrimary} style={styles.fleetPrimaryButtonArrow} />
                   </TouchableOpacity>
                 </View>
               ))}
@@ -1878,7 +1922,7 @@ export default function DriverWalletScreen() {
                                 >
                                   <FontAwesome
                                     name={status === 'Rejected' ? 'times-circle' : status === 'Pending' ? 'clock-o' : 'check-circle'}
-                                    size={18}
+                                    size={14}
                                     color={status === 'Rejected' ? Theme.negative : status === 'Pending' ? AMBER_600 : colors.emerald}
                                   />
                                 </View>
@@ -1899,22 +1943,6 @@ export default function DriverWalletScreen() {
                                 <Text style={[styles.tripsAmount, { color: colors.text }]}>
                                   ₹{Math.round(Number(req.amount) || 0).toLocaleString('en-IN')}
                                 </Text>
-                                <View style={styles.tripsStatusRow}>
-                                  <Text
-                                    style={[
-                                      styles.tripsStatusPill,
-                                      status === 'Paid'
-                                        ? styles.tripsStatusSuccess
-                                        : status === 'Approved'
-                                          ? styles.tripsStatusInfo
-                                          : status === 'Rejected'
-                                            ? styles.salaryRequestStatusRejected
-                                            : styles.salaryRequestStatusPending,
-                                    ]}
-                                  >
-                                    {status}
-                                  </Text>
-                                </View>
                               </View>
                             </View>
                             {req.note?.trim() ? (
@@ -1922,6 +1950,28 @@ export default function DriverWalletScreen() {
                                 {req.note.trim()}
                               </Text>
                             ) : null}
+                            <View
+                              style={[
+                                styles.tripsCardFooter,
+                                { borderTopColor: isDark ? colors.borderSubtle : '#f1f5f9' },
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.tripsStatusPill,
+                                  status === 'Paid'
+                                    ? styles.tripsStatusSuccess
+                                    : status === 'Approved'
+                                      ? styles.tripsStatusInfo
+                                      : status === 'Rejected'
+                                        ? styles.salaryRequestStatusRejected
+                                        : styles.salaryRequestStatusPending,
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {status}
+                              </Text>
+                            </View>
                           </View>
                         </View>
                       );
@@ -2016,8 +2066,8 @@ export default function DriverWalletScreen() {
                                       {
                                         backgroundColor: isActionRequired
                                           ? 'rgba(249,115,22,0.16)'
-                                          : isExpanded
-                                            ? colors.emerald
+                                          : hasFleetPending || isSettled
+                                            ? colors.emeraldMuted
                                             : isDark
                                               ? colors.surfaceElevated
                                               : 'rgba(248,250,252,0.92)',
@@ -2025,19 +2075,21 @@ export default function DriverWalletScreen() {
                                     ]}
                                   >
                                     {isActionRequired ? (
-                                      <FontAwesome name="exclamation-circle" size={18} color="rgb(249,115,22)" />
+                                      <FontAwesome name="exclamation-circle" size={14} color="rgb(249,115,22)" />
                                     ) : hasFleetPending || isSettled ? (
                                       <FontAwesome
                                         name="check-circle"
-                                        size={18}
-                                        color={isExpanded ? colors.textOnPrimary : colors.emerald}
+                                        size={14}
+                                        color={colors.emerald}
                                       />
                                     ) : (
                                       <Image source={{ uri: fleetAvatarUri }} style={styles.tripsIconImage} resizeMode="cover" />
                                     )}
                                   </View>
                                   <View style={styles.tripsHeadText}>
-                                    <Text style={[styles.tripsTripId, { color: colors.text }]}>{item.id}</Text>
+                                    <Text style={[styles.tripsTripId, { color: colors.text }]} numberOfLines={1}>
+                                      {item.id}
+                                    </Text>
                                     <View style={styles.tripsMetaInline}>
                                       <Text style={[styles.tripsMetaText, { color: colors.textMuted }]}>{item.time}</Text>
                                       <Text style={[styles.tripsMetaDot, { color: colors.emerald }]}>•</Text>
@@ -2049,33 +2101,9 @@ export default function DriverWalletScreen() {
                                 </View>
 
                                 <View style={styles.tripsCardRight}>
-                                  <Text style={[styles.tripsAmount, { color: colors.text }]}>₹{item.amount.toLocaleString('en-IN')}</Text>
-                                  <View style={styles.tripsStatusRow}>
-                                    <Text
-                                      style={[
-                                        styles.tripsStatusPill,
-                                        isActionRequired
-                                          ? styles.tripsStatusWarning
-                                          : isPending
-                                            ? styles.tripsStatusInfo
-                                            : styles.tripsStatusSuccess,
-                                      ]}
-                                      numberOfLines={1}
-                                    >
-                                      {item.subStatus || item.status}
-                                    </Text>
-                                    <FontAwesome
-                                      name="chevron-down"
-                                      size={16}
-                                      color={colors.textMuted}
-                                      style={isExpanded ? styles.tripsChevronExpanded : undefined}
-                                    />
-                                  </View>
-                                  {__DEV__ ? (
-                                    <Text style={[styles.tripsDebugSyncToken, { color: hasFleetPending ? colors.emerald : colors.textMuted }]}>
-                                      {hasFleetPending ? 'SYNC TOKEN: FOUND' : 'SYNC TOKEN: MISSING'}
-                                    </Text>
-                                  ) : null}
+                                  <Text style={[styles.tripsAmount, { color: colors.text }]}>
+                                    ₹{item.amount.toLocaleString('en-IN')}
+                                  </Text>
                                 </View>
                               </View>
 
@@ -2083,30 +2111,154 @@ export default function DriverWalletScreen() {
                                 style={[
                                   styles.tripsRouteCard,
                                   {
-                                    backgroundColor: isDark ? colors.surfaceElevated : 'rgba(248,250,252,0.85)',
-                                    borderColor: isDark ? colors.borderSubtle : 'rgba(226,232,240,0.65)',
+                                    borderColor: isDark ? colors.borderSubtle : 'rgba(226,232,240,0.9)',
+                                    backgroundColor: isDark ? colors.surfaceElevated : 'rgba(248,250,252,0.65)',
                                   },
                                 ]}
                               >
                                 <View style={styles.tripsRouteSide}>
                                   <Text style={[styles.tripsRouteLabel, { color: colors.textMuted }]}>Origin</Text>
-                                  <Text style={[styles.tripsRouteValue, { color: colors.text }]} numberOfLines={1}>
+                                  <Text style={[styles.tripsRouteValue, { color: colors.text }]} numberOfLines={2}>
                                     {item.from}
                                   </Text>
                                 </View>
                                 <View style={styles.tripsRouteMiddle}>
                                   <View style={[styles.tripsRouteDot, { backgroundColor: colors.emerald }]} />
-                                  <View style={[styles.tripsRouteLine, { backgroundColor: colors.border }]} />
+                                  <View
+                                    style={[
+                                      styles.tripsRouteLine,
+                                      { backgroundColor: isDark ? colors.borderSubtle : 'rgba(148,163,184,0.45)' },
+                                    ]}
+                                  />
                                   <View style={[styles.tripsRouteDot, { backgroundColor: colors.textMuted }]} />
                                 </View>
                                 <View style={[styles.tripsRouteSide, styles.tripsRouteSideRight]}>
                                   <Text style={[styles.tripsRouteLabel, { color: colors.textMuted }]}>Destination</Text>
-                                  <Text style={[styles.tripsRouteValue, { color: colors.text }]} numberOfLines={1}>
+                                  <Text
+                                    style={[styles.tripsRouteValue, styles.tripsRouteValueRight, { color: colors.text }]}
+                                    numberOfLines={2}
+                                  >
                                     {item.to}
                                   </Text>
                                 </View>
                               </View>
+
+                              <View
+                                style={[
+                                  styles.tripsCardFooter,
+                                  { borderTopColor: isDark ? colors.borderSubtle : '#f1f5f9' },
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.tripsStatusPill,
+                                    hasFleetPending
+                                      ? styles.tripsStatusFleet
+                                      : isActionRequired
+                                        ? styles.tripsStatusWarning
+                                        : isPending
+                                          ? styles.tripsStatusInfo
+                                          : styles.tripsStatusSuccess,
+                                  ]}
+                                  numberOfLines={1}
+                                >
+                                  {hasFleetPending ? 'Awaiting your confirmation' : item.subStatus || item.status}
+                                </Text>
+                                <FontAwesome
+                                  name="chevron-down"
+                                  size={12}
+                                  color={colors.textMuted}
+                                  style={isExpanded ? styles.tripsChevronExpanded : undefined}
+                                />
+                              </View>
                             </TouchableOpacity>
+
+                            {hasFleetPending && !isSettled ? (
+                              <View
+                                style={[
+                                  styles.tripVerifyPanel,
+                                  {
+                                    borderTopColor: isDark ? colors.borderSubtle : '#f1f5f9',
+                                    backgroundColor: isDark ? 'rgba(4,120,87,0.07)' : 'rgba(248,250,252,0.92)',
+                                  },
+                                ]}
+                              >
+                                <View style={styles.tripVerifyHeader}>
+                                  <View
+                                    style={[
+                                      styles.tripVerifyIconWrap,
+                                      { backgroundColor: isDark ? 'rgba(4,120,87,0.18)' : colors.emeraldMuted },
+                                    ]}
+                                  >
+                                    <FontAwesome name="shield" size={10} color={colors.emerald} />
+                                  </View>
+                                  <View style={styles.tripVerifyHeaderText}>
+                                    <Text style={[styles.tripVerifyTitle, { color: colors.text }]}>
+                                      Confirm fleet payment
+                                    </Text>
+                                    <Text style={[styles.tripVerifySubtitle, { color: colors.textMuted }]} numberOfLines={2}>
+                                      {providerShort} marked ₹{item.amount.toLocaleString('en-IN')} via{' '}
+                                      {formatPaymentModeLabel(pendingMode)}
+                                    </Text>
+                                  </View>
+                                </View>
+
+                                <View
+                                  style={[
+                                    styles.tripVerifyMetaGrid,
+                                    {
+                                      borderColor: isDark ? colors.borderSubtle : 'rgba(226,232,240,0.9)',
+                                      backgroundColor: isDark ? 'rgba(15,23,42,0.35)' : colors.surface,
+                                    },
+                                  ]}
+                                >
+                                  <View style={styles.tripVerifyMetaCell}>
+                                    <Text style={[styles.tripVerifyMetaLabel, { color: colors.textMuted }]}>Mode</Text>
+                                    <Text style={[styles.tripVerifyMetaValue, { color: colors.text }]} numberOfLines={1}>
+                                      {formatPaymentModeLabel(pendingMode)}
+                                    </Text>
+                                  </View>
+                                  <View
+                                    style={[
+                                      styles.tripVerifyMetaDivider,
+                                      { backgroundColor: isDark ? colors.borderSubtle : '#e2e8f0' },
+                                    ]}
+                                  />
+                                  <View style={styles.tripVerifyMetaCell}>
+                                    <Text style={[styles.tripVerifyMetaLabel, { color: colors.textMuted }]}>UTR</Text>
+                                    <Text style={[styles.tripVerifyMetaValue, { color: colors.text }]} numberOfLines={1}>
+                                      {pendingUtr}
+                                    </Text>
+                                  </View>
+                                </View>
+
+                                <Text style={[styles.tripVerifyTimestamp, { color: colors.textMuted }]}>
+                                  Marked {pendingCapturedAt}
+                                </Text>
+
+                                <TouchableOpacity
+                                  style={[
+                                    styles.tripVerifyBtn,
+                                    {
+                                      backgroundColor: colors.emerald,
+                                      shadowColor: isDark ? '#000' : 'rgba(4,120,87,0.28)',
+                                    },
+                                  ]}
+                                  onPress={() => confirmMarkAsPaid(item.trip, item.amount, fleetPendingLedger)}
+                                  disabled={markPaidLoadingTripId === item.trip.id}
+                                  activeOpacity={0.88}
+                                >
+                                  {markPaidLoadingTripId === item.trip.id ? (
+                                    <LoadingIndicator size="small" color={Theme.textOnPrimary} />
+                                  ) : (
+                                    <>
+                                      <FontAwesome name="check" size={11} color={Theme.textOnPrimary} />
+                                      <Text style={styles.tripVerifyBtnText}>Verify payment</Text>
+                                    </>
+                                  )}
+                                </TouchableOpacity>
+                              </View>
+                            ) : null}
 
                             {isExpanded && (
                               <View style={styles.tripsExpanded}>
@@ -2327,15 +2479,6 @@ export default function DriverWalletScreen() {
                                               <FontAwesome name="share-square-o" size={13} color={colors.textMuted} />
                                               <Text style={[styles.tripsReceiptActionSecondaryText, { color: colors.textMuted }]}>Share</Text>
                                             </TouchableOpacity>
-
-                                            <TouchableOpacity
-                                              activeOpacity={0.85}
-                                              style={[styles.tripsReceiptActionPrimary, { backgroundColor: colors.emerald }]}
-                                              onPress={() => confirmMarkAsPaid(item.trip, item.amount, fleetPendingLedger)}
-                                            >
-                                              <FontAwesome name="check" size={13} color={colors.textOnPrimary} />
-                                              <Text style={styles.tripsReceiptActionPrimaryText}>Verify & Mark as paid</Text>
-                                            </TouchableOpacity>
                                           </View>
                                         </View>
                                       </View>
@@ -2514,7 +2657,7 @@ export default function DriverWalletScreen() {
                               </View>
                               <FontAwesome
                                 name="chevron-down"
-                                size={16}
+                                size={14}
                                 color={colors.textMuted}
                                 style={txnExpanded ? styles.cashPremiumChevronExpanded : undefined}
                               />
@@ -2701,6 +2844,23 @@ export default function DriverWalletScreen() {
         void markTripAsPaid(next.trip, next.amount, next.sourceLedger ?? null);
       }}
     />
+    <ThemedConfirmModal
+      variant="positive"
+      visible={!!settledSuccessState}
+      title="Payment settled"
+      message={
+        settledSuccessState
+          ? `${settledSuccessState.tripDisplay} · ₹${settledSuccessState.amount.toLocaleString('en-IN')} has been verified and marked as settled. Your cash balance is updated.`
+          : ''
+      }
+      cancelText="Done"
+      confirmText="View settled"
+      onCancel={() => setSettledSuccessState(null)}
+      onConfirm={() => {
+        setSettledSuccessState(null);
+        setJourneyFilter('settled');
+      }}
+    />
     </>
   );
 }
@@ -2884,21 +3044,19 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   mainTabsWrap: {
-    marginTop: 18,
+    marginTop: 12,
     marginHorizontal: Layout.screenPaddingHorizontal,
     flexDirection: 'row',
-    borderWidth: 1,
-    borderRadius: 28,
-    padding: 8,
-    gap: 6,
-    // Clip active-tab visual effects inside the segmented shell.
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 22,
+    padding: 4,
+    gap: 4,
     overflow: 'hidden',
-    // Keep container flat to avoid platform-specific shadow compositing artifacts.
     ...Platform.select({
       ios: {
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.08,
-        shadowRadius: 16,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.04,
+        shadowRadius: 4,
       },
       android: {
         elevation: 0,
@@ -2911,30 +3069,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
-    gap: 8,
-    minHeight: 56,
-    borderRadius: 22,
-    borderWidth: 1,
+    gap: 6,
+    minHeight: 36,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'transparent',
   },
   mainTabActive: {
     ...Platform.select({
       ios: {
-        shadowOffset: { width: 0, height: 3 },
+        shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.06,
-        shadowRadius: 8,
+        shadowRadius: 3,
       },
       android: {
-        // Prevent Android glow/ring artifact from nested elevation.
-        elevation: 0,
+        elevation: 1,
       },
       default: {},
     }),
   },
   mainTabText: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: '800',
-    letterSpacing: 2,
+    letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
   tripsItalicText: {
@@ -2942,54 +3099,72 @@ const styles = StyleSheet.create({
   },
   searchSection: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 14,
-    gap: 12,
+    paddingTop: 8,
+    gap: 8,
+  },
+  tripsSearchBar: {
+    minHeight: 44,
+    borderRadius: 22,
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  tripsSearchInput: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Theme.textPrimary,
+  },
+  filterChipScrollWrap: {
+    minHeight: 30,
+    marginTop: 0,
   },
   filterChipRow: {
-    gap: 10,
-    paddingRight: 24,
+    gap: 6,
+    paddingRight: 4,
+    paddingBottom: 2,
+    alignItems: 'center',
   },
   filterChip: {
-    paddingHorizontal: 18,
-    paddingVertical: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: 999,
     borderWidth: 1,
+    flexShrink: 0,
   },
   filterChipText: {
     fontSize: 8,
-    fontWeight: '500',
+    fontWeight: '800',
     textTransform: 'uppercase',
-    letterSpacing: 2,
+    letterSpacing: 0.7,
   },
   bulkClaimButton: {
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    paddingVertical: 16,
-    borderRadius: 18,
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.22,
-    shadowRadius: 26,
-    elevation: 10,
+    gap: 8,
+    paddingVertical: 10,
+    borderRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 3,
   },
   bulkClaimButtonText: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 9,
+    fontWeight: '800',
     textTransform: 'uppercase',
-    letterSpacing: 1.8,
+    letterSpacing: 1,
     color: Theme.textOnPrimary,
   },
   ledgerSection: {
-    paddingTop: 16,
+    paddingTop: 12,
   },
   transactionHistoryTitle: {
-    fontSize: 10,
-    fontWeight: '500',
+    fontSize: 9,
+    fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 2.2,
-    marginBottom: 10,
+    letterSpacing: 1.2,
+    marginBottom: 8,
   },
   salaryRequestList: {
     gap: 10,
@@ -3013,8 +3188,8 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   salaryRequestFleet: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
   },
   salaryRequestMeta: {
     marginTop: 4,
@@ -3026,7 +3201,7 @@ const styles = StyleSheet.create({
   salaryRequestAmount: {
     fontSize: 16,
     fontWeight: '700',
-    letterSpacing: -0.2,
+    letterSpacing: -0.35,
   },
   salaryRequestBottomRow: {
     marginTop: 12,
@@ -3053,13 +3228,13 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   fleetList: {
-    gap: 18,
+    gap: 12,
     paddingBottom: 24,
   },
   fleetCard: {
-    borderWidth: 1,
-    borderRadius: 24,
-    padding: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 16,
+    padding: 12,
   },
   fleetCardTopRow: {
     flexDirection: 'row',
@@ -3071,12 +3246,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 14,
-    gap: 14,
+    marginBottom: 10,
+    gap: 10,
   },
   fleetCardTopLeft: {
     flexDirection: 'row',
-    gap: 14,
+    gap: 10,
     flex: 1,
     minWidth: 0,
   },
@@ -3089,15 +3264,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   fleetCardLogoNew: {
-    width: 50,
-    height: 50,
-    borderRadius: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.18,
-    shadowRadius: 24,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 2,
   },
   fleetCardLogoImage: {
     width: '100%',
@@ -3108,10 +3283,10 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   fleetCardTitle: {
-    fontSize: 15,
-    fontWeight: '500',
-    letterSpacing: -0.2,
-    marginBottom: 6,
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: -0.25,
+    marginBottom: 4,
   },
   fleetMetaRow: {
     flexDirection: 'row',
@@ -3179,20 +3354,20 @@ const styles = StyleSheet.create({
   },
   fleetStatsGridNew: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 14,
+    gap: 8,
+    marginBottom: 10,
   },
   fleetStatBox: {
     flex: 1,
-    borderWidth: 1,
-    borderRadius: 22,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
     shadowColor: 'rgba(15,23,42,0.06)',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.16,
-    shadowRadius: 18,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 1,
   },
   fleetStatBoxWarning: {
     shadowColor: 'rgba(249,115,22,0.10)',
@@ -3205,9 +3380,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   fleetStatBoxValue: {
-    fontSize: 15,
-    fontWeight: '500',
-    letterSpacing: -0.6,
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: -0.35,
   },
   fleetStatRow: {
     flexDirection: 'row',
@@ -3240,13 +3415,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: 18,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
     borderRadius: 999,
-    shadowOffset: { width: 0, height: 18 },
-    shadowOpacity: 0.22,
-    shadowRadius: 30,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.14,
+    shadowRadius: 12,
+    elevation: 4,
   },
   fleetPrimaryButtonLeft: {
     flexDirection: 'row',
@@ -3280,35 +3455,31 @@ const styles = StyleSheet.create({
     paddingBottom: 28,
   },
   tripsPremiumWrap: {
-    gap: 28,
-    paddingBottom: 28,
+    gap: 12,
+    paddingBottom: 20,
   },
   tripsPremiumSection: {
-    gap: 12,
+    gap: 6,
   },
   tripsSectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
     paddingLeft: 2,
+    marginBottom: 2,
   },
   tripsSectionDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    borderWidth: 3,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    borderWidth: 2,
     borderColor: Theme.driverBackground,
-    shadowColor: 'rgba(4,120,87,0.45)',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.22,
-    shadowRadius: 12,
-    elevation: 6,
   },
   tripsPremiumSectionLabel: {
-    fontSize: 8,
-    fontWeight: '400',
+    fontSize: 9,
+    fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 2,
+    letterSpacing: 1.2,
     paddingHorizontal: 2,
   },
   tripsTimeline: {
@@ -3319,42 +3490,44 @@ const styles = StyleSheet.create({
     display: 'none',
   },
   tripsTimelineList: {
-    gap: 18,
+    gap: 10,
   },
   tripsCard: {
-    borderWidth: 1,
-    borderRadius: 30,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 14,
     overflow: 'hidden',
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.12,
-    shadowRadius: 24,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
   },
   tripsCardExpanded: {
-    shadowOpacity: 0.18,
-    shadowRadius: 30,
-    elevation: 10,
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 2,
   },
   tripsCardTouch: {
-    padding: 20,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 8,
   },
   tripsCardTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 16,
-    gap: 12,
+    marginBottom: 8,
+    gap: 8,
   },
   tripsCardTopLeft: {
     flexDirection: 'row',
-    gap: 14,
+    gap: 8,
     flex: 1,
     minWidth: 0,
   },
   tripsIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -3368,10 +3541,10 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   tripsTripId: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 12,
+    fontWeight: '800',
     letterSpacing: -0.2,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   tripsMetaInline: {
     flexDirection: 'row',
@@ -3379,38 +3552,48 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   tripsMetaText: {
-    fontSize: 9,
-    fontWeight: '400',
+    fontSize: 8,
+    fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    letterSpacing: 0.5,
   },
   tripsMetaDot: {
-    fontSize: 10,
+    fontSize: 8,
     fontWeight: '400',
   },
   tripsCardRight: {
     alignItems: 'flex-end',
-    gap: 8,
+    flexShrink: 0,
+    paddingTop: 1,
   },
   tripsAmount: {
-    fontSize: 18,
-    fontWeight: '500',
-    letterSpacing: -0.7,
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  tripsCardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 8,
   },
   tripsStatusRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   tripsStatusPill: {
     fontSize: 8,
-    fontWeight: '500',
+    fontWeight: '800',
     textTransform: 'uppercase',
-    letterSpacing: 1.2,
-    paddingHorizontal: 7,
-    paddingVertical: 4,
-    borderRadius: 10,
+    letterSpacing: 0.8,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
     overflow: 'hidden',
+    flexShrink: 1,
   },
   tripsStatusWarning: {
     backgroundColor: '#ffedd5',
@@ -3429,6 +3612,16 @@ const styles = StyleSheet.create({
     color: Theme.driverEmerald,
     borderWidth: 1,
     borderColor: '#a7f3d0',
+  },
+  tripsStatusFleet: {
+    backgroundColor: 'rgba(4,120,87,0.08)',
+    color: Theme.driverEmerald,
+    borderWidth: 1,
+    borderColor: 'rgba(4,120,87,0.16)',
+    textTransform: 'none',
+    fontSize: 9,
+    fontWeight: '500',
+    letterSpacing: -0.05,
   },
   salaryRequestStatusPending: {
     backgroundColor: AMBER_50,
@@ -3451,18 +3644,82 @@ const styles = StyleSheet.create({
   tripsChevronExpanded: {
     transform: [{ rotate: '180deg' }],
   },
-  tripsDebugSyncToken: {
+  tripVerifyPanel: {
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 8,
+  },
+  tripVerifyHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  tripVerifyIconWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  tripVerifyHeaderText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
+  },
+  tripVerifyTitle: {
+    fontSize: 11,
+    fontWeight: '500',
+    letterSpacing: -0.1,
+  },
+  tripVerifySubtitle: {
+    fontSize: 10,
+    fontWeight: '400',
+    lineHeight: 14,
+  },
+  tripVerifyMetaGrid: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  tripVerifyMetaCell: {
+    flex: 1,
+    minWidth: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    gap: 1,
+  },
+  tripVerifyMetaDivider: {
+    width: StyleSheet.hairlineWidth,
+  },
+  tripVerifyMetaLabel: {
+    fontSize: 8,
+    fontWeight: '500',
+    letterSpacing: 0.2,
+  },
+  tripVerifyMetaValue: {
+    fontSize: 10,
+    fontWeight: '400',
+    letterSpacing: -0.05,
+  },
+  tripVerifyTimestamp: {
     fontSize: 9,
-    fontWeight: '600',
-    letterSpacing: 0.6,
+    fontWeight: '400',
+    marginTop: -2,
   },
   tripsRouteCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 22,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 8,
+    gap: 6,
   },
   tripsRouteSide: {
     flex: 1,
@@ -3473,36 +3730,65 @@ const styles = StyleSheet.create({
   },
   tripsRouteLabel: {
     fontSize: 8,
-    fontWeight: '500',
+    fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 1.3,
-    marginBottom: 4,
+    letterSpacing: 1,
+    marginBottom: 2,
   },
   tripsRouteValue: {
     fontSize: 11,
-    fontWeight: '400',
+    fontWeight: '700',
+    lineHeight: 14,
+    letterSpacing: -0.15,
+  },
+  tripsRouteValueRight: {
+    textAlign: 'right',
   },
   tripsRouteMiddle: {
     alignItems: 'center',
-    width: 44,
+    justifyContent: 'center',
+    width: 18,
+    flexShrink: 0,
+    alignSelf: 'stretch',
+    paddingVertical: 4,
   },
   tripsRouteDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
   },
   tripsRouteLine: {
-    width: 1,
-    height: 22,
+    width: StyleSheet.hairlineWidth,
+    flex: 1,
+    minHeight: 14,
     marginVertical: 2,
   },
+  tripVerifyBtn: {
+    minHeight: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    paddingHorizontal: 12,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  tripVerifyBtnText: {
+    fontSize: 11,
+    fontWeight: '500',
+    letterSpacing: -0.05,
+    color: Theme.textOnPrimary,
+  },
   tripsExpanded: {
-    paddingHorizontal: 18,
-    paddingBottom: 18,
+    paddingHorizontal: 12,
+    paddingBottom: 12,
     paddingTop: 2,
-    borderTopWidth: 1,
+    borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: 'rgba(226,232,240,0.7)',
-    gap: 12,
+    gap: 10,
   },
   tripsAttention: {
     marginTop: 14,
@@ -3755,28 +4041,28 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   cashPremiumWrap: {
-    gap: 28,
-    paddingBottom: 28,
+    gap: 16,
+    paddingBottom: 24,
   },
   cashPremiumSection: {
-    gap: 14,
+    gap: 8,
   },
   cashPremiumSectionLabel: {
-    fontSize: 8,
-    fontWeight: '400',
+    fontSize: 9,
+    fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 2,
+    letterSpacing: 1.2,
     paddingHorizontal: 2,
   },
   cashPremiumGroup: {
-    borderWidth: 1,
-    borderRadius: 32,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 16,
     overflow: 'hidden',
     shadowColor: 'rgba(15,23,42,0.12)',
-    shadowOffset: { width: 0, height: 18 },
-    shadowOpacity: 0.14,
-    shadowRadius: 34,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 2,
   },
   cashPremiumRow: {
     paddingHorizontal: 6,
@@ -3784,37 +4070,37 @@ const styles = StyleSheet.create({
   cashPremiumRowTouch: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 16,
+    paddingVertical: 12,
     paddingHorizontal: 12,
     justifyContent: 'space-between',
   },
   cashPremiumLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    gap: 10,
     flex: 1,
     minWidth: 0,
   },
   cashPremiumAvatar: {
-    width: 48,
-    height: 48,
+    width: 40,
+    height: 40,
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
   },
   cashPremiumAvatarImageClip: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 24,
+    borderRadius: 20,
     overflow: 'hidden',
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   cashPremiumAvatarImage: {
     width: '100%',
     height: '100%',
   },
   cashPremiumAvatarText: {
-    fontSize: 16,
-    fontWeight: '500',
+    fontSize: 13,
+    fontWeight: '700',
     letterSpacing: -0.2,
   },
   cashPremiumAvatarBadge: {
@@ -3838,8 +4124,8 @@ const styles = StyleSheet.create({
   },
   cashPremiumSource: {
     fontSize: 13,
-    fontWeight: '500',
-    letterSpacing: -0.2,
+    fontWeight: '700',
+    letterSpacing: -0.25,
   },
   cashPremiumMethod: {
     fontSize: 9,
@@ -3860,8 +4146,8 @@ const styles = StyleSheet.create({
   },
   cashPremiumAmount: {
     fontSize: 16,
-    fontWeight: '500',
-    letterSpacing: -0.4,
+    fontWeight: '700',
+    letterSpacing: -0.35,
   },
   cashPremiumStatusRow: {
     flexDirection: 'row',
@@ -5038,17 +5324,17 @@ const styles = StyleSheet.create({
   earningsListRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    gap: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 10,
   },
   earningsListRowLast: {
     borderBottomWidth: 0,
   },
   earningsListStatusIconWrap: {
-    width: 40,
-    height: 40,
+    width: 36,
+    height: 36,
     borderRadius: 12,
     borderWidth: 0,
     alignItems: 'center',
@@ -5070,9 +5356,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   earningsListTripId: {
-    fontSize: 15,
-    fontWeight: '400',
-    letterSpacing: -0.1,
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: -0.25,
   },
   earningsListRideBadge: {
     paddingHorizontal: 6,
@@ -5086,9 +5372,9 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   earningsListSubtext: {
-    fontSize: 12,
-    fontWeight: '400',
-    marginTop: 4,
+    fontSize: 10,
+    fontWeight: '500',
+    marginTop: 3,
   },
   earningsListLocationRow: {
     flexDirection: 'row',
@@ -5101,8 +5387,8 @@ const styles = StyleSheet.create({
   },
   earningsListLocation: {
     flex: 1,
-    fontSize: 11,
-    fontWeight: '400',
+    fontSize: 10,
+    fontWeight: '500',
     letterSpacing: 0.1,
   },
   earningsListRight: {
@@ -5111,9 +5397,9 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   earningsListAmount: {
-    fontSize: 15,
-    fontWeight: '400',
-    letterSpacing: -0.1,
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: -0.35,
   },
   statusBadge: {
     flexDirection: 'row',

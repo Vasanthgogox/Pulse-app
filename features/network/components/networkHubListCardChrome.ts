@@ -4,6 +4,13 @@
 import Theme from "@/constants/Theme";
 import { Platform, StyleSheet } from "react-native";
 
+/** Horizontal rule between identity and metrics — matches TripsHubMobileTripCard `divider`. */
+export const hubCardSectionDivider = {
+  height: StyleSheet.hairlineWidth,
+  backgroundColor: Theme.borderLight,
+  width: "100%" as const,
+};
+
 /** Consistent corner radii — avoids mismatched nested curves. */
 export const NETWORK_HUB_RADIUS = {
   card: 12,
@@ -150,17 +157,23 @@ export const networkHubNativeListStyles = StyleSheet.create({
     gap: 4,
     justifyContent: "center",
   },
+  sectionDivider: {
+    ...hubCardSectionDivider,
+    marginTop: 10,
+    marginBottom: 10,
+  },
   footer: {
+    width: "100%",
+    alignSelf: "stretch",
+    minWidth: 0,
+  },
+  footerBody: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
-    marginTop: 12,
-    paddingTop: 0,
-    borderTopWidth: 0,
-    minWidth: 0,
     width: "100%",
-    alignSelf: "stretch",
+    minWidth: 0,
   },
   footerMetrics: {
     flexDirection: "row",

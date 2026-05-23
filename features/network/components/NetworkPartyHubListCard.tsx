@@ -247,10 +247,13 @@ export function NetworkPartyHubListCard({
         </View>
 
         <View style={nativeStyles.footer}>
-          <View style={nativeStyles.footerMetrics}>{metricsTiles}</View>
-          {connectionAction ? (
-            <View style={nativeStyles.footerAction}>{connectionAction}</View>
-          ) : null}
+          <View style={nativeStyles.sectionDivider} />
+          <View style={nativeStyles.footerBody}>
+            <View style={nativeStyles.footerMetrics}>{metricsTiles}</View>
+            {connectionAction ? (
+              <View style={nativeStyles.footerAction}>{connectionAction}</View>
+            ) : null}
+          </View>
         </View>
       </View>
     );

@@ -1,9 +1,9 @@
 /**
- * GIVE LOAD card layout aligned with Load Center — used when picking an indent
- * to broadcast as a 24h story (create-post).
+ * Compact indent card for Broadcast story picker (create-post).
  */
 import { LoadCardRouteRow } from "@/components/LoadCardRouteRow";
 import { LoadCardSpecsRow } from "@/components/LoadCardSpecsRow";
+import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import Theme from "@/constants/Theme";
 import { BidReceivedHammer, getIndentDisplayNumber, type IndentRow } from "@/features/indents";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -37,7 +37,7 @@ function giveLoadStatusPillStyles(status: string): { pill: object; text: object 
       pill: {
         backgroundColor: Theme.screenBackground,
         borderWidth: 1,
-        borderColor: Theme.textPrimaryDark,
+        borderColor: Theme.borderLight,
       },
       text: { color: Theme.textPrimaryDark },
     };
@@ -46,7 +46,7 @@ function giveLoadStatusPillStyles(status: string): { pill: object; text: object 
     pill: {
       backgroundColor: Theme.tripHubUnassignedPillBg,
       borderWidth: 1,
-      borderColor: Theme.textPrimaryDark,
+      borderColor: Theme.borderLight,
     },
     text: { color: Theme.textPrimaryDark },
   };
@@ -98,34 +98,37 @@ export function BroadcastPickIndentCard({
       accessibilityState={{ selected }}
       accessibilityLabel={`${getIndentDisplayNumber(load)} ${load.pickup_area} to ${load.drop_location}. ${selected ? "Selected" : "Select to broadcast"}`}
     >
-      <View style={[styles.loadCardOrb, { pointerEvents: "none" }]} />
-      <View style={styles.loadCardHeroRow}>
+      <View style={styles.loadCardHead}>
         <View style={styles.loadPillRow}>
           <View style={styles.loadTypePill}>
-            <Text style={styles.loadTypePillText}>GIVE LOAD</Text>
+            <Text style={styles.loadTypePillText}>Give load</Text>
           </View>
           <View style={[styles.loadStatePill, statusPill.pill]}>
             <Text style={[styles.loadStatePillText, statusPill.text]}>
-              {status.toUpperCase()}
+              {status}
             </Text>
           </View>
         </View>
-        <View style={styles.heroRight}>
+        <View style={styles.headRight}>
           {selected ? (
             <View style={styles.checkBubble}>
-              <Check size={16} color="#fff" strokeWidth={3} />
+              <Check size={12} color="#fff" strokeWidth={3} />
             </View>
           ) : null}
-          <Text style={styles.loadCardDateHero}>{formatIndentCardDate(load.pickup_date)}</Text>
+          <Text style={styles.loadCardDate}>{formatIndentCardDate(load.pickup_date)}</Text>
         </View>
       </View>
+
       <LoadCardRouteRow
         origin={load.pickup_area || "—"}
         destination={load.drop_location || "—"}
+        compact
       />
-      <Text style={styles.loadCardIdCompact} numberOfLines={1}>
+
+      <Text style={styles.loadCardId} numberOfLines={1}>
         {getIndentDisplayNumber(load)}
       </Text>
+
       <View style={styles.loadCardSpecsPanel}>
         <LoadCardSpecsRow
           vehicle={vehicleDetail}
@@ -133,24 +136,16 @@ export function BroadcastPickIndentCard({
           loadType={loadTypeDetail}
         />
       </View>
+
       <View style={styles.pickerHintRow}>
-        <View style={styles.bidMetaWrap}>
-          <View
-            style={[
-              styles.bidIconCircle,
-              bidCount > 0 ? styles.bidIconCircleActive : styles.bidIconCircleMuted,
-            ]}
-          >
-            {bidCount > 0 ? (
-              <BidReceivedHammer visible size={16} />
-            ) : (
-              <FontAwesome name="gavel" size={16} color={Theme.textMuted} />
-            )}
-          </View>
-          <Text style={styles.loadCardMetaText} numberOfLines={1}>
-            {bidCount} bid{bidCount === 1 ? "" : "s"} · Tap to use for story
-          </Text>
-        </View>
+        {bidCount > 0 ? (
+          <BidReceivedHammer visible size={13} />
+        ) : (
+          <FontAwesome name="gavel" size={12} color={Theme.textMuted} />
+        )}
+        <Text style={styles.loadCardMetaText} numberOfLines={1}>
+          {bidCount} bid{bidCount === 1 ? "" : "s"} · Tap for story
+        </Text>
       </View>
     </Pressable>
   );
@@ -158,141 +153,104 @@ export function BroadcastPickIndentCard({
 
 const styles = StyleSheet.create({
   loadCard: {
-    position: "relative",
+    flex: 1,
+    minWidth: 0,
     backgroundColor: Theme.cardWhite,
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    borderRadius: 28,
-    padding: 18,
-    marginBottom: 12,
-    shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.07,
-    shadowRadius: 16,
-    elevation: 3,
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 0,
     overflow: "hidden",
   },
   loadCardSelected: {
     borderColor: Theme.primary,
-    borderWidth: 2,
-    shadowColor: Theme.primary,
-    shadowOpacity: 0.12,
+    borderWidth: 1.5,
   },
-  loadCardPressed: { opacity: 0.95 },
-  loadCardOrb: {
-    position: "absolute",
-    top: -72,
-    right: -48,
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    backgroundColor: Theme.textPrimaryDark,
-    opacity: 0.04,
-  },
-  loadCardHeroRow: {
+  loadCardPressed: { opacity: 0.92 },
+  loadCardHead: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 10,
-    zIndex: 1,
+    gap: 6,
+    marginBottom: 6,
   },
-  heroRight: { alignItems: "flex-end", gap: 6 },
+  headRight: {
+    alignItems: "flex-end",
+    gap: 4,
+    flexShrink: 0,
+  },
   checkBubble: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     backgroundColor: Theme.primary,
     alignItems: "center",
     justifyContent: "center",
   },
-  loadCardDateHero: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 1.2,
+  loadCardDate: {
+    ...FinanceTxnTypography.dateLine,
+    fontSize: 8,
+    lineHeight: 11,
   },
   loadPillRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    flexShrink: 1,
+    gap: 4,
+    flex: 1,
+    minWidth: 0,
     flexWrap: "wrap",
   },
   loadTypePill: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: Theme.borderMedium,
+    borderColor: Theme.borderLight,
     backgroundColor: Theme.surfaceGray,
   },
   loadTypePillText: {
-    fontSize: 7,
-    fontWeight: "800",
-    letterSpacing: 0.35,
-    color: Theme.textPrimaryDark,
-    textTransform: "uppercase",
+    ...FinanceTxnTypography.chipLabel,
+    color: Theme.textSecondary,
+    fontWeight: "600",
   },
   loadStatePill: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
   },
   loadStatePillText: {
-    fontSize: 7,
-    fontWeight: "800",
-    letterSpacing: 0.45,
+    ...FinanceTxnTypography.chipLabel,
+    fontWeight: "600",
     textTransform: "uppercase",
   },
-  loadCardIdCompact: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: Theme.textSecondary,
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
-    marginBottom: 12,
-    zIndex: 1,
+  loadCardId: {
+    ...FinanceTxnTypography.tripId,
+    marginBottom: 6,
+    lineHeight: 11,
   },
   loadCardSpecsPanel: {
     backgroundColor: Theme.surfaceGray,
-    borderRadius: 20,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
-    marginBottom: 4,
-    zIndex: 1,
+    marginBottom: 6,
   },
   pickerHintRow: {
-    marginTop: 4,
-    paddingTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingTop: 6,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
   },
-  bidMetaWrap: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1, minWidth: 0 },
-  bidIconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-  },
-  bidIconCircleActive: {
-    backgroundColor: Theme.screenBackground,
-    borderColor: Theme.borderLight,
-  },
-  bidIconCircleMuted: {
-    backgroundColor: Theme.surfaceGray,
-    borderColor: Theme.borderLight,
-  },
   loadCardMetaText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
+    ...FinanceTxnTypography.chipLabel,
     flex: 1,
+    minWidth: 0,
+    color: Theme.textMuted,
+    fontWeight: "500",
   },
 });
