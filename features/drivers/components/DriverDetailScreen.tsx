@@ -894,7 +894,7 @@ export default function DriverDetailScreen({
       : null;
   const lockedPartyName = (driver?.name || t("driver")).trim() || t("driver");
   const handleInviteToApp = useCallback(() => {
-    const message = `Join me on Pulse to sync trips and payouts with ${lockedPartyName}. Download the Q app to get started.`;
+    const message = `Join me on Pulse to sync trips and payouts with ${lockedPartyName}. Download Pulse to get started.`;
     Share.share({ message, title: "Invite to Q" }).catch(() => {});
   }, [lockedPartyName]);
 
@@ -2246,6 +2246,8 @@ export default function DriverDetailScreen({
         visible={inviteSalaryModalVisible}
         mode={inviteSalaryModalMode}
         driverName={(driver.name ?? "").trim() || t("driver")}
+        driverAvatarUri={profileAvatarUri}
+        driverAvatarSeed={(driver.avatar_seed ?? "").trim() || null}
         initialCompensation={suggestedInviteCompensation}
         submitting={inviting}
         onClose={() => {

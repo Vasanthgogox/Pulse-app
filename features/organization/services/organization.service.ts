@@ -182,6 +182,30 @@ export type OrganizationLocation = {
   address_line: string | null;
 };
 
+export async function updateOrganizationName(
+  orgId: string,
+  name: string,
+): Promise<{ error: Error | null }> {
+  const trimmed = name.trim();
+  if (!trimmed) return { error: new Error("Organisation name cannot be empty") };
+  const { error } = await supabase()
+    .from("organizations")
+    .update({ name: trimmed })
+    .eq("id", orgId);
+  return { error: error ? new Error(error.message) : null };
+}
+
+export async function updateOrganizationLogo(
+  orgId: string,
+  logoPath: string | null,
+): Promise<{ error: Error | null }> {
+  const { error } = await supabase()
+    .from("organizations")
+    .update({ logo_url: logoPath })
+    .eq("id", orgId);
+  return { error: error ? new Error(error.message) : null };
+}
+
 export async function getOrganizationLocationsByIds(orgIds: string[]): Promise<{
   error: Error | null;
   locations: OrganizationLocation[];

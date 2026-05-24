@@ -1,15 +1,23 @@
 /**
- * My Account screen — personal identity only.
- * Shows user's photo, name, phone, email, and an edit profile button.
- * No org data is displayed here.
+ * My Account — personal identity hub.
+ * Avatar, name, status (all editable). Phone/email/company are read-only.
+ * KYC and org management live in /workspace.
  */
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { LoadingIndicator } from '@/components/LoadingIndicator';
-import { PulseAvatar } from '@/components/PulseAvatar';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
+import { PartyAvatar } from '@/components/PartyAvatar';
 import { EditProfileModal } from '@/features/auth';
+import { LinearGradient } from 'expo-linear-gradient';
+import {
+  Building2,
+  Lock,
+  MessageSquare,
+  Pencil,
+  Shield,
+} from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -21,329 +29,285 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ProfileItemRow
-// ─────────────────────────────────────────────────────────────────────────────
+const PURPLE = '#1a237e';
+const PURPLE_MID = '#312e81';
+const PURPLE_TINT = 'rgba(26,35,126,0.08)';
+const PURPLE_BORDER = 'rgba(26,35,126,0.18)';
+const TEAL = '#0f766e';
+const TEAL_TINT = 'rgba(15,118,110,0.08)';
+const AMBER = '#d97706';
+const AMBER_TINT = 'rgba(217,119,6,0.08)';
 
-type ProfileItemRowProps = {
-  icon: React.ComponentProps<typeof FontAwesome>['name'];
-  label: string;
-  value: string;
-};
+// ─── Sub-components ────────────────────────────────────────────────────────────
 
-function ProfileItemRow({ icon, label, value }: ProfileItemRowProps) {
+function SectionHeader({ label, color = PURPLE }: { label: string; color?: string }) {
   return (
-    <View style={styles.itemRow}>
-      <View style={styles.itemIconBox}>
-        <FontAwesome name={icon} size={15} color={Theme.textMuted} />
-      </View>
-      <View style={styles.itemTextWrap}>
-        <Text style={styles.itemLabel}>{label}</Text>
-        <Text style={styles.itemValue} numberOfLines={1}>
-          {value || '—'}
-        </Text>
-      </View>
+    <View style={sh.wrap}>
+      <View style={[sh.accent, { backgroundColor: color }]} />
+      <Text style={sh.title}>{label}</Text>
     </View>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Screen
-// ─────────────────────────────────────────────────────────────────────────────
+const sh = StyleSheet.create({
+  wrap: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 8 },
+  accent: { width: 3, height: 14, borderRadius: 2 },
+  title: { fontSize: 11, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase', color: Theme.textMuted },
+});
+
+function IdentityRow({
+  icon,
+  iconBg,
+  label,
+  value,
+  locked,
+  onPress,
+}: {
+  icon: React.ReactNode;
+  iconBg?: string;
+  label: string;
+  value: string;
+  locked?: boolean;
+  onPress?: () => void;
+}) {
+  const inner = (
+    <View style={row.wrap}>
+      <View style={[row.iconBox, iconBg ? { backgroundColor: iconBg } : null]}>{icon}</View>
+      <View style={row.textWrap}>
+        <Text style={row.label}>{label}</Text>
+        <Text style={row.value} numberOfLines={1}>{value || '—'}</Text>
+      </View>
+      {locked ? (
+        <View style={row.lockBadge}><Lock size={10} color={Theme.textMuted} strokeWidth={2.2} /></View>
+      ) : onPress ? (
+        <View style={row.editBadge}><Pencil size={10} color={PURPLE} strokeWidth={2.4} /></View>
+      ) : null}
+    </View>
+  );
+  if (onPress) {
+    return (
+      <Pressable style={({ pressed }) => [pressed && { opacity: 0.8 }]} onPress={onPress} accessibilityRole="button">
+        {inner}
+      </Pressable>
+    );
+  }
+  return inner;
+}
+
+const row = StyleSheet.create({
+  wrap: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 12 },
+  iconBox: { width: 34, height: 34, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: Theme.surfaceGray },
+  textWrap: { flex: 1, minWidth: 0 },
+  label: { fontSize: 10, fontWeight: '700', color: Theme.textMuted, letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 1 },
+  value: { fontSize: 14, fontWeight: '600', color: Theme.textPrimaryDark },
+  lockBadge: { width: 22, height: 22, borderRadius: 6, backgroundColor: Theme.surfaceGray, borderWidth: 1, borderColor: Theme.borderLight, alignItems: 'center', justifyContent: 'center' },
+  editBadge: { width: 22, height: 22, borderRadius: 6, backgroundColor: PURPLE_TINT, borderWidth: 1, borderColor: PURPLE_BORDER, alignItems: 'center', justifyContent: 'center' },
+});
+
+// ─── Screen ────────────────────────────────────────────────────────────────────
 
 export default function AccountScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { profile, status } = useAuth();
+  const { profile, user, status } = useAuth();
 
   const [editModalVisible, setEditModalVisible] = useState(false);
 
   const isLoading = status === 'restoring';
 
+  const fullName = profile?.full_name ?? profile?.displayName ?? '';
+  const phone = profile?.phone ?? '';
+  const email = user?.email ?? profile?.email ?? '';
+  const company = profile?.company_name ?? '';
+
   if (isLoading) {
     return (
-      <View style={[styles.loadingScreen, { paddingTop: insets.top }]}>
+      <View style={styles.loadingScreen}>
         <LoadingIndicator size="small" color={Theme.primary} />
       </View>
     );
   }
 
-  const fullName = profile?.full_name ?? profile?.displayName ?? '';
-  const phone = profile?.phone ?? '';
-  const email = profile?.email ?? '';
-
   return (
-    <View style={[styles.screen, { paddingTop: insets.top }]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Pressable style={styles.backBtn} onPress={() => router.back()}>
-          <FontAwesome name="arrow-left" size={18} color={Theme.textPrimaryDark} />
-        </Pressable>
-        <Text style={styles.headerTitle}>My Account</Text>
-      </View>
-
-      <ScrollView
-        contentContainerStyle={[
-          styles.content,
-          { paddingBottom: insets.bottom + Layout.sectionSpacing },
-        ]}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
+    <View style={styles.screen}>
+      {/* ── Purple gradient hero ── */}
+      <LinearGradient
+        colors={[PURPLE, PURPLE_MID, '#2d1b69']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.hero, { paddingTop: insets.top + 6 }]}
       >
-        {/* Avatar section */}
-        <View style={styles.avatarSection}>
-          <View style={styles.avatarWrap}>
-            <PulseAvatar surface="personal" size={72} />
-            <Pressable
-              style={styles.editCameraBtn}
-              onPress={() => setEditModalVisible(true)}
-              accessibilityRole="button"
-              accessibilityLabel="Edit profile photo"
-            >
-              <FontAwesome name="camera" size={11} color={Theme.buttonPrimaryText} />
-            </Pressable>
-          </View>
-          <Text style={styles.avatarName}>{fullName || 'No name set'}</Text>
-          {profile?.status_text ? (
-            <Text style={styles.avatarStatus}>{profile.status_text}</Text>
-          ) : null}
-        </View>
-
-        {/* Identity info card */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Personal Details</Text>
-          <ProfileItemRow icon="user" label="Full Name" value={fullName} />
-          <View style={styles.divider} />
-          <ProfileItemRow icon="phone" label="Mobile" value={phone} />
-          <View style={styles.divider} />
-          <ProfileItemRow icon="envelope" label="Email" value={email} />
-        </View>
-
-        {/* Edit profile button */}
-        <View style={styles.card}>
+        <View style={styles.heroTopBar}>
+          <Pressable style={styles.heroBtn} onPress={() => router.back()} hitSlop={8}>
+            <FontAwesome name="arrow-left" size={16} color="rgba(255,255,255,0.9)" />
+          </Pressable>
+          <Text style={styles.heroTopTitle}>My Account</Text>
           <Pressable
-            style={({ pressed }) => [styles.editBtn, pressed && styles.editBtnPressed]}
+            style={styles.heroBtn}
             onPress={() => setEditModalVisible(true)}
             accessibilityRole="button"
+            accessibilityLabel="Edit name and status"
+            hitSlop={8}
           >
-            <FontAwesome
-              name="pencil"
-              size={14}
-              color={Theme.buttonPrimaryText}
-              style={styles.editBtnIcon}
-            />
-            <Text style={styles.editBtnText}>Edit Profile</Text>
+            <Pencil size={15} color="rgba(255,255,255,0.85)" strokeWidth={2.2} />
           </Pressable>
         </View>
 
-        {/* Chat identity info card */}
+        <View style={styles.heroAvatarSection}>
+          <View style={styles.heroAvatarWrap}>
+            <PartyAvatar
+              name={fullName.trim() || 'User'}
+              avatarUrl={profile?.avatar_url ?? null}
+              avatarSeed={profile?.avatar_seed ?? null}
+              size={78}
+              borderStyle={{ borderWidth: 3, borderColor: 'rgba(255,255,255,0.35)' }}
+            />
+            <Pressable
+              style={styles.heroCameraBtn}
+              onPress={() => setEditModalVisible(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Change profile photo"
+            >
+              <FontAwesome name="camera" size={10} color="#fff" />
+            </Pressable>
+          </View>
+          <Text style={styles.heroName}>{fullName || 'No name set'}</Text>
+          {profile?.status_text ? (
+            <Text style={styles.heroStatus} numberOfLines={1}>{profile.status_text}</Text>
+          ) : null}
+          <View style={styles.roleBadge}>
+            <Shield size={10} color="#fff" strokeWidth={2.5} />
+            <Text style={styles.roleBadgeText}>PERSONAL ACCOUNT</Text>
+          </View>
+        </View>
+      </LinearGradient>
+
+      {/* ── Content ── */}
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 20 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ── PERSONAL IDENTITY ── */}
         <View style={styles.card}>
-          <View style={styles.infoRow}>
-            <View style={styles.infoIconBox}>
-              <FontAwesome name="comment" size={14} color={Theme.textMuted} />
+          <SectionHeader label="Personal Identity" />
+          <IdentityRow
+            icon={<FontAwesome name="user" size={14} color={PURPLE} />}
+            iconBg={PURPLE_TINT}
+            label="Full Name"
+            value={fullName}
+            onPress={() => setEditModalVisible(true)}
+          />
+          <View style={styles.divider} />
+          <IdentityRow
+            icon={<FontAwesome name="phone" size={14} color={TEAL} />}
+            iconBg={TEAL_TINT}
+            label="Mobile"
+            value={phone}
+            locked
+          />
+          <View style={styles.divider} />
+          <IdentityRow
+            icon={<FontAwesome name="envelope" size={13} color={AMBER} />}
+            iconBg={AMBER_TINT}
+            label="Email"
+            value={email}
+            locked
+          />
+          {company ? (
+            <>
+              <View style={styles.divider} />
+              <IdentityRow
+                icon={<Building2 size={14} color={PURPLE} strokeWidth={2.2} />}
+                iconBg={PURPLE_TINT}
+                label="Registered Company"
+                value={company}
+                locked
+              />
+            </>
+          ) : null}
+          <View style={styles.lockedNote}>
+            <Lock size={10} color={Theme.textMuted} strokeWidth={2} />
+            <Text style={styles.lockedNoteText}>
+              Phone, email and company are set at signup and cannot be changed here.
+            </Text>
+          </View>
+        </View>
+
+        {/* ── HOW IDENTITY WORKS ── */}
+        <View style={styles.card}>
+          <SectionHeader label="How your identity works" />
+          <View style={styles.identityRow}>
+            <View style={[styles.identityIconBox, { backgroundColor: 'rgba(99,102,241,0.1)' }]}>
+              <MessageSquare size={14} color="#4f46e5" strokeWidth={2.2} />
             </View>
-            <View style={styles.infoTextWrap}>
-              <Text style={styles.infoTitle}>Chat Identity</Text>
-              <Text style={styles.infoBody}>
-                Your personal avatar is shown in all chat conversations and when colleagues view
-                your profile.
+            <View style={styles.identityText}>
+              <Text style={styles.identityTitle}>Chat & team communications</Text>
+              <Text style={styles.identityBody}>
+                Your personal photo and name appear in trip chats and team messages.
+              </Text>
+            </View>
+          </View>
+          <View style={styles.identityDivider} />
+          <View style={styles.identityRow}>
+            <View style={[styles.identityIconBox, { backgroundColor: TEAL_TINT }]}>
+              <Building2 size={14} color={TEAL} strokeWidth={2.2} />
+            </View>
+            <View style={styles.identityText}>
+              <Text style={styles.identityTitle}>Network & partner visibility</Text>
+              <Text style={styles.identityBody}>
+                Your org logo represents the business on the load board, partner profiles and invoices.
+                Manage it in Workspace settings.
               </Text>
             </View>
           </View>
         </View>
       </ScrollView>
 
-      {/* Edit Profile Modal */}
       <EditProfileModal
         visible={editModalVisible}
         onClose={() => setEditModalVisible(false)}
         initialFullName={profile?.full_name ?? profile?.displayName ?? ''}
         initialPhone={profile?.phone ?? ''}
         initialCompanyName={profile?.company_name ?? ''}
-        email={profile?.email ?? ''}
+        email={user?.email ?? profile?.email ?? ''}
+        initialStatusText={profile?.status_text ?? ''}
+        avatarPresetStyle="user-2d"
       />
     </View>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Styles
-// ─────────────────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: Theme.screenBackground,
-  },
-  loadingScreen: {
-    flex: 1,
-    backgroundColor: Theme.screenBackground,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderLight,
-  },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Theme.surfaceGray,
-  },
-  headerTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: Theme.textPrimaryDark,
-  },
-  content: {
-    padding: Layout.screenPaddingHorizontal,
-    gap: 16,
-  },
-  // Avatar section
-  avatarSection: {
-    alignItems: 'center',
-    paddingVertical: Layout.sectionSpacing,
-    gap: 8,
-  },
-  avatarWrap: {
-    position: 'relative',
-    width: 72,
-    height: 72,
-  },
-  editCameraBtn: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: Theme.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: Theme.cardWhite,
-  },
-  avatarName: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: Theme.textPrimaryDark,
-    marginTop: 4,
-  },
-  avatarStatus: {
-    fontSize: 12,
-    color: Theme.textSecondary,
-  },
-  // Card
-  card: {
-    backgroundColor: Theme.cardWhite,
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderInput,
-    overflow: 'hidden',
-  },
-  cardTitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: Theme.textMuted,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 8,
-  },
-  // Profile item row
-  itemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  itemIconBox: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: Theme.surfaceGray,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  itemTextWrap: {
-    flex: 1,
-  },
-  itemLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: Theme.textSecondary,
-    marginBottom: 1,
-  },
-  itemValue: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: Theme.textPrimaryDark,
-  },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: Theme.borderLight,
-    marginLeft: 60,
-  },
-  // Edit button
-  editBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    backgroundColor: Theme.primary,
-    margin: 12,
-    borderRadius: 10,
-  },
-  editBtnPressed: {
-    opacity: 0.85,
-  },
-  editBtnIcon: {
-    marginRight: 2,
-  },
-  editBtnText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Theme.buttonPrimaryText,
-  },
-  // Info card
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    padding: 16,
-  },
-  infoIconBox: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: Theme.surfaceGray,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 1,
-  },
-  infoTextWrap: {
-    flex: 1,
-  },
-  infoTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: Theme.textPrimaryDark,
-    marginBottom: 4,
-  },
-  infoBody: {
-    fontSize: 12,
-    color: Theme.textSecondary,
-    lineHeight: 18,
-  },
+  screen: { flex: 1, backgroundColor: Theme.screenBackground },
+  loadingScreen: { flex: 1, backgroundColor: Theme.screenBackground, alignItems: 'center', justifyContent: 'center' },
+
+  // Hero
+  hero: { paddingHorizontal: Layout.screenPaddingHorizontal, paddingBottom: 24 },
+  heroTopBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 6, marginBottom: 2 },
+  heroBtn: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.12)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' },
+  heroTopTitle: { fontSize: 15, fontWeight: '800', color: '#fff', letterSpacing: 0.2 },
+  heroAvatarSection: { alignItems: 'center', paddingTop: 8, gap: 6 },
+  heroAvatarWrap: { position: 'relative', width: 82, height: 82, marginBottom: 2 },
+  heroCameraBtn: { position: 'absolute', bottom: 0, right: 0, width: 24, height: 24, borderRadius: 12, backgroundColor: PURPLE_MID, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' },
+  heroName: { fontSize: 18, fontWeight: '800', color: '#fff', letterSpacing: -0.3, textAlign: 'center' },
+  heroStatus: { fontSize: 12, color: 'rgba(255,255,255,0.7)', textAlign: 'center', maxWidth: 220 },
+  roleBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 8, paddingHorizontal: 9, paddingVertical: 4, borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)', marginTop: 2 },
+  roleBadgeText: { fontSize: 9, fontWeight: '900', color: '#fff', letterSpacing: 1.8 },
+
+  // Cards
+  content: { padding: Layout.screenPaddingHorizontal, gap: 12 },
+  card: { backgroundColor: Theme.cardWhite, borderRadius: 18, borderWidth: 1, borderColor: Theme.borderInput, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 1 },
+  divider: { height: StyleSheet.hairlineWidth, backgroundColor: Theme.borderLight, marginLeft: 60 },
+
+  // Locked note
+  lockedNote: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 9, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Theme.borderLight, backgroundColor: Theme.surfaceGray },
+  lockedNoteText: { fontSize: 10, color: Theme.textMuted, flex: 1, lineHeight: 14 },
+
+  // Identity info
+  identityRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingHorizontal: 14, paddingVertical: 12 },
+  identityDivider: { height: StyleSheet.hairlineWidth, backgroundColor: Theme.borderLight, marginLeft: 60 },
+  identityIconBox: { width: 34, height: 34, borderRadius: 9, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
+  identityText: { flex: 1 },
+  identityTitle: { fontSize: 13, fontWeight: '700', color: Theme.textPrimaryDark, marginBottom: 3 },
+  identityBody: { fontSize: 12, color: Theme.textSecondary, lineHeight: 17 },
 });

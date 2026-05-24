@@ -1124,7 +1124,7 @@ export default function ClientDetailScreen({
   }, [currentOrganization?.id, client?.phone, triggerSuccess]);
 
   const handleInviteToApp = useCallback(() => {
-    const message = `Join me on Pulse to sync our ledger and compare books with ${clientName}. Download the Q app to get started.`;
+    const message = `Join me on Pulse to sync our ledger and compare books with ${clientName}. Download Pulse to get started.`;
     Share.share({ message, title: "Invite to Q" });
   }, [clientName]);
 
@@ -2567,7 +2567,7 @@ export default function ClientDetailScreen({
                 triggerSuccess("CONNECTION_REQUESTED");
               }}
               onInviteToApp={() => {
-                const message = `Join me on Pulse to sync our ledger and compare books with ${clientName}. Download the Q app to get started.`;
+                const message = `Join me on Pulse to sync our ledger and compare books with ${clientName}. Download Pulse to get started.`;
                 Share.share({ message, title: "Invite to Q" })
                   .then(() => {
                     triggerSuccess("INVITE_SENT");
@@ -2729,7 +2729,7 @@ export default function ClientDetailScreen({
                   },
                 ]}
                 onPress={() => {
-                  const message = `Join me on Pulse to sync our ledger and compare books with ${clientName}. Download the Q app to get started.`;
+                  const message = `Join me on Pulse to sync our ledger and compare books with ${clientName}. Download Pulse to get started.`;
                   Share.share({ message, title: "Invite to Q" });
                 }}
                 activeOpacity={0.8}

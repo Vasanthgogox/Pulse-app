@@ -45,8 +45,10 @@ export const ROUTES = {
   },
 
   // Settings flows (root-level stack)
-  KYC_SETTINGS:      '/kyc-settings'      as const,
+  /** @deprecated Route replaced by WORKSPACE. branding-settings now redirects there. */
   BRANDING_SETTINGS: '/branding-settings' as const,
+  /** Canonical org hub: logo, name, KYC, team, invoice branding. */
+  WORKSPACE:         '/workspace'         as const,
   /** Personal identity: name, email, phone, personal avatar */
   MY_ACCOUNT:        '/account'           as const,
   /** Workspace admin: company logo, KYC, TMS metrics */

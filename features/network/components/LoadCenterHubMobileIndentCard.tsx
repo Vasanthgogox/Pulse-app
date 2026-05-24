@@ -123,7 +123,10 @@ export type LoadCenterHubMobileIndentCardProps = {
   leftFooterLabel: string;
   rightFooterLabel: string;
   avatarUrl?: string | null;
-  avatarSeed?: string;
+  avatarSeed?: string | null;
+  organizationImageUrl?: string | null;
+  organizationAvatarSeed?: string | null;
+  initialsColorSeed?: string;
   onPress: () => void;
   /** Footer slot (share / pulse / CTA) — rendered outside the pressable body. */
   actions?: ReactNode;
@@ -155,6 +158,9 @@ export function LoadCenterHubMobileIndentCard({
   rightFooterLabel,
   avatarUrl,
   avatarSeed,
+  organizationImageUrl,
+  organizationAvatarSeed,
+  initialsColorSeed,
   onPress,
   actions,
   dense = false,
@@ -167,7 +173,7 @@ export function LoadCenterHubMobileIndentCard({
   );
   const displayName = formatPartyName(titleName);
   const avatarFb =
-    (avatarSeed ?? "").trim() ||
+    (initialsColorSeed ?? avatarSeed ?? "").trim() ||
     (indent.client_id
       ? `client-entity:${String(indent.client_id).trim()}`
       : `indent:${indent.id}`);
@@ -197,6 +203,8 @@ export function LoadCenterHubMobileIndentCard({
               <PartyAvatar
                 name={displayName}
                 initialsColorSeed={avatarFb}
+                organizationImageUrl={organizationImageUrl}
+                organizationAvatarSeed={organizationAvatarSeed}
                 avatarUrl={avatarUrl}
                 avatarSeed={avatarSeed}
                 entityType="client"

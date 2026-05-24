@@ -5,10 +5,11 @@
 import { ALL_LEDGER_CATEGORY_VALUES } from "@/components/AddTransactionModal";
 import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { EntityIdentityAvatar } from "@/components/EntityIdentityAvatar";
+import { PartyAvatar } from "@/components/PartyAvatar";
 import {
   type LedgerIdentityContext,
   resolveLedgerRowPartyIdentity,
+  resolvedIdentityToEntityAvatarProps,
 } from "@/lib/entityIdentity";
 import type { LinkedOrgDisplay } from "@/lib/useLinkedOrgProfileMap";
 import { useRouter } from "expo-router";
@@ -296,8 +297,18 @@ export function LedgerTab({
         };
         const identity = resolveLedgerRowPartyIdentity(row, ctx);
         if (!identity) return null;
+        const props = resolvedIdentityToEntityAvatarProps(identity);
         return (
-          <EntityIdentityAvatar identity={identity} size="md" showIntegrationBadge />
+          <PartyAvatar
+            name={props.name}
+            initialsColorSeed={row.contact_id ?? row.party_name}
+            avatarUrl={props.avatarUrl}
+            avatarSeed={props.avatarSeed}
+            organizationImageUrl={props.organizationImageUrl}
+            organizationAvatarSeed={props.organizationAvatarSeed}
+            entityType={props.entityType}
+            size={40}
+          />
         );
       }}
       driverRows={driverRows}

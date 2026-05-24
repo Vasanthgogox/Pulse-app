@@ -129,7 +129,7 @@ export type NetworkHubGlassButtonProps = {
 export function NetworkHubGlassButton({
   variant,
   label,
-  size = "default",
+  size = "compact",
   onPress,
   disabled = false,
   loading = false,
@@ -141,7 +141,7 @@ export function NetworkHubGlassButton({
   const isStatic = variant === "connected" || !onPress;
 
   const inner = loading ? (
-    <LoadingIndicator size={compact ? 12 : 14} color={theme.textColor} />
+    <LoadingIndicator size={compact ? 10 : 12} color={theme.textColor} />
   ) : (
     <>
       {variant === "connected" ? <ConnectedDot /> : leadingIcon}
@@ -192,7 +192,7 @@ export function NetworkHubGlassButton({
 
 const styles = StyleSheet.create({
   pressable: {
-    minWidth: 100,
+    minWidth: 72,
     alignSelf: "flex-end",
   },
   pressableCompact: {
@@ -206,16 +206,16 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.985 }],
   },
   shell: {
-    borderRadius: 14,
+    borderRadius: 10,
     borderWidth: 1,
     overflow: "hidden",
     position: "relative",
-    minHeight: 36,
+    minHeight: 28,
     justifyContent: "center",
   },
   shellCompact: {
-    borderRadius: 12,
-    minHeight: 30,
+    borderRadius: 9,
+    minHeight: 24,
   },
   shellPressed: {
     opacity: 0.94,
@@ -227,46 +227,46 @@ const styles = StyleSheet.create({
   edgeLine: {
     position: "absolute",
     top: 0,
-    left: 12,
-    right: 12,
+    left: 10,
+    right: 10,
     height: StyleSheet.hairlineWidth,
     backgroundColor: Theme.networkGlassBorder,
     zIndex: 1,
   },
   edgeLineCompact: {
-    left: 8,
-    right: 8,
+    left: 7,
+    right: 7,
   },
   content: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     zIndex: 2,
   },
   contentCompact: {
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   label: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "500",
-    letterSpacing: 0.65,
+    letterSpacing: 0.55,
     textTransform: "uppercase",
-    lineHeight: 12,
+    lineHeight: 11,
   },
   labelCompact: {
     fontSize: 7,
-    letterSpacing: 0.5,
-    lineHeight: 10,
+    letterSpacing: 0.45,
+    lineHeight: 9,
   },
   connectedDotOuter: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(16, 185, 129, 0.22)",
@@ -274,9 +274,9 @@ const styles = StyleSheet.create({
     borderColor: "rgba(16, 185, 129, 0.35)",
   },
   connectedDotInner: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
     backgroundColor: Theme.positive,
   },
 });

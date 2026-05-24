@@ -2096,7 +2096,7 @@ export function SharedLedgerContent({
   ]);
 
   const handleInviteToApp = useCallback(() => {
-    const message = `Join me on Pulse to sync our ledger and compare books with ${entity.name}. Download the Q app to get started.`;
+    const message = `Join me on Pulse to sync our ledger and compare books with ${entity.name}. Download Pulse to get started.`;
     Share.share({ message, title: "Invite to Q" }).catch(() => {});
   }, [entity.name]);
 

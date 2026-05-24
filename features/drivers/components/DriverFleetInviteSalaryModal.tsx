@@ -1,13 +1,27 @@
 /**
  * Collect salary / pay terms before sending an in-app fleet invitation.
- * Responsive: bottom sheet on phones, centered card on desktop web.
+ * Layout aligned with driver-side `DriverInviteModal` (emerald hero, offer tiles, footer).
  */
-import { partyAddModalChromeStyles } from '@/components/PartyAddModalChrome';
+import { PartyAvatar } from '@/components/PartyAvatar';
 import Theme from '@/constants/Theme';
+import {
+  buildCompensationSalaryLines,
+  type DriverInviteSalaryLine,
+} from '@/lib/driverInviteOffer.util';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { LinearGradient } from 'expo-linear-gradient';
+import {
+  ArrowRight,
+  Briefcase,
+  MapPin,
+  Percent,
+  Sparkles,
+  Wallet,
+} from 'lucide-react-native';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -24,7 +38,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { DriverInviteCompensation } from '../utils/driverInviteCompensation.util';
 import {
   hasDriverInviteCompensation,
-  normalizeDriverInviteCompensation,
   validateDriverInviteCompensation,
 } from '../utils/driverInviteCompensation.util';
 
@@ -34,47 +47,74 @@ type Props = {
   visible: boolean;
   mode: DriverFleetInviteSalaryModalMode;
   driverName: string;
+  driverAvatarUri?: string | null;
+  driverAvatarSeed?: string | null;
   initialCompensation: DriverInviteCompensation;
   submitting?: boolean;
   onClose: () => void;
   onSubmit: (compensation: DriverInviteCompensation) => void | Promise<void>;
 };
 
-function CompensationPreview({
-  compensation,
-}: {
-  compensation: DriverInviteCompensation;
-}) {
-  const normalized = normalizeDriverInviteCompensation(compensation);
-  if (!hasDriverInviteCompensation(normalized)) return null;
+const EMERALD = Theme.driverEmerald;
+const EMERALD_DARK = Theme.driverEmeraldDark;
+const MINT = 'rgba(167,243,208,0.92)';
 
-  const rows: { label: string; value: string }[] = [];
-  if (normalized.payableAmount != null) {
-    rows.push({
-      label: 'Fixed salary',
-      value: `₹${normalized.payableAmount.toLocaleString('en-IN')}/mo`,
-    });
+function salaryLineIcon(label: string, size = 16) {
+  const key = label.toLowerCase();
+  if (key.includes('salary') || key.includes('fixed')) {
+    return <Wallet size={size} color={EMERALD} strokeWidth={2.2} />;
   }
-  if (normalized.commissionPercent != null) {
-    rows.push({
-      label: 'Commission',
-      value: `${normalized.commissionPercent}%`,
-    });
+  if (key.includes('commission') || key.includes('%')) {
+    return <Percent size={size} color={EMERALD} strokeWidth={2.2} />;
   }
-  if (normalized.commissionPerKm != null) {
-    rows.push({
-      label: 'Per km',
-      value: `₹${normalized.commissionPerKm.toLocaleString('en-IN')}/km`,
-    });
+  return <MapPin size={size} color={EMERALD} strokeWidth={2.2} />;
+}
+
+function PayPreviewTiles({
+  lines,
+  compact,
+}: {
+  lines: DriverInviteSalaryLine[];
+  compact: boolean;
+}) {
+  if (lines.length === 0) {
+    return (
+      <View style={styles.emptyPreview}>
+        <FontAwesome name="info-circle" size={13} color={Theme.textMuted} />
+        <Text style={styles.emptyPreviewText}>
+          Add at least one pay term — shown in the driver invite popup.
+        </Text>
+      </View>
+    );
   }
+
+  const useGrid = !compact && lines.length > 1;
 
   return (
-    <View style={styles.previewCard}>
-      <Text style={styles.previewTitle}>Driver will see in app</Text>
-      {rows.map((row) => (
-        <View key={row.label} style={styles.previewRow}>
-          <Text style={styles.previewLabel}>{row.label}</Text>
-          <Text style={styles.previewValue}>{row.value}</Text>
+    <View style={[styles.payGrid, !useGrid && styles.payGridStacked]}>
+      {lines.map((line, i) => (
+        <View
+          key={line.label}
+          style={[
+            styles.payTile,
+            i === 0 ? styles.payTilePrimary : styles.payTileSecondary,
+            useGrid ? styles.payTileGridCell : styles.payTileFull,
+          ]}
+        >
+          <View style={[styles.payTileIconWrap, i === 0 && styles.payTileIconWrapPrimary]}>
+            {salaryLineIcon(line.label, 15)}
+          </View>
+          <Text style={styles.payTileAmount} numberOfLines={1} adjustsFontSizeToFit>
+            {line.value}
+          </Text>
+          <Text style={styles.payTileLabel} numberOfLines={1}>
+            {line.label}
+          </Text>
+          {!compact ? (
+            <Text style={styles.payTileHint} numberOfLines={2}>
+              {line.hint}
+            </Text>
+          ) : null}
         </View>
       ))}
     </View>
@@ -85,6 +125,8 @@ export function DriverFleetInviteSalaryModal({
   visible,
   mode,
   driverName,
+  driverAvatarUri,
+  driverAvatarSeed,
   initialCompensation,
   submitting = false,
   onClose,
@@ -106,19 +148,39 @@ export function DriverFleetInviteSalaryModal({
   }, [visible, initialCompensation]);
 
   const copy = useMemo(() => {
+    const firstName = driverName.split(/\s+/).filter(Boolean)[0] ?? driverName;
     if (mode === 'fleet_reinvite') {
       return {
-        title: 'Reconnect driver',
-        subtitle: `${driverName} left your fleet. Set pay terms — they appear in the driver app invite popup.`,
+        eyebrow: 'RECONNECT DRIVER',
+        title: `Reconnect ${firstName}`,
+        pill: 'Former fleet driver',
+        subtitle: 'Pay terms show in their invite popup',
         note: 'Required every time you reconnect a driver.',
+        nextSteps: [
+          'Driver gets an in-app invitation',
+          'They accept to rejoin your fleet',
+          'Trips can be assigned again',
+        ],
       };
     }
     return {
-      title: 'Send invitation',
-      subtitle: `Set pay terms for ${driverName}. Shown in the driver app before they accept.`,
+      eyebrow: 'FLEET INVITATION',
+      title: `Invite ${firstName}`,
+      pill: 'Fleet driver',
+      subtitle: 'Pay terms show in the driver app',
       note: 'At least one pay term is required.',
+      nextSteps: [
+        'Driver sees this offer in the app',
+        'They accept or decline from Requests',
+        'Assign trips after they connect',
+      ],
     };
   }, [driverName, mode]);
+
+  const previewLines = useMemo(
+    () => buildCompensationSalaryLines(compensation),
+    [compensation],
+  );
 
   const handleSubmit = async () => {
     const validationError = validateDriverInviteCompensation(compensation);
@@ -132,8 +194,7 @@ export function DriverFleetInviteSalaryModal({
 
   if (!visible) return null;
 
-  const shellMaxW = Math.min(440, Math.max(300, width - 32));
-  const shellMaxH = Math.min(height * 0.9, 640);
+  const sheetMaxH = Math.min(height * (isWebDesktop ? 0.92 : 0.94), 660);
 
   const renderField = (
     label: string,
@@ -142,7 +203,7 @@ export function DriverFleetInviteSalaryModal({
     onChangeText: (v: string) => void,
     options?: { flex?: number },
   ) => (
-    <View style={[styles.fieldWrap, options?.flex != null ? { flex: options.flex } : null]}>
+    <View style={[styles.fieldWrap, options?.flex != null ? { flex: options.flex, minWidth: 0 } : null]}>
       <Text style={styles.label}>{label}</Text>
       <TextInput
         style={styles.input}
@@ -163,71 +224,120 @@ export function DriverFleetInviteSalaryModal({
       animationType="slide"
       onRequestClose={onClose}
       presentationStyle="overFullScreen"
+      statusBarTranslucent
     >
       <KeyboardAvoidingView
         style={styles.keyboardRoot}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={insets.top}
       >
-        <View
-          style={[
-            styles.overlay,
-            isWebDesktop ? styles.overlayDesktop : styles.overlayMobile,
-          ]}
-        >
+        <View style={[styles.backdrop, isWebDesktop && styles.backdropWeb]}>
           <Pressable
-            style={partyAddModalChromeStyles.overlayDismissHit}
+            style={styles.backdropDismiss}
             onPress={submitting ? undefined : onClose}
             accessibilityRole="button"
             accessibilityLabel="Close"
           />
           <View
             style={[
-              styles.shell,
-              isWebDesktop ? styles.shellDesktop : styles.shellMobile,
-              {
-                maxWidth: shellMaxW,
-                maxHeight: shellMaxH,
-                paddingBottom: Math.max(insets.bottom, 12),
-              },
+              styles.sheet,
+              isWebDesktop ? styles.sheetWeb : styles.sheetMobile,
+              { maxHeight: sheetMaxH, paddingBottom: Math.max(insets.bottom, 10) },
             ]}
           >
-            <View style={styles.handleRow}>
-              <View style={styles.handle} />
-            </View>
-
-            <View style={styles.header}>
-              <View style={styles.headerMain}>
-                <View style={styles.headerIcon}>
-                  <FontAwesome name="money" size={15} color={Theme.primary} />
+            <LinearGradient
+              colors={[EMERALD_DARK, EMERALD]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.hero, !isWebDesktop && styles.heroMobile]}
+            >
+              {!isWebDesktop ? (
+                <View style={styles.handleRow}>
+                  <View style={styles.handle} />
                 </View>
-                <View style={styles.headerText}>
-                  <Text style={styles.title}>{copy.title}</Text>
-                  <Text style={styles.subtitle}>{copy.subtitle}</Text>
+              ) : null}
+
+              <View style={styles.heroTopRow}>
+                <View style={styles.heroEyebrowRow}>
+                  <Sparkles size={11} color={MINT} strokeWidth={2.5} />
+                  <Text style={styles.heroEyebrow} numberOfLines={1}>
+                    {copy.eyebrow}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={onClose}
+                  disabled={submitting}
+                  style={styles.heroCloseBtn}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityLabel="Close"
+                >
+                  <FontAwesome name="times" size={15} color="#fff" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.heroBody}>
+                <View style={styles.heroAvatarWrap}>
+                  {driverAvatarUri ? (
+                    <Image
+                      source={{ uri: driverAvatarUri }}
+                      style={styles.heroAvatarImage}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <PartyAvatar
+                      name={driverName}
+                      avatarUrl={null}
+                      avatarSeed={driverAvatarSeed ?? null}
+                      entityType="driver"
+                      size={60}
+                    />
+                  )}
+                  <View style={styles.heroAvatarBadge}>
+                    <Briefcase size={8} color="#fff" strokeWidth={2.5} />
+                  </View>
+                </View>
+
+                <View style={styles.heroTextBlock}>
+                  <Text style={styles.heroTitle} numberOfLines={2}>
+                    {copy.title}
+                  </Text>
+                  <View style={styles.heroPillRow}>
+                    <View style={styles.heroPill}>
+                      <Text style={styles.heroPillText} numberOfLines={1}>
+                        {copy.pill}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={styles.heroSubtitle} numberOfLines={2}>
+                    {copy.subtitle}
+                  </Text>
                 </View>
               </View>
-              <TouchableOpacity
-                onPress={onClose}
-                disabled={submitting}
-                style={styles.closeBtn}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                accessibilityLabel="Close"
-              >
-                <FontAwesome name="times" size={18} color={Theme.textMuted} />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.noteCard}>
-              <FontAwesome name="info-circle" size={13} color={Theme.primary} />
-              <Text style={styles.noteText}>{copy.note}</Text>
-            </View>
+            </LinearGradient>
 
             <ScrollView
-              style={styles.scroll}
-              contentContainerStyle={styles.scrollContent}
+              style={styles.body}
+              contentContainerStyle={styles.bodyContent}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
+              bounces={false}
             >
+              <View style={styles.reminderBanner}>
+                <FontAwesome name="info-circle" size={11} color={EMERALD} />
+                <Text style={styles.reminderText}>{copy.note}</Text>
+              </View>
+
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionLabel}>SET PAY TERMS</Text>
+                {hasDriverInviteCompensation(compensation) ? (
+                  <View style={styles.offerPill}>
+                    <Text style={styles.offerPillText}>
+                      {previewLines.length} benefit{previewLines.length !== 1 ? 's' : ''}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+
               {renderField(
                 'Fixed salary (₹ / month)',
                 'e.g. 25000',
@@ -246,12 +356,7 @@ export function DriverFleetInviteSalaryModal({
                 },
               )}
 
-              <View
-                style={[
-                  styles.splitRow,
-                  isCompact && styles.splitRowStacked,
-                ]}
-              >
+              <View style={[styles.splitRow, isCompact && styles.splitRowStacked]}>
                 {renderField(
                   'Trip commission (%)',
                   'e.g. 10',
@@ -295,43 +400,61 @@ export function DriverFleetInviteSalaryModal({
                 )}
               </View>
 
-              <CompensationPreview compensation={compensation} />
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionLabel}>DRIVER WILL SEE IN APP</Text>
+              </View>
+              <PayPreviewTiles lines={previewLines} compact={isCompact || previewLines.length >= 3} />
+
+              <View style={styles.nextCard}>
+                <Text style={styles.nextTitle}>What happens next</Text>
+                {copy.nextSteps.map((item) => (
+                  <View key={item} style={styles.nextRow}>
+                    <ArrowRight size={12} color={EMERALD} strokeWidth={2.4} />
+                    <Text style={styles.nextText}>{item}</Text>
+                  </View>
+                ))}
+              </View>
 
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
             </ScrollView>
 
-            <View style={[styles.footer, isCompact && styles.footerStacked]}>
-              <TouchableOpacity
-                style={[
-                  styles.cancelBtn,
-                  isCompact && styles.footerBtnFull,
-                  submitting && styles.btnDisabled,
-                ]}
-                onPress={onClose}
-                disabled={submitting}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.cancelBtnText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.submitBtn,
-                  isCompact && styles.footerBtnFull,
-                  submitting && styles.btnDisabled,
-                ]}
-                onPress={() => void handleSubmit()}
-                disabled={submitting}
-                activeOpacity={0.85}
-              >
-                {submitting ? (
-                  <ActivityIndicator size="small" color={Theme.textOnPrimary} />
-                ) : (
-                  <>
-                    <FontAwesome name="send" size={13} color={Theme.textOnPrimary} />
-                    <Text style={styles.submitBtnText}>Send invitation</Text>
-                  </>
-                )}
-              </TouchableOpacity>
+            <View style={styles.footer}>
+              <View style={[styles.actions, isCompact && styles.actionsStacked]}>
+                <TouchableOpacity
+                  style={[styles.cancelBtn, isCompact && styles.actionFull]}
+                  onPress={onClose}
+                  disabled={submitting}
+                  activeOpacity={0.82}
+                >
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.submitBtn,
+                    isCompact && styles.actionFull,
+                    submitting && styles.btnDisabled,
+                  ]}
+                  onPress={() => void handleSubmit()}
+                  disabled={submitting}
+                  activeOpacity={0.88}
+                >
+                  <LinearGradient
+                    colors={[EMERALD, EMERALD_DARK]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.submitGradient}
+                  >
+                    {submitting ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <>
+                        <FontAwesome name="send" size={12} color="#fff" />
+                        <Text style={styles.submitBtnText}>Send invitation</Text>
+                      </>
+                    )}
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </View>
@@ -344,141 +467,229 @@ const styles = StyleSheet.create({
   keyboardRoot: {
     flex: 1,
   },
-  overlay: {
+  backdrop: {
     flex: 1,
-    backgroundColor:
-      Platform.OS === 'web'
-        ? 'rgba(15, 23, 42, 0.52)'
-        : 'rgba(15, 23, 42, 0.55)',
-    paddingHorizontal: 16,
-  },
-  overlayDesktop: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  overlayMobile: {
+    backgroundColor: 'rgba(15,23,42,0.75)',
     justifyContent: 'flex-end',
-    alignItems: 'stretch',
-    paddingHorizontal: 0,
-    paddingBottom: 0,
   },
-  shell: {
+  backdropWeb: {
+    ...(Platform.OS === 'web'
+      ? {
+          position: 'fixed' as 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 100000,
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: 20,
+        }
+      : {}),
+  },
+  backdropDismiss: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  sheet: {
+    flexDirection: 'column',
     backgroundColor: Theme.surface,
     overflow: 'hidden',
     zIndex: 1,
     width: '100%',
-    ...(Platform.OS === 'web'
-      ? {
-          boxShadow:
-            '0 24px 64px -16px rgba(15,23,42,0.28), 0 1px 0 rgba(255,255,255,0.9)',
-        }
-      : {
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: 0.12,
-          shadowRadius: 24,
-          elevation: 16,
-        }),
   },
-  shellDesktop: {
-    borderRadius: 20,
-    maxHeight: '88%',
+  sheetWeb: {
+    maxWidth: 440,
+    borderRadius: 28,
   },
-  shellMobile: {
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    maxHeight: '92%',
+  sheetMobile: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+  },
+  hero: {
+    paddingTop: 18,
+    paddingHorizontal: 18,
+    paddingBottom: 18,
+    gap: 12,
+  },
+  heroMobile: {
+    paddingTop: 8,
   },
   handleRow: {
     alignItems: 'center',
-    paddingTop: 10,
-    paddingBottom: 4,
+    paddingBottom: 6,
   },
   handle: {
-    width: 40,
+    width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: Theme.border,
+    backgroundColor: 'rgba(255,255,255,0.35)',
   },
-  header: {
+  heroTopRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingHorizontal: 20,
-    paddingBottom: 12,
+    alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 8,
   },
-  headerMain: {
+  heroEyebrowRow: {
     flex: 1,
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    gap: 6,
+    minWidth: 0,
+  },
+  heroEyebrow: {
+    flex: 1,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    color: MINT,
+    textTransform: 'uppercase',
+  },
+  heroCloseBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  heroBody: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
-    minWidth: 0,
   },
-  headerIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: Theme.pulseIndigoWash,
+  heroAvatarWrap: {
+    width: 60,
+    height: 60,
+    borderRadius: 16,
+    backgroundColor: '#fff',
+    overflow: 'hidden',
+    flexShrink: 0,
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 4px 12px rgba(0,0,0,0.16)' }
+      : {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 3 },
+          shadowOpacity: 0.16,
+          shadowRadius: 6,
+          elevation: 5,
+        }),
+  },
+  heroAvatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  heroAvatarBadge: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: EMERALD_DARK,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
   },
-  headerText: {
+  heroTextBlock: {
     flex: 1,
     minWidth: 0,
+    gap: 4,
   },
-  title: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: Theme.text,
-    letterSpacing: -0.3,
-    marginBottom: 4,
+  heroTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#fff',
+    letterSpacing: -0.4,
+    lineHeight: 24,
   },
-  subtitle: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: Theme.textMuted,
-  },
-  closeBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  heroPillRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Theme.screenBackground,
+    flexWrap: 'wrap',
+    gap: 6,
   },
-  noteCard: {
+  heroPill: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+    maxWidth: '100%',
+  },
+  heroPillText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  heroSubtitle: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: MINT,
+    lineHeight: 15,
+  },
+  body: {
+    flexGrow: 0,
+    flexShrink: 1,
+    minHeight: 0,
+  },
+  bodyContent: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 6,
+    gap: 10,
+  },
+  reminderBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginHorizontal: 20,
-    marginBottom: 14,
-    backgroundColor: Theme.screenBackground,
     borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: Theme.driverEmeraldBorderSoft,
+    backgroundColor: Theme.driverEmeraldMuted,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
-  noteText: {
+  reminderText: {
     flex: 1,
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 11,
+    lineHeight: 14,
     color: Theme.textSecondary,
     fontWeight: '500',
   },
-  scroll: {
-    flexGrow: 0,
-    flexShrink: 1,
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
   },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 8,
+  sectionLabel: {
+    flex: 1,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1,
+    color: Theme.textMuted,
+    textTransform: 'uppercase',
+  },
+  offerPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: Theme.driverEmeraldMuted,
+    flexShrink: 0,
+  },
+  offerPillText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: EMERALD,
   },
   fieldWrap: {
-    marginBottom: 12,
     minWidth: 0,
   },
   splitRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
     alignItems: 'flex-start',
   },
   splitRowStacked: {
@@ -486,10 +697,10 @@ const styles = StyleSheet.create({
     gap: 0,
   },
   label: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: Theme.textSecondary,
-    marginBottom: 6,
+    fontSize: 10,
+    fontWeight: '800',
+    color: Theme.textMuted,
+    marginBottom: 5,
     textTransform: 'uppercase',
     letterSpacing: 0.4,
   },
@@ -497,93 +708,171 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.border,
     borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: Platform.OS === 'web' ? 11 : 10,
-    fontSize: 16,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === 'web' ? 10 : 9,
+    fontSize: 15,
     color: Theme.text,
     backgroundColor: Theme.surface,
   },
-  previewCard: {
-    marginTop: 4,
-    marginBottom: 8,
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.border,
-    backgroundColor: Theme.screenBackground,
-  },
-  previewTitle: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: Theme.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    marginBottom: 10,
-  },
-  previewRow: {
+  payGrid: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  payGridStacked: {
+    flexDirection: 'column',
+  },
+  payTile: {
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 12,
+    gap: 2,
+    minWidth: 0,
+  },
+  payTilePrimary: {
+    backgroundColor: Theme.driverEmeraldMuted,
+    borderColor: Theme.driverEmeraldBorderSoft,
+  },
+  payTileSecondary: {
+    backgroundColor: Theme.screenBackground,
+    borderColor: Theme.border,
+  },
+  payTileFull: {
+    width: '100%',
+  },
+  payTileGridCell: {
+    flexBasis: '48%',
+    flexGrow: 1,
+    maxWidth: '48%',
+  },
+  payTileIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
     alignItems: 'center',
-    paddingVertical: 6,
+    justifyContent: 'center',
+    backgroundColor: Theme.surface,
+    marginBottom: 2,
   },
-  previewLabel: {
-    fontSize: 13,
-    color: Theme.textSecondary,
+  payTileIconWrapPrimary: {
+    backgroundColor: '#fff',
   },
-  previewValue: {
-    fontSize: 14,
-    fontWeight: '700',
+  payTileAmount: {
+    fontSize: 20,
+    fontWeight: '900',
+    letterSpacing: -0.4,
+    lineHeight: 24,
     color: Theme.text,
   },
+  payTileLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    color: EMERALD,
+  },
+  payTileHint: {
+    fontSize: 10,
+    lineHeight: 13,
+    color: Theme.textMuted,
+  },
+  emptyPreview: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.border,
+    backgroundColor: Theme.screenBackground,
+    padding: 12,
+  },
+  emptyPreviewText: {
+    flex: 1,
+    fontSize: 11,
+    lineHeight: 15,
+    color: Theme.textMuted,
+  },
+  nextCard: {
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.border,
+    backgroundColor: Theme.screenBackground,
+    padding: 12,
+    gap: 6,
+  },
+  nextTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Theme.text,
+    marginBottom: 2,
+  },
+  nextRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+  },
+  nextText: {
+    flex: 1,
+    fontSize: 11,
+    lineHeight: 15,
+    color: Theme.textMuted,
+  },
   errorText: {
-    marginTop: 4,
-    fontSize: 13,
+    fontSize: 12,
     color: Theme.negative,
     textAlign: 'center',
   },
   footer: {
-    flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: 20,
-    paddingTop: 14,
+    paddingHorizontal: 16,
+    paddingTop: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.border,
+    flexShrink: 0,
   },
-  footerStacked: {
+  actions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  actionsStacked: {
     flexDirection: 'column-reverse',
   },
-  footerBtnFull: {
+  actionFull: {
     width: '100%',
-    flex: undefined,
   },
   cancelBtn: {
     flex: 1,
-    minHeight: 48,
+    height: 46,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Theme.border,
+    backgroundColor: Theme.screenBackground,
     alignItems: 'center',
     justifyContent: 'center',
   },
   cancelBtnText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
-    color: Theme.textSecondary,
+    color: Theme.textMuted,
   },
   submitBtn: {
-    flex: 1.35,
-    minHeight: 48,
+    flex: 1.55,
+    height: 46,
     borderRadius: 12,
-    backgroundColor: Theme.primary,
+    overflow: 'hidden',
+  },
+  submitGradient: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 7,
+    paddingHorizontal: 10,
   },
   submitBtnText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: Theme.textOnPrimary,
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: -0.2,
   },
   btnDisabled: {
     opacity: 0.65,

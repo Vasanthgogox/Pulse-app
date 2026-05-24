@@ -56,6 +56,41 @@ async function writeCachedBranding(settings: InvoiceBrandingSettings): Promise<v
   }
 }
 
+/**
+ * Sync org identity to both the local branding cache and the server's branding_settings row.
+ * Call this whenever org name or logo changes. orgId is the canonical upsert key.
+ */
+export async function syncBrandingFromOrg(
+  orgId: string,
+  orgName: string,
+  orgLogoUrl: string | null,
+): Promise<void> {
+  const settings: InvoiceBrandingSettings = {
+    companyName: sanitizeCompanyName(orgName),
+    logoUrl: sanitizeLogoUrl(orgLogoUrl),
+  };
+  await writeCachedBranding(settings);
+
+  try {
+    const { error } = await supabase()
+      .from('branding_settings')
+      .upsert(
+        {
+          org_id: orgId,
+          company_name: settings.companyName,
+          logo_url: settings.logoUrl,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'org_id' },
+      );
+    if (error && !isMissingTableError(error)) {
+      console.warn('[invoiceBranding] sync failed:', error.message);
+    }
+  } catch {
+    // Best-effort server write; local cache is already updated.
+  }
+}
+
 export async function getInvoiceBrandingSettings(): Promise<{
   error: Error | null;
   settings: InvoiceBrandingSettings;
@@ -68,6 +103,7 @@ export async function getInvoiceBrandingSettings(): Promise<{
       .limit(1);
 
     if (error) {
+      // Table doesn't exist (old schema) — silently use cache; org sync writes there.
       if (isMissingTableError(error)) {
         const fallback = await readCachedBranding();
         return { error: null, settings: fallback };

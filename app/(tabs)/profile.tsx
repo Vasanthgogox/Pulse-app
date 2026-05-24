@@ -77,6 +77,16 @@ function isTripDone(status: string) {
 
 type ProfileViewMode = "main" | "roadmap";
 
+function orgInitials(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "?";
+  if (words.length === 1) return (words[0]![0] ?? "").toUpperCase();
+  return (
+    (words[0]![0] ?? "").toUpperCase() +
+    (words[words.length - 1]![0] ?? "").toUpperCase()
+  );
+}
+
 type ProfileItemRowProps = {
   icon: React.ComponentProps<typeof FontAwesome>["name"];
   label: string;
@@ -472,6 +482,16 @@ export default function ProfileScreen() {
   const email = user?.email ?? "—";
   const phone = profile?.phone ?? "Not added";
   const companyName = profile?.company_name ?? "Not added";
+
+  const operatingModelLabel = useMemo(() => {
+    switch (currentOrganization?.operatingModel) {
+      case "ASSET_BASED": return "Asset Fleet";
+      case "NON_ASSET": return "Broker / 3PL";
+      case "HYBRID": return "Hybrid Ops";
+      default: return null;
+    }
+  }, [currentOrganization?.operatingModel]);
+
   const accessLabel = useMemo(
     () =>
       hasDispatcherOrFleetAccess
@@ -498,7 +518,7 @@ export default function ProfileScreen() {
     }
   };
   const statusText =
-    profile?.status_text?.trim() || "Hey there! I am using Q Mobile.";
+    profile?.status_text?.trim() || "Hey there! I am using Pulse.";
   const appVersion = Constants.expoConfig?.version ?? "1.0.0";
   const buildNumber =
     Constants.expoConfig?.ios?.buildNumber ??
@@ -662,47 +682,38 @@ export default function ProfileScreen() {
             </View>
 
             <View style={styles.contentWrapDriverLike}>
+              {/* Hero bleeds to screen edges via negative margins — sits flush under the dark top bar */}
               <LinearGradient
-                colors={["#0f172a", "#020617"]}
+                colors={["#1e1b4b", "#312e81", "#1a237e"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.driverLikeHero}
               >
                 <View style={styles.avatarGlow} />
-                <View style={styles.heroAvatarGroup}>
-                  {orgLogoUri ? (
-                    <Pressable
-                      style={({ pressed }) => [styles.orgLogoTouch, pressed && { opacity: 0.85 }]}
-                      onPress={() => void handleUploadOrgLogo()}
-                      accessibilityRole="button"
-                      accessibilityLabel="Change org logo"
-                    >
-                      <Image source={{ uri: orgLogoUri }} style={styles.orgLogoHero} />
-                      <View style={styles.avatarEditBadge}>
-                        <FontAwesome name="camera" size={12} color={Theme.textPrimaryDark} />
-                      </View>
-                    </Pressable>
-                  ) : null}
+
+                {/* Org DP — always org-centric */}
+                <View style={styles.heroDpWrap}>
                   <Pressable
-                    style={({ pressed }) => [
-                      styles.avatarTouch,
-                      orgLogoUri && styles.avatarTouchSmall,
-                      pressed && styles.avatarTouchPressed,
-                    ]}
-                    onPress={handleEditProfile}
+                    style={({ pressed }) => [styles.orgDpTouch, pressed && { opacity: 0.86 }]}
+                    onPress={() => void handleUploadOrgLogo()}
                     accessibilityRole="button"
+                    accessibilityLabel="Change organisation logo"
                   >
-                    <View style={[styles.avatarFrame, orgLogoUri && styles.avatarFrameSmall]}>
-                      <Image source={{ uri: avatarUri }} style={orgLogoUri ? styles.avatarSmall : styles.avatar} />
-                    </View>
-                    {!orgLogoUri && (
-                      <View style={styles.levelBadgeOnAvatar}>
-                        <Trophy size={11} color="#fff" />
-                        <Text style={styles.levelBadgeText}>Lv {currentLevel}</Text>
+                    {orgLogoUri ? (
+                      <Image source={{ uri: orgLogoUri }} style={styles.orgDpImage} />
+                    ) : (
+                      <View style={styles.orgDpPlaceholder}>
+                        <Text style={styles.orgDpInitialsText}>
+                          {orgInitials(currentOrganization?.name || "Org")}
+                        </Text>
                       </View>
                     )}
-                    <View style={[styles.avatarEditBadge, orgLogoUri && styles.avatarEditBadgeSmall]}>
-                      <FontAwesome name="camera" size={orgLogoUri ? 10 : 14} color={Theme.textPrimaryDark} />
+                    <View style={styles.orgDpCameraBadge}>
+                      {orgLogoUploading ? (
+                        <LoadingIndicator size="small" color="#fff" />
+                      ) : (
+                        <FontAwesome name="camera" size={12} color="#fff" />
+                      )}
                     </View>
                   </Pressable>
                 </View>
@@ -710,11 +721,23 @@ export default function ProfileScreen() {
                 <Text numberOfLines={1} style={styles.nameText}>
                   {currentOrganization?.name || displayName}
                 </Text>
-                <Text style={styles.tierKicker} numberOfLines={1}>
-                  {orgLogoUri
-                    ? displayName
-                    : `${currentLevelConfig.tier} · ${currentLevelConfig.name}`}
-                </Text>
+
+                {/* Operating model + tier badge row */}
+                <View style={styles.heroBadgeRow}>
+                  {operatingModelLabel ? (
+                    <View style={styles.modelBadge}>
+                      <Text style={styles.modelBadgeText}>{operatingModelLabel}</Text>
+                    </View>
+                  ) : null}
+                  <View style={styles.tierBadge}>
+                    <Trophy size={9} color={AMBER_400} />
+                    <Text style={styles.tierBadgeText}>
+                      {currentLevelConfig.tier === currentLevelConfig.name
+                        ? currentLevelConfig.name
+                        : `${currentLevelConfig.tier} · ${currentLevelConfig.name}`}
+                    </Text>
+                  </View>
+                </View>
 
                 <View style={styles.ratingPillsStack}>
                   {showCombinedPartnerStars ? (
@@ -802,6 +825,37 @@ export default function ProfileScreen() {
                 </View>
               </View>
 
+              {/* Managed By — admin identity link to personal account */}
+              <Pressable
+                style={({ pressed }) => [styles.managedByCard, pressed && { opacity: 0.9 }]}
+                onPress={() => router.push(ROUTES.MY_ACCOUNT as Parameters<typeof router.push>[0])}
+                accessibilityRole="button"
+                accessibilityLabel="View admin account"
+              >
+                <Text style={styles.managedByEyebrow}>MANAGED BY</Text>
+                <View style={styles.managedByRow}>
+                  <View style={styles.managedByAvatarWrap}>
+                    <PartyAvatar
+                      name={displayName}
+                      avatarUrl={profile?.avatar_url ?? null}
+                      avatarSeed={avatarSeed}
+                      size={44}
+                    />
+                  </View>
+                  <View style={styles.managedByInfo}>
+                    <View style={styles.managedByNameRow}>
+                      <Text style={styles.managedByName} numberOfLines={1}>{displayName}</Text>
+                      <View style={styles.managedByRoleBadge}>
+                        <Text style={styles.managedByRoleText}>OWNER</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.managedByMeta} numberOfLines={1}>{email}</Text>
+                  </View>
+                  <FontAwesome name="chevron-right" size={14} color={Theme.textSection} />
+                </View>
+                <Text style={styles.managedByCaption}>Personal login · shown in chat &amp; communications</Text>
+              </Pressable>
+
               <View style={styles.premiumCard}>
                 <View style={styles.premiumCardInner}>
                   <View style={styles.interactiveRow}>
@@ -850,47 +904,6 @@ export default function ProfileScreen() {
                 </View>
               </View>
 
-              {orgId ? (
-                <View style={styles.premiumCard}>
-                  <View style={styles.premiumCardInner}>
-                    <Pressable
-                      onPress={() => void handleUploadOrgLogo()}
-                      style={({ pressed }) => [
-                        styles.orgLogoRow,
-                        pressed && styles.profileItemRowPressed,
-                      ]}
-                      accessibilityRole="button"
-                    >
-                      <View style={styles.orgLogoLeft}>
-                        <View style={styles.profileItemIconBox}>
-                          <FontAwesome name="image" size={16} color={Theme.textMuted} />
-                        </View>
-                        <View style={styles.profileItemTextWrap}>
-                          <Text style={styles.profileItemLabel}>Org Logo</Text>
-                          <Text style={styles.profileItemValue} numberOfLines={1}>
-                            {orgLogoUri ? "Uploaded · tap to change" : "Tap to upload logo"}
-                          </Text>
-                        </View>
-                      </View>
-                      <View style={styles.orgLogoPreviewWrap}>
-                        {orgLogoUploading ? (
-                          <LoadingIndicator size="small" color={Theme.primary} />
-                        ) : orgLogoUri ? (
-                          <Image source={{ uri: orgLogoUri }} style={styles.orgLogoPreview} />
-                        ) : (
-                          <View style={styles.orgLogoPlaceholder}>
-                            <PartyAvatar
-                              name={currentOrganization?.name || "Org"}
-                              size={36}
-                            />
-                          </View>
-                        )}
-                        <FontAwesome name="camera" size={12} color={Theme.textMuted} style={{ marginLeft: 6 }} />
-                      </View>
-                    </Pressable>
-                  </View>
-                </View>
-              ) : null}
 
               <View style={styles.premiumCard}>
                 <View style={styles.premiumCardInner}>
@@ -936,9 +949,9 @@ export default function ProfileScreen() {
                 <View style={styles.premiumCardInner}>
                   <ProfileItemRow
                     icon="cog"
-                    label="Settings"
-                    value="Branding & identity for invoice PDFs"
-                    onPress={() => router.push("/branding-settings")}
+                    label="Workspace"
+                    value="Org identity, KYC & invoice branding"
+                    onPress={() => router.push(ROUTES.WORKSPACE as Parameters<typeof router.push>[0])}
                     showChevron
                   />
                   <View style={styles.premiumDivider} />
@@ -1069,15 +1082,20 @@ const styles = StyleSheet.create({
   },
   contentWrapDriverLike: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 12,
+    paddingTop: 0,
     gap: 14,
   },
   driverLikeHero: {
     borderRadius: 38,
-    paddingVertical: 20,
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    paddingTop: 24,
+    paddingBottom: 24,
     paddingHorizontal: 20,
     alignItems: "center",
     overflow: "hidden",
+    // Break out of the parent's horizontal padding so the hero is full-bleed
+    marginHorizontal: -Layout.screenPaddingHorizontal,
   },
 
   cinematicHeader: {
@@ -1146,10 +1164,10 @@ const styles = StyleSheet.create({
   avatarGlow: {
     position: "absolute",
     top: 8,
-    width: 130,
-    height: 130,
-    borderRadius: 32,
-    backgroundColor: "rgba(255,255,255,0.05)",
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: "rgba(139,92,246,0.18)",
   },
   heroAvatarGroup: {
     flexDirection: "row",
@@ -1364,20 +1382,21 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     borderColor: Theme.cinematicCardBorder,
-    paddingVertical: 14,
+    paddingVertical: 16,
     paddingHorizontal: 8,
     alignItems: "center",
-    gap: 4,
-    shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
+    gap: 6,
+    shadowColor: "#1a237e",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
     elevation: 2,
   },
   statTileNum: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "900",
     color: Theme.textPrimaryDark,
+    letterSpacing: -0.5,
   },
   statTileLbl: {
     fontSize: 7,
@@ -1649,4 +1668,169 @@ const styles = StyleSheet.create({
   roadmapStepText: { flex: 1 },
   roadmapStepTitle: { fontSize: 12, fontWeight: "800", color: "#e2e8f0" },
   roadmapStepSub: { fontSize: 9, color: "rgba(148,163,184,0.9)", marginTop: 2 },
+
+  // ── Org DP (hero) ──────────────────────────────────────────────
+  heroDpWrap: {
+    alignItems: "center",
+    marginBottom: 14,
+  },
+  orgDpTouch: {
+    position: "relative",
+  },
+  orgDpImage: {
+    width: 108,
+    height: 108,
+    borderRadius: 28,
+    borderWidth: 4,
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: Theme.surfaceGray,
+  },
+  orgDpPlaceholder: {
+    width: 108,
+    height: 108,
+    borderRadius: 28,
+    overflow: "hidden",
+    borderWidth: 4,
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "#1e293b",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  orgDpInitialsText: {
+    fontSize: 34,
+    fontWeight: "900",
+    color: "rgba(255,255,255,0.82)",
+    letterSpacing: 3,
+  },
+  orgDpCameraBadge: {
+    position: "absolute",
+    right: -7,
+    bottom: -7,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: Theme.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2.5,
+    borderColor: SLATE_900,
+  },
+
+  // ── Hero badge row ─────────────────────────────────────────────
+  heroBadgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 10,
+    flexWrap: "wrap",
+    justifyContent: "center",
+  },
+  modelBadge: {
+    backgroundColor: "rgba(99,102,241,0.22)",
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: "rgba(99,102,241,0.35)",
+  },
+  modelBadgeText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#a5b4fc",
+    letterSpacing: 1.5,
+  },
+  tierBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(251,191,36,0.18)",
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: "rgba(251,191,36,0.3)",
+  },
+  tierBadgeText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: AMBER_400,
+    letterSpacing: 1.5,
+  },
+
+  // ── Managed By card ────────────────────────────────────────────
+  managedByCard: {
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "rgba(26,35,126,0.2)",
+    borderLeftWidth: 4,
+    borderLeftColor: "#1a237e",
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 12,
+    gap: 10,
+    shadowColor: "#1a237e",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.1,
+    shadowRadius: 14,
+    elevation: 2,
+  },
+  managedByEyebrow: {
+    fontSize: 8,
+    fontWeight: "900",
+    color: "#1a237e",
+    letterSpacing: 2.2,
+  },
+  managedByRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  managedByAvatarWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 13,
+    overflow: "hidden",
+  },
+  managedByInfo: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+  },
+  managedByNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  managedByName: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    flex: 1,
+  },
+  managedByRoleBadge: {
+    backgroundColor: Theme.primary + "20",
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: Theme.primary + "35",
+  },
+  managedByRoleText: {
+    fontSize: 8,
+    fontWeight: "900",
+    color: Theme.primary,
+    letterSpacing: 1.5,
+  },
+  managedByMeta: {
+    fontSize: 11,
+    color: Theme.textSecondary,
+  },
+  managedByCaption: {
+    fontSize: 10,
+    color: Theme.textMuted,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.cinematicDivider,
+  },
 });

@@ -35,6 +35,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ExistingDriverMatch } from '../services/drivers.service';
 import { getDriverProfileAvatar, searchExistingDriversByPhone } from '../services/drivers.service';
+import { DriverRegistrationPortalFlow } from './DriverRegistrationPortalFlow';
 
 export type DriverSource = 'organization' | 'partner';
 
@@ -106,10 +107,26 @@ const validateDrivingLicenseNumber = (licenseNumber: string): string | null => {
   return 'Enter a valid DL number (e.g. MH12 20180001234).';
 };
 
-export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, salariedOnly = false }: AddDriverModalProps) {
+export function AddDriverModal(props: AddDriverModalProps) {
+  const { visible, salariedOnly = false, onClose, onComplete, onAddDriver } = props;
+  if (visible === false) return null;
+  if (salariedOnly) {
+    return (
+      <DriverRegistrationPortalFlow
+        onClose={onClose}
+        onComplete={onComplete}
+        onAddDriver={onAddDriver}
+        visible={visible}
+      />
+    );
+  }
+  return <AddDriverWizardModal {...props} />;
+}
+
+function AddDriverWizardModal({ onClose, onComplete, onAddDriver, visible }: AddDriverModalProps) {
   const { t } = useLanguage();
   const insets = useSafeAreaInsets();
-  const STEPS_BASE = salariedOnly ? STEPS_SALARIED_ONLY_KEYS : STEPS_FULL_KEYS;
+  const STEPS_BASE = STEPS_FULL_KEYS;
   const STEPS = STEPS_BASE.map((s) => ({ id: s.id, title: t(s.titleKey), description: t(s.descriptionKey) }));
   const [stepIndex, setStepIndex] = useState(0);
   const [formData, setFormData] = useState<DriverFormData>(defaultFormData);
@@ -281,13 +298,7 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
     setLicenseValidationError(validateDrivingLicenseNumber(formData.licenseNumber));
   }, [formData.licenseNumber]);
   const isReview = step.id === 'review';
-  const canProceedDriver = salariedOnly
-    ? !!formData.name.trim() &&
-      !!formData.phone.trim() &&
-      !!formData.licenseNumber.trim() &&
-      !phoneValidationError &&
-      !licenseValidationError
-    : !!formData.phone.trim() && !phoneValidationError;
+  const canProceedDriver = !!formData.phone.trim() && !phoneValidationError;
   const canProceed = step.id === 'driver' ? canProceedDriver : true;
 
   /**
@@ -357,9 +368,7 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
       case 'driver':
         return (
           <View style={styles.stepContent}>
-            {!salariedOnly && (
-              <>
-                <Text style={labelStyle}>Driver Source</Text>
+            <Text style={labelStyle}>Driver Source</Text>
                 <View style={styles.toggleRow}>
                   <TouchableOpacity
                     style={[
@@ -391,8 +400,6 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
                     </Text>
                   </TouchableOpacity>
                 </View>
-              </>
-            )}
             <Text style={labelStyle}>
               Phone number <Text style={styles.requiredMark}>*</Text>
             </Text>
@@ -449,29 +456,6 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
                 </Text>
               </View>
             </TouchableOpacity>
-            {salariedOnly ? (
-              <>
-                <Text style={labelStyle}>
-                  DL number (Driving License) <Text style={styles.requiredMark}>*</Text>
-                </Text>
-                <TextInput
-                  style={inputStyle}
-                  placeholder="e.g. MH12 20180001234"
-                  placeholderTextColor={Theme.placeholder}
-                  value={formData.licenseNumber}
-                  onChangeText={(v) => setFormData((p) => ({ ...p, licenseNumber: v }))}
-                  autoCorrect={false}
-                  spellCheck={false}
-                  autoComplete="off"
-                  autoCapitalize="characters"
-                />
-                {licenseValidationError && (
-                  <Text style={[styles.errorText, { color: Theme.negative }]}>
-                    {licenseValidationError}
-                  </Text>
-                )}
-              </>
-            ) : null}
             {phoneSearchLoading && (
               <View style={styles.existingRow}>
                 <ActivityIndicator size="small" color={Theme.primary} />
@@ -806,8 +790,6 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
     }
   };
 
-  if (visible === false) return null;
-
   const fleetWarningModal = (
     <Modal
       transparent
@@ -901,7 +883,7 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
                 }}
               >
               <View style={popupStyles.headerRow}>
-                <Text style={popupStyles.title}>{salariedOnly ? 'Add Driver (Salaried)' : 'Add Driver'}</Text>
+                <Text style={popupStyles.title}>Add Driver</Text>
               </View>
               <View style={popupStyles.dotsRow}>
                 {STEPS.map((_, i) => (

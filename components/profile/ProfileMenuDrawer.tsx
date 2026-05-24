@@ -1,5 +1,5 @@
 /**
- * Left profile menu drawer (reference: compact MMT-style account panel).
+ * Left profile menu drawer — Slack-style: purple workspace header at top, personal identity pinned at bottom.
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Layout from "@/constants/Layout";
@@ -16,13 +16,11 @@ import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
 import { useRouter } from "expo-router";
 import {
   Bell,
+  Building2,
   ChevronRight,
-  FileText,
   HelpCircle,
   LogOut,
   Settings,
-  Shield,
-  User,
   Users,
 } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
@@ -40,6 +38,13 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+// ─── Color tokens ────────────────────────────────────────────────────────────
+const PURPLE_DARK = "#1a237e";
+const PURPLE_MID = "#312e81";
+const PURPLE_TINT = "rgba(26,35,126,0.08)";
+const PURPLE_TEXT_ON_DARK = "#ffffff";
+const PURPLE_MUTED_ON_DARK = "rgba(255,255,255,0.62)";
+
 export interface ProfileMenuDrawerProps {
   visible: boolean;
   onClose: () => void;
@@ -49,9 +54,17 @@ type MenuRow = {
   id: string;
   label: string;
   icon: React.ReactNode;
+  iconBg?: string;
   onPress: () => void;
   badge?: string;
 };
+
+function orgInitials(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "?";
+  if (words.length === 1) return (words[0]![0] ?? "").toUpperCase();
+  return ((words[0]![0] ?? "") + (words[words.length - 1]![0] ?? "")).toUpperCase();
+}
 
 function MenuRowItem({ row }: { row: MenuRow }) {
   return (
@@ -61,7 +74,9 @@ function MenuRowItem({ row }: { row: MenuRow }) {
       accessibilityRole="button"
       accessibilityLabel={row.label}
     >
-      <View style={styles.menuRowIcon}>{row.icon}</View>
+      <View style={[styles.menuRowIcon, row.iconBg ? { backgroundColor: row.iconBg } : null]}>
+        {row.icon}
+      </View>
       <Text style={styles.menuRowLabel} numberOfLines={1}>
         {row.label}
       </Text>
@@ -70,7 +85,7 @@ function MenuRowItem({ row }: { row: MenuRow }) {
           <Text style={styles.menuRowBadgeText}>{row.badge}</Text>
         </View>
       ) : null}
-      <ChevronRight size={16} color={Theme.textMuted} strokeWidth={2.2} />
+      <ChevronRight size={15} color={Theme.textMuted} strokeWidth={2} />
     </Pressable>
   );
 }
@@ -89,7 +104,7 @@ function QuickAction({
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.quickAction, pressed && styles.menuRowPressed]}
+      style={({ pressed }) => [styles.quickAction, pressed && { opacity: 0.8 }]}
       accessibilityRole="button"
       accessibilityLabel={label}
     >
@@ -115,6 +130,7 @@ export function ProfileMenuDrawer({ visible, onClose }: ProfileMenuDrawerProps) 
   const slideX = useRef(new Animated.Value(-panelWidth)).current;
 
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
+  const [orgLogoUri, setOrgLogoUri] = useState<string | null>(null);
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
 
@@ -122,8 +138,8 @@ export function ProfileMenuDrawer({ visible, onClose }: ProfileMenuDrawerProps) 
   const firstName = displayName.split(/\s+/)[0] || displayName;
   const email = (user?.email ?? profile?.email ?? "").trim();
   const orgName = (currentOrganization?.name ?? profile?.company_name ?? "").trim();
-  const roleLabel = profile?.aggregated ? "Dispatcher + Fleet Owner" : "Fleet User";
 
+  // Resolve personal avatar
   useEffect(() => {
     let mounted = true;
     const resolve = async () => {
@@ -147,10 +163,28 @@ export function ProfileMenuDrawer({ visible, onClose }: ProfileMenuDrawerProps) 
       if (mounted) setAvatarUri(getUser2DAvatarUriForSeed(DEFAULT_USER_2D_AVATAR_SEED));
     };
     void resolve();
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, [profile?.avatar_url, profile?.avatar_seed]);
+
+  // Resolve org logo
+  useEffect(() => {
+    let mounted = true;
+    const resolve = async () => {
+      const logoUrl = currentOrganization?.logo_url;
+      if (!logoUrl?.trim()) {
+        if (mounted) setOrgLogoUri(null);
+        return;
+      }
+      if (logoUrl.startsWith("http")) {
+        if (mounted) setOrgLogoUri(logoUrl);
+        return;
+      }
+      const signed = await getSignedAvatarUrl(logoUrl.trim());
+      if (mounted) setOrgLogoUri(signed);
+    };
+    void resolve();
+    return () => { mounted = false; };
+  }, [currentOrganization?.logo_url]);
 
   useEffect(() => {
     Animated.timing(slideX, {
@@ -161,9 +195,7 @@ export function ProfileMenuDrawer({ visible, onClose }: ProfileMenuDrawerProps) 
   }, [visible, panelWidth, slideX]);
 
   useEffect(() => {
-    if (!visible && !signingOut) {
-      setShowSignOutConfirm(false);
-    }
+    if (!visible && !signingOut) setShowSignOutConfirm(false);
   }, [visible, signingOut]);
 
   const navigate = (path: string) => {
@@ -175,37 +207,25 @@ export function ProfileMenuDrawer({ visible, onClose }: ProfileMenuDrawerProps) 
 
   const workspaceRows: MenuRow[] = [
     {
+      id: "workspace",
+      label: "Workspace settings",
+      icon: <Building2 size={17} color={PURPLE_DARK} strokeWidth={2.2} />,
+      iconBg: PURPLE_TINT,
+      onPress: () => navigate(ROUTES.WORKSPACE),
+    },
+    {
       id: "team",
       label: "Team members",
-      icon: <Users size={18} color={Theme.textSecondary} strokeWidth={2.2} />,
+      icon: <Users size={17} color={PURPLE_DARK} strokeWidth={2.2} />,
+      iconBg: PURPLE_TINT,
       onPress: () => navigate(ROUTES.MODALS.TEAM),
     },
     {
-      id: "branding",
-      label: "Branding & identity",
-      icon: <Settings size={18} color={Theme.textSecondary} strokeWidth={2.2} />,
-      onPress: () => navigate("/branding-settings"),
-    },
-    {
-      id: "role",
-      label: "Role & access",
-      icon: <Shield size={18} color={Theme.textSecondary} strokeWidth={2.2} />,
-      onPress: () => navigate(ROUTES.TABS.PROFILE),
-    },
-  ];
-
-  const operationsRows: MenuRow[] = [
-    {
-      id: "pod",
-      label: "Proof of delivery",
-      icon: <FileText size={18} color={Theme.textSecondary} strokeWidth={2.2} />,
-      onPress: () => navigate("/pod-reconciliation"),
-    },
-    {
-      id: "invoice",
-      label: "Invoicing",
-      icon: <FileText size={18} color={Theme.textSecondary} strokeWidth={2.2} />,
-      onPress: () => navigate("/invoicing-execute"),
+      id: "org-settings",
+      label: "Org identity & KYC",
+      icon: <Settings size={17} color={PURPLE_DARK} strokeWidth={2.2} />,
+      iconBg: PURPLE_TINT,
+      onPress: () => navigate(ROUTES.WORKSPACE),
     },
   ];
 
@@ -240,10 +260,7 @@ export function ProfileMenuDrawer({ visible, onClose }: ProfileMenuDrawerProps) 
       "Reach your operations team from Pulse chat or email your account manager.",
       [
         { text: "Cancel", style: "cancel" },
-        {
-          text: "Open chat",
-          onPress: () => navigate(ROUTES.CHAT),
-        },
+        { text: "Open chat", onPress: () => navigate(ROUTES.CHAT) },
       ],
     );
   };
@@ -267,131 +284,131 @@ export function ProfileMenuDrawer({ visible, onClose }: ProfileMenuDrawerProps) 
           <Animated.View
             style={[
               styles.panel,
-              {
-                width: panelWidth,
-                paddingTop: insets.top + 8,
-                paddingBottom: insets.bottom + 12,
-                transform: [{ translateX: slideX }],
-                zIndex: 2,
-              },
+              { width: panelWidth, transform: [{ translateX: slideX }] },
             ]}
           >
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.panelScroll}
-            keyboardShouldPersistTaps="handled"
-          >
+            {/* ── Workspace header (purple, pinned top) ── */}
             <Pressable
-              onPress={() => navigate(ROUTES.TABS.PROFILE)}
-              style={({ pressed }) => [styles.heroCard, pressed && styles.menuRowPressed]}
+              onPress={() => navigate(ROUTES.WORKSPACE)}
+              style={[styles.orgHeader, { paddingTop: insets.top + 14 }]}
               accessibilityRole="button"
-              accessibilityLabel="Open full profile"
+              accessibilityLabel="Open workspace settings"
             >
-              <View style={styles.heroRow}>
-                {avatarUri ? (
-                  <Image source={{ uri: avatarUri }} style={styles.heroAvatar} />
+              {/* Gradient overlay effect via layered views */}
+              <View style={styles.orgHeaderGradientOverlay} />
+
+              <View style={styles.orgHeaderContent}>
+                {orgLogoUri ? (
+                  <Image source={{ uri: orgLogoUri }} style={styles.orgLogo} />
                 ) : (
-                  <View style={styles.heroAvatarFallback}>
-                    <Text style={styles.heroAvatarInitials}>
+                  <View style={styles.orgLogoFallback}>
+                    <Text style={styles.orgLogoInitials}>
+                      {orgInitials(orgName || "Q")}
+                    </Text>
+                  </View>
+                )}
+                <View style={styles.orgHeaderText}>
+                  <Text style={styles.orgHeaderMeta}>WORKSPACE</Text>
+                  <Text style={styles.orgHeaderName} numberOfLines={1}>
+                    {orgName || "My Organisation"}
+                  </Text>
+                </View>
+                <ChevronRight size={16} color={PURPLE_MUTED_ON_DARK} strokeWidth={2} />
+              </View>
+            </Pressable>
+
+            {/* ── Scrollable menu content ── */}
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.panelScroll}
+              keyboardShouldPersistTaps="handled"
+              style={styles.panelScrollView}
+            >
+              {/* Quick actions */}
+              <View style={styles.quickRow}>
+                <QuickAction
+                  label="My Account"
+                  icon={
+                    <View style={styles.quickAvatarWrap}>
+                      {avatarUri ? (
+                        <Image source={{ uri: avatarUri }} style={styles.quickAvatar} />
+                      ) : (
+                        <Text style={styles.quickAvatarInitials}>
+                          {firstName.slice(0, 2).toUpperCase()}
+                        </Text>
+                      )}
+                    </View>
+                  }
+                  onPress={() => navigate(ROUTES.MY_ACCOUNT)}
+                />
+                <QuickAction
+                  label="Support"
+                  icon={<HelpCircle size={20} color={PURPLE_DARK} strokeWidth={2.2} />}
+                  onPress={handleSupport}
+                />
+                <QuickAction
+                  label="Alerts"
+                  icon={<Bell size={20} color={PURPLE_DARK} strokeWidth={2.2} />}
+                  onPress={() => navigate("/notifications")}
+                  showDot={notificationUnread > 0}
+                />
+              </View>
+
+              {/* Workspace section */}
+              <View style={styles.sectionCard}>
+                <View style={styles.sectionHeader}>
+                  <View style={styles.sectionAccent} />
+                  <Text style={styles.sectionTitle}>Workspace</Text>
+                </View>
+                {workspaceRows.map((row) => (
+                  <MenuRowItem key={row.id} row={row} />
+                ))}
+              </View>
+
+            </ScrollView>
+
+            {/* ── Personal identity footer (pinned bottom) ── */}
+            <View style={[styles.userFooterWrap, { paddingBottom: insets.bottom + 6 }]}>
+              <View style={styles.userFooterDivider} />
+              <Pressable
+                onPress={() => navigate(ROUTES.MY_ACCOUNT)}
+                style={({ pressed }) => [styles.userFooter, pressed && { opacity: 0.85 }]}
+                accessibilityRole="button"
+                accessibilityLabel="My account"
+              >
+                {avatarUri ? (
+                  <Image source={{ uri: avatarUri }} style={styles.userAvatar} />
+                ) : (
+                  <View style={styles.userAvatarFallback}>
+                    <Text style={styles.userAvatarInitials}>
                       {firstName.slice(0, 2).toUpperCase()}
                     </Text>
                   </View>
                 )}
-                <View style={styles.heroText}>
-                  <Text style={styles.heroGreeting} numberOfLines={1}>
-                    Hi {firstName}
-                  </Text>
-                  <Text style={styles.heroEmail} numberOfLines={1}>
-                    {email || "—"}
-                  </Text>
-                  {orgName ? (
-                    <Text style={styles.heroOrg} numberOfLines={1}>
-                      {orgName}
-                    </Text>
-                  ) : null}
+                <View style={styles.userFooterText}>
+                  <Text style={styles.userFooterName} numberOfLines={1}>{displayName}</Text>
+                  <Text style={styles.userFooterEmail} numberOfLines={1}>{email || "—"}</Text>
                 </View>
-                <ChevronRight size={18} color={Theme.textMuted} strokeWidth={2.2} />
-              </View>
-            </Pressable>
-
-            {orgName ? (
-              <Pressable
-                onPress={() => navigate(ROUTES.TABS.NETWORK)}
-                style={({ pressed }) => [styles.promoCard, pressed && styles.menuRowPressed]}
-              >
-                <View style={styles.promoInner}>
-                  <Text style={styles.promoTitle} numberOfLines={1}>
-                    Grow your network
-                  </Text>
-                  <Text style={styles.promoSub} numberOfLines={2}>
-                    Connect with verified partners on Home
-                  </Text>
-                </View>
-                <ChevronRight size={16} color={Theme.textMuted} strokeWidth={2.2} />
-              </Pressable>
-            ) : null}
-
-            <View style={styles.quickRow}>
-              <QuickAction
-                label="My account"
-                icon={<User size={18} color={Theme.primary} strokeWidth={2.2} />}
-                onPress={() => navigate(ROUTES.TABS.PROFILE)}
-              />
-              <QuickAction
-                label="Support"
-                icon={<HelpCircle size={18} color={Theme.primary} strokeWidth={2.2} />}
-                onPress={handleSupport}
-              />
-              <QuickAction
-                label="Alerts"
-                icon={<Bell size={18} color={Theme.primary} strokeWidth={2.2} />}
-                onPress={() => navigate("/notifications")}
-                showDot={notificationUnread > 0}
-              />
-            </View>
-
-            <View style={styles.sectionCard}>
-              <Text style={styles.sectionTitle}>Workspace</Text>
-              {workspaceRows.map((row) => (
-                <MenuRowItem key={row.id} row={row} />
-              ))}
-            </View>
-
-            <View style={styles.sectionCard}>
-              <Text style={styles.sectionTitle}>Operations</Text>
-              {operationsRows.map((row) => (
-                <MenuRowItem key={row.id} row={row} />
-              ))}
-            </View>
-
-            <View style={styles.sectionCard}>
-              <Text style={styles.sectionTitle}>Account</Text>
-              <View style={styles.accountMeta}>
-                <Text style={styles.accountMetaLabel}>Signed in as</Text>
-                <Text style={styles.accountMetaValue} numberOfLines={1}>
-                  {roleLabel}
-                </Text>
-              </View>
-              <Pressable
-                onPress={() => void openSignOutConfirm()}
-                disabled={signingOut}
-                style={({ pressed }) => [
-                  styles.signOutRow,
-                  pressed && styles.menuRowPressed,
-                  signingOut && { opacity: 0.6 },
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel="Sign out"
-              >
-                {signingOut ? (
-                  <LoadingIndicator size="small" color={Theme.negative} />
-                ) : (
-                  <LogOut size={18} color={Theme.negative} strokeWidth={2.2} />
-                )}
-                <Text style={styles.signOutText}>Sign out</Text>
+                <Pressable
+                  onPress={() => void openSignOutConfirm()}
+                  disabled={signingOut}
+                  style={({ pressed }) => [
+                    styles.signOutBtn,
+                    pressed && styles.signOutBtnPressed,
+                    signingOut && { opacity: 0.5 },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Sign out"
+                  hitSlop={8}
+                >
+                  {signingOut ? (
+                    <LoadingIndicator size="small" color={Theme.textMuted} />
+                  ) : (
+                    <LogOut size={17} color={Theme.textMuted} strokeWidth={2.2} />
+                  )}
+                </Pressable>
               </Pressable>
             </View>
-          </ScrollView>
           </Animated.View>
         </View>
       </Modal>
@@ -403,37 +420,37 @@ export function ProfileMenuDrawer({ visible, onClose }: ProfileMenuDrawerProps) 
         onRequestClose={closeSignOutConfirm}
         statusBarTranslucent
       >
-        <View style={styles.signOutConfirmBackdrop}>
+        <View style={styles.confirmBackdrop}>
           <Pressable style={StyleSheet.absoluteFill} onPress={closeSignOutConfirm} />
-          <View style={styles.signOutConfirmCard}>
-            <Text style={styles.signOutConfirmTitle}>Sign out</Text>
-            <Text style={styles.signOutConfirmBody}>
-              Are you sure you want to sign out?
+          <View style={styles.confirmCard}>
+            <View style={styles.confirmIconWrap}>
+              <LogOut size={22} color={Theme.teslaRed} strokeWidth={2.2} />
+            </View>
+            <Text style={styles.confirmTitle}>Sign out</Text>
+            <Text style={styles.confirmBody}>
+              Are you sure you want to sign out of {orgName || "Pulse"}?
             </Text>
-            <View style={styles.signOutConfirmActions}>
+            <View style={styles.confirmActions}>
               <Pressable
                 onPress={closeSignOutConfirm}
-                style={({ pressed }) => [
-                  styles.signOutConfirmCancelBtn,
-                  pressed && styles.signOutConfirmCancelBtnPressed,
-                ]}
+                style={({ pressed }) => [styles.confirmCancelBtn, pressed && { opacity: 0.85 }]}
                 accessibilityRole="button"
                 disabled={signingOut}
               >
-                <Text style={styles.signOutConfirmCancelText}>Cancel</Text>
+                <Text style={styles.confirmCancelText}>Cancel</Text>
               </Pressable>
               <Pressable
                 onPress={() => void confirmSignOut()}
                 style={({ pressed }) => [
-                  styles.signOutConfirmCtaBtn,
-                  pressed && styles.signOutConfirmCtaBtnPressed,
-                  signingOut && styles.signOutConfirmCtaBtnDisabled,
+                  styles.confirmCtaBtn,
+                  pressed && { opacity: 0.9 },
+                  signingOut && { opacity: 0.7 },
                 ]}
                 accessibilityRole="button"
                 disabled={signingOut}
               >
-                <Text style={styles.signOutConfirmCtaText}>
-                  {signingOut ? "Signing out..." : "Sign out"}
+                <Text style={styles.confirmCtaText}>
+                  {signingOut ? "Signing out…" : "Sign out"}
                 </Text>
               </Pressable>
             </View>
@@ -451,142 +468,124 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(15, 23, 42, 0.42)",
+    backgroundColor: "rgba(15, 23, 42, 0.45)",
     zIndex: 0,
   },
   panel: {
     backgroundColor: Theme.screenBackground,
-    shadowColor: Theme.shadow,
-    shadowOpacity: 0.18,
-    shadowRadius: 24,
-    shadowOffset: { width: 4, height: 0 },
-    elevation: 12,
-    maxHeight: "100%",
+    shadowColor: "#000",
+    shadowOpacity: 0.22,
+    shadowRadius: 28,
+    shadowOffset: { width: 6, height: 0 },
+    elevation: 14,
+    flex: 1,
+    flexDirection: "column",
     zIndex: 1,
   },
-  panelScroll: {
+
+  // ── Workspace header ──────────────────────────────────────────────────
+  orgHeader: {
+    backgroundColor: PURPLE_DARK,
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    gap: 12,
-    paddingBottom: 10,
+    paddingBottom: 18,
   },
-  heroCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Theme.warningMuted,
-    backgroundColor: Theme.screenBackground,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+  orgHeaderGradientOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: PURPLE_MID,
+    opacity: 0.35,
   },
-  heroRow: {
+  orgHeaderContent: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    minHeight: 48,
+    gap: 12,
   },
-  heroAvatar: {
+  orgLogo: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: 11,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.25)",
   },
-  heroAvatarFallback: {
+  orgLogoFallback: {
     width: 44,
     height: 44,
-    borderRadius: 22,
-    backgroundColor: Theme.surfaceGray,
+    borderRadius: 11,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.25)",
     alignItems: "center",
     justifyContent: "center",
   },
-  heroAvatarInitials: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: Theme.textPrimaryDark,
+  orgLogoInitials: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: PURPLE_TEXT_ON_DARK,
+    letterSpacing: 0.5,
   },
-  heroText: {
+  orgHeaderText: {
     flex: 1,
     minWidth: 0,
     gap: 3,
-    justifyContent: "center",
   },
-  heroGreeting: {
+  orgHeaderMeta: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: PURPLE_MUTED_ON_DARK,
+    letterSpacing: 1.8,
+  },
+  orgHeaderName: {
     fontSize: 16,
-    fontWeight: "700",
-    color: Theme.textPrimaryDark,
+    fontWeight: "800",
+    color: PURPLE_TEXT_ON_DARK,
     letterSpacing: -0.2,
     lineHeight: 20,
   },
-  heroEmail: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: Theme.textMuted,
-    lineHeight: 16,
-  },
-  heroOrg: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: Theme.textSecondary,
-    lineHeight: 14,
-  },
-  promoCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.surfaceGray,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    minHeight: 52,
-  },
-  promoInner: {
+
+  // ── Scrollable area ────────────────────────────────────────────────────
+  panelScrollView: {
     flex: 1,
-    minWidth: 0,
-    gap: 3,
-    justifyContent: "center",
   },
-  promoTitle: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: Theme.textPrimaryDark,
-    lineHeight: 17,
+  panelScroll: {
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 16,
+    paddingBottom: 10,
+    gap: 14,
   },
-  promoSub: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: Theme.textMuted,
-    lineHeight: 15,
-  },
+
+  // Quick actions
   quickRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 8,
-    paddingVertical: 6,
+    justifyContent: "space-around",
+    paddingVertical: 4,
   },
   quickAction: {
     flex: 1,
     alignItems: "center",
-    gap: 6,
+    gap: 7,
     minWidth: 0,
   },
   quickIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: `${Theme.primary}12`,
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: PURPLE_TINT,
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
+    borderWidth: 1,
+    borderColor: "rgba(26,35,126,0.12)",
   },
   quickDot: {
     position: "absolute",
-    top: 2,
-    right: 2,
-    width: 7,
-    height: 7,
+    top: 3,
+    right: 3,
+    width: 8,
+    height: 8,
     borderRadius: 4,
     backgroundColor: Theme.teslaRed,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: Theme.screenBackground,
   },
   quickLabel: {
@@ -596,42 +595,82 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 14,
   },
-  sectionCard: {
+  quickAvatarWrap: {
+    width: 46,
+    height: 46,
     borderRadius: 14,
+    backgroundColor: PURPLE_TINT,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(26,35,126,0.12)",
+  },
+  quickAvatar: {
+    width: "100%",
+    height: "100%",
+  },
+  quickAvatarInitials: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: PURPLE_DARK,
+  },
+
+  // Section cards
+  sectionCard: {
+    borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
     overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  sectionAccent: {
+    width: 3,
+    height: 14,
+    borderRadius: 2,
+    backgroundColor: PURPLE_DARK,
   },
   sectionTitle: {
     fontSize: 11,
-    fontWeight: "700",
+    fontWeight: "800",
     color: Theme.textMuted,
-    letterSpacing: 0.6,
+    letterSpacing: 0.8,
     textTransform: "uppercase",
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 6,
     lineHeight: 14,
   },
   menuRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 12,
+    gap: 11,
+    paddingHorizontal: 14,
     paddingVertical: 12,
-    minHeight: 48,
+    minHeight: 50,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
   },
   menuRowPressed: {
-    opacity: 0.88,
     backgroundColor: Theme.surfaceGray,
   },
   menuRowIcon: {
-    width: 28,
+    width: 32,
+    height: 32,
+    borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: Theme.surfaceGray,
   },
   menuRowLabel: {
     flex: 1,
@@ -642,7 +681,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   menuRowBadge: {
-    paddingHorizontal: 5,
+    paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
     backgroundColor: Theme.teslaRed,
@@ -652,123 +691,160 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: Theme.textOnPrimary,
   },
-  accountMeta: {
+
+  // ── Personal footer ────────────────────────────────────────────────────
+  userFooterWrap: {
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 6,
+  },
+  userFooterDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: Theme.borderLight,
+    marginBottom: 8,
+  },
+  userFooter: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
     gap: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    minHeight: 44,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.borderLight,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderRadius: 12,
   },
-  accountMetaLabel: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: Theme.textMuted,
-    lineHeight: 16,
+  userAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 2,
+    borderColor: PURPLE_TINT,
   },
-  accountMetaValue: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: "600",
-    color: Theme.textPrimaryDark,
-    textAlign: "right",
-    lineHeight: 16,
-  },
-  signOutRow: {
-    flexDirection: "row",
+  userAvatarFallback: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: PURPLE_TINT,
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    paddingVertical: 12,
-    minHeight: 48,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.borderLight,
+    borderWidth: 2,
+    borderColor: "rgba(26,35,126,0.15)",
   },
-  signOutText: {
+  userAvatarInitials: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: PURPLE_DARK,
+  },
+  userFooterText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  userFooterName: {
     fontSize: 14,
     fontWeight: "700",
-    color: Theme.negative,
+    color: Theme.textPrimaryDark,
     lineHeight: 18,
   },
-  signOutConfirmBackdrop: {
+  userFooterEmail: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: Theme.textMuted,
+    lineHeight: 14,
+  },
+  signOutBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  signOutBtnPressed: {
+    backgroundColor: "rgba(232,33,39,0.08)",
+    borderColor: "rgba(232,33,39,0.2)",
+  },
+
+  // ── Sign-out confirm ──────────────────────────────────────────────────
+  confirmBackdrop: {
     flex: 1,
     paddingHorizontal: Layout.screenPaddingHorizontal,
     justifyContent: "center",
-    backgroundColor: Theme.overlayBackdrop,
+    backgroundColor: "rgba(15,23,42,0.52)",
   },
-  signOutConfirmCard: {
+  confirmCard: {
     backgroundColor: Theme.surface,
     borderRadius: 24,
     borderWidth: 1,
     borderColor: Theme.border,
-    paddingHorizontal: 18,
-    paddingTop: 18,
-    paddingBottom: 16,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 18,
     maxWidth: 420,
     width: "100%",
     alignSelf: "center",
-    shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 12 },
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 14 },
     shadowOpacity: 0.22,
-    shadowRadius: 18,
-    elevation: 10,
+    shadowRadius: 22,
+    elevation: 12,
+    alignItems: "center",
   },
-  signOutConfirmTitle: {
+  confirmIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: "rgba(232,33,39,0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  confirmTitle: {
     fontSize: 17,
-    fontWeight: "700",
+    fontWeight: "800",
     color: Theme.textPrimaryDark,
     marginBottom: 6,
+    textAlign: "center",
   },
-  signOutConfirmBody: {
+  confirmBody: {
     fontSize: 13,
     lineHeight: 19,
     color: Theme.textSecondary,
-    marginBottom: 14,
+    marginBottom: 18,
+    textAlign: "center",
   },
-  signOutConfirmActions: {
+  confirmActions: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "flex-end",
     gap: 10,
+    width: "100%",
   },
-  signOutConfirmCancelBtn: {
-    minHeight: Layout.minTouchTargetSize,
-    paddingHorizontal: 16,
+  confirmCancelBtn: {
+    flex: 1,
+    minHeight: 44,
     borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: Theme.backgroundInput,
+    backgroundColor: Theme.surfaceGray,
     borderWidth: 1,
     borderColor: Theme.border,
   },
-  signOutConfirmCancelBtnPressed: {
-    backgroundColor: Theme.surfaceGray,
-  },
-  signOutConfirmCancelText: {
-    fontSize: 13,
+  confirmCancelText: {
+    fontSize: 14,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
   },
-  signOutConfirmCtaBtn: {
-    minHeight: Layout.minTouchTargetSize,
-    paddingHorizontal: 18,
+  confirmCtaBtn: {
+    flex: 1,
+    minHeight: 44,
     borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: Theme.teslaRed,
   },
-  signOutConfirmCtaBtnPressed: {
-    opacity: 0.9,
-  },
-  signOutConfirmCtaBtnDisabled: {
-    opacity: 0.7,
-  },
-  signOutConfirmCtaText: {
-    fontSize: 13,
+  confirmCtaText: {
+    fontSize: 14,
     fontWeight: "700",
-    color: Theme.textOnDark,
+    color: "#fff",
   },
 });

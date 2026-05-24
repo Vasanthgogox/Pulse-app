@@ -1376,11 +1376,8 @@ export default function CreateIndentScreen() {
                       >
                         <View style={styles.clientMain}>
                           <PartyAvatar
-                            party={{
-                              type: 'user',
-                              name: selectedClientRow.name ?? selectedClientRow.contact_person ?? "Client",
-                              avatarUrl: (selectedClientRow as { avatar_url?: string | null }).avatar_url ?? null,
-                            }}
+                            name={selectedClientRow.name ?? selectedClientRow.contact_person ?? "Client"}
+                            avatarUrl={(selectedClientRow as { avatar_url?: string | null }).avatar_url ?? null}
                             size={38}
                             style={styles.clientAvatarOn}
                           />
@@ -1430,11 +1427,8 @@ export default function CreateIndentScreen() {
                             >
                               <View style={styles.clientMain}>
                                 <PartyAvatar
-                                  party={{
-                                    type: 'user',
-                                    name: client.name ?? client.contact_person ?? "Client",
-                                    avatarUrl: (client as { avatar_url?: string | null }).avatar_url ?? null,
-                                  }}
+                                  name={client.name ?? client.contact_person ?? "Client"}
+                                  avatarUrl={(client as { avatar_url?: string | null }).avatar_url ?? null}
                                   size={38}
                                   style={selected ? styles.clientAvatarOn : styles.clientAvatar}
                                 />

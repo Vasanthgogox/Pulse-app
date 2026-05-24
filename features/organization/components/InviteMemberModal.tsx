@@ -214,7 +214,7 @@ export function InviteMemberModal({ orgId, onClose, onInvited }: InviteMemberMod
     }
     if (!profile) {
       setSearchError(
-        "No user found with that phone number. They need to sign up with the Q app first.",
+        "No user found with that phone number. They need to sign up with Pulse first.",
       );
       return;
     }

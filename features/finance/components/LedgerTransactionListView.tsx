@@ -15,7 +15,7 @@ import {
 } from "@/features/finance/components/LedgerFlowChip";
 import { type LedgerRow } from "@/features/finance/services/finance.service";
 import { formatLedgerAmount } from "@/lib/format";
-import { partyAvatarInitialsTextColor } from "@/lib/partyAvatarDisplay";
+import { partyAvatarHasRenderableOutput, partyAvatarInitialsTextColor } from "@/lib/partyAvatarDisplay";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import {
@@ -58,19 +58,41 @@ function defaultDriverPartyAvatar(
   driverById: Map<string, { avatar_url?: string | null; avatar_seed?: string | null }>,
   driverProfileImageUrls: Record<string, string> | undefined,
 ): ReactNode | null {
-  if (row.contact_type !== "driver" || !row.contact_id) return null;
-  const d = driverById.get(row.contact_id);
+  const isDriver =
+    row.contact_type === "driver" ||
+    (row.driver_name ?? "").trim() !== "";
+  if (!isDriver) return null;
+
+  const contactId = (row.contact_id ?? "").trim();
+  const d = contactId ? driverById.get(contactId) : undefined;
   const name =
     (row.party_name ?? "").trim() ||
     (row.driver_name ?? "").trim() ||
     "—";
-  const fromRow = (d?.avatar_url ?? "").trim();
-  const fromExtra = (driverProfileImageUrls?.[row.contact_id] ?? "").trim();
+  const avatarUrl =
+    (row.profileImageUrl ?? "").trim() ||
+    (d?.avatar_url ?? "").trim() ||
+    (contactId ? (driverProfileImageUrls?.[contactId] ?? "").trim() : "") ||
+    null;
+  const avatarSeed = (d?.avatar_seed ?? "").trim() || null;
+
+  if (
+    !partyAvatarHasRenderableOutput({
+      name,
+      avatarUrl,
+      avatarSeed,
+      entityType: "driver",
+    })
+  ) {
+    return null;
+  }
+
   return (
     <PartyAvatar
       name={name}
-      avatarUrl={fromRow || fromExtra || null}
-      avatarSeed={(d?.avatar_seed ?? "").trim() || null}
+      initialsColorSeed={contactId || name}
+      avatarUrl={avatarUrl}
+      avatarSeed={avatarSeed}
       entityType="driver"
       size={40}
     />

@@ -274,7 +274,10 @@ export default function RootLayout() {
     };
   }, []);
 
-  if (!loaded) {
+  // On web the browser handles font loading natively via CSS — blocking here
+  // causes several seconds of splash while the dev server streams ~4 MB of
+  // FontAwesome files.  Native still needs to wait (fonts aren't pre-bundled).
+  if (!loaded && Platform.OS !== 'web') {
     return (
       <SafeAreaProvider>
         <AppLoadingSplash variant="preparing" useGlobalI18n />

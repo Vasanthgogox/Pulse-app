@@ -147,7 +147,6 @@ export default function TabLayout() {
   const { width } = useWindowDimensions();
   const isDesktopWeb = Platform.OS === 'web' && width >= 1024;
   const orgId = org?.currentOrganization?.id ?? null;
-  const orgBootPending = !org || org.isLoading;
 
   useEffect(() => {
     if (loading || !orgId) return;
@@ -173,7 +172,6 @@ export default function TabLayout() {
 
   if (
     loading ||
-    orgBootPending ||
     !user ||
     !profile ||
     !roleVerified ||
@@ -181,7 +179,7 @@ export default function TabLayout() {
   ) {
     return (
       <AppLoadingSplash
-        variant={loading || orgBootPending ? 'session' : 'verify'}
+        variant={loading ? 'session' : 'verify'}
         style={styles.gate}
       />
     );

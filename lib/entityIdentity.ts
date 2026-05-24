@@ -167,6 +167,7 @@ export function resolveLedgerRowPartyIdentity(
     const d = driverId ? ctx.driverById.get(driverId) : undefined;
     const contactKey = (row.contact_id ?? "").trim();
     const mergedUrl =
+      (row.profileImageUrl ?? "").trim() ||
       (d?.avatar_url ?? "").trim() ||
       (driverId ? driverUrls[driverId] : "") ||
       (contactKey ? ctx.profileImages[contactKey] : "") ||

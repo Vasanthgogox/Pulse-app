@@ -279,3 +279,39 @@ export function subscribeSharedPostgresChanges(
   };
 }
 
+// ─── Production health export ─────────────────────────────────────────────────
+
+export type RealtimeSyncStatus = 'live' | 'degraded' | 'offline';
+
+export interface RealtimeHealth {
+  status: RealtimeSyncStatus;
+  activeChannels: number;
+  /** Channels open longer than 10 min (stale candidates). */
+  staleChannelCount: number;
+  capUtilizationPct: number;
+}
+
+/**
+ * Returns a lightweight health snapshot — safe to call in production.
+ * status='live'     → channels open, no cap breach in last window
+ * status='degraded' → cap was hit or channels are stale
+ * status='offline'  → no active channels (likely network loss)
+ */
+export function getRealtimeHealth(): RealtimeHealth {
+  const active = registry.size;
+  let stale = 0;
+  const now = Date.now();
+  registry.forEach((e) => {
+    if (now - e.openedAt > STALE_SHARED_CHANNEL_MS) stale++;
+  });
+  let status: RealtimeSyncStatus = 'live';
+  if (active === 0) status = 'offline';
+  else if (telemetry.capBreaches > 0 || stale > 0) status = 'degraded';
+  return {
+    status,
+    activeChannels: active,
+    staleChannelCount: stale,
+    capUtilizationPct: Math.round((active / MAX_SHARED_CHANNELS) * 100),
+  };
+}
+

@@ -16,6 +16,7 @@ export const queryKeys = {
         ? (["q", "trips", orgId, opts] as const)
         : (["q", "trips", orgId] as const),
     detail: (tripId: string) => ["q", "trips", "detail", tripId] as const,
+    workflow: (tripId: string) => ["q", "trips", "workflow", tripId] as const,
     byDriver: (driverId: string, opts?: { limit?: number; offset?: number }) =>
       opts
         ? (["q", "trips", "driver", driverId, opts] as const)

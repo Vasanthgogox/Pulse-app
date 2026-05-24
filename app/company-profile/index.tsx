@@ -6,7 +6,7 @@
  */
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { LoadingIndicator } from '@/components/LoadingIndicator';
-import { PulseAvatar } from '@/components/PulseAvatar';
+import { PartyAvatar } from '@/components/PartyAvatar';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { useActiveWorkspace } from '@/contexts/ActiveWorkspaceContext';
@@ -269,11 +269,10 @@ export default function CompanyProfileScreen() {
 
         {/* Logo section */}
         <View style={styles.logoSection}>
-          <PulseAvatar
-            surface="business"
+          <PartyAvatar
+            name={currentOrganization?.name ?? activeWorkspace?.name ?? 'Company'}
+            organizationImageUrl={currentOrganization?.logo_url ?? activeWorkspace?.logo_url ?? null}
             size={80}
-            shape="rounded"
-            showVerifiedBadge
           />
           {isAdmin ? (
             <Pressable

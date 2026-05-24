@@ -83,9 +83,12 @@ function BidCard({
     <View style={[styles.bidCard, isAccepted && styles.bidCardAccepted]}>
       <View style={styles.bidAvatar}>
         <PartyAvatar
-          party={{ type: 'organization', name: orgName, logoUrl: branding?.avatarUrl }}
+          name={orgName}
+          initialsColorSeed={bid.bidder_organization_id}
+          avatarUrl={branding?.avatarUrl}
+          avatarSeed={branding?.avatarSeed}
+          entityType="supplier"
           size={44}
-          shape="rounded"
         />
       </View>
       <View style={styles.bidInfo}>
@@ -274,9 +277,11 @@ export default function PostDetailScreen() {
           {/* Org info */}
           <View style={styles.postHeader}>
             <PartyAvatar
-              party={{ type: 'organization', name: post.org_name }}
+              name={post.org_name}
+              initialsColorSeed={post.organization_id}
+              avatarSeed={post.org_avatar_seed}
+              entityType="supplier"
               size={44}
-              shape="rounded"
               style={styles.postAvatar}
             />
             <View style={styles.postMeta}>

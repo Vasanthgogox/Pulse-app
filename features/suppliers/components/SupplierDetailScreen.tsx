@@ -1051,7 +1051,7 @@ export default function SupplierDetailScreen({
   };
 
   const handleInviteToApp = useCallback(() => {
-    const message = `Join me on Pulse to sync our ledger and compare books with ${supplierName}. Download the Q app to get started.`;
+    const message = `Join me on Pulse to sync our ledger and compare books with ${supplierName}. Download Pulse to get started.`;
     Share.share({ message, title: "Invite to Q" })
       .then(() => {
         triggerSuccess("INVITE_SENT");
@@ -2092,7 +2092,7 @@ export default function SupplierDetailScreen({
                 triggerSuccess("CONNECTION_REQUESTED");
               }}
               onInviteToApp={() => {
-                const message = `Join me on Pulse to sync our ledger and compare books with ${supplierName}. Download the Q app to get started.`;
+                const message = `Join me on Pulse to sync our ledger and compare books with ${supplierName}. Download Pulse to get started.`;
                 Share.share({ message, title: "Invite to Q" })
                   .then(() => {
                     // After sharing, show a friendlier message
@@ -2253,7 +2253,7 @@ export default function SupplierDetailScreen({
               <TouchableOpacity
                 style={styles.profileSecondaryBtn}
                 onPress={() => {
-                  const message = `Join me on Pulse to sync our ledger and compare books with ${supplierName}. Download the Q app to get started.`;
+                  const message = `Join me on Pulse to sync our ledger and compare books with ${supplierName}. Download Pulse to get started.`;
                   Share.share({ message, title: "Invite to Q" });
                 }}
                 activeOpacity={0.8}

@@ -172,19 +172,6 @@ export function EditProfileModal({
       setError(nameErr);
       return;
     }
-    const phoneTrimmed = phone.trim();
-    if (phoneTrimmed.length > 0) {
-      const phoneErr = validatePhone(phoneTrimmed);
-      if (phoneErr) {
-        setError(phoneErr);
-        return;
-      }
-    }
-    const companyErr = maxLength(200, 'Company name must be at most 200 characters.')(companyName);
-    if (companyErr) {
-      setError(companyErr);
-      return;
-    }
     const statusErr = maxLength(
       VALIDATION.STATUS_TEXT_MAX_LENGTH,
       'Status must be at most ' + VALIDATION.STATUS_TEXT_MAX_LENGTH + ' characters.'
@@ -197,8 +184,6 @@ export function EditProfileModal({
     setSaving(true);
     const { error: err } = await authService.updateProfile({
       full_name: name,
-      phone: phoneTrimmed,
-      company_name: companyName.trim(),
       status_text: statusText.trim() || null,
     });
     setSaving(false);
@@ -792,31 +777,23 @@ export function EditProfileModal({
 
               <Text style={labelStyle}>Primary phone</Text>
               <TextInput
-                style={inputStyle}
-                placeholder="e.g. 9025186111"
-                placeholderTextColor={Theme.textMuted}
+                style={[inputStyle, styles.inputReadOnly]}
                 value={phone}
-                onChangeText={(v) => setPhone(formatMobileNumber(v))}
-                keyboardType="phone-pad"
-                autoCorrect={false}
-                spellCheck={false}
-                autoComplete="off"
-                editable={!saving}
+                editable={false}
+                placeholder="—"
+                placeholderTextColor={Theme.textMuted}
               />
+              <Text style={styles.hint}>Phone cannot be changed here.</Text>
 
               <Text style={labelStyle}>Registered company</Text>
               <TextInput
-                style={inputStyle}
-                placeholder="Company name"
-                placeholderTextColor={Theme.textMuted}
+                style={[inputStyle, styles.inputReadOnly]}
                 value={companyName}
-                onChangeText={setCompanyName}
-                autoCapitalize="words"
-                autoCorrect={false}
-                spellCheck={false}
-                autoComplete="off"
-                editable={!saving}
+                editable={false}
+                placeholder="—"
+                placeholderTextColor={Theme.textMuted}
               />
+              <Text style={styles.hint}>Registered at signup. Contact support to update.</Text>
 
               <Text style={labelStyle}>Status / Quote</Text>
               <TextInput

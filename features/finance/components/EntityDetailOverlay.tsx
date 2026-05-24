@@ -1981,7 +1981,7 @@ export function EntityDetailOverlay({
             onInviteToApp={() => {
               const message = `Join me on Pulse to sync our ledger and compare books with ${
                 entity.name ?? "—"
-              }. Download the Q app to get started.`;
+              }. Download Pulse to get started.`;
               Share.share({ message, title: "Invite to Q" })
                 .then(() => {
                   triggerSuccess("INVITE_SENT");

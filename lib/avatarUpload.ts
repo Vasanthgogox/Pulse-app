@@ -158,45 +158,57 @@ export async function pickAndUploadOrgLogo(orgId: string): Promise<PickAndUpload
     }
     const asset = result.assets[0];
     let uri = asset.uri;
+
+    // Resize + re-encode to JPEG so we always have a consistent format.
+    // After manipulation the uri may be a data: or blob: URL on web —
+    // extract its base64 payload so uploadBytes is always from the
+    // final manipulated image (not the stale asset.base64 from the picker).
+    let manipulatedBase64: string | null = null;
     try {
       const manipulated = await ImageManipulator.manipulateAsync(
         uri,
         [{ resize: { width: MAX_SIZE, height: MAX_SIZE } }],
-        { compress: QUALITY, format: ImageManipulator.SaveFormat.JPEG }
+        { compress: QUALITY, format: ImageManipulator.SaveFormat.JPEG, base64: true },
       );
       uri = manipulated.uri;
+      if (manipulated.base64) manipulatedBase64 = manipulated.base64;
     } catch {
       // keep original if resize fails
     }
-    const path = `orgs/${orgId}/logo-${Date.now()}.jpg`;
-    let uploadBytes: ArrayBuffer | Uint8Array | null = null;
-    const base64 = typeof asset.base64 === 'string' ? asset.base64.trim() : '';
-    if (base64) {
-      uploadBytes = base64ToUint8Array(base64);
-    } else {
-      const file = new File(uri);
-      uploadBytes = await file.arrayBuffer();
+
+    // Resolve upload bytes: prefer manipulated base64, then original picker base64
+    let uploadBytes: Uint8Array | null = null;
+    const base64Source = manipulatedBase64 ?? (typeof asset.base64 === 'string' ? asset.base64.trim() : '');
+    if (base64Source) {
+      uploadBytes = base64ToUint8Array(base64Source);
+    } else if (uri.startsWith('data:')) {
+      // data URI fallback — extract base64 after the comma
+      const comma = uri.indexOf(',');
+      if (comma !== -1) uploadBytes = base64ToUint8Array(uri.slice(comma + 1));
     }
     if (!uploadBytes || uploadBytes.byteLength === 0) {
-      return { path: null, previewUri: null, error: new Error('Could not read image file') };
+      return { path: null, previewUri: null, error: new Error('Could not read image data') };
     }
+
+    // Resolve current user — org logo is stored in the owner's folder so the
+    // existing "Users can upload avatar to own folder" RLS policy covers it
+    // without requiring any extra migration.
+    const { data: { session } } = await supabase().auth.getSession();
+    const userId = session?.user?.id;
+    if (!userId) {
+      return { path: null, previewUri: null, error: new Error('Not signed in') };
+    }
+
+    const path = `${userId}/org-logo-${orgId}-${Date.now()}.jpg`;
+
     const { error } = await supabase().storage.from(AVATAR_BUCKET).upload(path, uploadBytes, {
       contentType: 'image/jpeg',
-      upsert: false,
+      upsert: true,
     });
     if (error) {
       const msg = error.message || 'Upload failed';
-      const isRls = /row-level security|policy|rls/i.test(msg);
-      console.log('[Org Logo Upload Error]', msg, 'isRls:', isRls, 'bucket:', AVATAR_BUCKET, 'path:', path);
-      return {
-        path: null,
-        previewUri: null,
-        error: new Error(
-          isRls
-            ? `Storage permissions blocked for org logo (path: "${path}"). Only the organization owner can upload. If you are the owner, apply migration 20260801120000_org_logo_storage_rls.sql. Supabase says: ${msg}`
-            : msg,
-        ),
-      };
+      console.log('[Org Logo Upload Error]', msg, 'bucket:', AVATAR_BUCKET, 'path:', path);
+      return { path: null, previewUri: null, error: new Error(msg) };
     }
     return { path, previewUri: uri, error: null };
   } catch (e) {

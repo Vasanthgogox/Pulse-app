@@ -1,5 +1,7 @@
 /**
- * Global profile side drawer — opened from home header avatar and dock profile.
+ * Global profile side drawer.
+ * Org header tap → /workspace. Personal footer tap → /account.
+ * No bottom-sheet cards here — each concept has one canonical route.
  */
 import { ProfileMenuDrawer } from "@/components/profile/ProfileMenuDrawer";
 import React, { createContext, useCallback, useContext, useMemo, useState } from "react";
@@ -10,22 +12,15 @@ type ProfileMenuDrawerContextValue = {
   visible: boolean;
 };
 
-const ProfileMenuDrawerContext = createContext<ProfileMenuDrawerContextValue | null>(
-  null,
-);
+const ProfileMenuDrawerContext = createContext<ProfileMenuDrawerContextValue | null>(null);
 
-export function ProfileMenuDrawerProvider({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export function ProfileMenuDrawerProvider({ children }: { children: React.ReactNode }) {
   const [visible, setVisible] = useState(false);
+
   const open = useCallback(() => setVisible(true), []);
   const close = useCallback(() => setVisible(false), []);
-  const value = useMemo(
-    () => ({ open, close, visible }),
-    [open, close, visible],
-  );
+
+  const value = useMemo(() => ({ open, close, visible }), [open, close, visible]);
 
   return (
     <ProfileMenuDrawerContext.Provider value={value}>
@@ -37,9 +32,7 @@ export function ProfileMenuDrawerProvider({
 
 export function useProfileMenuDrawer(): ProfileMenuDrawerContextValue {
   const ctx = useContext(ProfileMenuDrawerContext);
-  if (!ctx) {
-    throw new Error("useProfileMenuDrawer must be used within ProfileMenuDrawerProvider");
-  }
+  if (!ctx) throw new Error("useProfileMenuDrawer must be used within ProfileMenuDrawerProvider");
   return ctx;
 }
 

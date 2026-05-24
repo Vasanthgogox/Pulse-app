@@ -42,9 +42,14 @@ export function PartyAvatar({
   borderStyle,
 }: PartyAvatarProps) {
   const [resolvedPhotoUri, setResolvedPhotoUri] = useState<string | null>(null);
+  const [imageFailed, setImageFailed] = useState(false);
   const hasRawPhotoField = Boolean(
     (organizationImageUrl ?? "").trim() || (avatarUrl ?? "").trim(),
   );
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [organizationImageUrl, avatarUrl, avatarSeed, organizationAvatarSeed, entityType, name]);
 
   useEffect(() => {
     let cancelled = false;
@@ -89,12 +94,13 @@ export function PartyAvatar({
   const bg = partyAvatarBackgroundColor((initialsColorSeed ?? "").trim() || name);
   const initialsColor = partyAvatarInitialsTextColor(bg);
 
-  if (uri) {
+  if (uri && !imageFailed) {
     return (
       <Image
         source={{ uri }}
         resizeMode="cover"
         accessibilityIgnoresInvertColors
+        onError={() => setImageFailed(true)}
         style={[
           {
             width: size,

@@ -1,10 +1,44 @@
+import type { DriverInviteCompensation } from '@/features/drivers/utils/driverInviteCompensation.util';
 import type { DriverInviteRow } from '@/features/drivers/services/drivers.service';
+import { normalizeDriverInviteCompensation } from '@/features/drivers/utils/driverInviteCompensation.util';
 
 export type DriverInviteSalaryLine = {
   label: string;
   value: string;
   hint: string;
 };
+
+/** Pay-term preview lines from dispatcher-entered compensation (fleet invite modal). */
+export function buildCompensationSalaryLines(
+  compensation: DriverInviteCompensation,
+): DriverInviteSalaryLine[] {
+  const offer = normalizeDriverInviteCompensation(compensation);
+  const lines: DriverInviteSalaryLine[] = [];
+
+  if (offer.payableAmount != null) {
+    lines.push({
+      label: 'Fixed salary',
+      value: `₹${offer.payableAmount.toLocaleString('en-IN')}`,
+      hint: 'Agreed fixed pay from this fleet (e.g. monthly salary)',
+    });
+  }
+  if (offer.commissionPercent != null) {
+    lines.push({
+      label: 'Trip commission',
+      value: `${offer.commissionPercent}%`,
+      hint: 'Driver share of trip earnings on each completed trip',
+    });
+  }
+  if (offer.commissionPerKm != null) {
+    lines.push({
+      label: 'Per km rate',
+      value: `₹${offer.commissionPerKm.toLocaleString('en-IN')}/km`,
+      hint: 'Paid per kilometre driven on assigned trips',
+    });
+  }
+
+  return lines;
+}
 
 /** Structured salary / pay terms for invite preview UI. */
 export function buildDriverInviteSalaryLines(inv: DriverInviteRow): DriverInviteSalaryLine[] {

@@ -22,7 +22,13 @@ import {
   LoadCenterHubMobileShell,
 } from "@/features/network/components/LoadCenterHubMobileShell";
 import { SemanticAddIcon } from "@/components/SemanticAddIcon";
-import { getAvatarUriForSeed } from "@/constants/DriverLevels";
+import { getLinkedOrgProfilesBatch } from "@/features/clients/services/clients.service";
+import type { ClientRow } from "@/features/clients/services/clients.service";
+import {
+  giveLoadIndentAvatarProps,
+  marketLoadIndentAvatarProps,
+} from "@/features/network/utils/indentCardAvatar.util";
+import { PartyAvatar } from "@/components/PartyAvatar";
 import Layout from "@/constants/Layout";
 import { useLayoutInsets } from "@/lib/layoutInsets";
 import Theme from "@/constants/Theme";
@@ -57,7 +63,7 @@ import {
     assignmentShellColors,
     assignmentShellStyles,
 } from "@/features/trips/styles/assignmentShellShared";
-import { getSignedAvatarUrl } from "@/lib/avatarUpload";
+import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import { formatINR } from "@/lib/format";
 import {
     useIndentOfferCountsQuery,
@@ -67,6 +73,7 @@ import {
     useMarketIndentsQuery,
     useMyDirectQuotesQuery,
     useSuppliersQuery,
+    useClientsQuery,
     useTripsQuery,
     useVehiclesQuery,
 } from "@/lib/queries";
@@ -138,8 +145,8 @@ export function LoadCenterView({
   const [statusFilterTab, setStatusFilterTab] =
     useState<StatusFilterTab>("OPEN");
   const [searchQuery, setSearchQuery] = useState("");
-  const [loadAvatarByIndentId, setLoadAvatarByIndentId] = useState<
-    Record<string, string>
+  const [creatorOrgProfileMap, setCreatorOrgProfileMap] = useState<
+    Record<string, { avatarUrl?: string; avatarSeed?: string }>
   >({});
   const [showPostModal, setShowPostModal] = useState(false);
   const { showSuccess, successMsg, trigger: triggerSuccess } = useSuccessToast();
@@ -164,6 +171,8 @@ export function LoadCenterView({
   const { data: drivers = [] } = useDriversQuery(orgId);
   const { data: vehicles = [] } = useVehiclesQuery(orgId);
   const { data: suppliers = [] } = useSuppliersQuery(orgId);
+  const { data: clients = [] } = useClientsQuery(orgId);
+  const linkedOrgByOrganizationId = useLinkedOrgProfileMap(clients, suppliers);
   const invalidateIndents = useInvalidateIndents();
   const queryClient = useQueryClient();
 
@@ -291,73 +300,64 @@ export function LoadCenterView({
     onSuccess: triggerSuccess,
   });
 
-  const filteredFindWorkAvatarKey = useMemo(
-    () => filteredFindWorkList.map((load) => load.id).join("|"),
-    [filteredFindWorkList],
-  );
+  const clientById = useMemo(() => {
+    const map = new Map<string, ClientRow>();
+    for (const client of clients) {
+      map.set(client.id, client);
+    }
+    return map;
+  }, [clients]);
+
+  const marketCreatorOrgIdsKey = useMemo(() => {
+    const ids = new Set<string>();
+    for (const load of filteredFindWorkList) {
+      const orgIdKey = (load.organization_id ?? "").trim();
+      if (orgIdKey) ids.add(orgIdKey);
+    }
+    for (const load of displayedClaimedLoads) {
+      const orgIdKey = (load.organization_id ?? "").trim();
+      if (orgIdKey) ids.add(orgIdKey);
+    }
+    return Array.from(ids).sort().join("|");
+  }, [filteredFindWorkList, displayedClaimedLoads]);
 
   useEffect(() => {
-    let cancelled = false;
-    const loadCardAvatars = async () => {
-      if (filteredFindWorkList.length === 0) {
-        setLoadAvatarByIndentId((prev) =>
-          Object.keys(prev).length === 0 ? prev : {},
-        );
-        return;
-      }
-      const pairs = await Promise.all(
-        filteredFindWorkList.map(async (load) => {
-          const row = load as Record<string, unknown>;
-          const rawAvatarUrl = String(
-            row.creator_avatar_url ??
-              row.creatorAvatarUrl ??
-              row.avatar_url ??
-              row.avatarUrl ??
-              "",
-          ).trim();
-          if (rawAvatarUrl) {
-            if (
-              rawAvatarUrl.startsWith("http://") ||
-              rawAvatarUrl.startsWith("https://")
-            ) {
-              return [load.id, rawAvatarUrl] as const;
-            }
-            const signed = await getSignedAvatarUrl(rawAvatarUrl);
-            if (signed) return [load.id, signed] as const;
-          }
-          const rawSeed = String(
-            row.creator_avatar_seed ??
-              row.creatorAvatarSeed ??
-              row.avatar_seed ??
-              row.avatarSeed ??
-              "",
-          ).trim();
-          if (rawSeed) return [load.id, getAvatarUriForSeed(rawSeed)] as const;
-          return [load.id, ""] as const;
-        }),
+    const ids = marketCreatorOrgIdsKey
+      ? marketCreatorOrgIdsKey.split("|").filter(Boolean)
+      : [];
+    if (ids.length === 0) {
+      setCreatorOrgProfileMap((prev) =>
+        Object.keys(prev).length === 0 ? prev : {},
       );
+      return;
+    }
+    let cancelled = false;
+    void getLinkedOrgProfilesBatch(ids).then((profiles) => {
       if (cancelled) return;
-      const next: Record<string, string> = {};
-      pairs.forEach(([indentId, uri]) => {
-        if (uri) next[indentId] = uri;
-      });
-      setLoadAvatarByIndentId((prev) => {
+      const next: Record<string, { avatarUrl?: string; avatarSeed?: string }> =
+        {};
+      for (const [oid, profile] of Object.entries(profiles)) {
+        next[oid] = {
+          avatarUrl: (profile.avatarUrl ?? "").trim() || undefined,
+          avatarSeed: (profile.avatarSeed ?? "").trim() || undefined,
+        };
+      }
+      setCreatorOrgProfileMap((prev) => {
         const prevKeys = Object.keys(prev);
         const nextKeys = Object.keys(next);
         if (
           prevKeys.length === nextKeys.length &&
-          nextKeys.every((k) => prev[k] === next[k])
+          nextKeys.every((k) => prev[k]?.avatarUrl === next[k]?.avatarUrl)
         ) {
           return prev;
         }
         return next;
       });
-    };
-    loadCardAvatars();
+    });
     return () => {
       cancelled = true;
     };
-  }, [filteredFindWorkAvatarKey, filteredFindWorkList]);
+  }, [marketCreatorOrgIdsKey]);
 
   useEffect(() => {
     // Keep status filter valid per role tab to avoid confusing empty views.
@@ -470,6 +470,11 @@ export function LoadCenterView({
       const vehicleDetail = (load.vehicle_type || "—").toUpperCase();
       const loadTypeDetail = (load.load_type || "General").toUpperCase();
       const clientName = (load.client_name || "—").trim() || "—";
+      const avatar = giveLoadIndentAvatarProps(
+        load,
+        clientById,
+        linkedOrgByOrganizationId,
+      );
       return (
         <LoadCenterHubMobileIndentCard
           key={load.id}
@@ -485,11 +490,16 @@ export function LoadCenterView({
               ? `${bidCount} bid${bidCount === 1 ? "" : "s"}`
               : loadTypeDetail
           }
+          avatarUrl={avatar.avatarUrl}
+          avatarSeed={avatar.avatarSeed}
+          organizationImageUrl={avatar.organizationImageUrl}
+          organizationAvatarSeed={avatar.organizationAvatarSeed}
+          initialsColorSeed={avatar.initialsColorSeed}
           onPress={() => onIndentPress(load)}
         />
       );
     },
-    [onIndentPress, quoteCounts],
+    [clientById, linkedOrgByOrganizationId, onIndentPress, quoteCounts],
   );
 
   const renderGetLoadMobileCard = useCallback(
@@ -518,6 +528,7 @@ export function LoadCenterView({
         : isAccepted
           ? "Awarded"
           : loadTypeDetail;
+      const avatar = marketLoadIndentAvatarProps(load, creatorOrgProfileMap);
       return (
         <LoadCenterHubMobileIndentCard
           key={load.id}
@@ -529,12 +540,16 @@ export function LoadCenterView({
           pickupIso={load.pickup_date}
           leftFooterLabel={vehicleDetail}
           rightFooterLabel={rightFooter}
-          avatarUrl={loadAvatarByIndentId[load.id]}
+          avatarUrl={avatar.avatarUrl}
+          avatarSeed={avatar.avatarSeed}
+          organizationImageUrl={avatar.organizationImageUrl}
+          organizationAvatarSeed={avatar.organizationAvatarSeed}
+          initialsColorSeed={avatar.initialsColorSeed}
           onPress={() => onIndentPress(load)}
         />
       );
     },
-    [loadAvatarByIndentId, myQuoteByIndentId, onIndentPress],
+    [creatorOrgProfileMap, myQuoteByIndentId, onIndentPress],
   );
 
   const renderClaimedMobileCard = useCallback(
@@ -553,6 +568,7 @@ export function LoadCenterView({
         load.client_name ||
         "Claimed load"
       ).trim();
+      const avatar = marketLoadIndentAvatarProps(load, creatorOrgProfileMap);
       return (
         <LoadCenterHubMobileIndentCard
           key={load.id}
@@ -566,12 +582,16 @@ export function LoadCenterView({
           rightFooterLabel={
             isDone ? "On books" : formatINR(supplierRate)
           }
-          avatarUrl={loadAvatarByIndentId[load.id]}
+          avatarUrl={avatar.avatarUrl}
+          avatarSeed={avatar.avatarSeed}
+          organizationImageUrl={avatar.organizationImageUrl}
+          organizationAvatarSeed={avatar.organizationAvatarSeed}
+          initialsColorSeed={avatar.initialsColorSeed}
           onPress={() => onIndentPress(load)}
         />
       );
     },
-    [loadAvatarByIndentId, myQuotes, onIndentPress],
+    [creatorOrgProfileMap, myQuotes, onIndentPress],
   );
 
   const renderGiveLoadGridCard = useCallback(
@@ -615,6 +635,12 @@ export function LoadCenterView({
         indentCanBroadcastToPulseNetwork(load) &&
         !isDone;
 
+      const avatar = giveLoadIndentAvatarProps(
+        load,
+        clientById,
+        linkedOrgByOrganizationId,
+      );
+
       return (
         <LoadCenterHubMobileIndentCard
           indent={load}
@@ -629,6 +655,11 @@ export function LoadCenterView({
               ? `${bidCount} bid${bidCount === 1 ? "" : "s"}`
               : loadTypeDetail
           }
+          avatarUrl={avatar.avatarUrl}
+          avatarSeed={avatar.avatarSeed}
+          organizationImageUrl={avatar.organizationImageUrl}
+          organizationAvatarSeed={avatar.organizationAvatarSeed}
+          initialsColorSeed={avatar.initialsColorSeed}
           onPress={() => onIndentPress(load)}
           dense
           fillGrid
@@ -659,9 +690,11 @@ export function LoadCenterView({
     },
     [
       awardModal.open,
+      clientById,
       handleBroadcastDraft,
       handleShareIndent,
       indentIdsWithTrip,
+      linkedOrgByOrganizationId,
       onIndentPress,
       onShareToNetwork,
       quoteCounts,
@@ -715,6 +748,8 @@ export function LoadCenterView({
             ? "New quote"
             : "Bid now";
 
+      const avatar = marketLoadIndentAvatarProps(load, creatorOrgProfileMap);
+
       return (
         <LoadCenterHubMobileIndentCard
           indent={load}
@@ -725,7 +760,11 @@ export function LoadCenterView({
           pickupIso={load.pickup_date}
           leftFooterLabel={vehicleDetail}
           rightFooterLabel={rightFooter}
-          avatarUrl={loadAvatarByIndentId[load.id]}
+          avatarUrl={avatar.avatarUrl}
+          avatarSeed={avatar.avatarSeed}
+          organizationImageUrl={avatar.organizationImageUrl}
+          organizationAvatarSeed={avatar.organizationAvatarSeed}
+          initialsColorSeed={avatar.initialsColorSeed}
           onPress={() => onIndentPress(load)}
           dense
           fillGrid
@@ -750,9 +789,9 @@ export function LoadCenterView({
       );
     },
     [
+      creatorOrgProfileMap,
       handleShareIndent,
       indentIdsWithTrip,
-      loadAvatarByIndentId,
       myQuoteByIndentId,
       onIndentPress,
       setLoadSubTab,
@@ -776,6 +815,8 @@ export function LoadCenterView({
         "Claimed load"
       ).trim();
 
+      const avatar = marketLoadIndentAvatarProps(load, creatorOrgProfileMap);
+
       return (
         <LoadCenterHubMobileIndentCard
           indent={load}
@@ -786,7 +827,11 @@ export function LoadCenterView({
           pickupIso={load.pickup_date}
           leftFooterLabel={(load.vehicle_type || "—").toUpperCase()}
           rightFooterLabel={isDone ? "On books" : formatINR(supplierRate)}
-          avatarUrl={loadAvatarByIndentId[load.id]}
+          avatarUrl={avatar.avatarUrl}
+          avatarSeed={avatar.avatarSeed}
+          organizationImageUrl={avatar.organizationImageUrl}
+          organizationAvatarSeed={avatar.organizationAvatarSeed}
+          initialsColorSeed={avatar.initialsColorSeed}
           onPress={() => onIndentPress(load)}
           dense
           fillGrid
@@ -807,9 +852,9 @@ export function LoadCenterView({
       );
     },
     [
+      creatorOrgProfileMap,
       handleShareIndent,
       handshake.open,
-      loadAvatarByIndentId,
       myQuotes,
       onIndentPress,
       tripDeployment.assigningTripId,
@@ -1854,18 +1899,28 @@ export function LoadCenterView({
                         {clientLabel ? (
                           <View style={styles.loadMarketClientRow}>
                             <View style={styles.getLoadAvatarWrap}>
-                              {loadAvatarByIndentId[load.id] ? (
-                                <Image
-                                  source={{
-                                    uri: loadAvatarByIndentId[load.id],
-                                  }}
-                                  style={styles.getLoadAvatarImage}
-                                />
-                              ) : (
-                                <Text style={styles.getLoadAvatarInitial}>
-                                  {clientLabel.trim().charAt(0).toUpperCase()}
-                                </Text>
-                              )}
+                              {(() => {
+                                const avatar = marketLoadIndentAvatarProps(
+                                  load,
+                                  creatorOrgProfileMap,
+                                );
+                                return (
+                                  <PartyAvatar
+                                    name={clientLabel}
+                                    initialsColorSeed={avatar.initialsColorSeed}
+                                    organizationImageUrl={
+                                      avatar.organizationImageUrl
+                                    }
+                                    organizationAvatarSeed={
+                                      avatar.organizationAvatarSeed
+                                    }
+                                    avatarUrl={avatar.avatarUrl}
+                                    avatarSeed={avatar.avatarSeed}
+                                    entityType="client"
+                                    size={28}
+                                  />
+                                );
+                              })()}
                             </View>
                             <Building2
                               size={14}
