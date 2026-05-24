@@ -1,10 +1,20 @@
 /**
  * Job Request Card — trip assignment UI for driver (connectivity + OTP flow).
- * Earnings header, pickup/drop-off, distance/ETA pill, hold-to-accept button.
- * No close button; no swipe left/right.
+ * Visual layout aligned with driver `DriverInviteModal` (emerald hero, offer tiles, footer).
  */
+import { PartyAvatar } from "@/components/PartyAvatar";
+import {
+  RouteInlineRow,
+  sheetStyles,
+  TripDetailsStrip,
+} from "@/components/driver/DriverTripSheetLayout";
 import Theme from "@/constants/Theme";
-import FontAwesome from "@expo/vector-icons/FontAwesome";
+import type { JobCardAssignerPayload } from "@/lib/driverAssignerDisplay";
+import { LinearGradient } from "expo-linear-gradient";
+import {
+  Sparkles,
+  Wallet,
+} from "lucide-react-native";
 import React, { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import {
   Platform,
@@ -17,34 +27,118 @@ import {
   type TextInputProps,
 } from "react-native";
 
-const CARD_PADDING = 24;
-const CARD_PADDING_BOTTOM = 20;
-const CARD_MARGIN_H = 16;
-const CARD_RADIUS = 32;
-const EARNINGS_ICON_SIZE = 40;
-const EARNINGS_ICON_INNER = 20;
-const EARNINGS_AMOUNT_FONT = 24;
-const EARNINGS_LABEL_FONT = 11;
-const PICKUP_DROP_ICON_SIZE = 24;
-const PICKUP_DOT_SIZE = 8;
-const ADDRESS_LABEL_FONT = 10;
-const ADDRESS_FONT = 16;
-const PILL_PADDING_V = 12;
-const PILL_PADDING_H = 16;
-const PILL_RADIUS = 12;
-const PILL_FONT = 16;
 const HOLD_DURATION_MS = 1500;
-const HOLD_BTN_HEIGHT = 56;
-const HOLD_BTN_RADIUS = 14;
+const HOLD_BTN_HEIGHT = 38;
 const OTP_LENGTH = 6;
-/** Generous so finger drift / scroll handoff does not end the hold (native + sheet). */
 const HOLD_PRESS_RETENTION = 100;
 
-/** Reduces spurious onPressOut on mobile web (scroll/selection) during long-press. */
+const EMERALD = Theme.driverEmerald;
+const EMERALD_DARK = Theme.driverEmeraldDark;
+const MINT = "rgba(167,243,208,0.92)";
+
 const holdBtnWebStyle = {
   touchAction: "none" as "none" | "auto" | "manipulation",
   userSelect: "none" as "none" | "auto" | "text" | "contain" | "all",
 };
+
+function kindBadgeHeroStyle(kind: JobCardAssignerPayload["kind"]) {
+  switch (kind) {
+    case "your_fleet":
+      return {
+        bg: "rgba(255,255,255,0.22)",
+        text: "#fff",
+        border: "rgba(255,255,255,0.35)",
+      };
+    case "employer":
+      return {
+        bg: "rgba(255,255,255,0.18)",
+        text: MINT,
+        border: "rgba(255,255,255,0.28)",
+      };
+    case "direct":
+      return {
+        bg: "rgba(254,243,199,0.28)",
+        text: "#FEF3C7",
+        border: "rgba(254,243,199,0.4)",
+      };
+    default:
+      return {
+        bg: "rgba(255,255,255,0.14)",
+        text: MINT,
+        border: "rgba(255,255,255,0.22)",
+      };
+  }
+}
+
+function HeroAssignerBlock({
+  assigner,
+  assignedByLine,
+}: {
+  assigner: JobCardAssignerPayload | null;
+  assignedByLine?: string | null;
+}) {
+  if (assigner) {
+    const primary = assigner.linePrimary.trim();
+    const secondary = assigner.lineSecondary.trim();
+    if (!primary && !secondary) return null;
+
+    return (
+      <View style={styles.heroAssignerBlock}>
+        <Text style={styles.heroAssignLabel}>ASSIGNED BY</Text>
+        <View style={styles.heroAssignerRow}>
+          <PartyAvatar
+            name={primary || assigner.orgName || "Fleet"}
+            initialsColorSeed={assigner.orgId || assigner.orgName}
+            organizationImageUrl={assigner.orgLogoUrl}
+            organizationAvatarSeed={assigner.orgAvatarSeed}
+            avatarUrl={assigner.orgAvatarUrl}
+            entityType="client"
+            size={24}
+            borderStyle={styles.heroAvatarBorder}
+          />
+          <View style={styles.heroAssignerTextCol}>
+            {primary ? (
+              <Text style={styles.heroAssignPrimary} numberOfLines={1}>
+                {primary}
+              </Text>
+            ) : null}
+            {secondary ? (
+              <Text style={styles.heroAssignSecondary} numberOfLines={1}>
+                {secondary}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  const line = assignedByLine?.trim();
+  if (!line) return null;
+
+  return (
+    <View style={styles.heroAssignerBlock}>
+      <Text style={styles.heroAssignLabel}>ASSIGNED BY</Text>
+      <Text style={styles.heroAssignPrimary} numberOfLines={2}>
+        {line}
+      </Text>
+    </View>
+  );
+}
+
+function HeroKindBadge({ kind, label }: { kind: JobCardAssignerPayload["kind"]; label: string }) {
+  const badge = kindBadgeHeroStyle(kind);
+  return (
+    <View
+      style={[
+        styles.heroKindBadge,
+        { backgroundColor: badge.bg, borderColor: badge.border },
+      ]}
+    >
+      <Text style={[styles.heroKindText, { color: badge.text }]}>{label}</Text>
+    </View>
+  );
+}
 
 export interface JobRequestCardProps {
   pickup: string;
@@ -54,27 +148,16 @@ export interface JobRequestCardProps {
   earnings: string;
   onAccept: () => void;
   onDecline: () => void;
-  /** Optional: collapse/expand toggle (UI only). */
   onToggleCollapse?: () => void;
-  /** Optional: whether the card is currently collapsed (for chevron + disabling swipe). */
   collapsed?: boolean;
-  /** Optional: show "Accept & enter OTP" style (same card, different copy after accept) */
   requireOtp?: boolean;
-  /** Optional: disable while accept/decline in progress */
   disabled?: boolean;
-  /** Optional: accent color for earnings icon and progress (default Theme.positive) */
   accentColor?: string;
-  /** Large currency line above "ESTIMATED EARNINGS". Default Theme.textPrimaryDark; use Theme.textOnPrimary on dark surfaces */
   earningsAmountColor?: string;
-  /** Primary body text: addresses, OTP title/digits (not the light distance/ETA pill). Default Theme.textPrimaryDark */
   primaryTextColor?: string;
-  /** Muted labels: PICKUP/DROP-OFF, ESTIMATED EARNINGS, icons. Default Theme.textMuted */
   mutedTextColor?: string;
-  /** Hold-to-accept bar background. Default Theme.textPrimaryDark */
   holdTrackColor?: string;
-  /** Optional: error message to show above swipe bar (e.g. accept failed) */
   errorMessage?: string | null;
-  /** Optional: show OTP entry as next step inside same card */
   otpMode?: boolean;
   otpValue?: string;
   onOtpChange?: (value: string) => void;
@@ -82,28 +165,13 @@ export interface JobRequestCardProps {
   otpSubmitting?: boolean;
   otpError?: string | null;
   onOtpCancel?: () => void;
-  /** When true, remove horizontal margins so the card can be used inside an edge-to-edge bottom sheet. */
   edgeToEdge?: boolean;
-  /**
-   * Visual mode.
-   * - "card": default rounded card frame (used in standalone lists)
-   * - "page": frameless page inside the existing bottom sheet container
-   */
   variant?: "card" | "page";
-  /**
-   * Stable id for the assignment. Hold-to-accept resets when this or pickup/dropoff
-   * changes, not when distance/eta/earnings strings refresh (e.g. after route load).
-   */
   assignmentId?: string;
-  /**
-   * Dispatcher / org display, e.g. "Alex Kumar · ACME Logistics" (same logic as Notifications).
-   */
+  assignedBy?: JobCardAssignerPayload | null;
   assignedByLine?: string | null;
-  /** Bottom sheet map mode: use BottomSheetTextInput for keyboard sync. */
   OtpInputComponent?: ComponentType<TextInputProps>;
-  /** Called when the hidden OTP field receives focus (e.g. expand sheet). */
   onOtpFocus?: () => void;
-  /** Extra bottom padding when the software keyboard is open (web / native). */
   otpKeyboardInset?: number;
 }
 
@@ -119,11 +187,9 @@ export function JobRequestCard({
   collapsed = false,
   requireOtp = false,
   disabled = false,
-  accentColor = Theme.positive,
-  earningsAmountColor = Theme.textPrimaryDark,
+  accentColor = EMERALD,
   primaryTextColor = Theme.textPrimaryDark,
   mutedTextColor = Theme.textMuted,
-  holdTrackColor = Theme.textPrimaryDark,
   errorMessage = null,
   otpMode = false,
   otpValue = "",
@@ -135,6 +201,7 @@ export function JobRequestCard({
   edgeToEdge = false,
   variant = "card",
   assignmentId,
+  assignedBy = null,
   assignedByLine = null,
   OtpInputComponent: OtpInput = TextInput,
   onOtpFocus,
@@ -212,20 +279,24 @@ export function JobRequestCard({
     setIsHolding(false);
   };
 
+  const shellStyle =
+    variant === "page"
+      ? styles.page
+      : [
+          styles.sheet,
+          edgeToEdge ? styles.sheetEdgeToEdge : styles.sheetInset,
+          Platform.OS === "ios" ? styles.sheetShadowIos : styles.sheetShadowAndroid,
+        ];
+
+  const showHeroAssigner =
+    assignedBy != null
+      ? Boolean(
+          assignedBy.linePrimary.trim() || assignedBy.lineSecondary.trim(),
+        )
+      : Boolean(assignedByLine?.trim());
+
   return (
-    <View
-      style={[
-        variant === "page"
-          ? styles.page
-          : [
-              styles.card,
-              Platform.OS === "ios"
-                ? styles.cardShadowIos
-                : styles.cardShadowAndroid,
-              { marginHorizontal: edgeToEdge ? 0 : CARD_MARGIN_H },
-            ],
-      ]}
-    >
+    <View style={shellStyle}>
       {onToggleCollapse ? (
         <TouchableOpacity
           onPress={onToggleCollapse}
@@ -235,13 +306,12 @@ export function JobRequestCard({
           accessibilityLabel={collapsed ? "Expand" : "Collapse"}
           hitSlop={12}
         >
-          <FontAwesome
-            name={collapsed ? "chevron-up" : "chevron-down"}
-            size={16}
-            color={mutedTextColor}
-          />
+          <Text style={[styles.collapseChevron, { color: mutedTextColor }]}>
+            {collapsed ? "▲" : "▼"}
+          </Text>
         </TouchableOpacity>
       ) : null}
+
       {otpMode ? (
         <View
           style={[
@@ -249,346 +319,241 @@ export function JobRequestCard({
             otpKeyboardInset > 0 && { paddingBottom: otpKeyboardInset },
           ]}
         >
-          <Text
-            style={[styles.otpPageTitle, { color: primaryTextColor }]}
+          <LinearGradient
+            colors={[EMERALD_DARK, EMERALD]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.heroCompact}
           >
-            Enter trip OTP
-          </Text>
-          <Text style={[styles.otpPageSubtitle, { color: mutedTextColor }]}>
-            Enter the 6-digit OTP shared by your dispatcher to claim this
-            trip.
-          </Text>
-          {assignedByLine?.trim() ? (
-            <View style={styles.assignerCompact}>
-              <Text
-                style={[styles.assignerLabelCompact, { color: mutedTextColor }]}
-              >
-                ASSIGNED BY
-              </Text>
-              <Text
-                style={[styles.assignerValueCompact, { color: primaryTextColor }]}
-                numberOfLines={2}
-              >
-                {assignedByLine.trim()}
-              </Text>
+            <View style={styles.heroTopRow}>
+              <View style={styles.heroEyebrowRow}>
+                <Sparkles size={9} color={MINT} strokeWidth={2.5} />
+                <Text style={styles.heroEyebrow}>VERIFY TRIP</Text>
+              </View>
+              {assignedBy ? (
+                <HeroKindBadge kind={assignedBy.kind} label={assignedBy.kindLabel} />
+              ) : null}
             </View>
-          ) : null}
-          <Text
-            style={[styles.otpPageRoute, { color: primaryTextColor }]}
-            numberOfLines={2}
-          >
-            {pickup || "Pickup"} to {dropoff || "Drop-off"}
-          </Text>
-          <TouchableOpacity
-            style={styles.otpBoxRow}
-            onPress={() => otpInputRef.current?.focus()}
-            activeOpacity={1}
-          >
-            {Array.from({ length: OTP_LENGTH }).map((_, i) => (
-              <View
-                key={i}
-                style={[
-                  styles.otpBox,
-                  {
-                    borderColor:
-                      otpValue.length === i ? accentColor : Theme.border,
-                    backgroundColor: Theme.surfaceLight,
-                  },
-                ]}
-              >
-                <Text
+            <Text style={styles.heroTitleCompact}>Enter trip OTP</Text>
+            {showHeroAssigner ? (
+              <View style={styles.heroAssignerOtpWrap}>
+                <HeroAssignerBlock
+                  assigner={assignedBy}
+                  assignedByLine={assignedByLine}
+                />
+              </View>
+            ) : null}
+          </LinearGradient>
+          <View style={styles.body}>
+            <Text style={[styles.otpSubtitle, { color: mutedTextColor }]}>
+              Enter the 6-digit OTP shared by your dispatcher to claim this trip.
+            </Text>
+            <View style={sheetStyles.tripDetailsCard}>
+              <RouteInlineRow
+                pickup={pickup}
+                dropoff={dropoff}
+                primaryTextColor={primaryTextColor}
+                mutedTextColor={mutedTextColor}
+              />
+            </View>
+            <TouchableOpacity
+              style={styles.otpBoxRow}
+              onPress={() => otpInputRef.current?.focus()}
+              activeOpacity={1}
+            >
+              {Array.from({ length: OTP_LENGTH }).map((_, i) => (
+                <View
+                  key={i}
                   style={[
-                    styles.otpBoxDigit,
-                    { color: primaryTextColor },
+                    styles.otpBox,
+                    {
+                      borderColor:
+                        otpValue.length === i ? accentColor : Theme.border,
+                    },
                   ]}
                 >
-                  {otpValue[i] ?? ""}
-                </Text>
-              </View>
-            ))}
-          </TouchableOpacity>
-          <OtpInput
-            ref={otpInputRef as never}
-            value={otpValue}
-            onChangeText={(value) =>
-              onOtpChange?.(value.replace(/\D/g, "").slice(0, OTP_LENGTH))
-            }
-            onFocus={onOtpFocus}
-            keyboardType="number-pad"
-            maxLength={OTP_LENGTH}
-            style={styles.otpHiddenInput}
-            caretHidden
-            autoFocus
-          />
-          {otpError ? (
-            <Text style={[styles.errorText, { color: Theme.negative }]}>
-              {otpError}
-            </Text>
-          ) : null}
-          <TouchableOpacity
-            onPress={onOtpSubmit}
-            style={[
-              styles.otpSubmitBtn,
-              { backgroundColor: accentColor },
-              (otpSubmitting || otpValue.length !== OTP_LENGTH) &&
-                styles.holdBtnDisabled,
-            ]}
-            disabled={otpSubmitting || otpValue.length !== OTP_LENGTH}
-            activeOpacity={0.85}
-          >
-            {otpSubmitting ? (
-              <Text style={styles.otpSubmitText}>Verifying...</Text>
-            ) : (
-              <>
-                <FontAwesome
-                  name="check"
-                  size={16}
-                  color={Theme.textOnPrimary}
-                />
-                <Text style={styles.otpSubmitText}>Verify OTP</Text>
-              </>
-            )}
-          </TouchableOpacity>
-          {onOtpCancel ? (
-            <TouchableOpacity
-              onPress={onOtpCancel}
-              style={styles.declineLinkWrap}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.declineLink, { color: mutedTextColor }]}>
-                Cancel
-              </Text>
+                  <Text style={[styles.otpBoxDigit, { color: primaryTextColor }]}>
+                    {otpValue[i] ?? ""}
+                  </Text>
+                </View>
+              ))}
             </TouchableOpacity>
-          ) : null}
+            <OtpInput
+              ref={otpInputRef as never}
+              value={otpValue}
+              onChangeText={(value) =>
+                onOtpChange?.(value.replace(/\D/g, "").slice(0, OTP_LENGTH))
+              }
+              onFocus={onOtpFocus}
+              keyboardType="number-pad"
+              maxLength={OTP_LENGTH}
+              style={styles.otpHiddenInput}
+              caretHidden
+              autoFocus
+            />
+            {otpError ? (
+              <Text style={[styles.errorText, { color: Theme.negative }]}>
+                {otpError}
+              </Text>
+            ) : null}
+            <TouchableOpacity
+              onPress={onOtpSubmit}
+              style={[
+                styles.verifyBtnWrap,
+                (otpSubmitting || otpValue.length !== OTP_LENGTH) &&
+                  styles.btnDisabled,
+              ]}
+              disabled={otpSubmitting || otpValue.length !== OTP_LENGTH}
+              activeOpacity={0.88}
+            >
+              <LinearGradient
+                colors={[EMERALD, EMERALD_DARK]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.verifyGradient}
+              >
+                <Text style={styles.verifyText}>
+                  {otpSubmitting ? "Verifying…" : "Verify OTP"}
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
+            {onOtpCancel ? (
+              <TouchableOpacity
+                onPress={onOtpCancel}
+                style={styles.declineLinkWrap}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.declineLink, { color: mutedTextColor }]}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
         </View>
       ) : (
         <>
-          {/* Header: earnings only (no close button) */}
-          <View style={styles.header}>
-            <View style={styles.earningsRow}>
+          <LinearGradient
+            colors={[EMERALD_DARK, EMERALD]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.hero}
+          >
+            <View style={styles.heroTopRow}>
+              <View style={styles.heroEyebrowRow}>
+                <Sparkles size={9} color={MINT} strokeWidth={2.5} />
+                <Text style={styles.heroEyebrow}>TRIP ASSIGNMENT</Text>
+              </View>
+              {assignedBy ? (
+                <HeroKindBadge kind={assignedBy.kind} label={assignedBy.kindLabel} />
+              ) : null}
+            </View>
+            <View style={styles.heroMainRow}>
               <View
                 style={[
-                  styles.earningsIconWrap,
-                  { backgroundColor: `${accentColor}20` },
+                  styles.heroEarningsBlock,
+                  !showHeroAssigner && styles.heroEarningsBlockFull,
                 ]}
               >
-                <FontAwesome
-                  name="money"
-                  size={EARNINGS_ICON_INNER}
-                  color={accentColor}
-                />
+                <View style={styles.heroIconWrap}>
+                  <Wallet size={16} color={EMERALD} strokeWidth={2.2} />
+                </View>
+                <View style={styles.heroTextBlock}>
+                  <Text style={styles.heroAmount} numberOfLines={1}>
+                    {earnings}
+                  </Text>
+                  <Text style={styles.heroAmountLabel}>EST. EARNINGS</Text>
+                </View>
               </View>
-              <View style={styles.earningsTextWrap}>
-                <Text
-                  style={[
-                    styles.earningsAmount,
-                    { color: earningsAmountColor },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {earnings}
-                </Text>
-                <Text
-                  style={[styles.earningsLabel, { color: mutedTextColor }]}
-                >
-                  ESTIMATED EARNINGS
-                </Text>
-              </View>
+              {showHeroAssigner ? (
+                <>
+                  <View style={styles.heroColDivider} />
+                  <HeroAssignerBlock
+                    assigner={assignedBy}
+                    assignedByLine={assignedByLine}
+                  />
+                </>
+              ) : null}
             </View>
-          </View>
-          {!collapsed && assignedByLine?.trim() ? (
-            <View style={styles.assignerSection}>
-              <Text style={[styles.assignerLabel, { color: mutedTextColor }]}>
-                ASSIGNED BY
-              </Text>
-              <Text
-                style={[styles.assignerValue, { color: primaryTextColor }]}
-                numberOfLines={3}
-              >
-                {assignedByLine.trim()}
-              </Text>
-            </View>
-          ) : null}
+          </LinearGradient>
 
           {!collapsed ? (
-            <>
-              {/* Distance + ETA pill */}
-              <View
-                style={[
-                  styles.pill,
-                  {
-                    backgroundColor: Theme.surfaceLight,
-                    borderColor: Theme.border,
-                  },
-                ]}
-              >
-                <View style={styles.pillItem}>
-                  <FontAwesome
-                    name="paper-plane"
-                    size={16}
-                    color={Theme.textMuted}
-                  />
-                  <Text
-                    style={[styles.pillText, { color: Theme.textPrimaryDark }]}
-                  >
-                    {distance}
-                  </Text>
-                </View>
-                <View
-                  style={[
-                    styles.pillDivider,
-                    { backgroundColor: Theme.border },
-                  ]}
-                />
-                <View style={styles.pillItem}>
-                  <FontAwesome
-                    name="clock-o"
-                    size={16}
-                    color={Theme.textMuted}
-                  />
-                  <Text
-                    style={[styles.pillText, { color: Theme.textPrimaryDark }]}
-                  >
-                    {eta}
-                  </Text>
-                </View>
+            <View style={styles.body}>
+              <View style={styles.sectionHeader}>
+                <Text style={[styles.sectionLabel, { color: mutedTextColor }]}>
+                  TRIP DETAILS
+                </Text>
               </View>
-              <View style={styles.routeWrap}>
-                <View style={styles.routeRow}>
-                  <View
-                    style={[
-                      styles.routeIconWrap,
-                      {
-                        backgroundColor: Theme.surfaceLight,
-                        borderColor: Theme.border,
-                        borderWidth: 1,
-                      },
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.pickupDot,
-                        { backgroundColor: Theme.textPrimaryDark },
-                      ]}
-                    />
-                  </View>
-                  <View style={styles.routeTextWrap}>
-                    <Text
-                      style={[styles.routeLabel, { color: mutedTextColor }]}
-                    >
-                      PICKUP
-                    </Text>
-                    <Text
-                      style={[
-                        styles.routeAddress,
-                        { color: primaryTextColor },
-                      ]}
-                      numberOfLines={2}
-                    >
-                      {pickup || "—"}
-                    </Text>
-                  </View>
-                </View>
-                <View
-                  style={[
-                    styles.connectorLine,
-                    { backgroundColor: Theme.border },
-                  ]}
-                />
-                <View style={styles.routeRow}>
-                  <View
-                    style={[
-                      styles.routeIconWrap,
-                      { backgroundColor: `${accentColor}20` },
-                    ]}
-                  >
-                    <FontAwesome
-                      name="map-marker"
-                      size={14}
-                      color={accentColor}
-                    />
-                  </View>
-                  <View style={styles.routeTextWrap}>
-                    <Text
-                      style={[styles.routeLabel, { color: mutedTextColor }]}
-                    >
-                      DROP-OFF
-                    </Text>
-                    <Text
-                      style={[
-                        styles.routeAddress,
-                        { color: primaryTextColor },
-                      ]}
-                      numberOfLines={2}
-                    >
-                      {dropoff || "—"}
-                    </Text>
-                  </View>
-                </View>
-              </View>
+
+              <TripDetailsStrip
+                statLeft={distance}
+                statRight={eta}
+                pickup={pickup}
+                dropoff={dropoff}
+                primaryTextColor={primaryTextColor}
+                mutedTextColor={mutedTextColor}
+              />
+
               {errorMessage ? (
                 <Text style={[styles.errorText, { color: Theme.negative }]}>
                   {errorMessage}
                 </Text>
               ) : null}
-              {/* Hold to accept */}
-              <Pressable
-                onPressIn={startHold}
-                onPressOut={cancelHold}
-                onLongPress={completeAccept}
-                delayLongPress={HOLD_DURATION_MS}
-                pressRetentionOffset={HOLD_PRESS_RETENTION}
-                android_ripple={{ color: "transparent" }}
-                style={[
-                  styles.holdBtnWrap,
-                  disabled && styles.holdBtnDisabled,
-                  Platform.OS === "web" && holdBtnWebStyle,
-                ]}
-                disabled={disabled}
-              >
-                <View
-                  style={[
-                    styles.holdTrack,
-                    { backgroundColor: holdTrackColor },
-                  ]}
-                >
-                  <View
+
+              <View style={styles.footer}>
+                <View style={styles.actions}>
+                  {onDecline && !isAccepted ? (
+                    <TouchableOpacity
+                      onPress={onDecline}
+                      style={styles.declineBtn}
+                      disabled={disabled}
+                      activeOpacity={0.82}
+                    >
+                      <Text style={[styles.declineBtnText, { color: mutedTextColor }]}>
+                        Decline
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  <Pressable
+                    onPressIn={startHold}
+                    onPressOut={cancelHold}
+                    onLongPress={completeAccept}
+                    delayLongPress={HOLD_DURATION_MS}
+                    pressRetentionOffset={HOLD_PRESS_RETENTION}
+                    android_ripple={{ color: "transparent" }}
                     style={[
-                      styles.holdFill,
-                      {
-                        width: `${holdProgress}%`,
-                        backgroundColor: "rgba(255,255,255,0.18)",
-                      },
+                      styles.holdBtn,
+                      onDecline && !isAccepted ? styles.holdBtnFlex : styles.holdBtnFull,
+                      disabled && styles.btnDisabled,
+                      Platform.OS === "web" && holdBtnWebStyle,
                     ]}
-                  />
-                </View>
-                <Text
-                  style={[styles.holdLabel, { color: Theme.textOnPrimary }]}
-                  numberOfLines={1}
-                >
-                  {isAccepted
-                    ? requireOtp
-                      ? "Accepted! Enter OTP"
-                      : "Accepted!"
-                    : "Hold to accept"}
-                </Text>
-              </Pressable>
-              {onDecline && !isAccepted && (
-                <TouchableOpacity
-                  onPress={onDecline}
-                  style={styles.declineLinkWrap}
-                  disabled={disabled}
-                  activeOpacity={0.7}
-                  accessibilityLabel="Decline"
-                >
-                  <Text
-                    style={[styles.declineLink, { color: mutedTextColor }]}
+                    disabled={disabled}
                   >
-                    Decline
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </>
+                    <LinearGradient
+                      colors={[EMERALD, EMERALD_DARK]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.holdGradient}
+                    >
+                      <View
+                        style={[
+                          styles.holdFill,
+                          { width: `${holdProgress}%` },
+                        ]}
+                      />
+                      <Text style={styles.holdLabel} numberOfLines={1}>
+                        {isAccepted
+                          ? requireOtp
+                            ? "Accepted! Enter OTP"
+                            : "Accepted!"
+                          : isHolding
+                            ? "Keep holding…"
+                            : "Hold to accept"}
+                      </Text>
+                    </LinearGradient>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
           ) : null}
         </>
       )}
@@ -597,253 +562,308 @@ export function JobRequestCard({
 }
 
 const styles = StyleSheet.create({
-  card: {
-    marginHorizontal: CARD_MARGIN_H,
-    marginBottom: 8,
-    paddingTop: 16,
-    paddingHorizontal: 24,
-    paddingBottom: 16,
-    borderRadius: 24,
-    backgroundColor: Theme.screenBackground,
+  sheet: {
+    backgroundColor: Theme.surface,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.05)",
   },
-  /** Frameless container so the bottom sheet itself becomes the only "panel". */
-  page: {
+  sheetInset: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+  },
+  sheetEdgeToEdge: {
     marginHorizontal: 0,
     marginBottom: 0,
-    paddingTop: 8,
-    paddingHorizontal: 0,
-    paddingBottom: 0,
-    borderRadius: 0,
+  },
+  page: {
     backgroundColor: "transparent",
     overflow: "visible",
-    borderWidth: 0,
+  },
+  sheetShadowIos: {
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+  },
+  sheetShadowAndroid: {
+    elevation: 12,
   },
   collapseHandle: {
     position: "absolute",
-    top: 10,
-    left: 0,
-    right: 0,
+    top: 8,
     alignSelf: "center",
-    width: 44,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: Theme.surfaceLight,
-    borderWidth: 1,
-    borderColor: Theme.border,
+    width: 40,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.2)",
     alignItems: "center",
     justifyContent: "center",
     zIndex: 3,
   },
-  cardShadowIos: {
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.15,
-    shadowRadius: 24,
+  collapseChevron: {
+    fontSize: 10,
+    fontWeight: "800",
   },
-  cardShadowAndroid: {
-    elevation: 16,
+  hero: {
+    paddingTop: 10,
+    paddingHorizontal: 12,
+    paddingBottom: 10,
+    gap: 7,
   },
-  header: {
+  heroCompact: {
+    paddingTop: 10,
+    paddingHorizontal: 12,
+    paddingBottom: 10,
+    gap: 6,
+  },
+  heroTopRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 14,
+    gap: 8,
   },
-  earningsRow: {
+  heroEyebrowRow: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 5,
+    flex: 1,
+    minWidth: 0,
+  },
+  heroEyebrow: {
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 0.9,
+    color: MINT,
+    textTransform: "uppercase",
+  },
+  heroKindBadge: {
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    flexShrink: 0,
+  },
+  heroKindText: {
+    fontSize: 7,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+  },
+  heroMainRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
     gap: 10,
-    flex: 1,
     minWidth: 0,
   },
-  earningsIconWrap: {
-    width: EARNINGS_ICON_SIZE,
-    height: EARNINGS_ICON_SIZE,
-    borderRadius: EARNINGS_ICON_SIZE / 2,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  earningsAmount: {
-    fontSize: 24,
-    fontWeight: "900",
-  },
-  earningsTextWrap: {
-    flex: 1,
-    minWidth: 0,
-  },
-  earningsLabel: {
-    fontSize: EARNINGS_LABEL_FONT,
-    fontWeight: "800",
-    letterSpacing: 1,
-    textTransform: "uppercase",
-    marginTop: 4,
-  },
-  assignerSection: {
-    marginBottom: 12,
-    marginTop: -2,
-    paddingBottom: 2,
-  },
-  assignerLabel: {
-    fontSize: ADDRESS_LABEL_FONT,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
-    marginBottom: 6,
-  },
-  assignerValue: {
-    fontSize: 15,
-    fontWeight: "600",
-    lineHeight: 20,
-    flexShrink: 1,
-  },
-  assignerCompact: {
-    width: "100%",
-    alignItems: "center",
-    marginBottom: 12,
-    paddingHorizontal: 8,
-    gap: 4,
-  },
-  assignerLabelCompact: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
-  },
-  assignerValueCompact: {
-    fontSize: 15,
-    fontWeight: "700",
-    textAlign: "center",
-  },
-  routeWrap: {
-    paddingTop: 6,
-    paddingBottom: 4,
-  },
-  routeRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-  },
-  routeIconWrap: {
-    width: PICKUP_DROP_ICON_SIZE,
-    height: PICKUP_DROP_ICON_SIZE,
-    borderRadius: PICKUP_DROP_ICON_SIZE / 2,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 2,
-  },
-  pickupDot: {
-    width: PICKUP_DOT_SIZE,
-    height: PICKUP_DOT_SIZE,
-    borderRadius: PICKUP_DOT_SIZE / 2,
-  },
-  routeTextWrap: {
-    flex: 1,
-    minWidth: 0,
-  },
-  routeLabel: {
-    fontSize: ADDRESS_LABEL_FONT,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
-  },
-  routeAddress: {
-    fontSize: ADDRESS_FONT,
-    fontWeight: "600",
-    marginTop: 2,
-    flexShrink: 1,
-    lineHeight: 20,
-  },
-  errorText: {
-    fontSize: 14,
-    fontWeight: "600",
-    marginBottom: 8,
-    marginTop: 4,
-  },
-  connectorLine: {
-    width: 2,
-    height: 16,
-    marginLeft: 11,
-    marginVertical: 4,
-    borderRadius: 1,
-  },
-  pill: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: PILL_PADDING_V,
-    paddingHorizontal: PILL_PADDING_H,
-    borderRadius: 18,
-    marginTop: 4,
-    marginBottom: 12,
-    borderWidth: 1,
-  },
-  pillItem: {
+  heroEarningsBlock: {
+    flex: 0.42,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    minWidth: 0,
+  },
+  heroEarningsBlockFull: {
     flex: 1,
   },
-  pillDivider: {
-    width: 1,
-    height: 16,
-    marginHorizontal: 12,
+  heroColDivider: {
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: "rgba(255,255,255,0.28)",
+    marginVertical: 2,
   },
-  pillText: {
-    fontSize: PILL_FONT,
+  heroAssignerBlock: {
+    flex: 0.58,
+    minWidth: 0,
+    justifyContent: "center",
+    gap: 3,
+  },
+  heroAssignerOtpWrap: {
+    marginTop: 2,
+    paddingTop: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "rgba(255,255,255,0.22)",
+  },
+  heroAssignLabel: {
+    fontSize: 7,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    color: MINT,
+    textTransform: "uppercase",
+  },
+  heroAssignerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    minWidth: 0,
+  },
+  heroAssignerTextCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 0,
+  },
+  heroAssignPrimary: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#fff",
+    lineHeight: 13,
+  },
+  heroAssignSecondary: {
+    fontSize: 9,
+    fontWeight: "600",
+    color: MINT,
+    lineHeight: 12,
+  },
+  heroAvatarBorder: {
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.45)",
+  },
+  heroIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  heroTextBlock: {
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
+  },
+  heroAmount: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#fff",
+    letterSpacing: -0.3,
+    lineHeight: 21,
+  },
+  heroAmountLabel: {
+    fontSize: 7,
+    fontWeight: "800",
+    letterSpacing: 0.7,
+    color: MINT,
+    textTransform: "uppercase",
+  },
+  heroTitleCompact: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#fff",
+    letterSpacing: -0.3,
+  },
+  body: {
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 8,
+    gap: 6,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  sectionLabel: {
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  errorText: {
+    fontSize: 11,
     fontWeight: "600",
   },
-  otpScroll: {
-    width: "100%",
+  footer: {
+    paddingTop: 0,
   },
-  otpScrollContent: {
-    flexGrow: 1,
+  actions: {
+    flexDirection: "row",
+    gap: 6,
+    alignItems: "stretch",
+  },
+  declineBtn: {
+    flex: 1,
+    minHeight: HOLD_BTN_HEIGHT,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: Theme.border,
+    backgroundColor: Theme.screenBackground,
     alignItems: "center",
-    paddingBottom: 12,
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
+  declineBtnText: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  holdBtn: {
+    minHeight: HOLD_BTN_HEIGHT,
+    borderRadius: 9,
+    overflow: "hidden",
+  },
+  holdBtnFlex: {
+    flex: 1.55,
+  },
+  holdBtnFull: {
+    flex: 1,
+  },
+  holdGradient: {
+    flex: 1,
+    minHeight: HOLD_BTN_HEIGHT,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 12,
+  },
+  holdFill: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: "rgba(255,255,255,0.22)",
+    borderRadius: 12,
+  },
+  holdLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#fff",
+    letterSpacing: -0.2,
+    zIndex: 1,
+  },
+  btnDisabled: {
+    opacity: 0.65,
+  },
+  declineLinkWrap: {
+    alignSelf: "center",
+    paddingTop: 10,
+    paddingHorizontal: 16,
+  },
+  declineLink: {
+    fontSize: 14,
+    fontWeight: "600",
   },
   otpPageWrap: {
     width: "100%",
-    paddingTop: 4,
-    alignItems: "center",
   },
-  otpPageTitle: {
-    fontSize: 20,
-    fontWeight: "800",
-    textAlign: "center",
-  },
-  otpPageSubtitle: {
-    marginTop: 6,
-    fontSize: 14,
-    lineHeight: 20,
-    textAlign: "center",
-    marginBottom: 14,
-  },
-  otpPageRoute: {
-    fontSize: 16,
-    fontWeight: "700",
-    textAlign: "center",
-    width: "100%",
-    marginBottom: 16,
+  otpSubtitle: {
+    fontSize: 11,
+    lineHeight: 15,
   },
   otpBoxRow: {
     flexDirection: "row",
     justifyContent: "center",
-    gap: 10,
+    gap: 8,
     width: "100%",
-    marginBottom: 14,
   },
   otpBox: {
-    width: 42,
-    height: 48,
-    borderRadius: 12,
+    width: 40,
+    height: 46,
+    borderRadius: 10,
     borderWidth: 2,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: Theme.surface,
   },
   otpBoxDigit: {
-    fontSize: 20,
-    fontWeight: "700",
+    fontSize: 18,
+    fontWeight: "800",
   },
   otpHiddenInput: {
     position: "absolute",
@@ -851,59 +871,21 @@ const styles = StyleSheet.create({
     height: 1,
     opacity: 0,
   },
-  otpSubmitBtn: {
-    width: "100%",
+  verifyBtnWrap: {
+    borderRadius: 12,
+    overflow: "hidden",
+    marginTop: 4,
+  },
+  verifyGradient: {
     minHeight: HOLD_BTN_HEIGHT,
-    borderRadius: HOLD_BTN_RADIUS,
-    marginTop: 2,
-    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
-  },
-  otpSubmitText: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: Theme.textOnPrimary,
-  },
-  holdBtnWrap: {
-    height: HOLD_BTN_HEIGHT,
-    borderRadius: 18,
-    overflow: "hidden",
-    justifyContent: "center",
-    marginTop: 12,
-  },
-  holdBtnDisabled: {
-    opacity: 0.7,
-  },
-  holdTrack: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 18,
-  },
-  holdFill: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    bottom: 0,
-    borderRadius: 18,
-  },
-  holdLabel: {
-    fontSize: 16,
-    fontWeight: "900",
-    letterSpacing: 0.2,
-    textAlign: "center",
-    zIndex: 1,
-  },
-  declineLinkWrap: {
-    alignSelf: "center",
-    paddingTop: 10,
-    paddingBottom: 2,
     paddingHorizontal: 16,
-    marginTop: 2,
   },
-  declineLink: {
-    fontSize: 14,
+  verifyText: {
+    fontSize: 15,
     fontWeight: "800",
+    color: "#fff",
   },
 });
 
