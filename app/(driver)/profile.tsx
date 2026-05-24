@@ -14,6 +14,7 @@ import {
   getRatingsForDriver,
 } from '@/features/ratings/services/ratings.service';
 import type { RatingRow } from '@/features/ratings/types';
+import { useLayoutInsets } from '@/lib/layoutInsets';
 import { ROUTES } from '@/lib/routes';
 import { supabase } from '@/lib/supabase';
 import * as driversService from '@/services/driversService';
@@ -81,6 +82,7 @@ function formatShortDate(iso?: string | null) {
 
 export default function DriverProfileScreen() {
   const insets = useSafeAreaInsets();
+  const layout = useLayoutInsets();
   const router = useRouter();
   const { theme } = useDriverTheme();
   const isDark = theme === 'dark';
@@ -505,8 +507,8 @@ export default function DriverProfileScreen() {
         style={[
           styles.topBar,
           {
-            paddingTop: insets.top + 8,
-            paddingBottom: 12,
+            paddingTop: insets.top + Layout.driverHeaderTopOffset,
+            paddingBottom: Layout.driverHeaderBottomPadding,
             borderBottomColor: cardBorder,
             backgroundColor: isDark ? 'rgba(15,23,42,0.92)' : 'rgba(255,255,255,0.85)',
           },
@@ -545,12 +547,16 @@ export default function DriverProfileScreen() {
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={{ paddingTop: 16, paddingBottom: insets.bottom + 100, paddingHorizontal: SCREEN_PAD }}
+        contentContainerStyle={{
+          paddingTop: 12,
+          paddingBottom: layout.scrollBottomPadding(16),
+          paddingHorizontal: SCREEN_PAD,
+        }}
         showsVerticalScrollIndicator={false}
       >
         <>
             {profileView === 'main' && (
-              <View style={{ gap: 22 }}>
+              <View style={{ gap: 14 }}>
                 <LinearGradient colors={['#0f172a', '#020617']} style={styles.profileHero}>
                   <View style={styles.heroGlow} />
                   <TouchableOpacity style={styles.avatarCluster} onPress={() => setShowEditProfileModal(true)} activeOpacity={0.9}>
@@ -558,7 +564,7 @@ export default function DriverProfileScreen() {
                       <View style={styles.avatarInner}>
                         <Image source={{ uri: displayAvatarUri }} style={styles.avatarImg} />
                         <View style={styles.camOverlay}>
-                          <Camera size={22} color="#fff" />
+                          <Camera size={18} color="#fff" />
                         </View>
                       </View>
                     </LinearGradient>
@@ -594,7 +600,7 @@ export default function DriverProfileScreen() {
                   <View style={styles.bioStatementHeader}>
                     <View style={styles.bioStatementTitleRow}>
                       <View style={[styles.quoteIconWrap, { backgroundColor: isDark ? colors.emeraldMuted : 'rgba(167,243,208,0.38)' }]}>
-                        <Quote size={18} color={Theme.driverEmerald} strokeWidth={2.2} />
+                        <Quote size={15} color={Theme.driverEmerald} strokeWidth={2.2} />
                       </View>
                       <Text style={[styles.bioStatementEyebrow, { color: muted }]}>Pilot statement</Text>
                     </View>
@@ -605,7 +611,7 @@ export default function DriverProfileScreen() {
                       accessibilityRole="button"
                       accessibilityLabel="Edit bio"
                     >
-                      <Edit3 size={18} color={muted} strokeWidth={2.2} />
+                      <Edit3 size={16} color={muted} strokeWidth={2.2} />
                     </TouchableOpacity>
                   </View>
                   <Text style={[styles.bioStatementBody, { color: colors.text }]}>
@@ -618,15 +624,15 @@ export default function DriverProfileScreen() {
                 <TouchableOpacity style={[styles.rowCard, { backgroundColor: colors.surface, borderColor: cardBorder }]} onPress={() => setProfileView('vehicle')} activeOpacity={0.88}>
                   <View style={styles.rowCardLeft}>
                     <View style={styles.blueIcon}>
-                      <Truck size={26} color="#3b82f6" />
+                      <Truck size={20} color="#3b82f6" />
                     </View>
-                    <View>
+                    <View style={styles.rowCardText}>
                       <Text style={[styles.rowEyebrow, { color: muted }]}>FLEET ASSIGNED</Text>
                       <Text style={[styles.rowTitle, { color: colors.text }]}>{vehicleDisplay.model}</Text>
                     </View>
                   </View>
-                  <View style={[styles.chevPill, { marginTop: 4, backgroundColor: isDark ? colors.surfaceElevated : '#f1f5f9' }]}>
-                    <ChevronRight size={20} color={muted} />
+                  <View style={[styles.chevPill, { backgroundColor: isDark ? colors.surfaceElevated : '#f1f5f9' }]}>
+                    <ChevronRight size={18} color={muted} />
                   </View>
                 </TouchableOpacity>
 
@@ -637,9 +643,9 @@ export default function DriverProfileScreen() {
                 >
                   <View style={styles.rowCardLeft}>
                     <View style={styles.darkIcon}>
-                      <Shield size={24} color="#fff" />
+                      <Shield size={18} color="#fff" />
                     </View>
-                    <View style={{ flex: 1, minWidth: 0 }}>
+                    <View style={styles.rowCardText}>
                       <Text style={[styles.rowEyebrow, { color: muted }]}>KYC & COMPLIANCE</Text>
                       <Text style={[styles.rowTitle, { color: colors.text }]}>Upload & verify documents</Text>
                       <Text style={[styles.rowSub, { color: muted }]} numberOfLines={2}>
@@ -647,15 +653,15 @@ export default function DriverProfileScreen() {
                       </Text>
                     </View>
                   </View>
-                  <View style={[styles.chevPill, { marginTop: 4, backgroundColor: isDark ? colors.surfaceElevated : '#f1f5f9' }]}>
-                    <ChevronRight size={20} color={muted} />
+                  <View style={[styles.chevPill, { backgroundColor: isDark ? colors.surfaceElevated : '#f1f5f9' }]}>
+                    <ChevronRight size={18} color={muted} />
                   </View>
                 </TouchableOpacity>
 
                 <View style={styles.statsRow}>
                   <View style={[styles.statBox, { backgroundColor: colors.surface, borderColor: cardBorder }]}>
                     <View style={styles.amberIcon}>
-                      <Star size={22} color="#d97706" fill="#d97706" />
+                      <Star size={18} color="#d97706" fill="#d97706" />
                     </View>
                     <Text style={[styles.statNum, { color: colors.text }]}>
                       {primaryDriverId
@@ -675,7 +681,7 @@ export default function DriverProfileScreen() {
                   </View>
                   <View style={[styles.statBox, { backgroundColor: colors.surface, borderColor: cardBorder }]}>
                     <View style={styles.blueIconSm}>
-                      <History size={22} color="#3b82f6" />
+                      <History size={18} color="#3b82f6" />
                     </View>
                     <Text style={[styles.statNum, { color: colors.text }]}>
                       {loadingTrips ? '–' : tripsCount}
@@ -685,7 +691,7 @@ export default function DriverProfileScreen() {
                 </View>
 
                 <TouchableOpacity style={[styles.signOutCard, { backgroundColor: colors.surface, borderColor: cardBorder }]} onPress={handleSignOut} activeOpacity={0.85}>
-                  <LogOut size={20} color="#f43f5e" />
+                  <LogOut size={18} color="#f43f5e" />
                   <Text style={styles.signOutLbl}>Sign out</Text>
                 </TouchableOpacity>
               </View>
@@ -723,19 +729,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
+    paddingHorizontal: Layout.driverHeaderHorizontalPadding,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   topActions: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  topIconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  titleCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  headerName: { fontSize: 15, fontWeight: '700', maxWidth: 220 },
-  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Theme.driverEmerald },
+  topIconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  titleCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  headerName: { fontSize: 14, fontWeight: '700', maxWidth: 200 },
+  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: Theme.driverEmerald },
   scroll: { flex: 1 },
 
   profileHero: {
-    borderRadius: 40,
-    padding: 28,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 18,
     overflow: 'hidden',
     alignItems: 'center',
   },
@@ -743,15 +750,15 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(16,185,129,0.08)',
   },
-  avatarCluster: { marginBottom: 18, alignItems: 'center' },
-  avatarRing: { padding: 4, borderRadius: 36 },
+  avatarCluster: { marginBottom: 12, alignItems: 'center' },
+  avatarRing: { padding: 3, borderRadius: 26 },
   avatarInner: {
-    width: 112,
-    height: 112,
-    borderRadius: 32,
+    width: 84,
+    height: 84,
+    borderRadius: 22,
     backgroundColor: '#1e293b',
     overflow: 'hidden',
-    borderWidth: 4,
+    borderWidth: 3,
     borderColor: SLATE_900,
   },
   avatarImg: { width: '100%', height: '100%' },
@@ -763,179 +770,182 @@ const styles = StyleSheet.create({
   },
   levelBadge: {
     position: 'absolute',
-    right: -8,
-    bottom: -4,
+    right: -6,
+    bottom: -2,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
     backgroundColor: Theme.driverEmeraldDark,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 14,
-    borderWidth: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 3,
     borderColor: SLATE_900,
   },
-  levelBadgeText: { fontSize: 10, fontWeight: '900', color: '#fff' },
-  profileNameHero: { fontSize: 22, fontWeight: '900', color: '#fff', letterSpacing: -0.5 },
-  tierSmall: { marginTop: 6, fontSize: 10, fontWeight: '900', color: Theme.driverPrimary, letterSpacing: 2 },
+  levelBadgeText: { fontSize: 9, fontWeight: '800', color: '#fff' },
+  profileNameHero: { fontSize: 18, fontWeight: '800', color: '#fff', letterSpacing: -0.3 },
+  tierSmall: { marginTop: 4, fontSize: 10, fontWeight: '700', color: Theme.driverPrimary, letterSpacing: 1 },
   xpCard: {
-    marginTop: 22,
+    marginTop: 14,
     width: '100%',
     backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 16,
-    padding: 14,
+    borderRadius: 14,
+    padding: 12,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
   },
-  xpTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  xpEyebrow: { fontSize: 9, fontWeight: '900', color: 'rgba(148,163,184,0.95)', letterSpacing: 2 },
-  xpPct: { fontSize: 10, fontWeight: '900', color: Theme.driverPrimary },
+  xpTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
+  xpEyebrow: { fontSize: 9, fontWeight: '700', color: 'rgba(148,163,184,0.95)', letterSpacing: 1.2 },
+  xpPct: { fontSize: 10, fontWeight: '800', color: Theme.driverPrimary },
   progressTrackDark: {
-    height: 6,
+    height: 5,
     borderRadius: 999,
     backgroundColor: 'rgba(15,23,42,0.9)',
     overflow: 'hidden',
   },
   progressFillEm: { height: '100%', borderRadius: 999 },
-  xpFooter: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
-  xpFooterTxt: { fontSize: 8, fontWeight: '700', color: 'rgba(148,163,184,0.9)', letterSpacing: 1 },
+  xpFooter: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 },
+  xpFooterTxt: { fontSize: 10, fontWeight: '600', color: 'rgba(148,163,184,0.9)' },
 
   bioStatementCard: {
-    borderRadius: 36,
+    borderRadius: 16,
     borderWidth: 1,
-    paddingHorizontal: 20,
-    paddingVertical: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
     overflow: 'hidden',
   },
   bioStatementHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 14,
+    marginBottom: 10,
   },
   bioStatementTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
     flex: 1,
     minWidth: 0,
   },
   quoteIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 16,
+    width: 34,
+    height: 34,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   bioStatementEyebrow: {
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 2,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
   bioEditBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   bioStatementBody: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
     fontStyle: 'italic',
-    lineHeight: 22,
+    lineHeight: 19,
     opacity: 0.92,
   },
 
   rowCard: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 20,
-    borderRadius: 32,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 16,
     borderWidth: 1,
+    gap: 10,
   },
-  rowCardLeft: { flexDirection: 'row', alignItems: 'center', gap: 14, flex: 1 },
+  rowCardLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 },
+  rowCardText: { flex: 1, minWidth: 0 },
   blueIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 14,
     backgroundColor: 'rgba(59,130,246,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   darkIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 14,
     backgroundColor: SLATE_900,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  rowEyebrow: { fontSize: 10, fontWeight: '900', letterSpacing: 2, marginBottom: 4 },
-  rowTitle: { fontSize: 16, fontWeight: '900' },
-  rowSub: { marginTop: 6, fontSize: 11, fontWeight: '500', lineHeight: 15 },
-  chevPill: { padding: 12, borderRadius: 16 },
-  statsRow: { flexDirection: 'row', gap: 14 },
+  rowEyebrow: { fontSize: 9, fontWeight: '700', letterSpacing: 1.2, marginBottom: 2 },
+  rowTitle: { fontSize: 15, fontWeight: '700' },
+  rowSub: { marginTop: 4, fontSize: 11, fontWeight: '500', lineHeight: 15 },
+  chevPill: { padding: 8, borderRadius: 12 },
+  statsRow: { flexDirection: 'row', gap: 10 },
   statBox: {
     flex: 1,
-    padding: 18,
-    borderRadius: 28,
+    padding: 14,
+    borderRadius: 16,
     borderWidth: 1,
     alignItems: 'center',
   },
   amberIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
     backgroundColor: 'rgba(245,158,11,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   blueIconSm: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
     backgroundColor: 'rgba(59,130,246,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
-  statNum: { fontSize: 22, fontWeight: '900' },
-  statLbl: { marginTop: 6, fontSize: 9, fontWeight: '900', letterSpacing: 2 },
-  statHint: { marginTop: 4, fontSize: 10, fontWeight: '600', letterSpacing: 0.2 },
+  statNum: { fontSize: 18, fontWeight: '800' },
+  statLbl: { marginTop: 4, fontSize: 9, fontWeight: '700', letterSpacing: 1.2 },
+  statHint: { marginTop: 3, fontSize: 10, fontWeight: '600' },
   signOutCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    padding: 18,
-    borderRadius: 28,
+    gap: 10,
+    padding: 14,
+    borderRadius: 16,
     borderWidth: 1,
   },
-  signOutLbl: { fontSize: 14, fontWeight: '700', color: '#f43f5e' },
+  signOutLbl: { fontSize: 13, fontWeight: '700', color: '#f43f5e' },
 
-  subPage: { gap: 22, paddingBottom: 8 },
-  subHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 4 },
+  subPage: { gap: 14, paddingBottom: 8 },
+  subHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 4 },
   iconPill: {
-    padding: 10,
-    borderRadius: 14,
+    padding: 8,
+    borderRadius: 12,
     borderWidth: 1,
   },
-  subTitle: { fontSize: 14, fontWeight: '900', letterSpacing: 1 },
+  subTitle: { fontSize: 13, fontWeight: '800', letterSpacing: 0.8 },
 
   heroDark: {
     backgroundColor: SLATE_900,
-    borderRadius: 40,
-    padding: 28,
+    borderRadius: 20,
+    padding: 16,
     overflow: 'hidden',
   },
-  heroWatermark: { position: 'absolute', top: 0, right: 0, padding: 24 },
-  rankRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 22 },
-  crownBox: { width: 64, height: 64, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  heroEyebrowGold: { fontSize: 10, color: AMBER_400, fontWeight: '900', letterSpacing: 2 },
-  heroRankTitle: { fontSize: 22, fontWeight: '900', color: '#fff' },
+  heroWatermark: { position: 'absolute', top: 0, right: 0, padding: 16 },
+  rankRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+  crownBox: { width: 52, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  heroEyebrowGold: { fontSize: 9, color: AMBER_400, fontWeight: '700', letterSpacing: 1.2 },
+  heroRankTitle: { fontSize: 18, fontWeight: '800', color: '#fff' },
 
   roadLineWrap: { paddingLeft: 28, gap: 22 },
   roadLine: {
@@ -985,48 +995,48 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
   },
-  fleetBadgeText: { fontSize: 9, fontWeight: '900', color: '#fff', letterSpacing: 2 },
-  connectedRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  pulseDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Theme.driverEmerald },
-  connectedText: { fontSize: 10, fontWeight: '700', color: Theme.driverPrimary },
-  vehicleModel: { fontSize: 26, fontWeight: '900', color: '#fff', letterSpacing: -0.5 },
-  vehiclePlate: { marginTop: 6, fontSize: 12, fontWeight: '800', color: 'rgba(148,163,184,0.95)', letterSpacing: 4 },
-  vehicleGrid2: { flexDirection: 'row', gap: 12, marginTop: 22 },
+  fleetBadgeText: { fontSize: 9, fontWeight: '700', color: '#fff', letterSpacing: 1.2 },
+  connectedRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  pulseDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: Theme.driverEmerald },
+  connectedText: { fontSize: 10, fontWeight: '600', color: Theme.driverPrimary },
+  vehicleModel: { fontSize: 20, fontWeight: '800', color: '#fff', letterSpacing: -0.3 },
+  vehiclePlate: { marginTop: 4, fontSize: 11, fontWeight: '700', color: 'rgba(148,163,184,0.95)', letterSpacing: 2 },
+  vehicleGrid2: { flexDirection: 'row', gap: 10, marginTop: 14 },
   vehicleStatDark: {
     flex: 1,
     backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 18,
-    padding: 14,
+    borderRadius: 14,
+    padding: 12,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
   },
-  vehicleStatLabel: { fontSize: 10, color: 'rgba(148,163,184,0.85)', fontWeight: '700', marginBottom: 6 },
-  vehicleStatValue: { fontSize: 13, fontWeight: '800', color: '#fff' },
-  triGaugeRow: { flexDirection: 'row', gap: 10 },
+  vehicleStatLabel: { fontSize: 10, color: 'rgba(148,163,184,0.85)', fontWeight: '600', marginBottom: 4 },
+  vehicleStatValue: { fontSize: 12, fontWeight: '700', color: '#fff' },
+  triGaugeRow: { flexDirection: 'row', gap: 8 },
   gaugeCard: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: 14,
-    borderRadius: 28,
+    paddingVertical: 12,
+    borderRadius: 16,
     borderWidth: 1,
-    gap: 6,
+    gap: 4,
   },
-  gaugeVal: { fontSize: 18, fontWeight: '900' },
-  gaugeLbl: { fontSize: 8, fontWeight: '900', letterSpacing: 2 },
-  whiteCardLg: { borderRadius: 32, padding: 22, borderWidth: 1 },
-  cardHeadRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
-  cardHeadTitle: { fontSize: 11, fontWeight: '900', letterSpacing: 3 },
-  specRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12 },
+  gaugeVal: { fontSize: 16, fontWeight: '800' },
+  gaugeLbl: { fontSize: 8, fontWeight: '700', letterSpacing: 1.2 },
+  whiteCardLg: { borderRadius: 16, padding: 14, borderWidth: 1 },
+  cardHeadRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  cardHeadTitle: { fontSize: 10, fontWeight: '700', letterSpacing: 1.5 },
+  specRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10 },
   specRowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(226,232,240,0.8)' },
-  specLabel: { fontSize: 12, fontWeight: '700' },
-  specValue: { fontSize: 12, fontWeight: '900' },
+  specLabel: { fontSize: 12, fontWeight: '600' },
+  specValue: { fontSize: 12, fontWeight: '700' },
   healthRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    padding: 14,
-    borderRadius: 18,
-    marginBottom: 10,
+    padding: 12,
+    borderRadius: 14,
+    marginBottom: 8,
   },
-  healthLabel: { fontSize: 12, fontWeight: '700' },
-  healthValue: { fontSize: 10, fontWeight: '900' },
+  healthLabel: { fontSize: 12, fontWeight: '600' },
+  healthValue: { fontSize: 10, fontWeight: '700' },
 });

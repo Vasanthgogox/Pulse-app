@@ -49,15 +49,22 @@ export function NavigationLoadingOverlay() {
   const { width } = useWindowDimensions();
   const isDesktopWeb = Platform.OS === 'web' && width >= Layout.webDesktopMinWidth;
   const reserveTopNav = isDesktopWeb && pathnameHasRootTopNav(pathname);
+  const visibleRef = useRef(false);
   const [visible, setVisible] = useState(false);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shownAt = useRef(0);
+
+  const setVisibleIfChanged = (next: boolean) => {
+    if (visibleRef.current === next) return;
+    visibleRef.current = next;
+    setVisible(next);
+  };
 
   useEffect(() => {
     const shouldShow = shouldShowNavigationOverlay(pathname, segments);
 
     if (!shouldShow) {
-      setVisible((prev) => (prev ? false : prev));
+      setVisibleIfChanged(false);
       if (hideTimer.current) {
         clearTimeout(hideTimer.current);
         hideTimer.current = null;
@@ -65,7 +72,7 @@ export function NavigationLoadingOverlay() {
       return;
     }
 
-    setVisible((prev) => (prev ? prev : true));
+    setVisibleIfChanged(true);
     shownAt.current = Date.now();
 
     if (hideTimer.current) clearTimeout(hideTimer.current);
@@ -74,7 +81,7 @@ export function NavigationLoadingOverlay() {
       const elapsed = Date.now() - shownAt.current;
       const delay = Math.max(0, MIN_VISIBLE_MS - elapsed);
       hideTimer.current = setTimeout(() => {
-        setVisible((prev) => (prev ? false : prev));
+        setVisibleIfChanged(false);
       }, delay);
     });
 

@@ -31,7 +31,8 @@ export default function Index() {
   // Without this guard, the useEffect below would fire and redirect away from
   // the intended deep-link destination.
   const isFocused = useIsFocused();
-  const redirectTargetRef = useRef<string | null>(null);
+  /** Set once per focused index visit — prevents redirect / replace loops. */
+  const bootRedirectRef = useRef(false);
 
   const logRouteDecision = (event: string, details: Record<string, unknown>) => {
     if (!__DEV__) return;
@@ -40,7 +41,7 @@ export default function Index() {
 
   useEffect(() => {
     if (!isFocused) {
-      redirectTargetRef.current = null;
+      bootRedirectRef.current = false;
       return;
     }
     if (loading) return;
@@ -48,15 +49,17 @@ export default function Index() {
       // On web deep links (e.g. /network), do not let the index guard hijack refresh.
       return;
     }
+    if (bootRedirectRef.current) return;
+
     if (!user) {
-      redirectTargetRef.current = null;
+      bootRedirectRef.current = true;
       logRouteDecision('redirect_sign_in', { pathname });
       router.replace(Platform.OS === 'web' ? '/terminal-website' : '/sign-in');
       return;
     }
     if (!profile) return;
+
     if (profile.role === 'driver') {
-      // Security-first: only enter driver app after server-backed role verification.
       if (!roleVerified) {
         logRouteDecision('block_driver_redirect_unverified_role', {
           uid: user.uid,
@@ -65,28 +68,14 @@ export default function Index() {
         });
         return;
       }
-      if (redirectTargetRef.current === DEFAULT_DRIVER_ROUTE) return;
-      redirectTargetRef.current = DEFAULT_DRIVER_ROUTE;
+      bootRedirectRef.current = true;
       logRouteDecision('redirect_driver_root', { uid: user.uid, pathname });
       router.replace(DEFAULT_DRIVER_ROUTE as '/');
       return;
     }
-  }, [user, profile, roleVerified, loading, pathname, router, isFocused]);
 
-  useEffect(() => {
-    if (!isFocused || loading || !user || !profile || profile.role === 'driver') return;
-    if (Platform.OS === 'web' && pathname !== '/') return;
-    if (redirectTargetRef.current) return;
-
-    let cancelled = false;
-    redirectTargetRef.current = 'pending';
-
+    bootRedirectRef.current = true;
     void getLastTabRoute().then((route) => {
-      if (cancelled) {
-        redirectTargetRef.current = null;
-        return;
-      }
-      redirectTargetRef.current = route;
       preloadTabForRoute(route);
       logRouteDecision('redirect_dispatcher_last_tab', {
         uid: user.uid,
@@ -95,14 +84,7 @@ export default function Index() {
       });
       router.replace(route as '/');
     });
-
-    return () => {
-      cancelled = true;
-      if (redirectTargetRef.current === 'pending') {
-        redirectTargetRef.current = null;
-      }
-    };
-  }, [user, profile, loading, pathname, router, isFocused]);
+  }, [user, profile, roleVerified, loading, pathname, router, isFocused]);
 
   const splashVariant = useMemo(() => {
     if (loading) return 'session' as const;
