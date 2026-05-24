@@ -14,9 +14,11 @@ import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeCont
 import { computeDriverCommissionForTrip } from '@/features/finance/aggregation/aggregateDrivers';
 import { getPendingOtpTrips } from '@/features/trips/services/tripOtp.service';
 import { getLatestAssignmentAuditByTripIds } from '@/features/trips/services/trip-assignment-audit.service';
+import { TripListAssignerRow } from '@/components/driver/TripListAssignerRow';
 import {
     assignerPrimarySecondaryForDriver,
     buildAssignerDisplayForTrip,
+    buildJobCardAssignerPayload,
     resolveAssignerUserId,
 } from '@/lib/driverAssignerDisplay';
 import {
@@ -471,12 +473,37 @@ export default function DriverNotificationsScreen() {
           commissionPerKm: acceptedInviteForTrip?.commission_per_km ?? null,
         });
 
+        const inviteForTrip =
+          invites.find(
+            (i) =>
+              (i.from_organization_id ?? '').trim() ===
+              (trip.organization_id ?? '').trim(),
+          ) ?? null;
+
+        const assignerPayload = buildJobCardAssignerPayload(
+          trip,
+          {
+            assignerLinePrimary,
+            assignerLineSecondary,
+            assignedByOrgName,
+          },
+          driver?.organization_id ?? null,
+          inviteForTrip,
+          {
+            requiresOtp,
+            isAggregate: isAggregateTrip(trip),
+            isRoster: isRosterTrip(trip),
+          },
+          inviteForTrip?.from_org_logo_url ?? null,
+        );
+
         return {
           trip,
           assignerPersonDisplay,
           assignedByOrgName,
           assignerLinePrimary,
           assignerLineSecondary,
+          assignerPayload,
           requiresOtp,
           commissionForTrip,
         };
@@ -665,20 +692,12 @@ export default function DriverNotificationsScreen() {
                   {item.trip.pickup_area?.trim() || 'Pickup'} →{' '}
                   {item.trip.drop_location?.trim() || 'Drop-off'}
                 </Text>
-                <Text style={styles.assignedLine} numberOfLines={2}>
-                  <Text
-                    style={[styles.assignedPrefix, { color: colors.textMuted }]}
-                  >
-                    Assigned by{' '}
-                  </Text>
-                  <Text style={[styles.assignedName, { color: colors.text }]}>
-                    {item.assignerLinePrimary}
-                  </Text>
-                  <Text style={[styles.assignedOrg, { color: colors.textMuted }]}>
-                    {' '}
-                    · {item.assignerLineSecondary}
-                  </Text>
-                </Text>
+                <TripListAssignerRow
+                  assigner={item.assignerPayload}
+                  mutedColor={colors.textMuted}
+                  textColor={colors.text}
+                  compact={false}
+                />
                 <Text style={[styles.meta, { color: colors.textMuted }]}>
                   {item.commissionForTrip > 0
                     ? `Est. earning ${formatINR(item.commissionForTrip)}`

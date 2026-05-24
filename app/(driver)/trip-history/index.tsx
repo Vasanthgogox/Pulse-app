@@ -14,16 +14,19 @@ import {
 } from "@/contexts/DriverThemeContext";
 import { getLatestAssignmentAuditByTripIds } from "@/features/trips/services/trip-assignment-audit.service";
 import { useDriverAvatarUri } from "@/lib/avatarUpload";
+import { TripListAssignerRow } from "@/components/driver/TripListAssignerRow";
 import {
     buildAssignerDisplayForTrip,
+    buildJobCardAssignerPayload,
     humanizeAssignerDisplayName,
     resolveAssignerUserId,
+    type JobCardAssignerPayload,
 } from "@/lib/driverAssignerDisplay";
 import {
   buildDriverTripNumberMap,
   getDriverTripDisplayNumber,
 } from "@/lib/driverTripSequence";
-import { isAggregateTrip, tripEarningsForDriver } from "@/lib/driverUtils";
+import { isAggregateTrip, isRosterTrip, tripEarningsForDriver } from "@/lib/driverUtils";
 import { formatLedgerDateTime, formatTime } from "@/lib/format";
 import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
 import { getOptimalRoute } from "@/services/routingService";
@@ -479,6 +482,9 @@ export default function DriverTripsScreen() {
   const [assignerTripOrgNameByTripId, setAssignerTripOrgNameByTripId] = useState<
     Record<string, string>
   >({});
+  const [organizationLogoById, setOrganizationLogoById] = useState<
+    Record<string, string>
+  >({});
   const [loading, setLoading] = useState(true);
   const [, setRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
@@ -607,6 +613,7 @@ export default function DriverTripsScreen() {
           setAssignerOrgNameByUserId({});
           setAssignerDisplayByTripId({});
           setAssignerTripOrgNameByTripId({});
+          setOrganizationLogoById({});
         }
         return;
       }
@@ -732,6 +739,33 @@ export default function DriverTripsScreen() {
         setAssignerNamesByUserId(byId);
         setAssignerOrgNameByUserId(orgById);
       }
+
+      const organizationIds = Array.from(
+        new Set(
+          trips
+            .map((trip) => String(trip.organization_id ?? "").trim())
+            .filter((id) => id.length > 0),
+        ),
+      );
+      if (organizationIds.length > 0) {
+        const { data: orgRows, error: orgError } = await supabase()
+          .from("organizations")
+          .select("id, logo_url")
+          .in("id", organizationIds);
+        if (!cancelled && !orgError) {
+          const logosById: Record<string, string> = {};
+          for (const row of (orgRows ?? []) as Array<{
+            id: string;
+            logo_url?: string | null;
+          }>) {
+            const logo = String(row.logo_url ?? "").trim();
+            if (logo) logosById[row.id] = logo;
+          }
+          setOrganizationLogoById(logosById);
+        }
+      } else if (!cancelled) {
+        setOrganizationLogoById({});
+      }
     };
     void loadAssignerSources();
     return () => {
@@ -754,12 +788,12 @@ export default function DriverTripsScreen() {
     [rpcAssignerUserIdByTripId, assignmentActorByTripId],
   );
 
-  const assignerByTripId = useMemo(() => {
-    const byTrip: Record<string, string> = {};
+  const assignerPayloadByTripId = useMemo(() => {
+    const byTrip: Record<string, JobCardAssignerPayload> = {};
     for (const trip of trips) {
       const tid = String(trip.id ?? "").trim();
       if (!tid) continue;
-      byTrip[tid] = buildAssignerDisplayForTrip(
+      const assignerDisplay = buildAssignerDisplayForTrip(
         trip,
         invites,
         driver?.organization_id ?? null,
@@ -771,7 +805,26 @@ export default function DriverTripsScreen() {
           assignerTripOrgNameByTripId,
           organizationNamesById,
         },
-      ).assignedByName;
+      );
+      const inviteForTrip =
+        invites.find(
+          (i) =>
+            (i.from_organization_id ?? "").trim() ===
+            (trip.organization_id ?? "").trim(),
+        ) ?? null;
+      const tripOrgId = (trip.organization_id ?? "").trim();
+      byTrip[tid] = buildJobCardAssignerPayload(
+        trip,
+        assignerDisplay,
+        driver?.organization_id ?? null,
+        inviteForTrip,
+        {
+          requiresOtp: false,
+          isAggregate: isAggregateTrip(trip),
+          isRoster: isRosterTrip(trip),
+        },
+        organizationLogoById[tripOrgId] ?? null,
+      );
     }
     return byTrip;
   }, [
@@ -784,6 +837,7 @@ export default function DriverTripsScreen() {
     assignerTripOrgNameByTripId,
     invites,
     organizationNamesById,
+    organizationLogoById,
   ]);
 
   const getEarning = (trip: tripsService.TripRow) => {
@@ -854,8 +908,7 @@ export default function DriverTripsScreen() {
     const pickupParts = splitLocationPrimarySecondary(item.pickup_area);
     const dropParts = splitLocationPrimarySecondary(item.drop_location);
     const corridorHint = [pickupParts.secondary, dropParts.secondary].filter(Boolean).join(" · ");
-    const assignerDisplay =
-      assignerByTripId[String(item.id)] ?? "Fleet dispatcher";
+    const assignerPayload = assignerPayloadByTripId[String(item.id)] ?? null;
     return (
       <TouchableOpacity
         style={[
@@ -923,12 +976,11 @@ export default function DriverTripsScreen() {
                   {corridorHint}
                 </Text>
               ) : null}
-              <Text
-                style={[styles.cardAssignedByLine, { color: colors.textMuted }]}
-                numberOfLines={1}
-              >
-                Assigned by {assignerDisplay}
-              </Text>
+              <TripListAssignerRow
+                assigner={assignerPayload}
+                mutedColor={colors.textMuted}
+                textColor={colors.text}
+              />
             </View>
             <View
               style={[
@@ -1522,7 +1574,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 12,
+    marginBottom: 10,
     gap: 8,
   },
   cardRefTopLeft: {
@@ -1570,7 +1622,7 @@ const styles = StyleSheet.create({
     paddingTop: 1,
   },
   routeCorridorHint: {
-    marginTop: 4,
+    marginTop: 2,
     fontSize: 9,
     fontWeight: "600",
     letterSpacing: 0.6,
