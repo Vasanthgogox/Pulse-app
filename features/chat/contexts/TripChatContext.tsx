@@ -125,8 +125,12 @@ interface TripChatContextType {
 
 const TripChatContext = createContext<TripChatContextType | undefined>(undefined);
 
+export function useOptionalTripChat() {
+  return useContext(TripChatContext);
+}
+
 export function useTripChat() {
-  const ctx = useContext(TripChatContext);
+  const ctx = useOptionalTripChat();
   if (!ctx) throw new Error("useTripChat must be used within a TripChatProvider");
   return ctx;
 }

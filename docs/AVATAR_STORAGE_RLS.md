@@ -63,6 +63,31 @@ DROP POLICY IF EXISTS "Users can read own avatar" ON storage.objects;
 
 Then run the `CREATE POLICY` statements above.
 
-## 3. Verify
+## 3. Org logo uploads (`orgs/{org_id}/logo-*.jpg`)
+
+Organization logos upload to the same `userprofiles` bucket under `orgs/{org_id}/...`.
+Avatar policies above only allow `{auth.uid()}/...`, so org logo uploads need separate policies (migration `20260801120000_org_logo_storage_rls.sql`):
+
+```sql
+-- Org owners can INSERT/UPDATE/DELETE orgs/{their_org_id}/...
+CREATE POLICY "Org owners can upload org logo"
+ON storage.objects FOR INSERT TO authenticated
+WITH CHECK (
+  bucket_id = 'userprofiles'
+  AND (storage.foldername(name))[1] = 'orgs'
+  AND EXISTS (
+    SELECT 1 FROM public.organizations o
+    WHERE o.id = ((storage.foldername(name))[2])::uuid
+      AND o.owner_id = auth.uid()
+  )
+);
+-- See migration for UPDATE/DELETE variants.
+```
+
+Reads are already covered by the public read policy on `userprofiles`.
+
+## 4. Verify
 
 After applying, upload a profile photo again from the driver app (Profile → Change avatar → Upload). The "new row violates row-level security policy" error should be resolved.
+
+For org logos: Profile → Org Logo → pick an image. Only the **organization owner** can upload (matches `organizations` UPDATE RLS).

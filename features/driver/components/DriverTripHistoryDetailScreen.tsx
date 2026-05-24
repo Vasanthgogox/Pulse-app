@@ -317,6 +317,82 @@ export function DriverTripHistoryDetailScreen({ tripId }: DriverTripHistoryDetai
     return formatDurationForTrip(trip);
   }, [trip, routeFallback]);
 
+  const historyEmployerOrgIdSet = useMemo(() => {
+    const set = new Set<string>();
+    linkedDriversFull.forEach((d) => {
+      if (
+        (d.payable_amount != null && d.payable_amount > 0) ||
+        (d.commission_percent != null && d.commission_percent > 0) ||
+        (d.commission_per_km != null && d.commission_per_km > 0)
+      ) {
+        const orgId = String(d.organization_id ?? "");
+        if (orgId) set.add(orgId);
+      }
+    });
+    return set;
+  }, [linkedDriversFull]);
+
+  const historyCurrentEmployer = useMemo(() => {
+    const d =
+      linkedDriversFull.find((row) => !row.left_at && historyEmployerOrgIdSet.has(String(row.organization_id ?? ""))) ??
+      linkedDriversFull.find((row) => historyEmployerOrgIdSet.has(String(row.organization_id ?? "")));
+    if (!d) return null;
+    const orgName =
+      invites.find((i) => String(i.from_organization_id ?? "") === String(d.organization_id ?? ""))?.from_org_name?.trim() ||
+      "Employer";
+    return { orgId: String(d.organization_id ?? ""), driverRowId: d.id, orgName };
+  }, [linkedDriversFull, historyEmployerOrgIdSet, invites]);
+
+  const isTripHistoryFleet = useMemo(() => {
+    if (!trip || !historyCurrentEmployer) return false;
+    return historyEmployerOrgIdSet.has(String(trip.organization_id ?? ""));
+  }, [trip, historyCurrentEmployer, historyEmployerOrgIdSet]);
+
+  const isTripHistoryAttributed = useMemo(() => {
+    if (!historyCurrentEmployer || !trip) return false;
+    return attrSalaryRequests.some(
+      (r) =>
+        r.request_type === "trip_based" &&
+        String(r.organization_id ?? "") === historyCurrentEmployer.orgId &&
+        (r.trip_ids ?? []).includes(trip.id),
+    );
+  }, [attrSalaryRequests, historyCurrentEmployer, trip]);
+
+  const handleHistoryAttributeTrip = useCallback(async () => {
+    if (!historyCurrentEmployer || !trip) return;
+    setAttributeLoading(true);
+    try {
+      const earnings = Math.round(tripEarningsForDriver(trip));
+      if (earnings <= 0) {
+        Alert.alert("No earnings", "Could not calculate trip earnings.");
+        return;
+      }
+      const tripDate = trip.pickup_date ?? trip.started_at ?? trip.created_at ?? "";
+      const tripDateStr = tripDate
+        ? new Date(tripDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+        : "";
+      const tripRef = getDriverTripDisplayNumber(trip, driverTripNumberById);
+      const attrNote = [`Fleet trip · ${tripRef}`, tripDateStr, `₹${earnings.toLocaleString("en-IN")}`]
+        .filter(Boolean).join(" · ");
+      const { error } = await salaryRequestsService.createSalaryRequest(
+        historyCurrentEmployer.driverRowId,
+        historyCurrentEmployer.orgId,
+        "trip_based",
+        earnings,
+        { tripIds: [trip.id], note: attrNote, createdBy: profile?.uid ?? null },
+      );
+      if (error) {
+        Alert.alert("Error", error.message);
+      } else {
+        Alert.alert("Trip attributed", `Sent to ${historyCurrentEmployer.orgName} for review.`);
+        void salaryRequestsService.getSalaryRequestsByDriverIds(linkedDriversFull.map((d) => d.id))
+          .then((sRes) => setAttrSalaryRequests(sRes.requests ?? []));
+      }
+    } finally {
+      setAttributeLoading(false);
+    }
+  }, [historyCurrentEmployer, trip, driverTripNumberById, linkedDriversFull, profile?.uid]);
+
   const onBack = () => {
     if (router.canGoBack()) router.back();
     else router.replace("/(driver)/trip-history");
@@ -334,83 +410,6 @@ export function DriverTripHistoryDetailScreen({ tripId }: DriverTripHistoryDetai
   }
 
   const selectedTrip = trip;
-
-  // Fleet attribution derivations
-  const historyEmployerOrgIdSet = useMemo(() => {
-    const set = new Set<string>();
-    linkedDriversFull.forEach((d) => {
-      if (
-        (d.payable_amount != null && d.payable_amount > 0) ||
-        (d.commission_percent != null && d.commission_percent > 0) ||
-        (d.commission_per_km != null && d.commission_per_km > 0)
-      ) {
-        const orgId = String(d.organization_id ?? "");
-        if (orgId) set.add(orgId);
-      }
-    });
-    return set;
-  }, [linkedDriversFull]);
-
-  const historyCurrentEmployer = useMemo(() => {
-    // Prefer active employer row; fall back to any employer row for classification.
-    const d =
-      linkedDriversFull.find((row) => !row.left_at && historyEmployerOrgIdSet.has(String(row.organization_id ?? ""))) ??
-      linkedDriversFull.find((row) => historyEmployerOrgIdSet.has(String(row.organization_id ?? "")));
-    if (!d) return null;
-    const orgName =
-      invites.find((i) => String(i.from_organization_id ?? "") === String(d.organization_id ?? ""))?.from_org_name?.trim() ||
-      "Employer";
-    return { orgId: String(d.organization_id ?? ""), driverRowId: d.id, orgName };
-  }, [linkedDriversFull, historyEmployerOrgIdSet, invites]);
-
-  const isTripHistoryFleet = historyCurrentEmployer
-    ? historyEmployerOrgIdSet.has(String(selectedTrip?.organization_id ?? ""))
-    : false;
-
-  const isTripHistoryAttributed = useMemo(() => {
-    if (!historyCurrentEmployer || !selectedTrip) return false;
-    return attrSalaryRequests.some(
-      (r) =>
-        r.request_type === "trip_based" &&
-        String(r.organization_id ?? "") === historyCurrentEmployer.orgId &&
-        (r.trip_ids ?? []).includes(selectedTrip.id),
-    );
-  }, [attrSalaryRequests, historyCurrentEmployer, selectedTrip]);
-
-  const handleHistoryAttributeTrip = useCallback(async () => {
-    if (!historyCurrentEmployer || !selectedTrip) return;
-    setAttributeLoading(true);
-    try {
-      const earnings = Math.round(tripEarningsForDriver(selectedTrip));
-      if (earnings <= 0) {
-        Alert.alert("No earnings", "Could not calculate trip earnings.");
-        return;
-      }
-      const tripDate = selectedTrip.pickup_date ?? selectedTrip.started_at ?? selectedTrip.created_at ?? "";
-      const tripDateStr = tripDate
-        ? new Date(tripDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
-        : "";
-      const tripRef = getDriverTripDisplayNumber(selectedTrip, driverTripNumberById);
-      const attrNote = [`Fleet trip · ${tripRef}`, tripDateStr, `₹${earnings.toLocaleString("en-IN")}`]
-        .filter(Boolean).join(" · ");
-      const { error } = await salaryRequestsService.createSalaryRequest(
-        historyCurrentEmployer.driverRowId,
-        historyCurrentEmployer.orgId,
-        "trip_based",
-        earnings,
-        { tripIds: [selectedTrip.id], note: attrNote, createdBy: profile?.uid ?? null },
-      );
-      if (error) {
-        Alert.alert("Error", error.message);
-      } else {
-        Alert.alert("Trip attributed", `Sent to ${historyCurrentEmployer.orgName} for review.`);
-        void salaryRequestsService.getSalaryRequestsByDriverIds(linkedDriversFull.map((d) => d.id))
-          .then((sRes) => setAttrSalaryRequests(sRes.requests ?? []));
-      }
-    } finally {
-      setAttributeLoading(false);
-    }
-  }, [historyCurrentEmployer, selectedTrip, driverTripNumberById, linkedDriversFull, profile?.uid]);
 
   return (
     <View

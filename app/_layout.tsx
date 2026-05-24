@@ -66,6 +66,7 @@ import { useOptionalAuth } from '@/contexts/AuthContext';
 import { LanguageProvider, tGlobal } from '@/contexts/LanguageContext';
 import { NetworkProvider } from '@/contexts/NetworkContext';
 import { OrganizationProvider, useOptionalOrganization } from '@/contexts/OrganizationContext';
+import { ActiveWorkspaceProvider } from '@/contexts/ActiveWorkspaceContext';
 import { KeyboardAccessoryProvider } from '@/contexts/KeyboardAccessoryContext';
 import { WalletProvider } from '@/contexts/WalletContext';
 import { TripChatProvider } from '@/features/chat/contexts/TripChatContext';
@@ -308,6 +309,7 @@ export default function RootLayout() {
             <LanguageProvider>
               <AuthProvider>
                 <OrganizationProvider>
+                  <ActiveWorkspaceProvider>
                   <WalletProvider>
                     <KeyboardAccessoryProvider>
                       <GlobalSyncProvider>
@@ -317,6 +319,7 @@ export default function RootLayout() {
                       </GlobalSyncProvider>
                     </KeyboardAccessoryProvider>
                   </WalletProvider>
+                  </ActiveWorkspaceProvider>
                 </OrganizationProvider>
               </AuthProvider>
             </LanguageProvider>

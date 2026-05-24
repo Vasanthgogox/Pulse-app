@@ -47,6 +47,10 @@ export const ROUTES = {
   // Settings flows (root-level stack)
   KYC_SETTINGS:      '/kyc-settings'      as const,
   BRANDING_SETTINGS: '/branding-settings' as const,
+  /** Personal identity: name, email, phone, personal avatar */
+  MY_ACCOUNT:        '/account'           as const,
+  /** Workspace admin: company logo, KYC, TMS metrics */
+  COMPANY_PROFILE:   '/company-profile'   as const,
 
   // Full-screen flows (root-level stack)
   ADD_TRIP:       '/add-trip'       as const,

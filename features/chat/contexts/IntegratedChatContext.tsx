@@ -66,8 +66,12 @@ interface IntegratedChatContextType {
 
 const IntegratedChatContext = createContext<IntegratedChatContextType | undefined>(undefined);
 
+export function useOptionalIntegratedChat() {
+  return useContext(IntegratedChatContext);
+}
+
 export function useIntegratedChat() {
-  const ctx = useContext(IntegratedChatContext);
+  const ctx = useOptionalIntegratedChat();
   if (!ctx) throw new Error("useIntegratedChat must be used within an IntegratedChatProvider");
   return ctx;
 }
@@ -123,7 +127,7 @@ function toIntegratedChat(conv: NetworkConversation, currentOrgId: string): Inte
     partnerRole: "owner",
     organization: conv.partner_name,
     isOnline: false,
-    messages: conv.messages.map((m) => ({
+    messages: (conv.messages ?? []).map((m) => ({
       id: m.id,
       senderId: m.sender_org_id === currentOrgId ? "dispatcher-1" : "partner-1",
       content: m.content,

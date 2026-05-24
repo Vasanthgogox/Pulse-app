@@ -7,7 +7,7 @@ import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { ROUTES } from "@/lib/routes";
-import { useAvatar } from "@/lib/useAvatar";
+import { useAvatar, DEFAULT_USER_2D_AVATAR_SEED } from "@/lib/useAvatar";
 import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
 import { useRouter } from "expo-router";
 import {
@@ -123,6 +123,7 @@ export function ProfileMenuDrawer({ visible, onClose }: ProfileMenuDrawerProps) 
     type: 'user',
     name: displayName,
     avatarUrl: profile?.avatar_url ?? null,
+    avatarSeed: profile?.avatar_seed?.trim() || DEFAULT_USER_2D_AVATAR_SEED,
   });
 
   useEffect(() => {

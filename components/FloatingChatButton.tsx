@@ -5,8 +5,8 @@ import { Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWin
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useLayoutInsets } from "@/lib/layoutInsets";
-import { useIntegratedChat } from "@/features/chat/contexts/IntegratedChatContext";
-import { useTripChat } from "@/features/chat/contexts/TripChatContext";
+import { useOptionalIntegratedChat } from "@/features/chat/contexts/IntegratedChatContext";
+import { useOptionalTripChat } from "@/features/chat/contexts/TripChatContext";
 import { getTripDisplayNumber } from "@/features/trips/services/trips.service";
 import { useMobileNetworkDockExpanded } from "@/lib/mobileDockState";
 import { ROUTES } from "@/lib/routes";
@@ -33,10 +33,21 @@ function useShouldShow(): boolean {
   );
 }
 
-function useTotalUnread(): number {
-  const { getTotalUnreadCount: tripUnread } = useTripChat();
-  const { getTotalUnreadCount: netUnread } = useIntegratedChat();
-  return tripUnread() + netUnread();
+function useFloatingChatSnapshot() {
+  const tripChat = useOptionalTripChat();
+  const integratedChat = useOptionalIntegratedChat();
+  const chats = integratedChat?.chats ?? [];
+  const conversations = tripChat?.conversations ?? [];
+  const tripUnread = tripChat?.getTotalUnreadCount?.() ?? 0;
+  const networkUnread = integratedChat?.getTotalUnreadCount?.() ?? 0;
+  return {
+    ready: Boolean(tripChat && integratedChat),
+    chats,
+    conversations,
+    tripUnread,
+    networkUnread,
+    unread: tripUnread + networkUnread,
+  };
 }
 
 export function FloatingChatButton() {
@@ -45,14 +56,11 @@ export function FloatingChatButton() {
   const layout = useLayoutInsets();
   const { width } = useWindowDimensions();
   const show = useShouldShow();
-  const unread = useTotalUnread();
+  const { ready, chats, conversations, tripUnread, networkUnread, unread } =
+    useFloatingChatSnapshot();
   const networkDockExpanded = useMobileNetworkDockExpanded();
   const [showPreview, setShowPreview] = useState(false);
   const [chatTab, setChatTab] = useState<ChatTab>("trips");
-  const { chats } = useIntegratedChat();
-  const { conversations, getTotalUnreadCount } = useTripChat();
-  const tripUnread = getTotalUnreadCount();
-  const networkUnread = chats.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
 
   const networkRows = useMemo(
     () =>
@@ -103,7 +111,7 @@ export function FloatingChatButton() {
     setShowPreview(false);
   }, [normalizedPath]);
 
-  if (!show) return null;
+  if (!show || !ready) return null;
 
   const bottom =
     layout.scrollBottomPadding() + (networkDockExpanded ? 78 : 0);

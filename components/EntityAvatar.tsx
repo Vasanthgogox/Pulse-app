@@ -12,10 +12,8 @@ import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 export interface EntityAvatarProps {
   name: string;
   avatarUrl?: string | null;
-  /** @deprecated Seeds are ignored — initials are shown instead of preset images. */
   avatarSeed?: string | null;
   organizationImageUrl?: string | null;
-  /** @deprecated Seeds are ignored in the new avatar system. */
   organizationAvatarSeed?: string | null;
   /** @deprecated Use `style` instead. Kept for back-compat. */
   borderStyle?: StyleProp<ViewStyle>;
@@ -34,28 +32,38 @@ export interface EntityAvatarProps {
 function buildParty(props: {
   name: string;
   avatarUrl?: string | null;
+  avatarSeed?: string | null;
   organizationImageUrl?: string | null;
+  organizationAvatarSeed?: string | null;
   entityType?: PartyEntityType;
 }): AvatarParty {
-  const { name, avatarUrl, organizationImageUrl, entityType } = props;
+  const { name, avatarUrl, avatarSeed, organizationImageUrl, organizationAvatarSeed, entityType } =
+    props;
 
   if (entityType === "driver") {
-    return { type: "driver", name, avatarUrl };
+    return { type: "driver", name, avatarUrl, avatarSeed: avatarSeed ?? null };
   }
 
-  if (organizationImageUrl) {
-    return { type: "organization", name, logoUrl: organizationImageUrl };
+  const orgImage = (organizationImageUrl ?? "").trim();
+  const orgSeed = (organizationAvatarSeed ?? "").trim();
+  if (orgImage || orgSeed) {
+    return {
+      type: "organization",
+      name,
+      logoUrl: orgImage || null,
+      ownerAvatarSeed: orgSeed || null,
+    };
   }
 
-  return { type: "user", name, avatarUrl };
+  return { type: "user", name, avatarUrl, avatarSeed: avatarSeed ?? null };
 }
 
 export function EntityAvatar({
   name,
   avatarUrl,
-  avatarSeed: _avatarSeed,
+  avatarSeed,
   organizationImageUrl,
-  organizationAvatarSeed: _organizationAvatarSeed,
+  organizationAvatarSeed,
   borderStyle,
   initialsColorSeed: _initialsColorSeed,
   entityType = "client",
@@ -67,7 +75,14 @@ export function EntityAvatar({
   const badgeSize = Math.round(size * 0.28);
   const badgeOffset = Math.round(size * 0.02);
 
-  const party = buildParty({ name, avatarUrl, organizationImageUrl, entityType });
+  const party = buildParty({
+    name,
+    avatarUrl,
+    avatarSeed,
+    organizationImageUrl,
+    organizationAvatarSeed,
+    entityType,
+  });
 
   const avatar = (
     <PartyAvatar

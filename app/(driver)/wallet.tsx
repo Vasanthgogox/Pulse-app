@@ -1195,10 +1195,56 @@ export default function DriverWalletScreen() {
 
   const tripJourneyItems = useMemo(() => {
     return completedTrips.map((trip) => {
-      // Fleet owner trip = trip dispatched by an org where the driver has a pay arrangement.
-      // Aggregate trips (supplier_id set) are marketplace/outsourced trips — different concept.
-      // Direct trips are those dispatched by orgs with no pay arrangement (just phone-linked).
-      const isFleetOwnerTrip = employerOrgIdSet.has(String(trip.organization_id ?? ''));
+      // Fleet owner trip = trip dispatched by an org where the driver had a pay arrangement
+      // at the time the trip occurred. Uses a date-window check against linkedDrivers so that:
+      //   • Former-employer trips (left_at set) are still classified as fleet trips.
+      //   • The invite filter is applied relative to the trip date, not current state — preventing
+      //     the global hasAnyAcceptedInvite guard from wrongly excluding pre-invite employers.
+      const tripOrgId = String(trip.organization_id ?? '');
+      const tripDateRaw = trip.pickup_date ?? trip.started_at ?? trip.created_at ?? '';
+      const tripTs = tripDateRaw ? new Date(tripDateRaw).getTime() : Date.now();
+
+      // Build the set of org IDs that had an accepted invite on or before the trip date.
+      const acceptedInviteOrgIdsAtDate = new Set(
+        invites
+          .filter((i) => {
+            if ((i.status || '').toLowerCase() !== 'accepted') return false;
+            // responded_at tells us when the invite was accepted; fall back to created_at.
+            const acceptedTs = i.responded_at
+              ? new Date(i.responded_at).getTime()
+              : i.created_at
+                ? new Date(i.created_at).getTime()
+                : 0;
+            return acceptedTs <= tripTs + 24 * 60 * 60 * 1000;
+          })
+          .map((i) => String(i.from_organization_id ?? ''))
+          .filter(Boolean),
+      );
+      const hadAnyInviteAtDate = acceptedInviteOrgIdsAtDate.size > 0;
+
+      const isFleetOwnerTrip =
+        !!tripOrgId &&
+        linkedDrivers.some((d) => {
+          if (String(d.organization_id ?? '') !== tripOrgId) return false;
+          // Must have a pay arrangement on this driver record.
+          const hasPay =
+            (d.payable_amount != null && d.payable_amount > 0) ||
+            (d.commission_percent != null && d.commission_percent > 0) ||
+            (d.commission_per_km != null && d.commission_per_km > 0);
+          if (!hasPay) return false;
+          // Driver must have joined this org on or before the trip date (±1 day tolerance).
+          const joinTs = d.created_at ? new Date(d.created_at).getTime() : 0;
+          if (joinTs > tripTs + 24 * 60 * 60 * 1000) return false;
+          // If the driver left this org, they must have left after the trip date (±1 day).
+          if (d.left_at) {
+            const leftTs = new Date(d.left_at).getTime();
+            if (leftTs < tripTs - 24 * 60 * 60 * 1000) return false;
+          }
+          // When formal invites existed at trip time, require this org to have sent one —
+          // prevents client orgs with payable_amount from being misclassified as employers.
+          if (hadAnyInviteAtDate && !acceptedInviteOrgIdsAtDate.has(tripOrgId)) return false;
+          return true;
+        });
 
       const fleetOrgName =
         salaryRequestOrgOptions.find(
@@ -1256,7 +1302,7 @@ export default function DriverWalletScreen() {
         fleetPendingLedger: view.fleetPendingLedger,
       };
     });
-  }, [completedTrips, ledgerEntries, salaryRequestOrgOptions, orgNameById, driverTripNumberById, employerOrgIdSet]);
+  }, [completedTrips, ledgerEntries, salaryRequestOrgOptions, orgNameById, driverTripNumberById, linkedDrivers, invites]);
 
   const isFleetMarkedAwaitingVerify = useCallback(
     (item: (typeof tripJourneyItems)[number]) =>

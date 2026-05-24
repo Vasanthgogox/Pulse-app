@@ -4,7 +4,6 @@
  */
 import { AppLoadingSplash } from '@/components/AppLoadingSplash';
 import { useAuth } from '@/contexts/AuthContext';
-import { useOptionalOrganization } from '@/contexts/OrganizationContext';
 import { safeHideSplashAsync } from '@/lib/safeSplashScreen.util';
 import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
@@ -15,18 +14,18 @@ type AppBootGateProps = {
 
 export function AppBootGate({ children }: AppBootGateProps) {
   const { status, user, profile, roleVerified } = useAuth();
-  const org = useOptionalOrganization();
   const splashHidden = useRef(false);
 
   const bootReady = useMemo(() => {
-    if (status === 'restoring') return false;
-    if (user) {
-      if (!profile) return false;
-      if (profile.role === 'driver' && !roleVerified) return false;
-      if (org?.isLoading) return false;
-    }
+    // Only block on auth state — workspace/org data loads behind the scenes
+    // after navigation is unblocked. Each screen shows its own skeleton while
+    // workspace data streams in (avoids blocking the entire app on org fetch).
+    if (status === 'restoring') return false;     // no session yet — must block
+    if (user && !profile) return false;           // profile needed to determine role/route
+    if (user && profile?.role === 'driver' && !roleVerified) return false;
     return true;
-  }, [status, user, profile, roleVerified, org?.isLoading]);
+    // Intentionally excluded: org?.isLoading — workspace loads behind the screen
+  }, [status, user, profile, roleVerified]);
 
   const splashVariant =
     status === 'restoring'

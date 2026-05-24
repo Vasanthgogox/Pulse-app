@@ -12,6 +12,7 @@ import { File } from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useState } from 'react';
+import { Platform } from 'react-native';
 
 export const AVATAR_BUCKET = 'userprofiles';
 export const LEGACY_AVATAR_BUCKET = 'avatars';
@@ -53,9 +54,11 @@ export interface PickAndUploadAvatarResult {
  */
 export async function pickAndUploadAvatar(userId: string): Promise<PickAndUploadAvatarResult> {
   try {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      return { path: null, previewUri: null, error: new Error('Permission to access photos is required') };
+    if (Platform.OS !== 'web') {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        return { path: null, previewUri: null, error: new Error('Permission to access photos is required') };
+      }
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -137,9 +140,11 @@ export async function pickAndUploadAvatar(userId: string): Promise<PickAndUpload
  */
 export async function pickAndUploadOrgLogo(orgId: string): Promise<PickAndUploadAvatarResult> {
   try {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      return { path: null, previewUri: null, error: new Error('Permission to access photos is required') };
+    if (Platform.OS !== 'web') {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        return { path: null, previewUri: null, error: new Error('Permission to access photos is required') };
+      }
     }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
@@ -180,7 +185,18 @@ export async function pickAndUploadOrgLogo(orgId: string): Promise<PickAndUpload
       upsert: false,
     });
     if (error) {
-      return { path: null, previewUri: null, error: new Error(error.message || 'Upload failed') };
+      const msg = error.message || 'Upload failed';
+      const isRls = /row-level security|policy|rls/i.test(msg);
+      console.log('[Org Logo Upload Error]', msg, 'isRls:', isRls, 'bucket:', AVATAR_BUCKET, 'path:', path);
+      return {
+        path: null,
+        previewUri: null,
+        error: new Error(
+          isRls
+            ? `Storage permissions blocked for org logo (path: "${path}"). Only the organization owner can upload. If you are the owner, apply migration 20260801120000_org_logo_storage_rls.sql. Supabase says: ${msg}`
+            : msg,
+        ),
+      };
     }
     return { path, previewUri: uri, error: null };
   } catch (e) {

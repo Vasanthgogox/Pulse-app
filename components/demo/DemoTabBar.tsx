@@ -17,9 +17,9 @@ import { preloadFinanceWarmup } from "@/lib/preloadFinanceWarmup";
 import { preloadTabScreen } from "@/lib/preloadRoutes";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queryKeys";
-import { useIntegratedChat } from "@/features/chat/contexts/IntegratedChatContext";
-import { useTripChat } from "@/features/chat/contexts/TripChatContext";
-import { useAvatar } from "@/lib/useAvatar";
+import { useOptionalIntegratedChat } from "@/features/chat/contexts/IntegratedChatContext";
+import { useOptionalTripChat } from "@/features/chat/contexts/TripChatContext";
+import { useAvatar, DEFAULT_USER_2D_AVATAR_SEED } from "@/lib/useAvatar";
 import type { InboundProtocolInviteItem } from "@/lib/globalSync/inboundProtocol.types";
 import { useAlertRegistryNotifications } from "@/lib/globalSync/useAlertRegistryNotifications";
 import { useOperationsShelfItems } from "@/lib/globalSync/useOperationsDerived";
@@ -582,9 +582,11 @@ export function DemoTabBar({
   const dockIndentsQ = useIndentsQuery(orgId);
   const dockMarketIndentsQ = useMarketIndentsQuery(orgId);
   const dockMyQuotesQ = useMyDirectQuotesQuery(orgId);
-  const { getTotalUnreadCount: getTripUnreadCount } = useTripChat();
-  const { getTotalUnreadCount: getNetworkUnreadCount } = useIntegratedChat();
-  const messageUnreadCount = getTripUnreadCount() + getNetworkUnreadCount();
+  const tripChat = useOptionalTripChat();
+  const integratedChat = useOptionalIntegratedChat();
+  const messageUnreadCount =
+    (tripChat?.getTotalUnreadCount?.() ?? 0) +
+    (integratedChat?.getTotalUnreadCount?.() ?? 0);
   const {
     receivedItems: receivedInviteItems,
     sentItems: sentInviteItems,
@@ -797,6 +799,7 @@ export function DemoTabBar({
     type: 'user',
     name: displayName,
     avatarUrl: profile?.avatar_url ?? null,
+    avatarSeed: profile?.avatar_seed?.trim() || DEFAULT_USER_2D_AVATAR_SEED,
   });
 
   const tabBarPlatform = resolveTabBarLayoutPlatform({

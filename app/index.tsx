@@ -4,12 +4,18 @@ import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useIsOnline } from '@/contexts/NetworkContext';
+import {
+  claimIndexBootRedirect,
+  hasIndexBootRedirected,
+  isPastIndexBootPath,
+  resetIndexBootRedirect,
+} from '@/lib/indexBootRedirect.util';
 import { getLastTabRoute } from '@/lib/lastRoute';
 import { preloadTabForRoute } from '@/lib/preloadRoutes';
 import { DEFAULT_DRIVER_ROUTE } from '@/lib/routes';
 import { useIsFocused } from '@react-navigation/native';
 import { usePathname, useRouter } from 'expo-router';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo } from 'react';
 import {
   Platform,
   StyleSheet,
@@ -19,6 +25,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+const SIGN_IN_BOOT_KEY = '__sign_in__';
+
 export default function Index() {
   const insets = useSafeAreaInsets();
   const { t } = useLanguage();
@@ -26,13 +34,8 @@ export default function Index() {
   const { user, profile, roleVerified, loading, refreshSession } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
-  // React Navigation mounts this screen in the background when deep-linking to
-  // any other route (unstable_settings.initialRouteName keeps it in the stack).
-  // Without this guard, the useEffect below would fire and redirect away from
-  // the intended deep-link destination.
   const isFocused = useIsFocused();
-  /** Set once per focused index visit — prevents redirect / replace loops. */
-  const bootRedirectRef = useRef(false);
+  const uid = user?.uid ?? null;
 
   const logRouteDecision = (event: string, details: Record<string, unknown>) => {
     if (!__DEV__) return;
@@ -40,51 +43,51 @@ export default function Index() {
   };
 
   useEffect(() => {
-    if (!isFocused) {
-      bootRedirectRef.current = false;
-      return;
-    }
-    if (loading) return;
-    if (Platform.OS === 'web' && pathname !== '/') {
-      // On web deep links (e.g. /network), do not let the index guard hijack refresh.
-      return;
-    }
-    if (bootRedirectRef.current) return;
+    if (!isFocused || loading) return;
 
-    if (!user) {
-      bootRedirectRef.current = true;
+    if (Platform.OS === 'web' && pathname !== '/' && pathname !== '') {
+      return;
+    }
+
+    if (!uid) {
+      resetIndexBootRedirect();
+      if (!claimIndexBootRedirect(SIGN_IN_BOOT_KEY)) return;
       logRouteDecision('redirect_sign_in', { pathname });
       router.replace(Platform.OS === 'web' ? '/terminal-website' : '/sign-in');
       return;
     }
+
+    if (isPastIndexBootPath(pathname)) {
+      claimIndexBootRedirect(uid);
+      return;
+    }
+
     if (!profile) return;
 
     if (profile.role === 'driver') {
       if (!roleVerified) {
         logRouteDecision('block_driver_redirect_unverified_role', {
-          uid: user.uid,
+          uid,
           pathname,
           role: profile.role,
         });
         return;
       }
-      bootRedirectRef.current = true;
-      logRouteDecision('redirect_driver_root', { uid: user.uid, pathname });
+      if (!claimIndexBootRedirect(uid)) return;
+      logRouteDecision('redirect_driver_root', { uid, pathname });
       router.replace(DEFAULT_DRIVER_ROUTE as '/');
       return;
     }
 
-    bootRedirectRef.current = true;
+    if (hasIndexBootRedirected(uid)) return;
+    if (!claimIndexBootRedirect(uid)) return;
+
     void getLastTabRoute().then((route) => {
       preloadTabForRoute(route);
-      logRouteDecision('redirect_dispatcher_last_tab', {
-        uid: user.uid,
-        pathname,
-        route,
-      });
+      logRouteDecision('redirect_dispatcher_last_tab', { uid, pathname, route });
       router.replace(route as '/');
     });
-  }, [user, profile, roleVerified, loading, pathname, router, isFocused]);
+  }, [uid, profile, roleVerified, loading, pathname, router, isFocused]);
 
   const splashVariant = useMemo(() => {
     if (loading) return 'session' as const;

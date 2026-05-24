@@ -3,7 +3,7 @@ import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
-import { useAvatar } from "@/lib/useAvatar";
+import { useAvatar, DEFAULT_USER_2D_AVATAR_SEED } from "@/lib/useAvatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
@@ -374,10 +374,11 @@ export default function ProfileScreen() {
     }
   }, [profile?.avatar_seed]);
 
-  const { imageUri: avatarUri, initials: avatarInitials, initialsColor: avatarColor } = useAvatar({
+  const { imageUri: avatarUri } = useAvatar({
     type: 'user',
     name: (profile?.full_name ?? profile?.displayName ?? '').trim(),
     avatarUrl: profile?.avatar_url ?? null,
+    avatarSeed: profile?.avatar_seed?.trim() || DEFAULT_USER_2D_AVATAR_SEED,
   });
 
   const [orgLogoUri, setOrgLogoUri] = useState<string | null>(null);
@@ -671,13 +672,7 @@ export default function ProfileScreen() {
                     accessibilityRole="button"
                   >
                     <View style={[styles.avatarFrame, orgLogoUri && styles.avatarFrameSmall]}>
-                      {avatarUri ? (
-                        <Image source={{ uri: avatarUri }} style={orgLogoUri ? styles.avatarSmall : styles.avatar} />
-                      ) : (
-                        <View style={[orgLogoUri ? styles.avatarSmall : styles.avatar, { backgroundColor: avatarColor, alignItems: 'center', justifyContent: 'center' }]}>
-                          <Text style={{ color: '#fff', fontWeight: '700', fontSize: orgLogoUri ? 16 : 28 }}>{avatarInitials}</Text>
-                        </View>
-                      )}
+                      <Image source={{ uri: avatarUri }} style={orgLogoUri ? styles.avatarSmall : styles.avatar} />
                     </View>
                     {!orgLogoUri && (
                       <View style={styles.levelBadgeOnAvatar}>
@@ -806,76 +801,26 @@ export default function ProfileScreen() {
                 </View>
               </View>
 
+              {/* ── Identity navigation split ───────────────────────────── */}
               <View style={styles.premiumCard}>
                 <View style={styles.premiumCardInner}>
                   <ProfileItemRow
-                    icon="user"
-                    label="Name"
-                    value={displayName}
-                    onPress={handleEditProfile}
+                    icon="user-circle"
+                    label="My Account"
+                    value={`${displayName} · personal identity`}
+                    onPress={() => router.push('/account')}
                     showChevron
                   />
-                  <View style={styles.premiumDivider} />
-                  <ProfileItemRow
-                    icon="phone"
-                    label="Phone"
-                    value={phone}
-                    onPress={handleDialPhone}
-                    showChevron
-                  />
-                  <View style={styles.premiumDivider} />
-                  <ProfileItemRow icon="envelope" label="Email" value={email} />
                   <View style={styles.premiumDivider} />
                   <ProfileItemRow
                     icon="building"
-                    label="Company"
-                    value={companyName}
+                    label="Company Profile"
+                    value={`${currentOrganization?.name ?? 'Workspace'} · logo, KYC, team`}
+                    onPress={() => router.push('/company-profile')}
+                    showChevron
                   />
                 </View>
               </View>
-
-              {orgId ? (
-                <View style={styles.premiumCard}>
-                  <View style={styles.premiumCardInner}>
-                    <Pressable
-                      onPress={() => void handleUploadOrgLogo()}
-                      style={({ pressed }) => [
-                        styles.orgLogoRow,
-                        pressed && styles.profileItemRowPressed,
-                      ]}
-                      accessibilityRole="button"
-                    >
-                      <View style={styles.orgLogoLeft}>
-                        <View style={styles.profileItemIconBox}>
-                          <FontAwesome name="image" size={16} color={Theme.textMuted} />
-                        </View>
-                        <View style={styles.profileItemTextWrap}>
-                          <Text style={styles.profileItemLabel}>Org Logo</Text>
-                          <Text style={styles.profileItemValue} numberOfLines={1}>
-                            {orgLogoUri ? "Uploaded · tap to change" : "Tap to upload logo"}
-                          </Text>
-                        </View>
-                      </View>
-                      <View style={styles.orgLogoPreviewWrap}>
-                        {orgLogoUploading ? (
-                          <LoadingIndicator size="small" color={Theme.primary} />
-                        ) : orgLogoUri ? (
-                          <Image source={{ uri: orgLogoUri }} style={styles.orgLogoPreview} />
-                        ) : (
-                          <View style={styles.orgLogoPlaceholder}>
-                            <PartyAvatar
-                              party={{ type: 'organization', name: currentOrganization?.name || "Org" }}
-                              size={36}
-                              shape="rounded"
-                            />
-                          </View>
-                        )}
-                        <FontAwesome name="camera" size={12} color={Theme.textMuted} style={{ marginLeft: 6 }} />
-                      </View>
-                    </Pressable>
-                  </View>
-                </View>
-              ) : null}
 
               <View style={styles.premiumCard}>
                 <View style={styles.premiumCardInner}>

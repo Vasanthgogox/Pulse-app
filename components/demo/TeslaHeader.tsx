@@ -6,7 +6,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
-import { useAvatar } from '@/lib/useAvatar';
+import { useAvatar, DEFAULT_USER_2D_AVATAR_SEED } from '@/lib/useAvatar';
 
 export interface TeslaHeaderProps {
   title: string;
@@ -32,6 +32,7 @@ export function TeslaHeader({
     type: 'user',
     name: displayName,
     avatarUrl: profile?.avatar_url ?? null,
+    avatarSeed: profile?.avatar_seed?.trim() || DEFAULT_USER_2D_AVATAR_SEED,
   });
   return (
     <View style={styles.wrap}>

@@ -9,7 +9,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { StyleSheet, Text, TouchableOpacity, View, Image, type TextStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/contexts/AuthContext";
-import { useAvatar } from "@/lib/useAvatar";
+import { useAvatar, DEFAULT_USER_2D_AVATAR_SEED } from "@/lib/useAvatar";
 import { useRouter } from "expo-router";
 
 export interface TeslaHeaderProps {
@@ -77,6 +77,7 @@ export function TeslaHeader({
     type: 'user',
     name: displayName,
     avatarUrl: profile?.avatar_url ?? null,
+    avatarSeed: profile?.avatar_seed?.trim() || DEFAULT_USER_2D_AVATAR_SEED,
   });
   const handleNotificationPress = () => {
     if (onNotificationClick) {

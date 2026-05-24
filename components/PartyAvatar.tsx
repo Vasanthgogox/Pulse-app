@@ -1,8 +1,7 @@
 /**
  * PartyAvatar — global, context-aware profile picture component.
  *
- * Uses `useAvatar` internally. No random preset images: either the real
- * uploaded photo is shown, or clean initials on a coloured circle.
+ * Uses `useAvatar` internally: uploaded photo, 2D seed preset, or pastel initials.
  *
  * Quick-use wrappers: <DriverAvatar />, <OrgAvatar />, <UserAvatar />
  */
@@ -15,6 +14,10 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
+import {
+  partyAvatarBackgroundColor,
+  partyAvatarInitialsTextColor,
+} from '@/lib/partyAvatarDisplay';
 import {
   useAvatar,
   type AvatarContext,
@@ -58,45 +61,10 @@ function br(size: number, shape: AvatarShape): number {
   return 4;
 }
 
-/** WCAG-contrast-aware text colour for the initials. */
-function textColorFor(bg: string): string {
-  const hex = bg.replace('#', '');
-  if (hex.length !== 6) return '#fff';
-  const r = parseInt(hex.slice(0, 2), 16) / 255;
-  const g = parseInt(hex.slice(2, 4), 16) / 255;
-  const b = parseInt(hex.slice(4, 6), 16) / 255;
-  const lin = (v: number) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
-  const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
-  return L > 0.22 ? '#1e293b' : '#ffffff';
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Core component
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * @example driver
- * <PartyAvatar
- *   party={{ type: 'driver', name: 'Ahmed', avatarUrl: driver.avatar_url }}
- *   size={40}
- * />
- *
- * @example org
- * <PartyAvatar
- *   party={{ type: 'organization', name: 'aiman logs', logoUrl: org.logo_url,
- *             ownerAvatarUrl: ownerProfile.avatar_url }}
- *   size={40}
- *   shape="rounded"
- * />
- *
- * @example dispatcher showing org logo externally
- * <PartyAvatar
- *   party={{ type: 'user', name: 'Nihas N', avatarUrl: profile.avatar_url,
- *             orgLogoUrl: org.logo_url }}
- *   context="representing_company"
- *   size={40}
- * />
- */
 export function PartyAvatar({
   party,
   context = 'personal',
@@ -106,7 +74,7 @@ export function PartyAvatar({
   borderColor = 'rgba(0,0,0,0.08)',
   showBorder = true,
 }: PartyAvatarProps) {
-  const { imageUri, loading, initials, initialsColor } = useAvatar(party, context);
+  const { imageUri, loading, initials } = useAvatar(party, context);
 
   const opacity = useRef(new Animated.Value(0)).current;
   const prevUri = useRef<string | null>(null);
@@ -162,12 +130,13 @@ export function PartyAvatar({
     );
   }
 
-  // ── Initials fallback ─────────────────────────────────────────────────────
-  const textColor = textColorFor(initialsColor);
+  // ── Initials fallback (cash-tab pastel style) ─────────────────────────────
+  const bg = partyAvatarBackgroundColor(party.name);
+  const textColor = partyAvatarInitialsTextColor(bg);
   const fontSize = Math.round(size * 0.36);
 
   return (
-    <View style={[baseStyle, { backgroundColor: initialsColor }]}>
+    <View style={[baseStyle, { backgroundColor: bg }]}>
       <Text
         style={[styles.initials, { fontSize, color: textColor }]}
         numberOfLines={1}
@@ -191,6 +160,7 @@ export function PartyAvatar({
 export function DriverAvatar({
   name,
   avatarUrl,
+  avatarSeed,
   size,
   shape = 'circle',
   style,
@@ -203,7 +173,7 @@ export function DriverAvatar({
 }) {
   return (
     <PartyAvatar
-      party={{ type: 'driver', name, avatarUrl }}
+      party={{ type: 'driver', name, avatarUrl, avatarSeed }}
       size={size}
       shape={shape}
       style={style}
@@ -223,6 +193,7 @@ export function OrgAvatar({
   name,
   logoUrl,
   ownerAvatarUrl,
+  ownerAvatarSeed,
   size,
   shape = 'rounded',
   style,
@@ -235,7 +206,7 @@ export function OrgAvatar({
 }) {
   return (
     <PartyAvatar
-      party={{ type: 'organization', name, logoUrl, ownerAvatarUrl }}
+      party={{ type: 'organization', name, logoUrl, ownerAvatarUrl, ownerAvatarSeed }}
       size={size}
       shape={shape}
       style={style}

@@ -12,7 +12,7 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProfileMenuDrawerOptional } from "@/contexts/ProfileMenuDrawerContext";
 import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
-import { useAvatar } from "@/lib/useAvatar";
+import { useAvatar, DEFAULT_USER_2D_AVATAR_SEED } from "@/lib/useAvatar";
 import { ChevronLeft } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { useMemo } from "react";
@@ -82,6 +82,7 @@ export function HomePageHeader({
     type: 'user',
     name: profileDisplayName,
     avatarUrl: profile?.avatar_url ?? null,
+    avatarSeed: profile?.avatar_seed?.trim() || DEFAULT_USER_2D_AVATAR_SEED,
   });
 
   const welcomeName = useMemo(() => {

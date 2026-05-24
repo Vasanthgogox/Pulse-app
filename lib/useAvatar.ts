@@ -4,13 +4,17 @@
  * Rules (no exceptions):
  *   Driver                → their uploaded photo, or initials
  *   Organization          → company logo, or initials
- *   User (personal)       → their uploaded photo, or initials
- *   User (business)       → org logo, then their own photo, or initials
+ *   User (personal)       → their uploaded photo, seed preset, or initials
+ *   User (business)       → org logo, then their own photo, seed preset, or initials
  *
- * NO random preset avatars. If no real photo is found → initials only.
- * Signed URLs are resolved async; initials render immediately as placeholder.
+ * Signed URLs are resolved async; seed presets and initials render synchronously.
  */
 
+import { getAvatarUriForSeed } from '@/constants/DriverLevels';
+import {
+  DEFAULT_USER_2D_AVATAR_SEED,
+  getUser2DAvatarUriForSeed,
+} from '@/constants/UserAvatars';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AVATAR_BUCKET,
@@ -37,6 +41,8 @@ export type DriverParty = {
   name: string;
   /** profile.avatar_url — Supabase storage path or full URL */
   avatarUrl?: string | null;
+  /** profile.avatar_seed — driver preset when no uploaded photo */
+  avatarSeed?: string | null;
 };
 
 /**
@@ -52,6 +58,8 @@ export type OrgParty = {
    * (Not a preset — this is their actual uploaded photo.)
    */
   ownerAvatarUrl?: string | null;
+  /** Org owner avatar_seed — 2D preset when no logo or owner photo */
+  ownerAvatarSeed?: string | null;
 };
 
 /**
@@ -68,6 +76,10 @@ export type UserParty = {
   orgLogoUrl?: string | null;
   /** org owner's profile.avatar_url — secondary fallback for business context */
   orgOwnerAvatarUrl?: string | null;
+  /** profile.avatar_seed — 2D preset when no uploaded photo */
+  avatarSeed?: string | null;
+  /** Org owner avatar_seed — preset fallback in business context */
+  orgOwnerAvatarSeed?: string | null;
 };
 
 export type AvatarParty = DriverParty | OrgParty | UserParty;
@@ -175,10 +187,50 @@ function rawUrlCandidates(party: AvatarParty, context: AvatarContext): Array<str
  * Collapse the candidate list into a single stable cache key string.
  * Changing this string triggers a new async resolution.
  */
+function presetSeedKey(party: AvatarParty, context: AvatarContext): string {
+  switch (party.type) {
+    case 'driver':
+      return (party.avatarSeed ?? '').trim();
+    case 'organization':
+      return (party.ownerAvatarSeed ?? '').trim();
+    case 'user':
+      if (context === 'representing_company') {
+        return [
+          (party.orgOwnerAvatarSeed ?? '').trim(),
+          (party.avatarSeed ?? '').trim(),
+        ].join('|');
+      }
+      return (party.avatarSeed ?? '').trim();
+  }
+}
+
+function resolvePresetUri(party: AvatarParty, context: AvatarContext): string | null {
+  switch (party.type) {
+    case 'driver': {
+      const seed = (party.avatarSeed ?? '').trim();
+      return seed ? getAvatarUriForSeed(seed) : null;
+    }
+    case 'organization': {
+      const seed = (party.ownerAvatarSeed ?? '').trim();
+      return seed ? getUser2DAvatarUriForSeed(seed) : null;
+    }
+    case 'user': {
+      if (context === 'representing_company') {
+        const orgSeed = (party.orgOwnerAvatarSeed ?? '').trim();
+        if (orgSeed) return getUser2DAvatarUriForSeed(orgSeed);
+      }
+      const seed = (party.avatarSeed ?? '').trim();
+      return seed ? getUser2DAvatarUriForSeed(seed) : null;
+    }
+  }
+}
+
 function cacheKey(party: AvatarParty, context: AvatarContext): string {
-  return rawUrlCandidates(party, context)
-    .map((u) => (u ?? '').trim())
-    .join('|');
+  return [
+  ...rawUrlCandidates(party, context).map((u) => (u ?? '').trim()),
+  presetSeedKey(party, context),
+  context,
+  ].join('|');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -209,10 +261,18 @@ export function useAvatar(
     party.type, party.name,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     ...rawUrlCandidates(party, context).map((u) => u ?? ''),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    presetSeedKey(party, context),
     context,
   ]);
 
-  const [imageUri, setImageUri] = useState<string | null>(null);
+  const presetUri = useMemo(
+    () => resolvePresetUri(party, context),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [party.type, presetSeedKey(party, context), context],
+  );
+
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const prevKey = useRef<string>('');
 
@@ -225,14 +285,14 @@ export function useAvatar(
     );
 
     if (candidates.length === 0) {
-      setImageUri(null);
+      setPhotoUri(null);
       setLoading(false);
       return;
     }
 
     let cancelled = false;
     setLoading(true);
-    setImageUri(null);
+    setPhotoUri(null);
 
     // Try candidates in order — first successful resolution wins.
     (async () => {
@@ -240,13 +300,12 @@ export function useAvatar(
         const resolved = await resolvePhotoUrl(raw);
         if (cancelled) return;
         if (resolved) {
-          setImageUri(resolved);
+          setPhotoUri(resolved);
           setLoading(false);
           return;
         }
       }
-      // All candidates failed → show initials
-      setImageUri(null);
+      setPhotoUri(null);
       setLoading(false);
     })();
 
@@ -255,9 +314,12 @@ export function useAvatar(
   }, [key]);
 
   return {
-    imageUri,
-    loading,
+    imageUri: photoUri ?? presetUri,
+    loading: loading && !presetUri,
     initials: deriveInitials(party.name),
     initialsColor: deriveInitialsColor(party.name),
   };
 }
+
+/** Default 2D seed for signed-in dispatcher profile chrome (tab bar, drawer, profile hero). */
+export { DEFAULT_USER_2D_AVATAR_SEED };
