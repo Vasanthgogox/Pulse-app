@@ -8,7 +8,7 @@ import React, {
   type ReactNode,
 } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOptionalOrganization } from "@/contexts/OrganizationContext";
 import { subscribeSharedPostgresChanges } from "@/lib/realtimeRegistry";
 import * as chatService from "../services/chat.service";
 import type {
@@ -146,7 +146,8 @@ export function IntegratedChatProvider({
 }) {
   const { profile } = useAuth();
   const selfUid = profile?.uid ?? null;
-  const { currentOrganization } = useOrganization();
+  const org = useOptionalOrganization();
+  const currentOrganization = org?.currentOrganization ?? null;
   const orgId = currentOrganization?.id ?? null;
   const orgName = currentOrganization?.name ?? "My Organization";
 

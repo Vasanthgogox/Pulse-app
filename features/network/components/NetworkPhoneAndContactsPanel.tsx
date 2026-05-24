@@ -2,7 +2,7 @@
  * Network discover helpers: debounced phone lookup + contacts-on-app recommendations.
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
-import { PartyAvatar } from "@/components/PartyAvatar";
+import { EntityAvatar as PartyAvatar } from '@/components/EntityAvatar';
 import Theme from "@/constants/Theme";
 import {
   ConnectionRoleModal,

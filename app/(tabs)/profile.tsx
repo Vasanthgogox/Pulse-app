@@ -3,10 +3,7 @@ import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
-import {
-    DEFAULT_USER_2D_AVATAR_SEED,
-    getUser2DAvatarUriForSeed,
-} from "@/constants/UserAvatars";
+import { useAvatar } from "@/lib/useAvatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
@@ -22,6 +19,7 @@ import { getCapabilitiesFromProfile } from "@/lib/capabilities";
 import { useClientsQuery } from "@/lib/queries/useClientsQuery";
 import { useDriversQuery } from "@/lib/queries/useDriversQuery";
 import { useTripsQuery } from "@/lib/queries/useTripsQuery";
+import { useRealtimeTripsInvalidation } from "@/lib/queries/useRealtimeInvalidation";
 import { queryKeys } from "@/lib/queryKeys";
 import { ROUTES } from "@/lib/routes";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -300,6 +298,7 @@ export default function ProfileScreen() {
   const { signOut, user, profile, refreshSession } = useAuth();
 
   const { data: trips = [], isLoading: tripsLoading } = useTripsQuery(orgId);
+  useRealtimeTripsInvalidation(orgId);
   const { data: drivers = [] } = useDriversQuery(orgId);
   const { data: clients = [] } = useClientsQuery(orgId);
 
@@ -367,9 +366,7 @@ export default function ProfileScreen() {
   }, [nextLevelConfig, completedTrips]);
 
   const [viewMode, setViewMode] = useState<ProfileViewMode>("main");
-  const [avatarSeed, setAvatarSeed] = useState(
-    profile?.avatar_seed || DEFAULT_USER_2D_AVATAR_SEED,
-  );
+  const [avatarSeed, setAvatarSeed] = useState(profile?.avatar_seed ?? '');
 
   useEffect(() => {
     if (profile?.avatar_seed) {
@@ -377,9 +374,11 @@ export default function ProfileScreen() {
     }
   }, [profile?.avatar_seed]);
 
-  const [avatarUri, setAvatarUri] = useState<string>(() =>
-    getUser2DAvatarUriForSeed(profile?.avatar_seed || DEFAULT_USER_2D_AVATAR_SEED),
-  );
+  const { imageUri: avatarUri, initials: avatarInitials, initialsColor: avatarColor } = useAvatar({
+    type: 'user',
+    name: (profile?.full_name ?? profile?.displayName ?? '').trim(),
+    avatarUrl: profile?.avatar_url ?? null,
+  });
 
   const [orgLogoUri, setOrgLogoUri] = useState<string | null>(null);
   const [orgLogoUploading, setOrgLogoUploading] = useState(false);
@@ -548,27 +547,6 @@ export default function ProfileScreen() {
 
   useEffect(() => {
     let mounted = true;
-    (async () => {
-      const fallback = getUser2DAvatarUriForSeed(avatarSeed);
-      const raw = profile?.avatar_url?.trim();
-      if (!raw) {
-        if (mounted) setAvatarUri(fallback);
-        return;
-      }
-      if (raw.startsWith("http://") || raw.startsWith("https://")) {
-        if (mounted) setAvatarUri(raw);
-        return;
-      }
-      const signed = await getSignedAvatarUrl(raw);
-      if (mounted) setAvatarUri(signed ?? fallback);
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, [profile?.avatar_url, avatarSeed]);
-
-  useEffect(() => {
-    let mounted = true;
     const raw = currentOrganization?.logo_url?.trim();
     if (!raw) {
       setOrgLogoUri(null);
@@ -693,7 +671,13 @@ export default function ProfileScreen() {
                     accessibilityRole="button"
                   >
                     <View style={[styles.avatarFrame, orgLogoUri && styles.avatarFrameSmall]}>
-                      <Image source={{ uri: avatarUri }} style={orgLogoUri ? styles.avatarSmall : styles.avatar} />
+                      {avatarUri ? (
+                        <Image source={{ uri: avatarUri }} style={orgLogoUri ? styles.avatarSmall : styles.avatar} />
+                      ) : (
+                        <View style={[orgLogoUri ? styles.avatarSmall : styles.avatar, { backgroundColor: avatarColor, alignItems: 'center', justifyContent: 'center' }]}>
+                          <Text style={{ color: '#fff', fontWeight: '700', fontSize: orgLogoUri ? 16 : 28 }}>{avatarInitials}</Text>
+                        </View>
+                      )}
                     </View>
                     {!orgLogoUri && (
                       <View style={styles.levelBadgeOnAvatar}>
@@ -880,8 +864,9 @@ export default function ProfileScreen() {
                         ) : (
                           <View style={styles.orgLogoPlaceholder}>
                             <PartyAvatar
-                              name={currentOrganization?.name || "Org"}
+                              party={{ type: 'organization', name: currentOrganization?.name || "Org" }}
                               size={36}
+                              shape="rounded"
                             />
                           </View>
                         )}
@@ -935,9 +920,17 @@ export default function ProfileScreen() {
               <View style={styles.premiumCard}>
                 <View style={styles.premiumCardInner}>
                   <ProfileItemRow
+                    icon="shield"
+                    label="Business Verification"
+                    value="KYC · PAN · GSTIN · CIN"
+                    onPress={() => router.push("/kyc-settings")}
+                    showChevron
+                  />
+                  <View style={styles.premiumDivider} />
+                  <ProfileItemRow
                     icon="cog"
-                    label="Settings"
-                    value="Branding & identity for invoice PDFs"
+                    label="Invoice Branding"
+                    value="Logo & watermark for invoice PDFs"
                     onPress={() => router.push("/branding-settings")}
                     showChevron
                   />
@@ -978,10 +971,7 @@ export default function ProfileScreen() {
         initialCompanyName={profile?.company_name ?? ""}
         email={user?.email ?? ""}
         initialStatusText={profile?.status_text ?? ""}
-        onPhotoUpdated={async (payload) => {
-          if (payload?.avatarUri?.trim()) {
-            setAvatarUri(payload.avatarUri);
-          }
+        onPhotoUpdated={async () => {
           await refreshSession();
         }}
         initialAvatarSeed={avatarSeed}

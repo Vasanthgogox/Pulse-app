@@ -15,7 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
-import { PartyAvatar } from "@/components/PartyAvatar";
+import { EntityAvatar as PartyAvatar } from '@/components/EntityAvatar';
 import Theme from "@/constants/Theme";
 
 import type {

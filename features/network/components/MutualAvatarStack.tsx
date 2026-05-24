@@ -1,7 +1,7 @@
 /**
  * LinkedIn-style overlapping mutual connection avatars (facepile).
  */
-import { PartyAvatar } from "@/components/PartyAvatar";
+import { EntityAvatar as PartyAvatar } from '@/components/EntityAvatar';
 import Theme from "@/constants/Theme";
 import { NETWORK_DISCOVER_MUTUAL_FACE_SIZE } from "@/features/network/components/networkDiscoverDossierCard.styles";
 import { useMemo } from "react";

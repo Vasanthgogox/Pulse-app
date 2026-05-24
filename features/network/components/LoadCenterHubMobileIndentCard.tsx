@@ -11,7 +11,7 @@ import {
   HUB_GRID_PARTY_MIN_HEIGHT,
   HUB_GRID_ROUTE_MIN_HEIGHT,
 } from "@/components/hub/hubGridCardLayout";
-import { PartyAvatar } from "@/components/PartyAvatar";
+import { EntityAvatar as PartyAvatar } from '@/components/EntityAvatar';
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";

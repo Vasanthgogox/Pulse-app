@@ -45,6 +45,7 @@ function shouldShowNavigationOverlay(
 export function NavigationLoadingOverlay() {
   const pathname = usePathname();
   const segments = useSegments() as string[];
+  const segmentsKey = segments.join('/');
   const { width } = useWindowDimensions();
   const isDesktopWeb = Platform.OS === 'web' && width >= Layout.webDesktopMinWidth;
   const reserveTopNav = isDesktopWeb && pathnameHasRootTopNav(pathname);
@@ -53,12 +54,18 @@ export function NavigationLoadingOverlay() {
   const shownAt = useRef(0);
 
   useEffect(() => {
-    if (!shouldShowNavigationOverlay(pathname, segments)) {
-      setVisible(false);
+    const shouldShow = shouldShowNavigationOverlay(pathname, segments);
+
+    if (!shouldShow) {
+      setVisible((prev) => (prev ? false : prev));
+      if (hideTimer.current) {
+        clearTimeout(hideTimer.current);
+        hideTimer.current = null;
+      }
       return;
     }
 
-    setVisible(true);
+    setVisible((prev) => (prev ? prev : true));
     shownAt.current = Date.now();
 
     if (hideTimer.current) clearTimeout(hideTimer.current);
@@ -66,14 +73,16 @@ export function NavigationLoadingOverlay() {
     const interaction = InteractionManager.runAfterInteractions(() => {
       const elapsed = Date.now() - shownAt.current;
       const delay = Math.max(0, MIN_VISIBLE_MS - elapsed);
-      hideTimer.current = setTimeout(() => setVisible(false), delay);
+      hideTimer.current = setTimeout(() => {
+        setVisible((prev) => (prev ? false : prev));
+      }, delay);
     });
 
     return () => {
       interaction.cancel();
       if (hideTimer.current) clearTimeout(hideTimer.current);
     };
-  }, [pathname, segments]);
+  }, [pathname, segmentsKey]);
 
   if (!visible) return null;
 

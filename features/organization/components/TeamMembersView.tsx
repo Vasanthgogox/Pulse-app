@@ -5,7 +5,7 @@
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
-import { PartyAvatar } from "@/components/PartyAvatar";
+import { EntityAvatar as PartyAvatar } from '@/components/EntityAvatar';
 import { useOrgMembersQuery, useInvalidateOrgMembers } from "@/lib/queries/useOrgMembersQuery";
 import {
   updateMemberRole,

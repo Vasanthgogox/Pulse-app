@@ -5,7 +5,7 @@
  * If that returns nothing and the DB has get_organizations_for_user() RPC, tries RPC to backfill owner memberships.
  */
 import { supabase } from "@/lib/supabase";
-import type { CurrentOrganization } from "@/types/organization";
+import type { CurrentOrganization, WorkspaceKyc } from "@/types/organization";
 
 const defaultCapabilities = {
   canPostIndent: true,
@@ -224,4 +224,31 @@ export async function getOrganizationLocationsByNames(orgNames: string[]): Promi
     .flatMap((response) => response.data ?? [])
     .filter(Boolean) as OrganizationLocation[];
   return { error: null, locations };
+}
+
+// ─── Workspace KYC ────────────────────────────────────────────────────────────
+
+export async function getWorkspaceKyc(orgId: string): Promise<{
+  error: Error | null;
+  kyc: WorkspaceKyc | null;
+}> {
+  const { data, error } = await supabase().rpc('get_workspace_kyc_status', {
+    p_org_id: orgId,
+  });
+  if (error) return { error: new Error(error.message), kyc: null };
+  return { error: null, kyc: (data as WorkspaceKyc) ?? null };
+}
+
+export async function updateWorkspaceKyc(
+  orgId: string,
+  fields: { business_pan?: string | null; gstin?: string | null; cin?: string | null },
+): Promise<{ error: Error | null; kyc: WorkspaceKyc | null }> {
+  const { data, error } = await supabase().rpc('update_workspace_kyc', {
+    p_org_id: orgId,
+    p_pan:    fields.business_pan ?? null,
+    p_gstin:  fields.gstin ?? null,
+    p_cin:    fields.cin ?? null,
+  });
+  if (error) return { error: new Error(error.message), kyc: null };
+  return { error: null, kyc: (data as WorkspaceKyc) ?? null };
 }

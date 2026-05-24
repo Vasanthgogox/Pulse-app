@@ -49,3 +49,19 @@ export interface TeamInvite {
   joined_at: string;
   org_name: string;
 }
+
+// ─── Workspace KYC ────────────────────────────────────────────────────────────
+
+export type KycVerificationStatus = 'unverified' | 'pending' | 'verified' | 'rejected';
+
+export interface WorkspaceKyc {
+  id: string;
+  name: string;
+  logo_url: string | null;
+  business_pan: string | null;
+  gstin: string | null;
+  cin: string | null;
+  verification_status: KycVerificationStatus;
+  verified_at: string | null;
+  kyc_rejected_reason: string | null;
+}

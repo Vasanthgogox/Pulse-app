@@ -1,7 +1,7 @@
 /**
  * Mobile trips hub — MakeMyTrip “My Trips” ticket card (single white surface, no nested panels).
  */
-import { PartyAvatar } from "@/components/PartyAvatar";
+import { EntityAvatar as PartyAvatar } from '@/components/EntityAvatar';
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import Theme from "@/constants/Theme";
 import {

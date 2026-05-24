@@ -4,7 +4,7 @@
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { CreateTripSheetSearchInput } from "@/components/CreateTripSheetSearchInput";
-import { PartyAvatar } from "@/components/PartyAvatar";
+import { EntityAvatar as PartyAvatar } from '@/components/EntityAvatar';
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";

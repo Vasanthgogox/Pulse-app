@@ -6,9 +6,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
-import { useState, useEffect } from 'react';
-import { getSignedAvatarUrl } from '@/lib/avatarUpload';
-import { DEFAULT_USER_2D_AVATAR_SEED, getUser2DAvatarUriForSeed } from '@/constants/UserAvatars';
+import { useAvatar } from '@/lib/useAvatar';
 
 export interface TeslaHeaderProps {
   title: string;
@@ -29,42 +27,12 @@ export function TeslaHeader({
   onProfileClick,
 }: TeslaHeaderProps) {
   const { profile } = useAuth();
-  const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
   const displayName = (profile?.full_name ?? profile?.displayName ?? 'User').trim();
-  const initials =
-    displayName
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part[0]?.toUpperCase())
-      .join('') || 'U';
-  useEffect(() => {
-    let mounted = true;
-    const resolveAvatar = async () => {
-      if (!profile) {
-        if (mounted) setProfileAvatarUri(null);
-        return;
-      }
-      if (profile.avatar_url?.startsWith("http")) {
-        if (mounted) setProfileAvatarUri(profile.avatar_url);
-        return;
-      }
-      if (profile.avatar_url?.trim()) {
-        const signed = await getSignedAvatarUrl(profile.avatar_url.trim());
-        if (mounted) setProfileAvatarUri(signed);
-        return;
-      }
-      if (profile.avatar_seed?.trim()) {
-        if (mounted) setProfileAvatarUri(getUser2DAvatarUriForSeed(profile.avatar_seed.trim()));
-        return;
-      }
-      if (mounted) setProfileAvatarUri(getUser2DAvatarUriForSeed(DEFAULT_USER_2D_AVATAR_SEED));
-    };
-    void resolveAvatar();
-    return () => {
-      mounted = false;
-    };
-  }, [profile?.avatar_url, profile?.avatar_seed]);
+  const { imageUri: profileAvatarUri, initials } = useAvatar({
+    type: 'user',
+    name: displayName,
+    avatarUrl: profile?.avatar_url ?? null,
+  });
   return (
     <View style={styles.wrap}>
       <View style={styles.left}>

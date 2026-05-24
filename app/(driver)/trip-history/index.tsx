@@ -502,9 +502,11 @@ export default function DriverTripsScreen() {
       if (res.error && __DEV__) {
         console.warn("[trip-history] getLinkedDriversForCurrentUser:", res.error.message);
       }
-      const drivers = (res.drivers ?? []).filter((d) => !d.left_at);
+      // Include all rows (including left fleets) so history shows all trips ever driven.
+      const drivers = res.drivers ?? [];
+      const activeDriver = drivers.find((d) => !d.left_at) ?? drivers[0] ?? null;
       if (drivers.length > 0) {
-        setDriver(drivers[0]);
+        setDriver(activeDriver);
         Promise.all([
           tripsService.getTripsByDriverIds(drivers.map((d) => d.id)),
           driversService.getDriverInvitesReceived(),

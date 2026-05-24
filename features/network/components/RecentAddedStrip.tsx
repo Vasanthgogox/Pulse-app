@@ -2,7 +2,7 @@
  * Recently added — avatars, role, status, and connect / on Pulse (matches network hub semantics).
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
-import { PartyAvatar } from "@/components/PartyAvatar";
+import { EntityAvatar as PartyAvatar } from '@/components/EntityAvatar';
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import type { ConnectedOrg } from "@/features/network/components/ConnectionsView";

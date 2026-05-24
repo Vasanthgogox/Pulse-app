@@ -2,7 +2,7 @@
  * Shared network profile card — reference grid + list layouts (connections & discover).
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
-import { PartyAvatar } from "@/components/PartyAvatar";
+import { EntityAvatar as PartyAvatar } from '@/components/EntityAvatar';
 import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { NetworkHubGlassBadge } from "@/features/network/components/NetworkHubGlassBadge";

@@ -1,6 +1,6 @@
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
 import { LoadingIndicator } from "@/components/LoadingIndicator";
-import { getFleetAvatarUriForOrg } from '@/lib/fleetAvatar';
+import { resolveOrgAvatarUri } from '@/lib/fleetAvatar';
 import {
   buildDriverTripNumberMap,
   getDriverTripDisplayNumber,
@@ -1093,9 +1093,12 @@ export default function DriverRequestsScreen() {
                         >
                           <Image
                             source={{
-                              uri: getFleetAvatarUriForOrg(
+                              uri: resolveOrgAvatarUri(
                                 inv.from_organization_id,
                                 inv.from_org_name ?? 'Organisation',
+                                inv.from_org_logo_url,
+                                inv.from_org_avatar_seed,
+                                inv.from_org_avatar_url,
                               ),
                             }}
                             style={styles.cardIconImage}

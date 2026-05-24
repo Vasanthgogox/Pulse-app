@@ -1,4 +1,4 @@
--- Extend get_driver_invites_received to include org owner's avatar for consistent
+-- Extend get_driver_invites_received to include org logo + owner avatar for consistent
 -- avatar display in the driver app (matching business-app party avatar logic).
 CREATE OR REPLACE FUNCTION public.get_driver_invites_received()
 RETURNS TABLE(
@@ -13,6 +13,7 @@ RETURNS TABLE(
   payable_amount numeric,
   commission_percent numeric,
   commission_per_km numeric,
+  from_org_logo_url text,
   from_org_avatar_url text,
   from_org_avatar_seed text
 )
@@ -32,6 +33,7 @@ AS $$
     di.payable_amount,
     di.commission_percent,
     di.commission_per_km,
+    o.logo_url,
     p.avatar_url,
     p.avatar_seed
   FROM public.driver_invites di

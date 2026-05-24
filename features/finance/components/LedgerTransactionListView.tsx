@@ -2,7 +2,7 @@
  * Ledger entries in a compact transaction list: grouped by day/month,
  * with cumulative Paid/Received per section and tappable trip association.
  */
-import { PartyAvatar } from "@/components/PartyAvatar";
+import { EntityAvatar } from "@/components/EntityAvatar";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
@@ -67,12 +67,12 @@ function defaultDriverPartyAvatar(
   const fromRow = (d?.avatar_url ?? "").trim();
   const fromExtra = (driverProfileImageUrls?.[row.contact_id] ?? "").trim();
   return (
-    <PartyAvatar
+    <EntityAvatar
       name={name}
       avatarUrl={fromRow || fromExtra || null}
-      avatarSeed={(d?.avatar_seed ?? "").trim() || null}
       entityType="driver"
       size={40}
+      showIntegrationBadge={false}
     />
   );
 }

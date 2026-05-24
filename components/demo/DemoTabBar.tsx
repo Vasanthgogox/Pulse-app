@@ -6,10 +6,6 @@ import { AlertRegistryPanel } from "@/components/AlertRegistryPanel";
 import { InboundProtocolPanel } from "@/components/InboundProtocolPanel";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import {
-    DEFAULT_USER_2D_AVATAR_SEED,
-    getUser2DAvatarUriForSeed,
-} from "@/constants/UserAvatars";
 import { useAuth } from "@/contexts/AuthContext";
 import {
     useDemoTabBarScrollHideVersion,
@@ -23,7 +19,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queryKeys";
 import { useIntegratedChat } from "@/features/chat/contexts/IntegratedChatContext";
 import { useTripChat } from "@/features/chat/contexts/TripChatContext";
-import { getSignedAvatarUrl } from "@/lib/avatarUpload";
+import { useAvatar } from "@/lib/useAvatar";
 import type { InboundProtocolInviteItem } from "@/lib/globalSync/inboundProtocol.types";
 import { useAlertRegistryNotifications } from "@/lib/globalSync/useAlertRegistryNotifications";
 import { useOperationsShelfItems } from "@/lib/globalSync/useOperationsDerived";
@@ -558,7 +554,6 @@ export function DemoTabBar({
       }
     }
   };
-  const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
   /** Operation shelf row ids the user has opened in the Alert Registry (session-only; badge excludes them). */
   const [seenRegistryOperationIds, setSeenRegistryOperationIds] = useState<
     Record<string, true>
@@ -627,40 +622,6 @@ export function DemoTabBar({
 
     return activeIds.size;
   }, [dockIndentsQ.data, dockMarketIndentsQ.data, dockMyQuotesQ.data, orgId]);
-  useEffect(() => {
-    let mounted = true;
-    const resolveAvatar = async () => {
-      if (!profile) {
-        if (mounted) setProfileAvatarUri(null);
-        return;
-      }
-      if (profile.avatar_url?.startsWith("http")) {
-        if (mounted) setProfileAvatarUri(profile.avatar_url);
-        return;
-      }
-      if (profile.avatar_url?.trim()) {
-        const signed = await getSignedAvatarUrl(profile.avatar_url.trim());
-        if (mounted) setProfileAvatarUri(signed);
-        return;
-      }
-      if (profile.avatar_seed?.trim()) {
-        if (mounted)
-          setProfileAvatarUri(
-            getUser2DAvatarUriForSeed(profile.avatar_seed.trim()),
-          );
-        return;
-      }
-      if (mounted)
-        setProfileAvatarUri(
-          getUser2DAvatarUriForSeed(DEFAULT_USER_2D_AVATAR_SEED),
-        );
-    };
-    void resolveAvatar();
-    return () => {
-      mounted = false;
-    };
-  }, [profile?.avatar_url, profile?.avatar_seed]);
-
   useEffect(() => {
     setSeenRegistryOperationIds({});
   }, [currentOrganization?.id]);
@@ -832,13 +793,11 @@ export function DemoTabBar({
     profile?.displayName ??
     "User"
   ).trim();
-  const initials =
-    displayName
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((p) => p[0]?.toUpperCase())
-      .join("") || "US";
+  const { imageUri: profileAvatarUri, initials } = useAvatar({
+    type: 'user',
+    name: displayName,
+    avatarUrl: profile?.avatar_url ?? null,
+  });
 
   const tabBarPlatform = resolveTabBarLayoutPlatform({
     isWeb,

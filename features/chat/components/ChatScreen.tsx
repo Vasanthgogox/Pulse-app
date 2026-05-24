@@ -1535,10 +1535,8 @@ export function ChatScreen() {
       >
         <View style={s.chatAvatarWrap}>
           <PartyAvatar
-            name={avatarName}
-            entityType={item.party_type}
+            party={{ type: item.party_type === 'driver' ? 'driver' : 'user', name: avatarName }}
             size={isNativeMobile ? CHAT_MOBILE.listAvatar : 38}
-            avatarSeed={lastMsgSeed}
           />
           {item.unread_dispatcher_count > 0 && !active && (
             <View style={s.chatAvatarUnreadDot} />
@@ -1637,8 +1635,7 @@ export function ChatScreen() {
         activeOpacity={0.8}
       >
         <PartyAvatar
-          name={item.partnerName}
-          entityType="client"
+          party={{ type: 'user', name: item.partnerName }}
           size={isNativeMobile ? CHAT_MOBILE.listAvatar : 38}
         />
         <View style={s.chatBody}>
@@ -4827,18 +4824,14 @@ function ChatBubble({
         onAvatarPress ? (
           <Pressable onPress={onAvatarPress} hitSlop={6}>
             <PartyAvatar
-              name={senderName ?? "?"}
-              entityType="client"
+              party={{ type: 'user', name: senderName ?? "?" }}
               size={avatarSize}
-              avatarSeed={avatarSeed ?? null}
             />
           </Pressable>
         ) : (
           <PartyAvatar
-            name={senderName ?? "?"}
-            entityType="client"
+            party={{ type: 'user', name: senderName ?? "?" }}
             size={avatarSize}
-            avatarSeed={avatarSeed ?? null}
           />
         )
       )}
@@ -4872,11 +4865,14 @@ function ChatBubble({
       </View>
       {isOwn && (
         <PartyAvatar
-          name={profile?.full_name || profile?.displayName || "You"}
-          entityType="client"
+          party={{
+            type: 'user',
+            name: profile?.full_name || profile?.displayName || "You",
+            avatarUrl: profile?.avatar_url ?? null,
+            orgLogoUrl: currentOrganization?.logo_url ?? null,
+          }}
+          context="representing_company"
           size={avatarSize}
-          organizationImageUrl={currentOrganization?.logo_url ?? null}
-          avatarUrl={profile?.avatar_url ?? null}
         />
       )}
     </Animated.View>
