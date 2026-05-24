@@ -1,7 +1,7 @@
 /**
  * Grow your network / People you may know — list row (transaction typography).
  */
-import { EntityAvatar as PartyAvatar } from '@/components/EntityAvatar';
+import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { ConnectionInviteRole } from "@/features/network/components/ConnectionRoleModal";

@@ -2,12 +2,13 @@
  * Demo header aligned to Q-unified-base mobile header language.
  * Branded left lockup + right utility cluster (bell, profile).
  */
-import { AvatarImageOrInitials } from '@/components/AvatarImageOrInitials';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
-import { useAvatar, DEFAULT_USER_2D_AVATAR_SEED } from '@/lib/useAvatar';
+import { useState, useEffect } from 'react';
+import { getSignedAvatarUrl } from '@/lib/avatarUpload';
+import { DEFAULT_USER_2D_AVATAR_SEED, getUser2DAvatarUriForSeed } from '@/constants/UserAvatars';
 
 export interface TeslaHeaderProps {
   title: string;
@@ -28,13 +29,42 @@ export function TeslaHeader({
   onProfileClick,
 }: TeslaHeaderProps) {
   const { profile } = useAuth();
+  const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
   const displayName = (profile?.full_name ?? profile?.displayName ?? 'User').trim();
-  const { imageUri: profileAvatarUri, initials, initialsColor } = useAvatar({
-    type: 'user',
-    name: displayName,
-    avatarUrl: profile?.avatar_url ?? null,
-    avatarSeed: profile?.avatar_seed?.trim() || DEFAULT_USER_2D_AVATAR_SEED,
-  });
+  const initials =
+    displayName
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join('') || 'U';
+  useEffect(() => {
+    let mounted = true;
+    const resolveAvatar = async () => {
+      if (!profile) {
+        if (mounted) setProfileAvatarUri(null);
+        return;
+      }
+      if (profile.avatar_url?.startsWith("http")) {
+        if (mounted) setProfileAvatarUri(profile.avatar_url);
+        return;
+      }
+      if (profile.avatar_url?.trim()) {
+        const signed = await getSignedAvatarUrl(profile.avatar_url.trim());
+        if (mounted) setProfileAvatarUri(signed);
+        return;
+      }
+      if (profile.avatar_seed?.trim()) {
+        if (mounted) setProfileAvatarUri(getUser2DAvatarUriForSeed(profile.avatar_seed.trim()));
+        return;
+      }
+      if (mounted) setProfileAvatarUri(getUser2DAvatarUriForSeed(DEFAULT_USER_2D_AVATAR_SEED));
+    };
+    void resolveAvatar();
+    return () => {
+      mounted = false;
+    };
+  }, [profile?.avatar_url, profile?.avatar_seed]);
   return (
     <View style={styles.wrap}>
       <View style={styles.left}>
@@ -66,25 +96,19 @@ export function TeslaHeader({
         </View>
         {onProfileClick ? (
           <TouchableOpacity onPress={onProfileClick} style={[styles.avatar, profileAvatarUri ? styles.avatarWithImage : null]} hitSlop={8} activeOpacity={0.7}>
-            <AvatarImageOrInitials
-              uri={profileAvatarUri}
-              initials={initials}
-              initialsColor={initialsColor}
-              containerStyle={styles.avatarFill}
-              imageStyle={styles.avatarImage}
-              textStyle={styles.avatarInitials}
-            />
+            {profileAvatarUri ? (
+              <Image source={{ uri: profileAvatarUri }} style={styles.avatarImage} />
+            ) : (
+              <Text style={styles.avatarInitials}>{initials}</Text>
+            )}
           </TouchableOpacity>
         ) : (
           <View style={[styles.avatar, profileAvatarUri ? styles.avatarWithImage : null]}>
-            <AvatarImageOrInitials
-              uri={profileAvatarUri}
-              initials={initials}
-              initialsColor={initialsColor}
-              containerStyle={styles.avatarFill}
-              imageStyle={styles.avatarImage}
-              textStyle={styles.avatarInitials}
-            />
+            {profileAvatarUri ? (
+              <Image source={{ uri: profileAvatarUri }} style={styles.avatarImage} />
+            ) : (
+              <Text style={styles.avatarInitials}>{initials}</Text>
+            )}
           </View>
         )}
       </View>
@@ -168,12 +192,6 @@ const styles = StyleSheet.create({
   avatarWithImage: {
     borderWidth: 0,
     backgroundColor: 'transparent',
-  },
-  avatarFill: {
-    width: '100%',
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   avatarImage: {
     width: '100%',

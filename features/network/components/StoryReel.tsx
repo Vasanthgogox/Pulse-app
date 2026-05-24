@@ -3,7 +3,7 @@
  */
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import { EntityAvatar as PartyAvatar } from '@/components/EntityAvatar';
+import { PartyAvatar } from "@/components/PartyAvatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { type PostRow } from "@/features/network/services/posts.service";
 import AsyncStorage from "@react-native-async-storage/async-storage";

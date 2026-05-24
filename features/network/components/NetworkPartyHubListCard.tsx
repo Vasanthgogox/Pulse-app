@@ -1,7 +1,7 @@
 /**
  * "Your connections" list row — full-width horizontal card (reference list layout).
  */
-import { EntityAvatar as PartyAvatar } from '@/components/EntityAvatar';
+import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { NetworkHubGlassBadge } from "@/features/network/components/NetworkHubGlassBadge";

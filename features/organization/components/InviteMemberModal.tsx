@@ -4,7 +4,7 @@
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from "@/constants/Theme";
-import { EntityAvatar as PartyAvatar } from '@/components/EntityAvatar';
+import { PartyAvatar } from "@/components/PartyAvatar";
 import {
   lookupUserByPhone,
   inviteTeamMember,

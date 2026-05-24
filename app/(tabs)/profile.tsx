@@ -3,7 +3,10 @@ import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
-import { useAvatar, DEFAULT_USER_2D_AVATAR_SEED } from "@/lib/useAvatar";
+import {
+    DEFAULT_USER_2D_AVATAR_SEED,
+    getUser2DAvatarUriForSeed,
+} from "@/constants/UserAvatars";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
@@ -19,7 +22,6 @@ import { getCapabilitiesFromProfile } from "@/lib/capabilities";
 import { useClientsQuery } from "@/lib/queries/useClientsQuery";
 import { useDriversQuery } from "@/lib/queries/useDriversQuery";
 import { useTripsQuery } from "@/lib/queries/useTripsQuery";
-import { useRealtimeTripsInvalidation } from "@/lib/queries/useRealtimeInvalidation";
 import { queryKeys } from "@/lib/queryKeys";
 import { ROUTES } from "@/lib/routes";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -298,7 +300,6 @@ export default function ProfileScreen() {
   const { signOut, user, profile, refreshSession } = useAuth();
 
   const { data: trips = [], isLoading: tripsLoading } = useTripsQuery(orgId);
-  useRealtimeTripsInvalidation(orgId);
   const { data: drivers = [] } = useDriversQuery(orgId);
   const { data: clients = [] } = useClientsQuery(orgId);
 
@@ -366,7 +367,9 @@ export default function ProfileScreen() {
   }, [nextLevelConfig, completedTrips]);
 
   const [viewMode, setViewMode] = useState<ProfileViewMode>("main");
-  const [avatarSeed, setAvatarSeed] = useState(profile?.avatar_seed ?? '');
+  const [avatarSeed, setAvatarSeed] = useState(
+    profile?.avatar_seed || DEFAULT_USER_2D_AVATAR_SEED,
+  );
 
   useEffect(() => {
     if (profile?.avatar_seed) {
@@ -374,12 +377,9 @@ export default function ProfileScreen() {
     }
   }, [profile?.avatar_seed]);
 
-  const { imageUri: avatarUri, initials: avatarInitials, initialsColor: avatarColor } = useAvatar({
-    type: 'user',
-    name: (profile?.full_name ?? profile?.displayName ?? '').trim(),
-    avatarUrl: profile?.avatar_url ?? null,
-    avatarSeed: profile?.avatar_seed?.trim() || DEFAULT_USER_2D_AVATAR_SEED,
-  });
+  const [avatarUri, setAvatarUri] = useState<string>(() =>
+    getUser2DAvatarUriForSeed(profile?.avatar_seed || DEFAULT_USER_2D_AVATAR_SEED),
+  );
 
   const [orgLogoUri, setOrgLogoUri] = useState<string | null>(null);
   const [orgLogoUploading, setOrgLogoUploading] = useState(false);
@@ -548,6 +548,27 @@ export default function ProfileScreen() {
 
   useEffect(() => {
     let mounted = true;
+    (async () => {
+      const fallback = getUser2DAvatarUriForSeed(avatarSeed);
+      const raw = profile?.avatar_url?.trim();
+      if (!raw) {
+        if (mounted) setAvatarUri(fallback);
+        return;
+      }
+      if (raw.startsWith("http://") || raw.startsWith("https://")) {
+        if (mounted) setAvatarUri(raw);
+        return;
+      }
+      const signed = await getSignedAvatarUrl(raw);
+      if (mounted) setAvatarUri(signed ?? fallback);
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [profile?.avatar_url, avatarSeed]);
+
+  useEffect(() => {
+    let mounted = true;
     const raw = currentOrganization?.logo_url?.trim();
     if (!raw) {
       setOrgLogoUri(null);
@@ -672,30 +693,7 @@ export default function ProfileScreen() {
                     accessibilityRole="button"
                   >
                     <View style={[styles.avatarFrame, orgLogoUri && styles.avatarFrameSmall]}>
-                      {avatarUri ? (
-                        <Image source={{ uri: avatarUri }} style={orgLogoUri ? styles.avatarSmall : styles.avatar} />
-                      ) : (
-                        <View
-                          style={[
-                            orgLogoUri ? styles.avatarSmall : styles.avatar,
-                            {
-                              backgroundColor: avatarColor,
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                            },
-                          ]}
-                        >
-                          <Text
-                            style={{
-                              color: '#fff',
-                              fontWeight: '700',
-                              fontSize: orgLogoUri ? 16 : 28,
-                            }}
-                          >
-                            {avatarInitials}
-                          </Text>
-                        </View>
-                      )}
+                      <Image source={{ uri: avatarUri }} style={orgLogoUri ? styles.avatarSmall : styles.avatar} />
                     </View>
                     {!orgLogoUri && (
                       <View style={styles.levelBadgeOnAvatar}>
@@ -824,26 +822,75 @@ export default function ProfileScreen() {
                 </View>
               </View>
 
-              {/* ── Identity navigation split ───────────────────────────── */}
               <View style={styles.premiumCard}>
                 <View style={styles.premiumCardInner}>
                   <ProfileItemRow
-                    icon="user-circle"
-                    label="My Account"
-                    value={`${displayName} · personal identity`}
-                    onPress={() => router.push('/account')}
+                    icon="user"
+                    label="Name"
+                    value={displayName}
+                    onPress={handleEditProfile}
                     showChevron
                   />
                   <View style={styles.premiumDivider} />
                   <ProfileItemRow
-                    icon="building"
-                    label="Company Profile"
-                    value={`${currentOrganization?.name ?? 'Workspace'} · logo, KYC, team`}
-                    onPress={() => router.push('/company-profile')}
+                    icon="phone"
+                    label="Phone"
+                    value={phone}
+                    onPress={handleDialPhone}
                     showChevron
+                  />
+                  <View style={styles.premiumDivider} />
+                  <ProfileItemRow icon="envelope" label="Email" value={email} />
+                  <View style={styles.premiumDivider} />
+                  <ProfileItemRow
+                    icon="building"
+                    label="Company"
+                    value={companyName}
                   />
                 </View>
               </View>
+
+              {orgId ? (
+                <View style={styles.premiumCard}>
+                  <View style={styles.premiumCardInner}>
+                    <Pressable
+                      onPress={() => void handleUploadOrgLogo()}
+                      style={({ pressed }) => [
+                        styles.orgLogoRow,
+                        pressed && styles.profileItemRowPressed,
+                      ]}
+                      accessibilityRole="button"
+                    >
+                      <View style={styles.orgLogoLeft}>
+                        <View style={styles.profileItemIconBox}>
+                          <FontAwesome name="image" size={16} color={Theme.textMuted} />
+                        </View>
+                        <View style={styles.profileItemTextWrap}>
+                          <Text style={styles.profileItemLabel}>Org Logo</Text>
+                          <Text style={styles.profileItemValue} numberOfLines={1}>
+                            {orgLogoUri ? "Uploaded · tap to change" : "Tap to upload logo"}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.orgLogoPreviewWrap}>
+                        {orgLogoUploading ? (
+                          <LoadingIndicator size="small" color={Theme.primary} />
+                        ) : orgLogoUri ? (
+                          <Image source={{ uri: orgLogoUri }} style={styles.orgLogoPreview} />
+                        ) : (
+                          <View style={styles.orgLogoPlaceholder}>
+                            <PartyAvatar
+                              name={currentOrganization?.name || "Org"}
+                              size={36}
+                            />
+                          </View>
+                        )}
+                        <FontAwesome name="camera" size={12} color={Theme.textMuted} style={{ marginLeft: 6 }} />
+                      </View>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : null}
 
               <View style={styles.premiumCard}>
                 <View style={styles.premiumCardInner}>
@@ -888,17 +935,9 @@ export default function ProfileScreen() {
               <View style={styles.premiumCard}>
                 <View style={styles.premiumCardInner}>
                   <ProfileItemRow
-                    icon="shield"
-                    label="Business Verification"
-                    value="KYC · PAN · GSTIN · CIN"
-                    onPress={() => router.push("/kyc-settings")}
-                    showChevron
-                  />
-                  <View style={styles.premiumDivider} />
-                  <ProfileItemRow
                     icon="cog"
-                    label="Invoice Branding"
-                    value="Logo & watermark for invoice PDFs"
+                    label="Settings"
+                    value="Branding & identity for invoice PDFs"
                     onPress={() => router.push("/branding-settings")}
                     showChevron
                   />
@@ -939,7 +978,10 @@ export default function ProfileScreen() {
         initialCompanyName={profile?.company_name ?? ""}
         email={user?.email ?? ""}
         initialStatusText={profile?.status_text ?? ""}
-        onPhotoUpdated={async () => {
+        onPhotoUpdated={async (payload) => {
+          if (payload?.avatarUri?.trim()) {
+            setAvatarUri(payload.avatarUri);
+          }
           await refreshSession();
         }}
         initialAvatarSeed={avatarSeed}

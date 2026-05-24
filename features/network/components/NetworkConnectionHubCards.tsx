@@ -2,7 +2,7 @@
  * Connection cards for Network hub (reference: nested white card, grey inner band, role pills, handshake).
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
-import { EntityAvatar as PartyAvatar } from '@/components/EntityAvatar';
+import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from "@/constants/Theme";
 import {
   NETWORK_PROFILE_AVATAR_SIZE_HUB,

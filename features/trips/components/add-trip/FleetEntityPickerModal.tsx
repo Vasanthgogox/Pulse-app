@@ -2,7 +2,7 @@
  * Centered fleet picker — reference layout: title, search, rich rows.
  */
 import { CreateTripSheetSearchInput } from "@/components/CreateTripSheetSearchInput";
-import { EntityAvatar as PartyAvatar } from '@/components/EntityAvatar';
+import { PartyAvatar } from "@/components/PartyAvatar";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";

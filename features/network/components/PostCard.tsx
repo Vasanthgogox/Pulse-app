@@ -8,7 +8,7 @@ import Theme from '@/constants/Theme';
 import Typography from '@/constants/Typography';
 import { type PostRow } from '@/features/network/services/posts.service';
 import { formatINR } from '@/lib/format';
-import { EntityAvatar as PartyAvatar } from '@/components/EntityAvatar';
+import { PartyAvatar } from '@/components/PartyAvatar';
 import { useRouter } from 'expo-router';
 import {
   ArrowRight,

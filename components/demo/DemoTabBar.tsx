@@ -6,6 +6,10 @@ import { AlertRegistryPanel } from "@/components/AlertRegistryPanel";
 import { InboundProtocolPanel } from "@/components/InboundProtocolPanel";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import {
+    DEFAULT_USER_2D_AVATAR_SEED,
+    getUser2DAvatarUriForSeed,
+} from "@/constants/UserAvatars";
 import { useAuth } from "@/contexts/AuthContext";
 import {
     useDemoTabBarScrollHideVersion,
@@ -17,9 +21,9 @@ import { preloadFinanceWarmup } from "@/lib/preloadFinanceWarmup";
 import { preloadTabScreen } from "@/lib/preloadRoutes";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queryKeys";
-import { useOptionalIntegratedChat } from "@/features/chat/contexts/IntegratedChatContext";
-import { useOptionalTripChat } from "@/features/chat/contexts/TripChatContext";
-import { useAvatar, DEFAULT_USER_2D_AVATAR_SEED } from "@/lib/useAvatar";
+import { useIntegratedChat } from "@/features/chat/contexts/IntegratedChatContext";
+import { useTripChat } from "@/features/chat/contexts/TripChatContext";
+import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import type { InboundProtocolInviteItem } from "@/lib/globalSync/inboundProtocol.types";
 import { useAlertRegistryNotifications } from "@/lib/globalSync/useAlertRegistryNotifications";
 import { useOperationsShelfItems } from "@/lib/globalSync/useOperationsDerived";
@@ -554,6 +558,7 @@ export function DemoTabBar({
       }
     }
   };
+  const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
   /** Operation shelf row ids the user has opened in the Alert Registry (session-only; badge excludes them). */
   const [seenRegistryOperationIds, setSeenRegistryOperationIds] = useState<
     Record<string, true>
@@ -582,11 +587,9 @@ export function DemoTabBar({
   const dockIndentsQ = useIndentsQuery(orgId);
   const dockMarketIndentsQ = useMarketIndentsQuery(orgId);
   const dockMyQuotesQ = useMyDirectQuotesQuery(orgId);
-  const tripChat = useOptionalTripChat();
-  const integratedChat = useOptionalIntegratedChat();
-  const messageUnreadCount =
-    (tripChat?.getTotalUnreadCount?.() ?? 0) +
-    (integratedChat?.getTotalUnreadCount?.() ?? 0);
+  const { getTotalUnreadCount: getTripUnreadCount } = useTripChat();
+  const { getTotalUnreadCount: getNetworkUnreadCount } = useIntegratedChat();
+  const messageUnreadCount = getTripUnreadCount() + getNetworkUnreadCount();
   const {
     receivedItems: receivedInviteItems,
     sentItems: sentInviteItems,
@@ -624,6 +627,40 @@ export function DemoTabBar({
 
     return activeIds.size;
   }, [dockIndentsQ.data, dockMarketIndentsQ.data, dockMyQuotesQ.data, orgId]);
+  useEffect(() => {
+    let mounted = true;
+    const resolveAvatar = async () => {
+      if (!profile) {
+        if (mounted) setProfileAvatarUri(null);
+        return;
+      }
+      if (profile.avatar_url?.startsWith("http")) {
+        if (mounted) setProfileAvatarUri(profile.avatar_url);
+        return;
+      }
+      if (profile.avatar_url?.trim()) {
+        const signed = await getSignedAvatarUrl(profile.avatar_url.trim());
+        if (mounted) setProfileAvatarUri(signed);
+        return;
+      }
+      if (profile.avatar_seed?.trim()) {
+        if (mounted)
+          setProfileAvatarUri(
+            getUser2DAvatarUriForSeed(profile.avatar_seed.trim()),
+          );
+        return;
+      }
+      if (mounted)
+        setProfileAvatarUri(
+          getUser2DAvatarUriForSeed(DEFAULT_USER_2D_AVATAR_SEED),
+        );
+    };
+    void resolveAvatar();
+    return () => {
+      mounted = false;
+    };
+  }, [profile?.avatar_url, profile?.avatar_seed]);
+
   useEffect(() => {
     setSeenRegistryOperationIds({});
   }, [currentOrganization?.id]);
@@ -795,12 +832,13 @@ export function DemoTabBar({
     profile?.displayName ??
     "User"
   ).trim();
-  const { imageUri: profileAvatarUri, initials, initialsColor } = useAvatar({
-    type: 'user',
-    name: displayName,
-    avatarUrl: profile?.avatar_url ?? null,
-    avatarSeed: profile?.avatar_seed?.trim() || DEFAULT_USER_2D_AVATAR_SEED,
-  });
+  const initials =
+    displayName
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((p) => p[0]?.toUpperCase())
+      .join("") || "US";
 
   const tabBarPlatform = resolveTabBarLayoutPlatform({
     isWeb,
@@ -1056,10 +1094,7 @@ export function DemoTabBar({
             </View>
             <AnimatedPress
               onPress={onProfilePress}
-              style={[
-                styles.webAvatarBtn,
-                !profileAvatarUri && { backgroundColor: initialsColor },
-              ]}
+              style={styles.webAvatarBtn}
               activeOpacity={0.8}
             >
               {profileAvatarUri ? (

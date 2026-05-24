@@ -4,7 +4,7 @@
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
-import { EntityAvatar as PartyAvatar } from '@/components/EntityAvatar';
+import { PartyAvatar } from "@/components/PartyAvatar";
 import { type ClientRow } from "@/features/clients/services/clients.service";
 import {
     getDriversByOrganization,

@@ -9,14 +9,19 @@ import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import {
+  DEFAULT_USER_2D_AVATAR_SEED,
+  getUser2DAvatarUriForSeed,
+} from "@/constants/UserAvatars";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProfileMenuDrawerOptional } from "@/contexts/ProfileMenuDrawerContext";
+import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
-import { useAvatar, DEFAULT_USER_2D_AVATAR_SEED } from "@/lib/useAvatar";
 import { ChevronLeft } from "lucide-react-native";
 import { useRouter } from "expo-router";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -24,7 +29,6 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import { AvatarImageOrInitials } from "@/components/AvatarImageOrInitials";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const ICON_SIZE = 22;
@@ -70,6 +74,37 @@ export function HomePageHeader({
   const { currentOrganization } = useOrganization();
   const profileDrawer = useProfileMenuDrawerOptional();
   const notificationUnread = useGlobalSyncStore((s) => s.notificationUnreadCount);
+  const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const resolveAvatar = async () => {
+      if (!profile) {
+        if (mounted) setProfileAvatarUri(null);
+        return;
+      }
+      if (profile.avatar_url?.startsWith("http")) {
+        if (mounted) setProfileAvatarUri(profile.avatar_url);
+        return;
+      }
+      if (profile.avatar_url?.trim()) {
+        const signed = await getSignedAvatarUrl(profile.avatar_url.trim());
+        if (mounted) setProfileAvatarUri(signed);
+        return;
+      }
+      if (profile.avatar_seed?.trim()) {
+        if (mounted)
+          setProfileAvatarUri(getUser2DAvatarUriForSeed(profile.avatar_seed.trim()));
+        return;
+      }
+      if (mounted)
+        setProfileAvatarUri(getUser2DAvatarUriForSeed(DEFAULT_USER_2D_AVATAR_SEED));
+    };
+    void resolveAvatar();
+    return () => {
+      mounted = false;
+    };
+  }, [profile?.avatar_url, profile?.avatar_seed]);
 
   const profileDisplayName = (
     profile?.full_name ??
@@ -78,19 +113,23 @@ export function HomePageHeader({
     "User"
   ).trim();
 
-  const { imageUri: profileAvatarUri, initials, initialsColor } = useAvatar({
-    type: 'user',
-    name: profileDisplayName,
-    avatarUrl: profile?.avatar_url ?? null,
-    avatarSeed: profile?.avatar_seed?.trim() || DEFAULT_USER_2D_AVATAR_SEED,
-  });
-
   const welcomeName = useMemo(() => {
     const first = profileDisplayName.split(/\s+/).filter(Boolean)[0];
     const raw = first || profileDisplayName;
     if (!raw) return "there";
     return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
   }, [profileDisplayName]);
+
+  const initials = useMemo(
+    () =>
+      profileDisplayName
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part[0]?.toUpperCase())
+        .join("") || "US",
+    [profileDisplayName],
+  );
 
   const headerTitle = (
     title?.trim() ||
@@ -150,14 +189,13 @@ export function HomePageHeader({
             accessibilityLabel="Open profile"
             hitSlop={6}
           >
-            <AvatarImageOrInitials
-              uri={profileAvatarUri}
-              initials={initials}
-              initialsColor={initialsColor}
-              containerStyle={styles.avatarBtn}
-              imageStyle={styles.avatarImage}
-              textStyle={styles.avatarInitials}
-            />
+            {profileAvatarUri ? (
+              <Image source={{ uri: profileAvatarUri }} style={styles.avatarImage} />
+            ) : (
+              <View style={styles.avatarFallback}>
+                <Text style={styles.avatarInitials}>{initials}</Text>
+              </View>
+            )}
           </Pressable>
         )}
 

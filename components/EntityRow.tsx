@@ -1,8 +1,9 @@
-import { EntityAvatar } from '@/components/EntityAvatar';
+import { PartyAvatar } from '@/components/PartyAvatar';
 import { View, Text, TouchableOpacity, StyleSheet, Image, type ImageSourcePropType } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Theme from '@/constants/Theme';
 import type { PartyEntityType } from '@/lib/partyAvatarDisplay';
+import { partyAvatarHasRenderableOutput } from '@/lib/partyAvatarDisplay';
 
 export interface EntityRowProps {
   title: string;
@@ -67,6 +68,13 @@ export function EntityRow({
 }: EntityRowProps) {
   const initial = getInitial(title);
   const avatar = getAvatarStyle();
+  const partyAvatar = partyAvatarHasRenderableOutput({
+    name: title,
+    organizationImageUrl,
+    avatarUrl,
+    avatarSeed,
+    entityType,
+  });
   const amountStyle =
     amountColor === 'green' ? styles.amountPositive : amountColor === 'red' ? styles.amountNegative : styles.amountDefault;
   const labelStyle =
@@ -80,19 +88,20 @@ export function EntityRow({
   const content = (
     <>
       {showAvatar && (
-        <View style={[styles.avatar, { backgroundColor: avatarImage ? Theme.screenBackground : 'transparent' }]}>
+        <View style={[styles.avatar, { backgroundColor: avatarImage || partyAvatar ? Theme.screenBackground : avatar.bg }]}>
           {avatarImage ? (
             <Image source={avatarImage} style={styles.avatarImage} resizeMode="contain" />
-          ) : (
-            <EntityAvatar
+          ) : partyAvatar ? (
+            <PartyAvatar
               name={title}
               organizationImageUrl={organizationImageUrl}
               avatarUrl={avatarUrl}
               avatarSeed={avatarSeed}
               entityType={entityType}
               size={40}
-              showIntegrationBadge={false}
             />
+          ) : (
+            <Text style={[styles.avatarText, { color: avatar.text }]}>{initial}</Text>
           )}
         </View>
       )}

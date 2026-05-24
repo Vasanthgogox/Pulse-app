@@ -2,7 +2,7 @@
  * Lists organizations mutually connected to the viewer and a target org.
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
-import { EntityAvatar as PartyAvatar } from '@/components/EntityAvatar';
+import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
