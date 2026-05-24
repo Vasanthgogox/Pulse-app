@@ -36,7 +36,7 @@ import {
   extractDriverPaymentUtr,
   formatDriverPaymentModeLabel,
 } from "@/features/driver/tripSettlement/driverTripSettlement.util";
-import { getFleetAvatarUriForOrg } from '@/lib/fleetAvatar';
+import { getFleetAvatarUriForOrg, resolveOrgAvatarUri } from '@/lib/fleetAvatar';
 import { resolvePartyDisplayUri } from '@/lib/partyAvatarDisplay';
 import { buildDriverInviteSalaryLines } from '@/lib/driverInviteOffer.util';
 import { usePreventScreenCapture } from '@/lib/usePreventScreenCapture';
@@ -1162,23 +1162,36 @@ export default function DriverWalletScreen() {
 
   /**
    * Org IDs that are (or were) employers — have/had a formal pay arrangement.
-   * left_at is intentionally NOT filtered: a trip assigned by an employer is always
-   * a fleet trip even if the driver later left that fleet.
+   * left_at is NOT filtered: a trip assigned by a former employer is still a fleet trip.
+   *
+   * When the driver has any accepted invites, ONLY those invite orgs qualify as employers
+   * (prevents client orgs that merely set payable_amount from being misclassified).
+   * When there are no accepted invites at all, fall back to pay-arrangement-only check.
    */
   const employerOrgIdSet = useMemo(() => {
+    const acceptedInviteOrgIds = new Set(
+      invites
+        .filter((i) => (i.status || '').toLowerCase() === 'accepted')
+        .map((i) => String(i.from_organization_id ?? ''))
+        .filter(Boolean),
+    );
+    const hasAnyAcceptedInvite = acceptedInviteOrgIds.size > 0;
+
     const set = new Set<string>();
     linkedDrivers.forEach((d) => {
-      if (
+      const orgId = String(d.organization_id ?? '');
+      if (!orgId) return;
+      const hasPay =
         (d.payable_amount != null && d.payable_amount > 0) ||
         (d.commission_percent != null && d.commission_percent > 0) ||
-        (d.commission_per_km != null && d.commission_per_km > 0)
-      ) {
-        const orgId = String(d.organization_id ?? '');
-        if (orgId) set.add(orgId);
-      }
+        (d.commission_per_km != null && d.commission_per_km > 0);
+      if (!hasPay) return;
+      // When formal invites exist, require the org to have sent one.
+      if (hasAnyAcceptedInvite && !acceptedInviteOrgIds.has(orgId)) return;
+      set.add(orgId);
     });
     return set;
-  }, [linkedDrivers]);
+  }, [linkedDrivers, invites]);
 
   const tripJourneyItems = useMemo(() => {
     return completedTrips.map((trip) => {
@@ -1270,12 +1283,21 @@ export default function DriverWalletScreen() {
   );
 
   const currentEmployer = useMemo(() => {
-    // Primary: org where the driver has an explicit salary/commission arrangement set
-    const withPayArrangement = fleetCards.find((f) => {
+    // A formal accepted invite is the authoritative employer signal.
+    // Orgs that merely have a drivers row with pay set (but no accepted invite)
+    // are clients/dispatchers, NOT employers — prevents e.g. GOGOX overriding MK Logistics.
+    const acceptedOrgIds = new Set(
+      invites
+        .filter((i) => (i.status || '').toLowerCase() === 'accepted')
+        .map((i) => String(i.from_organization_id ?? ''))
+        .filter(Boolean),
+    );
+
+    // Primary: accepted invite + explicit pay arrangement (strongest signal)
+    const withInviteAndPay = fleetCards.find((f) => {
+      if (!acceptedOrgIds.has(String(f.orgId ?? ''))) return false;
       const d = linkedDrivers.find(
-        (row) =>
-          !row.left_at &&
-          String(row.organization_id ?? '') === String(f.orgId ?? ''),
+        (row) => !row.left_at && String(row.organization_id ?? '') === String(f.orgId ?? ''),
       );
       return (
         d &&
@@ -1286,37 +1308,51 @@ export default function DriverWalletScreen() {
         )
       );
     });
-    if (withPayArrangement) return withPayArrangement;
-    // Secondary: org with a formal accepted invite AND monthly salary requests
-    const acceptedOrgIds = new Set(
-      invites
-        .filter((i) => (i.status || '').toLowerCase() === 'accepted')
-        .map((i) => String(i.from_organization_id ?? ''))
-        .filter(Boolean),
-    );
+    if (withInviteAndPay) return withInviteAndPay;
+
+    // Secondary: accepted invite + monthly salary requests
     const monthlySalaryOrgIds = new Set(
       salaryRequests
         .filter((r) => r.request_type === 'monthly')
         .map((r) => String(r.organization_id ?? ''))
         .filter(Boolean),
     );
-    const withMonthly = fleetCards.find(
+    const withInviteAndMonthly = fleetCards.find(
       (f) =>
         acceptedOrgIds.has(String(f.orgId ?? '')) &&
         monthlySalaryOrgIds.has(String(f.orgId ?? '')),
     );
-    if (withMonthly) return withMonthly;
-    // Tertiary: org with accepted invite + any salary requests
+    if (withInviteAndMonthly) return withInviteAndMonthly;
+
+    // Tertiary: accepted invite + any salary request
     const anySalaryOrgIds = new Set(
       salaryRequests.map((r) => String(r.organization_id ?? '')).filter(Boolean),
     );
-    return (
-      fleetCards.find(
-        (f) =>
-          acceptedOrgIds.has(String(f.orgId ?? '')) &&
-          anySalaryOrgIds.has(String(f.orgId ?? '')),
-      ) ?? null
+    const withInviteAndSalary = fleetCards.find(
+      (f) =>
+        acceptedOrgIds.has(String(f.orgId ?? '')) &&
+        anySalaryOrgIds.has(String(f.orgId ?? '')),
     );
+    if (withInviteAndSalary) return withInviteAndSalary;
+
+    // Quaternary: accepted invite only (no salary data yet — new relationship)
+    const withInviteOnly = fleetCards.find((f) => acceptedOrgIds.has(String(f.orgId ?? '')));
+    if (withInviteOnly) return withInviteOnly;
+
+    // Last resort: pay arrangement with no invite (legacy / manual add flows)
+    return fleetCards.find((f) => {
+      const d = linkedDrivers.find(
+        (row) => !row.left_at && String(row.organization_id ?? '') === String(f.orgId ?? ''),
+      );
+      return (
+        d &&
+        (
+          (d.payable_amount != null && d.payable_amount > 0) ||
+          (d.commission_percent != null && d.commission_percent > 0) ||
+          (d.commission_per_km != null && d.commission_per_km > 0)
+        )
+      );
+    }) ?? null;
   }, [fleetCards, linkedDrivers, invites, salaryRequests]);
 
   const pastEmployerFleetCards = useMemo(() => {
@@ -1326,7 +1362,7 @@ export default function DriverWalletScreen() {
       const inv = accepted.find((i) => String(i.from_organization_id ?? '') === orgId);
       const invName = (inv as { from_org_name?: string | null } | undefined)?.from_org_name?.trim() || null;
       const dbOrgName = (d.organizations as { name?: string } | null | undefined)?.name?.trim() || null;
-      const orgName = invName ?? dbOrgName ?? 'Fleet';
+      const orgName = invName ?? dbOrgName ?? orgNameById[orgId] ?? 'Fleet';
       const fleetTrips = completedTrips.filter(
         (t) =>
           String(t.organization_id ?? '') === orgId &&
@@ -1343,7 +1379,7 @@ export default function DriverWalletScreen() {
         leftAt: d.left_at!,
       };
     });
-  }, [pastLinkedDrivers, completedTrips, invites]);
+  }, [pastLinkedDrivers, completedTrips, invites, orgNameById]);
 
   /** Trip IDs the driver has attributed to their current employer via trip_based salary requests. */
   const fleetAttributedTripIds = useMemo(() => {
@@ -2150,7 +2186,7 @@ export default function DriverWalletScreen() {
                     ]}
                   >
                     <Image
-                      source={{ uri: getFleetAvatarUriForOrg(String(currentEmployer.orgId ?? ''), currentEmployer.orgName) }}
+                      source={{ uri: (() => { const a = orgAvatarById[String(currentEmployer.orgId ?? '')]; return resolveOrgAvatarUri(String(currentEmployer.orgId ?? ''), currentEmployer.orgName, a?.logoUrl, a?.avatarSeed, a?.avatarUrl); })() }}
                       style={styles.fleetCardLogoImage}
                       resizeMode="cover"
                     />
@@ -2291,8 +2327,7 @@ export default function DriverWalletScreen() {
                 <View style={{ gap: 10 }}>
                   {pendingWalletInvites.map((inv) => {
                     const orgName = inv.from_org_name?.trim() || 'Fleet';
-                    const logoUri = inv.from_org_logo_url ?? inv.from_org_avatar_url ?? null;
-                    const presetUri = getFleetAvatarUriForOrg(inv.from_organization_id ?? '', orgName);
+                    const logoUri = resolveOrgAvatarUri(inv.from_organization_id ?? '', orgName, inv.from_org_logo_url, inv.from_org_avatar_seed, inv.from_org_avatar_url);
                     const salaryLines = buildDriverInviteSalaryLines(inv);
                     const isBusy = walletInviteActionId === inv.id;
                     return (
@@ -2310,15 +2345,11 @@ export default function DriverWalletScreen() {
                         {/* Header */}
                         <View style={styles.walletInviteHeader}>
                           <View style={[styles.walletInviteLogoWrap, { backgroundColor: colors.emeraldMuted }]}>
-                            {logoUri || presetUri ? (
-                              <Image
-                                source={{ uri: logoUri ?? presetUri }}
-                                style={styles.walletInviteLogoImg}
-                                resizeMode="cover"
-                              />
-                            ) : (
-                              <FontAwesome name="building" size={16} color={colors.emerald} />
-                            )}
+                            <Image
+                              source={{ uri: logoUri }}
+                              style={styles.walletInviteLogoImg}
+                              resizeMode="cover"
+                            />
                           </View>
                           <View style={{ flex: 1, minWidth: 0 }}>
                             <Text style={[styles.walletInviteOrgName, { color: colors.text }]} numberOfLines={1}>
@@ -2593,11 +2624,23 @@ export default function DriverWalletScreen() {
                             },
                           ]}
                         >
-                          <Image
-                            source={{ uri: getFleetAvatarUriForOrg(past.orgId, past.orgName) }}
-                            style={styles.careerLogoImage}
-                            resizeMode="cover"
-                          />
+                          {(() => {
+                            const orgAvatar = orgAvatarById[past.orgId];
+                            const uri =
+                              resolvePartyDisplayUri({
+                                organizationImageUrl: orgAvatar?.logoUrl,
+                                organizationAvatarSeed: orgAvatar?.avatarSeed,
+                                avatarUrl: orgAvatar?.avatarUrl,
+                                avatarSeed: null,
+                              }) ?? getFleetAvatarUriForOrg(past.orgId, past.orgName);
+                            return (
+                              <Image
+                                source={{ uri }}
+                                style={styles.careerLogoImage}
+                                resizeMode="cover"
+                              />
+                            );
+                          })()}
                         </View>
                         <View style={styles.careerCardBody}>
                           <Text style={[styles.careerOrgName, { color: colors.text }]} numberOfLines={1}>

@@ -9,7 +9,7 @@ import { preloadTabForRoute } from '@/lib/preloadRoutes';
 import { DEFAULT_DRIVER_ROUTE } from '@/lib/routes';
 import { useIsFocused } from '@react-navigation/native';
 import { usePathname, useRouter } from 'expo-router';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import {
   Platform,
   StyleSheet,
@@ -31,6 +31,7 @@ export default function Index() {
   // Without this guard, the useEffect below would fire and redirect away from
   // the intended deep-link destination.
   const isFocused = useIsFocused();
+  const redirectTargetRef = useRef<string | null>(null);
 
   const logRouteDecision = (event: string, details: Record<string, unknown>) => {
     if (!__DEV__) return;
@@ -38,13 +39,17 @@ export default function Index() {
   };
 
   useEffect(() => {
-    if (!isFocused) return;
+    if (!isFocused) {
+      redirectTargetRef.current = null;
+      return;
+    }
     if (loading) return;
     if (Platform.OS === 'web' && pathname !== '/') {
       // On web deep links (e.g. /network), do not let the index guard hijack refresh.
       return;
     }
     if (!user) {
+      redirectTargetRef.current = null;
       logRouteDecision('redirect_sign_in', { pathname });
       router.replace(Platform.OS === 'web' ? '/terminal-website' : '/sign-in');
       return;
@@ -60,13 +65,28 @@ export default function Index() {
         });
         return;
       }
+      if (redirectTargetRef.current === DEFAULT_DRIVER_ROUTE) return;
+      redirectTargetRef.current = DEFAULT_DRIVER_ROUTE;
       logRouteDecision('redirect_driver_root', { uid: user.uid, pathname });
       router.replace(DEFAULT_DRIVER_ROUTE as '/');
       return;
     }
-    // Restore the last visited tab so cold-start lands where the user left off,
-    // rather than always defaulting to the Cash/Finance tab.
-    getLastTabRoute().then((route) => {
+  }, [user, profile, roleVerified, loading, pathname, router, isFocused]);
+
+  useEffect(() => {
+    if (!isFocused || loading || !user || !profile || profile.role === 'driver') return;
+    if (Platform.OS === 'web' && pathname !== '/') return;
+    if (redirectTargetRef.current) return;
+
+    let cancelled = false;
+    redirectTargetRef.current = 'pending';
+
+    void getLastTabRoute().then((route) => {
+      if (cancelled) {
+        redirectTargetRef.current = null;
+        return;
+      }
+      redirectTargetRef.current = route;
       preloadTabForRoute(route);
       logRouteDecision('redirect_dispatcher_last_tab', {
         uid: user.uid,
@@ -75,7 +95,14 @@ export default function Index() {
       });
       router.replace(route as '/');
     });
-  }, [user, profile, roleVerified, loading, pathname, router, isFocused]);
+
+    return () => {
+      cancelled = true;
+      if (redirectTargetRef.current === 'pending') {
+        redirectTargetRef.current = null;
+      }
+    };
+  }, [user, profile, loading, pathname, router, isFocused]);
 
   const splashVariant = useMemo(() => {
     if (loading) return 'session' as const;

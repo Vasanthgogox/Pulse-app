@@ -7,6 +7,7 @@ import { View, Text, StyleSheet, ScrollView, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import Theme from '@/constants/Theme';
 import { LEVELS_CONFIG } from '@/constants/DriverLevels';
 import {
@@ -19,6 +20,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { CenteredLoadingView } from '@/components/CenteredLoadingView';
 import * as driversService from '@/services/driversService';
 import * as tripsService from '@/services/tripsService';
+import { supabase } from '@/lib/supabase';
 
 
 const DARK_HERO_BG = '#0f0f0f';
@@ -53,14 +55,15 @@ export default function LevelProgressionScreen() {
   const [tripsCount, setTripsCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(() => {
+  const load = useCallback((showLoading = true) => {
     if (!profile?.uid) {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (showLoading) setLoading(true);
     driversService.getLinkedDriversForCurrentUser(profile.uid).then((res) => {
-      const drivers = (res.drivers ?? []).filter((d) => !d.left_at);
+      // Experience is cumulative — include ALL driver rows (including left fleets).
+      const drivers = res.drivers ?? [];
       if (drivers.length > 0) {
         tripsService.getTripsByDriverIds(drivers.map((d) => d.id)).then((tRes) => {
           const list = tRes.trips ?? [];
@@ -75,6 +78,26 @@ export default function LevelProgressionScreen() {
 
   useEffect(() => {
     load();
+  }, [load]);
+
+  // Reload when screen comes back into focus (e.g. after returning from another screen).
+  useFocusEffect(useCallback(() => {
+    load(false);
+  }, [load]));
+
+  // Supabase Realtime: re-fetch trips count whenever any of the driver's trips change.
+  useEffect(() => {
+    const client = supabase();
+    if (!client) return;
+    const channel = client
+      .channel('level-progression-trips')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'trips' },
+        () => { load(false); },
+      )
+      .subscribe();
+    return () => { client.removeChannel(channel); };
   }, [load]);
 
   const currentLevel = Math.min(1 + Math.floor(tripsCount / 2), 8);

@@ -4,7 +4,7 @@
  */
 import { ALL_LEDGER_CATEGORY_VALUES } from "@/components/AddTransactionModal";
 import { FinanceFAB } from "@/components/FinanceFAB";
-import { PartyAvatar } from "@/components/PartyAvatar";
+import { EntityAvatar } from "@/components/EntityAvatar";
 import { TeslaHeader } from "@/components/TeslaHeader";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -3435,7 +3435,7 @@ export function EntityDetailOverlay({
                                 <>
                                   <View style={styles.spWebTdClient}>
                                     <View style={styles.spWebTdPartyAvatarRow}>
-                                      <PartyAvatar
+                                      <EntityAvatar
                                         name={clientNameForUi}
                                         organizationImageUrl={
                                           clientRow?.linked_organization_id
@@ -3444,21 +3444,12 @@ export function EntityDetailOverlay({
                                               ]?.avatarUrl
                                             : undefined
                                         }
-                                        organizationAvatarSeed={
-                                          clientRow?.linked_organization_id
-                                            ? financeLinkedOrgDisplayMap[
-                                                clientRow.linked_organization_id
-                                              ]?.avatarSeed
-                                            : undefined
-                                        }
                                         avatarUrl={
                                           clientRow?.avatar_url ?? null
                                         }
-                                        avatarSeed={
-                                          clientRow?.avatar_seed ?? null
-                                        }
                                         entityType="client"
                                         size={TRIP_TABLE_AVATAR}
+                                        showIntegrationBadge={false}
                                       />
                                       <View
                                         style={styles.spWebTdPartyTextStack}
@@ -3501,24 +3492,13 @@ export function EntityDetailOverlay({
                                   </View>
                                   <View style={styles.spWebTdParty}>
                                     <View style={styles.spWebTdPartyAvatarRow}>
-                                      <PartyAvatar
+                                      <EntityAvatar
                                         name={supplierColumnTitle || "—"}
-                                        organizationImageUrl={
-                                          supplierAv.organizationImageUrl ??
-                                          undefined
-                                        }
-                                        organizationAvatarSeed={
-                                          supplierAv.organizationAvatarSeed ??
-                                          undefined
-                                        }
-                                        avatarUrl={
-                                          supplierAv.avatarUrl ?? null
-                                        }
-                                        avatarSeed={
-                                          supplierAv.avatarSeed ?? null
-                                        }
+                                        organizationImageUrl={supplierAv.organizationImageUrl ?? undefined}
+                                        avatarUrl={supplierAv.avatarUrl ?? null}
                                         entityType="supplier"
                                         size={TRIP_TABLE_AVATAR}
+                                        showIntegrationBadge={false}
                                       />
                                       <View
                                         style={styles.spWebTdPartyTextStack}
@@ -3561,7 +3541,7 @@ export function EntityDetailOverlay({
                                   </View>
                                   <View style={styles.spWebTdDriverCol}>
                                     <View style={styles.spWebTdPartyAvatarRow}>
-                                      <PartyAvatar
+                                      <EntityAvatar
                                         name={driverName || "—"}
                                         avatarUrl={
                                           (driverRow?.avatar_url ?? "").trim() ||

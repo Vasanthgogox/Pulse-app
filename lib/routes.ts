@@ -44,6 +44,10 @@ export const ROUTES = {
     CHAT:           '/(modals)/chat'           as const,
   },
 
+  // Settings flows (root-level stack)
+  KYC_SETTINGS:      '/kyc-settings'      as const,
+  BRANDING_SETTINGS: '/branding-settings' as const,
+
   // Full-screen flows (root-level stack)
   ADD_TRIP:       '/add-trip'       as const,
   /** Modal: same add-client UX as Create Trip (PartyRegistrationPortal on web). */

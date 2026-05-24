@@ -11,7 +11,7 @@
  */
 import Theme from "@/constants/Theme";
 import { EntityIdentityAvatar } from "@/components/EntityIdentityAvatar";
-import { PartyAvatar } from "@/components/PartyAvatar";
+import { EntityAvatar } from "@/components/EntityAvatar";
 import { resolveFinancialRowPartyIdentity } from "@/lib/entityIdentity";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { CUSTOMERS_SUPPLIERS, DRIVERS, LEDGER } from "@/features/finance/constants/tableColumns";
@@ -759,12 +759,12 @@ export function FinancialRow({
       ) : type === "drivers" ? (
         <View style={styles.driverCellWithDot}>
           <View style={styles.driverAvatarWithStatus}>
-            <PartyAvatar
+            <EntityAvatar
               name={(nodeMain ?? data.name ?? "—").trim() || "—"}
               avatarUrl={(data.profileImageUrl ?? "").trim() || null}
-              avatarSeed={(data.avatarSeed ?? "").trim() || null}
               entityType="driver"
               size={24}
+              showIntegrationBadge={false}
             />
             <View
               style={[

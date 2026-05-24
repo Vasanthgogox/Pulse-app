@@ -7,7 +7,7 @@ import { entityDetailPageChromeStyles as edc } from "@/components/entityDetailPa
 import { entityHeroScorecardStyles as ehs } from "@/components/entityHeroScorecard.styles";
 import { FinanceFAB } from "@/components/FinanceFAB";
 import { EntityIdentityAvatar } from "@/components/EntityIdentityAvatar";
-import { PartyAvatar } from "@/components/PartyAvatar";
+import { EntityAvatar as PartyAvatar } from '@/components/EntityAvatar';
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { getUser2DAvatarUriForSeed } from "@/constants/UserAvatars";

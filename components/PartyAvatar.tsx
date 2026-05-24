@@ -1,141 +1,175 @@
-import React, { useEffect, useState } from "react";
-import { Image, StyleSheet, Text, View, type ImageStyle, type StyleProp, type ViewStyle } from "react-native";
-import Theme from "@/constants/Theme";
+/**
+ * PartyAvatar — global, context-aware profile picture component.
+ *
+ * Uses `useAvatar` internally. No random preset images: either the real
+ * uploaded photo is shown, or clean initials on a coloured circle.
+ *
+ * Quick-use wrappers: <DriverAvatar />, <OrgAvatar />, <UserAvatar />
+ */
+import React, { useEffect, useRef } from 'react';
 import {
-  partyAvatarBackgroundColor,
-  partyAvatarInitialsTextColor,
-  partyAvatarHasRenderableOutput,
-  partyInitialsFromName,
-  resolvePartyDisplayUri,
-  resolvePartyPhotoUriAsync,
-  type PartyEntityType,
-} from "@/lib/partyAvatarDisplay";
+  Animated,
+  StyleSheet,
+  Text,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
+import {
+  useAvatar,
+  type AvatarContext,
+  type AvatarParty,
+  type DriverParty,
+  type OrgParty,
+  type UserParty,
+} from '@/lib/useAvatar';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type AvatarShape = 'circle' | 'rounded' | 'square';
 
 export type PartyAvatarProps = {
-  name: string;
-  /** When set, initials fallback background is hashed from this (e.g. org id) so renames do not change color. */
-  initialsColorSeed?: string | null;
-  /** Linked org / org branding photo (storage path or http). */
-  organizationImageUrl?: string | null;
-  organizationAvatarSeed?: string | null;
-  avatarUrl?: string | null;
-  avatarSeed?: string | null;
-  entityType?: PartyEntityType;
+  /** Typed party descriptor — see `lib/useAvatar.ts`. */
+  party: AvatarParty;
+  /**
+   * `personal`              — show person's own photo (profile page, settings)
+   * `representing_company`  — show org logo when user acts on behalf of company
+   * Ignored for drivers (always own photo) and orgs (always logo).
+   */
+  context?: AvatarContext;
   size: number;
+  shape?: AvatarShape;
   style?: StyleProp<ViewStyle>;
-  borderStyle?: StyleProp<ImageStyle>;
+  /** Override the border colour (default: `rgba(0,0,0,0.08)`) */
+  borderColor?: string;
+  /** Show 1px border ring. Default true. */
+  showBorder?: boolean;
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Internal helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+function br(size: number, shape: AvatarShape): number {
+  if (shape === 'circle') return size / 2;
+  if (shape === 'rounded') return Math.round(size * 0.25);
+  return 4;
+}
+
+/** WCAG-contrast-aware text colour for the initials. */
+function textColorFor(bg: string): string {
+  const hex = bg.replace('#', '');
+  if (hex.length !== 6) return '#fff';
+  const r = parseInt(hex.slice(0, 2), 16) / 255;
+  const g = parseInt(hex.slice(2, 4), 16) / 255;
+  const b = parseInt(hex.slice(4, 6), 16) / 255;
+  const lin = (v: number) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+  const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  return L > 0.22 ? '#1e293b' : '#ffffff';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Core component
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
- * One place for party visuals: org logo → contact photo → seed preset → initials (cash tab style).
+ * @example driver
+ * <PartyAvatar
+ *   party={{ type: 'driver', name: 'Ahmed', avatarUrl: driver.avatar_url }}
+ *   size={40}
+ * />
+ *
+ * @example org
+ * <PartyAvatar
+ *   party={{ type: 'organization', name: 'aiman logs', logoUrl: org.logo_url,
+ *             ownerAvatarUrl: ownerProfile.avatar_url }}
+ *   size={40}
+ *   shape="rounded"
+ * />
+ *
+ * @example dispatcher showing org logo externally
+ * <PartyAvatar
+ *   party={{ type: 'user', name: 'Nihas N', avatarUrl: profile.avatar_url,
+ *             orgLogoUrl: org.logo_url }}
+ *   context="representing_company"
+ *   size={40}
+ * />
  */
 export function PartyAvatar({
-  name,
-  initialsColorSeed,
-  organizationImageUrl,
-  organizationAvatarSeed,
-  avatarUrl,
-  avatarSeed,
-  entityType = "client",
+  party,
+  context = 'personal',
   size,
+  shape = 'circle',
   style,
-  borderStyle,
+  borderColor = 'rgba(0,0,0,0.08)',
+  showBorder = true,
 }: PartyAvatarProps) {
-  const [resolvedPhotoUri, setResolvedPhotoUri] = useState<string | null>(null);
-  const hasRawPhotoField = Boolean(
-    (organizationImageUrl ?? "").trim() || (avatarUrl ?? "").trim(),
-  );
+  const { imageUri, loading, initials, initialsColor } = useAvatar(party, context);
 
+  const opacity = useRef(new Animated.Value(0)).current;
+  const prevUri = useRef<string | null>(null);
+
+  // Fade in when image URL first resolves
   useEffect(() => {
-    let cancelled = false;
-    if (!hasRawPhotoField) {
-      setResolvedPhotoUri(null);
-      return () => {
-        cancelled = true;
-      };
+    if (imageUri && imageUri !== prevUri.current) {
+      prevUri.current = imageUri;
+      opacity.setValue(0);
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
     }
-    resolvePartyPhotoUriAsync({
-      organizationImageUrl,
-      avatarUrl,
-    }).then((uri) => {
-      if (!cancelled) setResolvedPhotoUri(uri);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [hasRawPhotoField, organizationImageUrl, avatarUrl]);
+    if (!imageUri) {
+      opacity.setValue(0);
+      prevUri.current = null;
+    }
+  }, [imageUri, opacity]);
 
-  const syncUri = resolvePartyDisplayUri({
-    organizationImageUrl,
-    organizationAvatarSeed,
-    avatarUrl,
-    avatarSeed,
-    entityType,
-  });
-  const uri = resolvedPhotoUri ?? syncUri;
-  if (
-    !partyAvatarHasRenderableOutput({
-      name,
-      organizationImageUrl,
-      organizationAvatarSeed,
-      avatarUrl,
-      avatarSeed,
-      entityType,
-    })
-  ) {
-    return null;
-  }
-  const initials = partyInitialsFromName(name);
-  const bg = partyAvatarBackgroundColor((initialsColorSeed ?? "").trim() || name);
-  const initialsColor = partyAvatarInitialsTextColor(bg);
+  const radius = br(size, shape);
+  const baseStyle: StyleProp<ViewStyle> = [
+    styles.base,
+    {
+      width: size,
+      height: size,
+      borderRadius: radius,
+      borderWidth: showBorder ? StyleSheet.hairlineWidth : 0,
+      borderColor,
+    },
+    style,
+  ];
 
-  if (uri) {
+  // ── Image resolved ────────────────────────────────────────────────────────
+  if (imageUri) {
     return (
-      <Image
-        source={{ uri }}
-        resizeMode="cover"
-        accessibilityIgnoresInvertColors
-        style={[
-          {
-            width: size,
-            height: size,
-            borderRadius: size / 2,
-            backgroundColor: Theme.surface,
-            borderWidth: 1,
-            borderColor: Theme.border,
-            overflow: "hidden",
-          },
-          borderStyle,
-          style as StyleProp<ImageStyle>,
-        ]}
-      />
+      <View style={baseStyle}>
+        <Animated.Image
+          source={{ uri: imageUri }}
+          style={[styles.img, { borderRadius: radius, opacity }]}
+          resizeMode="cover"
+          accessibilityIgnoresInvertColors
+        />
+      </View>
     );
   }
 
+  // ── Loading shimmer (no image yet, async in-flight) ───────────────────────
+  if (loading) {
+    return (
+      <View style={[baseStyle, styles.shimmer]} />
+    );
+  }
+
+  // ── Initials fallback ─────────────────────────────────────────────────────
+  const textColor = textColorFor(initialsColor);
+  const fontSize = Math.round(size * 0.36);
+
   return (
-    <View
-      style={[
-        styles.initialsWrap,
-        {
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          backgroundColor: bg,
-          borderWidth: 1,
-          borderColor: Theme.border,
-        },
-        style,
-      ]}
-    >
+    <View style={[baseStyle, { backgroundColor: initialsColor }]}>
       <Text
-        style={[
-          styles.initialsText,
-          {
-            fontSize: size * 0.3,
-            lineHeight: size * 0.36,
-            color: initialsColor,
-          },
-        ]}
+        style={[styles.initials, { fontSize, color: textColor }]}
         numberOfLines={1}
       >
         {initials}
@@ -144,14 +178,135 @@ export function PartyAvatar({
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Convenience wrappers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Driver avatar — always shows their own photo or initials.
+ *
+ * @example
+ * <DriverAvatar name={driver.name} avatarUrl={driver.avatar_url} size={40} />
+ */
+export function DriverAvatar({
+  name,
+  avatarUrl,
+  size,
+  shape = 'circle',
+  style,
+  showBorder,
+}: Omit<DriverParty, 'type'> & {
+  size: number;
+  shape?: AvatarShape;
+  style?: StyleProp<ViewStyle>;
+  showBorder?: boolean;
+}) {
+  return (
+    <PartyAvatar
+      party={{ type: 'driver', name, avatarUrl }}
+      size={size}
+      shape={shape}
+      style={style}
+      showBorder={showBorder}
+    />
+  );
+}
+
+/**
+ * Org/company logo avatar — always shows company logo or initials.
+ * Defaults to `shape="rounded"` to match company branding conventions.
+ *
+ * @example
+ * <OrgAvatar name={org.name} logoUrl={org.logo_url} ownerAvatarUrl={owner.avatar_url} size={40} />
+ */
+export function OrgAvatar({
+  name,
+  logoUrl,
+  ownerAvatarUrl,
+  size,
+  shape = 'rounded',
+  style,
+  showBorder,
+}: Omit<OrgParty, 'type'> & {
+  size: number;
+  shape?: AvatarShape;
+  style?: StyleProp<ViewStyle>;
+  showBorder?: boolean;
+}) {
+  return (
+    <PartyAvatar
+      party={{ type: 'organization', name, logoUrl, ownerAvatarUrl }}
+      size={size}
+      shape={shape}
+      style={style}
+      showBorder={showBorder}
+    />
+  );
+}
+
+/**
+ * User/employee avatar. Pass `context="representing_company"` to show the
+ * org logo when the user is interacting with customers or dispatching.
+ *
+ * @example — personal profile page
+ * <UserAvatar name={profile.full_name} avatarUrl={profile.avatar_url} size={40} />
+ *
+ * @example — dispatch card (shows org logo instead of personal photo)
+ * <UserAvatar
+ *   name={profile.full_name}
+ *   avatarUrl={profile.avatar_url}
+ *   orgLogoUrl={org.logo_url}
+ *   orgOwnerAvatarUrl={ownerProfile.avatar_url}
+ *   context="representing_company"
+ *   size={40}
+ * />
+ */
+export function UserAvatar({
+  name,
+  avatarUrl,
+  orgLogoUrl,
+  orgOwnerAvatarUrl,
+  context = 'personal',
+  size,
+  shape = 'circle',
+  style,
+  showBorder,
+}: Omit<UserParty, 'type'> & {
+  context?: AvatarContext;
+  size: number;
+  shape?: AvatarShape;
+  style?: StyleProp<ViewStyle>;
+  showBorder?: boolean;
+}) {
+  return (
+    <PartyAvatar
+      party={{ type: 'user', name, avatarUrl, orgLogoUrl, orgOwnerAvatarUrl }}
+      context={context}
+      size={size}
+      shape={shape}
+      style={style}
+      showBorder={showBorder}
+    />
+  );
+}
+
 const styles = StyleSheet.create({
-  initialsWrap: {
-    alignItems: "center",
-    justifyContent: "center",
+  base: {
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  initialsText: {
-    fontWeight: "400",
-    letterSpacing: 0.3,
-    textAlign: "center",
+  img: {
+    width: '100%',
+    height: '100%',
+  },
+  shimmer: {
+    backgroundColor: 'rgba(148,163,184,0.18)',
+  },
+  initials: {
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    textAlign: 'center',
+    includeFontPadding: false,
   },
 });

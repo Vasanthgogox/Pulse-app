@@ -3,6 +3,7 @@
  * Data from global sync bootstrap (requests + batch partner avatars).
  */
 import { PartyAvatar } from "@/components/PartyAvatar";
+import type { AvatarParty } from "@/lib/useAvatar";
 import { useEffect } from "react";
 import Theme from "@/constants/Theme";
 import type { InboundProtocolInviteItem } from "@/lib/globalSync/inboundProtocol.types";
@@ -86,13 +87,12 @@ function EmptyProtocolState() {
 }
 
 function InviteAvatar({ item }: { item: InboundProtocolInviteItem }) {
+  const party: AvatarParty = { type: 'organization', name: item.name, logoUrl: item.avatarUri };
   return (
     <PartyAvatar
-      name={item.name}
-      initialsColorSeed={item.partnerOrgId}
-      avatarUrl={item.avatarUri}
-      entityType="client"
+      party={party}
       size={44}
+      shape="rounded"
       style={styles.inviteAvatarOnly}
     />
   );
@@ -387,6 +387,9 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     gap: 10,
     backgroundColor: Theme.cardWhite,
+  },
+  bodyFullscreen: {
+    flex: 1,
   },
   tabTrack: {
     flexDirection: "row",

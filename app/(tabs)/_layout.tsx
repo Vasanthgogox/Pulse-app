@@ -26,7 +26,7 @@ import { ROUTES } from '@/lib/routes';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
-import { useOrganization } from '@/contexts/OrganizationContext';
+import { useOptionalOrganization } from '@/contexts/OrganizationContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { ProfileMenuDrawerProvider, useProfileMenuDrawer } from '@/contexts/ProfileMenuDrawerContext';
 
@@ -35,8 +35,8 @@ function DemoCustomTabBar(
 ) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { currentOrganization } = useOrganization();
-  const orgId = currentOrganization?.id ?? null;
+  const org = useOptionalOrganization();
+  const orgId = org?.currentOrganization?.id ?? null;
   const { resetBarVisible } = useDemoTabBarScroll();
   const { onOpenProfileDrawer } = props;
   const { state, navigation } = props;
@@ -141,12 +141,13 @@ export const unstable_settings = { initialRouteName: 'trips' };
 
 export default function TabLayout() {
   const { user, profile, roleVerified, loading } = useAuth();
-  const { currentOrganization } = useOrganization();
+  const org = useOptionalOrganization();
   const queryClient = useQueryClient();
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isDesktopWeb = Platform.OS === 'web' && width >= 1024;
-  const orgId = currentOrganization?.id ?? null;
+  const orgId = org?.currentOrganization?.id ?? null;
+  const orgBootPending = !org || org.isLoading;
 
   useEffect(() => {
     if (loading || !orgId) return;
@@ -170,10 +171,17 @@ export default function TabLayout() {
     }
   }, [loading, user, profile, roleVerified, router]);
 
-  if (loading || !user || !profile || !roleVerified || profile.role === 'driver') {
+  if (
+    loading ||
+    orgBootPending ||
+    !user ||
+    !profile ||
+    !roleVerified ||
+    profile.role === 'driver'
+  ) {
     return (
       <AppLoadingSplash
-        variant={loading ? 'session' : 'verify'}
+        variant={loading || orgBootPending ? 'session' : 'verify'}
         style={styles.gate}
       />
     );

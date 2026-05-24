@@ -4,14 +4,10 @@
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import {
-  DEFAULT_USER_2D_AVATAR_SEED,
-  getUser2DAvatarUriForSeed,
-} from "@/constants/UserAvatars";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { ROUTES } from "@/lib/routes";
+import { useAvatar } from "@/lib/useAvatar";
 import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
 import { useRouter } from "expo-router";
 import {
@@ -114,7 +110,6 @@ export function ProfileMenuDrawer({ visible, onClose }: ProfileMenuDrawerProps) 
   const panelWidth = Math.min(screenWidth * 0.84, 340);
   const slideX = useRef(new Animated.Value(-panelWidth)).current;
 
-  const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
 
@@ -124,33 +119,11 @@ export function ProfileMenuDrawer({ visible, onClose }: ProfileMenuDrawerProps) 
   const orgName = (currentOrganization?.name ?? profile?.company_name ?? "").trim();
   const roleLabel = profile?.aggregated ? "Dispatcher + Fleet Owner" : "Fleet User";
 
-  useEffect(() => {
-    let mounted = true;
-    const resolve = async () => {
-      if (!profile) {
-        if (mounted) setAvatarUri(null);
-        return;
-      }
-      if (profile.avatar_url?.startsWith("http")) {
-        if (mounted) setAvatarUri(profile.avatar_url);
-        return;
-      }
-      if (profile.avatar_url?.trim()) {
-        const signed = await getSignedAvatarUrl(profile.avatar_url.trim());
-        if (mounted) setAvatarUri(signed);
-        return;
-      }
-      if (profile.avatar_seed?.trim()) {
-        if (mounted) setAvatarUri(getUser2DAvatarUriForSeed(profile.avatar_seed.trim()));
-        return;
-      }
-      if (mounted) setAvatarUri(getUser2DAvatarUriForSeed(DEFAULT_USER_2D_AVATAR_SEED));
-    };
-    void resolve();
-    return () => {
-      mounted = false;
-    };
-  }, [profile?.avatar_url, profile?.avatar_seed]);
+  const { imageUri: avatarUri, initials: avatarInitials } = useAvatar({
+    type: 'user',
+    name: displayName,
+    avatarUrl: profile?.avatar_url ?? null,
+  });
 
   useEffect(() => {
     Animated.timing(slideX, {
@@ -292,9 +265,7 @@ export function ProfileMenuDrawer({ visible, onClose }: ProfileMenuDrawerProps) 
                   <Image source={{ uri: avatarUri }} style={styles.heroAvatar} />
                 ) : (
                   <View style={styles.heroAvatarFallback}>
-                    <Text style={styles.heroAvatarInitials}>
-                      {firstName.slice(0, 2).toUpperCase()}
-                    </Text>
+                    <Text style={styles.heroAvatarInitials}>{avatarInitials}</Text>
                   </View>
                 )}
                 <View style={styles.heroText}>

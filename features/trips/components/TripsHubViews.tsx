@@ -2,7 +2,7 @@
  * Trips hub — compact card grid and audit-style table for the main Trips tab.
  * Styling aligns with fleet hub / reference; data bindings mirror TripExpandableCard.
  */
-import { PartyAvatar } from "@/components/PartyAvatar";
+import { EntityAvatar as PartyAvatar } from '@/components/EntityAvatar';
 import Theme from "@/constants/Theme";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import { computePartnerIndentFreightCost } from "@/features/finance/utils/partnerIndentFreightCost.util";

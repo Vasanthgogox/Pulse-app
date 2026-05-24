@@ -48,7 +48,7 @@ import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persi
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { useFonts } from 'expo-font';
 import { Stack, usePathname, useRouter, type ErrorBoundaryProps } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
+import { safePreventAutoHideAsync } from '@/lib/safeSplashScreen.util';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
 import { AppBootGate } from '@/components/AppBootGate';
@@ -209,7 +209,7 @@ export const unstable_settings = {
   initialRouteName: 'index',
 };
 
-SplashScreen.preventAutoHideAsync();
+void safePreventAutoHideAsync().catch(() => {});
 
 // Stale refresh token (e.g. from another device) is handled by clearing local session and showing sign-in.
 // Suppress the library's error log so users don't see a scary red error on app open.

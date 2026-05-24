@@ -1,7 +1,8 @@
 /**
  * Driver Profile — hero, fleet vehicle, levels, KYC shortcut to documents (single upload hub).
  */
-import { getAvatarUriForSeed, LEVELS_CONFIG } from '@/constants/DriverLevels';
+import { LEVELS_CONFIG } from '@/constants/DriverLevels';
+import { useAvatar } from '@/lib/useAvatar';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -13,7 +14,6 @@ import {
   getRatingsForDriver,
 } from '@/features/ratings/services/ratings.service';
 import type { RatingRow } from '@/features/ratings/types';
-import { useDriverAvatarUri } from '@/lib/avatarUpload';
 import { ROUTES } from '@/lib/routes';
 import { supabase } from '@/lib/supabase';
 import * as driversService from '@/services/driversService';
@@ -45,6 +45,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Image, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 
 const SCREEN_PAD = Layout.screenPaddingHorizontal;
 
@@ -86,9 +87,6 @@ export default function DriverProfileScreen() {
   const colors = useDriverThemeColors();
   const { user, profile, signOut, refreshSession } = useAuth();
   const { avatarSeed, setAvatarSeed } = useDriverAvatar();
-  const { avatarUri } = useDriverAvatarUri();
-
-  const [avatarError, setAvatarError] = useState(false);
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [profileView, setProfileView] = useState<ProfileView>('main');
   const [drivers, setDrivers] = useState<driversService.DriverRow[]>([]);
@@ -104,9 +102,11 @@ export default function DriverProfileScreen() {
     user?.email?.split('@')[0] ||
     'Pilot';
 
-  const displayAvatarUri = avatarError
-    ? getAvatarUriForSeed(displayName || 'pilot')
-    : avatarUri || getAvatarUriForSeed(displayName || 'pilot');
+  const { imageUri: displayAvatarUri } = useAvatar({
+    type: 'driver',
+    name: displayName,
+    avatarUrl: profile?.avatar_url ?? null,
+  });
 
   const loadTrips = useCallback(() => {
     if (!profile?.uid) {
@@ -117,14 +117,15 @@ export default function DriverProfileScreen() {
     driversService
       .getLinkedDriversForCurrentUser(profile.uid)
       .then((res) => {
-        const list = (res.drivers ?? []).filter((d) => !d.left_at);
-        setDrivers(list);
-        if (list.length === 0) {
+        // All driver rows (including left fleets) — experience is cumulative.
+        const allRows = res.drivers ?? [];
+        setDrivers(allRows.filter((d) => !d.left_at)); // UI fleet display: active only
+        if (allRows.length === 0) {
           setTrips([]);
           setLoadingTrips(false);
           return;
         }
-        return tripsService.getTripsByDriverIds(list.map((d) => d.id)).then((tRes) => {
+        return tripsService.getTripsByDriverIds(allRows.map((d) => d.id)).then((tRes) => {
           setTrips(tRes.trips ?? []);
         });
       })
@@ -185,6 +186,22 @@ export default function DriverProfileScreen() {
 
   useEffect(() => {
     loadTrips();
+  }, [loadTrips]);
+
+  useFocusEffect(useCallback(() => {
+    loadTrips();
+  }, [loadTrips]));
+
+  useEffect(() => {
+    const client = supabase();
+    if (!client) return;
+    const channel = client
+      .channel('driver-profile-trips')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'trips' }, () => {
+        loadTrips();
+      })
+      .subscribe();
+    return () => { client.removeChannel(channel); };
   }, [loadTrips]);
 
   useEffect(() => {
@@ -539,7 +556,7 @@ export default function DriverProfileScreen() {
                   <TouchableOpacity style={styles.avatarCluster} onPress={() => setShowEditProfileModal(true)} activeOpacity={0.9}>
                     <LinearGradient colors={[Theme.driverPrimary, Theme.driverEmeraldDark, '#0f766e']} style={styles.avatarRing}>
                       <View style={styles.avatarInner}>
-                        <Image source={{ uri: displayAvatarUri }} style={styles.avatarImg} onError={() => setAvatarError(true)} />
+                        <Image source={{ uri: displayAvatarUri }} style={styles.avatarImg} />
                         <View style={styles.camOverlay}>
                           <Camera size={22} color="#fff" />
                         </View>

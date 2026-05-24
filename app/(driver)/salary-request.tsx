@@ -13,7 +13,7 @@ import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeCont
 import { useIsOnline } from '@/contexts/NetworkContext';
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
 import { tripEarningsForDriver } from '@/lib/driverUtils';
-import { getFleetAvatarUriForOrg } from '@/lib/fleetAvatar';
+import { resolveOrgAvatarUri } from '@/lib/fleetAvatar';
 import {
   buildDriverTripNumberMap,
   getDriverTripDisplayNumber,
@@ -146,7 +146,9 @@ export default function SalaryRequestScreen() {
     driverId: string;
     orgId: string;
     orgName: string;
-    avatarUrl: string | null;
+    logoUrl: string | null;
+    ownerSeed: string | null;
+    ownerUrl: string | null;
   } | null>(null);
   const [salaryRequestType, setSalaryRequestType] = useState<salaryRequestsService.SalaryRequestType | null>(null);
   const [salaryRequestAmount, setSalaryRequestAmount] = useState('');
@@ -295,20 +297,17 @@ export default function SalaryRequestScreen() {
           (inv && (inv as { from_org_name?: string | null; fromOrgName?: string | null }).from_org_name) ||
           (inv && (inv as { from_org_name?: string | null; fromOrgName?: string | null }).fromOrgName) ||
           null;
-        const avatarCandidate =
-          (inv && (inv as { from_org_avatar_url?: string | null }).from_org_avatar_url) ||
-          (inv && (inv as { from_org_logo_url?: string | null }).from_org_logo_url) ||
-          (inv && (inv as { from_org_image_url?: string | null }).from_org_image_url) ||
-          (inv && (inv as { from_org_photo_url?: string | null }).from_org_photo_url) ||
-          (inv && (inv as { from_org_logo?: string | null }).from_org_logo) ||
-          null;
-        const avatarUrl = avatarCandidate && String(avatarCandidate).trim() ? String(avatarCandidate).trim() : null;
+        const logoUrl = (inv && (inv as { from_org_logo_url?: string | null }).from_org_logo_url) || null;
+        const ownerSeed = (inv && (inv as { from_org_avatar_seed?: string | null }).from_org_avatar_seed) || null;
+        const ownerUrl = (inv && (inv as { from_org_avatar_url?: string | null }).from_org_avatar_url) || null;
         const name = (rawName && String(rawName).trim()) ? String(rawName).trim() : null;
         return {
           driverId: d.id,
           orgId: d.organization_id,
           orgName: name || 'Fleet',
-          avatarUrl,
+          logoUrl,
+          ownerSeed,
+          ownerUrl,
         };
       });
   }, [linkedDrivers, invites]);
@@ -317,9 +316,12 @@ export default function SalaryRequestScreen() {
 
   const fleetHeroAvatarUri = useMemo(() => {
     if (!effectiveSalaryOrg) return '';
-    return (
-      effectiveSalaryOrg.avatarUrl ??
-      getFleetAvatarUriForOrg(String(effectiveSalaryOrg.orgId ?? ''), effectiveSalaryOrg.orgName)
+    return resolveOrgAvatarUri(
+      String(effectiveSalaryOrg.orgId ?? ''),
+      effectiveSalaryOrg.orgName,
+      effectiveSalaryOrg.logoUrl,
+      effectiveSalaryOrg.ownerSeed,
+      effectiveSalaryOrg.ownerUrl,
     );
   }, [effectiveSalaryOrg]);
 
@@ -989,7 +991,7 @@ export default function SalaryRequestScreen() {
                           <View style={[styles.fleetAvatarRing, { borderColor: active ? colors.emerald : 'transparent' }]}>
                             <Image
                               source={{
-                                uri: opt.avatarUrl ?? getFleetAvatarUriForOrg(String(opt.orgId ?? ''), opt.orgName),
+                                uri: resolveOrgAvatarUri(String(opt.orgId ?? ''), opt.orgName, opt.logoUrl, opt.ownerSeed, opt.ownerUrl),
                               }}
                               style={styles.fleetAvatar}
                               resizeMode="cover"

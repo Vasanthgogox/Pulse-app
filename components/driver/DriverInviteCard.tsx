@@ -1,5 +1,5 @@
 import Theme from '@/constants/Theme';
-import { getFleetAvatarUriForOrg } from '@/lib/fleetAvatar';
+import { resolveOrgAvatarUri } from '@/lib/fleetAvatar';
 import type { DriverInviteRow } from '@/services/driversService';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import React from 'react';
@@ -38,14 +38,12 @@ export function DriverInviteCard({
   onClose,
   acceptLabel = 'Accept Invite',
 }: Props) {
-  const orgLogo =
-    invite.from_org_logo_url ??
-    invite.from_org_avatar_url ??
-    fallbackAvatarUri ??
-    null;
-  const presetFleetUri = getFleetAvatarUriForOrg(
+  const orgLogo = resolveOrgAvatarUri(
     invite.from_organization_id ?? '',
     invite.from_org_name ?? '',
+    invite.from_org_logo_url,
+    invite.from_org_avatar_seed,
+    invite.from_org_avatar_url ?? fallbackAvatarUri,
   );
 
   return (
@@ -63,7 +61,7 @@ export function DriverInviteCard({
 
       <View style={styles.header}>
         <View style={styles.avatarWrap}>
-          <Image source={{ uri: orgLogo ?? presetFleetUri }} style={styles.avatarImage} resizeMode="cover" />
+          <Image source={{ uri: orgLogo }} style={styles.avatarImage} resizeMode="cover" />
         </View>
         <View style={styles.orgInfo}>
           <View style={styles.nameRow}>

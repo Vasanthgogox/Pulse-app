@@ -1,65 +1,80 @@
 /**
  * Shared avatar for Customers, Suppliers, Drivers list rows.
- * Delegates to `PartyAvatar`: linked-org logo → contact photo → seed preset → initials.
+ * Adapts the legacy flat-prop API to `<PartyAvatar>` (typed party system).
  * Integration status: small badge dot (green = integrated, grey = manual).
  */
 import Theme from "@/constants/Theme";
 import { PartyAvatar } from "@/components/PartyAvatar";
+import type { AvatarParty } from "@/lib/useAvatar";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
-import { partyAvatarHasRenderableOutput } from "@/lib/partyAvatarDisplay";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 
 export interface EntityAvatarProps {
   name: string;
   avatarUrl?: string | null;
+  /** @deprecated Seeds are ignored — initials are shown instead of preset images. */
   avatarSeed?: string | null;
   organizationImageUrl?: string | null;
+  /** @deprecated Seeds are ignored in the new avatar system. */
   organizationAvatarSeed?: string | null;
-  /** Determines which seed generator to use for preset fallback. */
+  /** @deprecated Use `style` instead. Kept for back-compat. */
+  borderStyle?: StyleProp<ViewStyle>;
+  /** @deprecated Initials color is derived from name. */
+  initialsColorSeed?: string | null;
+  /** Determines which party type to use for avatar resolution. */
   entityType?: PartyEntityType;
   size?: number;
+  style?: StyleProp<ViewStyle>;
   /** When true, shows a green connected dot; grey dot otherwise. */
   isIntegrated?: boolean;
   /** Hide the integration badge (e.g. dense lists / hero). */
   showIntegrationBadge?: boolean;
 }
 
+function buildParty(props: {
+  name: string;
+  avatarUrl?: string | null;
+  organizationImageUrl?: string | null;
+  entityType?: PartyEntityType;
+}): AvatarParty {
+  const { name, avatarUrl, organizationImageUrl, entityType } = props;
+
+  if (entityType === "driver") {
+    return { type: "driver", name, avatarUrl };
+  }
+
+  if (organizationImageUrl) {
+    return { type: "organization", name, logoUrl: organizationImageUrl };
+  }
+
+  return { type: "user", name, avatarUrl };
+}
+
 export function EntityAvatar({
   name,
   avatarUrl,
-  avatarSeed,
+  avatarSeed: _avatarSeed,
   organizationImageUrl,
-  organizationAvatarSeed,
+  organizationAvatarSeed: _organizationAvatarSeed,
+  borderStyle,
+  initialsColorSeed: _initialsColorSeed,
   entityType = "client",
   size = 36,
+  style,
   isIntegrated = false,
   showIntegrationBadge = true,
 }: EntityAvatarProps) {
   const badgeSize = Math.round(size * 0.28);
   const badgeOffset = Math.round(size * 0.02);
 
-  if (
-    !partyAvatarHasRenderableOutput({
-      name,
-      organizationImageUrl,
-      organizationAvatarSeed,
-      avatarUrl,
-      avatarSeed,
-      entityType,
-    })
-  ) {
-    return null;
-  }
+  const party = buildParty({ name, avatarUrl, organizationImageUrl, entityType });
 
   const avatar = (
     <PartyAvatar
-      name={name}
-      organizationImageUrl={organizationImageUrl}
-      organizationAvatarSeed={organizationAvatarSeed}
-      avatarUrl={avatarUrl}
-      avatarSeed={avatarSeed}
-      entityType={entityType}
+      party={party}
       size={size}
+      shape={entityType === "driver" ? "circle" : "rounded"}
+      style={style ?? borderStyle}
     />
   );
 

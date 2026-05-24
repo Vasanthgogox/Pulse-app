@@ -10,7 +10,7 @@ import { entityDetailPageChromeStyles as edc } from "@/components/entityDetailPa
 import { entityHeroScorecardStyles as ehs } from "@/components/entityHeroScorecard.styles";
 import { FinanceFAB } from "@/components/FinanceFAB";
 import { EntityIdentityAvatar } from "@/components/EntityIdentityAvatar";
-import { PartyAvatar } from "@/components/PartyAvatar";
+import { EntityAvatar } from "@/components/EntityAvatar";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { getUser2DAvatarUriForSeed } from "@/constants/UserAvatars";
@@ -2234,7 +2234,7 @@ export default function ClientDetailScreen({
                         {isWebDesktop ? (
                           <View style={styles.partyColWebDesktop}>
                             <View style={styles.tdPartyAvatarRow}>
-                              <PartyAvatar
+                              <EntityAvatar
                                 name={supplierAv.name}
                                 organizationImageUrl={
                                   supplierAv.organizationImageUrl
@@ -2289,7 +2289,7 @@ export default function ClientDetailScreen({
                         {isWebDesktop ? (
                           <View style={styles.driverColWebDesktop}>
                             <View style={styles.tdPartyAvatarRow}>
-                              <PartyAvatar
+                              <EntityAvatar
                                 name={driverName}
                                 avatarUrl={
                                   (driverRow?.avatar_url ?? "").trim() || null

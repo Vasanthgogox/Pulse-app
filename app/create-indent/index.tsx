@@ -1376,28 +1376,13 @@ export default function CreateIndentScreen() {
                       >
                         <View style={styles.clientMain}>
                           <PartyAvatar
-                            name={
-                              selectedClientRow.name ??
-                              selectedClientRow.contact_person ??
-                              "Client"
-                            }
-                            avatarUrl={
-                              (
-                                selectedClientRow as {
-                                  avatar_url?: string | null;
-                                }
-                              ).avatar_url ?? null
-                            }
-                            avatarSeed={
-                              (
-                                selectedClientRow as {
-                                  avatar_seed?: string | null;
-                                }
-                              ).avatar_seed ?? null
-                            }
-                            entityType="client"
+                            party={{
+                              type: 'user',
+                              name: selectedClientRow.name ?? selectedClientRow.contact_person ?? "Client",
+                              avatarUrl: (selectedClientRow as { avatar_url?: string | null }).avatar_url ?? null,
+                            }}
                             size={38}
-                            borderStyle={styles.clientAvatarOn}
+                            style={styles.clientAvatarOn}
                           />
                           <View style={{ flex: 1, minWidth: 0 }}>
                             <Text
@@ -1445,26 +1430,13 @@ export default function CreateIndentScreen() {
                             >
                               <View style={styles.clientMain}>
                                 <PartyAvatar
-                                  name={
-                                    client.name ??
-                                    client.contact_person ??
-                                    "Client"
-                                  }
-                                  avatarUrl={
-                                    (client as { avatar_url?: string | null })
-                                      .avatar_url ?? null
-                                  }
-                                  avatarSeed={
-                                    (client as { avatar_seed?: string | null })
-                                      .avatar_seed ?? null
-                                  }
-                                  entityType="client"
+                                  party={{
+                                    type: 'user',
+                                    name: client.name ?? client.contact_person ?? "Client",
+                                    avatarUrl: (client as { avatar_url?: string | null }).avatar_url ?? null,
+                                  }}
                                   size={38}
-                                  borderStyle={
-                                    selected
-                                      ? styles.clientAvatarOn
-                                      : styles.clientAvatar
-                                  }
+                                  style={selected ? styles.clientAvatarOn : styles.clientAvatar}
                                 />
                                 <View style={{ flex: 1, minWidth: 0 }}>
                                   <Text

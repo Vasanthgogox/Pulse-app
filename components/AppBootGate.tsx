@@ -5,7 +5,7 @@
 import { AppLoadingSplash } from '@/components/AppLoadingSplash';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOptionalOrganization } from '@/contexts/OrganizationContext';
-import * as SplashScreen from 'expo-splash-screen';
+import { safeHideSplashAsync } from '@/lib/safeSplashScreen.util';
 import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 
@@ -39,7 +39,7 @@ export function AppBootGate({ children }: AppBootGateProps) {
     if (!bootReady || splashHidden.current) return;
     splashHidden.current = true;
     const id = requestAnimationFrame(() => {
-      SplashScreen.hideAsync().catch(() => {});
+      void safeHideSplashAsync().catch(() => {});
     });
     return () => cancelAnimationFrame(id);
   }, [bootReady]);
