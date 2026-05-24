@@ -718,57 +718,76 @@ export async function inviteDriver(
         .maybeSingle();
       const driverStillActiveInOrg = Boolean(activeRow?.id);
 
-      const shouldReopen =
+      // Can't re-invite a driver who is still actively connected
+      if (driverStillActiveInOrg) {
+        return {
+          error: null,
+          driver: null,
+          inviteSent: false,
+          inviteAlreadyExists: true,
+          inviteStatus: existingStatus,
+        };
+      }
+
+      const inviteeName =
+        (data.name ?? "").trim() || invitee.full_name || null;
+      const offer: DriverInviteOffer | null =
+        data.payableAmount != null ||
+        data.commissionPercent != null ||
+        data.commissionPerKm != null
+          ? {
+              payableAmount: data.payableAmount ?? null,
+              commissionPercent: data.commissionPercent ?? null,
+              commissionPerKm: data.commissionPerKm ?? null,
+            }
+          : null;
+
+      // Reconnect after leave / rejection: INSERT a fresh pending invite row.
+      // The partial unique index (pending only) allows this alongside historical rows.
+      const isReconnect =
         normalizedStatus === "rejected" ||
         normalizedStatus === "declined" ||
-        (normalizedStatus === "accepted" && !driverStillActiveInOrg) ||
-        (normalizedStatus === "pending" && options?.requireCompensation);
+        normalizedStatus === "accepted";
 
-      if (shouldReopen) {
-        const offer: DriverInviteOffer | null =
-          data.payableAmount != null ||
-          data.commissionPercent != null ||
-          data.commissionPerKm != null
-            ? {
-                payableAmount: data.payableAmount ?? null,
-                commissionPercent: data.commissionPercent ?? null,
-                commissionPerKm: data.commissionPerKm ?? null,
-              }
-            : null;
+      if (isReconnect) {
+        const { error: inviteErr, created } = await createDriverInvite(
+          orgId,
+          toUserId,
+          orgName,
+          inviteeName,
+          offer,
+        );
+        if (inviteErr) return { error: inviteErr, driver: null, inviteSent: false };
+        if (created) return { error: null, driver: null, inviteSent: true };
+        return {
+          error: new Error("Re-invite could not be sent. Please try again."),
+          driver: null,
+          inviteSent: false,
+        };
+      }
+
+      // Pending invite already exists: update pay terms only (no new row needed)
+      if (normalizedStatus === "pending" && options?.requireCompensation) {
         const { error: reopenError, reopened } = await reopenDriverInvite(
           orgId,
           toUserId,
           orgName,
-          (data.name ?? "").trim() || invitee.full_name || null,
+          inviteeName,
           offer,
         );
         if (reopenError) {
           return { error: reopenError, driver: null, inviteSent: false };
         }
         if (reopened) {
-          const verify = await getDriverInviteSentStatus(orgId, toUserId);
-          if (verify.error) {
-            return { error: verify.error, driver: null, inviteSent: false };
-          }
-          if ((verify.status ?? "").toLowerCase() !== "pending") {
-            return {
-              error: new Error(
-                "Re-invite could not be activated. Please try again."
-              ),
-              driver: null,
-              inviteSent: false,
-            };
-          }
           return { error: null, driver: null, inviteSent: true };
         }
         return {
-          error: new Error(
-            "Re-invite could not be activated. Please try again."
-          ),
+          error: new Error("Could not update invite terms. Please try again."),
           driver: null,
           inviteSent: false,
         };
       }
+
       return {
         error: null,
         driver: null,
@@ -812,12 +831,14 @@ export async function inviteDriver(
   }
 
   // No platform driver user found for this phone -> create/upsert a driver row for assignment.
-  // Validation: avoid duplicating driver rows for the same (org,phone).
+  // Only touch active rows (left_at IS NULL): terminated stints are historical and must not
+  // be reactivated — that would merge a new hire into an old passbook.
   const existingDriver = await supabase()
     .from("drivers")
     .select("id,status")
     .eq("organization_id", orgId)
     .eq("phone", phoneNorm)
+    .is("left_at", null)
     .limit(1)
     .maybeSingle();
 
@@ -828,7 +849,6 @@ export async function inviteDriver(
         name: (data.name || "").trim() || "—",
         phone: phoneNorm,
         email: (data.email || "").trim() || null,
-        left_at: null,
         status: "offline",
         payable_amount: data.payableAmount ?? null,
         commission_percent: data.commissionPercent ?? null,
