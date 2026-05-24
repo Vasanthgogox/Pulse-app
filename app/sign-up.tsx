@@ -252,6 +252,7 @@ export default function SignUp() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
@@ -552,7 +553,7 @@ export default function SignUp() {
 
   const backLabel = step === 0 ? 'Back' : step === 5 ? '' : 'Previous';
 
-  const pageScrollBottomPad = insets.bottom + 72;
+  const pageScrollBottomPad = insets.bottom + 220;
 
   const pageBody = (pageIndex: number, content: ReactNode) => (
     <View style={[styles.page, { width: pageWidth }]}>
@@ -578,7 +579,7 @@ export default function SignUp() {
   return (
     <KeyboardAvoidingView
       style={[styles.container, { paddingTop: insets.top }]}
-      behavior={Platform.OS === 'web' ? undefined : 'padding'}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 20 : 0}
     >
       {/* Top bar */}
@@ -924,11 +925,16 @@ export default function SignUp() {
                 <View style={styles.fieldGroup}>
                   <Text style={styles.label}>Office address</Text>
                   <TextInput
-                    style={styles.input}
+                    style={styles.inputMultiline}
                     placeholder="Building, street, area"
                     placeholderTextColor={C.placeholder}
                     value={addressLine}
                     onChangeText={setAddressLine}
+                    multiline
+                    numberOfLines={3}
+                    textAlignVertical="top"
+                    autoCapitalize="sentences"
+                    returnKeyType="default"
                   />
                 </View>
 
@@ -1169,35 +1175,33 @@ export default function SignUp() {
                       <FontAwesome name={showPassword ? 'eye-slash' : 'eye'} size={18} color={C.muted} />
                     </TouchableOpacity>
                   </View>
-                  {password.length > 0 ? (
-                    <View style={styles.strengthWrap}>
-                      <View style={styles.strengthBar}>
-                        {[1, 2, 3, 4].map((seg) => (
-                          <View
-                            key={seg}
-                            style={[
-                              styles.strengthSeg,
-                              passwordStrength >= seg && (
-                                passwordStrength <= 1 ? styles.strengthWeak :
-                                passwordStrength === 2 ? styles.strengthFair :
-                                passwordStrength === 3 ? styles.strengthGood :
-                                styles.strengthStrong
-                              ),
-                            ]}
-                          />
-                        ))}
-                      </View>
-                      <Text style={[
-                        styles.strengthLabel,
-                        passwordStrength <= 1 ? { color: C.error } :
-                        passwordStrength === 2 ? { color: C.warning } :
-                        passwordStrength === 3 ? { color: '#22c55e' } :
-                        { color: '#16a34a' },
-                      ]}>
-                        {passwordStrength <= 1 ? 'Weak' : passwordStrength === 2 ? 'Fair' : passwordStrength === 3 ? 'Good' : 'Strong'}
-                      </Text>
+                  <View style={[styles.strengthWrap, { opacity: password.length > 0 ? 1 : 0 }]}>
+                    <View style={styles.strengthBar}>
+                      {[1, 2, 3, 4].map((seg) => (
+                        <View
+                          key={seg}
+                          style={[
+                            styles.strengthSeg,
+                            passwordStrength >= seg && (
+                              passwordStrength <= 1 ? styles.strengthWeak :
+                              passwordStrength === 2 ? styles.strengthFair :
+                              passwordStrength === 3 ? styles.strengthGood :
+                              styles.strengthStrong
+                            ),
+                          ]}
+                        />
+                      ))}
                     </View>
-                  ) : null}
+                    <Text style={[
+                      styles.strengthLabel,
+                      passwordStrength <= 1 ? { color: C.error } :
+                      passwordStrength === 2 ? { color: C.warning } :
+                      passwordStrength === 3 ? { color: '#22c55e' } :
+                      { color: '#16a34a' },
+                    ]}>
+                      {passwordStrength <= 1 ? 'Weak' : passwordStrength === 2 ? 'Fair' : passwordStrength === 3 ? 'Good' : 'Strong'}
+                    </Text>
+                  </View>
                   {step4Attempted && step4Errors.password ? (
                     <Text style={styles.fieldError}>{step4Errors.password}</Text>
                   ) : null}
@@ -1207,15 +1211,25 @@ export default function SignUp() {
                   <Text style={[styles.label, (step4Attempted && step4Errors.confirmPassword) || confirmMismatch ? styles.labelError : null]}>
                     Confirm password <Text style={styles.req}>*</Text>
                   </Text>
-                  <TextInput
-                    style={[styles.input, (step4Attempted && step4Errors.confirmPassword) || confirmMismatch ? styles.inputError : confirmPassword.length > 0 && !confirmMismatch && password === confirmPassword ? styles.inputSuccess : null]}
-                    placeholder="Re-enter password"
-                    placeholderTextColor={C.placeholder}
-                    value={confirmPassword}
-                    onChangeText={setConfirmPassword}
-                    secureTextEntry={!showPassword}
-                    editable={!loading}
-                  />
+                  <View style={styles.passwordRow}>
+                    <TextInput
+                      style={[styles.inputPassword, (step4Attempted && step4Errors.confirmPassword) || confirmMismatch ? styles.inputError : confirmPassword.length > 0 && !confirmMismatch && password === confirmPassword ? styles.inputSuccess : null]}
+                      placeholder="Re-enter password"
+                      placeholderTextColor={C.placeholder}
+                      value={confirmPassword}
+                      onChangeText={setConfirmPassword}
+                      secureTextEntry={!showConfirmPassword}
+                      editable={!loading}
+                      onFocus={() => {
+                        setTimeout(() => {
+                          pageVerticalScrollRefs.current[4]?.scrollToEnd({ animated: true });
+                        }, 150);
+                      }}
+                    />
+                    <TouchableOpacity onPress={() => setShowConfirmPassword((v) => !v)} style={styles.eyeBtn}>
+                      <FontAwesome name={showConfirmPassword ? 'eye-slash' : 'eye'} size={18} color={C.muted} />
+                    </TouchableOpacity>
+                  </View>
                   {confirmMismatch ? (
                     <Text style={styles.fieldError}>Passwords do not match.</Text>
                   ) : confirmPassword.length > 0 && password === confirmPassword ? (
@@ -1432,6 +1446,11 @@ const styles = StyleSheet.create({
   input: {
     minHeight: 50, paddingVertical: 14, paddingHorizontal: 14, fontSize: 15, color: C.text,
     backgroundColor: C.bg, borderRadius: 12, borderWidth: 1.5, borderColor: C.border,
+  },
+  inputMultiline: {
+    minHeight: 84, paddingVertical: 12, paddingHorizontal: 14, fontSize: 15, color: C.text,
+    backgroundColor: C.bg, borderRadius: 12, borderWidth: 1.5, borderColor: C.border,
+    textAlignVertical: 'top',
   },
   inputPassword: {
     flex: 1, minHeight: 50, paddingVertical: 14, paddingHorizontal: 14, paddingRight: 48,
