@@ -17,7 +17,7 @@ import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOptionalOrganization } from "@/contexts/OrganizationContext";
 import { TripsLedgerExportModalGate } from "@/features/trips/components/TripsLedgerExportModalGate";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import {
@@ -237,7 +237,7 @@ export default function TripsScreen() {
   const tripsScrollBottomPad = layout.scrollBottomPadding(40);
   const router = useRouter();
   const { t: tr } = useLanguage();
-  const { currentOrganization } = useOrganization();
+  const orgCtx = useOptionalOrganization();
   const { profile } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const lastFocusRefreshRef = useRef<number>(0);
@@ -303,6 +303,8 @@ export default function TripsScreen() {
       : null,
   );
   const canAccess = canAccessTrips(capabilities);
+  const currentOrganization = orgCtx?.currentOrganization ?? null;
+  const orgBootPending = !orgCtx || orgCtx.isLoading;
   const orgId = canAccess ? (currentOrganization?.id ?? null) : null;
 
   const {
@@ -1401,7 +1403,7 @@ export default function TripsScreen() {
     );
   }
 
-  if (loading && trips.length === 0) {
+  if (orgBootPending || (loading && trips.length === 0)) {
     return <SceneLoadingSplash variant="preparing" message={tr("loading")} />;
   }
 
