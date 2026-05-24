@@ -16,6 +16,8 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { PartyAvatar } from '@/components/PartyAvatar';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOptionalActiveWorkspace } from '@/contexts/ActiveWorkspaceContext';
+import { useOptionalDriverAvatar } from '@/contexts/DriverAvatarContext';
+import { DEFAULT_USER_2D_AVATAR_SEED } from '@/lib/useAvatar';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -67,6 +69,7 @@ export function PulseAvatar({
 }: PulseAvatarProps) {
   const { profile } = useAuth();
   const workspace = useOptionalActiveWorkspace();
+  const driverAvatarCtx = useOptionalDriverAvatar();
 
   // Resolve values — props win over context defaults
   const resolvedName = nameProp ?? profile?.full_name ?? profile?.displayName ?? '';
@@ -79,6 +82,10 @@ export function PulseAvatar({
   const resolvedDriverAvatarUrl = driverAvatarUrlProp !== undefined
     ? driverAvatarUrlProp
     : null;
+  const resolvedPersonalAvatarSeed =
+    profile?.avatar_seed?.trim() || DEFAULT_USER_2D_AVATAR_SEED;
+  const resolvedDriverAvatarSeed =
+    profile?.avatar_seed?.trim() || driverAvatarCtx?.avatarSeed || 'driver-1';
 
   // Default shape by surface
   const resolvedShape = shape ?? (surface === 'business' ? 'rounded' : 'circle');
@@ -94,7 +101,12 @@ export function PulseAvatar({
   if (surface === 'personal') {
     avatarNode = (
       <PartyAvatar
-        party={{ type: 'user', name: resolvedName, avatarUrl: resolvedPersonalAvatarUrl }}
+        party={{
+          type: 'user',
+          name: resolvedName,
+          avatarUrl: resolvedPersonalAvatarUrl,
+          avatarSeed: resolvedPersonalAvatarSeed,
+        }}
         context="personal"
         size={size}
         shape={resolvedShape}
@@ -109,6 +121,8 @@ export function PulseAvatar({
           name: resolvedName,
           avatarUrl: resolvedPersonalAvatarUrl,
           orgLogoUrl: resolvedWorkspaceLogoUrl,
+          avatarSeed: resolvedPersonalAvatarSeed,
+          orgOwnerAvatarSeed: resolvedPersonalAvatarSeed,
         }}
         context="representing_company"
         size={size}
@@ -120,7 +134,12 @@ export function PulseAvatar({
     // driver
     avatarNode = (
       <PartyAvatar
-        party={{ type: 'driver', name: resolvedName, avatarUrl: resolvedDriverAvatarUrl }}
+        party={{
+          type: 'driver',
+          name: resolvedName,
+          avatarUrl: resolvedDriverAvatarUrl,
+          avatarSeed: resolvedDriverAvatarSeed,
+        }}
         size={size}
         shape={resolvedShape}
         showBorder={showBorder}

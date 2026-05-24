@@ -2,6 +2,7 @@
  * Unified mobile header style (aligned with Q-unified-base):
  * branded left lockup + contextual title/subtitle, and right utility cluster (bell, profile).
  */
+import { AvatarImageOrInitials } from "@/components/AvatarImageOrInitials";
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
 import Layout from "@/constants/Layout";
@@ -73,7 +74,7 @@ export function TeslaHeader({
   const topPadding = skipSafeAreaTop ? 16 : insets.top + 16;
   const displayName = (profile?.full_name ?? profile?.displayName ?? "User").trim();
 
-  const { imageUri: profileAvatarUri, initials } = useAvatar({
+  const { imageUri: profileAvatarUri, initials, initialsColor } = useAvatar({
     type: 'user',
     name: displayName,
     avatarUrl: profile?.avatar_url ?? null,
@@ -161,19 +162,25 @@ export function TeslaHeader({
             style={[styles.avatar, isDark && styles.avatarDark, profileAvatarUri ? styles.avatarWithImage : null]}
             hitSlop={8}
           >
-            {profileAvatarUri ? (
-              <Image source={{ uri: profileAvatarUri }} style={styles.avatarImage} />
-            ) : (
-              <Text style={[styles.avatarInitials, isDark && styles.avatarInitialsDark]}>{initials}</Text>
-            )}
+            <AvatarImageOrInitials
+              uri={profileAvatarUri}
+              initials={initials}
+              initialsColor={initialsColor}
+              containerStyle={styles.avatarFill}
+              imageStyle={styles.avatarImage}
+              textStyle={styles.avatarInitials}
+            />
           </TouchableOpacity>
         ) : (
           <View style={[styles.avatar, isDark && styles.avatarDark, profileAvatarUri ? styles.avatarWithImage : null]}>
-            {profileAvatarUri ? (
-              <Image source={{ uri: profileAvatarUri }} style={styles.avatarImage} />
-            ) : (
-              <Text style={[styles.avatarInitials, isDark && styles.avatarInitialsDark]}>{initials}</Text>
-            )}
+            <AvatarImageOrInitials
+              uri={profileAvatarUri}
+              initials={initials}
+              initialsColor={initialsColor}
+              containerStyle={styles.avatarFill}
+              imageStyle={styles.avatarImage}
+              textStyle={styles.avatarInitials}
+            />
           </View>
         )}
         {onAddClick != null && (
@@ -325,6 +332,12 @@ const styles = StyleSheet.create({
   avatarWithImage: {
     borderWidth: 0,
     backgroundColor: "transparent",
+  },
+  avatarFill: {
+    width: "100%",
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
   },
   avatarImage: {
     width: "100%",

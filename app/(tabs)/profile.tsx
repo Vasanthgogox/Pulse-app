@@ -374,7 +374,7 @@ export default function ProfileScreen() {
     }
   }, [profile?.avatar_seed]);
 
-  const { imageUri: avatarUri } = useAvatar({
+  const { imageUri: avatarUri, initials: avatarInitials, initialsColor: avatarColor } = useAvatar({
     type: 'user',
     name: (profile?.full_name ?? profile?.displayName ?? '').trim(),
     avatarUrl: profile?.avatar_url ?? null,
@@ -672,7 +672,30 @@ export default function ProfileScreen() {
                     accessibilityRole="button"
                   >
                     <View style={[styles.avatarFrame, orgLogoUri && styles.avatarFrameSmall]}>
-                      <Image source={{ uri: avatarUri }} style={orgLogoUri ? styles.avatarSmall : styles.avatar} />
+                      {avatarUri ? (
+                        <Image source={{ uri: avatarUri }} style={orgLogoUri ? styles.avatarSmall : styles.avatar} />
+                      ) : (
+                        <View
+                          style={[
+                            orgLogoUri ? styles.avatarSmall : styles.avatar,
+                            {
+                              backgroundColor: avatarColor,
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={{
+                              color: '#fff',
+                              fontWeight: '700',
+                              fontSize: orgLogoUri ? 16 : 28,
+                            }}
+                          >
+                            {avatarInitials}
+                          </Text>
+                        </View>
+                      )}
                     </View>
                     {!orgLogoUri && (
                       <View style={styles.levelBadgeOnAvatar}>

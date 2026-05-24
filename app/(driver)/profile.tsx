@@ -104,10 +104,11 @@ export default function DriverProfileScreen() {
     user?.email?.split('@')[0] ||
     'Pilot';
 
-  const { imageUri: displayAvatarUri } = useAvatar({
+  const { imageUri: displayAvatarUri, initials: displayAvatarInitials, initialsColor: displayAvatarColor } = useAvatar({
     type: 'driver',
     name: displayName,
     avatarUrl: profile?.avatar_url ?? null,
+    avatarSeed: profile?.avatar_seed?.trim() || avatarSeed,
   });
 
   const loadTrips = useCallback(() => {
@@ -562,7 +563,24 @@ export default function DriverProfileScreen() {
                   <TouchableOpacity style={styles.avatarCluster} onPress={() => setShowEditProfileModal(true)} activeOpacity={0.9}>
                     <LinearGradient colors={[Theme.driverPrimary, Theme.driverEmeraldDark, '#0f766e']} style={styles.avatarRing}>
                       <View style={styles.avatarInner}>
-                        <Image source={{ uri: displayAvatarUri }} style={styles.avatarImg} />
+                        {displayAvatarUri ? (
+                          <Image source={{ uri: displayAvatarUri }} style={styles.avatarImg} />
+                        ) : (
+                          <View
+                            style={[
+                              styles.avatarImg,
+                              {
+                                backgroundColor: displayAvatarColor,
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                              },
+                            ]}
+                          >
+                            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 24 }}>
+                              {displayAvatarInitials}
+                            </Text>
+                          </View>
+                        )}
                         <View style={styles.camOverlay}>
                           <Camera size={18} color="#fff" />
                         </View>

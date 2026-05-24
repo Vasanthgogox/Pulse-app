@@ -17,7 +17,6 @@ import { ChevronLeft } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { useMemo } from "react";
 import {
-  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -25,6 +24,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
+import { AvatarImageOrInitials } from "@/components/AvatarImageOrInitials";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const ICON_SIZE = 22;
@@ -78,7 +78,7 @@ export function HomePageHeader({
     "User"
   ).trim();
 
-  const { imageUri: profileAvatarUri, initials } = useAvatar({
+  const { imageUri: profileAvatarUri, initials, initialsColor } = useAvatar({
     type: 'user',
     name: profileDisplayName,
     avatarUrl: profile?.avatar_url ?? null,
@@ -150,13 +150,14 @@ export function HomePageHeader({
             accessibilityLabel="Open profile"
             hitSlop={6}
           >
-            {profileAvatarUri ? (
-              <Image source={{ uri: profileAvatarUri }} style={styles.avatarImage} />
-            ) : (
-              <View style={styles.avatarFallback}>
-                <Text style={styles.avatarInitials}>{initials}</Text>
-              </View>
-            )}
+            <AvatarImageOrInitials
+              uri={profileAvatarUri}
+              initials={initials}
+              initialsColor={initialsColor}
+              containerStyle={styles.avatarBtn}
+              imageStyle={styles.avatarImage}
+              textStyle={styles.avatarInitials}
+            />
           </Pressable>
         )}
 

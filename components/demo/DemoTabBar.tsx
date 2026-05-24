@@ -795,7 +795,7 @@ export function DemoTabBar({
     profile?.displayName ??
     "User"
   ).trim();
-  const { imageUri: profileAvatarUri, initials } = useAvatar({
+  const { imageUri: profileAvatarUri, initials, initialsColor } = useAvatar({
     type: 'user',
     name: displayName,
     avatarUrl: profile?.avatar_url ?? null,
@@ -1056,7 +1056,10 @@ export function DemoTabBar({
             </View>
             <AnimatedPress
               onPress={onProfilePress}
-              style={styles.webAvatarBtn}
+              style={[
+                styles.webAvatarBtn,
+                !profileAvatarUri && { backgroundColor: initialsColor },
+              ]}
               activeOpacity={0.8}
             >
               {profileAvatarUri ? (

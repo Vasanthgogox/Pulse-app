@@ -21,6 +21,10 @@ export function useDriverAvatar() {
   return ctx;
 }
 
+export function useOptionalDriverAvatar() {
+  return useContext(DriverAvatarContext);
+}
+
 export function DriverAvatarProvider({ children }: { children: ReactNode }) {
   const [avatarSeed, setAvatarSeedState] = useState(DEFAULT_SEED);
   const [hydrated, setHydrated] = useState(false);

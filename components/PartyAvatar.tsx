@@ -1,7 +1,7 @@
 /**
  * PartyAvatar — global, context-aware profile picture component.
  *
- * Uses `useAvatar` internally: uploaded photo, 2D seed preset, or pastel initials.
+ * Uses `useAvatar` internally: uploaded photo, 2D seed preset, or coloured initials.
  *
  * Quick-use wrappers: <DriverAvatar />, <OrgAvatar />, <UserAvatar />
  */
@@ -233,6 +233,8 @@ export function UserAvatar({
   avatarUrl,
   orgLogoUrl,
   orgOwnerAvatarUrl,
+  avatarSeed,
+  orgOwnerAvatarSeed,
   context = 'personal',
   size,
   shape = 'circle',
@@ -247,7 +249,15 @@ export function UserAvatar({
 }) {
   return (
     <PartyAvatar
-      party={{ type: 'user', name, avatarUrl, orgLogoUrl, orgOwnerAvatarUrl }}
+      party={{
+        type: 'user',
+        name,
+        avatarUrl,
+        orgLogoUrl,
+        orgOwnerAvatarUrl,
+        avatarSeed,
+        orgOwnerAvatarSeed,
+      }}
       context={context}
       size={size}
       shape={shape}

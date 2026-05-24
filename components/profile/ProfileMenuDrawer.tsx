@@ -7,6 +7,7 @@ import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { ROUTES } from "@/lib/routes";
+import { AvatarImageOrInitials } from "@/components/AvatarImageOrInitials";
 import { useAvatar, DEFAULT_USER_2D_AVATAR_SEED } from "@/lib/useAvatar";
 import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
 import { useRouter } from "expo-router";
@@ -119,7 +120,7 @@ export function ProfileMenuDrawer({ visible, onClose }: ProfileMenuDrawerProps) 
   const orgName = (currentOrganization?.name ?? profile?.company_name ?? "").trim();
   const roleLabel = profile?.aggregated ? "Dispatcher + Fleet Owner" : "Fleet User";
 
-  const { imageUri: avatarUri, initials: avatarInitials } = useAvatar({
+  const { imageUri: avatarUri, initials: avatarInitials, initialsColor } = useAvatar({
     type: 'user',
     name: displayName,
     avatarUrl: profile?.avatar_url ?? null,
@@ -262,13 +263,13 @@ export function ProfileMenuDrawer({ visible, onClose }: ProfileMenuDrawerProps) 
               accessibilityLabel="Open full profile"
             >
               <View style={styles.heroRow}>
-                {avatarUri ? (
-                  <Image source={{ uri: avatarUri }} style={styles.heroAvatar} />
-                ) : (
-                  <View style={styles.heroAvatarFallback}>
-                    <Text style={styles.heroAvatarInitials}>{avatarInitials}</Text>
-                  </View>
-                )}
+                <AvatarImageOrInitials
+                  uri={avatarUri}
+                  initials={avatarInitials}
+                  initialsColor={initialsColor}
+                  containerStyle={styles.heroAvatar}
+                  textStyle={styles.heroAvatarInitials}
+                />
                 <View style={styles.heroText}>
                   <Text style={styles.heroGreeting} numberOfLines={1}>
                     Hi {firstName}

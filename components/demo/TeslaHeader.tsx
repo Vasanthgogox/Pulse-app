@@ -2,7 +2,8 @@
  * Demo header aligned to Q-unified-base mobile header language.
  * Branded left lockup + right utility cluster (bell, profile).
  */
-import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import { AvatarImageOrInitials } from '@/components/AvatarImageOrInitials';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -28,7 +29,7 @@ export function TeslaHeader({
 }: TeslaHeaderProps) {
   const { profile } = useAuth();
   const displayName = (profile?.full_name ?? profile?.displayName ?? 'User').trim();
-  const { imageUri: profileAvatarUri, initials } = useAvatar({
+  const { imageUri: profileAvatarUri, initials, initialsColor } = useAvatar({
     type: 'user',
     name: displayName,
     avatarUrl: profile?.avatar_url ?? null,
@@ -65,19 +66,25 @@ export function TeslaHeader({
         </View>
         {onProfileClick ? (
           <TouchableOpacity onPress={onProfileClick} style={[styles.avatar, profileAvatarUri ? styles.avatarWithImage : null]} hitSlop={8} activeOpacity={0.7}>
-            {profileAvatarUri ? (
-              <Image source={{ uri: profileAvatarUri }} style={styles.avatarImage} />
-            ) : (
-              <Text style={styles.avatarInitials}>{initials}</Text>
-            )}
+            <AvatarImageOrInitials
+              uri={profileAvatarUri}
+              initials={initials}
+              initialsColor={initialsColor}
+              containerStyle={styles.avatarFill}
+              imageStyle={styles.avatarImage}
+              textStyle={styles.avatarInitials}
+            />
           </TouchableOpacity>
         ) : (
           <View style={[styles.avatar, profileAvatarUri ? styles.avatarWithImage : null]}>
-            {profileAvatarUri ? (
-              <Image source={{ uri: profileAvatarUri }} style={styles.avatarImage} />
-            ) : (
-              <Text style={styles.avatarInitials}>{initials}</Text>
-            )}
+            <AvatarImageOrInitials
+              uri={profileAvatarUri}
+              initials={initials}
+              initialsColor={initialsColor}
+              containerStyle={styles.avatarFill}
+              imageStyle={styles.avatarImage}
+              textStyle={styles.avatarInitials}
+            />
           </View>
         )}
       </View>
@@ -161,6 +168,12 @@ const styles = StyleSheet.create({
   avatarWithImage: {
     borderWidth: 0,
     backgroundColor: 'transparent',
+  },
+  avatarFill: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   avatarImage: {
     width: '100%',
