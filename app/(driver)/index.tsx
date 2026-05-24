@@ -4906,10 +4906,15 @@ export default function DriverRadarScreen() {
                 }
               }}
               bottomInset={driverTabBarClearance}
+              handleComponent={
+                shouldUseStaticMapSheetCard ? () => null : undefined
+              }
               backgroundStyle={{
-                backgroundColor: colors.surface,
-                borderTopLeftRadius: 24,
-                borderTopRightRadius: 24,
+                backgroundColor: shouldUseStaticMapSheetCard
+                  ? "transparent"
+                  : colors.surface,
+                borderTopLeftRadius: shouldUseStaticMapSheetCard ? 0 : 28,
+                borderTopRightRadius: shouldUseStaticMapSheetCard ? 0 : 28,
                 overflow: "hidden",
               }}
               handleIndicatorStyle={{
@@ -4927,7 +4932,7 @@ export default function DriverRadarScreen() {
                     styles.olaSheetContent,
                     {
                       paddingBottom: 0,
-                      paddingHorizontal: Layout.screenPaddingHorizontal,
+                      paddingHorizontal: 0,
                       flexGrow: 0,
                     },
                   ]}

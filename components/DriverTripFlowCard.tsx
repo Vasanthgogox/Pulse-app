@@ -7,6 +7,7 @@ import {
   HeroAssignerBlock,
   HeroKindBadge,
   sheetStyles,
+  TRIP_SHEET_TOP_RADIUS,
   TripDetailsStrip,
 } from '@/components/driver/DriverTripSheetLayout';
 import { useAuth } from '@/contexts/AuthContext';
@@ -148,14 +149,6 @@ function titleForStep(step: StepId): string {
   if (step === 'transit') return 'Head to Drop-off';
   if (step === 'reached') return 'At Drop-off Location';
   return 'Trip completed';
-}
-
-function subtitleForStep(step: StepId, trip: tripsService.TripRow): string {
-  if (step === 'accepted') return trip.pickup_area?.trim() || 'Proceed to pickup';
-  if (step === 'pickup') return 'Collect the package';
-  if (step === 'transit') return trip.drop_location?.trim() || 'Proceed to drop-off';
-  if (step === 'reached') return 'Deliver the package';
-  return 'Nice work — you’re done.';
 }
 
 export interface DriverTripFlowCardProps {
@@ -434,7 +427,6 @@ export function DriverTripFlowCard({
   const progressPct = useMemo(() => progressForStep(step), [step]);
   const stage = useMemo(() => stageForStep(step), [step]);
   const title = useMemo(() => titleForStep(step), [step]);
-  const subtitle = useMemo(() => subtitleForStep(step, localTrip), [step, localTrip]);
 
   const showHeroAssigner = useMemo(() => {
     if (!assignedBy) return false;
@@ -771,18 +763,12 @@ export function DriverTripFlowCard({
   return (
     <View
       style={[
-        variant === 'page'
-          ? styles.page
-          : [
-              styles.sheet,
-              styles.shadow,
-              {
-                marginHorizontal: edgeToEdge ? 0 : undefined,
-              },
-            ],
+        styles.sheet,
+        variant === 'page' || edgeToEdge ? styles.sheetEdgeToEdge : styles.sheetInset,
+        variant !== 'page' ? styles.shadow : null,
       ]}
     >
-      {variant === 'card' ? (
+      {variant === 'card' && !edgeToEdge ? (
         <View style={styles.handleWrap}>
           <View style={[styles.handleBar, { backgroundColor: Theme.border }]} />
         </View>
@@ -826,7 +812,7 @@ export function DriverTripFlowCard({
               ]}
             >
               <View style={styles.heroIconWrap}>
-                <Wallet size={16} color={FLOW_EMERALD} strokeWidth={2.2} />
+                <Wallet size={14} color={FLOW_EMERALD} strokeWidth={2.2} />
               </View>
               <View style={styles.heroTextBlock}>
                 <Text style={styles.heroAmount} numberOfLines={1}>
@@ -842,9 +828,6 @@ export function DriverTripFlowCard({
               </>
             ) : null}
           </View>
-          <Text style={styles.heroStepSubtitle} numberOfLines={1}>
-            {subtitle}
-          </Text>
         </LinearGradient>
       ) : null}
 
@@ -860,20 +843,7 @@ export function DriverTripFlowCard({
                 statRight={tripEtaLabel}
                 pickup={pickupLabel}
                 dropoff={dropLabel}
-                footer={
-                  driverLivePlaceText ? (
-                    <View style={styles.gpsRow}>
-                      <FontAwesome name="truck" size={9} color={colors.emerald} />
-                      <Text
-                        style={[styles.gpsText, { color: Theme.textMuted }]}
-                        numberOfLines={1}
-                        selectable={!!driverLocationLabel?.trim()}
-                      >
-                        {driverLivePlaceText}
-                      </Text>
-                    </View>
-                  ) : undefined
-                }
+                locationLabel={driverLivePlaceText}
               />
             </>
           ) : null}
@@ -1203,28 +1173,23 @@ export function DriverTripFlowCard({
 
 const styles = StyleSheet.create({
   sheet: {
+    borderTopLeftRadius: TRIP_SHEET_TOP_RADIUS,
+    borderTopRightRadius: TRIP_SHEET_TOP_RADIUS,
+    overflow: 'hidden',
+    backgroundColor: Theme.surface,
+  },
+  sheetInset: {
     marginHorizontal: 16,
     marginBottom: 8,
-    borderRadius: 24,
-    overflow: 'hidden',
-    backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
-    paddingHorizontal: 24,
-    paddingBottom: 18,
-    paddingTop: 12,
   },
-  /** Frameless container so the bottom sheet itself becomes the only "panel". */
+  sheetEdgeToEdge: {
+    marginHorizontal: 0,
+    marginBottom: 0,
+  },
+  /** Legacy — sheet chrome now lives on `sheet` for page/map mode too. */
   page: {
     marginHorizontal: 0,
     marginBottom: 0,
-    borderRadius: 0,
-    overflow: 'visible',
-    backgroundColor: 'transparent',
-    borderWidth: 0,
-    paddingHorizontal: 0,
-    paddingBottom: 0,
-    paddingTop: 0,
   },
   shadow: {
     shadowColor: '#000',
@@ -1236,10 +1201,10 @@ const styles = StyleSheet.create({
   handleWrap: { alignItems: 'center', paddingBottom: 8 },
   handleBar: { width: 36, height: 4, borderRadius: 999, opacity: 0.5 },
   flowHero: {
-    paddingTop: 10,
-    paddingHorizontal: 12,
-    paddingBottom: 10,
-    gap: 7,
+    paddingTop: 14,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    gap: 8,
   },
   progressSegmentsHero: {
     flexDirection: 'row',
@@ -1273,15 +1238,15 @@ const styles = StyleSheet.create({
   },
   heroMainRow: {
     flexDirection: 'row',
-    alignItems: 'stretch',
-    gap: 10,
+    alignItems: 'center',
+    gap: 8,
     minWidth: 0,
   },
   heroEarningsBlock: {
-    flex: 0.42,
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
     minWidth: 0,
   },
   heroEarningsBlockFull: {
@@ -1289,13 +1254,15 @@ const styles = StyleSheet.create({
   },
   heroColDivider: {
     width: StyleSheet.hairlineWidth,
+    height: 30,
     backgroundColor: 'rgba(255,255,255,0.28)',
-    marginVertical: 2,
+    alignSelf: 'center',
+    flexShrink: 0,
   },
   heroIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
+    width: 30,
+    height: 30,
+    borderRadius: 9,
     backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1307,46 +1274,25 @@ const styles = StyleSheet.create({
     gap: 1,
   },
   heroAmount: {
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: '900',
     color: '#fff',
-    letterSpacing: -0.3,
-    lineHeight: 21,
+    letterSpacing: -0.25,
+    lineHeight: 18,
   },
   heroAmountLabel: {
-    fontSize: 7,
+    fontSize: 6,
     fontWeight: '800',
-    letterSpacing: 0.7,
+    letterSpacing: 0.6,
     color: FLOW_MINT,
     textTransform: 'uppercase',
   },
-  heroStepSubtitle: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: FLOW_MINT,
-    lineHeight: 13,
-  },
   flowBody: {
-    paddingHorizontal: 12,
-    paddingTop: 8,
-    paddingBottom: 8,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 10,
     gap: 6,
     backgroundColor: Theme.surface,
-  },
-  gpsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    minHeight: 28,
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-  },
-  gpsText: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 9,
-    fontWeight: '600',
-    lineHeight: 12,
   },
   actionIconsRow: { flexDirection: 'row', gap: 8 },
   actionIconBtnWrap: { flex: 1, position: 'relative' },
@@ -1394,7 +1340,12 @@ const styles = StyleSheet.create({
   },
   btnDisabled: { opacity: 0.7 },
 
-  reachedBlock: { paddingTop: 2 },
+  reachedBlock: {
+    paddingTop: 2,
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+    backgroundColor: Theme.surface,
+  },
   podCard: { borderWidth: 1, borderRadius: 18, padding: 12 },
   podHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 10 },
   podTitle: { fontSize: 12, fontWeight: '900', letterSpacing: 0.5, textTransform: 'uppercase' },
@@ -1502,7 +1453,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   errorText: { fontSize: 12, fontWeight: '700', flex: 1 },
-  completedBlock: { paddingTop: 2 },
+  completedBlock: {
+    paddingTop: 2,
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+    backgroundColor: Theme.surface,
+  },
   earningsCard: { borderWidth: 1, borderRadius: 18, padding: 14, alignItems: 'center' },
   completedTitle: { marginTop: 8, fontSize: 17, fontWeight: '900' },
   completedSubtitle: { marginTop: 4, fontSize: 12, fontWeight: '700' },

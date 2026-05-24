@@ -2,10 +2,12 @@
  * Job Request Card — trip assignment UI for driver (connectivity + OTP flow).
  * Visual layout aligned with driver `DriverInviteModal` (emerald hero, offer tiles, footer).
  */
-import { PartyAvatar } from "@/components/PartyAvatar";
 import {
+  HeroAssignerBlock,
+  HeroKindBadge,
   RouteInlineRow,
   sheetStyles,
+  TRIP_SHEET_TOP_RADIUS,
   TripDetailsStrip,
 } from "@/components/driver/DriverTripSheetLayout";
 import Theme from "@/constants/Theme";
@@ -40,105 +42,6 @@ const holdBtnWebStyle = {
   touchAction: "none" as "none" | "auto" | "manipulation",
   userSelect: "none" as "none" | "auto" | "text" | "contain" | "all",
 };
-
-function kindBadgeHeroStyle(kind: JobCardAssignerPayload["kind"]) {
-  switch (kind) {
-    case "your_fleet":
-      return {
-        bg: "rgba(255,255,255,0.22)",
-        text: "#fff",
-        border: "rgba(255,255,255,0.35)",
-      };
-    case "employer":
-      return {
-        bg: "rgba(255,255,255,0.18)",
-        text: MINT,
-        border: "rgba(255,255,255,0.28)",
-      };
-    case "direct":
-      return {
-        bg: "rgba(254,243,199,0.28)",
-        text: "#FEF3C7",
-        border: "rgba(254,243,199,0.4)",
-      };
-    default:
-      return {
-        bg: "rgba(255,255,255,0.14)",
-        text: MINT,
-        border: "rgba(255,255,255,0.22)",
-      };
-  }
-}
-
-function HeroAssignerBlock({
-  assigner,
-  assignedByLine,
-}: {
-  assigner: JobCardAssignerPayload | null;
-  assignedByLine?: string | null;
-}) {
-  if (assigner) {
-    const primary = assigner.linePrimary.trim();
-    const secondary = assigner.lineSecondary.trim();
-    if (!primary && !secondary) return null;
-
-    return (
-      <View style={styles.heroAssignerBlock}>
-        <Text style={styles.heroAssignLabel}>ASSIGNED BY</Text>
-        <View style={styles.heroAssignerRow}>
-          <PartyAvatar
-            name={primary || assigner.orgName || "Fleet"}
-            initialsColorSeed={assigner.orgId || assigner.orgName}
-            organizationImageUrl={assigner.orgLogoUrl}
-            organizationAvatarSeed={assigner.orgAvatarSeed}
-            avatarUrl={assigner.orgAvatarUrl}
-            entityType="client"
-            size={24}
-            borderStyle={styles.heroAvatarBorder}
-          />
-          <View style={styles.heroAssignerTextCol}>
-            {primary ? (
-              <Text style={styles.heroAssignPrimary} numberOfLines={1}>
-                {primary}
-              </Text>
-            ) : null}
-            {secondary ? (
-              <Text style={styles.heroAssignSecondary} numberOfLines={1}>
-                {secondary}
-              </Text>
-            ) : null}
-          </View>
-        </View>
-      </View>
-    );
-  }
-
-  const line = assignedByLine?.trim();
-  if (!line) return null;
-
-  return (
-    <View style={styles.heroAssignerBlock}>
-      <Text style={styles.heroAssignLabel}>ASSIGNED BY</Text>
-      <Text style={styles.heroAssignPrimary} numberOfLines={2}>
-        {line}
-      </Text>
-    </View>
-  );
-}
-
-function HeroKindBadge({ kind, label }: { kind: JobCardAssignerPayload["kind"]; label: string }) {
-  const badge = kindBadgeHeroStyle(kind);
-  return (
-    <View
-      style={[
-        styles.heroKindBadge,
-        { backgroundColor: badge.bg, borderColor: badge.border },
-      ]}
-    >
-      <Text style={[styles.heroKindText, { color: badge.text }]}>{label}</Text>
-    </View>
-  );
-}
 
 export interface JobRequestCardProps {
   pickup: string;
@@ -280,11 +183,15 @@ export function JobRequestCard({
   };
 
   const shellStyle =
-    variant === "page"
-      ? styles.page
+    variant === "page" || edgeToEdge
+      ? [
+          styles.sheet,
+          styles.sheetEdgeToEdge,
+          Platform.OS === "ios" ? styles.sheetShadowIos : styles.sheetShadowAndroid,
+        ]
       : [
           styles.sheet,
-          edgeToEdge ? styles.sheetEdgeToEdge : styles.sheetInset,
+          styles.sheetInset,
           Platform.OS === "ios" ? styles.sheetShadowIos : styles.sheetShadowAndroid,
         ];
 
@@ -455,7 +362,7 @@ export function JobRequestCard({
                 ]}
               >
                 <View style={styles.heroIconWrap}>
-                  <Wallet size={16} color={EMERALD} strokeWidth={2.2} />
+                  <Wallet size={14} color={EMERALD} strokeWidth={2.2} />
                 </View>
                 <View style={styles.heroTextBlock}>
                   <Text style={styles.heroAmount} numberOfLines={1}>
@@ -564,8 +471,8 @@ export function JobRequestCard({
 const styles = StyleSheet.create({
   sheet: {
     backgroundColor: Theme.surface,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: TRIP_SHEET_TOP_RADIUS,
+    borderTopRightRadius: TRIP_SHEET_TOP_RADIUS,
     overflow: "hidden",
   },
   sheetInset: {
@@ -575,10 +482,6 @@ const styles = StyleSheet.create({
   sheetEdgeToEdge: {
     marginHorizontal: 0,
     marginBottom: 0,
-  },
-  page: {
-    backgroundColor: "transparent",
-    overflow: "visible",
   },
   sheetShadowIos: {
     shadowColor: "#000",
@@ -606,16 +509,16 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   hero: {
-    paddingTop: 10,
-    paddingHorizontal: 12,
-    paddingBottom: 10,
-    gap: 7,
+    paddingTop: 14,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    gap: 8,
   },
   heroCompact: {
-    paddingTop: 10,
-    paddingHorizontal: 12,
-    paddingBottom: 10,
-    gap: 6,
+    paddingTop: 14,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    gap: 8,
   },
   heroTopRow: {
     flexDirection: "row",
@@ -637,29 +540,17 @@ const styles = StyleSheet.create({
     color: MINT,
     textTransform: "uppercase",
   },
-  heroKindBadge: {
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    flexShrink: 0,
-  },
-  heroKindText: {
-    fontSize: 7,
-    fontWeight: "800",
-    letterSpacing: 0.4,
-  },
   heroMainRow: {
-    flexDirection: "row",
-    alignItems: "stretch",
-    gap: 10,
-    minWidth: 0,
-  },
-  heroEarningsBlock: {
-    flex: 0.42,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    minWidth: 0,
+  },
+  heroEarningsBlock: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     minWidth: 0,
   },
   heroEarningsBlockFull: {
@@ -667,59 +558,22 @@ const styles = StyleSheet.create({
   },
   heroColDivider: {
     width: StyleSheet.hairlineWidth,
+    height: 30,
     backgroundColor: "rgba(255,255,255,0.28)",
-    marginVertical: 2,
-  },
-  heroAssignerBlock: {
-    flex: 0.58,
-    minWidth: 0,
-    justifyContent: "center",
-    gap: 3,
+    alignSelf: "center",
+    flexShrink: 0,
   },
   heroAssignerOtpWrap: {
     marginTop: 2,
     paddingTop: 6,
+    paddingLeft: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: "rgba(255,255,255,0.22)",
   },
-  heroAssignLabel: {
-    fontSize: 7,
-    fontWeight: "800",
-    letterSpacing: 0.6,
-    color: MINT,
-    textTransform: "uppercase",
-  },
-  heroAssignerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    minWidth: 0,
-  },
-  heroAssignerTextCol: {
-    flex: 1,
-    minWidth: 0,
-    gap: 0,
-  },
-  heroAssignPrimary: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#fff",
-    lineHeight: 13,
-  },
-  heroAssignSecondary: {
-    fontSize: 9,
-    fontWeight: "600",
-    color: MINT,
-    lineHeight: 12,
-  },
-  heroAvatarBorder: {
-    borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.45)",
-  },
   heroIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
+    width: 30,
+    height: 30,
+    borderRadius: 9,
     backgroundColor: "#fff",
     alignItems: "center",
     justifyContent: "center",
@@ -731,16 +585,16 @@ const styles = StyleSheet.create({
     gap: 1,
   },
   heroAmount: {
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: "900",
     color: "#fff",
-    letterSpacing: -0.3,
-    lineHeight: 21,
+    letterSpacing: -0.25,
+    lineHeight: 18,
   },
   heroAmountLabel: {
-    fontSize: 7,
+    fontSize: 6,
     fontWeight: "800",
-    letterSpacing: 0.7,
+    letterSpacing: 0.6,
     color: MINT,
     textTransform: "uppercase",
   },
@@ -751,10 +605,11 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   body: {
-    paddingHorizontal: 12,
-    paddingTop: 8,
-    paddingBottom: 8,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 10,
     gap: 6,
+    backgroundColor: Theme.surface,
   },
   sectionHeader: {
     flexDirection: "row",

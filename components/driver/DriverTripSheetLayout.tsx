@@ -4,13 +4,15 @@
 import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from "@/constants/Theme";
 import type { JobCardAssignerPayload } from "@/lib/driverAssignerDisplay";
-import { Clock, MapPin, Navigation } from "lucide-react-native";
+import { Clock, MapPin, Navigation, Truck } from "lucide-react-native";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 export const FLOW_EMERALD = Theme.driverEmerald;
 export const FLOW_EMERALD_DARK = Theme.driverEmeraldDark;
 export const FLOW_MINT = "rgba(167,243,208,0.92)";
+/** Matches `DriverInviteModal` sheet top curve. */
+export const TRIP_SHEET_TOP_RADIUS = 28;
 
 export function compactRoutePlace(raw: string): string {
   const t = (raw ?? "").trim();
@@ -82,7 +84,6 @@ export function HeroAssignerBlock({
 
     return (
       <View style={sheetStyles.heroAssignerBlock}>
-        <Text style={sheetStyles.heroAssignLabel}>ASSIGNED BY</Text>
         <View style={sheetStyles.heroAssignerRow}>
           <PartyAvatar
             name={primary || assigner.orgName || "Fleet"}
@@ -91,7 +92,7 @@ export function HeroAssignerBlock({
             organizationAvatarSeed={assigner.orgAvatarSeed}
             avatarUrl={assigner.orgAvatarUrl}
             entityType="client"
-            size={24}
+            size={28}
             borderStyle={sheetStyles.heroAvatarBorder}
           />
           <View style={sheetStyles.heroAssignerTextCol}>
@@ -116,7 +117,6 @@ export function HeroAssignerBlock({
 
   return (
     <View style={sheetStyles.heroAssignerBlock}>
-      <Text style={sheetStyles.heroAssignLabel}>ASSIGNED BY</Text>
       <Text style={sheetStyles.heroAssignPrimary} numberOfLines={2}>
         {line}
       </Text>
@@ -174,6 +174,7 @@ export function TripDetailsStrip({
   pickup,
   dropoff,
   footer,
+  locationLabel,
   primaryTextColor = Theme.textPrimaryDark,
   mutedTextColor = Theme.textMuted,
 }: {
@@ -181,35 +182,85 @@ export function TripDetailsStrip({
   statRight: string;
   pickup: string;
   dropoff: string;
+  /** Legacy footer slot — prefer `locationLabel` for location + stats row. */
   footer?: React.ReactNode;
+  /** When set, stats move to the bottom row beside live location. */
+  locationLabel?: string | null;
   primaryTextColor?: string;
   mutedTextColor?: string;
 }) {
+  const trimmedLocation = locationLabel?.trim();
+  const showLocationStatsRow = !!trimmedLocation;
+
+  const statsEnd = (
+    <View style={sheetStyles.statsEndGroup}>
+      <View style={sheetStyles.statChipCompact}>
+        <Navigation size={9} color={FLOW_EMERALD} strokeWidth={2.2} />
+        <Text
+          style={[sheetStyles.statValueCompact, { color: primaryTextColor }]}
+          numberOfLines={1}
+        >
+          {statLeft}
+        </Text>
+      </View>
+      <View style={sheetStyles.statSepDot} />
+      <View style={sheetStyles.statChipCompact}>
+        <Clock size={9} color={FLOW_EMERALD} strokeWidth={2.2} />
+        <Text
+          style={[sheetStyles.statValueCompact, { color: primaryTextColor }]}
+          numberOfLines={1}
+        >
+          {statRight}
+        </Text>
+      </View>
+    </View>
+  );
+
   return (
     <View style={sheetStyles.tripDetailsCard}>
-      <View style={sheetStyles.statsInline}>
-        <View style={sheetStyles.statChip}>
-          <Navigation size={10} color={FLOW_EMERALD} strokeWidth={2.2} />
-          <Text style={[sheetStyles.statValue, { color: primaryTextColor }]}>
-            {statLeft}
-          </Text>
-        </View>
-        <View style={sheetStyles.statDivider} />
-        <View style={sheetStyles.statChip}>
-          <Clock size={10} color={FLOW_EMERALD} strokeWidth={2.2} />
-          <Text style={[sheetStyles.statValue, { color: primaryTextColor }]}>
-            {statRight}
-          </Text>
-        </View>
-      </View>
-      <View style={sheetStyles.tripDetailsDivider} />
+      {!showLocationStatsRow ? (
+        <>
+          <View style={sheetStyles.statsInline}>
+            <View style={sheetStyles.statChip}>
+              <Navigation size={10} color={FLOW_EMERALD} strokeWidth={2.2} />
+              <Text style={[sheetStyles.statValue, { color: primaryTextColor }]}>
+                {statLeft}
+              </Text>
+            </View>
+            <View style={sheetStyles.statDivider} />
+            <View style={sheetStyles.statChip}>
+              <Clock size={10} color={FLOW_EMERALD} strokeWidth={2.2} />
+              <Text style={[sheetStyles.statValue, { color: primaryTextColor }]}>
+                {statRight}
+              </Text>
+            </View>
+          </View>
+          <View style={sheetStyles.tripDetailsDivider} />
+        </>
+      ) : null}
       <RouteInlineRow
         pickup={pickup}
         dropoff={dropoff}
         primaryTextColor={primaryTextColor}
         mutedTextColor={mutedTextColor}
       />
-      {footer ? (
+      {showLocationStatsRow ? (
+        <>
+          <View style={sheetStyles.tripDetailsDivider} />
+          <View style={sheetStyles.locationStatsRow}>
+            <View style={sheetStyles.locationSide}>
+              <Truck size={9} color={FLOW_EMERALD} strokeWidth={2.2} />
+              <Text
+                style={[sheetStyles.locationText, { color: mutedTextColor }]}
+                numberOfLines={1}
+              >
+                {trimmedLocation}
+              </Text>
+            </View>
+            {statsEnd}
+          </View>
+        </>
+      ) : footer ? (
         <>
           <View style={sheetStyles.tripDetailsDivider} />
           {footer}
@@ -233,44 +284,40 @@ export const sheetStyles = StyleSheet.create({
     letterSpacing: 0.4,
   },
   heroAssignerBlock: {
-    flex: 0.58,
+    flex: 1,
     minWidth: 0,
     justifyContent: "center",
-    gap: 3,
-  },
-  heroAssignLabel: {
-    fontSize: 7,
-    fontWeight: "800",
-    letterSpacing: 0.6,
-    color: FLOW_MINT,
-    textTransform: "uppercase",
+    paddingLeft: 10,
+    paddingRight: 0,
   },
   heroAssignerRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
     minWidth: 0,
   },
   heroAssignerTextCol: {
     flex: 1,
     minWidth: 0,
-    gap: 0,
+    gap: 2,
+    justifyContent: "center",
   },
   heroAssignPrimary: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "800",
     color: "#fff",
-    lineHeight: 13,
+    lineHeight: 14,
+    letterSpacing: -0.15,
   },
   heroAssignSecondary: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "600",
     color: FLOW_MINT,
-    lineHeight: 12,
+    lineHeight: 13,
   },
   heroAvatarBorder: {
-    borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.45)",
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.5)",
   },
   tripDetailsCard: {
     borderRadius: 10,
@@ -296,8 +343,58 @@ export const sheetStyles = StyleSheet.create({
   },
   statValue: {
     fontSize: 10,
-    fontWeight: "800",
+    fontWeight: "600",
     letterSpacing: -0.2,
+  },
+  locationStatsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    minHeight: 30,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  locationSide: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    minWidth: 0,
+    paddingRight: 4,
+  },
+  locationText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 9,
+    fontWeight: "600",
+    lineHeight: 12,
+  },
+  statsEndGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    flexShrink: 0,
+    marginLeft: "auto",
+  },
+  statChipCompact: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    minWidth: 0,
+  },
+  statValueCompact: {
+    fontSize: 9,
+    fontWeight: "600",
+    letterSpacing: -0.15,
+    flexShrink: 1,
+  },
+  statSepDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: Theme.border,
+    flexShrink: 0,
   },
   statDivider: {
     width: StyleSheet.hairlineWidth,
