@@ -13,6 +13,7 @@ import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import Typography from '@/constants/Typography';
 import { useAuth } from '@/contexts/AuthContext';
+import { useOptionalDriverInviteModal } from '@/contexts/DriverInviteModalContext';
 import { useDriverAvatar } from '@/contexts/DriverAvatarContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
@@ -48,6 +49,7 @@ import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Print from 'expo-print';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import * as Sharing from 'expo-sharing';
 import { Sparkles, Wallet } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -84,6 +86,18 @@ function isCompleted(status: string) {
 /** Trip earnings for driver: 0 for aggregate (offline payment), else driver_commission / 10% supplier_rate / 10% client_price. */
 function tripEarnings(t: tripsService.TripRow): number {
   return tripEarningsForDriver(t);
+}
+
+/** Active fleet row, including reconnect when accept cleared invite but left_at was stale server-side. */
+function isActiveFleetMembership(
+  d: driversService.DriverRow,
+  acceptedInvites: driversService.DriverInviteRow[],
+): boolean {
+  if (!d.left_at) return true;
+  const orgId = String(d.organization_id ?? '');
+  const inv = acceptedInvites.find((i) => String(i.from_organization_id ?? '') === orgId);
+  if (!inv?.responded_at) return false;
+  return new Date(inv.responded_at).getTime() >= new Date(d.left_at).getTime();
 }
 
 /** UPI-style date section label: Today, Yesterday, or "5 Mar" */
@@ -187,6 +201,8 @@ export default function DriverWalletScreen() {
   // Note: We intentionally do not deep-link to the Trip tab from Wallet.
   // The Wallet screen should remain self-contained and not steal focus/navigation.
   const { profile } = useAuth();
+  const fleetConnectionRevision =
+    useOptionalDriverInviteModal()?.fleetConnectionRevision ?? 0;
   const { avatarSeed } = useDriverAvatar();
   const { avatarUri } = useDriverAvatarUri();
   const [driver, setDriver] = useState<driversService.DriverRow | null>(null);
@@ -308,6 +324,17 @@ export default function DriverWalletScreen() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
+
+  useEffect(() => {
+    if (fleetConnectionRevision === 0) return;
+    load();
+  }, [fleetConnectionRevision, load]);
 
   const completedTrips = useMemo(() => {
     const list = trips.filter((t) => isCompleted(t.status));
@@ -1078,7 +1105,8 @@ export default function DriverWalletScreen() {
   /** Salary request: all connected fleets. Org name resolved from invite → DB org name → fallback. */
   const salaryRequestOrgOptions = useMemo(() => {
     const accepted = invites.filter((i) => (i.status || '').toLowerCase() === 'accepted');
-    return linkedDrivers.filter((d) => !d.left_at).map((d) => {
+    const activeEmployers = linkedDrivers.filter((d) => isActiveFleetMembership(d, accepted));
+    return activeEmployers.map((d) => {
       const inv = accepted.find(
         (i) => String(i.from_organization_id || '') === String(d.organization_id || '')
       );
@@ -1339,11 +1367,15 @@ export default function DriverWalletScreen() {
         .filter(Boolean),
     );
 
+    const accepted = invites.filter((i) => (i.status || '').toLowerCase() === 'accepted');
+
     // Primary: accepted invite + explicit pay arrangement (strongest signal)
     const withInviteAndPay = fleetCards.find((f) => {
       if (!acceptedOrgIds.has(String(f.orgId ?? ''))) return false;
       const d = linkedDrivers.find(
-        (row) => !row.left_at && String(row.organization_id ?? '') === String(f.orgId ?? ''),
+        (row) =>
+          isActiveFleetMembership(row, accepted) &&
+          String(row.organization_id ?? '') === String(f.orgId ?? ''),
       );
       return (
         d &&
@@ -1385,10 +1417,60 @@ export default function DriverWalletScreen() {
     const withInviteOnly = fleetCards.find((f) => acceptedOrgIds.has(String(f.orgId ?? '')));
     if (withInviteOnly) return withInviteOnly;
 
+    // Recover stale reconnect: invite accepted after leave_fleet but left_at was not cleared (legacy RPC bug).
+    const acceptedSorted = invites
+      .filter((i) => (i.status || '').toLowerCase() === 'accepted')
+      .sort(
+        (a, b) =>
+          new Date(b.responded_at ?? b.created_at).getTime() -
+          new Date(a.responded_at ?? a.created_at).getTime(),
+      );
+    for (const inv of acceptedSorted) {
+      const orgId = String(inv.from_organization_id ?? '');
+      if (!orgId) continue;
+      const d = linkedDrivers.find((row) => String(row.organization_id ?? '') === orgId);
+      if (!d?.left_at || !inv.responded_at) continue;
+      if (new Date(inv.responded_at).getTime() < new Date(d.left_at).getTime()) continue;
+      const orgName =
+        inv.from_org_name?.trim() ||
+        (d.organizations as { name?: string } | null | undefined)?.name?.trim() ||
+        orgNameById[orgId] ||
+        'Fleet';
+      const fleetTrips = completedTrips.filter(
+        (trip) =>
+          String(trip.organization_id ?? '') === orgId &&
+          String(trip.driver_id ?? '') === String(d.id),
+      );
+      const earned = Math.round(fleetTrips.reduce((sum, trip) => sum + tripEarnings(trip), 0));
+      const received = Math.round(
+        ledgerEntries
+          .filter(
+            (entry) =>
+              entry.type === 'settlement' &&
+              !!entry.trip_id &&
+              String(entry.organization_id ?? '') === orgId &&
+              String(entry.driver_id ?? '') === String(d.id),
+          )
+          .reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0),
+      );
+      return {
+        driverId: d.id,
+        orgId,
+        orgName,
+        tripsCompleted: fleetTrips.length,
+        earned,
+        received,
+        pending: Math.max(0, earned - received),
+        progress: earned > 0 ? Math.min(100, Math.round((received / earned) * 100)) : 0,
+      };
+    }
+
     // Last resort: pay arrangement with no invite (legacy / manual add flows)
     return fleetCards.find((f) => {
       const d = linkedDrivers.find(
-        (row) => !row.left_at && String(row.organization_id ?? '') === String(f.orgId ?? ''),
+        (row) =>
+          isActiveFleetMembership(row, accepted) &&
+          String(row.organization_id ?? '') === String(f.orgId ?? ''),
       );
       return (
         d &&
@@ -1399,7 +1481,7 @@ export default function DriverWalletScreen() {
         )
       );
     }) ?? null;
-  }, [fleetCards, linkedDrivers, invites, salaryRequests]);
+  }, [fleetCards, linkedDrivers, invites, salaryRequests, completedTrips, ledgerEntries, orgNameById]);
 
   const pastEmployerFleetCards = useMemo(() => {
     const accepted = invites.filter((i) => (i.status || '').toLowerCase() === 'accepted');

@@ -23,9 +23,15 @@ type DriverInviteModalContextValue = {
   refreshInvites: () => Promise<void>;
   /** Re-open the fleet invite popup (clears in-session snooze). */
   presentPendingInvite: () => void;
+  /** Bumps when fleet membership changes (accept/decline) so earnings screens can reload. */
+  fleetConnectionRevision: number;
 };
 
 const DriverInviteModalContext = createContext<DriverInviteModalContextValue | null>(null);
+
+export function useOptionalDriverInviteModal(): DriverInviteModalContextValue | null {
+  return useContext(DriverInviteModalContext);
+}
 
 export function useDriverInviteModal(): DriverInviteModalContextValue {
   const ctx = useContext(DriverInviteModalContext);
@@ -45,6 +51,10 @@ export function DriverInviteModalProvider({ children }: { children: ReactNode })
   const [sessionSnoozedIds, setSessionSnoozedIds] = useState<Set<string>>(new Set());
   const [busyId, setBusyId] = useState<string | null>(null);
   const [declineTarget, setDeclineTarget] = useState<DriverInviteRow | null>(null);
+  const [fleetConnectionRevision, setFleetConnectionRevision] = useState(0);
+  const bumpFleetConnectionRevision = useCallback(() => {
+    setFleetConnectionRevision((n) => n + 1);
+  }, []);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   const refreshInvites = useCallback(async () => {
@@ -175,7 +185,8 @@ export function DriverInviteModalProvider({ children }: { children: ReactNode })
       return next;
     });
     await refreshInvites();
-  }, [activeInvite, refreshInvites]);
+    bumpFleetConnectionRevision();
+  }, [activeInvite, refreshInvites, bumpFleetConnectionRevision]);
 
   const runDecline = useCallback(
     async (invite: DriverInviteRow) => {
@@ -193,8 +204,9 @@ export function DriverInviteModalProvider({ children }: { children: ReactNode })
         return next;
       });
       await refreshInvites();
+      bumpFleetConnectionRevision();
     },
-    [refreshInvites],
+    [refreshInvites, bumpFleetConnectionRevision],
   );
 
   const handleDeclinePress = useCallback(() => {
@@ -215,8 +227,9 @@ export function DriverInviteModalProvider({ children }: { children: ReactNode })
       pendingInvites: allPendingInvites,
       refreshInvites,
       presentPendingInvite,
+      fleetConnectionRevision,
     }),
-    [allPendingInvites, refreshInvites, presentPendingInvite],
+    [allPendingInvites, refreshInvites, presentPendingInvite, fleetConnectionRevision],
   );
 
   return (

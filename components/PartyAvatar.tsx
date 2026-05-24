@@ -14,10 +14,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
-import {
-  partyAvatarBackgroundColor,
-  partyAvatarInitialsTextColor,
-} from '@/lib/partyAvatarDisplay';
+import { partyAvatarInitialsTextColor } from '@/lib/partyAvatarDisplay';
 import {
   useAvatar,
   type AvatarContext,
@@ -74,7 +71,7 @@ export function PartyAvatar({
   borderColor = 'rgba(0,0,0,0.08)',
   showBorder = true,
 }: PartyAvatarProps) {
-  const { imageUri, loading, initials } = useAvatar(party, context);
+  const { imageUri, loading, initials, initialsColor } = useAvatar(party, context);
 
   const opacity = useRef(new Animated.Value(0)).current;
   const prevUri = useRef<string | null>(null);
@@ -130,13 +127,12 @@ export function PartyAvatar({
     );
   }
 
-  // ── Initials fallback (cash-tab pastel style) ─────────────────────────────
-  const bg = partyAvatarBackgroundColor(party.name);
-  const textColor = partyAvatarInitialsTextColor(bg);
+  // ── Initials fallback ─────────────────────────────────────────────────────
+  const textColor = partyAvatarInitialsTextColor(initialsColor);
   const fontSize = Math.round(size * 0.36);
 
   return (
-    <View style={[baseStyle, { backgroundColor: bg }]}>
+    <View style={[baseStyle, { backgroundColor: initialsColor }]}>
       <Text
         style={[styles.initials, { fontSize, color: textColor }]}
         numberOfLines={1}
