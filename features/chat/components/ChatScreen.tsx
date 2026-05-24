@@ -5514,6 +5514,36 @@ function TripConversationDetailLoaded({
     ],
   );
 
+  /**
+   * WhatsApp-style ping collapsing: consecutive location pings in a run are collapsed into ONE card.
+   * Maps each message ID → { isLast: whether it's the last ping in a consecutive run, runCount: total in run }.
+   * Non-last pings are hidden; the last one shows the consolidated count.
+   */
+  const locationPingRunInfo = useMemo(() => {
+    const info = new Map<string, { isLast: boolean; runCount: number }>();
+    const isLocationPing = (m: TripMessageRow) =>
+      (m.message_type === 'system_log' || m.message_type === 'system' ||
+       m.message_type === 'update' || m.message_type === 'location_log') &&
+      parseMessageLocationData(m) !== null;
+
+    let runIds: string[] = [];
+    const flushRun = () => {
+      if (runIds.length === 0) return;
+      const count = runIds.length;
+      runIds.forEach((id, idx) => info.set(id, { isLast: idx === count - 1, runCount: count }));
+      runIds = [];
+    };
+    for (const m of displayMessages) {
+      if (isLocationPing(m)) {
+        runIds.push(m.id);
+      } else {
+        flushRun();
+      }
+    }
+    flushRun();
+    return info;
+  }, [displayMessages]);
+
   const scrollToEndCooldownRef = useRef(0);
   const onMessagesContentSizeChange = useCallback(() => {
     if (displayMessages.length === 0) return;
@@ -5905,7 +5935,19 @@ function TripConversationDetailLoaded({
       }
       const locData = parseMessageLocationData(m);
       if (locData) {
-        return <LocationEventCard message={m} location={locData} isMobile={!isDesktop} />;
+        // Driver sees their own pings as system updates on the business side — hide from their view.
+        if (viewerIsDriver) return null;
+        // Collapse consecutive ping runs: skip non-last pings; show last with count badge.
+        const pingInfo = locationPingRunInfo.get(m.id);
+        if (pingInfo && !pingInfo.isLast) return null;
+        return (
+          <LocationEventCard
+            message={m}
+            location={locData}
+            isMobile={!isDesktop}
+            consolidatedCount={pingInfo?.runCount ?? 1}
+          />
+        );
       }
       return <ChatSystemEventCard message={m} isMobile={!isDesktop} />;
     }
@@ -6019,6 +6061,7 @@ function TripConversationDetailLoaded({
     clientId,
     supplierId,
     driverId,
+    locationPingRunInfo,
   ]);
 
   const indentShipperDisplayName = useMemo(() => {

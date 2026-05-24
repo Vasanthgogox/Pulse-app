@@ -3,6 +3,7 @@
  * Data from trips + driver_ledger for the current user's driver link to this org.
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
+import { FinanceTxnTypography } from '@/constants/FinanceTxnTypography';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import Typography from '@/constants/Typography';
@@ -270,9 +271,25 @@ export default function DriverPassbookDetailScreen() {
   const handleBack = useCallback(() => {
     if (from === 'history') {
       router.navigate('/(driver)/passbook/history');
-    } else {
-      router.navigate('/(driver)');
+      return;
     }
+    if (from === 'wallet') {
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.navigate({ pathname: '/(driver)/wallet', params: { tab: 'fleet' } });
+      }
+      return;
+    }
+    if (from === 'requests') {
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.navigate('/(driver)/requests');
+      }
+      return;
+    }
+    router.navigate('/(driver)');
   }, [router, from]);
 
   const openWhatsAppReminder = useCallback(async (message: string) => {
@@ -1322,13 +1339,13 @@ export default function DriverPassbookDetailScreen() {
                                   +₹{receivedAmt.toLocaleString('en-IN')}
                                 </Text>
                                 <View style={styles.cashPremiumStatusRow}>
-                                  <FontAwesome name="check-circle" size={10} color={colors.emerald} />
-                                  <Text style={[styles.cashPremiumStatus, { color: colors.textMuted }]}>SUCCESS</Text>
+                                  <FontAwesome name="check-circle" size={8} color={colors.emerald} />
+                                  <Text style={[styles.cashPremiumStatus, { color: colors.emerald }]}>SUCCESS</Text>
                                 </View>
                               </View>
                               <FontAwesome
                                 name="chevron-down"
-                                size={16}
+                                size={10}
                                 color={colors.textMuted}
                                 style={txnExpanded ? styles.cashPremiumChevronExpanded : undefined}
                               />
@@ -2287,7 +2304,7 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 1.2,
+    letterSpacing: 0.5,
     paddingHorizontal: 2,
   },
   cashPremiumGroup: {
@@ -2306,14 +2323,14 @@ const styles = StyleSheet.create({
   cashPremiumRowTouch: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 8,
     paddingHorizontal: 12,
     justifyContent: 'space-between',
   },
   cashPremiumLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
     flex: 1,
     minWidth: 0,
   },
@@ -2356,45 +2373,45 @@ const styles = StyleSheet.create({
   cashPremiumBody: {
     flex: 1,
     minWidth: 0,
-    gap: 4,
+    justifyContent: 'center',
   },
   cashPremiumSource: {
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: -0.25,
+    ...FinanceTxnTypography.partyTitle,
+    fontWeight: '300',
+    letterSpacing: -0.5,
   },
   cashPremiumMethod: {
-    fontSize: 9,
-    fontWeight: '400',
-    textTransform: 'uppercase',
-    letterSpacing: 0.9,
+    ...FinanceTxnTypography.dateLine,
+    marginTop: 4,
   },
   cashPremiumRight: {
     alignItems: 'flex-end',
+    justifyContent: 'center',
     gap: 6,
-    marginLeft: 4,
   },
   cashPremiumRightWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    marginLeft: 12,
+    gap: 8,
+    marginLeft: 8,
   },
   cashPremiumAmount: {
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: -0.35,
+    fontSize: 13,
+    fontWeight: '600',
+    fontStyle: 'italic',
+    letterSpacing: -0.2,
   },
   cashPremiumStatusRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
   },
   cashPremiumStatus: {
     fontSize: 8,
-    fontWeight: '400',
+    fontWeight: '600',
+    fontStyle: 'italic',
     textTransform: 'uppercase',
-    letterSpacing: 1.7,
+    letterSpacing: 0.2,
   },
   cashPremiumChevronExpanded: {
     transform: [{ rotate: '180deg' }],

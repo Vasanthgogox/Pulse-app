@@ -49,6 +49,8 @@
         {
           "asyncRoutes": {
             "web": true,
+            "ios": false,
+            "android": false,
             "default": "development"
           }
         }

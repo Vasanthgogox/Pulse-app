@@ -2,6 +2,7 @@ import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import Typography from '@/constants/Typography';
 import { useAuth } from '@/contexts/AuthContext';
+import { DriverBrandMark } from '@/components/driver/DriverBrandMark';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
 import React, { useEffect } from 'react';
@@ -42,6 +43,9 @@ type Props = {
   variant?: DriverHeaderVariant;
   onPressOtpClaim?: () => void;
   onPressNotifications?: () => void;
+  /** Number of pending fleet invitations — shows a badge on the invite icon. */
+  pendingInviteCount?: number;
+  onPressInvites?: () => void;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -52,6 +56,8 @@ export function DriverHeader({
   isOnline,
   variant = 'default',
   onPressNotifications,
+  pendingInviteCount = 0,
+  onPressInvites,
   style,
 }: Props) {
   const insets = useSafeAreaInsets();
@@ -158,7 +164,7 @@ export function DriverHeader({
         </TouchableOpacity>
 
         <View style={styles.headerTextWrap}>
-          <Text style={[styles.brand, { color: colors.textMuted }]}>Q PILOT</Text>
+          <DriverBrandMark color={colors.textMuted} />
           <Text style={[styles.welcomeTitle, { color: colors.text }]} numberOfLines={1}>
             {title}
           </Text>
@@ -166,17 +172,29 @@ export function DriverHeader({
       </View>
 
       <View style={styles.headerRight}>
+        {/* Fleet invitation icon — badge shows pending count */}
         <TouchableOpacity
-          onPress={handleInviteDrivers}
+          onPress={onPressInvites ?? handleInviteDrivers}
           style={[
             styles.notificationBtn,
             { backgroundColor: colors.whiteMuted, borderColor: colors.border },
           ]}
           activeOpacity={0.8}
-          accessibilityLabel="Invite drivers"
-          accessibilityHint="Share your invite link"
+          accessibilityLabel={pendingInviteCount > 0 ? `${pendingInviteCount} fleet invite${pendingInviteCount > 1 ? 's' : ''}` : 'Invite drivers'}
+          accessibilityHint={pendingInviteCount > 0 ? 'Tap to view fleet invitations' : 'Share your invite link'}
         >
-          <FontAwesome name="user-plus" size={18} color={colors.text} />
+          <FontAwesome
+            name={pendingInviteCount > 0 ? 'envelope' : 'user-plus'}
+            size={18}
+            color={pendingInviteCount > 0 ? colors.emerald : colors.text}
+          />
+          {pendingInviteCount > 0 ? (
+            <View style={[styles.inviteBadge, { backgroundColor: colors.emerald }]}>
+              <Text style={styles.inviteBadgeText}>
+                {pendingInviteCount > 9 ? '9+' : String(pendingInviteCount)}
+              </Text>
+            </View>
+          ) : null}
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -253,10 +271,6 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: Layout.driverHeaderAvatarSize / 2,
   },
-  brand: {
-    ...Typography.headerSubtitle,
-    marginBottom: 1,
-  },
   welcomeTitle: {
     ...Typography.headerTitle,
     textTransform: 'none',
@@ -277,6 +291,23 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  inviteBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 17,
+    height: 17,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  inviteBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#fff',
+    lineHeight: 12,
   },
 });
 

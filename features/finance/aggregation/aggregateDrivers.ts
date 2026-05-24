@@ -101,9 +101,13 @@ export function aggregateDrivers(
     const pending = Math.max(0, due - paid);
     totalIn += paid + pending;
     totalOut += pending;
-    const isIntegrated =
-      (d.tracking_only !== true) && d.user_id != null && d.user_id !== '';
     const leftAt = d.left_at ?? null;
+    const isDisconnected = leftAt != null && leftAt !== '';
+    const isIntegrated =
+      !isDisconnected &&
+      (d.tracking_only !== true) &&
+      d.user_id != null &&
+      d.user_id !== '';
     const leftAtFormatted =
       leftAt != null && leftAt !== ''
         ? (() => {
@@ -116,7 +120,6 @@ export function aggregateDrivers(
           })()
         : null;
     const displayName = d.name ?? (d as { full_name?: string | null }).full_name ?? undefined;
-    const isDisconnected = leftAt != null && leftAt !== '';
     const rawAvatar = (d.avatar_url ?? "").trim();
     const rawSeed = (d.avatar_seed ?? "").trim();
     rows.push({

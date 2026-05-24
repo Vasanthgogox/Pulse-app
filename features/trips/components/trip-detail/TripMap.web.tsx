@@ -113,6 +113,31 @@ function isValidCoordinatePair(
   return true;
 }
 
+// ── Trail helpers ────────────────────────────────────────────────────────────
+function bearingDeg(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const toRad = (d: number) => d * Math.PI / 180;
+  const dLng = toRad(lng2 - lng1);
+  const y = Math.sin(dLng) * Math.cos(toRad(lat2));
+  const x =
+    Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLng);
+  return ((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360;
+}
+
+function etaFromLatLng(
+  fromLat: number, fromLng: number, toLat: number, toLng: number, avgSpeedKmh = 50,
+): { distanceKm: number; etaMinutes: number } {
+  const R = 6371;
+  const toRad = (d: number) => d * Math.PI / 180;
+  const dLat = toRad(toLat - fromLat);
+  const dLng = toRad(toLng - fromLng);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(fromLat)) * Math.cos(toRad(toLat)) * Math.sin(dLng / 2) ** 2;
+  const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return { distanceKm: dist, etaMinutes: Math.round((dist / avgSpeedKmh) * 60) };
+}
+
 // ── Props ───────────────────────────────────────────────────────────────────
 export interface TripMapProps {
   source?: string | null;
@@ -310,25 +335,63 @@ export function TripMap({
         truckMarker.addTo(map);
       }
 
-      // ── DB GPS trail (driver_locations) — dots only; brought to front after road route ──
+      // ── DB GPS trail (driver_locations) — path + dots + arrows ─────────────
       let dbTrailLeafletLayer: import('leaflet').LayerGroup | null = null;
       const validTrailPoints = (Array.isArray(dbLocationTrail) ? dbLocationTrail : []).filter((p) =>
         isValidCoordinatePair(p),
       );
       if (validTrailPoints.length > 0) {
-        if (typeof __DEV__ !== 'undefined' && __DEV__) {
-          console.log(
-            '[TripMap] DB driver_locations lat/lon (rendered on map)',
-            validTrailPoints.map((p, i) => ({
-              i,
-              lat: p.latitude,
-              lon: p.longitude,
-              recorded_at: p.recorded_at ?? null,
-            })),
-          );
-        }
+        const total = validTrailPoints.length;
         const trailGroup = L.layerGroup();
+
+        // Dashed polyline connecting all pings in order
+        if (validTrailPoints.length > 1) {
+          L.polyline(
+            validTrailPoints.map((p) => [p.latitude, p.longitude] as [number, number]),
+            { color: '#fb923c', weight: 2, dashArray: '4 6', opacity: 0.65 },
+          ).addTo(trailGroup);
+        }
+
+        // Directional arrows at midpoints between consecutive pings
         validTrailPoints.forEach((p, idx) => {
+          if (idx === 0) return;
+          const prev = validTrailPoints[idx - 1];
+          const midLat = (prev.latitude + p.latitude) / 2;
+          const midLng = (prev.longitude + p.longitude) / 2;
+          const bearing = bearingDeg(prev.latitude, prev.longitude, p.latitude, p.longitude);
+          const arrowIcon = L.divIcon({
+            html: `<div style="transform:rotate(${bearing}deg);color:#c2410c;font-size:10px;line-height:1;">▲</div>`,
+            className: '',
+            iconSize: [10, 10],
+            iconAnchor: [5, 5],
+          });
+          L.marker([midLat, midLng], { icon: arrowIcon }).addTo(trailGroup);
+        });
+
+        // Ping dots with enhanced popups (no raw lat/lng)
+        validTrailPoints.forEach((p, idx) => {
+          const timeStr = p.recorded_at
+            ? new Date(p.recorded_at).toLocaleString('en-IN', {
+                timeZone: 'Asia/Kolkata',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+              })
+            : '—';
+          const relativeTime = (() => {
+            if (!p.recorded_at) return '';
+            const diffMs = Date.now() - new Date(p.recorded_at).getTime();
+            const diffMin = Math.floor(diffMs / 60000);
+            if (diffMin < 1) return 'just now';
+            if (diffMin < 60) return `${diffMin} min ago`;
+            const diffH = Math.floor(diffMin / 60);
+            if (diffH < 24) return `${diffH} hour${diffH !== 1 ? 's' : ''} ago`;
+            const diffD = Math.floor(diffH / 24);
+            return `${diffD} day${diffD !== 1 ? 's' : ''} ago`;
+          })();
           L.circleMarker([p.latitude, p.longitude], {
             radius: 6,
             fillColor: '#fb923c',
@@ -338,12 +401,37 @@ export function TripMap({
             fillOpacity: 0.95,
           })
             .bindPopup(
-              `<div style="font-family:system-ui,sans-serif;font-size:12px;padding:4px;"><strong>GPS ping ${idx + 1}</strong><br/><span style="color:#64748b;">${p.recorded_at ? new Date(p.recorded_at).toLocaleString() : '—'}</span><br/><code style="font-size:11px;">${p.latitude.toFixed(5)}, ${p.longitude.toFixed(5)}</code></div>`,
+              `<div style="font-family:system-ui,sans-serif;font-size:12px;padding:4px;min-width:160px;">` +
+              `<strong>GPS ping ${idx + 1} of ${total}</strong><br/>` +
+              `<span style="color:#64748b;">Time: ${timeStr}</span>` +
+              (relativeTime ? `<br/><span style="color:#94a3b8;font-size:11px;">${relativeTime}</span>` : '') +
+              `</div>`,
             )
             .addTo(trailGroup);
         });
+
         trailGroup.addTo(map);
         dbTrailLeafletLayer = trailGroup;
+
+        // ETA panel — from last trail point to destination (straight-line estimate)
+        if (validTrailPoints.length > 0 && isValidCoordinatePair({ latitude: dstCoords[0], longitude: dstCoords[1] })) {
+          const lastPt = validTrailPoints[validTrailPoints.length - 1];
+          const eta = etaFromLatLng(lastPt.latitude, lastPt.longitude, dstCoords[0], dstCoords[1]);
+          const etaH = Math.floor(eta.etaMinutes / 60);
+          const etaM = eta.etaMinutes % 60;
+          const etaStr = etaH > 0 ? `~${etaH}h ${etaM}m` : `~${etaM} min`;
+          // Append ETA panel directly to map container to avoid Leaflet Control type issues.
+          const etaPanelEl = document.createElement('div');
+          etaPanelEl.style.cssText =
+            'position:absolute;bottom:28px;left:10px;z-index:1000;pointer-events:none;';
+          etaPanelEl.innerHTML =
+            `<div style="background:rgba(255,255,255,0.95);border:1px solid rgba(5,150,105,0.3);border-radius:8px;padding:6px 10px;font-family:system-ui;font-size:11px;box-shadow:0 2px 8px rgba(0,0,0,0.12);">` +
+            `<span style="color:#047857;font-weight:700;">ETA</span> ` +
+            `<span style="color:#1e293b;">${etaStr}</span>` +
+            `<span style="color:#94a3b8;margin-left:6px;">(${eta.distanceKm.toFixed(0)} km)</span>` +
+            `</div>`;
+          map.getContainer().appendChild(etaPanelEl);
+        }
       }
 
       const bringDbTrailToFront = () => {

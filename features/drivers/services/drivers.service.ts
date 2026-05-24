@@ -8,6 +8,9 @@ import { syncDomainRows } from "@/lib/cache/domainSync";
 import { mergeDeltaRows } from "@/lib/cache/mergeDelta";
 import type { DeltaResponse } from "@/lib/cache/deltaTypes";
 import { supabase } from "@/lib/supabase";
+import {
+  validateDriverInviteCompensation,
+} from "../utils/driverInviteCompensation.util";
 
 const DRIVER_COLUMNS = [
   "id", "organization_id", "user_id", "name", "phone", "email",
@@ -357,6 +360,7 @@ export interface DriverInviteRow {
   from_org_name: string | null;
   from_org_logo_url?: string | null;
   from_org_avatar_url?: string | null;
+  from_org_avatar_seed?: string | null;
   payable_amount: number | null;
   commission_percent: number | null;
   commission_per_km: number | null;
@@ -609,6 +613,10 @@ export async function inviteDriver(
   orgName?: string | null,
   options?: {
     allowReinviteRejected?: boolean;
+    /** When true, at least one pay term must be supplied (reconnect / in-app invite). */
+    requireCompensation?: boolean;
+    /** When known (e.g. disconnected driver row), skip phone lookup. */
+    knownToUserId?: string | null;
   },
 ): Promise<{
   error: Error | null;
@@ -640,10 +648,10 @@ export async function inviteDriver(
     return { error: new Error(friendly), driver: null, inviteSent: false };
   }
 
-  let toUserId = invitee.user_id ?? null;
+  let toUserId =
+    (options?.knownToUserId ?? "").trim() || invitee.user_id || null;
 
   if (!toUserId) {
-    const phoneNorm = normalizePhone(phone);
     if (phoneNorm) {
       const { drivers } = await getDriversByOrganization(orgId);
       const disconnected = drivers.find(
@@ -653,7 +661,34 @@ export async function inviteDriver(
     }
   }
 
+  if (!toUserId) {
+    if (options?.requireCompensation) {
+      return {
+        error: new Error(
+          "This driver is not linked to a Pulse app account. They must sign in on the driver app before you can send an in-app invitation.",
+        ),
+        driver: null,
+        inviteSent: false,
+      };
+    }
+  }
+
   if (toUserId) {
+    if (options?.requireCompensation) {
+      const compensationError = validateDriverInviteCompensation({
+        payableAmount: data.payableAmount ?? null,
+        commissionPercent: data.commissionPercent ?? null,
+        commissionPerKm: data.commissionPerKm ?? null,
+      });
+      if (compensationError) {
+        return {
+          error: new Error(compensationError),
+          driver: null,
+          inviteSent: false,
+        };
+      }
+    }
+
     // Validation: block duplicate driver_invites for this (org,driver user).
     // Use RPC because client-side RLS typically prevents selecting invite rows by from_organization_id.
     let existingStatus: string | null = null;
@@ -672,10 +707,24 @@ export async function inviteDriver(
 
     if (existingStatus) {
       const normalizedStatus = existingStatus.toLowerCase();
-      if (
-        options?.allowReinviteRejected === true &&
-        (normalizedStatus === "rejected" || normalizedStatus === "declined")
-      ) {
+
+      const { data: activeRow } = await supabase()
+        .from("drivers")
+        .select("id")
+        .eq("organization_id", orgId)
+        .eq("user_id", toUserId)
+        .is("left_at", null)
+        .limit(1)
+        .maybeSingle();
+      const driverStillActiveInOrg = Boolean(activeRow?.id);
+
+      const shouldReopen =
+        normalizedStatus === "rejected" ||
+        normalizedStatus === "declined" ||
+        (normalizedStatus === "accepted" && !driverStillActiveInOrg) ||
+        (normalizedStatus === "pending" && options?.requireCompensation);
+
+      if (shouldReopen) {
         const offer: DriverInviteOffer | null =
           data.payableAmount != null ||
           data.commissionPercent != null ||
@@ -690,7 +739,7 @@ export async function inviteDriver(
           orgId,
           toUserId,
           orgName,
-          invitee.full_name ?? null,
+          (data.name ?? "").trim() || invitee.full_name || null,
           offer,
         );
         if (reopenError) {

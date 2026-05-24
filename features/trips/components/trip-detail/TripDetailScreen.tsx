@@ -274,6 +274,7 @@ export default function TripDetailScreen({
   >("summary");
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedLog, setExpandedLog] = useState<number | null>(null);
+  const [locationLogExpanded, setLocationLogExpanded] = useState(false);
   const [showFinanceProvisionPanel, setShowFinanceProvisionPanel] = useState<
     "client" | "supplier" | null
   >(null);
@@ -4474,6 +4475,83 @@ export default function TripDetailScreen({
                     }
                   />
                 </View>
+              </View>
+            )}
+
+            {/* Location Log section */}
+            {(detail.locationTrailWithNames ?? detail.tripLocationPoints).length > 0 && (
+              <View style={styles.locationLogWrap}>
+                <TouchableOpacity
+                  style={styles.locationLogHeader}
+                  onPress={() => setLocationLogExpanded((v) => !v)}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel={locationLogExpanded ? "Collapse location log" : "Expand location log"}
+                >
+                  <View style={styles.locationLogHeaderLeft}>
+                    <Feather name="map-pin" size={13} color="#7c3aed" />
+                    <Text style={styles.locationLogTitle}>Location log</Text>
+                    <View style={styles.locationLogBadge}>
+                      <Text style={styles.locationLogBadgeText}>
+                        {(detail.locationTrailWithNames ?? detail.tripLocationPoints).length}
+                      </Text>
+                    </View>
+                  </View>
+                  <Feather
+                    name={locationLogExpanded ? "chevron-up" : "chevron-down"}
+                    size={15}
+                    color="#94a3b8"
+                  />
+                </TouchableOpacity>
+                {locationLogExpanded && (
+                  <ScrollView
+                    style={styles.locationLogScroll}
+                    nestedScrollEnabled
+                    showsVerticalScrollIndicator={false}
+                  >
+                    {(detail.locationTrailWithNames ?? detail.tripLocationPoints)
+                      .slice()
+                      .reverse()
+                      .slice(0, 20)
+                      .map((pt, idx, arr) => {
+                        const isLast = idx === arr.length - 1;
+                        const timeStr = pt.recorded_at
+                          ? (() => {
+                              try {
+                                return new Date(pt.recorded_at).toLocaleString("en-IN", {
+                                  timeZone: "Asia/Kolkata",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                  day: "2-digit",
+                                  month: "short",
+                                  hour12: true,
+                                });
+                              } catch {
+                                return "—";
+                              }
+                            })()
+                          : "—";
+                        const locationName =
+                          "locationName" in pt
+                            ? (pt as { locationName: string | null }).locationName
+                            : null;
+                        return (
+                          <View key={`${pt.recorded_at ?? idx}-${idx}`} style={styles.locationLogRow}>
+                            <View style={styles.locationLogTrack}>
+                              <View style={styles.locationLogDot} />
+                              {!isLast && <View style={styles.locationLogLine} />}
+                            </View>
+                            <View style={styles.locationLogContent}>
+                              <Text style={styles.locationLogTime}>{timeStr}</Text>
+                              <Text style={styles.locationLogName} numberOfLines={2}>
+                                {locationName ?? "Location ping"}
+                              </Text>
+                            </View>
+                          </View>
+                        );
+                      })}
+                  </ScrollView>
+                )}
               </View>
             )}
 
@@ -11225,6 +11303,91 @@ const styles = StyleSheet.create({
   },
   feedbackWrap: {
     marginTop: 4,
+  },
+
+  // ── Location log ──
+  locationLogWrap: {
+    marginTop: 12,
+    marginBottom: 4,
+    backgroundColor: "#fff",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#ede9fe",
+    overflow: "hidden",
+  },
+  locationLogHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+  },
+  locationLogHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  locationLogTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#3b0764",
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+  },
+  locationLogBadge: {
+    backgroundColor: "#ede9fe",
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
+  locationLogBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#7c3aed",
+  },
+  locationLogScroll: {
+    maxHeight: 260,
+    paddingHorizontal: 14,
+    paddingBottom: 10,
+  },
+  locationLogRow: {
+    flexDirection: "row",
+    gap: 10,
+    paddingVertical: 7,
+  },
+  locationLogTrack: {
+    alignItems: "center",
+    width: 12,
+    paddingTop: 3,
+  },
+  locationLogDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#7c3aed",
+  },
+  locationLogLine: {
+    flex: 1,
+    width: 1,
+    backgroundColor: "#ddd6fe",
+    marginTop: 3,
+  },
+  locationLogContent: {
+    flex: 1,
+    minWidth: 0,
+    paddingBottom: 4,
+  },
+  locationLogTime: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#7c3aed",
+    marginBottom: 1,
+  },
+  locationLogName: {
+    fontSize: 12,
+    color: "#1e293b",
+    fontWeight: "400",
+    lineHeight: 17,
   },
 
   // ── Finance tab layout ──

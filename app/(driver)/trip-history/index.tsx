@@ -1,3 +1,4 @@
+import { DriverBrandMark } from "@/components/driver/DriverBrandMark";
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import {
     driverBodyPrimary,
@@ -1041,9 +1042,7 @@ export default function DriverTripsScreen() {
             </View>
           </TouchableOpacity>
           <View style={styles.headerTextWrap}>
-            <Text style={[styles.brand, { color: colors.textMuted }]}>
-              Q PILOT
-            </Text>
+            <DriverBrandMark color={colors.textMuted} />
             <Text
               style={[styles.welcomeTitle, { color: colors.text }]}
               numberOfLines={1}

@@ -37,7 +37,7 @@ import {
   createConnectionRequest,
   looksLikeConnectionRateLimitError,
 } from "@/services/connectionRequestsService";
-import { useInboundProtocolInvites } from "@/lib/globalSync/useInboundProtocolInvites";
+import { useProtocolInvitesWithDriverSent } from "@/lib/hooks/useProtocolInvitesWithDriverSent";
 import { useInboundProtocolInviteActions } from "@/lib/hooks/useInboundProtocolInviteActions";
 import { getOrCreateNetworkConversation } from "@/features/chat/services/chat.service";
 import { ROUTES } from "@/lib/routes";
@@ -249,7 +249,7 @@ function NetworkScreenInner() {
     receivedItems: receivedInviteItems,
     sentItems: sentInviteItems,
     pendingCount,
-  } = useInboundProtocolInvites(orgId);
+  } = useProtocolInvitesWithDriverSent(orgId);
   const { inviteActionId, handleInviteAction } =
     useInboundProtocolInviteActions(orgId);
 

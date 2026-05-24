@@ -23,6 +23,8 @@ export type InboundProtocolInviteItem = {
   linkedRequestIds?: string[];
   avatarUri: string | null;
   createdAt: string;
+  /** Distinguishes org connection requests from fleet driver invitations. */
+  kind?: 'connection' | 'driver';
 };
 
 export type InboundProtocolSnapshot = {

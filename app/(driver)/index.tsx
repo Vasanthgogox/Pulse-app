@@ -12,6 +12,7 @@ import { JobRequestCard } from "@/components/JobRequestCard";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
+import { useDriverInviteModal } from "@/contexts/DriverInviteModalContext";
 import {
     useDriverTheme,
     useDriverThemeColors,
@@ -410,6 +411,8 @@ export default function DriverRadarScreen() {
     ? "rgba(255,255,255,0.22)"
     : Theme.textPrimaryDark;
   const { profile } = useAuth();
+  const { presentPendingInvite, pendingCount: pendingInviteModalCount } =
+    useDriverInviteModal();
   const { avatarUri } = useDriverAvatarUri();
   const [driver, setDriver] = useState<driversService.DriverRow | null>(null);
   const [allTrips, setAllTrips] = useState<tripsService.TripRow[]>([]);
@@ -1440,14 +1443,7 @@ export default function DriverRadarScreen() {
   const hasAssignableIncomingTrip = visibleAssignableIncomingTrips.length > 0;
   const hasSingleAssignableIncomingTrip =
     visibleAssignableIncomingTrips.length === 1;
-  const showDeferredInviteCard = Boolean(
-    showNotification &&
-      pendingInvite &&
-      !activeMission &&
-      !effectiveFirstIncoming &&
-      !hasAssignableIncomingTrip &&
-      assignmentFeedback == null,
-  );
+  const showDeferredInviteCard = false;
   const effectiveIncomingId = String(
     effectiveFirstIncoming?.id ?? "",
   ).toLowerCase();
@@ -4761,6 +4757,10 @@ export default function DriverRadarScreen() {
                 driverName={driverName}
                 isOnline
                 variant="assigned"
+                pendingInviteCount={pendingInviteModalCount}
+                onPressInvites={
+                  pendingInviteModalCount > 0 ? presentPendingInvite : undefined
+                }
                 style={[
                   styles.assignedStaticHeader,
                   {
@@ -4786,6 +4786,10 @@ export default function DriverRadarScreen() {
                   driverName={driverName}
                   isOnline
                   variant="assigned"
+                  pendingInviteCount={pendingInviteModalCount}
+                  onPressInvites={
+                    pendingInviteModalCount > 0 ? presentPendingInvite : undefined
+                  }
                   style={[
                     styles.assignedStaticHeader,
                     {
@@ -4993,6 +4997,10 @@ export default function DriverRadarScreen() {
                 driverName={driverName}
                 isOnline={isOnline}
                 onPressOtpClaim={handleOpenOtpClaimFromHeader}
+                pendingInviteCount={pendingInviteModalCount}
+                onPressInvites={
+                  pendingInviteModalCount > 0 ? presentPendingInvite : undefined
+                }
               />
               {driver?.organization_id ? (
                 <TouchableOpacity

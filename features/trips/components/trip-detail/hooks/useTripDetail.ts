@@ -296,6 +296,9 @@ export function useTripDetail({
   const [pastLocationAddresses, setPastLocationAddresses] = useState<
     [string | null, string | null]
   >([null, null]);
+  const [locationTrailWithNames, setLocationTrailWithNames] = useState<
+    { latitude: number; longitude: number; recorded_at: string; locationName: string | null }[]
+  >([]);
 
   // ── Documents ─────────────────────────────────────────────────────────────
   const [tripDocuments, setTripDocuments] = useState<tripDocumentsService.TripDocumentRow[]>([]);
@@ -2086,6 +2089,60 @@ export function useTripDetail({
     };
   }, [tripLocationPoints]);
 
+  // Location trail geocoding — reverse-geocode up to 10 most recent pings
+  useEffect(() => {
+    const points = tripLocationPoints.slice(-10);
+    // Seed with null names immediately so the list renders while geocoding
+    setLocationTrailWithNames(
+      tripLocationPoints.map((p) => ({ ...p, locationName: null })),
+    );
+    if (points.length === 0) return;
+    let isActive = true;
+    (async () => {
+      for (let i = 0; i < points.length; i++) {
+        if (!isActive) return;
+        const pt = points[i];
+        const results = await safeReverseGeocode(pt.latitude, pt.longitude);
+        if (!isActive) return;
+        const addr = results[0];
+        let locationName: string | null = null;
+        if (addr) {
+          const street = addr.street?.trim() || null;
+          const city = addr.city?.trim() || null;
+          const state = addr.region?.trim() || null;
+          if (street) {
+            locationName = [street, city, state].filter(Boolean).join(", ");
+          } else {
+            locationName = [city, state].filter(Boolean).join(", ") || null;
+          }
+        }
+        // Map back to the original index in tripLocationPoints
+        const originalIndex = tripLocationPoints.length - points.length + i;
+        setLocationTrailWithNames((prev) => {
+          if (!isActive) return prev;
+          const next = [...prev];
+          if (next[originalIndex]) {
+            next[originalIndex] = { ...next[originalIndex], locationName };
+          }
+          return next;
+        });
+        if (i < points.length - 1) {
+          await new Promise<void>((resolve) => {
+            const timer = setTimeout(resolve, 300);
+            // Allow cleanup to cancel the delay
+            const check = () => { if (!isActive) { clearTimeout(timer); resolve(); } };
+            const interval = setInterval(check, 50);
+            setTimeout(() => clearInterval(interval), 350);
+          });
+        }
+      }
+    })();
+    return () => {
+      isActive = false;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tripLocationPoints]);
+
   return {
     // Data
     trip,
@@ -2144,6 +2201,7 @@ export function useTripDetail({
     driverLocation,
     driverLocationLoading,
     tripLocationPoints,
+    locationTrailWithNames,
     driverLocationAddress,
     trackingMapLocationLabels,
     trackingMapOriginCoordinate,

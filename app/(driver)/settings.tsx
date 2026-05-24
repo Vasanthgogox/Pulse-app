@@ -1,3 +1,4 @@
+import { DriverBrandMark } from '@/components/driver/DriverBrandMark';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, RefreshControl } from 'react-native';
 import { useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -116,7 +117,7 @@ export default function DriverSettingsScreen() {
           <Text style={[styles.sectionEyebrow, { color: colors.textMuted }]}>About</Text>
           <View style={[styles.row, { borderTopColor: colors.border }]}>
             <Text style={[styles.rowLabel, { color: colors.text }]}>App</Text>
-            <Text style={[styles.rowValue, { color: colors.textMuted }]}>Q Pilot</Text>
+            <DriverBrandMark color={colors.textMuted} style={{ marginBottom: 0 }} />
           </View>
         </View>
 

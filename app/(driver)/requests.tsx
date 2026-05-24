@@ -5,6 +5,7 @@ import {
   buildDriverTripNumberMap,
   getDriverTripDisplayNumber,
 } from '@/lib/driverTripSequence';
+import { DriverBrandMark } from '@/components/driver/DriverBrandMark';
 import { DriverInviteCard } from '@/components/driver/DriverInviteCard';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
@@ -854,7 +855,7 @@ export default function DriverRequestsScreen() {
             </View>
           </TouchableOpacity>
           <View style={styles.headerTextWrap}>
-            <Text style={[styles.brand, { color: colors.textMuted }]}>Q PILOT</Text>
+            <DriverBrandMark color={colors.textMuted} />
             <Text style={[styles.welcomeTitle, { color: colors.text }]} numberOfLines={1}>
               {hasAccepted ? 'Passbook' : 'Requests'}
             </Text>
