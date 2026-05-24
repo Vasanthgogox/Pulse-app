@@ -6,6 +6,7 @@ import {
   checkExistingUserByPhone,
   checkOrganizationNameTaken,
   setPendingOAuthMetadata,
+  resendVerificationEmail,
   type OperatingModel,
 } from '@/features/auth';
 import { validateEmail } from '@/lib/emailValidation';
@@ -43,6 +44,8 @@ type Zone = 'NORTH' | 'SOUTH' | 'EAST' | 'WEST' | 'NORTHEAST';
 type IndiaLocation = { city: string; state: string; zone: Zone };
 type BusinessType = 'SOLE_PROPRIETOR' | 'PARTNERSHIP' | 'PVT_LTD' | 'LLP' | 'OPC' | 'OTHER';
 type EmployeeCount = '1-10' | '11-50' | '51-200' | '201-500' | '500+';
+type FleetSize = '1-5' | '6-15' | '16-30' | '31-50' | '50+';
+type MonthlyVolume = '<50' | '50-200' | '200-500' | '500-1000' | '1000+';
 
 const ALL_LOCATIONS = INDIA_LOCATIONS as IndiaLocation[];
 const ITEM_HEIGHT = 58;
@@ -51,6 +54,23 @@ const ZONE_LABELS: Record<Zone, string> = {
   NORTH: 'North Zone', SOUTH: 'South Zone', EAST: 'East Zone',
   WEST: 'West Zone', NORTHEAST: 'Northeast Zone',
 };
+
+const ZONE_COLORS: Record<Zone, { bg: string; text: string; border: string; bar: string }> = {
+  NORTH:     { bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe', bar: '#3b82f6' },
+  SOUTH:     { bg: '#f0fdf4', text: '#166534', border: '#bbf7d0', bar: '#22c55e' },
+  EAST:      { bg: '#faf5ff', text: '#6b21a8', border: '#e9d5ff', bar: '#a855f7' },
+  WEST:      { bg: '#fffbeb', text: '#92400e', border: '#fde68a', bar: '#f59e0b' },
+  NORTHEAST: { bg: '#f0fdfa', text: '#134e4a', border: '#99f6e4', bar: '#14b8a6' },
+};
+
+const POPULAR_CITY_NAMES = [
+  'Mumbai', 'Delhi', 'Bangalore', 'Chennai', 'Hyderabad',
+  'Pune', 'Kolkata', 'Ahmedabad', 'Surat', 'Jaipur',
+  'Nagpur', 'Ludhiana', 'Indore', 'Kochi', 'Coimbatore',
+];
+const POPULAR_CITIES_DATA = POPULAR_CITY_NAMES
+  .map(name => (INDIA_LOCATIONS as IndiaLocation[]).find(l => l.city === name))
+  .filter((l): l is IndiaLocation => !!l);
 
 const OPERATING_MODELS: { value: OperatingModel; label: string; sub: string }[] = [
   { value: 'ASSET_BASED', label: 'Asset', sub: 'Own trucks' },
@@ -68,6 +88,14 @@ const BUSINESS_TYPES: { value: BusinessType; label: string }[] = [
 ];
 
 const EMPLOYEE_COUNTS: EmployeeCount[] = ['1-10', '11-50', '51-200', '201-500', '500+'];
+const FLEET_SIZES: FleetSize[] = ['1-5', '6-15', '16-30', '31-50', '50+'];
+const MONTHLY_VOLUMES: { value: MonthlyVolume; label: string }[] = [
+  { value: '<50', label: 'Under 50' },
+  { value: '50-200', label: '50–200' },
+  { value: '200-500', label: '200–500' },
+  { value: '500-1000', label: '500–1,000' },
+  { value: '1000+', label: '1,000+' },
+];
 
 // ─── Design tokens ─────────────────────────────────────────────────────────────
 
@@ -87,6 +115,25 @@ const C = {
 
 // Total pages in the horizontal scroller
 const STEP_LABELS = ['Phone', 'Verify', 'Company', 'Details', 'Account'];
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function HighlightText({
+  text, query, baseStyle, matchStyle,
+}: { text: string; query: string; baseStyle: object; matchStyle: object }) {
+  const q = query.trim().toLowerCase();
+  if (!q) return <Text style={baseStyle}>{text}</Text>;
+  const lower = text.toLowerCase();
+  const idx = lower.indexOf(q);
+  if (idx === -1) return <Text style={baseStyle}>{text}</Text>;
+  return (
+    <Text style={baseStyle}>
+      {text.slice(0, idx)}
+      <Text style={matchStyle}>{text.slice(idx, idx + q.length)}</Text>
+      {text.slice(idx + q.length)}
+    </Text>
+  );
+}
 
 // ─── OTP input ────────────────────────────────────────────────────────────────
 
@@ -192,6 +239,8 @@ export default function SignUp() {
   const [businessType, setBusinessType] = useState<BusinessType | null>(null);
   const [employeeCount, setEmployeeCount] = useState<EmployeeCount | null>(null);
   const [operatingModel, setOperatingModel] = useState<OperatingModel>('HYBRID');
+  const [fleetSize, setFleetSize] = useState<FleetSize | null>(null);
+  const [monthlyVolume, setMonthlyVolume] = useState<MonthlyVolume | null>(null);
   const [addressLine, setAddressLine] = useState('');
   const [selectedLocation, setSelectedLocation] = useState<IndiaLocation | null>(null);
   const [cityPickerOpen, setCityPickerOpen] = useState(false);
@@ -203,8 +252,19 @@ export default function SignUp() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+
+  // ── Step 5: Email verification ────────────────────────────────────────────
+  const [emailVerificationRequired, setEmailVerificationRequired] = useState(false);
+  const [resendingSecs, setResendingSecs] = useState(0);
+  const resendEmailTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── Inline validation attempt flags ──────────────────────────────────────
+  const [step2Attempted, setStep2Attempted] = useState(false);
+  const [step3Attempted, setStep3Attempted] = useState(false);
+  const [step4Attempted, setStep4Attempted] = useState(false);
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const phoneInlineError = (() => {
@@ -221,6 +281,43 @@ export default function SignUp() {
       (l) => l.city.toLowerCase().includes(q) || l.state.toLowerCase().includes(q),
     );
   }, [citySearch]);
+
+  const step3Errors = useMemo(() => ({
+    businessType: !businessType ? 'Select your business structure.' : null,
+    fleetSize:
+      (operatingModel === 'ASSET_BASED' || operatingModel === 'HYBRID') && !fleetSize
+        ? 'Select your fleet size.' : null,
+    monthlyVolume:
+      (operatingModel === 'NON_ASSET' || operatingModel === 'HYBRID') && !monthlyVolume
+        ? 'Select your monthly shipment volume.' : null,
+    employeeCount: !employeeCount ? 'Select your employee count.' : null,
+    city: !selectedLocation ? 'Select your city.' : null,
+  }), [businessType, fleetSize, monthlyVolume, employeeCount, selectedLocation, operatingModel]);
+
+  const step4Errors = useMemo(() => ({
+    fullName: validateFullName(true)(fullName),
+    email: !email.trim()
+      ? 'Email is required.'
+      : validateEmail(email),
+    password: !password
+      ? 'Password is required.'
+      : validatePassword(password),
+    confirmPassword: !confirmPassword
+      ? 'Please confirm your password.'
+      : password !== confirmPassword ? 'Passwords do not match.' : null,
+  }), [fullName, email, password, confirmPassword]);
+
+  const passwordStrength = useMemo(() => {
+    if (!password || password.length < 6) return 0;
+    let score = 1;
+    if (password.length >= 8) score++;
+    if (/[A-Z]/.test(password) && /[0-9]/.test(password)) score++;
+    if (/[^A-Za-z0-9]/.test(password)) score++;
+    return Math.min(score, 4);
+  }, [password]);
+
+  const confirmMismatch =
+    password.length > 0 && confirmPassword.length > 0 && password !== confirmPassword;
 
   // ── Phone exists debounce ─────────────────────────────────────────────────
   useEffect(() => {
@@ -328,12 +425,12 @@ export default function SignUp() {
   };
 
   const continueOrgCheck = () => {
-    if (!orgName.trim()) return Alert.alert('Required', 'Enter your organization name.');
-    if (orgCheck?.loading) return; // debounce in progress
+    setStep2Attempted(true);
+    if (!orgName.trim()) return;
+    if (orgCheck?.loading) return;
     const isTaken = orgCheck?.taken ?? false;
     setOrgJoinMode(isTaken);
     if (isTaken) {
-      // Jump straight to account step (skip company details)
       goToPage(4);
     } else {
       goToPage(3);
@@ -341,21 +438,17 @@ export default function SignUp() {
   };
 
   const continueCompanyDetails = () => {
-    if (!businessType) return Alert.alert('Required', 'Select your business structure.');
-    if (!employeeCount) return Alert.alert('Required', 'Select your employee count.');
-    if (!selectedLocation) return Alert.alert('Required', 'Please select your city.');
+    setStep3Attempted(true);
+    const errs = step3Errors;
+    if (errs.businessType || errs.fleetSize || errs.monthlyVolume || errs.employeeCount || errs.city) return;
     goToPage(4);
   };
 
   const createAccount = async () => {
     if (!isOnline) return Alert.alert('No internet', 'Connect to create an account.');
-    const nameErr = validateFullName(true)(fullName);
-    if (nameErr) return Alert.alert('Invalid', nameErr);
-    const emailErr = validateEmail(email);
-    if (emailErr) return Alert.alert('Invalid', emailErr);
-    const passwordErr = validatePassword(password);
-    if (passwordErr) return Alert.alert('Invalid', passwordErr);
-    if (password !== confirmPassword) return Alert.alert('Invalid', 'Passwords do not match.');
+    setStep4Attempted(true);
+    const errs = step4Errors;
+    if (errs.fullName || errs.email || errs.password || errs.confirmPassword) return;
     const storedPhone = normalizeIndianPhoneForMetadata(phone);
     if (!storedPhone || !extractIndianMobileTenDigits(phone)) {
       return Alert.alert('Invalid', 'Enter a valid phone number.');
@@ -370,7 +463,7 @@ export default function SignUp() {
       if (dup.taken) { setLoading(false); return Alert.alert('Taken', 'This company name was just registered. Please choose another.'); }
     }
 
-    const { error } = await signUp(
+    const result = await signUp(
       email.trim(),
       password,
       fullName.trim(),
@@ -387,7 +480,8 @@ export default function SignUp() {
       orgJoinMode ? true : undefined,
     );
     setLoading(false);
-    if (error) return Alert.alert('Error', error.message);
+    if (result.error) return Alert.alert('Error', result.error.message);
+    if (result.emailVerificationRequired) setEmailVerificationRequired(true);
     goToPage(5);
   };
 
@@ -459,7 +553,7 @@ export default function SignUp() {
 
   const backLabel = step === 0 ? 'Back' : step === 5 ? '' : 'Previous';
 
-  const pageScrollBottomPad = insets.bottom + 72;
+  const pageScrollBottomPad = insets.bottom + 220;
 
   const pageBody = (pageIndex: number, content: ReactNode) => (
     <View style={[styles.page, { width: pageWidth }]}>
@@ -485,7 +579,7 @@ export default function SignUp() {
   return (
     <KeyboardAvoidingView
       style={[styles.container, { paddingTop: insets.top }]}
-      behavior={Platform.OS === 'web' ? undefined : 'padding'}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 20 : 0}
     >
       {/* Top bar */}
@@ -536,7 +630,7 @@ export default function SignUp() {
 
                 <View style={styles.fieldGroup}>
                   <Text style={styles.label}>Mobile number</Text>
-                  <View style={[styles.phoneRow, phoneInlineError && styles.phoneRowError]}>
+                  <View style={[styles.phoneRow, (phoneInlineError || (phoneExistsCheck?.exists && !phoneExistsCheck?.loading)) && styles.phoneRowError]}>
                     <Text style={styles.flag}>🇮🇳</Text>
                     <Text style={styles.dialCode}>+91</Text>
                     <TextInput
@@ -639,15 +733,20 @@ export default function SignUp() {
                 <Text style={styles.pageSub}>Enter your company name. We'll check if it already exists on Pulse.</Text>
 
                 <View style={styles.fieldGroup}>
-                  <Text style={styles.label}>Company / Organization name</Text>
+                  <Text style={[styles.label, step2Attempted && !orgName.trim() ? styles.labelError : null]}>
+                    Company / Organization name <Text style={styles.req}>*</Text>
+                  </Text>
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, step2Attempted && !orgName.trim() ? styles.inputError : null]}
                     placeholder="e.g. GoGoX Logistics"
                     placeholderTextColor={C.placeholder}
                     value={orgName}
-                    onChangeText={setOrgName}
+                    onChangeText={(t) => { setOrgName(t); setStep2Attempted(false); }}
                     autoCapitalize="words"
                   />
+                  {step2Attempted && !orgName.trim() ? (
+                    <Text style={styles.fieldError}>Enter your organization name.</Text>
+                  ) : null}
                   {orgCheck?.loading ? (
                     <View style={styles.orgStatusRow}>
                       <LoadingIndicator size="small" color={C.muted} />
@@ -702,10 +801,35 @@ export default function SignUp() {
                 <Text style={styles.pageTitle}>Company details</Text>
                 <Text style={styles.pageSub}>Tell us about <Text style={styles.orgNameHighlight}>{orgName}</Text></Text>
 
+                {/* Operating model — first so the form can react */}
+                <View style={styles.fieldGroup}>
+                  <Text style={styles.label}>How do you operate? <Text style={styles.req}>*</Text></Text>
+                  <View style={styles.modelRow}>
+                    {OPERATING_MODELS.map(({ value, label, sub }) => (
+                      <TouchableOpacity
+                        key={value}
+                        style={[styles.modelCard, operatingModel === value && styles.modelCardActive]}
+                        onPress={() => {
+                          setOperatingModel(value);
+                          setFleetSize(null);
+                          setMonthlyVolume(null);
+                        }}
+                      >
+                        <Text style={[styles.modelLabel, operatingModel === value && styles.modelLabelActive]}>
+                          {label}
+                        </Text>
+                        <Text style={styles.modelSub}>{sub}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
                 {/* Business structure */}
                 <View style={styles.fieldGroup}>
-                  <Text style={styles.label}>Business structure <Text style={styles.req}>*</Text></Text>
-                  <View style={styles.chipWrap}>
+                  <Text style={[styles.label, step3Attempted && step3Errors.businessType ? styles.labelError : null]}>
+                    Business structure <Text style={styles.req}>*</Text>
+                  </Text>
+                  <View style={[styles.chipWrap, step3Attempted && step3Errors.businessType ? styles.chipGroupError : null]}>
                     {BUSINESS_TYPES.map(({ value, label }) => (
                       <TouchableOpacity
                         key={value}
@@ -718,12 +842,68 @@ export default function SignUp() {
                       </TouchableOpacity>
                     ))}
                   </View>
+                  {step3Attempted && step3Errors.businessType ? (
+                    <Text style={styles.fieldError}>{step3Errors.businessType}</Text>
+                  ) : null}
                 </View>
+
+                {/* Fleet size — ASSET_BASED and HYBRID only */}
+                {(operatingModel === 'ASSET_BASED' || operatingModel === 'HYBRID') ? (
+                  <View style={styles.fieldGroup}>
+                    <Text style={[styles.label, step3Attempted && step3Errors.fleetSize ? styles.labelError : null]}>
+                      {operatingModel === 'HYBRID' ? 'Own fleet size (trucks)' : 'Fleet size (trucks)'}
+                      {' '}<Text style={styles.req}>*</Text>
+                    </Text>
+                    <View style={[styles.chipWrap, step3Attempted && step3Errors.fleetSize ? styles.chipGroupError : null]}>
+                      {FLEET_SIZES.map((size) => (
+                        <TouchableOpacity
+                          key={size}
+                          style={[styles.chip, fleetSize === size && styles.chipActive]}
+                          onPress={() => setFleetSize(size)}
+                        >
+                          <Text style={[styles.chipText, fleetSize === size && styles.chipTextActive]}>
+                            {size}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    {step3Attempted && step3Errors.fleetSize ? (
+                      <Text style={styles.fieldError}>{step3Errors.fleetSize}</Text>
+                    ) : null}
+                  </View>
+                ) : null}
+
+                {/* Monthly shipment volume — NON_ASSET and HYBRID only */}
+                {(operatingModel === 'NON_ASSET' || operatingModel === 'HYBRID') ? (
+                  <View style={styles.fieldGroup}>
+                    <Text style={[styles.label, step3Attempted && step3Errors.monthlyVolume ? styles.labelError : null]}>
+                      Shipments arranged per month <Text style={styles.req}>*</Text>
+                    </Text>
+                    <View style={[styles.chipWrap, step3Attempted && step3Errors.monthlyVolume ? styles.chipGroupError : null]}>
+                      {MONTHLY_VOLUMES.map(({ value, label }) => (
+                        <TouchableOpacity
+                          key={value}
+                          style={[styles.chip, monthlyVolume === value && styles.chipActive]}
+                          onPress={() => setMonthlyVolume(value)}
+                        >
+                          <Text style={[styles.chipText, monthlyVolume === value && styles.chipTextActive]}>
+                            {label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    {step3Attempted && step3Errors.monthlyVolume ? (
+                      <Text style={styles.fieldError}>{step3Errors.monthlyVolume}</Text>
+                    ) : null}
+                  </View>
+                ) : null}
 
                 {/* Employee count */}
                 <View style={styles.fieldGroup}>
-                  <Text style={styles.label}>Number of employees <Text style={styles.req}>*</Text></Text>
-                  <View style={styles.chipWrap}>
+                  <Text style={[styles.label, step3Attempted && step3Errors.employeeCount ? styles.labelError : null]}>
+                    Number of employees <Text style={styles.req}>*</Text>
+                  </Text>
+                  <View style={[styles.chipWrap, step3Attempted && step3Errors.employeeCount ? styles.chipGroupError : null]}>
                     {EMPLOYEE_COUNTS.map((count) => (
                       <TouchableOpacity
                         key={count}
@@ -736,107 +916,187 @@ export default function SignUp() {
                       </TouchableOpacity>
                     ))}
                   </View>
-                </View>
-
-                {/* Operating model */}
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.label}>Operating model</Text>
-                  <View style={styles.modelRow}>
-                    {OPERATING_MODELS.map(({ value, label, sub }) => (
-                      <TouchableOpacity
-                        key={value}
-                        style={[styles.modelCard, operatingModel === value && styles.modelCardActive]}
-                        onPress={() => setOperatingModel(value)}
-                      >
-                        <Text style={[styles.modelLabel, operatingModel === value && styles.modelLabelActive]}>
-                          {label}
-                        </Text>
-                        <Text style={styles.modelSub}>{sub}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
+                  {step3Attempted && step3Errors.employeeCount ? (
+                    <Text style={styles.fieldError}>{step3Errors.employeeCount}</Text>
+                  ) : null}
                 </View>
 
                 {/* Address */}
                 <View style={styles.fieldGroup}>
                   <Text style={styles.label}>Office address</Text>
                   <TextInput
-                    style={styles.input}
+                    style={styles.inputMultiline}
                     placeholder="Building, street, area"
                     placeholderTextColor={C.placeholder}
                     value={addressLine}
                     onChangeText={setAddressLine}
+                    multiline
+                    numberOfLines={3}
+                    textAlignVertical="top"
+                    autoCapitalize="sentences"
+                    returnKeyType="default"
                   />
                 </View>
 
                 {/* City picker */}
                 <View style={styles.fieldGroup}>
-                  <Text style={styles.label}>City / District <Text style={styles.req}>*</Text></Text>
-                  <View style={styles.cityFieldWrap}>
-                    <View style={[styles.cityInputRow, cityPickerOpen && styles.cityInputRowActive]}>
-                      <FontAwesome name="search" size={14} color={C.muted} style={{ marginRight: 8 }} />
-                      <TextInput
-                        style={styles.cityInput}
-                        placeholder="Search & select city"
-                        placeholderTextColor={C.placeholder}
-                        value={cityPickerOpen ? citySearch : (selectedLocation?.city ?? '')}
-                        onFocus={() => { setCityPickerOpen(true); setCitySearch(selectedLocation?.city ?? ''); }}
-                        onChangeText={(t) => { setCityPickerOpen(true); setCitySearch(t); }}
-                        autoCapitalize="words"
-                      />
-                      <TouchableOpacity onPress={() => {
-                        if (cityPickerOpen) { setCityPickerOpen(false); setCitySearch(''); }
-                        else { setCityPickerOpen(true); setCitySearch(selectedLocation?.city ?? ''); }
-                      }}>
-                        <FontAwesome name={cityPickerOpen ? 'chevron-up' : 'chevron-down'} size={13} color={C.muted} />
-                      </TouchableOpacity>
-                    </View>
-                    {selectedLocation && !cityPickerOpen ? (
-                      <Text style={styles.citySubText}>{selectedLocation.state}</Text>
-                    ) : null}
-                    {cityPickerOpen ? (
-                      <View style={styles.dropdown}>
-                        <FlatList
-                          data={filteredLocations}
-                          keyExtractor={(_, i) => String(i)}
-                          keyboardShouldPersistTaps="handled"
-                          getItemLayout={(_, index) => ({ length: ITEM_HEIGHT, offset: ITEM_HEIGHT * index, index })}
-                          initialNumToRender={20}
-                          maxToRenderPerBatch={20}
-                          removeClippedSubviews
-                          renderItem={({ item }) => {
-                            const active = selectedLocation?.city === item.city && selectedLocation?.state === item.state;
-                            return (
-                              <TouchableOpacity
-                                style={[styles.dropdownItem, active && styles.dropdownItemActive]}
-                                onPress={() => { setSelectedLocation(item); setCityPickerOpen(false); setCitySearch(''); }}
-                              >
-                                <View>
-                                  <Text style={[styles.dropdownItemCity, active && { fontWeight: '700' }]}>{item.city}</Text>
-                                  <Text style={styles.dropdownItemState}>{item.state}</Text>
-                                </View>
-                                <View style={styles.zonePill}>
-                                  <Text style={styles.zonePillText}>{item.zone}</Text>
-                                </View>
-                              </TouchableOpacity>
-                            );
-                          }}
-                          ItemSeparatorComponent={() => <View style={styles.dropdownSep} />}
-                          ListEmptyComponent={<Text style={styles.dropdownEmpty}>No results</Text>}
-                        />
-                      </View>
-                    ) : null}
-                  </View>
-                </View>
+                  <Text style={[styles.label, step3Attempted && step3Errors.city ? styles.labelError : null]}>
+                    City / District <Text style={styles.req}>*</Text>
+                  </Text>
 
-                {selectedLocation ? (
-                  <View style={styles.zoneBadgeRow}>
-                    <Text style={styles.zoneBadgeLabel}>Zone</Text>
-                    <View style={styles.zoneBadge}>
-                      <Text style={styles.zoneBadgeText}>{ZONE_LABELS[selectedLocation.zone]}</Text>
+                  {!cityPickerOpen ? (
+                    selectedLocation ? (
+                      // ── Selected summary card ──────────────────────────────
+                      <TouchableOpacity
+                        style={[styles.citySelectedCard, { borderLeftColor: ZONE_COLORS[selectedLocation.zone].bar }]}
+                        onPress={() => { setCityPickerOpen(true); setCitySearch(''); }}
+                        activeOpacity={0.82}
+                      >
+                        <View style={styles.citySelectedInfo}>
+                          <Text style={styles.citySelectedName}>{selectedLocation.city}</Text>
+                          <View style={styles.citySelectedMeta}>
+                            <Text style={styles.citySelectedState}>{selectedLocation.state}</Text>
+                            <View style={[styles.cityZonePill, {
+                              backgroundColor: ZONE_COLORS[selectedLocation.zone].bg,
+                              borderColor: ZONE_COLORS[selectedLocation.zone].border,
+                            }]}>
+                              <Text style={[styles.cityZonePillText, { color: ZONE_COLORS[selectedLocation.zone].text }]}>
+                                {ZONE_LABELS[selectedLocation.zone]}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+                        <TouchableOpacity
+                          style={styles.cityClearBtn}
+                          onPress={() => { setSelectedLocation(null); setCitySearch(''); }}
+                          hitSlop={12}
+                        >
+                          <FontAwesome name="times-circle" size={20} color="#cbd5e1" />
+                        </TouchableOpacity>
+                      </TouchableOpacity>
+                    ) : (
+                      // ── Empty trigger ──────────────────────────────────────
+                      <TouchableOpacity
+                        style={[styles.cityTrigger, step3Attempted && step3Errors.city ? styles.cityTriggerError : null]}
+                        onPress={() => setCityPickerOpen(true)}
+                        activeOpacity={0.7}
+                      >
+                        <FontAwesome name="map-marker" size={15} color={C.muted} />
+                        <Text style={styles.cityTriggerText}>Search & select city</Text>
+                        <FontAwesome name="chevron-down" size={12} color={C.muted} />
+                      </TouchableOpacity>
+                    )
+                  ) : (
+                    // ── Open picker panel ────────────────────────────────────
+                    <View style={styles.cityPickerPanel}>
+                      {/* Search row */}
+                      <View style={styles.citySearchRow}>
+                        <FontAwesome name="search" size={14} color={C.muted} />
+                        <TextInput
+                          style={styles.citySearchInput}
+                          placeholder="Search city or district..."
+                          placeholderTextColor={C.placeholder}
+                          value={citySearch}
+                          onChangeText={setCitySearch}
+                          autoCapitalize="words"
+                          autoFocus={Platform.OS !== 'web'}
+                        />
+                        {citySearch.length > 0 ? (
+                          <TouchableOpacity onPress={() => setCitySearch('')} hitSlop={10}>
+                            <FontAwesome name="times-circle" size={16} color={C.muted} />
+                          </TouchableOpacity>
+                        ) : (
+                          <TouchableOpacity onPress={() => { setCityPickerOpen(false); setCitySearch(''); }} hitSlop={10}>
+                            <FontAwesome name="times" size={16} color={C.muted} />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+
+                      {/* Popular cities (no query) or result count (searching) */}
+                      {!citySearch.trim() ? (
+                        <View style={styles.popularSection}>
+                          <Text style={styles.pickerSectionLabel}>Popular freight hubs</Text>
+                          <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            contentContainerStyle={styles.popularScrollContent}
+                            keyboardShouldPersistTaps="handled"
+                          >
+                            {POPULAR_CITIES_DATA.map((loc) => (
+                              <TouchableOpacity
+                                key={loc.city}
+                                style={[styles.popularChip, { borderColor: ZONE_COLORS[loc.zone].border }]}
+                                onPress={() => { setSelectedLocation(loc); setCityPickerOpen(false); setCitySearch(''); }}
+                              >
+                                <View style={[styles.popularChipDot, { backgroundColor: ZONE_COLORS[loc.zone].bar }]} />
+                                <Text style={styles.popularChipText}>{loc.city}</Text>
+                              </TouchableOpacity>
+                            ))}
+                          </ScrollView>
+                          <View style={styles.pickerDivider} />
+                          <Text style={styles.pickerSectionLabel}>All cities</Text>
+                        </View>
+                      ) : (
+                        filteredLocations.length > 0 ? (
+                          <Text style={styles.resultCount}>
+                            {filteredLocations.length} result{filteredLocations.length !== 1 ? 's' : ''}
+                          </Text>
+                        ) : null
+                      )}
+
+                      {/* Results */}
+                      <FlatList
+                        data={filteredLocations}
+                        keyExtractor={(_, i) => String(i)}
+                        keyboardShouldPersistTaps="handled"
+                        getItemLayout={(_, index) => ({ length: ITEM_HEIGHT, offset: ITEM_HEIGHT * index, index })}
+                        initialNumToRender={20}
+                        maxToRenderPerBatch={20}
+                        removeClippedSubviews
+                        style={styles.cityResultsList}
+                        renderItem={({ item }) => {
+                          const active = selectedLocation?.city === item.city && selectedLocation?.state === item.state;
+                          const zc = ZONE_COLORS[item.zone];
+                          return (
+                            <TouchableOpacity
+                              style={[styles.cityResultItem, active && styles.cityResultItemActive]}
+                              onPress={() => { setSelectedLocation(item); setCityPickerOpen(false); setCitySearch(''); }}
+                            >
+                              <View style={[styles.cityResultBar, { backgroundColor: zc.bar }]} />
+                              <View style={styles.cityResultBody}>
+                                <HighlightText
+                                  text={item.city}
+                                  query={citySearch}
+                                  baseStyle={[styles.cityResultName, active && { color: C.accent }]}
+                                  matchStyle={styles.cityResultNameMatch}
+                                />
+                                <Text style={styles.cityResultState}>{item.state}</Text>
+                              </View>
+                              <View style={[styles.cityResultZonePill, { backgroundColor: zc.bg, borderColor: zc.border }]}>
+                                <Text style={[styles.cityResultZoneText, { color: zc.text }]}>{item.zone}</Text>
+                              </View>
+                              {active ? (
+                                <FontAwesome name="check-circle" size={16} color={C.accent} style={{ marginLeft: 8 }} />
+                              ) : null}
+                            </TouchableOpacity>
+                          );
+                        }}
+                        ItemSeparatorComponent={() => <View style={styles.cityResultSep} />}
+                        ListEmptyComponent={
+                          <View style={styles.cityEmptyState}>
+                            <FontAwesome name="map-o" size={28} color={C.border} />
+                            <Text style={styles.cityEmptyTitle}>No cities found</Text>
+                            <Text style={styles.cityEmptyHint}>Try a different spelling or district name.</Text>
+                          </View>
+                        }
+                      />
                     </View>
-                  </View>
-                ) : null}
+                  )}
+
+                  {step3Attempted && step3Errors.city ? (
+                    <Text style={styles.fieldError}>{step3Errors.city}</Text>
+                  ) : null}
+                </View>
 
                 <TouchableOpacity style={styles.primaryBtn} onPress={continueCompanyDetails}>
                   <Text style={styles.primaryBtnText}>Continue</Text>
@@ -861,9 +1121,11 @@ export default function SignUp() {
                 )}
 
                 <View style={styles.fieldGroup}>
-                  <Text style={styles.label}>Full name</Text>
+                  <Text style={[styles.label, step4Attempted && step4Errors.fullName ? styles.labelError : null]}>
+                    Full name <Text style={styles.req}>*</Text>
+                  </Text>
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, step4Attempted && step4Errors.fullName ? styles.inputError : null]}
                     placeholder="Your name"
                     placeholderTextColor={C.placeholder}
                     value={fullName}
@@ -871,12 +1133,17 @@ export default function SignUp() {
                     autoCapitalize="words"
                     editable={!loading}
                   />
+                  {step4Attempted && step4Errors.fullName ? (
+                    <Text style={styles.fieldError}>{step4Errors.fullName}</Text>
+                  ) : null}
                 </View>
 
                 <View style={styles.fieldGroup}>
-                  <Text style={styles.label}>Email address</Text>
+                  <Text style={[styles.label, step4Attempted && step4Errors.email ? styles.labelError : null]}>
+                    Email address <Text style={styles.req}>*</Text>
+                  </Text>
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, step4Attempted && step4Errors.email ? styles.inputError : null]}
                     placeholder="you@example.com"
                     placeholderTextColor={C.placeholder}
                     value={email}
@@ -885,13 +1152,18 @@ export default function SignUp() {
                     autoCapitalize="none"
                     editable={!loading}
                   />
+                  {step4Attempted && step4Errors.email ? (
+                    <Text style={styles.fieldError}>{step4Errors.email}</Text>
+                  ) : null}
                 </View>
 
                 <View style={styles.fieldGroup}>
-                  <Text style={styles.label}>Password</Text>
+                  <Text style={[styles.label, step4Attempted && step4Errors.password ? styles.labelError : null]}>
+                    Password <Text style={styles.req}>*</Text>
+                  </Text>
                   <View style={styles.passwordRow}>
                     <TextInput
-                      style={styles.inputPassword}
+                      style={[styles.inputPassword, step4Attempted && step4Errors.password ? styles.inputError : null]}
                       placeholder="At least 6 characters"
                       placeholderTextColor={C.placeholder}
                       value={password}
@@ -903,19 +1175,68 @@ export default function SignUp() {
                       <FontAwesome name={showPassword ? 'eye-slash' : 'eye'} size={18} color={C.muted} />
                     </TouchableOpacity>
                   </View>
+                  <View style={[styles.strengthWrap, { opacity: password.length > 0 ? 1 : 0 }]}>
+                    <View style={styles.strengthBar}>
+                      {[1, 2, 3, 4].map((seg) => (
+                        <View
+                          key={seg}
+                          style={[
+                            styles.strengthSeg,
+                            passwordStrength >= seg && (
+                              passwordStrength <= 1 ? styles.strengthWeak :
+                              passwordStrength === 2 ? styles.strengthFair :
+                              passwordStrength === 3 ? styles.strengthGood :
+                              styles.strengthStrong
+                            ),
+                          ]}
+                        />
+                      ))}
+                    </View>
+                    <Text style={[
+                      styles.strengthLabel,
+                      passwordStrength <= 1 ? { color: C.error } :
+                      passwordStrength === 2 ? { color: C.warning } :
+                      passwordStrength === 3 ? { color: '#22c55e' } :
+                      { color: '#16a34a' },
+                    ]}>
+                      {passwordStrength <= 1 ? 'Weak' : passwordStrength === 2 ? 'Fair' : passwordStrength === 3 ? 'Good' : 'Strong'}
+                    </Text>
+                  </View>
+                  {step4Attempted && step4Errors.password ? (
+                    <Text style={styles.fieldError}>{step4Errors.password}</Text>
+                  ) : null}
                 </View>
 
                 <View style={styles.fieldGroup}>
-                  <Text style={styles.label}>Confirm password</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Re-enter password"
-                    placeholderTextColor={C.placeholder}
-                    value={confirmPassword}
-                    onChangeText={setConfirmPassword}
-                    secureTextEntry={!showPassword}
-                    editable={!loading}
-                  />
+                  <Text style={[styles.label, (step4Attempted && step4Errors.confirmPassword) || confirmMismatch ? styles.labelError : null]}>
+                    Confirm password <Text style={styles.req}>*</Text>
+                  </Text>
+                  <View style={styles.passwordRow}>
+                    <TextInput
+                      style={[styles.inputPassword, (step4Attempted && step4Errors.confirmPassword) || confirmMismatch ? styles.inputError : confirmPassword.length > 0 && !confirmMismatch && password === confirmPassword ? styles.inputSuccess : null]}
+                      placeholder="Re-enter password"
+                      placeholderTextColor={C.placeholder}
+                      value={confirmPassword}
+                      onChangeText={setConfirmPassword}
+                      secureTextEntry={!showConfirmPassword}
+                      editable={!loading}
+                      onFocus={() => {
+                        setTimeout(() => {
+                          pageVerticalScrollRefs.current[4]?.scrollToEnd({ animated: true });
+                        }, 150);
+                      }}
+                    />
+                    <TouchableOpacity onPress={() => setShowConfirmPassword((v) => !v)} style={styles.eyeBtn}>
+                      <FontAwesome name={showConfirmPassword ? 'eye-slash' : 'eye'} size={18} color={C.muted} />
+                    </TouchableOpacity>
+                  </View>
+                  {confirmMismatch ? (
+                    <Text style={styles.fieldError}>Passwords do not match.</Text>
+                  ) : confirmPassword.length > 0 && password === confirmPassword ? (
+                    <Text style={styles.fieldSuccess}>Passwords match.</Text>
+                  ) : step4Attempted && step4Errors.confirmPassword ? (
+                    <Text style={styles.fieldError}>{step4Errors.confirmPassword}</Text>
+                  ) : null}
                 </View>
 
                 <TouchableOpacity
@@ -947,45 +1268,81 @@ export default function SignUp() {
               </>
             ))}
 
-            {/* ── Page 5: Success ──────────────────────────────────────────── */}
+            {/* ── Page 5: Success / Email verification ─────────────────── */}
             {pageBody(5, (
               <View style={styles.successInner}>
                 <View style={styles.successIcon}>
-                  <FontAwesome name="check" size={32} color="#fff" />
+                  <FontAwesome name={emailVerificationRequired ? 'envelope' : 'check'} size={32} color="#fff" />
                 </View>
-                <Text style={styles.successTitle}>
-                  {orgJoinMode ? 'Account created!' : "You're in!"}
-                </Text>
-                {orgJoinMode ? (
+                {emailVerificationRequired ? (
                   <>
+                    <Text style={styles.successTitle}>Check your email</Text>
                     <Text style={styles.successSub}>
-                      Your account is ready. To join{' '}
-                      <Text style={{ fontWeight: '700' }}>{orgName}</Text>, ask their admin
-                      to invite you from the Pulse Team Management screen.
+                      We sent a verification link to{' '}
+                      <Text style={{ fontWeight: '700' }}>{email}</Text>.{'\n'}
+                      Click the link to activate your account.
                     </Text>
-                    <View style={styles.inviteHintCard}>
-                      <FontAwesome name="users" size={16} color={C.accent} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.inviteHintTitle}>How to get invited</Text>
-                        <Text style={styles.inviteHintSub}>
-                          Ask the {orgName} admin to open{' '}
-                          <Text style={{ fontStyle: 'italic' }}>Profile → Team → Invite Member</Text>
-                          {' '}and search for your phone number <Text style={{ fontWeight: '700' }}>+91 {phone}</Text>.
-                        </Text>
-                      </View>
-                    </View>
+                    <TouchableOpacity
+                      style={[styles.primaryBtn, resendingSecs > 0 && { opacity: 0.5 }]}
+                      disabled={resendingSecs > 0}
+                      onPress={async () => {
+                        const { error: resendErr } = await resendVerificationEmail(email.trim());
+                        if (resendErr) { Alert.alert('Error', resendErr.message); return; }
+                        setResendingSecs(60);
+                        const t = setInterval(() => {
+                          setResendingSecs(s => {
+                            if (s <= 1) { clearInterval(t); return 0; }
+                            return s - 1;
+                          });
+                        }, 1000);
+                        resendEmailTimerRef.current = t;
+                      }}
+                    >
+                      <Text style={styles.primaryBtnText}>
+                        {resendingSecs > 0 ? `Resend in ${resendingSecs}s` : 'Resend verification email'}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.altRow} onPress={() => router.replace(ROUTES.SIGN_IN)}>
+                      <Text style={styles.altLink}>Already verified? Sign in</Text>
+                    </TouchableOpacity>
                   </>
                 ) : (
-                  <Text style={styles.successSub}>
-                    Your workspace <Text style={{ fontWeight: '700' }}>{orgName}</Text> is ready. Start managing your fleet.
-                  </Text>
+                  <>
+                    <Text style={styles.successTitle}>
+                      {orgJoinMode ? 'Account created!' : "You're in!"}
+                    </Text>
+                    {orgJoinMode ? (
+                      <>
+                        <Text style={styles.successSub}>
+                          Your account is ready. To join{' '}
+                          <Text style={{ fontWeight: '700' }}>{orgName}</Text>, ask their admin
+                          to invite you from the Pulse Team Management screen.
+                        </Text>
+                        <View style={styles.inviteHintCard}>
+                          <FontAwesome name="users" size={16} color={C.accent} />
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.inviteHintTitle}>How to get invited</Text>
+                            <Text style={styles.inviteHintSub}>
+                              Ask the {orgName} admin to open{' '}
+                              <Text style={{ fontStyle: 'italic' }}>Profile → Team → Invite Member</Text>
+                              {' '}and search for your phone number <Text style={{ fontWeight: '700' }}>+91 {phone}</Text>.
+                            </Text>
+                          </View>
+                        </View>
+                      </>
+                    ) : (
+                      <Text style={styles.successSub}>
+                        Your workspace <Text style={{ fontWeight: '700' }}>{orgName}</Text> is ready. Start managing your fleet.
+                      </Text>
+                    )}
+                    <TouchableOpacity style={styles.primaryBtn} onPress={() => router.replace('/')}>
+                      <Text style={styles.primaryBtnText}>Go to app</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.altRow} onPress={() => router.replace(ROUTES.SIGN_IN)}>
+                      <Text style={styles.altLink}>Already have an account? Sign in</Text>
+                    </TouchableOpacity>
+                  </>
                 )}
-                <TouchableOpacity style={styles.primaryBtn} onPress={() => router.replace('/')}>
-                  <Text style={styles.primaryBtnText}>Go to app</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.altRow} onPress={() => router.replace(ROUTES.SIGN_IN)}>
-                  <Text style={styles.altLink}>Already have an account? Sign in</Text>
-                </TouchableOpacity>
               </View>
             ))}
           </ScrollView>
@@ -1090,6 +1447,11 @@ const styles = StyleSheet.create({
     minHeight: 50, paddingVertical: 14, paddingHorizontal: 14, fontSize: 15, color: C.text,
     backgroundColor: C.bg, borderRadius: 12, borderWidth: 1.5, borderColor: C.border,
   },
+  inputMultiline: {
+    minHeight: 84, paddingVertical: 12, paddingHorizontal: 14, fontSize: 15, color: C.text,
+    backgroundColor: C.bg, borderRadius: 12, borderWidth: 1.5, borderColor: C.border,
+    textAlignVertical: 'top',
+  },
   inputPassword: {
     flex: 1, minHeight: 50, paddingVertical: 14, paddingHorizontal: 14, paddingRight: 48,
     fontSize: 15, color: C.text, backgroundColor: C.bg, borderRadius: 12, borderWidth: 1.5, borderColor: C.border,
@@ -1120,38 +1482,89 @@ const styles = StyleSheet.create({
   modelLabelActive: { color: '#166534' },
   modelSub: { fontSize: 11, color: C.placeholder, marginTop: 2 },
 
-  // City picker
-  cityFieldWrap: {},
-  cityInputRow: {
-    flexDirection: 'row', alignItems: 'center', minHeight: 50,
-    paddingHorizontal: 12, borderRadius: 12, borderWidth: 1.5, borderColor: C.border,
-    backgroundColor: C.bg,
+  // City picker — closed trigger
+  cityTrigger: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    minHeight: 52, paddingHorizontal: 14, paddingVertical: 14,
+    borderRadius: 12, borderWidth: 1.5, borderColor: C.border, backgroundColor: C.bg,
+  },
+  cityTriggerError: { borderColor: C.error, backgroundColor: '#fff5f5' },
+  cityTriggerText: { flex: 1, fontSize: 15, color: C.placeholder },
+
+  // City picker — selected summary card
+  citySelectedCard: {
+    flexDirection: 'row', alignItems: 'center',
+    borderRadius: 12, borderWidth: 1.5, borderColor: C.border,
+    borderLeftWidth: 5, backgroundColor: C.bg,
+    paddingHorizontal: 14, paddingVertical: 12, gap: 10,
+  },
+  citySelectedInfo: { flex: 1 },
+  citySelectedName: { fontSize: 16, fontWeight: '700', color: C.text, letterSpacing: -0.2 },
+  citySelectedMeta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
+  citySelectedState: { fontSize: 12, color: C.muted, fontWeight: '500' },
+  cityZonePill: {
+    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, borderWidth: 1,
+  },
+  cityZonePillText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
+  cityClearBtn: { padding: 4 },
+
+  // City picker — open panel
+  cityPickerPanel: {
+    borderRadius: 14, borderWidth: 1.5, borderColor: C.border,
+    backgroundColor: '#fff', overflow: 'hidden',
+    shadowColor: '#0f172a', shadowOpacity: 0.09, shadowRadius: 18,
+    shadowOffset: { width: 0, height: 6 }, elevation: 5,
+  },
+  citySearchRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 14, paddingVertical: 13,
+    borderBottomWidth: 1, borderBottomColor: C.border,
+  },
+  citySearchInput: {
+    flex: 1, fontSize: 15, color: C.text,
     ...Platform.select({ web: { outlineStyle: 'none' } as object }),
   },
-  cityInputRowActive: { borderColor: '#cbd5e1' },
-  cityInput: {
-    flex: 1, fontSize: 15, color: C.text, paddingVertical: 10,
-    ...Platform.select({ web: { outlineStyle: 'none' } as object }),
+
+  // Popular cities section
+  popularSection: { paddingTop: 12, paddingBottom: 4 },
+  pickerSectionLabel: {
+    fontSize: 10, fontWeight: '800', color: C.muted, letterSpacing: 1,
+    textTransform: 'uppercase', marginBottom: 8, paddingHorizontal: 14,
   },
-  citySubText: { fontSize: 12, color: C.muted, marginTop: 3, marginLeft: 2 },
-  dropdown: {
-    marginTop: 6, borderRadius: 12, borderWidth: 1, borderColor: '#dbe3ee',
-    backgroundColor: '#fff', maxHeight: 280, overflow: 'hidden',
-    shadowColor: '#0f172a', shadowOpacity: 0.05, shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 }, elevation: 2,
+  popularScrollContent: { gap: 8, paddingHorizontal: 14, paddingBottom: 12 },
+  popularChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 10, paddingVertical: 7, borderRadius: 10,
+    borderWidth: 1.5, backgroundColor: C.surface,
   },
-  dropdownItem: { height: ITEM_HEIGHT, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  dropdownItemActive: { backgroundColor: 'rgba(15,23,42,0.04)' },
-  dropdownItemCity: { fontSize: 14, color: C.text, fontWeight: '500' },
-  dropdownItemState: { fontSize: 11, color: C.muted, marginTop: 2 },
-  dropdownSep: { height: 1, backgroundColor: C.border, marginHorizontal: 14 },
-  dropdownEmpty: { textAlign: 'center', color: C.muted, paddingVertical: 28, fontSize: 13 },
-  zonePill: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
-  zonePillText: { fontSize: 9, fontWeight: '700', color: C.muted, letterSpacing: 0.3 },
-  zoneBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
-  zoneBadgeLabel: { fontSize: 12, fontWeight: '700', color: C.muted },
-  zoneBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#bbf7d0' },
-  zoneBadgeText: { fontSize: 12, fontWeight: '600', color: C.accent },
+  popularChipDot: { width: 7, height: 7, borderRadius: 3.5 },
+  popularChipText: { fontSize: 12, fontWeight: '700', color: C.text },
+  pickerDivider: { height: 1, backgroundColor: C.border, marginBottom: 10, marginTop: 2 },
+  resultCount: {
+    fontSize: 11, fontWeight: '600', color: C.muted,
+    paddingHorizontal: 14, paddingVertical: 8,
+  },
+
+  // City results list
+  cityResultsList: { maxHeight: 268 },
+  cityResultItem: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 14, paddingVertical: 13, minHeight: ITEM_HEIGHT,
+  },
+  cityResultItemActive: { backgroundColor: '#f0fdf4' },
+  cityResultBar: { width: 4, height: 34, borderRadius: 2, marginRight: 12 },
+  cityResultBody: { flex: 1 },
+  cityResultName: { fontSize: 14, fontWeight: '600', color: C.text },
+  cityResultNameMatch: { fontWeight: '800', color: C.text, textDecorationLine: 'underline' },
+  cityResultState: { fontSize: 11, color: C.muted, marginTop: 2 },
+  cityResultZonePill: {
+    paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, borderWidth: 1, marginLeft: 8,
+  },
+  cityResultZoneText: { fontSize: 9, fontWeight: '700', letterSpacing: 0.4 },
+  cityResultSep: { height: 1, backgroundColor: C.border, marginHorizontal: 14 },
+  cityEmptyState: { alignItems: 'center', paddingVertical: 36, gap: 8 },
+  cityEmptyTitle: { fontSize: 14, fontWeight: '700', color: C.muted },
+  cityEmptyHint: { fontSize: 12, color: C.placeholder, textAlign: 'center', maxWidth: 200 },
 
   // Join notice banner (on account step)
   joinNoticeBanner: {
@@ -1200,6 +1613,23 @@ const styles = StyleSheet.create({
   },
   inviteHintTitle: { fontSize: 13, fontWeight: '700', color: '#166534', marginBottom: 4 },
   inviteHintSub: { fontSize: 12, color: '#166534', lineHeight: 18 },
+
+  // Validation state
+  labelError: { color: C.error },
+  inputError: { borderColor: C.error, backgroundColor: '#fff5f5' },
+  inputSuccess: { borderColor: '#22c55e', backgroundColor: '#f0fdf4' },
+  fieldSuccess: { fontSize: 12, color: '#16a34a', marginTop: 5, marginLeft: 2, fontWeight: '600' },
+  chipGroupError: { padding: 4, borderRadius: 10, borderWidth: 1.5, borderColor: '#fecaca', backgroundColor: '#fff5f5' },
+
+  // Password strength
+  strengthWrap: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
+  strengthBar: { flex: 1, flexDirection: 'row', gap: 4 },
+  strengthSeg: { flex: 1, height: 4, borderRadius: 2, backgroundColor: C.border },
+  strengthWeak: { backgroundColor: C.error },
+  strengthFair: { backgroundColor: C.warning },
+  strengthGood: { backgroundColor: '#22c55e' },
+  strengthStrong: { backgroundColor: '#16a34a' },
+  strengthLabel: { fontSize: 11, fontWeight: '700', minWidth: 44, textAlign: 'right' },
 
   // Step dots
   dotsRow: {

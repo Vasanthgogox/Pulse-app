@@ -86,7 +86,7 @@ interface AuthContextType {
     businessType?: string,
     employeeCount?: string,
     skipOrgCreation?: boolean,
-  ) => Promise<{ error: Error | null }>;
+  ) => Promise<{ error: Error | null; emailVerificationRequired?: boolean }>;
   signOut: () => Promise<void>;
 }
 
@@ -497,7 +497,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setRestoreError(null);
       await refreshSessionInternal();
     }
-    return wrapActionResult(result);
+    return { ...wrapActionResult(result), emailVerificationRequired: result.emailVerificationRequired };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const refreshSessionInternal = async () => {

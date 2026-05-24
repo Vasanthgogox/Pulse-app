@@ -320,7 +320,7 @@ export default function SignIn() {
 
         <View style={styles.signUpRow}>
           <Text style={[styles.signUpMuted, isDesktop && styles.signUpMutedDesktop]}>New to Pulse? </Text>
-          <TouchableOpacity onPress={() => router.push(ROUTES.SIGN_UP)} activeOpacity={0.8}>
+          <TouchableOpacity onPress={() => router.push(ROUTES.WELCOME)} activeOpacity={0.8}>
             <Text style={styles.signUpLink}>Create account</Text>
           </TouchableOpacity>
         </View>

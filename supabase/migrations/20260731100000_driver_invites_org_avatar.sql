@@ -1,5 +1,6 @@
 -- Extend get_driver_invites_received to include org logo + owner avatar for consistent
 -- avatar display in the driver app (matching business-app party avatar logic).
+DROP FUNCTION IF EXISTS public.get_driver_invites_received();
 CREATE OR REPLACE FUNCTION public.get_driver_invites_received()
 RETURNS TABLE(
   id uuid,

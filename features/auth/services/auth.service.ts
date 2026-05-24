@@ -127,6 +127,8 @@ function mapDbProfileToAuth(profile: any): AuthProfile {
 
 export interface SignInResult {
   error: Error | null;
+  /** True when Supabase email confirmation is enabled and the user must click the verification link. */
+  emailVerificationRequired?: boolean;
 }
 
 export interface SignUpOptions {
@@ -228,13 +230,21 @@ export async function signUp({
       const e164 = normalizeIndianPhoneForMetadata(phone);
       if (e164) metadata.phone = e164;
     }
+    // Auto-assign a random avatar seed for business users so their profile
+    // always has a visual identity immediately (drivers pick theirs in signup UI).
+    if (role === 'user' && !metadata.avatar_seed) {
+      metadata.avatar_seed = `driver-${Math.floor(Math.random() * 10) + 1}`;
+    }
+
+    const webBase = process.env.EXPO_PUBLIC_WEB_BASE_URL?.trim().replace(/\/$/, '');
+    const emailRedirectTo = webBase ? `${webBase}/auth/callback` : undefined;
+
     const { data, error } = await supabase().auth.signUp({
       email: email.trim(),
       password,
-      options: { data: metadata },
+      options: { data: metadata, ...(emailRedirectTo ? { emailRedirectTo } : {}) },
     });
     if (error) {
-      // Catch the database trigger exception if it fired
       if (error.message.includes("Company name already exists")) {
         return { error: new Error("Company name already exists.") };
       }
@@ -243,7 +253,9 @@ export async function signUp({
     if (!data.user) return { error: new Error("No user returned") };
 
     // Org, organization_members, and (if driver) drivers row are created by DB trigger on auth.users INSERT.
-    return { error: null };
+    // email_confirmed_at is null when Supabase email confirmation is enabled.
+    const emailVerificationRequired = !data.user.email_confirmed_at;
+    return { error: null, emailVerificationRequired };
   } catch (e) {
     if (isNetworkError(e)) {
       return {
@@ -254,6 +266,11 @@ export async function signUp({
     }
     return { error: e instanceof Error ? e : new Error("Sign up failed") };
   }
+}
+
+export async function resendVerificationEmail(email: string): Promise<{ error: Error | null }> {
+  const { error } = await supabase().auth.resend({ type: 'signup', email });
+  return { error: error ? new Error(error.message) : null };
 }
 
 function isNetworkError(e: unknown): boolean {
