@@ -56,10 +56,94 @@ export function humanizeAssignerDisplayName(raw: string | null | undefined): str
 export type DriverInviteLite = {
   from_organization_id?: string | null;
   from_org_name?: string | null;
+  from_org_logo_url?: string | null;
+  from_org_avatar_url?: string | null;
+  from_org_avatar_seed?: string | null;
   commission_percent?: number | null;
   commission_per_km?: number | null;
   status?: string | null;
 };
+
+/** How the driver should treat this assignment (fleet payroll vs direct / partner). */
+export type JobCardAssignmentSourceKind =
+  | "your_fleet"
+  | "employer"
+  | "direct"
+  | "partner";
+
+export type JobCardAssignerPayload = {
+  kind: JobCardAssignmentSourceKind;
+  kindLabel: string;
+  linePrimary: string;
+  lineSecondary: string;
+  orgId: string;
+  orgName: string;
+  orgLogoUrl?: string | null;
+  orgAvatarSeed?: string | null;
+  orgAvatarUrl?: string | null;
+};
+
+export function resolveJobCardAssignmentSourceKind(
+  trip: TripRow,
+  driverOrganizationId: string | null | undefined,
+  flags: { requiresOtp: boolean; isAggregate: boolean; isRoster: boolean },
+  acceptedInviteForOrg: DriverInviteLite | null,
+): Pick<JobCardAssignerPayload, "kind" | "kindLabel"> {
+  const tripOrgId = (trip.organization_id ?? "").trim();
+  const driverOrgId = (driverOrganizationId ?? "").trim();
+  const isOwnFleet = Boolean(tripOrgId && driverOrgId && tripOrgId === driverOrgId);
+  const hasAcceptedEmployer =
+    acceptedInviteForOrg != null &&
+    String(acceptedInviteForOrg.status ?? "").toLowerCase() === "accepted";
+
+  if (flags.requiresOtp || flags.isAggregate) {
+    return { kind: "direct", kindLabel: "DIRECT TRIP" };
+  }
+  if (isOwnFleet) {
+    return { kind: "your_fleet", kindLabel: "YOUR FLEET" };
+  }
+  if (hasAcceptedEmployer || flags.isRoster) {
+    return { kind: "employer", kindLabel: "EMPLOYER" };
+  }
+  return { kind: "partner", kindLabel: "PARTNER FLEET" };
+}
+
+/** Structured assigner block for JobRequestCard (avatar + trip-source badge). */
+export function buildJobCardAssignerPayload(
+  trip: TripRow,
+  assigner: Pick<
+    AssignerDisplayResult,
+    "assignerLinePrimary" | "assignerLineSecondary" | "assignedByOrgName"
+  >,
+  driverOrganizationId: string | null | undefined,
+  inviteForOrg: DriverInviteLite | null,
+  flags: { requiresOtp: boolean; isAggregate: boolean; isRoster: boolean },
+  orgLogoFromDb?: string | null,
+): JobCardAssignerPayload {
+  const acceptedInvite =
+    inviteForOrg &&
+    String(inviteForOrg.status ?? "").toLowerCase() === "accepted"
+      ? inviteForOrg
+      : null;
+  const { kind, kindLabel } = resolveJobCardAssignmentSourceKind(
+    trip,
+    driverOrganizationId,
+    flags,
+    acceptedInvite,
+  );
+  const orgId = (trip.organization_id ?? "").trim();
+  return {
+    kind,
+    kindLabel,
+    linePrimary: assigner.assignerLinePrimary,
+    lineSecondary: assigner.assignerLineSecondary,
+    orgId,
+    orgName: assigner.assignedByOrgName,
+    orgLogoUrl: inviteForOrg?.from_org_logo_url ?? orgLogoFromDb ?? null,
+    orgAvatarSeed: inviteForOrg?.from_org_avatar_seed ?? null,
+    orgAvatarUrl: inviteForOrg?.from_org_avatar_url ?? null,
+  };
+}
 
 export type AssignerResolutionDeps = {
   assignmentActorByTripId: Record<string, string>;

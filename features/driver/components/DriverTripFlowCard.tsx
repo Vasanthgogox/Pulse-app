@@ -1,16 +1,30 @@
 import Theme from '@/constants/Theme';
 import { LoadingIndicator } from "@/components/LoadingIndicator";
+import {
+  FLOW_EMERALD,
+  FLOW_EMERALD_DARK,
+  FLOW_MINT,
+  HeroAssignerBlock,
+  HeroKindBadge,
+  sheetStyles,
+  TRIP_SHEET_TOP_RADIUS,
+  TripDetailsStrip,
+} from '@/components/driver/DriverTripSheetLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { useDriverChat } from '@/features/chat/contexts/DriverChatContext';
 import { sendDocumentShareMessage } from '@/features/chat/services/chat.service';
+import type { JobCardAssignerPayload } from '@/features/trips/utils/driverAssignerDisplay.util';
 import type { DriverFlowStepId as StepId } from '@/features/driver/utils/driverTripStatusNotes.util';
 import { deriveDriverFlowStepFromTrip } from '@/features/driver/utils/driverTripStatusNotes.util';
 import { isAggregateTrip } from '@/features/drivers/utils/driverUtils.util';
 import { formatINR } from '@/lib/format';
+import { formatEstimatedDuration } from '@/lib/formatEstimatedDuration';
 import * as tripDocumentsService from '@/features/trips/services/tripDocuments.service';
 import * as tripsService from '@/features/trips/services/trips.service';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Sparkles, Wallet } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -137,14 +151,6 @@ function titleForStep(step: StepId): string {
   return 'Trip completed';
 }
 
-function subtitleForStep(step: StepId, trip: tripsService.TripRow): string {
-  if (step === 'accepted') return trip.pickup_area?.trim() || 'Proceed to pickup';
-  if (step === 'pickup') return 'Collect the package';
-  if (step === 'transit') return trip.drop_location?.trim() || 'Proceed to drop-off';
-  if (step === 'reached') return 'Deliver the package';
-  return 'Nice work — you’re done.';
-}
-
 export interface DriverTripFlowCardProps {
   trip: tripsService.TripRow;
   /** Precomputed commission for non-aggregate trips (to match existing dashboard calc). */
@@ -168,6 +174,8 @@ export interface DriverTripFlowCardProps {
   onTripCompleted?: () => void;
   /** When true, remove horizontal margins so the card fits inside edge-to-edge bottom sheet. */
   edgeToEdge?: boolean;
+  /** Structured assigner (matches JobRequestCard hero). */
+  assignedBy?: JobCardAssignerPayload | null;
   /**
    * Visual mode.
    * - "card": default rounded card frame (used elsewhere)
@@ -264,6 +272,7 @@ export function DriverTripFlowCard({
   onBackToDashboard,
   onTripCompleted,
   edgeToEdge = false,
+  assignedBy = null,
   variant = 'card',
 }: DriverTripFlowCardProps) {
   const colors = useDriverThemeColors();
@@ -418,7 +427,43 @@ export function DriverTripFlowCard({
   const progressPct = useMemo(() => progressForStep(step), [step]);
   const stage = useMemo(() => stageForStep(step), [step]);
   const title = useMemo(() => titleForStep(step), [step]);
-  const subtitle = useMemo(() => subtitleForStep(step, localTrip), [step, localTrip]);
+
+  const showHeroAssigner = useMemo(() => {
+    if (!assignedBy) return false;
+    return Boolean(
+      assignedBy.linePrimary.trim() || assignedBy.lineSecondary.trim(),
+    );
+  }, [assignedBy]);
+
+  const tripDistanceLabel = useMemo(() => {
+    const d = localTrip.distance;
+    if (d != null && Number(d) > 0) return fmtKm(Number(d));
+    return '—';
+  }, [localTrip.distance]);
+
+  const tripEtaLabel = useMemo(() => {
+    const e = localTrip.estimated_duration;
+    if (e != null && String(e).trim() !== '' && !String(e).includes('00:00:00')) {
+      return formatEstimatedDuration(e);
+    }
+    return '—';
+  }, [localTrip.estimated_duration]);
+
+  const detailsStatLeft = useMemo(() => {
+    if (
+      (step === 'accepted' || step === 'transit') &&
+      distanceToTargetKm != null
+    ) {
+      const suffix = step === 'accepted' ? ' to pickup' : ' to drop';
+      return `${fmtKm(distanceToTargetKm)}${suffix}`;
+    }
+    return tripDistanceLabel;
+  }, [step, distanceToTargetKm, tripDistanceLabel]);
+
+  const pickupLabel = localTrip.pickup_area?.trim() || '—';
+  const dropLabel =
+    (localTrip.drop_location || (localTrip as { drop_area?: string }).drop_area)?.trim() ||
+    '—';
 
   const loadPodDocuments = useCallback(
     (opts?: { silent?: boolean }) => {
@@ -718,127 +763,118 @@ export function DriverTripFlowCard({
   return (
     <View
       style={[
-        variant === 'page'
-          ? styles.page
-          : [
-              styles.sheet,
-              styles.shadow,
-              {
-                marginHorizontal: edgeToEdge ? 0 : undefined,
-              },
-            ],
+        styles.sheet,
+        variant === 'page' || edgeToEdge ? styles.sheetEdgeToEdge : styles.sheetInset,
+        variant !== 'page' ? styles.shadow : null,
       ]}
     >
-      {variant === 'card' ? (
+      {variant === 'card' && !edgeToEdge ? (
         <View style={styles.handleWrap}>
           <View style={[styles.handleBar, { backgroundColor: Theme.border }]} />
         </View>
       ) : null}
 
       {step !== 'completed' ? (
-        <View style={styles.progressSegments}>
-          {[1, 2, 3, 4].map((i) => (
-            <View
-              key={i}
-              style={[
-                styles.progressSegment,
-                { backgroundColor: i <= stage ? colors.emerald : Theme.surfaceGray },
-              ]}
-            />
-          ))}
-        </View>
-      ) : null}
-
-      <View style={styles.titleBlock}>
-        <Text style={[styles.title, { color: Theme.textPrimaryDark }]} numberOfLines={1}>
-          {title}
-        </Text>
-        <Text style={[styles.subtitle, { color: Theme.textMuted }]} numberOfLines={2}>
-          {subtitle}
-        </Text>
-        {distanceToTargetKm != null && (step === 'accepted' || step === 'transit') ? (
-          <View style={[styles.distanceChip, { backgroundColor: colors.emeraldMuted }]}>
-            <FontAwesome name="location-arrow" size={10} color={colors.emerald} />
-            <Text style={[styles.distanceChipText, { color: colors.emerald }]}>
-              {fmtKm(distanceToTargetKm)}{' '}
-              <Text style={{ opacity: 0.7 }}>{step === 'accepted' ? 'to pickup' : 'to drop-off'}</Text>
-            </Text>
-          </View>
-        ) : null}
-      </View>
-
-      {/* Route: one tight row + thin strip with truck icon + live GPS when available */}
-      {step !== 'completed' && (localTrip.pickup_area || localTrip.drop_location) ? (
-        <View
-          style={[styles.routeCompactOuter, { borderColor: Theme.border, backgroundColor: Theme.surfaceLight }]}
+        <LinearGradient
+          colors={[FLOW_EMERALD_DARK, FLOW_EMERALD]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.flowHero}
         >
-          <View style={styles.routeOneRow}>
-            <View style={[styles.routeCompactDot, { backgroundColor: colors.emerald }]} />
-            <Text style={[styles.routePlaceText, { color: Theme.textPrimaryDark }]} numberOfLines={1}>
-              {localTrip.pickup_area?.trim() || '—'}
-            </Text>
-            <Text style={[styles.routeCompactSep, { color: Theme.textMuted }]}>→</Text>
-            <View style={[styles.routeCompactDot, { backgroundColor: '#f59e0b' }]} />
-            <Text style={[styles.routePlaceText, { color: Theme.textPrimaryDark }]} numberOfLines={1}>
-              {(localTrip.drop_location || (localTrip as any).drop_area)?.trim() || '—'}
-            </Text>
-            <View style={styles.routeTrail}>
-              {(localTrip.distance != null && Number(localTrip.distance) > 0) || localTrip.estimated_duration ? (
-                <Text style={[styles.routeTripMeta, { color: Theme.textMuted }]} numberOfLines={1}>
-                  {localTrip.distance != null && Number(localTrip.distance) > 0 ? fmtKm(Number(localTrip.distance)) : ''}
-                  {localTrip.distance != null && Number(localTrip.distance) > 0 && localTrip.estimated_duration ? ' · ' : ''}
-                  {localTrip.estimated_duration ? String(localTrip.estimated_duration) : ''}
-                </Text>
-              ) : null}
-              {driverLivePlaceText ? (
-                <View style={styles.routeGpsPill}>
-                  <FontAwesome name="truck" size={10} color={colors.emerald} />
-                  <Text
-                    style={[styles.routeDriverCoords, { color: Theme.textMuted }]}
-                    selectable={!!driverLocationLabel?.trim()}
-                    numberOfLines={2}
-                  >
-                    {driverLivePlaceText}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
+          <View style={styles.progressSegmentsHero}>
+            {[1, 2, 3, 4].map((i) => (
+              <View
+                key={i}
+                style={[
+                  styles.progressSegmentHero,
+                  {
+                    backgroundColor:
+                      i <= stage ? '#fff' : 'rgba(255,255,255,0.25)',
+                  },
+                ]}
+              />
+            ))}
           </View>
-        </View>
-      ) : null}
-
-      {stepError ? (
-        <View style={[styles.errorWrap, { backgroundColor: Theme.negativeMuted, borderColor: Theme.negative }]}>
-          <FontAwesome name="exclamation-circle" size={14} color={Theme.negative} />
-          <Text style={[styles.errorText, { color: Theme.negative }]} numberOfLines={3}>
-            {stepError}
-          </Text>
-        </View>
+          <View style={styles.heroTopRow}>
+            <View style={styles.heroEyebrowRow}>
+              <Sparkles size={9} color={FLOW_MINT} strokeWidth={2.5} />
+              <Text style={styles.heroEyebrow}>{title.toUpperCase()}</Text>
+            </View>
+            {assignedBy ? (
+              <HeroKindBadge kind={assignedBy.kind} label={assignedBy.kindLabel} />
+            ) : null}
+          </View>
+          <View style={styles.heroMainRow}>
+            <View
+              style={[
+                styles.heroEarningsBlock,
+                !showHeroAssigner && styles.heroEarningsBlockFull,
+              ]}
+            >
+              <View style={styles.heroIconWrap}>
+                <Wallet size={14} color={FLOW_EMERALD} strokeWidth={2.2} />
+              </View>
+              <View style={styles.heroTextBlock}>
+                <Text style={styles.heroAmount} numberOfLines={1}>
+                  {earnings}
+                </Text>
+                <Text style={styles.heroAmountLabel}>EST. EARNINGS</Text>
+              </View>
+            </View>
+            {showHeroAssigner && assignedBy ? (
+              <>
+                <View style={styles.heroColDivider} />
+                <HeroAssignerBlock assigner={assignedBy} />
+              </>
+            ) : null}
+          </View>
+        </LinearGradient>
       ) : null}
 
       {step !== 'completed' ? (
-        <>
-          {/* Communication action row */}
+        <View style={styles.flowBody}>
+          {(localTrip.pickup_area || localTrip.drop_location) ? (
+            <>
+              <Text style={[sheetStyles.sectionLabel, { color: Theme.textMuted }]}>
+                TRIP DETAILS
+              </Text>
+              <TripDetailsStrip
+                statLeft={detailsStatLeft}
+                statRight={tripEtaLabel}
+                pickup={pickupLabel}
+                dropoff={dropLabel}
+                locationLabel={driverLivePlaceText}
+              />
+            </>
+          ) : null}
+
+          {stepError ? (
+            <View style={[styles.errorWrap, { backgroundColor: Theme.negativeMuted, borderColor: Theme.negative }]}>
+              <FontAwesome name="exclamation-circle" size={12} color={Theme.negative} />
+              <Text style={[styles.errorText, { color: Theme.negative }]} numberOfLines={3}>
+                {stepError}
+              </Text>
+            </View>
+          ) : null}
+
           <View style={styles.actionIconsRow}>
-            {/* Phone — placeholder, disabled */}
             <TouchableOpacity
-              style={[styles.actionIconBtn, { backgroundColor: Theme.surfaceLight, borderColor: Theme.border, opacity: 0.35 }]}
+              style={[styles.actionIconBtn, { backgroundColor: Theme.screenBackground, borderColor: Theme.border, opacity: 0.35 }]}
               activeOpacity={0.8}
               disabled
               accessibilityLabel="Call (not available)"
             >
-              <FontAwesome name="phone" size={20} color={Theme.textPrimaryDark} />
+              <FontAwesome name="phone" size={16} color={Theme.textPrimaryDark} />
             </TouchableOpacity>
 
-            {/* Trip messages — full-screen driver chat (same UI as Messages tab) */}
             <View style={styles.actionIconBtnWrap}>
               <TouchableOpacity
-                style={[styles.actionIconBtn, { backgroundColor: Theme.surfaceLight, borderColor: Theme.border }]}
+                style={[styles.actionIconBtn, { backgroundColor: Theme.screenBackground, borderColor: Theme.border }]}
                 activeOpacity={0.8}
                 onPress={() => router.push(`/(driver)/chat?tripId=${encodeURIComponent(localTrip.id)}`)}
                 accessibilityLabel="Open trip messages"
               >
-                <FontAwesome name="comment-o" size={20} color={Theme.textPrimaryDark} />
+                <FontAwesome name="comment-o" size={16} color={Theme.textPrimaryDark} />
               </TouchableOpacity>
               {tripChatUnread > 0 ? (
                 <View style={[styles.messageBadge, { backgroundColor: colors.emerald }]}>
@@ -847,9 +883,8 @@ export function DriverTripFlowCard({
               ) : null}
             </View>
 
-            {/* POD / stage photo — uploads also post to the trip message thread */}
             <TouchableOpacity
-              style={[styles.actionIconBtn, { backgroundColor: Theme.surfaceLight, borderColor: Theme.border }]}
+              style={[styles.actionIconBtn, { backgroundColor: Theme.screenBackground, borderColor: Theme.border }]}
               activeOpacity={0.8}
               onPress={step === 'reached' ? uploadPod : uploadStagePhoto}
               disabled={stagePhotoUploading || podUploading}
@@ -858,47 +893,68 @@ export function DriverTripFlowCard({
               {stagePhotoUploading || podUploading ? (
                 <LoadingIndicator size="small" color={Theme.textPrimaryDark} />
               ) : (
-                <FontAwesome name="camera" size={20} color={Theme.textPrimaryDark} />
+                <FontAwesome name="camera" size={16} color={Theme.textPrimaryDark} />
               )}
             </TouchableOpacity>
           </View>
-        </>
-      ) : null}
 
-      {step === 'accepted' ? (
-        <TouchableOpacity
-          style={[styles.primaryBtn, { backgroundColor: Theme.textPrimaryDark }, stepLoading && styles.btnDisabled]}
-          onPress={confirmArrival}
-          disabled={stepLoading}
-          activeOpacity={0.9}
-        >
-          <FontAwesome name="check-circle" size={18} color={Theme.textOnPrimary} />
-          <Text style={styles.primaryBtnText}>{stepLoading ? 'Updating…' : 'Arrived at pickup'}</Text>
-        </TouchableOpacity>
-      ) : null}
+          {step === 'accepted' ? (
+            <TouchableOpacity
+              style={[styles.primaryBtnWrap, stepLoading && styles.btnDisabled]}
+              onPress={confirmArrival}
+              disabled={stepLoading}
+              activeOpacity={0.88}
+            >
+              <LinearGradient
+                colors={[FLOW_EMERALD, FLOW_EMERALD_DARK]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.primaryGradient}
+              >
+                <FontAwesome name="check-circle" size={14} color="#fff" />
+                <Text style={styles.primaryBtnText}>{stepLoading ? 'Updating…' : 'Arrived at pickup'}</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          ) : null}
 
-      {step === 'pickup' ? (
-        <TouchableOpacity
-          style={[styles.primaryBtn, { backgroundColor: Theme.textPrimaryDark }, stepLoading && styles.btnDisabled]}
-          onPress={engageTransit}
-          disabled={stepLoading}
-          activeOpacity={0.9}
-        >
-          <FontAwesome name="archive" size={18} color={Theme.textOnPrimary} />
-          <Text style={styles.primaryBtnText}>{stepLoading ? 'Updating…' : 'Package collected'}</Text>
-        </TouchableOpacity>
-      ) : null}
+          {step === 'pickup' ? (
+            <TouchableOpacity
+              style={[styles.primaryBtnWrap, stepLoading && styles.btnDisabled]}
+              onPress={engageTransit}
+              disabled={stepLoading}
+              activeOpacity={0.88}
+            >
+              <LinearGradient
+                colors={[FLOW_EMERALD, FLOW_EMERALD_DARK]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.primaryGradient}
+              >
+                <FontAwesome name="archive" size={14} color="#fff" />
+                <Text style={styles.primaryBtnText}>{stepLoading ? 'Updating…' : 'Package collected'}</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          ) : null}
 
-      {step === 'transit' ? (
-        <TouchableOpacity
-          style={[styles.primaryBtn, { backgroundColor: Theme.textPrimaryDark }, stepLoading && styles.btnDisabled]}
-          onPress={confirmReached}
-          disabled={stepLoading}
-          activeOpacity={0.9}
-        >
-          <FontAwesome name="map-marker" size={18} color={Theme.textOnPrimary} />
-          <Text style={styles.primaryBtnText}>{stepLoading ? 'Updating…' : 'Arrived at drop-off'}</Text>
-        </TouchableOpacity>
+          {step === 'transit' ? (
+            <TouchableOpacity
+              style={[styles.primaryBtnWrap, stepLoading && styles.btnDisabled]}
+              onPress={confirmReached}
+              disabled={stepLoading}
+              activeOpacity={0.88}
+            >
+              <LinearGradient
+                colors={[FLOW_EMERALD, FLOW_EMERALD_DARK]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.primaryGradient}
+              >
+                <FontAwesome name="map-marker" size={14} color="#fff" />
+                <Text style={styles.primaryBtnText}>{stepLoading ? 'Updating…' : 'Arrived at drop-off'}</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          ) : null}
+        </View>
       ) : null}
 
       {step === 'reached' ? (
@@ -1117,28 +1173,23 @@ export function DriverTripFlowCard({
 
 const styles = StyleSheet.create({
   sheet: {
+    borderTopLeftRadius: TRIP_SHEET_TOP_RADIUS,
+    borderTopRightRadius: TRIP_SHEET_TOP_RADIUS,
+    overflow: 'hidden',
+    backgroundColor: Theme.surface,
+  },
+  sheetInset: {
     marginHorizontal: 16,
     marginBottom: 8,
-    borderRadius: 24,
-    overflow: 'hidden',
-    backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
-    paddingHorizontal: 24,
-    paddingBottom: 18,
-    paddingTop: 12,
   },
-  /** Frameless container so the bottom sheet itself becomes the only "panel". */
+  sheetEdgeToEdge: {
+    marginHorizontal: 0,
+    marginBottom: 0,
+  },
+  /** Legacy — sheet chrome now lives on `sheet` for page/map mode too. */
   page: {
     marginHorizontal: 0,
     marginBottom: 0,
-    borderRadius: 0,
-    overflow: 'visible',
-    backgroundColor: 'transparent',
-    borderWidth: 0,
-    paddingHorizontal: 16,
-    paddingBottom: 0,
-    paddingTop: 8,
   },
   shadow: {
     shadowColor: '#000',
@@ -1149,117 +1200,152 @@ const styles = StyleSheet.create({
   },
   handleWrap: { alignItems: 'center', paddingBottom: 8 },
   handleBar: { width: 36, height: 4, borderRadius: 999, opacity: 0.5 },
-  progressSegments: { flexDirection: 'row', gap: 8, width: '100%', marginBottom: 8 },
-  progressSegment: { height: 6, flex: 1, borderRadius: 999 },
-  titleBlock: { alignItems: 'center', paddingBottom: 6 },
-  title: { fontSize: 22, fontWeight: '900', letterSpacing: -0.5, textAlign: 'center' },
-  subtitle: { marginTop: 4, fontSize: 14, fontWeight: '600', textAlign: 'center', opacity: 0.8 },
-  distanceChip: {
+  flowHero: {
+    paddingTop: 14,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    gap: 8,
+  },
+  progressSegmentsHero: {
+    flexDirection: 'row',
+    gap: 5,
+    width: '100%',
+  },
+  progressSegmentHero: {
+    height: 4,
+    flex: 1,
+    borderRadius: 999,
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  heroEyebrowRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    marginTop: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 20,
-  },
-  distanceChipText: { fontSize: 12, fontWeight: '800' },
-  routeCompactOuter: {
-    width: '100%',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    marginBottom: 4,
-    marginTop: 2,
-    overflow: 'hidden',
-  },
-  routeOneRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    width: '100%',
-    flexWrap: 'nowrap',
-  },
-  routeCompactDot: { width: 6, height: 6, borderRadius: 3, flexShrink: 0 },
-  routePlaceText: {
-    fontSize: 10,
-    fontWeight: '700',
-    flexGrow: 1,
-    flexBasis: 0,
-    minWidth: 40,
-  },
-  routeCompactSep: { fontSize: 10, fontWeight: '800', flexShrink: 0, opacity: 0.85 },
-  routeTrail: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    flexWrap: 'wrap',
-    flexShrink: 1,
+    flex: 1,
     minWidth: 0,
-    marginLeft: 4,
-    gap: 5,
-    maxWidth: '46%',
-    rowGap: 2,
   },
-  routeTripMeta: {
-    fontSize: 9,
-    fontWeight: '700',
-    textAlign: 'right',
+  heroEyebrow: {
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 0.9,
+    color: FLOW_MINT,
+    textTransform: 'uppercase',
+  },
+  heroMainRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    minWidth: 0,
+  },
+  heroEarningsBlock: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minWidth: 0,
+  },
+  heroEarningsBlockFull: {
+    flex: 1,
+  },
+  heroColDivider: {
+    width: StyleSheet.hairlineWidth,
+    height: 30,
+    backgroundColor: 'rgba(255,255,255,0.28)',
+    alignSelf: 'center',
     flexShrink: 0,
-    maxWidth: '100%',
   },
-  routeGpsPill: {
-    flexDirection: 'row',
+  heroIconWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 9,
+    backgroundColor: '#fff',
     alignItems: 'center',
-    gap: 4,
-    flexShrink: 1,
-    minWidth: 0,
-    maxWidth: '100%',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
-  routeDriverCoords: {
-    fontSize: 9,
-    fontWeight: '600',
-    fontVariant: ['tabular-nums'],
-    flexShrink: 1,
+  heroTextBlock: {
+    flex: 1,
     minWidth: 0,
-    textAlign: 'right',
+    gap: 1,
   },
-  actionIconsRow: { flexDirection: 'row', gap: 12, paddingTop: 2, paddingBottom: 4 },
+  heroAmount: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#fff',
+    letterSpacing: -0.25,
+    lineHeight: 18,
+  },
+  heroAmountLabel: {
+    fontSize: 6,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    color: FLOW_MINT,
+    textTransform: 'uppercase',
+  },
+  flowBody: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 10,
+    gap: 6,
+    backgroundColor: Theme.surface,
+  },
+  actionIconsRow: { flexDirection: 'row', gap: 8 },
   actionIconBtnWrap: { flex: 1, position: 'relative' },
   messageBadge: {
     position: 'absolute',
     top: -4,
     right: -2,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    paddingHorizontal: 5,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 4,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  messageBadgeText: { fontSize: 10, fontWeight: '900', color: '#fff' },
+  messageBadgeText: { fontSize: 9, fontWeight: '900', color: '#fff' },
   actionIconBtn: {
     flex: 1,
-    height: 48,
-    borderWidth: 1,
-    borderRadius: 16,
+    height: 38,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  primaryBtn: {
-    marginTop: 6,
-    paddingVertical: 15,
-    borderRadius: 18,
+  primaryBtnWrap: {
+    borderRadius: 9,
+    overflow: 'hidden',
+  },
+  primaryGradient: {
+    minHeight: 38,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 8,
+    paddingHorizontal: 12,
   },
-  primaryBtnText: { fontSize: 16, fontWeight: '900', letterSpacing: 0.2, color: Theme.textOnPrimary },
+  primaryBtnText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.1, color: '#fff' },
+  primaryBtn: {
+    marginTop: 6,
+    paddingVertical: 12,
+    borderRadius: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
   btnDisabled: { opacity: 0.7 },
 
-  reachedBlock: { paddingTop: 2 },
+  reachedBlock: {
+    paddingTop: 2,
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+    backgroundColor: Theme.surface,
+  },
   podCard: { borderWidth: 1, borderRadius: 18, padding: 12 },
   podHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 10 },
   podTitle: { fontSize: 12, fontWeight: '900', letterSpacing: 0.5, textTransform: 'uppercase' },
@@ -1367,7 +1453,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   errorText: { fontSize: 12, fontWeight: '700', flex: 1 },
-  completedBlock: { paddingTop: 2 },
+  completedBlock: {
+    paddingTop: 2,
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+    backgroundColor: Theme.surface,
+  },
   earningsCard: { borderWidth: 1, borderRadius: 18, padding: 14, alignItems: 'center' },
   completedTitle: { marginTop: 8, fontSize: 17, fontWeight: '900' },
   completedSubtitle: { marginTop: 4, fontSize: 12, fontWeight: '700' },

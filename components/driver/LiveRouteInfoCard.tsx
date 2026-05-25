@@ -1,10 +1,13 @@
 /**
- * Floating “Live route” panel on the driver map — distance, ETA, arrival.
+ * Floating “Live route” panel on the driver map — aligned with trip sheet card UI.
  */
+import { sheetStyles } from "@/components/driver/DriverTripSheetLayout";
+import Theme from "@/constants/Theme";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { LinearGradient } from "expo-linear-gradient";
+import { Clock, Navigation, Sparkles } from "lucide-react-native";
 import React, { useEffect } from "react";
-import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
 import Reanimated, {
   cancelAnimation,
   Easing,
@@ -32,8 +35,11 @@ type Props = {
   etaDisplay: string;
   arrivalClock: string | null;
   bottomHint?: string;
-  onDismiss: () => void;
 };
+
+const EMERALD = Theme.driverEmerald;
+const EMERALD_DARK = Theme.driverEmeraldDark;
+const MINT = "rgba(167,243,208,0.92)";
 
 export function LiveRouteInfoCard({
   colors,
@@ -42,7 +48,6 @@ export function LiveRouteInfoCard({
   etaDisplay,
   arrivalClock,
   bottomHint,
-  onDismiss,
 }: Props) {
   const pulse = useSharedValue(0.55);
 
@@ -65,90 +70,52 @@ export function LiveRouteInfoCard({
   const dist = distanceDisplay ?? "—";
 
   return (
-    <View
-      style={[
-        styles.card,
-        {
-          backgroundColor: colors.surface,
-          borderColor: colors.border,
-        },
-      ]}
-    >
+    <View style={styles.shell}>
       <LinearGradient
-        colors={[colors.emerald, "#14b8a6"]}
-        start={{ x: 0, y: 0.5 }}
-        end={{ x: 1, y: 0.5 }}
-        style={styles.accentBar}
-      />
+        colors={[EMERALD_DARK, EMERALD]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.hero}
+      >
+        <View style={styles.heroEyebrowRow}>
+          <Sparkles size={8} color={MINT} strokeWidth={2.5} />
+          <Text style={styles.heroEyebrow}>LIVE ROUTE</Text>
+        </View>
+        <Text style={styles.heroSubtitle} numberOfLines={1}>
+          Remaining to {toLabel}
+        </Text>
+      </LinearGradient>
 
-      <View style={styles.inner}>
-        <View style={styles.headerRow}>
-          <View style={styles.headerLeft}>
-            <View style={[styles.headerIconWrap, { backgroundColor: colors.emeraldMuted }]}>
-              <FontAwesome name="crosshairs" size={13} color={colors.emerald} />
+      <View style={[styles.body, { backgroundColor: colors.surface }]}>
+        <View style={sheetStyles.tripDetailsCard}>
+          <View style={sheetStyles.statsInline}>
+            <View style={sheetStyles.statChip}>
+              <Navigation size={10} color={EMERALD} strokeWidth={2.2} />
+              <Text style={[sheetStyles.statValue, { color: colors.text }]}>
+                {dist}
+              </Text>
             </View>
-            <View style={styles.headerTitles}>
-              <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
-                Live route
+            <View style={sheetStyles.statDivider} />
+            <View style={sheetStyles.statChip}>
+              <Clock size={10} color={EMERALD} strokeWidth={2.2} />
+              <Text style={[sheetStyles.statValue, { color: colors.text }]}>
+                {etaDisplay}
               </Text>
             </View>
           </View>
-          <TouchableOpacity
-            onPress={onDismiss}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            style={[styles.closeBtn, { backgroundColor: colors.emeraldMuted }]}
-            accessibilityLabel="Dismiss tracking details"
-            accessibilityRole="button"
-          >
-            <FontAwesome name="times" size={14} color={colors.textMuted} />
-          </TouchableOpacity>
+          {arrivalClock ? (
+            <>
+              <View style={sheetStyles.tripDetailsDivider} />
+              <View style={styles.arrivalRow}>
+                <FontAwesome name="flag-checkered" size={10} color={EMERALD} />
+                <Text style={[styles.arrivalText, { color: EMERALD }]} numberOfLines={1}>
+                  Arrive ~{arrivalClock}
+                </Text>
+                <Reanimated.View style={[styles.liveDot, pulseStyle]} />
+              </View>
+            </>
+          ) : null}
         </View>
-
-        <Text style={[styles.kicker, { color: colors.textMuted }]} numberOfLines={1}>
-          {`Remaining to ${toLabel}`}
-        </Text>
-
-        <View style={styles.metricRow}>
-          <View style={[styles.metricTile, { borderColor: colors.border, backgroundColor: colors.emeraldMuted }]}>
-            <View style={styles.metricTileTop}>
-              <FontAwesome name="road" size={11} color={colors.emerald} />
-              <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Distance</Text>
-            </View>
-            <Text style={[styles.metricValue, { color: colors.text }]} numberOfLines={1}>
-              {dist}
-            </Text>
-          </View>
-          <View style={[styles.metricTile, { borderColor: colors.border, backgroundColor: colors.emeraldMuted }]}>
-            <View style={styles.metricTileTop}>
-              <FontAwesome name="clock-o" size={11} color={colors.emerald} />
-              <Text style={[styles.metricLabel, { color: colors.textMuted }]}>ETA</Text>
-            </View>
-            <Text style={[styles.metricValue, { color: colors.text }]} numberOfLines={1}>
-              {etaDisplay}
-            </Text>
-          </View>
-        </View>
-
-        <View style={[styles.progressTrack, { backgroundColor: colors.emeraldMuted }]}>
-          <Reanimated.View style={[styles.progressFillClip, pulseStyle]}>
-            <LinearGradient
-              colors={[colors.emerald, "#34d399"]}
-              start={{ x: 0, y: 0.5 }}
-              end={{ x: 1, y: 0.5 }}
-              style={StyleSheet.absoluteFillObject}
-            />
-          </Reanimated.View>
-        </View>
-
-        {arrivalClock ? (
-          <View style={styles.arrivalRow}>
-            <FontAwesome name="flag-checkered" size={12} color={colors.emerald} />
-            <Text style={[styles.arrivalText, { color: colors.emerald }]} numberOfLines={1}>
-              {`~ arrive by ${arrivalClock}`}
-            </Text>
-          </View>
-        ) : null}
-
         {bottomHint ? (
           <Text style={[styles.hint, { color: colors.textMuted }]}>{bottomHint}</Text>
         ) : null}
@@ -158,129 +125,78 @@ export function LiveRouteInfoCard({
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: 22,
-    borderWidth: StyleSheet.hairlineWidth,
+  shell: {
+    borderRadius: 10,
     overflow: "hidden",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.border,
     ...(Platform.OS === "ios"
       ? {
           shadowColor: "#0f172a",
-          shadowOffset: { width: 0, height: 10 },
-          shadowOpacity: 0.14,
-          shadowRadius: 22,
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.1,
+          shadowRadius: 10,
         }
-      : { elevation: 8 }),
+      : { elevation: 4 }),
   },
-  accentBar: {
-    height: 3,
-    width: "100%",
-  },
-  inner: {
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 12,
-    gap: 10,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-  headerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    flex: 1,
-    minWidth: 0,
-  },
-  headerIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerTitles: {
-    flex: 1,
-    minWidth: 0,
-    justifyContent: "center",
-  },
-  title: {
-    fontSize: 15,
-    fontWeight: "800",
-    letterSpacing: -0.35,
-  },
-  closeBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  kicker: {
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 1.05,
-    textTransform: "uppercase",
-    marginTop: -2,
-  },
-  metricRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  metricTile: {
-    flex: 1,
-    minWidth: 0,
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
+  hero: {
+    paddingTop: 8,
     paddingHorizontal: 10,
-    paddingVertical: 9,
-    gap: 6,
+    paddingBottom: 8,
+    gap: 4,
   },
-  metricTileTop: {
+  heroEyebrowRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
+    flex: 1,
+    minWidth: 0,
   },
-  metricLabel: {
-    fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 0.2,
-  },
-  metricValue: {
-    fontSize: 15,
+  heroEyebrow: {
+    fontSize: 8,
     fontWeight: "800",
-    letterSpacing: -0.4,
+    letterSpacing: 0.8,
+    color: MINT,
+    textTransform: "uppercase",
   },
-  progressTrack: {
-    height: 5,
-    borderRadius: 999,
-    overflow: "hidden",
-    opacity: 0.95,
+  heroSubtitle: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#fff",
+    lineHeight: 14,
+    paddingLeft: 18,
   },
-  progressFillClip: {
-    height: "100%",
-    width: "72%",
-    borderRadius: 999,
-    overflow: "hidden",
+  body: {
+    paddingHorizontal: 8,
+    paddingTop: 6,
+    paddingBottom: 8,
+    gap: 5,
   },
   arrivalRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginTop: -2,
+    gap: 6,
+    minHeight: 28,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
   },
   arrivalText: {
     flex: 1,
-    fontSize: 12,
+    minWidth: 0,
+    fontSize: 10,
     fontWeight: "800",
     letterSpacing: -0.1,
   },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: EMERALD,
+  },
   hint: {
-    fontSize: 11,
+    fontSize: 9,
     fontWeight: "600",
-    lineHeight: 15,
-    marginTop: -4,
+    lineHeight: 12,
+    paddingHorizontal: 2,
   },
 });

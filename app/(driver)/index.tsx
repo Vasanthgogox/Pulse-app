@@ -1,6 +1,10 @@
 import { AppLoadingSplash } from "@/components/AppLoadingSplash";
 import { DriverHeader } from "@/components/driver/DriverHeader";
 import { LiveRouteInfoCard } from "@/components/driver/LiveRouteInfoCard";
+import {
+  sheetStyles,
+  TripDetailsStrip,
+} from "@/components/driver/DriverTripSheetLayout";
 import { DriverInviteCard } from "@/components/driver/DriverInviteCard";
 import {
     LeafletMap,
@@ -25,6 +29,7 @@ import { getLatestAssignmentAuditByTripIds } from "@/features/trips/services/tri
 import { useDriverAvatarUri } from "@/lib/avatarUpload";
 import {
     buildAssignerDisplayForTrip,
+    buildJobCardAssignerPayload,
     resolveAssignerUserId,
 } from "@/features/trips/utils/driverAssignerDisplay.util";
 import {
@@ -130,6 +135,34 @@ const DEFAULT_MAP_REGION = {
 
 const DRIVER_MAP_BOOT_KEY = "@q-mobile/driver-map-native-booting";
 const DRIVER_MAP_BOOT_TS_KEY = "@q-mobile/driver-map-native-boot-ts";
+
+const MAP_CONTROLS_BAR_HEIGHT = 32;
+const MAP_CONTROLS_BELOW_TOP = 6;
+
+function mapControlsTopInset(
+  controlsVariant: "modal" | "embedded",
+  safeTop: number,
+): number {
+  return (
+    (controlsVariant === "embedded" ? safeTop + 96 : safeTop + 10) +
+    MAP_CONTROLS_BAR_HEIGHT +
+    MAP_CONTROLS_BELOW_TOP
+  );
+}
+
+function mapControlsBarTop(
+  controlsVariant: "modal" | "embedded",
+  safeTop: number,
+): number {
+  return controlsVariant === "embedded" ? safeTop + 96 : safeTop + 10;
+}
+
+function mapTrackingCardTop(
+  controlsVariant: "modal" | "embedded",
+  safeTop: number,
+): number {
+  return mapControlsBarTop(controlsVariant, safeTop) + MAP_CONTROLS_BAR_HEIGHT + 4;
+}
 
 /** Trip is in progress so "Accept" does not reappear after refresh (includes started_at). */
 function isTripInProgress(t: tripsService.TripRow) {
@@ -486,6 +519,9 @@ export default function DriverRadarScreen() {
     Record<string, string>
   >({});
   const [organizationNamesById, setOrganizationNamesById] = useState<
+    Record<string, string>
+  >({});
+  const [organizationLogoById, setOrganizationLogoById] = useState<
     Record<string, string>
   >({});
   const [assignmentActorByTripId, setAssignmentActorByTripId] = useState<
@@ -1604,6 +1640,85 @@ export default function DriverRadarScreen() {
     incomingNotificationsWithMeta.find(
       (item) => item.trip.id === effectiveFirstIncoming?.id,
     ) ?? null;
+  const buildAssignerPayloadForTrip = useCallback(
+    (trip: tripsService.TripRow, requiresOtp: boolean) => {
+      const fromList = incomingNotificationsWithMeta.find(
+        (item) => item.trip.id === trip.id,
+      );
+      const assignerDisplay =
+        fromList != null
+          ? {
+              assignerLinePrimary: fromList.assignerLinePrimary,
+              assignerLineSecondary: fromList.assignerLineSecondary,
+              assignedByOrgName: fromList.assignedByOrgName,
+            }
+          : buildAssignerDisplayForTrip(
+              trip,
+              invites,
+              driver?.organization_id,
+              {
+                assignmentActorByTripId: effectiveAssignmentActorByTripId,
+                assignerNamesByUserId,
+                assignerOrgNameByUserId,
+                assignerDisplayByTripId,
+                assignerTripOrgNameByTripId,
+                organizationNamesById: mergedOrganizationNamesById,
+              },
+            );
+      const inviteForTrip =
+        invites.find(
+          (i) =>
+            (i.from_organization_id ?? "").trim() ===
+            (trip.organization_id ?? "").trim(),
+        ) ?? null;
+      const tripOrgId = (trip.organization_id ?? "").trim();
+      return buildJobCardAssignerPayload(
+        trip,
+        assignerDisplay,
+        driver?.organization_id,
+        inviteForTrip,
+        {
+          requiresOtp,
+          isAggregate: isAggregateTrip(trip),
+          isRoster: isRosterTrip(trip),
+        },
+        organizationLogoById[tripOrgId] ?? null,
+      );
+    },
+    [
+      incomingNotificationsWithMeta,
+      invites,
+      driver?.organization_id,
+      effectiveAssignmentActorByTripId,
+      assignerNamesByUserId,
+      assignerOrgNameByUserId,
+      assignerDisplayByTripId,
+      assignerTripOrgNameByTripId,
+      mergedOrganizationNamesById,
+      organizationLogoById,
+    ],
+  );
+  const jobCardAssigner = useMemo(
+    () =>
+      effectiveFirstIncoming
+        ? buildAssignerPayloadForTrip(
+            effectiveFirstIncoming,
+            firstIncomingRequiresOtp,
+          )
+        : null,
+    [
+      effectiveFirstIncoming,
+      firstIncomingRequiresOtp,
+      buildAssignerPayloadForTrip,
+    ],
+  );
+  const activeFlowAssigner = useMemo(
+    () =>
+      activeMission
+        ? buildAssignerPayloadForTrip(activeMission, false)
+        : null,
+    [activeMission, buildAssignerPayloadForTrip],
+  );
   const assignerLineForJobCard = useMemo(() => {
     if (!effectiveFirstIncoming) return null;
     const fromList = incomingNotificationsWithMeta.find(
@@ -1668,6 +1783,7 @@ export default function DriverRadarScreen() {
           setAssignerDisplayByTripId({});
           setAssignerTripOrgNameByTripId({});
           setOrganizationNamesById({});
+          setOrganizationLogoById({});
         }
         return;
       }
@@ -1816,18 +1932,28 @@ export default function DriverRadarScreen() {
       if (organizationIds.length > 0) {
         const { data, error } = await supabase()
           .from("organizations")
-          .select("id, name")
+          .select("id, name, logo_url")
           .in("id", organizationIds);
         if (!cancelled && !error) {
           const byId: Record<string, string> = {};
+          const logosById: Record<string, string> = {};
           for (const row of
-            (data ?? []) as Array<{ id: string; name?: string | null }>) {
-            byId[row.id] = (row.name ?? "").trim();
+            (data ?? []) as Array<{
+              id: string;
+              name?: string | null;
+              logo_url?: string | null;
+            }>) {
+            const name = (row.name ?? "").trim();
+            if (name) byId[row.id] = name;
+            const logo = (row.logo_url ?? "").trim();
+            if (logo) logosById[row.id] = logo;
           }
           setOrganizationNamesById(byId);
+          setOrganizationLogoById(logosById);
         }
       } else if (!cancelled) {
         setOrganizationNamesById({});
+        setOrganizationLogoById({});
       }
     };
     void loadAssignmentSources();
@@ -3673,7 +3799,7 @@ export default function DriverRadarScreen() {
               {controlsVariant === "embedded" ? (
                 <TouchableOpacity
                   style={[
-                    styles.mapTopPillButton,
+                    styles.mapTopIconBtn,
                     { backgroundColor: colors.surface, borderColor: colors.border },
                   ]}
                   onPress={() => {
@@ -3691,18 +3817,12 @@ export default function DriverRadarScreen() {
                   accessibilityLabel="Open full screen map"
                   accessibilityRole="button"
                 >
-                  <FontAwesome name="expand" size={15} color={colors.text} />
-                  <Text
-                    style={[styles.mapTopPillLabel, { color: colors.text }]}
-                    numberOfLines={1}
-                  >
-                    Full view
-                  </Text>
+                  <FontAwesome name="expand" size={12} color={colors.text} />
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity
                   style={[
-                    styles.mapTopPillButton,
+                    styles.mapTopIconBtn,
                     { backgroundColor: colors.surface, borderColor: colors.border },
                   ]}
                   onPress={() => {
@@ -3717,17 +3837,11 @@ export default function DriverRadarScreen() {
                   accessibilityLabel="Close full screen map"
                   accessibilityRole="button"
                 >
-                  <FontAwesome name="compress" size={15} color={colors.text} />
-                  <Text
-                    style={[styles.mapTopPillLabel, { color: colors.text }]}
-                    numberOfLines={1}
-                  >
-                    Done
-                  </Text>
+                  <FontAwesome name="compress" size={12} color={colors.text} />
                 </TouchableOpacity>
               )}
 
-              {/* Right group: Route icon + Driver location icon + Tracking pill */}
+              {/* Right group: Route + driver GPS + live tracking */}
               <View style={styles.mapTopRightGroup}>
                 {/* Route button — fit to full route + toggle summary panel */}
                 {(activeMission || effectiveFirstIncoming) &&
@@ -3769,7 +3883,7 @@ export default function DriverRadarScreen() {
                   >
                     <FontAwesome
                       name="map-o"
-                      size={15}
+                      size={12}
                       color={
                         showRouteSummary ? "#fff" : colors.text
                       }
@@ -3777,7 +3891,6 @@ export default function DriverRadarScreen() {
                   </TouchableOpacity>
                 ) : null}
 
-                {/* Driver location button — zoom to current GPS */}
                 <TouchableOpacity
                   style={[
                     styles.mapTopIconBtn,
@@ -3788,40 +3901,55 @@ export default function DriverRadarScreen() {
                   accessibilityLabel="Center on my location"
                   accessibilityRole="button"
                 >
-                  <FontAwesome name="street-view" size={15} color={colors.text} />
+                  <FontAwesome name="street-view" size={12} color={colors.text} />
                 </TouchableOpacity>
 
-                {/* Tracking pill (existing) */}
                 <TouchableOpacity
                   style={[
-                    styles.mapTopPillButton,
-                    { backgroundColor: colors.surface, borderColor: colors.border },
+                    styles.mapTopIconBtn,
+                    {
+                      backgroundColor:
+                        showTrackingInfoCard || isFollowingLocation
+                          ? colors.emerald
+                          : colors.surface,
+                      borderColor:
+                        showTrackingInfoCard || isFollowingLocation
+                          ? colors.emerald
+                          : colors.border,
+                    },
                   ]}
                   onPress={async () => {
                     setShowRouteSummary(false);
+                    if (showTrackingInfoCard) {
+                      setShowTrackingInfoCard(false);
+                      setIsFollowingLocation(false);
+                      return;
+                    }
                     setShowTrackingInfoCard(true);
                     const ok = await handleFocusCurrentLocation();
                     if (ok) setIsFollowingLocation(true);
                   }}
-                  onLongPress={() => {
-                    setIsFollowingLocation(false);
-                    setShowTrackingInfoCard(false);
-                  }}
-                  accessibilityLabel="Track current location"
+                  accessibilityLabel={
+                    showTrackingInfoCard
+                      ? "Close live route details"
+                      : "Show live route details"
+                  }
                   accessibilityRole="button"
                   disabled={isFetchingLocation}
                 >
                   {isFetchingLocation ? (
                     <ActivityIndicator size="small" color={Theme.primary} />
                   ) : (
-                    <FontAwesome name="crosshairs" size={17} color={colors.text} />
+                    <FontAwesome
+                      name="crosshairs"
+                      size={12}
+                      color={
+                        showTrackingInfoCard || isFollowingLocation
+                          ? "#fff"
+                          : colors.text
+                      }
+                    />
                   )}
-                  <Text
-                    style={[styles.mapTopPillLabel, { color: colors.text }]}
-                    numberOfLines={1}
-                  >
-                    {isFollowingLocation ? "Tracking" : "My location"}
-                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -3841,9 +3969,7 @@ export default function DriverRadarScreen() {
                       : null;
                   const etaText = formatEtaFromRouteSeconds(optimalRoute?.duration);
                   const arrivalClock = formatEtaArrivalClock(optimalRoute?.duration);
-                  const cardTop =
-                    (controlsVariant === "embedded" ? insets.top + 96 : insets.top + 10) +
-                    54;
+                  const cardTop = mapTrackingCardTop(controlsVariant, insets.top);
                   const bottomHint =
                     !arrivalClock && !activeMission
                       ? "Start the trip to see live ETA from your location."
@@ -3855,7 +3981,9 @@ export default function DriverRadarScreen() {
                       pointerEvents="box-none"
                       style={[
                         styles.trackingInfoCardWrap,
-                        { top: cardTop, right: Layout.screenPaddingHorizontal },
+                        {
+                          top: cardTop,
+                        },
                       ]}
                     >
                       <LiveRouteInfoCard
@@ -3865,7 +3993,6 @@ export default function DriverRadarScreen() {
                         etaDisplay={etaText ?? "—"}
                         arrivalClock={arrivalClock}
                         bottomHint={bottomHint}
-                        onDismiss={() => setShowTrackingInfoCard(false)}
                       />
                     </View>
                   );
@@ -3875,102 +4002,40 @@ export default function DriverRadarScreen() {
             {/* Route summary panel — readable pickup/drop addresses */}
             {showRouteSummary && (activeMission || effectiveFirstIncoming) ? (() => {
               const trip = (activeMission || effectiveFirstIncoming) as tripsService.TripRow;
+              const routeDist =
+                optimalRoute?.distance != null
+                  ? formatRoadDistanceM(optimalRoute.distance)
+                  : trip.distance != null && Number(trip.distance) > 0
+                    ? `${Number(trip.distance)} km`
+                    : "—";
+              const routeEta =
+                formatEtaFromRouteSeconds(optimalRoute?.duration) ??
+                (trip.estimated_duration
+                  ? String(trip.estimated_duration)
+                  : "—");
               return (
                 <View
-                  pointerEvents="none"
+                  pointerEvents="box-none"
                   style={[
                     styles.routeSummaryPanel,
                     {
-                      top:
-                        (controlsVariant === "embedded"
-                          ? insets.top + 96
-                          : insets.top + 10) + 54,
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
+                      top: mapControlsTopInset(controlsVariant, insets.top),
                     },
                   ]}
                 >
-                  {/* FROM */}
-                  <View style={styles.routeSummaryRow}>
-                    <View
-                      style={[
-                        styles.routeSummaryDot,
-                        { backgroundColor: colors.emerald },
-                      ]}
-                    />
-                    <View style={styles.routeSummaryTextWrap}>
-                      <Text
-                        style={[
-                          styles.routeSummaryLabel,
-                          { color: colors.textMuted },
-                        ]}
-                      >
-                        FROM
-                      </Text>
-                      <Text
-                        style={[
-                          styles.routeSummaryAddress,
-                          { color: colors.text },
-                        ]}
-                        numberOfLines={2}
-                      >
-                        {trip.pickup_area?.trim() || "—"}
-                      </Text>
-                    </View>
-                  </View>
-
-                  {/* Connector + distance */}
-                  <View style={styles.routeSummaryConnector}>
-                    <View
-                      style={[
-                        styles.routeSummaryLine,
-                        { backgroundColor: colors.border },
-                      ]}
-                    />
-                    {optimalRoute?.distance != null ? (
-                      <View
-                        style={[
-                          styles.routeSummaryBadge,
-                          { borderColor: colors.border },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.routeSummaryBadgeText,
-                            { color: colors.textMuted },
-                          ]}
-                        >
-                          {formatRoadDistanceM(optimalRoute.distance)}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
-
-                  {/* TO */}
-                  <View style={styles.routeSummaryRow}>
-                    <View
-                      style={[styles.routeSummaryDot, { backgroundColor: "#f59e0b" }]}
-                    />
-                    <View style={styles.routeSummaryTextWrap}>
-                      <Text
-                        style={[
-                          styles.routeSummaryLabel,
-                          { color: colors.textMuted },
-                        ]}
-                      >
-                        TO
-                      </Text>
-                      <Text
-                        style={[
-                          styles.routeSummaryAddress,
-                          { color: colors.text },
-                        ]}
-                        numberOfLines={2}
-                      >
-                        {(trip.drop_location || trip.drop_area)?.trim() || "—"}
-                      </Text>
-                    </View>
-                  </View>
+                  <Text style={[sheetStyles.sectionLabel, { color: colors.textMuted }]}>
+                    TRIP ROUTE
+                  </Text>
+                  <TripDetailsStrip
+                    statLeft={routeDist}
+                    statRight={routeEta}
+                    pickup={trip.pickup_area?.trim() || "—"}
+                    dropoff={
+                      (trip.drop_location || trip.drop_area)?.trim() || "—"
+                    }
+                    primaryTextColor={colors.text}
+                    mutedTextColor={colors.textMuted}
+                  />
                 </View>
               );
             })() : null}
@@ -4193,6 +4258,7 @@ export default function DriverRadarScreen() {
             <DriverTripFlowCard
               trip={activeMission}
               commissionAmount={activeMissionCommission}
+              assignedBy={activeFlowAssigner}
               distanceToTargetKm={distanceToTargetKmGlobal}
               driverLatitude={(truckPosition ?? driverMapPosition)?.latitude ?? null}
               driverLongitude={(truckPosition ?? driverMapPosition)?.longitude ?? null}
@@ -4232,6 +4298,7 @@ export default function DriverRadarScreen() {
             <DriverTripFlowCard
               trip={effectiveFirstIncoming}
               commissionAmount={newAssignmentCommission}
+              assignedBy={jobCardAssigner}
               distanceToTargetKm={distanceToTargetKmGlobal}
               driverLatitude={(truckPosition ?? driverMapPosition)?.latitude ?? null}
               driverLongitude={(truckPosition ?? driverMapPosition)?.longitude ?? null}
@@ -4486,6 +4553,7 @@ export default function DriverRadarScreen() {
             onOtpCancel={closeOtpClaim}
             edgeToEdge={mapSheet}
             variant={mapSheet ? "page" : "card"}
+            assignedBy={jobCardAssigner}
             assignedByLine={assignerLineForJobCard}
             OtpInputComponent={mapSheet ? OtpInputComponent : undefined}
             onOtpFocus={
@@ -4838,10 +4906,15 @@ export default function DriverRadarScreen() {
                 }
               }}
               bottomInset={driverTabBarClearance}
+              handleComponent={
+                shouldUseStaticMapSheetCard ? () => null : undefined
+              }
               backgroundStyle={{
-                backgroundColor: colors.surface,
-                borderTopLeftRadius: 24,
-                borderTopRightRadius: 24,
+                backgroundColor: shouldUseStaticMapSheetCard
+                  ? "transparent"
+                  : colors.surface,
+                borderTopLeftRadius: shouldUseStaticMapSheetCard ? 0 : 28,
+                borderTopRightRadius: shouldUseStaticMapSheetCard ? 0 : 28,
                 overflow: "hidden",
               }}
               handleIndicatorStyle={{
@@ -4859,7 +4932,7 @@ export default function DriverRadarScreen() {
                     styles.olaSheetContent,
                     {
                       paddingBottom: 0,
-                      paddingHorizontal: Layout.screenPaddingHorizontal,
+                      paddingHorizontal: 0,
                       flexGrow: 0,
                     },
                   ]}
@@ -6408,27 +6481,29 @@ const styles = StyleSheet.create({
   mapTopPillButton: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
     borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth,
-    minHeight: Layout.minTouchTargetSize,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
-    elevation: 3,
+    minHeight: MAP_CONTROLS_BAR_HEIGHT,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
   },
   mapTopPillLabel: {
-    fontSize: 13,
+    fontSize: 10,
     fontWeight: "700",
-    letterSpacing: 0.2,
-    maxWidth: 108,
+    letterSpacing: 0.1,
+    maxWidth: 72,
   },
   trackingInfoCardWrap: {
     position: "absolute",
     zIndex: 36,
-    maxWidth: 288,
+    width: 220,
+    maxWidth: 220,
+    right: Layout.screenPaddingHorizontal,
   },
   /** Scrollable inbox below active / accepted trip flow — never blocks with a modal. */
   otherPendingTripsWrap: {
@@ -6614,86 +6689,27 @@ const styles = StyleSheet.create({
   mapTopRightGroup: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 5,
   },
   mapTopIconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 999,
+    width: MAP_CONTROLS_BAR_HEIGHT,
+    height: MAP_CONTROLS_BAR_HEIGHT,
+    borderRadius: 10,
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: "center",
     justifyContent: "center",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
   },
   routeSummaryPanel: {
     position: "absolute",
     left: Layout.screenPaddingHorizontal,
     right: Layout.screenPaddingHorizontal,
     zIndex: 40,
-    elevation: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    ...(Platform.OS === "ios"
-      ? {
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.1,
-          shadowRadius: 12,
-        }
-      : {}),
-  },
-  routeSummaryRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-  },
-  routeSummaryDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginTop: 4,
-    flexShrink: 0,
-  },
-  routeSummaryTextWrap: {
-    flex: 1,
-    minWidth: 0,
-  },
-  routeSummaryLabel: {
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 1,
-    marginBottom: 2,
-  },
-  routeSummaryAddress: {
-    fontSize: 13,
-    fontWeight: "600",
-    lineHeight: 17,
-  },
-  routeSummaryConnector: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginLeft: 4,
-    marginVertical: 5,
-    gap: 8,
-  },
-  routeSummaryLine: {
-    width: 2,
-    height: 18,
-  },
-  routeSummaryBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  routeSummaryBadgeText: {
-    fontSize: 11,
-    fontWeight: "700",
+    elevation: 6,
+    gap: 5,
   },
   mapControlBtn: {
     width: 44,
