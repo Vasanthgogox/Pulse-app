@@ -2,9 +2,13 @@ import { DriverInviteModal } from '@/components/driver/DriverInviteModal';
 import { ThemedConfirmModal } from '@/components/ThemedConfirmModal';
 import { useAuth } from '@/contexts/AuthContext';
 import type { DriverInviteRow } from '@/features/drivers/services/drivers.service';
-import { subscribeSharedPostgresChanges } from '@/lib/realtimeRegistry';
 import * as driversService from '@/features/drivers/services/drivers.service';
-import { usePathname } from 'expo-router';
+import {
+  driverInvitesReceivedQueryKey,
+  useDriverInvitesQuery,
+} from '@/lib/queries/useDriverInvitesQuery';
+import { subscribeSharedPostgresChanges } from '@/lib/realtimeRegistry';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   createContext,
   useCallback,
@@ -18,12 +22,11 @@ import {
 import { Alert, AppState, Platform, type AppStateStatus } from 'react-native';
 
 type DriverInviteModalContextValue = {
+  allInvites: DriverInviteRow[];
   pendingCount: number;
   pendingInvites: DriverInviteRow[];
   refreshInvites: () => Promise<void>;
-  /** Re-open the fleet invite popup (clears in-session snooze). */
   presentPendingInvite: () => void;
-  /** Bumps when fleet membership changes (accept/decline) so earnings screens can reload. */
   fleetConnectionRevision: number;
 };
 
@@ -44,36 +47,45 @@ export function useDriverInviteModal(): DriverInviteModalContextValue {
 export function DriverInviteModalProvider({ children }: { children: ReactNode }) {
   const { profile } = useAuth();
   const uid = profile?.uid ?? null;
-  const pathname = usePathname();
+  const queryClient = useQueryClient();
 
-  const [invites, setInvites] = useState<DriverInviteRow[]>([]);
-  /** In-session snooze only — cleared when app returns to foreground so invite shows again. */
+  const {
+    allInvites,
+    pendingInvites,
+    pendingCount,
+    refreshInvites,
+    isError,
+    error,
+  } = useDriverInvitesQuery(uid);
+
   const [sessionSnoozedIds, setSessionSnoozedIds] = useState<Set<string>>(new Set());
   const [busyId, setBusyId] = useState<string | null>(null);
   const [declineTarget, setDeclineTarget] = useState<DriverInviteRow | null>(null);
   const [fleetConnectionRevision, setFleetConnectionRevision] = useState(0);
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+
   const bumpFleetConnectionRevision = useCallback(() => {
     setFleetConnectionRevision((n) => n + 1);
   }, []);
-  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
-  const refreshInvites = useCallback(async () => {
-    if (!uid) {
-      setInvites([]);
-      return;
-    }
-    const { error, invites: rows } = await driversService.getDriverInvitesReceived();
-    if (error && __DEV__) {
-      console.warn('[DriverInviteModal] getDriverInvitesReceived:', error.message);
-    }
-    setInvites(error ? [] : rows ?? []);
-  }, [uid]);
+  const invalidateInvites = useCallback(() => {
+    if (!uid) return;
+    void queryClient.invalidateQueries({
+      queryKey: driverInvitesReceivedQueryKey(uid),
+    });
+  }, [queryClient, uid]);
 
   const clearSessionSnooze = useCallback(() => {
     setSessionSnoozedIds(new Set());
   }, []);
 
-  /** Every app open / resume: show pending invites again until accept or decline. */
+  useEffect(() => {
+    if (!isError || !__DEV__ || !error) return;
+    const msg = error instanceof Error ? error.message : String(error);
+    console.warn('[DriverInviteModal] invites query:', msg);
+  }, [isError, error]);
+
+  /** Foreground resume: show snoozed invites again + one cache invalidation (no pathname / setInterval). */
   useEffect(() => {
     if (!uid) return;
 
@@ -84,25 +96,19 @@ export function DriverInviteModalProvider({ children }: { children: ReactNode })
         nextState === 'active' && (prev === 'background' || prev === 'inactive');
       if (becameActive) {
         clearSessionSnooze();
-        void refreshInvites();
+        invalidateInvites();
       }
     };
 
-    void refreshInvites();
     const sub = AppState.addEventListener('change', onAppStateChange);
     return () => sub.remove();
-  }, [uid, refreshInvites, clearSessionSnooze]);
+  }, [uid, clearSessionSnooze, invalidateInvites]);
 
-  useEffect(() => {
-    if (!uid) return;
-    void refreshInvites();
-  }, [uid, pathname, refreshInvites]);
-
-  /** Realtime: show invite popup when fleet sends or re-opens an invitation. */
+  /** Event-driven refresh when fleet sends or updates an invitation. */
   useEffect(() => {
     if (!uid) return;
 
-    const unsubscribe = subscribeSharedPostgresChanges(
+    return subscribeSharedPostgresChanges(
       `driver-invites-received-${uid}`,
       [
         {
@@ -119,40 +125,18 @@ export function DriverInviteModalProvider({ children }: { children: ReactNode })
         },
       ],
       (payload) => {
-        const row = payload.new as { id?: string; status?: string } | null;
+        const row = payload.new as { status?: string } | null;
         const isPending =
           row != null && String(row.status ?? '').toLowerCase() === 'pending';
-
-        void refreshInvites().then(() => {
-          if (isPending) {
-            clearSessionSnooze();
-          }
-        });
+        invalidateInvites();
+        if (isPending) clearSessionSnooze();
       },
     );
-
-    return unsubscribe;
-  }, [uid, refreshInvites, clearSessionSnooze]);
-
-  /** Poll fallback when Realtime publication is not yet applied on remote. */
-  useEffect(() => {
-    if (!uid) return;
-    const interval = setInterval(() => {
-      if (AppState.currentState === 'active') {
-        void refreshInvites();
-      }
-    }, 15000);
-    return () => clearInterval(interval);
-  }, [uid, refreshInvites]);
-
-  const allPendingInvites = useMemo(
-    () => invites.filter((i) => String(i.status ?? '').toLowerCase() === 'pending'),
-    [invites],
-  );
+  }, [uid, invalidateInvites, clearSessionSnooze]);
 
   const visiblePendingInvites = useMemo(
-    () => allPendingInvites.filter((i) => !sessionSnoozedIds.has(i.id)),
-    [allPendingInvites, sessionSnoozedIds],
+    () => pendingInvites.filter((i) => !sessionSnoozedIds.has(i.id)),
+    [pendingInvites, sessionSnoozedIds],
   );
 
   const activeInvite = visiblePendingInvites[0] ?? null;
@@ -160,10 +144,8 @@ export function DriverInviteModalProvider({ children }: { children: ReactNode })
 
   const presentPendingInvite = useCallback(() => {
     clearSessionSnooze();
-    if (allPendingInvites.length === 0) {
-      void refreshInvites();
-    }
-  }, [allPendingInvites.length, refreshInvites, clearSessionSnooze]);
+    if (pendingCount === 0) void refreshInvites();
+  }, [pendingCount, refreshInvites, clearSessionSnooze]);
 
   const handleLater = useCallback(() => {
     if (!activeInvite) return;
@@ -173,10 +155,10 @@ export function DriverInviteModalProvider({ children }: { children: ReactNode })
   const handleAccept = useCallback(async () => {
     if (!activeInvite) return;
     setBusyId(activeInvite.id);
-    const { error } = await driversService.acceptDriverInvite(activeInvite.id);
+    const { error: acceptError } = await driversService.acceptDriverInvite(activeInvite.id);
     setBusyId(null);
-    if (error) {
-      Alert.alert('Accept failed', error.message ?? 'Could not accept invite. Try again.');
+    if (acceptError) {
+      Alert.alert('Accept failed', acceptError.message ?? 'Could not accept invite. Try again.');
       return;
     }
     setSessionSnoozedIds((prev) => {
@@ -184,18 +166,18 @@ export function DriverInviteModalProvider({ children }: { children: ReactNode })
       next.delete(activeInvite.id);
       return next;
     });
-    await refreshInvites();
+    invalidateInvites();
     bumpFleetConnectionRevision();
-  }, [activeInvite, refreshInvites, bumpFleetConnectionRevision]);
+  }, [activeInvite, invalidateInvites, bumpFleetConnectionRevision]);
 
   const runDecline = useCallback(
     async (invite: DriverInviteRow) => {
       setBusyId(invite.id);
-      const { error } = await driversService.rejectDriverInvite(invite.id);
+      const { error: declineError } = await driversService.rejectDriverInvite(invite.id);
       setBusyId(null);
       setDeclineTarget(null);
-      if (error) {
-        Alert.alert('Decline failed', error.message ?? 'Could not decline invite. Try again.');
+      if (declineError) {
+        Alert.alert('Decline failed', declineError.message ?? 'Could not decline invite. Try again.');
         return;
       }
       setSessionSnoozedIds((prev) => {
@@ -203,10 +185,10 @@ export function DriverInviteModalProvider({ children }: { children: ReactNode })
         next.delete(invite.id);
         return next;
       });
-      await refreshInvites();
+      invalidateInvites();
       bumpFleetConnectionRevision();
     },
-    [refreshInvites, bumpFleetConnectionRevision],
+    [invalidateInvites, bumpFleetConnectionRevision],
   );
 
   const handleDeclinePress = useCallback(() => {
@@ -223,13 +205,21 @@ export function DriverInviteModalProvider({ children }: { children: ReactNode })
 
   const value = useMemo(
     (): DriverInviteModalContextValue => ({
-      pendingCount: allPendingInvites.length,
-      pendingInvites: allPendingInvites,
+      allInvites,
+      pendingCount,
+      pendingInvites,
       refreshInvites,
       presentPendingInvite,
       fleetConnectionRevision,
     }),
-    [allPendingInvites, refreshInvites, presentPendingInvite, fleetConnectionRevision],
+    [
+      allInvites,
+      pendingCount,
+      pendingInvites,
+      refreshInvites,
+      presentPendingInvite,
+      fleetConnectionRevision,
+    ],
   );
 
   return (
@@ -241,9 +231,9 @@ export function DriverInviteModalProvider({ children }: { children: ReactNode })
           visible={showModal}
           invite={activeInvite}
           queueIndex={
-            allPendingInvites.findIndex((i) => i.id === activeInvite.id) + 1 || 1
+            pendingInvites.findIndex((i) => i.id === activeInvite.id) + 1 || 1
           }
-          queueTotal={allPendingInvites.length}
+          queueTotal={pendingInvites.length}
           busy={busyId === activeInvite.id}
           onAccept={() => void handleAccept()}
           onDecline={handleDeclinePress}

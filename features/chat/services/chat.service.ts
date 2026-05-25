@@ -1137,38 +1137,21 @@ export async function getConversationsByDriverIds(
 
   const normalizedConvRows = (convRows ?? []) as DriverChatConversationRow[];
   const tripIds = Array.from(new Set(normalizedConvRows.map((r) => String(r.trip_id ?? "")).filter(Boolean)));
-  const convIds = Array.from(new Set(normalizedConvRows.map((r) => String(r.id ?? "")).filter(Boolean)));
-
   const emptyTripsRes: { data: DriverChatTripMini[]; error: null } = { data: [], error: null };
-  const emptyMessagesRes: { data: TripMessageRow[]; error: null } = { data: [], error: null };
-  const [tripRes, msgRes] = await Promise.all([
-    tripIds.length
-      ? supabase()
-          .from("trips")
-          .select("id, trip_number, driver_display_trip_id, pickup_area, drop_location")
-          .in("id", tripIds)
-      : Promise.resolve(emptyTripsRes),
-    convIds.length
-      ? supabase()
-          .from("trip_messages")
-          .select("id, conversation_id, content, sender_role, sender_name, sender_user_id, created_at, is_read, message_type, metadata")
-          .in("conversation_id", convIds)
-          .order("created_at", { ascending: false })
-          .limit(Math.min(50 * convIds.length, 500))
-      : Promise.resolve(emptyMessagesRes),
-  ]);
+  const tripRes = tripIds.length
+    ? await supabase()
+        .from("trips")
+        .select("id, trip_number, driver_display_trip_id, pickup_area, drop_location")
+        .in("id", tripIds)
+    : emptyTripsRes;
 
   const tripsById = new Map<string, DriverChatTripMini>();
   for (const tr of (tripRes.data ?? []) as DriverChatTripMini[]) {
     tripsById.set(String(tr.id ?? ""), tr);
   }
 
+  // Message bodies load per-thread via windowed_trip_message_history (TanStack infinite query).
   const messagesByConversationId = new Map<string, TripMessageRow[]>();
-  for (const msg of (msgRes.data ?? []) as TripMessageRow[]) {
-    const cid = String(msg.conversation_id ?? "");
-    if (!messagesByConversationId.has(cid)) messagesByConversationId.set(cid, []);
-    messagesByConversationId.get(cid)?.push(msg);
-  }
 
   return mapRows(normalizedConvRows, tripsById, messagesByConversationId);
 }

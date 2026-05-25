@@ -9,25 +9,23 @@ import { Dimensions, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { TripRow } from "../../../services/trips.service";
 import type { TripAssignmentAuditRow } from "../../../services/trip-assignment-audit.service";
-import type { DriverLocationRow } from "@/features/driver/services/driverLocation.service";
 import { TrackingMapBlock, VehicleTrackingCard } from "../TrackingMapBlock";
 import type { DriverActivityTimelineRow } from "../hooks/useTripDetail";
+import type { TrackingState } from "@/features/tracking/hooks/useTrackingState";
 
 interface LiveTrackingModalProps {
   visible: boolean;
   onClose: () => void;
 
   trip: TripRow;
-  isDriverOffline: boolean;
   isClientIndentView?: boolean;
+  trackingState: TrackingState;
 
   // Map props
   vehicleLabel: string | null;
   locationLabels: [string, string, string, string, string];
   originCoordinate: { latitude: number; longitude: number } | null;
   destinationCoordinate: { latitude: number; longitude: number } | null;
-  driverLocation: DriverLocationRow | null;
-  driverLocationLoading: boolean;
   tripLocationPoints: { latitude: number; longitude: number; recorded_at: string }[];
   locationAddress: string | null;
 
@@ -39,19 +37,6 @@ interface LiveTrackingModalProps {
   assignmentVehicleLabels: Record<string, string>;
   driverName: string | null;
   currentUserId: string | null;
-}
-
-function formatLocationUpdatedAt(recordedAt: string): string {
-  const then = new Date(recordedAt).getTime();
-  const now = Date.now();
-  const diffMs = now - then;
-  const diffM = Math.floor(diffMs / 60000);
-  if (diffM < 1) return "Updated just now";
-  if (diffM === 1) return "Updated 1 min ago";
-  if (diffM < 60) return `Updated ${diffM} min ago`;
-  const diffH = Math.floor(diffM / 60);
-  if (diffH === 1) return "Updated 1 hr ago";
-  return `Updated ${diffH} hr ago`;
 }
 
 function formatAssignmentDate(iso: string | null | undefined): string {
@@ -78,14 +63,12 @@ export function LiveTrackingModal({
   visible,
   onClose,
   trip,
-  isDriverOffline,
   isClientIndentView,
+  trackingState,
   vehicleLabel,
   locationLabels,
   originCoordinate,
   destinationCoordinate,
-  driverLocation,
-  driverLocationLoading,
   tripLocationPoints,
   locationAddress,
   driverActivityTimelineRows,
@@ -97,6 +80,7 @@ export function LiveTrackingModal({
   currentUserId,
 }: LiveTrackingModalProps) {
   const insets = useSafeAreaInsets();
+  const isDriverOffline = !trackingState.driverOnline;
   const { step, label } = trackingStepAndLabel(trip?.status ?? "draft");
   const statusChangeRowsOnly = driverActivityTimelineRows.filter(
     (r) => r.kind === "status",
@@ -157,8 +141,8 @@ export function LiveTrackingModal({
                 locationLabels={locationLabels}
                 originCoordinate={originCoordinate}
                 destinationCoordinate={destinationCoordinate}
-                latestLocation={driverLocation}
-                driverLocationLoading={driverLocationLoading}
+                latestLocation={trackingState.currentPosition}
+                isLocating={!trackingState.broadcastActive && !trackingState.currentPosition}
                 tripLocationPoints={tripLocationPoints}
                 locationAddress={locationAddress}
               />
@@ -166,17 +150,15 @@ export function LiveTrackingModal({
               <VehicleTrackingCard
                 vehicleLabel={vehicleLabel}
                 cardStatusText={
-                  driverLocationLoading
-                    ? "Fetching from DB..."
-                    : driverLocation
-                      ? "LIVE"
-                      : "No location in DB yet"
+                  trackingState.broadcastActive
+                    ? "LIVE"
+                    : trackingState.currentPosition
+                      ? "Last known"
+                      : "No location yet"
                 }
                 cardSubtext={
-                  driverLocation
-                    ? locationAddress
-                      ? `${locationAddress} · ${formatLocationUpdatedAt(driverLocation.recorded_at)}`
-                      : `${driverLocation.latitude.toFixed(5)}°, ${driverLocation.longitude.toFixed(5)}° · ${formatLocationUpdatedAt(driverLocation.recorded_at)}`
+                  trackingState.currentPosition
+                    ? `${locationAddress?.trim() || "Location available"} · ${trackingState.lastSeenLabel}`
                     : "Open map to see driver position"
                 }
               />

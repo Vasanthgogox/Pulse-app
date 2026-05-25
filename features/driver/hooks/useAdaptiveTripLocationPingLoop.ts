@@ -35,6 +35,10 @@ export interface AdaptiveTripLocationPingLoopParams {
     accuracy: number | null;
     position: { coords: { latitude: number; longitude: number; heading?: number | null } };
   }) => void;
+  /** Skip `v_long_haul_health` read on every tick (location stream uses ETA-only pacing). */
+  skipHealthFetchOnTick?: boolean;
+  /** Do not await DB write before scheduling the next ping. */
+  reportFireAndForget?: boolean;
 }
 
 /**
@@ -51,6 +55,8 @@ export function useAdaptiveTripLocationPingLoop(params: AdaptiveTripLocationPing
     source,
     reportLocationToDb,
     onLocationFix,
+    skipHealthFetchOnTick = false,
+    reportFireAndForget = false,
   } = params;
 
   const reportRef = useRef(reportLocationToDb);
@@ -170,7 +176,10 @@ export function useAdaptiveTripLocationPingLoop(params: AdaptiveTripLocationPing
         }
 
         let health = healthRef.current;
-        if (isTripStatusEligibleForLongHaulPings(trip.status)) {
+        if (
+          !skipHealthFetchOnTick &&
+          isTripStatusEligibleForLongHaulPings(trip.status)
+        ) {
           const h = await fetchLongHaulHealthStatus(trip.id);
           if (!cancelled && h) healthRef.current = h;
           if (h) health = h;
@@ -194,17 +203,31 @@ export function useAdaptiveTripLocationPingLoop(params: AdaptiveTripLocationPing
 
         if (dispOk) {
           const recordedAt = new Date().toISOString();
-          const ok = await reportRef.current(trip.id, latitude, longitude, acc, source, {
-            odometerKm: null,
-            recordedAt,
-          });
-          const saved = ok !== false;
-          if (saved) {
+          if (reportFireAndForget) {
+            void reportRef.current(trip.id, latitude, longitude, acc, source, {
+              odometerKm: null,
+              recordedAt,
+            });
             lastSentRef.current = { lat: latitude, lng: longitude };
             if (isTripStatusEligibleForLongHaulPings(trip.status)) {
               pingsUsedRef.current += 1;
               if (pingsUsedRef.current >= LONG_HAUL_STANDARD_PINGS) {
                 stretchRef.current = true;
+              }
+            }
+          } else {
+            const ok = await reportRef.current(trip.id, latitude, longitude, acc, source, {
+              odometerKm: null,
+              recordedAt,
+            });
+            const saved = ok !== false;
+            if (saved) {
+              lastSentRef.current = { lat: latitude, lng: longitude };
+              if (isTripStatusEligibleForLongHaulPings(trip.status)) {
+                pingsUsedRef.current += 1;
+                if (pingsUsedRef.current >= LONG_HAUL_STANDARD_PINGS) {
+                  stretchRef.current = true;
+                }
               }
             }
           }
@@ -232,5 +255,7 @@ export function useAdaptiveTripLocationPingLoop(params: AdaptiveTripLocationPing
     shouldPersistCheckpoint,
     minDisplacementM,
     source,
+    skipHealthFetchOnTick,
+    reportFireAndForget,
   ]);
 }

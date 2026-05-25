@@ -1008,6 +1008,7 @@ export async function linkPhoneToDriver(
 
 /**
  * List invites received by the current user (driver app). Requires RPC get_driver_invites_received.
+ * Prefer {@link useDriverInvitesQuery} for UI — TanStack Query dedupes concurrent reads.
  */
 export async function getDriverInvitesReceived(): Promise<{
   error: Error | null;

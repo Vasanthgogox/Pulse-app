@@ -25,6 +25,8 @@ export interface TripMapProps {
   intermediateStops?: string[];
   height?: number | string;
   onDistanceCalculated?: (distanceKm: string) => void;
+  tripId?: string | null;
+  trackingEnabled?: boolean;
 }
 
 export function TripMap({ height }: TripMapProps) {

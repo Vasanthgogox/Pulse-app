@@ -1,8 +1,8 @@
-import { useState, useCallback, useEffect, useRef } from "react";
-import { Platform } from "react-native";
+import { useState, useCallback, useEffect } from "react";
 import * as driverLocationService from "@/features/driver/services/driverLocation.service";
+import { resolveMapLocationLabel } from "@/lib/mapLocationLabel.service";
+import { TRIP_TRACKING_HISTORY_FETCH_LIMIT } from "@/lib/trackingLocation.constants";
 import { supabase } from "@/lib/supabase";
-import type * as ExpoLocationTypes from "expo-location";
 
 export function useDriverLocation(tripId: string | undefined) {
   const [driverLocation, setDriverLocation] =
@@ -15,36 +15,16 @@ export function useDriverLocation(tripId: string | undefined) {
     string | null
   >(null);
 
-  const expoLocationModuleRef = useRef<typeof ExpoLocationTypes | null>(null);
-
-  const safeReverseGeocode = useCallback(
-    async (
-      latitude: number,
-      longitude: number,
-    ): Promise<ExpoLocationTypes.LocationGeocodedAddress[]> => {
-      if (Platform.OS === "web") return [];
-      try {
-        if (!expoLocationModuleRef.current) {
-          expoLocationModuleRef.current = await import("expo-location");
-        }
-        return await expoLocationModuleRef.current.reverseGeocodeAsync({
-          latitude,
-          longitude,
-        });
-      } catch {
-        return [];
-      }
-    },
-    [],
-  );
-
   const fetchDriverLocationFromDb = useCallback(async () => {
     if (!tripId) return;
     setDriverLocationLoading(true);
     try {
       const [locRes, histRes] = await Promise.all([
         driverLocationService.getLatestDriverLocationForTrip(tripId),
-        driverLocationService.getTripLocationHistory(tripId, 50),
+        driverLocationService.getTripLocationHistory(
+          tripId,
+          TRIP_TRACKING_HISTORY_FETCH_LIMIT,
+        ),
       ]);
       setDriverLocation(locRes.error ? null : locRes.location ?? null);
       setTripLocationPoints(histRes.error ? [] : histRes.points ?? []);
@@ -92,26 +72,17 @@ export function useDriverLocation(tripId: string | undefined) {
       return;
     }
     let cancelled = false;
-    safeReverseGeocode(driverLocation.latitude, driverLocation.longitude)
-      .then((results) => {
-        if (cancelled) return;
-        const addr = results[0];
-        if (addr && (addr.city || addr.street || addr.name)) {
-          const label = [addr.name, addr.street, addr.city, addr.region]
-            .filter(Boolean)
-            .join(", ");
-          setDriverLocationAddress(label || null);
-        } else {
-          setDriverLocationAddress(null);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setDriverLocationAddress(null);
-      });
+    void resolveMapLocationLabel(
+      driverLocation.latitude,
+      driverLocation.longitude,
+      { mode: "full" },
+    ).then((label) => {
+      if (!cancelled) setDriverLocationAddress(label);
+    });
     return () => {
       cancelled = true;
     };
-  }, [driverLocation?.latitude, driverLocation?.longitude, safeReverseGeocode]);
+  }, [driverLocation?.latitude, driverLocation?.longitude]);
 
   return {
     driverLocation,

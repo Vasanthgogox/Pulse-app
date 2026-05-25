@@ -4,6 +4,17 @@
     ".expo",
     "node_modules",
     "dist",
-    ".git"
+    "web-build",
+    ".git",
+    "coverage",
+    "playwright-report",
+    "test-results",
+    "supabase",
+    "data-analytics",
+    "docs",
+    ".claude",
+    ".cursor",
+    "android",
+    "ios"
   ]
 }
