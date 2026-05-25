@@ -174,13 +174,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const getVerifiedDbProfile = useCallback(
     async (uid: string): Promise<authService.AuthProfile | null> => {
       try {
-        const dbProfile = await authService.getProfile(uid);
+        const dbProfile = await withTimeout(authService.getProfile(uid), AUTH_TIMEOUT_MS);
         if (dbProfile) return dbProfile;
 
         const provision = await authService.ensureCurrentUserProfile();
         if (provision.error) return null;
 
-        return await authService.getProfile(uid);
+        return await withTimeout(authService.getProfile(uid), AUTH_TIMEOUT_MS);
       } catch (e) {
         logAuthError("profile_verification_error", e, { uid });
         return null;
@@ -279,7 +279,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        const session = await authService.getSession();
+        const session = await withTimeout(authService.getSession(), AUTH_TIMEOUT_MS).catch(() => null);
         if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
         if (session) {
           const keep = await getKeepSignedIn();
