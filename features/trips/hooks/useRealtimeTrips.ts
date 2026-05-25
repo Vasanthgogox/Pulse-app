@@ -57,14 +57,22 @@ export function useRealtimeTrip(
   }, [tripId]);
 }
 
-/** Subscribe to driver location inserts for a specific trip (and optional driver fallback). */
+/**
+ * Subscribe to driver location INSERTs for a specific trip (and optional driver fallback).
+ *
+ * Phase 3c: callback receives the full Realtime payload so callers can merge the new
+ * location row directly into state without triggering a DB round trip.
+ *
+ * Dual-filter note: when both tripId and driverId are set, Supabase may emit the same
+ * INSERT event twice (once per matching filter). Callers must deduplicate by row id.
+ */
 export function useRealtimeDriverLocations(
   tripId: string | null,
   driverId: string | null,
-  onInvalidate: () => void,
+  onEvent: (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => void,
 ) {
-  const onInvalidateRef = useRef(onInvalidate);
-  onInvalidateRef.current = onInvalidate;
+  const onEventRef = useRef(onEvent);
+  onEventRef.current = onEvent;
 
   useEffect(() => {
     if (!tripId && !driverId) return;
@@ -92,8 +100,8 @@ export function useRealtimeDriverLocations(
     }
 
     const key = `driver_locations:${tripId ?? 'none'}:${driverId ?? 'none'}`;
-    return subscribeSharedPostgresChanges(key, specs, () => {
-      onInvalidateRef.current();
+    return subscribeSharedPostgresChanges(key, specs, (payload) => {
+      onEventRef.current(payload);
     });
   }, [tripId, driverId]);
 }
