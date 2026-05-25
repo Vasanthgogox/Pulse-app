@@ -2,6 +2,13 @@
 -- Adds org_id column (FK → organizations) with UNIQUE constraint so
 -- syncBrandingFromOrg() can upsert by org_id rather than a row-order fallback.
 
+CREATE TABLE IF NOT EXISTS branding_settings (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_name text,
+  logo_url     text,
+  updated_at   timestamptz DEFAULT now()
+);
+
 ALTER TABLE IF EXISTS branding_settings
   ADD COLUMN IF NOT EXISTS org_id uuid REFERENCES organizations(id) ON DELETE CASCADE;
 
